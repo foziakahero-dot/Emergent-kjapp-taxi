@@ -1,0 +1,83 @@
+import React from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import "./App.css";
+import { StatusBar } from "./components/UIKit";
+import BottomNav from "./components/BottomNav";
+
+import Onboarding from "./pages/Onboarding";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import VoiceSignIn from "./pages/VoiceSignIn";
+import Home from "./pages/Home";
+import BookingFlow from "./pages/BookingFlow";
+import TripReceipt from "./pages/TripReceipt";
+import AIChat from "./pages/AIChat";
+import Profile from "./pages/Profile";
+import PaymentMethods from "./pages/PaymentMethods";
+import Settings from "./pages/Settings";
+import TripHistory from "./pages/TripHistory";
+import HelpSupport from "./pages/HelpSupport";
+
+function Protected({ children }) {
+  const { user } = useAuth();
+  if (user === undefined) return <LoadingSplash />;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function PublicOnly({ children }) {
+  const { user } = useAuth();
+  if (user === undefined) return <LoadingSplash />;
+  if (user) return <Navigate to="/app" replace />;
+  return children;
+}
+
+function LoadingSplash() {
+  return (
+    <div className="min-h-screen grid place-items-center bg-bg">
+      <div className="orb orb-small" />
+    </div>
+  );
+}
+
+function Shell({ children, withNav = true }) {
+  return (
+    <div className="phone-shell grain">
+      <StatusBar />
+      <div style={{ minHeight: "calc(100dvh - 44px)" }}>{children}</div>
+      {withNav && <BottomNav />}
+    </div>
+  );
+}
+
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <Routes location={location} key={location.pathname}>
+      <Route path="/" element={<Onboarding />} />
+      <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+      <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+      <Route path="/voice-signin" element={<PublicOnly><VoiceSignIn /></PublicOnly>} />
+
+      <Route path="/app" element={<Protected><Shell><Home /></Shell></Protected>} />
+      <Route path="/app/booking/:tripId" element={<Protected><Shell withNav={false}><BookingFlow /></Shell></Protected>} />
+      <Route path="/app/receipt/:tripId" element={<Protected><Shell withNav={false}><TripReceipt /></Shell></Protected>} />
+      <Route path="/app/ai" element={<Protected><Shell><AIChat /></Shell></Protected>} />
+      <Route path="/app/history" element={<Protected><Shell><TripHistory /></Shell></Protected>} />
+      <Route path="/app/profile" element={<Protected><Shell><Profile /></Shell></Protected>} />
+      <Route path="/app/payment" element={<Protected><Shell withNav={false}><PaymentMethods /></Shell></Protected>} />
+      <Route path="/app/settings" element={<Protected><Shell withNav={false}><Settings /></Shell></Protected>} />
+      <Route path="/app/help" element={<Protected><Shell withNav={false}><HelpSupport /></Shell></Protected>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
+  );
+}

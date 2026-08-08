@@ -1,0 +1,151 @@
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { StatusBar, Orb } from "../components/UIKit";
+import { useAuth } from "../context/AuthContext";
+import { formatApiErrorDetail } from "../lib/api";
+import { ArrowRight, ChevronLeft, Eye, EyeOff, Apple } from "lucide-react";
+
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate("/app");
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="phone-shell grain flex flex-col">
+      <StatusBar />
+      <div className="px-6 pt-2 flex items-center">
+        <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a8388]" data-testid="login-back">
+          <ChevronLeft size={22} />
+        </button>
+      </div>
+
+      <div className="px-8 pt-4 flex-1">
+        <h1 className="font-display text-[28px] tracking-tight text-white">Velkommen tilbake</h1>
+        <p className="text-[#7a8388] text-sm mt-2">Logg inn for å fortsette reisen</p>
+
+        <form onSubmit={submit} className="mt-10 space-y-4">
+          <input
+            className="input"
+            placeholder="E-post eller telefon"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            data-testid="login-email"
+            autoComplete="email"
+            required
+          />
+          <div className="relative">
+            <input
+              className="input pr-12"
+              type={showPw ? "text" : "password"}
+              placeholder="Passord"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              data-testid="login-password"
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a8388]"
+              onClick={() => setShowPw((v) => !v)}
+              aria-label="Vis passord"
+              data-testid="login-toggle-pw"
+            >
+              {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
+          <div className="text-right">
+            <button type="button" className="text-[#7a8388] text-sm hover:text-mint transition-colors">
+              Glemt passord?
+            </button>
+          </div>
+
+          {err && (
+            <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3" data-testid="login-error">
+              {err}
+            </div>
+          )}
+
+          <div className="pt-2 flex justify-center">
+            <button
+              type="submit"
+              disabled={loading}
+              data-testid="login-submit"
+              className="w-14 h-14 rounded-full bg-mint text-[#04120a] grid place-items-center mint-glow hover:scale-105 active:scale-95 transition-transform disabled:opacity-60"
+            >
+              {loading ? <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={22} strokeWidth={2.5} />}
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-10 flex items-center gap-4">
+          <div className="flex-1 h-px bg-line" />
+          <span className="text-[11px] text-[#7a8388] tracking-widest uppercase">eller fortsett med</span>
+          <div className="flex-1 h-px bg-line" />
+        </div>
+
+        <div className="mt-8 flex items-center justify-center gap-4">
+          <SocialButton icon={<Apple size={20} />} testid="social-apple" />
+          <SocialButton icon={<GoogleIcon />} testid="social-google" />
+          <SocialButton icon={<PhoneIcon />} testid="social-phone" />
+        </div>
+      </div>
+
+      <div className="px-8 pb-10 text-center">
+        <p className="text-[#7a8388] text-sm">
+          Ingen konto?{" "}
+          <Link to="/register" className="text-mint font-medium" data-testid="link-register">
+            Opprett en
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SocialButton({ icon, testid }) {
+  return (
+    <button
+      data-testid={testid}
+      className="w-14 h-14 rounded-full card grid place-items-center text-white hover:border-mint transition-colors"
+    >
+      {icon}
+    </button>
+  );
+}
+function GoogleIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24">
+      <path fill="#EA4335" d="M12 5c1.6 0 3 .55 4.1 1.5l3-3C17.5 1.7 15 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.5 2.7C6 7.3 8.8 5 12 5z"/>
+      <path fill="#34A853" d="M23 12c0-.8-.1-1.6-.2-2.3H12v4.6h6.2c-.3 1.4-1.1 2.6-2.3 3.4l3.5 2.7c2.1-1.9 3.6-4.8 3.6-8.4z"/>
+      <path fill="#4A90E2" d="M5.1 14.3c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9L1.6 7.8C.9 9.2.5 10.5.5 12s.4 2.8 1.1 4.2l3.5-1.9z"/>
+      <path fill="#FBBC05" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.2 1.1-3.8 1.1-3.2 0-5.9-2.3-6.9-5.4L1.6 16C3.5 20.4 7.4 23 12 23z"/>
+    </svg>
+  );
+}
+function PhoneIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1.9.3 1.8.6 2.6a2 2 0 01-.5 2.1l-1.3 1.3a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.5c.8.3 1.7.5 2.6.6a2 2 0 011.7 2z"/>
+    </svg>
+  );
+}

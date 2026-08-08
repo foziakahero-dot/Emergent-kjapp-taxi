@@ -1,0 +1,28 @@
+{
+  "summary": "First-pass backend smoke test of KJAPP taxi API. All 11 requested endpoints verified against public backend URL. Auth (register/login/me), places (8 seeded, featured filter), cars/nearby (8 drivers from MongoDB), trip estimate/request/lifecycle (searching -> arrived within ~25s), AI chat (Claude replies in Norwegian), payment methods (Vipps/Visa/Mastercard seeded), and settings GET/PATCH all working correctly.",
+  "tested_scope": ["backend", "auth", "integration"],
+  "passed": [
+    "POST /api/auth/register with {email,password,fullName} returns JWT token+user (id, email, fullName, phone)",
+    "POST /api/auth/register duplicate email -> 400 with Norwegian message 'E-post er allerede registrert'",
+    "POST /api/auth/login ola@kjapp.no/test1234 -> token+user; wrong password -> 401",
+    "GET /api/auth/me with Bearer token returns user; without token -> 401",
+    "GET /api/places returns 8 places; ?featured_only=true returns 3 featured places (Karl Johans, Aker Brygge, Oslo S)",
+    "POST /api/cars/nearby returns 8 active drivers with lat/lng/eta_min/distance_km computed around requested position",
+    "POST /api/trips/estimate returns distance_km, duration_min and 4 options (ai-first, enkelt, trygg, premium) with prices",
+    "POST /api/trips/request creates trip (status=searching) with auth; background lifecycle progresses searching -> in_trip -> arrived within ~25s",
+    "GET /api/trips/{trip_id} returns current status with driver info assigned from MongoDB drivers collection",
+    "GET /api/trips/active returns the active trip for the user (null when none)",
+    "POST /api/ai/chat returns Norwegian reply from Claude via emergentintegrations and session_id",
+    "GET /api/payment-methods returns 3 seeded methods (Vipps default, Visa, Mastercard) for ola@kjapp.no",
+    "GET /api/settings returns defaults (Norsk, Mork, ai_voice Nora); PATCH /api/settings updates language field"
+  ],
+  "failed": [],
+  "notes": [
+    "Register schema uses 'fullName' (camelCase) not 'name'. Trip request uses 'pickup_address'/'dropoff_address' (not 'pickup_name'). Trip response id field is 'trip_id' (not 'id'). These are schema conventions, not bugs, but frontend must match.",
+    "AI chat responded in Norwegian in ~2s. emergentintegrations + Claude Sonnet 4.5 integration is live and working."
+  ],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (skipped per request)"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
