@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { StatusBar } from "../components/UIKit";
 import { driverInviteApi, formatApiErrorDetail } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -53,7 +53,7 @@ export default function DriverSignup() {
   if (!invite) {
     return (
       <div className="phone-shell grain flex flex-col">
-        <StatusBar />
+        
         <div className="p-8 text-center flex-1 flex flex-col items-center justify-center">
           <div className="w-14 h-14 rounded-full bg-red-500/10 grid place-items-center">
             <ShieldCheck size={22} className="text-red-400" />
@@ -69,7 +69,7 @@ export default function DriverSignup() {
   if (done) {
     return (
       <div className="phone-shell grain flex flex-col">
-        <StatusBar />
+        
         <div className="p-8 text-center flex-1 flex flex-col items-center justify-center">
           <div className="w-16 h-16 rounded-full bg-mint grid place-items-center mint-glow">
             <ShieldCheck size={24} className="text-[#04120a]" />
@@ -86,7 +86,7 @@ export default function DriverSignup() {
 
   return (
     <div className="phone-shell grain flex flex-col">
-      <StatusBar />
+      
       <div className="px-8 pt-4">
         <div className="text-[11px] text-mint uppercase tracking-widest">Sjåfør-registrering</div>
         <h1 className="font-display text-[24px] tracking-tight text-white mt-1">Velkommen til flåten</h1>
@@ -117,7 +117,9 @@ export default function DriverSignup() {
         )}
 
         <p className="text-[11px] text-[#7a8388] leading-relaxed">
-          Ved å registrere deg godtar du KJAPPs sjåfør-vilkår og at KJAPP behandler personopplysninger for å tildele turer.
+          Ved å registrere deg godtar du KJAPPs{" "}
+          <Link to="/terms" className="text-mint">sjåfør-vilkår</Link> og{" "}
+          <Link to="/privacy" className="text-mint">personvernerklæring</Link>. KJAPP behandler personopplysninger for å tildele turer.
         </p>
 
         <div className="pt-2 flex justify-center pb-10">

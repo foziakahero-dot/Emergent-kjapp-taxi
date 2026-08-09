@@ -90,7 +90,7 @@ export default function DriverTrip() {
   }[trip.status] || trip.status;
 
   return (
-    <div className="relative" style={{ height: "calc(100dvh - 44px - 80px)" }}>
+    <div className="relative" style={{ height: "calc(100dvh - 80px)" }}>
       <div className="absolute inset-0">
         <MapContainer
           center={[(trip.pickup_lat + trip.dropoff_lat) / 2, (trip.pickup_lng + trip.dropoff_lng) / 2]}

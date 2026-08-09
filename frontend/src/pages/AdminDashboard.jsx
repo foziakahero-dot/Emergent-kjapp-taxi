@@ -21,7 +21,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="phone-shell grain">
-      <StatusBar />
+      
       <div className="px-4 pt-2 flex items-center justify-between">
         <div>
           <div className="text-[11px] text-mint uppercase tracking-widest">Admin</div>
@@ -195,6 +195,7 @@ function Invites() {
   const [invites, setInvites] = useState([]);
   const [creating, setCreating] = useState(false);
   const [driverId, setDriverId] = useState("car-2");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState(null);
 
@@ -204,9 +205,13 @@ function Invites() {
   const create = async () => {
     setCreating(true);
     try {
-      await adminApi.createInvite(driverId, note);
+      const res = await adminApi.createInvite(driverId, note, inviteEmail);
       await load();
       setNote("");
+      setInviteEmail("");
+      if (res?.email_sent === false && inviteEmail) {
+        alert("Invitasjon opprettet, men e-post ble ikke sendt (SendGrid ikke konfigurert). Kopier lenken manuelt.");
+      }
     } catch (e) {
       alert("Kunne ikke lage invitasjon: " + (e.response?.data?.detail || e.message));
     } finally {
@@ -225,14 +230,17 @@ function Invites() {
     <div className="space-y-3">
       <div className="card p-4">
         <div className="text-white text-sm font-medium mb-3">Ny sjåfør-invitasjon</div>
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="input" data-testid="invite-car">
-            {["car-1", "car-2", "car-3", "car-4", "car-5", "car-6", "car-7", "car-8"].map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <input className="input" placeholder="Notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="invite-note" />
+        <div className="space-y-2 mb-2">
+          <div className="grid grid-cols-2 gap-2">
+            <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="input" data-testid="invite-car">
+              {["car-1", "car-2", "car-3", "car-4", "car-5", "car-6", "car-7", "car-8"].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input className="input" placeholder="Notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="invite-note" />
+          </div>
+          <input className="input" placeholder="E-post til sjåfør (valgfritt — sendes automatisk)" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} data-testid="invite-email" />
         </div>
         <button onClick={create} disabled={creating} className="btn-primary w-full text-sm" data-testid="invite-create">
-          <LinkIcon size={14} className="inline mr-2" /> {creating ? "Oppretter…" : "Opprett invitasjons-lenke"}
+          <LinkIcon size={14} className="inline mr-2" /> {creating ? "Oppretter…" : inviteEmail ? "Send invitasjons-e-post" : "Opprett invitasjons-lenke"}
         </button>
       </div>
 

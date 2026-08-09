@@ -9,4 +9,5 @@ PyJWT==2.10.1
 python-multipart==0.0.19
 httpx==0.28.1
 pywebpush==2.0.1
+sendgrid==6.12.5
 emergentintegrations

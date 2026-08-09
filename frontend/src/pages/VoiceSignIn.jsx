@@ -7,7 +7,7 @@ export default function VoiceSignIn() {
   const navigate = useNavigate();
   return (
     <div className="phone-shell grain flex flex-col">
-      <StatusBar />
+      
       <div className="px-6 flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a8388]" data-testid="voice-close">
           <X size={22} />

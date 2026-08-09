@@ -189,10 +189,53 @@ async def osrm_route(plat, plng, dlat, dlng):
             return {
                 "distance_km": round(route["distance"] / 1000.0, 2),
                 "duration_min": max(1, int(round(route["duration"] / 60.0))),
-                "geometry": route["geometry"],  # GeoJSON LineString
+                "geometry": route["geometry"],
             }
     except Exception:
         return None
+
+
+def send_email(to_email: str, subject: str, html: str) -> bool:
+    """Send email via SendGrid if configured, else log to console."""
+    api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
+    sender = os.environ.get("SENDER_EMAIL", "noreply@kjapp.no").strip()
+    if not api_key:
+        print(f"[EMAIL/no-key] to={to_email} subj={subject}\n{html[:200]}")
+        return False
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+        msg = Mail(from_email=sender, to_emails=to_email, subject=subject, html_content=html)
+        sg = SendGridAPIClient(api_key)
+        res = sg.send(msg)
+        return 200 <= res.status_code < 300
+    except Exception as e:
+        print(f"[EMAIL/error] {e}")
+        return False
+
+
+def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
+    note_html = f"<p style='color:#a1a7ab;font-size:13px'>Notat fra flåte-eier: {note}</p>" if note else ""
+    return f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;background:#050708;color:#e6ecef;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
+      <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:#2fe08c">A</span>PP</div>
+      <div style="font-size:11px;letter-spacing:4px;color:#2fe08c;text-transform:uppercase;margin-top:4px">Sjåfør-invitasjon</div>
+      <h1 style="font-size:22px;color:#fff;margin-top:24px;line-height:1.3">Velkommen til KJAPP-flåten</h1>
+      <p style="color:#a1a7ab;font-size:14px;line-height:1.6">
+        Du har blitt invitert til å kjøre for KJAPP. Bilen som er tildelt deg:
+      </p>
+      <div style="background:#0e1113;border:1px solid #1c2124;border-radius:12px;padding:16px;margin:16px 0;">
+        <div style="color:#2fe08c;font-size:11px;letter-spacing:2px;text-transform:uppercase">Bil</div>
+        <div style="color:#fff;font-size:16px;margin-top:4px">{car} · {plate}</div>
+      </div>
+      {note_html}
+      <p style="color:#a1a7ab;font-size:14px;line-height:1.6">Klikk lenken under for å fullføre registreringen. Kontoen din må godkjennes før du kan motta turer.</p>
+      <a href="{invite_url}" style="display:inline-block;background:#2fe08c;color:#04120a;padding:14px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:12px">Fullfør registrering</a>
+      <p style="color:#5a6166;font-size:11px;margin-top:32px;line-height:1.5">
+        Hvis du ikke forventet denne invitasjonen kan du trygt ignorere e-posten. Lenken utløper om 14 dager.
+      </p>
+    </div>
+    """
 
 
 def price_for(distance_km: float, vehicle_type: str, duration_min: float = None) -> int:
@@ -1025,6 +1068,7 @@ async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current
 class DriverInviteRequest(BaseModel):
     driver_id: str  # which fleet car
     note: Optional[str] = ""
+    email: Optional[str] = None  # if set, send invite via SendGrid
 
 
 class DriverSignupRequest(BaseModel):
@@ -1036,7 +1080,7 @@ class DriverSignupRequest(BaseModel):
 
 
 @api.post("/admin/driver-invites")
-async def create_driver_invite(body: DriverInviteRequest, current=Depends(require_admin)):
+async def create_driver_invite(body: DriverInviteRequest, request: Request, current=Depends(require_admin)):
     token = secrets.token_urlsafe(24)
     d = await db.drivers.find_one({"driver_id": body.driver_id})
     if not d:
@@ -1045,12 +1089,29 @@ async def create_driver_invite(body: DriverInviteRequest, current=Depends(requir
         "token": token,
         "driver_id": body.driver_id,
         "note": body.note or "",
+        "email": (body.email or "").strip().lower() or None,
         "created_by": current["id"],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=14)).isoformat(),
         "used": False,
+        "email_sent": False,
     }
     await db.driver_invites.insert_one(doc)
+    # send email if requested
+    if body.email:
+        # Build signup URL from request origin
+        origin = str(request.base_url).rstrip("/").replace("/api", "")
+        # Prefer Origin header (frontend URL) if present
+        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
+        invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
+        ok = send_email(
+            body.email,
+            "Invitasjon: Bli sjåfør for KJAPP",
+            email_driver_invite_html(d["car"], d["plate"], invite_url, body.note or ""),
+        )
+        if ok:
+            await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
+            doc["email_sent"] = True
     doc.pop("_id", None)
     return doc
 
@@ -1114,6 +1175,102 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": body.phone, "role": "driver", "driver_id": inv["driver_id"], "approved": False},
         "pending_approval": True,
     }
+
+
+# ============================================================
+# Apple Sign In
+# ============================================================
+class AppleSignInRequest(BaseModel):
+    identity_token: str
+    fullName: Optional[str] = None
+    email: Optional[str] = None  # Apple only provides this on first login
+
+
+APPLE_KEYS_CACHE = {"keys": None, "fetched_at": None}
+
+
+async def _get_apple_keys():
+    now = datetime.now(timezone.utc)
+    if APPLE_KEYS_CACHE["keys"] and APPLE_KEYS_CACHE["fetched_at"] and (now - APPLE_KEYS_CACHE["fetched_at"]).seconds < 3600:
+        return APPLE_KEYS_CACHE["keys"]
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        r = await client.get("https://appleid.apple.com/auth/keys")
+        keys = r.json().get("keys", [])
+    APPLE_KEYS_CACHE["keys"] = keys
+    APPLE_KEYS_CACHE["fetched_at"] = now
+    return keys
+
+
+@api.post("/auth/apple")
+async def apple_signin(body: AppleSignInRequest, response: Response):
+    """Verify Apple identity_token and log user in.
+    Requires APPLE_CLIENT_ID env var to be set (App Store Service ID / Bundle ID)."""
+    apple_client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
+    if not apple_client_id:
+        raise HTTPException(status_code=501, detail="Apple Sign In er ikke konfigurert. Sett APPLE_CLIENT_ID.")
+    try:
+        # Get unverified header to find kid
+        header = jwt.get_unverified_header(body.identity_token)
+        kid = header.get("kid")
+        apple_keys = await _get_apple_keys()
+        key_data = next((k for k in apple_keys if k.get("kid") == kid), None)
+        if not key_data:
+            raise HTTPException(status_code=401, detail="Ukjent Apple-nøkkel")
+        # Verify token using PyJWT with JWK
+        from jwt.algorithms import RSAAlgorithm
+        public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+        payload = jwt.decode(
+            body.identity_token, public_key, algorithms=["RS256"],
+            audience=apple_client_id, issuer="https://appleid.apple.com",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Ugyldig Apple-token: {e}")
+
+    apple_sub = payload.get("sub")
+    email = (body.email or payload.get("email") or "").strip().lower()
+    if not email:
+        # Apple hides email after first login — need to find user by apple_sub
+        existing = await db.users.find_one({"apple_sub": apple_sub})
+        if not existing:
+            raise HTTPException(status_code=400, detail="Ingen e-post fra Apple ved første innlogging")
+        uid = str(existing["_id"])
+        email = existing["email"]
+        role = existing.get("role", "user")
+        driver_id = existing.get("driver_id")
+    else:
+        user = await db.users.find_one({"email": email}) or await db.users.find_one({"apple_sub": apple_sub})
+        if not user:
+            name = body.fullName or email.split("@")[0]
+            result = await db.users.insert_one({
+                "email": email,
+                "password_hash": hash_password(secrets.token_hex(16)),
+                "fullName": name,
+                "phone": "",
+                "apple_sub": apple_sub,
+                "apple_linked": True,
+                "role": "user",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            uid = str(result.inserted_id)
+            role = "user"
+            driver_id = None
+        else:
+            uid = str(user["_id"])
+            role = user.get("role", "user")
+            driver_id = user.get("driver_id")
+            if not user.get("apple_sub"):
+                await db.users.update_one({"_id": user["_id"]}, {"$set": {"apple_sub": apple_sub, "apple_linked": True}})
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": {"id": uid, "email": email, "fullName": body.fullName or "", "phone": "", "role": role, "driver_id": driver_id}}
+
+
+@api.get("/auth/apple/config")
+async def apple_config():
+    """Expose the Apple Client ID so the frontend can init Apple JS SDK."""
+    return {"client_id": os.environ.get("APPLE_CLIENT_ID", ""), "enabled": bool(os.environ.get("APPLE_CLIENT_ID"))}
 
 
 app.include_router(api)

@@ -31,7 +31,7 @@ export default function Register() {
 
   return (
     <div className="phone-shell grain flex flex-col">
-      <StatusBar />
+      
       <div className="px-6 pt-2 flex items-center">
         <button onClick={() => navigate(-1)} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a8388]" data-testid="register-back">
           <ChevronLeft size={22} />
@@ -80,7 +80,9 @@ export default function Register() {
         </form>
 
         <p className="mt-6 text-center text-[11px] text-[#7a8388] leading-relaxed">
-          Ved å opprette konto godtar du våre vilkår og personvernregler.
+          Ved å opprette konto godtar du våre{" "}
+          <Link to="/terms" className="text-mint">vilkår</Link> og{" "}
+          <Link to="/privacy" className="text-mint">personvernregler</Link>.
         </p>
       </div>
 

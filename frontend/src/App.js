@@ -27,6 +27,8 @@ import DriverLogin from "./pages/DriverLogin";
 import DriverSignup from "./pages/DriverSignup";
 import AdminDashboard from "./pages/AdminDashboard";
 import AuthCallback from "./pages/AuthCallback";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 
 function Protected({ children, driverOnly = false, adminOnly = false }) {
   const { user } = useAuth();
@@ -58,8 +60,7 @@ function LoadingSplash() {
 function Shell({ children, withNav = true, driver = false }) {
   return (
     <div className="phone-shell grain">
-      <StatusBar />
-      <div style={{ minHeight: "calc(100dvh - 44px)" }}>{children}</div>
+      <div style={{ minHeight: "100dvh" }}>{children}</div>
       {withNav && (driver ? <DriverNav /> : <BottomNav />)}
     </div>
   );
@@ -76,6 +77,8 @@ function AppRoutes() {
       <Route path="/driver/login" element={<PublicOnly><DriverLogin /></PublicOnly>} />
       <Route path="/driver-signup/:token" element={<DriverSignup />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
 
       <Route path="/app" element={<Protected><Shell><Home /></Shell></Protected>} />
       <Route path="/app/booking/:tripId" element={<Protected><Shell withNav={false}><BookingFlow /></Shell></Protected>} />

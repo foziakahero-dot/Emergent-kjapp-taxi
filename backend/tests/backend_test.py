@@ -173,6 +173,109 @@ class TestDriverInvites:
         assert r.status_code == 404
 
 
+# ---------- Apple Sign In (iter4) ----------
+class TestAppleSignIn:
+    def test_apple_config_when_unconfigured(self):
+        r = requests.get(f"{API}/auth/apple/config", timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "client_id" in data and "enabled" in data
+        # APPLE_CLIENT_ID is empty by design in this iter
+        assert data["enabled"] is False
+        assert data["client_id"] == ""
+
+    def test_apple_signin_returns_501_when_unconfigured(self):
+        r = requests.post(f"{API}/auth/apple",
+                          json={"identity_token": "fake.jwt.token", "email": "x@example.com"},
+                          timeout=15)
+        assert r.status_code == 501, f"expected 501, got {r.status_code} {r.text}"
+        detail = r.json().get("detail", "")
+        assert "Apple Sign In er ikke konfigurert" in detail
+
+
+# ---------- SendGrid email graceful no-op (iter4) ----------
+class TestDriverInviteEmail:
+    def test_invite_with_email_no_sendgrid_key(self, admin_token):
+        email = f"TEST_invite_{uuid.uuid4().hex[:8]}@example.com"
+        r = requests.post(f"{API}/admin/driver-invites",
+                          headers=_headers(admin_token),
+                          json={"driver_id": "car-3", "email": email, "note": "TEST iter4"},
+                          timeout=15)
+        assert r.status_code == 200, r.text
+        inv = r.json()
+        assert inv.get("email") == email.lower()
+        # SENDGRID_API_KEY empty -> email_sent must be False (graceful no-op)
+        assert inv.get("email_sent") is False
+        assert inv.get("token")
+
+        # Check backend log for [EMAIL/no-key] entry
+        try:
+            with open("/var/log/supervisor/backend.out.log", "r") as f:
+                # read last 20KB
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 20000))
+                tail = f.read()
+            assert "[EMAIL/no-key]" in tail, "expected [EMAIL/no-key] log entry"
+            assert email in tail or email.lower() in tail, f"expected recipient {email} in backend log"
+        except FileNotFoundError:
+            pytest.skip("backend.out.log not accessible")
+
+    def test_invite_without_email(self, admin_token):
+        r = requests.post(f"{API}/admin/driver-invites",
+                          headers=_headers(admin_token),
+                          json={"driver_id": "car-3", "note": "TEST no-email"},
+                          timeout=15)
+        assert r.status_code == 200, r.text
+        inv = r.json()
+        assert inv.get("email") is None
+        assert inv.get("email_sent") is False
+
+    def test_duplicate_invite_email_no_crash(self, admin_token):
+        email = f"TEST_dup_{uuid.uuid4().hex[:8]}@example.com"
+        for _ in range(2):
+            r = requests.post(f"{API}/admin/driver-invites",
+                              headers=_headers(admin_token),
+                              json={"driver_id": "car-3", "email": email},
+                              timeout=15)
+            assert r.status_code == 200, r.text
+            assert r.json().get("email_sent") is False
+
+    def test_list_invites_includes_email_field(self, admin_token):
+        # create an invite with email
+        email = f"TEST_listemail_{uuid.uuid4().hex[:8]}@example.com"
+        requests.post(f"{API}/admin/driver-invites",
+                      headers=_headers(admin_token),
+                      json={"driver_id": "car-3", "email": email}, timeout=15)
+        r = requests.get(f"{API}/admin/driver-invites", headers=_headers(admin_token), timeout=15)
+        assert r.status_code == 200
+        invites = r.json().get("invites", [])
+        found = next((i for i in invites if i.get("email") == email.lower()), None)
+        assert found is not None, "invite with email not found in list"
+        assert "email" in found
+
+    def test_accept_invite_with_email_attached(self, admin_token):
+        email = f"TEST_accept_{uuid.uuid4().hex[:8]}@example.com"
+        r = requests.post(f"{API}/admin/driver-invites",
+                          headers=_headers(admin_token),
+                          json={"driver_id": "car-3", "email": email}, timeout=15)
+        assert r.status_code == 200
+        token = r.json()["token"]
+
+        driver_email = f"TEST_drv_{uuid.uuid4().hex[:8]}@kjapp.no"
+        r = requests.post(f"{API}/driver-invites/accept", json={
+            "token": token,
+            "fullName": "TEST Driver iter4",
+            "email": driver_email,
+            "phone": "+4790000456",
+            "password": "drv12345",
+        }, timeout=15)
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["user"]["role"] == "driver"
+        assert payload["user"]["approved"] is False
+
+
 # ---------- Google Sign-in stub ----------
 class TestGoogleSession:
     def test_fake_session_returns_401(self):

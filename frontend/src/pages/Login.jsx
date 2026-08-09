@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { StatusBar, Orb } from "../components/UIKit";
+import { Orb } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
-import { formatApiErrorDetail } from "../lib/api";
+import { formatApiErrorDetail, api } from "../lib/api";
 import { ArrowRight, ChevronLeft, Eye, EyeOff, Apple } from "lucide-react";
 
 export default function Login() {
@@ -11,8 +11,47 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [appleEnabled, setAppleEnabled] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get("/auth/apple/config").then((r) => setAppleEnabled(!!r.data.enabled)).catch(() => {});
+  }, []);
+
+  async function loginWithApple() {
+    if (!appleEnabled) {
+      alert("Apple Sign In krever Apple Developer-konto ($99/år) og at APPLE_CLIENT_ID settes i backend .env. Backend-endepunktet er allerede klart.");
+      return;
+    }
+    // Load Apple JS SDK
+    if (!window.AppleID) {
+      await new Promise((resolve) => {
+        const s = document.createElement("script");
+        s.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+        s.onload = resolve;
+        document.head.appendChild(s);
+      });
+    }
+    try {
+      const { data: cfg } = await api.get("/auth/apple/config");
+      window.AppleID.auth.init({
+        clientId: cfg.client_id,
+        scope: "name email",
+        redirectURI: window.location.origin + "/auth/callback",
+        usePopup: true,
+      });
+      const res = await window.AppleID.auth.signIn();
+      const idToken = res.authorization?.id_token;
+      const fullName = res.user ? `${res.user.name?.firstName || ""} ${res.user.name?.lastName || ""}`.trim() : undefined;
+      const email = res.user?.email;
+      const { data } = await api.post("/auth/apple", { identity_token: idToken, fullName, email });
+      localStorage.setItem("kjapp_token", data.token);
+      navigate(data.user.role === "admin" ? "/admin" : data.user.role === "driver" ? "/driver" : "/app");
+    } catch (e) {
+      alert("Apple-innlogging feilet: " + (e.response?.data?.detail || e.message));
+    }
+  }
 
   const submit = async (e) => {
     e.preventDefault();
@@ -30,7 +69,7 @@ export default function Login() {
 
   return (
     <div className="phone-shell grain flex flex-col">
-      <StatusBar />
+      
       <div className="px-6 pt-2 flex items-center">
         <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a8388]" data-testid="login-back">
           <ChevronLeft size={22} />
@@ -104,7 +143,7 @@ export default function Login() {
         </div>
 
         <div className="mt-8 flex items-center justify-center gap-4">
-          <SocialButton icon={<Apple size={20} />} testid="social-apple" onClick={() => alert("Apple Sign In krever Apple Developer-nøkler — kommer snart.")} />
+          <SocialButton icon={<Apple size={20} />} testid="social-apple" onClick={loginWithApple} />
           <SocialButton icon={<GoogleIcon />} testid="social-google" onClick={loginWithGoogle} />
           <SocialButton icon={<PhoneIcon />} testid="social-phone" onClick={() => alert("SMS-logg inn kommer snart.")} />
         </div>
@@ -122,6 +161,11 @@ export default function Login() {
           <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
             Sjåfør-innlogging
           </Link>
+        </p>
+        <p className="text-[#5a6166] text-[11px] mt-4">
+          <Link to="/privacy" className="hover:text-mint">Personvern</Link>
+          <span className="mx-2">·</span>
+          <Link to="/terms" className="hover:text-mint">Vilkår</Link>
         </p>
       </div>
     </div>

@@ -33,7 +33,7 @@ export default function DriverLogin() {
 
   return (
     <div className="phone-shell grain flex flex-col">
-      <StatusBar />
+      
       <div className="px-6 pt-2 flex items-center">
         <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a8388]" data-testid="dlogin-back">
           <ChevronLeft size={22} />

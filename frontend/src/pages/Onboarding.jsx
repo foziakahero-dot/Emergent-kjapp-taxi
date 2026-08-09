@@ -34,7 +34,7 @@ export default function Onboarding() {
 
   return (
     <div className="phone-shell grain flex flex-col">
-      <StatusBar />
+      
       <div className="flex-1 flex flex-col items-center justify-center px-8 relative">
         <AnimatePresence mode="wait">
           <motion.div

@@ -159,7 +159,7 @@ export default function Home() {
   };
 
   return (
-    <div className="relative" style={{ height: "calc(100dvh - 44px - 80px)" }}>
+    <div className="relative" style={{ height: "calc(100dvh - 80px)" }}>
       {/* Map */}
       <div className="absolute inset-x-0 top-0 bottom-0">
         <MapContainer

@@ -165,7 +165,7 @@ export default function AIChat() {
   const empty = messages.length === 0 && !bookingStep;
 
   return (
-    <div className="flex flex-col" style={{ minHeight: "calc(100dvh - 44px - 80px)" }}>
+    <div className="flex flex-col" style={{ minHeight: "calc(100dvh - 80px)" }}>
       <div className="px-4 pt-2 pb-1 flex items-center gap-2">
         <button onClick={() => navigate("/app")} className="w-10 h-10 grid place-items-center text-[#7a8388]" data-testid="ai-back">
           <ChevronLeft size={22} />

@@ -28,7 +28,7 @@ export const adminApi = {
   drivers: () => api.get("/admin/drivers").then((r) => r.data),
   trips: () => api.get("/admin/trips").then((r) => r.data),
   approveDriver: (id, approved = true) => api.post(`/admin/drivers/${id}/approve`, { approved }).then((r) => r.data),
-  createInvite: (driver_id, note = "") => api.post("/admin/driver-invites", { driver_id, note }).then((r) => r.data),
+  createInvite: (driver_id, note = "", email = "") => api.post("/admin/driver-invites", { driver_id, note, email: email || undefined }).then((r) => r.data),
   invites: () => api.get("/admin/driver-invites").then((r) => r.data),
 };
 
