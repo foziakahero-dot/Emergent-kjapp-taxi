@@ -49,11 +49,27 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
   - Push subscribe UI in both Profile (passenger) and DriverProfile
 - PWA: manifest.json + SVG icons (192, 512) + apple-touch-icon + safe-area CSS + service worker
 
-## Verified (testing agent iteration_1 + iteration_2 + iteration_3)
-- **iter_1**: 13/13 basis-endepunkter — 100%
-- **iter_2**: 10/10 sjåfør + push + OSRM — 100%
-- **iter_3**: 10/10 real prices + admin + driver-invite + Google session — 100%
-- Total: **33/33 backend-tester passert** uten bugs
+## Verified (testing agent iter 1–4)
+- **iter_1**: 13/13 · basis
+- **iter_2**: 10/10 · sjåfør + push + OSRM
+- **iter_3**: 10/10 · admin + driver-invite + Google + ekte priser
+- **iter_4**: 17/17 · SendGrid + Apple Sign In + regresjon
+- **Total: 50/50 backend-tester grønne** — ingen bugs
+
+## Nye legal og integrasjonsflater
+- `/privacy` — Norsk personvernerklæring (12 seksjoner, GDPR-konform, Datatilsynet-referanse)
+- `/terms` — Brukervilkår (12 seksjoner, norsk drosjerett, Oslo tingrett verneting)
+- Apple Sign In: fullverdig JWT-verifisering mot Apple ID public keys. Aktivering ved å sette `APPLE_CLIENT_ID` i backend .env (krever Apple Developer $99/år)
+- SendGrid: graceful fallback — sender invitasjons-e-post når `SENDGRID_API_KEY` er satt, ellers logger til stdout
+- Fake status-bar (klokke/wifi/batteri) fjernet fra alle skjermer. Bruker nå ekte device safe-area for iPhone-notch og Android status bar
+
+## Backlog / Next
+- P1: Ekte betaling (Stripe/Vipps SDK) ved kvittering
+- P1: Skaff Apple Developer + generer APPLE_CLIENT_ID for iOS-lansering
+- P1: Skaff SendGrid API-nøkkel for ekte e-post
+- P2: Voice input (OpenAI Whisper) for AI chat
+- P2: Trip receipts sent via email
+- P3: Capacitor wrap for native iOS/Android
 
 ## Test Credentials
 - Kunde: `ola@kjapp.no` / `test1234` → `/app`
@@ -66,11 +82,10 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Nøkkelinnsikt: **Skatteetatens ARS-godkjenning** er lengste kritiske vei for norsk drosje-lansering
 
 ## Backlog / Next
-- P1: Ekte betaling (Stripe/Vipps SDK) ved kvittering
-- P1: Ekte Apple Sign In (krever Apple Developer $99/år + egne nøkler)
-- P1: Norsk personvernerklæring + brukervilkår (påkrevd for App Store/Play)
+- P0: Ekte betaling (Stripe/Vipps SDK) ved kvittering — første steg mot inntekt
+- P1: Sett `APPLE_CLIENT_ID` i backend .env for å aktivere Apple Sign In (krever Apple Developer $99/år)
+- P1: Sett `SENDGRID_API_KEY` for ekte e-post-utsending
 - P2: Voice input (OpenAI Whisper) for AI chat
-- P2: Trip receipts sent via email (SendGrid/Resend)
-- P2: SendGrid-integrasjon for å sende sjåfør-invitasjoner via ekte e-post
+- P2: Trip receipts via e-post
 - P3: Capacitor wrap for native iOS/Android
 - P3: Skatteetaten ARS-godkjenning
