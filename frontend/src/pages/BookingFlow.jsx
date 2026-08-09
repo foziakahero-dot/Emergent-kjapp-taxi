@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { tripsApi } from "../lib/api";
 import { StatusBar, Orb, ProgressRing } from "../components/UIKit";
 import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
 import L from "leaflet";
-import { pickupIcon, dropoffIcon, carIcon } from "../lib/mapAssets";
+import { pickupIcon, dropoffIcon, carIconRotated } from "../lib/mapAssets";
+import { computeDriverPosition } from "../lib/tripAnimation";
+import ChatModal from "../components/ChatModal";
 import { X, Phone, MessageCircle, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -19,6 +21,8 @@ const STATUS_META = {
 export default function BookingFlow() {
   const { tripId } = useParams();
   const [trip, setTrip] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [carPos, setCarPos] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,6 +41,16 @@ export default function BookingFlow() {
     const i = setInterval(fetchTrip, 2000);
     return () => { mounted = false; clearInterval(i); };
   }, [tripId, navigate]);
+
+  // Live-animate car position along route
+  useEffect(() => {
+    if (!trip) return;
+    if (trip.status !== "driver_on_way" && trip.status !== "in_trip") { setCarPos(null); return; }
+    const tick = () => setCarPos(computeDriverPosition(trip));
+    tick();
+    const i = setInterval(tick, 1000);
+    return () => clearInterval(i);
+  }, [trip]);
 
   const cancel = async () => {
     if (window.confirm("Avbryte turen?")) {
@@ -62,13 +76,6 @@ export default function BookingFlow() {
     routePoints = [[trip.pickup_lat, trip.pickup_lng], [trip.dropoff_lat, trip.dropoff_lng]];
   }
 
-  // synthesize a car position between pickup and dropoff based on status
-  const carProgress = trip.status === "driver_on_way" ? 0.1 : trip.status === "in_trip" ? 0.55 : trip.status === "arrived" ? 0.95 : 0;
-  const carPos = [
-    trip.pickup_lat + (trip.dropoff_lat - trip.pickup_lat) * carProgress,
-    trip.pickup_lng + (trip.dropoff_lng - trip.pickup_lng) * carProgress,
-  ];
-
   return (
     <div className="relative min-h-screen">
       <div className="absolute inset-x-0" style={{ top: 0, bottom: 0 }}>
@@ -80,8 +87,8 @@ export default function BookingFlow() {
           <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={pickupIcon} />
           <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={dropoffIcon} />
           <Polyline positions={routePoints} pathOptions={{ color: "#2fe08c", weight: 4, opacity: 0.9 }} />
-          {(trip.status === "driver_on_way" || trip.status === "in_trip") && (
-            <Marker position={carPos} icon={carIcon} />
+          {(trip.status === "driver_on_way" || trip.status === "in_trip") && carPos && (
+            <Marker position={[carPos.lat, carPos.lng]} icon={carIconRotated(carPos.bearing)} />
           )}
         </MapContainer>
       </div>
@@ -137,9 +144,9 @@ export default function BookingFlow() {
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2">
-                    <ActionBtn icon={<Phone size={16} />} label="Ring sjåfør" testid="action-call" />
-                    <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="action-message" />
-                    <ActionBtn icon={<Shield size={16} />} label="Sikkerhet" testid="action-safety" />
+                    <ActionBtn icon={<Phone size={16} />} label="Ring sjåfør" testid="action-call" onClick={() => alert("Ring-funksjon aktiveres i produksjon.")} />
+                    <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="action-message" onClick={() => setChatOpen(true)} />
+                    <ActionBtn icon={<Shield size={16} />} label="Sikkerhet" testid="action-safety" onClick={() => alert("Kontakt support på: support@kjapp.no")} />
                   </div>
                 </div>
               ) : trip.status === "in_trip" ? (
@@ -168,7 +175,9 @@ export default function BookingFlow() {
                       <div className="text-white text-sm">Vipps</div>
                     </div>
                   </div>
-                  <button className="mt-3 w-full btn-ghost text-sm" data-testid="share-trip">Del turstatus</button>
+                  <button onClick={() => setChatOpen(true)} className="mt-3 w-full btn-ghost text-sm flex items-center justify-center gap-2" data-testid="ontrip-chat">
+                    <MessageCircle size={14} /> Melding til sjåfør
+                  </button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center py-4">
@@ -185,13 +194,15 @@ export default function BookingFlow() {
           </AnimatePresence>
         </div>
       </motion.div>
+
+      <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} tripId={tripId} role="passenger" />
     </div>
   );
 }
 
-function ActionBtn({ icon, label, testid }) {
+function ActionBtn({ icon, label, testid, onClick }) {
   return (
-    <button data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#141719] border border-line hover:border-mint transition-colors">
+    <button onClick={onClick} data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#141719] border border-line hover:border-mint transition-colors">
       <span className="text-mint">{icon}</span>
       <span className="text-[10px] text-[#a1a7ab]">{label}</span>
     </button>

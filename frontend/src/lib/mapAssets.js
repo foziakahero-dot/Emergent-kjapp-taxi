@@ -74,6 +74,16 @@ export const fleetCarIcon = L.divIcon({
   iconAnchor: [14, 14],
 });
 
+/** Build a car icon rotated to face the direction of travel (bearing in degrees). */
+export function carIconRotated(bearing = 0) {
+  return L.divIcon({
+    className: "kjapp-marker",
+    html: `<div style="transform:rotate(${bearing}deg);transition:transform 0.5s ease;filter:drop-shadow(0 0 12px rgba(47,224,140,0.55))">${decodeURIComponent(CAR_SVG)}</div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+}
+
 /**
  * Open native maps app for turn-by-turn navigation.
  * Works on Android (Google Maps app), iOS (Google Maps app if installed, else Apple Maps).

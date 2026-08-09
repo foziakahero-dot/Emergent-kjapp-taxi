@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { driverApi } from "../lib/api";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
-import { pickupIcon, dropoffIcon, openMapsNavigation } from "../lib/mapAssets";
+import { pickupIcon, dropoffIcon, openMapsNavigation, carIconRotated } from "../lib/mapAssets";
+import { computeDriverPosition } from "../lib/tripAnimation";
+import ChatModal from "../components/ChatModal";
 import { motion } from "framer-motion";
 import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag, MapPin } from "lucide-react";
 import { Orb } from "../components/UIKit";
@@ -25,6 +27,8 @@ export default function DriverTrip() {
   const [trip, setTrip] = useState(null);
   const [busy, setBusy] = useState(false);
   const [autoNav, setAutoNav] = useState(() => localStorage.getItem("kjapp_auto_nav") === "true");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [carPos, setCarPos] = useState(null);
   const lastStatusRef = React.useRef(null);
   const navigate = useNavigate();
 
@@ -42,6 +46,16 @@ export default function DriverTrip() {
     const i = setInterval(load, 3000);
     return () => clearInterval(i);
   }, []);
+
+  // Animate driver car along route
+  useEffect(() => {
+    if (!trip) { setCarPos(null); return; }
+    if (trip.status !== "driver_on_way" && trip.status !== "in_trip") { setCarPos(null); return; }
+    const tick = () => setCarPos(computeDriverPosition(trip));
+    tick();
+    const i = setInterval(tick, 1000);
+    return () => clearInterval(i);
+  }, [trip]);
 
   // Auto-open Google Maps when a new trip becomes active (transition into driver_on_way or in_trip)
   useEffect(() => {
@@ -128,6 +142,9 @@ export default function DriverTrip() {
           <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={PICKUP_ICON} />
           <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={DROPOFF_ICON} />
           <Polyline positions={routePoints} pathOptions={{ color: "#2fe08c", weight: 5, opacity: 0.9 }} />
+          {carPos && (
+            <Marker position={[carPos.lat, carPos.lng]} icon={carIconRotated(carPos.bearing)} />
+          )}
           <FitBounds points={routePoints} />
         </MapContainer>
       </div>
@@ -169,9 +186,9 @@ export default function DriverTrip() {
           </div>
 
           <div className="grid grid-cols-3 gap-2 mb-3">
-            <ActionBtn icon={<Phone size={16} />} label="Ring" testid="dtrip-call" />
-            <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="dtrip-msg" />
-            <ActionBtn icon={<Flag size={16} />} label="Support" testid="dtrip-support" />
+            <ActionBtn icon={<Phone size={16} />} label="Ring" testid="dtrip-call" onClick={() => alert("Ring-funksjon aktiveres i produksjon.")} />
+            <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="dtrip-msg" onClick={() => setChatOpen(true)} />
+            <ActionBtn icon={<Flag size={16} />} label="Support" testid="dtrip-support" onClick={() => alert("Kontakt: support@kjapp.no")} />
           </div>
 
           {/* Prominent open-in-Google-Maps for turn-by-turn */}
@@ -221,13 +238,15 @@ export default function DriverTrip() {
           )}
         </div>
       </motion.div>
+
+      <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} tripId={trip.trip_id} role="driver" />
     </div>
   );
 }
 
-function ActionBtn({ icon, label, testid }) {
+function ActionBtn({ icon, label, testid, onClick }) {
   return (
-    <button data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#141719] border border-line hover:border-mint transition-colors">
+    <button onClick={onClick} data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#141719] border border-line hover:border-mint transition-colors">
       <span className="text-mint">{icon}</span>
       <span className="text-[10px] text-[#a1a7ab]">{label}</span>
     </button>

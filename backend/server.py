@@ -302,6 +302,10 @@ async def progress_trip(trip_id: str):
                 d = drv[0]
                 driver = {"name": d["name"], "car": d["car"], "plate": d["plate"], "rating": d["rating"], "photo": d["name"][:2].upper()}
                 eta = random.randint(2, 6)
+                import hashlib
+                h = hashlib.md5(f"{trip_id}-auto".encode()).digest()
+                dx = ((h[0] - 128) / 128) * 0.012 + 0.006
+                dy = ((h[1] - 128) / 128) * 0.012 + 0.006
                 await db.trips.update_one(
                     {"trip_id": trip_id, "status": "booking"},
                     {"$set": {
@@ -309,6 +313,9 @@ async def progress_trip(trip_id: str):
                         "driver": driver,
                         "driver_id": d["driver_id"],
                         "eta_min": eta,
+                        "driver_start_lat": t["pickup_lat"] + dx,
+                        "driver_start_lng": t["pickup_lng"] + dy,
+                        "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
                         "updated_at": datetime.now(timezone.utc).isoformat(),
                     }},
                 )
@@ -658,6 +665,64 @@ async def list_trips(current=Depends(get_current_user)):
     return trips
 
 
+# ---- Trip messages (chat between passenger and driver) ----
+class TripMessageRequest(BaseModel):
+    text: str
+
+
+async def _load_trip_or_403(trip_id: str, current: dict):
+    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Turen finnes ikke")
+    is_passenger = trip.get("user_id") == current["id"]
+    is_driver = trip.get("driver_user_id") == current["id"] or (current.get("role") in ("driver", "admin") and trip.get("driver_id") == current.get("driver_id"))
+    if not (is_passenger or is_driver or current.get("role") == "admin"):
+        raise HTTPException(status_code=403, detail="Ikke tilgang til denne turen")
+    return trip, is_passenger, is_driver
+
+
+@api.post("/trips/{trip_id}/messages")
+async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depends(get_current_user)):
+    trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Melding kan ikke være tom")
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="Meldingen er for lang (maks 500 tegn)")
+    msg = {
+        "trip_id": trip_id,
+        "from_user_id": current["id"],
+        "from_role": "passenger" if is_passenger else "driver",
+        "from_name": current.get("fullName", "Bruker"),
+        "text": text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db.trip_messages.insert_one(msg)
+    msg["id"] = str(result.inserted_id)
+    msg.pop("_id", None)
+    # Send push to the OTHER party
+    other_user_id = trip.get("driver_user_id") if is_passenger else trip.get("user_id")
+    if other_user_id:
+        await send_push_to_user(
+            other_user_id,
+            f"Melding fra {'kunde' if is_passenger else trip.get('driver', {}).get('name', 'sjåfør')}",
+            text[:140],
+            f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
+        )
+    return msg
+
+
+@api.get("/trips/{trip_id}/messages")
+async def list_trip_messages(trip_id: str, current=Depends(get_current_user)):
+    await _load_trip_or_403(trip_id, current)
+    out = []
+    async for m in db.trip_messages.find({"trip_id": trip_id}).sort("created_at", 1).limit(200):
+        m["id"] = str(m["_id"])
+        m.pop("_id", None)
+        out.append(m)
+    return {"messages": out}
+
+
 # ---- Payment methods ----
 @api.get("/payment-methods")
 async def list_payment_methods(current=Depends(get_current_user)):
@@ -830,13 +895,28 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         raise HTTPException(status_code=400, detail="Sjåføren har ingen bil tildelt")
     driver = {"name": d["name"], "car": d["car"], "plate": d["plate"], "rating": d["rating"], "photo": d["name"][:2].upper()}
     eta = random.randint(2, 6)
+    # Pick up trip first so we know pickup coords for a realistic start position
+    trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": "booking", "driver_id": None})
+    if not trip_pre:
+        raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    # Driver starts ~1-2km NE of pickup (small random offset) so we can animate arrival
+    import hashlib
+    h = hashlib.md5(f"{body.trip_id}-{driver_id}".encode()).digest()
+    dx = ((h[0] - 128) / 128) * 0.012 + 0.006
+    dy = ((h[1] - 128) / 128) * 0.012 + 0.006
+    driver_start_lat = trip_pre["pickup_lat"] + dx
+    driver_start_lng = trip_pre["pickup_lng"] + dy
     result = await db.trips.update_one(
         {"trip_id": body.trip_id, "status": "booking", "driver_id": None},
         {"$set": {
             "status": "driver_on_way",
             "driver": driver,
             "driver_id": driver_id,
+            "driver_user_id": current["id"],
             "eta_min": eta,
+            "driver_start_lat": driver_start_lat,
+            "driver_start_lng": driver_start_lng,
+            "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )

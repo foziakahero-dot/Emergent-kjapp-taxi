@@ -46,6 +46,8 @@ export const tripsApi = {
   cancel: (id) => api.post(`/trips/${id}/cancel`).then((r) => r.data),
   list: () => api.get("/trips").then((r) => r.data),
   estimate: (data) => api.post("/trips/estimate", data).then((r) => r.data),
+  messages: (id) => api.get(`/trips/${id}/messages`).then((r) => r.data),
+  sendMessage: (id, text) => api.post(`/trips/${id}/messages`, { text }).then((r) => r.data),
 };
 
 export const carsApi = {

@@ -287,3 +287,213 @@ class TestGoogleSession:
             assert "Ugyldig" in r.json().get("detail", "")
         except Exception:
             pass
+
+
+
+# ---------- Iteration 5: driver_start position + trip messages chat ----------
+DRIVER = {"email": "sjafor@kjapp.no", "password": "sjafor1234"}
+
+# Oslo pickup / dropoff coords used across chat tests
+PICKUP_LAT, PICKUP_LNG = 59.9127, 10.7461
+DROPOFF_LAT, DROPOFF_LNG = 59.9110, 10.7530
+
+
+@pytest.fixture(scope="session")
+def driver_token():
+    return _login(**DRIVER)
+
+
+def _book_trip(user_token):
+    body = {
+        "pickup_address": "TEST_Oslo S",
+        "pickup_lat": PICKUP_LAT, "pickup_lng": PICKUP_LNG,
+        "dropoff_address": "TEST_Aker Brygge",
+        "dropoff_lat": DROPOFF_LAT, "dropoff_lng": DROPOFF_LNG,
+        "vehicle_type": "enkelt",
+    }
+    r = requests.post(f"{API}/trips/request", json=body, headers=_headers(user_token), timeout=20)
+    assert r.status_code == 200, r.text
+    return r.json()["trip_id"]
+
+
+def _wait_until_booking(trip_id, token, timeout=8):
+    import time
+    for _ in range(timeout * 2):
+        r = requests.get(f"{API}/trips/{trip_id}", headers=_headers(token), timeout=10)
+        if r.status_code == 200 and r.json().get("status") == "booking":
+            return
+        time.sleep(0.5)
+
+
+class TestDriverAcceptPosition:
+    """Iter5: driver_accept sets driver_start_lat/lng, driver_route_started_at, driver_user_id."""
+
+    def test_accept_populates_start_position(self, user_token, driver_token, admin_token):
+        trip_id = _book_trip(user_token)
+        _wait_until_booking(trip_id, user_token)
+
+        r = requests.post(f"{API}/driver/accept", json={"trip_id": trip_id},
+                          headers=_headers(driver_token), timeout=20)
+        assert r.status_code == 200, r.text
+        t = r.json()
+        assert t["status"] == "driver_on_way"
+        # New iter5 fields
+        assert "driver_start_lat" in t and "driver_start_lng" in t
+        assert "driver_route_started_at" in t and t["driver_route_started_at"]
+        assert "driver_user_id" in t and t["driver_user_id"]
+        # Offset roughly 1-2km: lat/lng delta between ~-0.006 and ~0.018
+        dlat = t["driver_start_lat"] - PICKUP_LAT
+        dlng = t["driver_start_lng"] - PICKUP_LNG
+        assert -0.02 < dlat < 0.02, f"dlat out of range: {dlat}"
+        assert -0.02 < dlng < 0.02, f"dlng out of range: {dlng}"
+        # Must not be zero (should be offset)
+        assert abs(dlat) > 0.0001 and abs(dlng) > 0.0001
+
+
+class TestAutoAssignFallback:
+    """Iter5: if no driver accepts within 12s, progress_trip auto-assigns and sets start fields."""
+
+    def test_auto_assign_sets_driver_start(self, user_token):
+        import time
+        trip_id = _book_trip(user_token)
+        # Wait for booking->auto-assign (3s to booking + up to 12s wait)
+        deadline = time.time() + 22
+        t = None
+        while time.time() < deadline:
+            r = requests.get(f"{API}/trips/{trip_id}", headers=_headers(user_token), timeout=10)
+            if r.status_code == 200:
+                t = r.json()
+                if t.get("status") in ("driver_on_way", "in_trip", "arrived"):
+                    break
+            time.sleep(1)
+        assert t is not None and t.get("status") in ("driver_on_way", "in_trip", "arrived"), \
+            f"trip did not auto-progress: {t}"
+        assert t.get("driver_start_lat") is not None
+        assert t.get("driver_start_lng") is not None
+        assert t.get("driver_route_started_at")
+        dlat = t["driver_start_lat"] - PICKUP_LAT
+        dlng = t["driver_start_lng"] - PICKUP_LNG
+        assert -0.02 < dlat < 0.02 and -0.02 < dlng < 0.02
+
+
+class TestTripMessages:
+    """Iter5: chat between passenger and assigned driver."""
+
+    @pytest.fixture(scope="class")
+    def accepted_trip(self, user_token, driver_token, admin_token):
+        trip_id = _book_trip(user_token)
+        _wait_until_booking(trip_id, user_token)
+        r = requests.post(f"{API}/driver/accept", json={"trip_id": trip_id},
+                          headers=_headers(driver_token), timeout=20)
+        assert r.status_code == 200, r.text
+        return trip_id
+
+    def test_passenger_sends_message(self, accepted_trip, user_token):
+        r = requests.post(f"{API}/trips/{accepted_trip}/messages",
+                          json={"text": "Hei, jeg står ved inngangen"},
+                          headers=_headers(user_token), timeout=20)
+        assert r.status_code == 200, r.text
+        m = r.json()
+        for k in ("id", "trip_id", "from_user_id", "from_role", "from_name", "text", "created_at"):
+            assert k in m, f"missing key {k} in {m}"
+        assert m["trip_id"] == accepted_trip
+        assert m["from_role"] == "passenger"
+        assert m["text"] == "Hei, jeg står ved inngangen"
+
+    def test_driver_sends_reply(self, accepted_trip, driver_token):
+        r = requests.post(f"{API}/trips/{accepted_trip}/messages",
+                          json={"text": "Kommer om 2 minutter"},
+                          headers=_headers(driver_token), timeout=20)
+        assert r.status_code == 200, r.text
+        assert r.json()["from_role"] == "driver"
+
+    def test_list_messages_ordered_ascending(self, accepted_trip, user_token):
+        r = requests.get(f"{API}/trips/{accepted_trip}/messages",
+                         headers=_headers(user_token), timeout=20)
+        assert r.status_code == 200, r.text
+        msgs = r.json()["messages"]
+        assert len(msgs) >= 2
+        # Ascending by created_at
+        timestamps = [m["created_at"] for m in msgs]
+        assert timestamps == sorted(timestamps)
+        # First from passenger, then driver
+        roles = [m["from_role"] for m in msgs]
+        assert "passenger" in roles and "driver" in roles
+
+    def test_unauthenticated_returns_401(self, accepted_trip):
+        r = requests.post(f"{API}/trips/{accepted_trip}/messages",
+                          json={"text": "hi"}, timeout=15)
+        assert r.status_code in (401, 403), r.text
+
+    def test_unrelated_user_gets_403(self, accepted_trip):
+        # Register a fresh unrelated user
+        email = f"TEST_unrelated_{uuid.uuid4().hex[:8]}@kjapp.no"
+        rr = requests.post(f"{API}/auth/register",
+                           json={"email": email, "password": "test1234",
+                                 "fullName": "TEST_Unrelated", "phone": "+4790000000"},
+                           timeout=15)
+        assert rr.status_code == 200, rr.text
+        tok = rr.json()["token"]
+        r = requests.post(f"{API}/trips/{accepted_trip}/messages",
+                          json={"text": "should not work"},
+                          headers=_headers(tok), timeout=15)
+        assert r.status_code == 403, r.text
+        r2 = requests.get(f"{API}/trips/{accepted_trip}/messages",
+                          headers=_headers(tok), timeout=15)
+        assert r2.status_code == 403, r2.text
+
+    def test_empty_text_returns_400(self, accepted_trip, user_token):
+        r = requests.post(f"{API}/trips/{accepted_trip}/messages",
+                          json={"text": "   "},
+                          headers=_headers(user_token), timeout=15)
+        assert r.status_code == 400
+        assert "tom" in r.json().get("detail", "").lower()
+
+    def test_long_text_returns_400(self, accepted_trip, user_token):
+        r = requests.post(f"{API}/trips/{accepted_trip}/messages",
+                          json={"text": "x" * 501},
+                          headers=_headers(user_token), timeout=15)
+        assert r.status_code == 400
+        assert "lang" in r.json().get("detail", "").lower()
+
+    def test_nonexistent_trip_returns_404(self, user_token):
+        r = requests.post(f"{API}/trips/nonexistent-trip-xyz/messages",
+                          json={"text": "hi"},
+                          headers=_headers(user_token), timeout=15)
+        assert r.status_code == 404
+        r2 = requests.get(f"{API}/trips/nonexistent-trip-xyz/messages",
+                          headers=_headers(user_token), timeout=15)
+        assert r2.status_code == 404
+
+
+class TestChatLifecycleRegression:
+    """Iter5: full lifecycle passenger↔driver chat around trip stages."""
+
+    def test_full_lifecycle_with_chat(self, user_token, driver_token, admin_token):
+        trip_id = _book_trip(user_token)
+        _wait_until_booking(trip_id, user_token)
+        r = requests.post(f"{API}/driver/accept", json={"trip_id": trip_id},
+                          headers=_headers(driver_token), timeout=20)
+        assert r.status_code == 200, r.text
+
+        # Passenger sends
+        r1 = requests.post(f"{API}/trips/{trip_id}/messages",
+                           json={"text": "På vei ut nå"},
+                           headers=_headers(user_token), timeout=15)
+        assert r1.status_code == 200
+        # Driver replies
+        r2 = requests.post(f"{API}/trips/{trip_id}/messages",
+                           json={"text": "Ok, ser deg"},
+                           headers=_headers(driver_token), timeout=15)
+        assert r2.status_code == 200
+
+        # Both list messages
+        for tok in (user_token, driver_token):
+            rl = requests.get(f"{API}/trips/{trip_id}/messages",
+                              headers=_headers(tok), timeout=15)
+            assert rl.status_code == 200
+            assert len(rl.json()["messages"]) >= 2
+
+        # Passenger can still fetch trip
+        rt = requests.get(f"{API}/trips/{trip_id}", headers=_headers(user_token), timeout=15)
+        assert rt.status_code == 200
