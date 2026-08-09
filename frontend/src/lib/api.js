@@ -59,6 +59,21 @@ export const summaryApi = {
   today: () => api.get("/summary/today").then((r) => r.data),
 };
 
+export const driverApi = {
+  pending: () => api.get("/driver/pending").then((r) => r.data),
+  accept: (trip_id) => api.post("/driver/accept", { trip_id }).then((r) => r.data),
+  current: () => api.get("/driver/current").then((r) => r.data),
+  start: (trip_id) => api.post(`/driver/trip/${trip_id}/start`).then((r) => r.data),
+  arrive: (trip_id) => api.post(`/driver/trip/${trip_id}/arrive`).then((r) => r.data),
+  summary: () => api.get("/driver/summary/today").then((r) => r.data),
+};
+
+export const pushApi = {
+  publicKey: () => api.get("/push/vapid-public-key").then((r) => r.data),
+  subscribe: (subscription) => api.post("/push/subscribe", { subscription }).then((r) => r.data),
+  test: () => api.post("/push/test").then((r) => r.data),
+};
+
 export function formatApiErrorDetail(detail) {
   if (detail == null) return "Noe gikk galt. Prøv igjen.";
   if (typeof detail === "string") return detail;

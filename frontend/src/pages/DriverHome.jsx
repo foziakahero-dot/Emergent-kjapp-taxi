@@ -1,0 +1,180 @@
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { driverApi, tripsApi } from "../lib/api";
+import { Orb, VoiceBars } from "../components/UIKit";
+import { useAuth } from "../context/AuthContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { MapPin, Navigation, Clock, Check } from "lucide-react";
+
+export default function DriverHome() {
+  const { user } = useAuth();
+  const [pending, setPending] = useState([]);
+  const [current, setCurrent] = useState(null);
+  const [summary, setSummary] = useState({ income: 0, trips: 0, satisfaction: 98 });
+  const [accepting, setAccepting] = useState(null);
+  const navigate = useNavigate();
+
+  const load = async () => {
+    try {
+      const [p, c, s] = await Promise.all([driverApi.pending(), driverApi.current(), driverApi.summary()]);
+      setPending(p.trips || []);
+      setCurrent(c);
+      setSummary(s);
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  const accept = async (trip_id) => {
+    setAccepting(trip_id);
+    try {
+      await driverApi.accept(trip_id);
+      await load();
+      navigate("/driver/trip");
+    } catch (e) {
+      alert("Turen ble tatt av en annen sjåfør.");
+      await load();
+    } finally {
+      setAccepting(null);
+    }
+  };
+
+  const firstName = (user?.fullName || "Sjåfør").split(" ")[0];
+
+  return (
+    <div className="px-4 pt-2 pb-24 page-enter">
+      {/* AI Assistant hero */}
+      <div className="mt-2 card p-5 relative overflow-hidden">
+        <div className="absolute -right-8 -top-8 opacity-40 pointer-events-none">
+          <div className="orb" style={{ width: 130, height: 130 }} />
+        </div>
+        <div className="relative">
+          <div className="text-[11px] text-mint uppercase tracking-widest">AI Assistent</div>
+          <h1 className="mt-2 font-display text-[22px] tracking-tight text-white leading-tight">
+            Hei {firstName}!<br />
+            {pending.length > 0 || current
+              ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} klar nå.`
+              : "Ingen turer akkurat nå."}
+          </h1>
+          <p className="text-[#7a8388] text-sm mt-1">
+            {current ? "Du har en aktiv tur." : pending.length ? "Klar for å kjøre?" : "Vi varsler deg når det kommer en tur."}
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={() => navigate(current ? "/driver/trip" : "/driver/summary")}
+              data-testid="driver-hero-cta"
+              className="btn-ghost text-sm flex items-center gap-2"
+            >
+              <VoiceBars /> Trykk for å snakke
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Current trip banner */}
+      {current && (
+        <motion.button
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          onClick={() => navigate("/driver/trip")}
+          data-testid="driver-current-banner"
+          className="mt-3 w-full text-left card p-4 flex items-center gap-3 border-mint/40"
+        >
+          <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
+            <Navigation size={18} className="text-mint" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] text-mint uppercase tracking-widest">Aktiv tur</div>
+            <div className="text-white text-sm truncate mt-0.5">{current.dropoff_address}</div>
+          </div>
+          <div className="text-white text-sm font-semibold">{current.price} kr</div>
+        </motion.button>
+      )}
+
+      {/* Next / pending trips */}
+      <div className="mt-5 px-1 flex items-center justify-between">
+        <h2 className="text-white text-sm font-medium">Neste tur</h2>
+        <span className="text-[11px] text-[#7a8388]">{pending.length} venter</span>
+      </div>
+
+      <div className="mt-2 space-y-2">
+        <AnimatePresence>
+          {pending.length === 0 ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-6 text-center">
+              <Orb size="small" />
+              <div className="text-[#7a8388] text-sm mt-3">Ingen turer venter</div>
+              <div className="text-[11px] text-[#5a6166] mt-1">Turer dukker opp automatisk her</div>
+            </motion.div>
+          ) : (
+            pending.map((t) => (
+              <motion.div
+                key={t.trip_id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: 40 }}
+                className="card p-4"
+                data-testid={`pending-${t.trip_id}`}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex flex-col items-center pt-1">
+                    <div className="w-2 h-2 rounded-full bg-mint" />
+                    <div className="w-px h-6 bg-[#22262a]" />
+                    <div className="w-2 h-2 rounded-sm bg-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] text-[#7a8388]">Henting</div>
+                    <div className="text-white text-sm truncate">{t.pickup_address}</div>
+                    <div className="text-[11px] text-[#7a8388] mt-1">Til</div>
+                    <div className="text-white text-sm truncate">{t.dropoff_address}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-[12px] text-[#a1a7ab] mb-3 border-t border-line pt-2">
+                  <span>{t.distance_km} km</span>
+                  <span>·</span>
+                  <span>{t.duration_min} min</span>
+                  <span className="ml-auto text-white font-semibold text-base">{t.price} kr</span>
+                </div>
+                <button
+                  onClick={() => accept(t.trip_id)}
+                  disabled={accepting === t.trip_id}
+                  data-testid={`accept-${t.trip_id}`}
+                  className="btn-primary w-full flex items-center justify-center gap-2"
+                >
+                  {accepting === t.trip_id ? (
+                    <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check size={16} /> Godta tur
+                    </>
+                  )}
+                </button>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Today snapshot */}
+      <div className="mt-6 grid grid-cols-3 gap-2">
+        <Stat label="Inntekt i dag" value={`${summary.income} kr`} testid="stat-income" />
+        <Stat label="Turer" value={summary.trips} testid="stat-trips" />
+        <Stat label="Tilfredshet" value={`${summary.satisfaction}%`} testid="stat-satisfaction" />
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, testid }) {
+  return (
+    <div className="card p-3" data-testid={testid}>
+      <div className="text-[10px] text-[#7a8388] uppercase tracking-widest">{label}</div>
+      <div className="font-display text-lg text-white mt-1">{value}</div>
+    </div>
+  );
+}

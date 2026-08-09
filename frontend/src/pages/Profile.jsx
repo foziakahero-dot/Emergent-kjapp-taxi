@@ -1,14 +1,25 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { User, CreditCard, Heart, Settings as SettingsIcon, HelpCircle, Info, LogOut, ChevronRight, ChevronLeft } from "lucide-react";
+import { subscribePush } from "../lib/push";
+import { User, CreditCard, Heart, Settings as SettingsIcon, HelpCircle, Info, LogOut, ChevronRight, ChevronLeft, Bell } from "lucide-react";
 
 export default function Profile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [pushOn, setPushOn] = useState(typeof Notification !== "undefined" && Notification.permission === "granted");
+  const [msg, setMsg] = useState("");
   const initial = (user?.fullName || user?.email || "?").trim()[0]?.toUpperCase();
 
+  const enablePush = async () => {
+    setMsg("");
+    const res = await subscribePush();
+    if (res.ok) { setPushOn(true); setMsg("Push-varsler er slått på ✨"); }
+    else setMsg(res.reason === "denied" ? "Blokkert. Slå på i innstillinger." : "Kunne ikke slå på varsler.");
+  };
+
   const items = [
+    { icon: Bell, label: pushOn ? "Push-varsler: På" : "Slå på push-varsler", to: null, testid: "profile-push", onClick: enablePush, active: pushOn },
     { icon: User, label: "Profil", to: null, testid: "profile-profile" },
     { icon: CreditCard, label: "Betaling", to: "/app/payment", testid: "profile-payment" },
     { icon: Heart, label: "Favoritter", to: null, testid: "profile-favorites" },
@@ -36,19 +47,21 @@ export default function Profile() {
       </div>
 
       <div className="card divide-y divide-line">
-        {items.map(({ icon: Icon, label, to, testid }) => (
+        {items.map(({ icon: Icon, label, to, testid, onClick, active }) => (
           <button
             key={label}
-            onClick={() => to && navigate(to)}
+            onClick={() => (onClick ? onClick() : to && navigate(to))}
             data-testid={testid}
             className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#141719] transition-colors first:rounded-t-[22px] last:rounded-b-[22px]"
           >
-            <Icon size={18} className="text-mint" />
+            <Icon size={18} className={active ? "text-mint" : "text-mint"} />
             <span className="flex-1 text-white text-sm">{label}</span>
             <ChevronRight size={16} className="text-[#7a8388]" />
           </button>
         ))}
       </div>
+
+      {msg && <div className="mt-3 text-center text-[13px] text-mint" data-testid="profile-msg">{msg}</div>}
 
       <button
         onClick={async () => { await logout(); navigate("/login"); }}

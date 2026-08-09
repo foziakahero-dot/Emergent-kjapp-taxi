@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { authApi } from "../lib/api";
+import { ensureServiceWorker } from "../lib/push";
 
 const AuthContext = createContext(null);
 
@@ -23,6 +24,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     refresh();
+    ensureServiceWorker();
   }, [refresh]);
 
   const login = async (email, password) => {

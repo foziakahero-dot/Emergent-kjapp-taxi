@@ -18,18 +18,24 @@ import PaymentMethods from "./pages/PaymentMethods";
 import Settings from "./pages/Settings";
 import TripHistory from "./pages/TripHistory";
 import HelpSupport from "./pages/HelpSupport";
+import DriverHome from "./pages/DriverHome";
+import DriverTrip from "./pages/DriverTrip";
+import DriverSummary from "./pages/DriverSummary";
+import DriverProfile from "./pages/DriverProfile";
+import DriverNav from "./components/DriverNav";
 
-function Protected({ children }) {
+function Protected({ children, driverOnly = false }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (!user) return <Navigate to="/login" replace />;
+  if (driverOnly && user.role !== "driver" && user.role !== "admin") return <Navigate to="/app" replace />;
   return children;
 }
 
 function PublicOnly({ children }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
-  if (user) return <Navigate to="/app" replace />;
+  if (user) return <Navigate to={user.role === "driver" ? "/driver" : "/app"} replace />;
   return children;
 }
 
@@ -41,12 +47,12 @@ function LoadingSplash() {
   );
 }
 
-function Shell({ children, withNav = true }) {
+function Shell({ children, withNav = true, driver = false }) {
   return (
     <div className="phone-shell grain">
       <StatusBar />
       <div style={{ minHeight: "calc(100dvh - 44px)" }}>{children}</div>
-      {withNav && <BottomNav />}
+      {withNav && (driver ? <DriverNav /> : <BottomNav />)}
     </div>
   );
 }
@@ -69,6 +75,13 @@ function AppRoutes() {
       <Route path="/app/payment" element={<Protected><Shell withNav={false}><PaymentMethods /></Shell></Protected>} />
       <Route path="/app/settings" element={<Protected><Shell withNav={false}><Settings /></Shell></Protected>} />
       <Route path="/app/help" element={<Protected><Shell withNav={false}><HelpSupport /></Shell></Protected>} />
+
+      {/* Driver app */}
+      <Route path="/driver" element={<Protected driverOnly><Shell driver><DriverHome /></Shell></Protected>} />
+      <Route path="/driver/trip" element={<Protected driverOnly><Shell driver><DriverTrip /></Shell></Protected>} />
+      <Route path="/driver/summary" element={<Protected driverOnly><Shell driver><DriverSummary /></Shell></Protected>} />
+      <Route path="/driver/profile" element={<Protected driverOnly><Shell driver><DriverProfile /></Shell></Protected>} />
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

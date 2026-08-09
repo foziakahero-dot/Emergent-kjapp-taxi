@@ -46,7 +46,7 @@ export default function BookingFlow() {
           await tripsApi.complete(tripId);
           navigate(`/app/receipt/${tripId}`);
         }
-      } catch {}
+      } catch (_e) { /* transient */ }
     };
     fetchTrip();
     const i = setInterval(fetchTrip, 2000);
@@ -69,7 +69,13 @@ export default function BookingFlow() {
   }
 
   const meta = STATUS_META[trip.status] || STATUS_META.searching;
-  const routePoints = [[trip.pickup_lat, trip.pickup_lng], [trip.dropoff_lat, trip.dropoff_lng]];
+  // Use OSRM geometry if available for realistic route
+  let routePoints;
+  if (trip.geometry?.coordinates?.length) {
+    routePoints = trip.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+  } else {
+    routePoints = [[trip.pickup_lat, trip.pickup_lng], [trip.dropoff_lat, trip.dropoff_lng]];
+  }
 
   // synthesize a car position between pickup and dropoff based on status
   const carProgress = trip.status === "driver_on_way" ? 0.1 : trip.status === "in_trip" ? 0.55 : trip.status === "arrived" ? 0.95 : 0;

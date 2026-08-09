@@ -5,19 +5,30 @@ import os
 import asyncio
 import random
 import secrets
+import json
+import base64
 import bcrypt
 import jwt
+import httpx
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import uuid
+
+try:
+    from pywebpush import webpush, WebPushException
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    PUSH_AVAILABLE = True
+except Exception:
+    PUSH_AVAILABLE = False
 
 # ------------------ Config ------------------
 MONGO_URL = os.environ["MONGO_URL"]
@@ -163,51 +174,111 @@ def haversine_km(lat1, lng1, lat2, lng2):
     return R * c
 
 
+async def osrm_route(plat, plng, dlat, dlng):
+    """Real driving distance + duration + polyline via public OSRM API. Returns None on failure."""
+    url = f"https://router.project-osrm.org/route/v1/driving/{plng},{plat};{dlng},{dlat}"
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(url, params={"overview": "full", "geometries": "geojson"})
+            data = r.json()
+            if data.get("code") != "Ok" or not data.get("routes"):
+                return None
+            route = data["routes"][0]
+            return {
+                "distance_km": round(route["distance"] / 1000.0, 2),
+                "duration_min": max(1, int(round(route["duration"] / 60.0))),
+                "geometry": route["geometry"],  # GeoJSON LineString
+            }
+    except Exception:
+        return None
+
+
 def price_for(distance_km: float, vehicle_type: str) -> int:
     base = {"ai-first": 49, "enkelt": 39, "trygg": 59, "premium": 89}[vehicle_type]
     per_km = {"ai-first": 18, "enkelt": 14, "trygg": 22, "premium": 34}[vehicle_type]
     return int(base + distance_km * per_km)
 
 
+async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app"):
+    """Send push notifications to all subscriptions of a user."""
+    if not PUSH_AVAILABLE:
+        return
+    vapid = await db.vapid.find_one({"_id": "keys"})
+    if not vapid:
+        return
+    subs = []
+    async for s in db.push_subscriptions.find({"user_id": user_id}):
+        subs.append(s)
+    for s in subs:
+        try:
+            webpush(
+                subscription_info=s["subscription"],
+                data=json.dumps({"title": title, "body": body, "url": url}),
+                vapid_private_key=vapid["private_pem"],
+                vapid_claims={"sub": "mailto:noreply@kjapp.no"},
+            )
+        except WebPushException as e:
+            # if subscription is gone (410) remove it
+            if getattr(e.response, "status_code", None) in (404, 410):
+                await db.push_subscriptions.delete_one({"_id": s["_id"]})
+        except Exception:
+            pass
+
+
 async def progress_trip(trip_id: str):
     """Background task that moves trip through lifecycle statuses."""
     try:
-        # searching -> booking
+        # searching -> booking (waiting for a driver to accept)
         await asyncio.sleep(3)
         await db.trips.update_one(
             {"trip_id": trip_id, "status": "searching"},
             {"$set": {"status": "booking", "updated_at": datetime.now(timezone.utc).isoformat()}},
         )
-        # booking -> driver_on_way (assign driver from DB)
-        await asyncio.sleep(3)
-        drv = await db.drivers.aggregate([{"$match": {"active": True}}, {"$sample": {"size": 1}}]).to_list(1)
-        if drv:
-            d = drv[0]
-            driver = {"name": d["name"], "car": d["car"], "plate": d["plate"], "rating": d["rating"], "photo": d["name"][:2].upper()}
-        else:
-            driver = {"name": "KJAPP Sjåfør", "car": "Tesla Model Y", "plate": "EL00000", "rating": 4.9, "photo": "KJ"}
-        eta = random.randint(2, 6)
-        await db.trips.update_one(
-            {"trip_id": trip_id, "status": "booking"},
-            {"$set": {
-                "status": "driver_on_way",
-                "driver": driver,
-                "eta_min": eta,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }},
-        )
+        # Wait up to 12 seconds for a driver to accept manually via /api/driver/accept.
+        # If no driver has accepted, auto-assign a random driver so the passenger flow keeps working.
+        for _ in range(12):
+            await asyncio.sleep(1)
+            t = await db.trips.find_one({"trip_id": trip_id})
+            if not t or t.get("status") != "booking":
+                break
+        t = await db.trips.find_one({"trip_id": trip_id})
+        if t and t.get("status") == "booking":
+            drv = await db.drivers.aggregate([{"$match": {"active": True}}, {"$sample": {"size": 1}}]).to_list(1)
+            if drv:
+                d = drv[0]
+                driver = {"name": d["name"], "car": d["car"], "plate": d["plate"], "rating": d["rating"], "photo": d["name"][:2].upper()}
+                eta = random.randint(2, 6)
+                await db.trips.update_one(
+                    {"trip_id": trip_id, "status": "booking"},
+                    {"$set": {
+                        "status": "driver_on_way",
+                        "driver": driver,
+                        "driver_id": d["driver_id"],
+                        "eta_min": eta,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }},
+                )
+                t = await db.trips.find_one({"trip_id": trip_id})
+                if t:
+                    await send_push_to_user(t["user_id"], "Sjåfør på vei 🚗", f"{driver['name']} kommer om {eta} min.", f"/app/booking/{trip_id}")
         # driver_on_way -> in_trip
         await asyncio.sleep(8)
-        await db.trips.update_one(
-            {"trip_id": trip_id, "status": "driver_on_way"},
-            {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
-        )
+        t = await db.trips.find_one({"trip_id": trip_id})
+        if t and t.get("status") == "driver_on_way":
+            await db.trips.update_one(
+                {"trip_id": trip_id, "status": "driver_on_way"},
+                {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            await send_push_to_user(t["user_id"], "Turen har startet ✨", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
         # in_trip -> arrived
         await asyncio.sleep(10)
-        await db.trips.update_one(
-            {"trip_id": trip_id, "status": "in_trip"},
-            {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
-        )
+        t = await db.trips.find_one({"trip_id": trip_id})
+        if t and t.get("status") == "in_trip":
+            await db.trips.update_one(
+                {"trip_id": trip_id, "status": "in_trip"},
+                {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            await send_push_to_user(t["user_id"], "Du er fremme! 🎯", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
     except Exception as e:
         print(f"progress_trip err: {e}")
 
@@ -220,6 +291,21 @@ async def lifespan(app: FastAPI):
     await db.trips.create_index("trip_id", unique=True)
     await db.drivers.create_index("driver_id", unique=True)
     await db.places.create_index("slug", unique=True)
+    await db.push_subscriptions.create_index("user_id")
+
+    # generate VAPID keys once
+    if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
+        priv = ec.generate_private_key(ec.SECP256R1())
+        priv_pem = priv.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode("utf-8")
+        pub_numbers = priv.public_key().public_numbers()
+        # Raw uncompressed public key: 0x04 || X (32 bytes) || Y (32 bytes) — VAPID applicationServerKey
+        raw = b"\x04" + pub_numbers.x.to_bytes(32, "big") + pub_numbers.y.to_bytes(32, "big")
+        pub_b64 = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+        await db.vapid.insert_one({"_id": "keys", "private_pem": priv_pem, "public_key": pub_b64})
 
     # seed drivers fleet
     if await db.drivers.count_documents({}) == 0:
@@ -276,6 +362,19 @@ async def lifespan(app: FastAPI):
             {"user_id": str(uid.inserted_id), "type": "visa", "label": "Visa", "last4": "4242", "is_default": False, "created_at": datetime.now(timezone.utc).isoformat()},
             {"user_id": str(uid.inserted_id), "type": "mastercard", "label": "Mastercard", "last4": "8888", "is_default": False, "created_at": datetime.now(timezone.utc).isoformat()},
         ])
+
+    # seed driver user linked to fleet
+    driver_email = "sjafor@kjapp.no"
+    if not await db.users.find_one({"email": driver_email}):
+        await db.users.insert_one({
+            "email": driver_email,
+            "password_hash": hash_password("sjafor1234"),
+            "fullName": "Ola Sjåfør",
+            "phone": "+4790000001",
+            "role": "driver",
+            "driver_id": "car-1",  # linked to Tesla Model Y in fleet
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
     yield
 
 
@@ -337,9 +436,15 @@ async def list_places(featured_only: bool = False):
 
 @api.post("/trips/estimate")
 async def trip_estimate(body: EstimateRequest):
-    dist = haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
-    est = round(dist, 1)
-    duration = max(3, int(est * 2.2))
+    route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
+    if route:
+        est = route["distance_km"]
+        duration = route["duration_min"]
+        geometry = route["geometry"]
+    else:
+        est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
+        duration = max(3, int(est * 2.2))
+        geometry = None
     options = []
     for vt, mult in [("ai-first", 1.0), ("enkelt", 0.85), ("trygg", 1.2), ("premium", 1.8)]:
         options.append({
@@ -347,7 +452,7 @@ async def trip_estimate(body: EstimateRequest):
             "price": int(price_for(est, vt)),
             "eta_min": duration,
         })
-    return {"distance_km": est, "duration_min": duration, "options": options}
+    return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry}
 
 
 
@@ -381,7 +486,7 @@ async def login(body: LoginRequest, response: Response):
     uid = str(user["_id"])
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", "")}}
+    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
 
 
 @api.post("/auth/logout")
@@ -399,10 +504,16 @@ async def me(current=Depends(get_current_user)):
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     trip_id = str(uuid.uuid4())
-    dist = haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
-    est = round(dist, 1)
+    route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
+    if route:
+        est = route["distance_km"]
+        eta_min = route["duration_min"]
+        geometry = route["geometry"]
+    else:
+        est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
+        eta_min = max(3, int(est * 2.2))
+        geometry = None
     price = price_for(est, body.vehicle_type)
-    eta_min = max(3, int(est * 2.2))
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
@@ -416,7 +527,9 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "distance_km": est,
         "duration_min": eta_min,
         "price": price,
+        "geometry": geometry,
         "status": "searching",
+        "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -628,6 +741,148 @@ async def summary_today(current=Depends(get_current_user)):
         trips += 1
         total += t.get("price", 0)
     return {"trips": trips, "spent": total, "satisfaction": 98}
+
+
+# ---- Driver endpoints ----
+def require_driver(current=Depends(get_current_user)):
+    if current.get("role") not in ("driver", "admin"):
+        raise HTTPException(status_code=403, detail="Kun for sjåfører")
+    return current
+
+
+class AcceptTripRequest(BaseModel):
+    trip_id: str
+
+
+@api.get("/driver/pending")
+async def driver_pending(current=Depends(require_driver)):
+    """Trips waiting to be accepted (status=booking, no driver assigned yet)."""
+    trips = []
+    async for t in db.trips.find({"status": "booking", "driver_id": None}).sort("created_at", 1).limit(10):
+        t["id"] = str(t["_id"])
+        t.pop("_id", None)
+        trips.append(t)
+    return {"trips": trips}
+
+
+@api.post("/driver/accept")
+async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)):
+    driver_id = current.get("driver_id") or "car-1"
+    d = await db.drivers.find_one({"driver_id": driver_id})
+    if not d:
+        raise HTTPException(status_code=400, detail="Sjåføren har ingen bil tildelt")
+    driver = {"name": d["name"], "car": d["car"], "plate": d["plate"], "rating": d["rating"], "photo": d["name"][:2].upper()}
+    eta = random.randint(2, 6)
+    result = await db.trips.update_one(
+        {"trip_id": body.trip_id, "status": "booking", "driver_id": None},
+        {"$set": {
+            "status": "driver_on_way",
+            "driver": driver,
+            "driver_id": driver_id,
+            "eta_min": eta,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    t = await db.trips.find_one({"trip_id": body.trip_id})
+    await send_push_to_user(t["user_id"], "Sjåfør på vei 🚗", f"{driver['name']} kommer om {eta} min.", f"/app/booking/{body.trip_id}")
+    t["id"] = str(t["_id"]); t.pop("_id", None)
+    return t
+
+
+@api.get("/driver/current")
+async def driver_current(current=Depends(require_driver)):
+    driver_id = current.get("driver_id") or "car-1"
+    t = await db.trips.find_one(
+        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip", "arrived"]}},
+        sort=[("created_at", -1)],
+    )
+    if not t:
+        return None
+    t["id"] = str(t["_id"]); t.pop("_id", None)
+    return t
+
+
+@api.post("/driver/trip/{trip_id}/start")
+async def driver_start(trip_id: str, current=Depends(require_driver)):
+    driver_id = current.get("driver_id") or "car-1"
+    result = await db.trips.update_one(
+        {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+        {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
+    t = await db.trips.find_one({"trip_id": trip_id})
+    await send_push_to_user(t["user_id"], "Turen har startet ✨", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
+    return {"ok": True}
+
+
+@api.post("/driver/trip/{trip_id}/arrive")
+async def driver_arrive(trip_id: str, current=Depends(require_driver)):
+    driver_id = current.get("driver_id") or "car-1"
+    result = await db.trips.update_one(
+        {"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"},
+        {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
+    t = await db.trips.find_one({"trip_id": trip_id})
+    await send_push_to_user(t["user_id"], "Du er fremme! 🎯", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
+    return {"ok": True}
+
+
+@api.get("/driver/summary/today")
+async def driver_summary(current=Depends(require_driver)):
+    driver_id = current.get("driver_id") or "car-1"
+    today = datetime.now(timezone.utc).date().isoformat()
+    total = 0
+    trips = 0
+    async for t in db.trips.find({
+        "driver_id": driver_id,
+        "created_at": {"$gte": today},
+        "status": {"$in": ["arrived", "completed", "rated"]},
+    }):
+        trips += 1
+        total += t.get("price", 0)
+    return {"income": total, "trips": trips, "satisfaction": 98}
+
+
+# ---- Push endpoints ----
+class PushSubscribeRequest(BaseModel):
+    subscription: dict
+
+
+@api.get("/push/vapid-public-key")
+async def get_vapid_public_key():
+    if not PUSH_AVAILABLE:
+        return {"public_key": None}
+    v = await db.vapid.find_one({"_id": "keys"})
+    return {"public_key": v["public_key"] if v else None}
+
+
+@api.post("/push/subscribe")
+async def push_subscribe(body: PushSubscribeRequest, current=Depends(get_current_user)):
+    endpoint = body.subscription.get("endpoint")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="Invalid subscription")
+    await db.push_subscriptions.update_one(
+        {"user_id": current["id"], "endpoint": endpoint},
+        {"$set": {
+            "user_id": current["id"],
+            "endpoint": endpoint,
+            "subscription": body.subscription,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/push/test")
+async def push_test(current=Depends(get_current_user)):
+    await send_push_to_user(current["id"], "KJAPP", "Push-varsler er slått på ✨", "/app")
+    return {"ok": True}
 
 
 app.include_router(api)

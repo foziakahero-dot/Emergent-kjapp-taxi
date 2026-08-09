@@ -19,8 +19,8 @@ export default function Login() {
     setErr("");
     setLoading(true);
     try {
-      await login(email, password);
-      navigate("/app");
+      const u = await login(email, password);
+      navigate(u.role === "driver" ? "/driver" : "/app");
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
     } finally {

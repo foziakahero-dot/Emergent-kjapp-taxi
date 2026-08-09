@@ -65,6 +65,20 @@ export default function Home() {
   const [activeTrip, setActiveTrip] = useState(null);
   const [cars, setCars] = useState([]);
   const [places, setPlaces] = useState(PLACES_FALLBACK);
+  const [routeGeom, setRouteGeom] = useState(null);
+  const [routeInfo, setRouteInfo] = useState(null); // {distance_km, duration_min, options[]}
+
+  // Load real route via OSRM whenever a destination is chosen
+  useEffect(() => {
+    if (!dropoff) { setRouteGeom(null); setRouteInfo(null); return; }
+    tripsApi.estimate({
+      pickup_lat: pickup.lat, pickup_lng: pickup.lng,
+      dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+    }).then((r) => {
+      setRouteInfo(r);
+      setRouteGeom(r.geometry || null);
+    }).catch(() => {});
+  }, [dropoff, pickup.lat, pickup.lng]);
 
   // Load places from backend
   useEffect(() => {
@@ -111,24 +125,17 @@ export default function Home() {
 
   const routePoints = useMemo(() => {
     if (!dropoff) return null;
+    if (routeGeom?.coordinates?.length) return routeGeom.coordinates.map(([lng, lat]) => [lat, lng]);
     return [[pickup.lat, pickup.lng], [dropoff.lat, dropoff.lng]];
-  }, [pickup, dropoff]);
+  }, [pickup, dropoff, routeGeom]);
 
-  const distanceKm = useMemo(() => {
-    if (!dropoff) return 0;
-    const toRad = (x) => (x * Math.PI) / 180;
-    const R = 6371;
-    const dLat = toRad(dropoff.lat - pickup.lat);
-    const dLon = toRad(dropoff.lng - pickup.lng);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(pickup.lat)) * Math.cos(toRad(dropoff.lat)) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }, [pickup, dropoff]);
+  const distanceKm = routeInfo?.distance_km ?? 0;
 
   const estPrice = useMemo(() => {
-    const v = VEHICLES.find((x) => x.id === vehicle);
-    const base = 49;
-    return Math.round((base + distanceKm * 18) * (v?.multiplier || 1));
-  }, [distanceKm, vehicle]);
+    if (!routeInfo) return 0;
+    const opt = routeInfo.options.find((o) => o.vehicle_type === vehicle);
+    return opt?.price || 0;
+  }, [routeInfo, vehicle]);
 
   const requestTrip = async () => {
     if (!dropoff) return;
