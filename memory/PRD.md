@@ -49,12 +49,26 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
   - Push subscribe UI in both Profile (passenger) and DriverProfile
 - PWA: manifest.json + SVG icons (192, 512) + apple-touch-icon + safe-area CSS + service worker
 
-## Verified (testing agent iter 1–4)
+## Verified (testing agent iter 1–5)
 - **iter_1**: 13/13 · basis
 - **iter_2**: 10/10 · sjåfør + push + OSRM
 - **iter_3**: 10/10 · admin + driver-invite + Google + ekte priser
 - **iter_4**: 17/17 · SendGrid + Apple Sign In + regresjon
-- **Total: 50/50 backend-tester grønne** — ingen bugs
+- **iter_5**: 28/28 · live-posisjon + chat + regresjon
+- **Total: 78/78 backend-tester grønne** — ingen bugs
+
+## Sanntid + kommunikasjon
+- **Bilen kjører på kartet**: Ny `lib/tripAnimation.js` computeDriverPosition() beregner sanntid-posisjon basert på tidspunkt for status-endring
+  - `driver_on_way`: interpolerer fra `driver_start` → pickup over `eta_min` minutter
+  - `in_trip`: går langs OSRM-polyline fra pickup → dropoff over `duration_min` minutter
+  - Roterer bilikonet til bevegelsesretning (bearing beregnes)
+  - Oppdateres hver sekund på både passasjer- og sjåfør-siden
+- **Trip-chat**: Nytt `components/ChatModal.jsx` med sikker tilkobling
+  - Passasjer og sjåfør kan sende korte meldinger (maks 500 tegn)
+  - 4 hurtigsvar per rolle ("Jeg står utenfor", "Kommer ned nå", "3 minutter unna", osv.)
+  - Poller hvert 2.5s for nye meldinger
+  - Push-varsler til motparten ved ny melding
+  - Backend: `POST /api/trips/{id}/messages` + `GET /api/trips/{id}/messages` med rolle-basert tilgang
 
 ## Nye legal og integrasjonsflater
 - `/privacy` — Norsk personvernerklæring (12 seksjoner, GDPR-konform, Datatilsynet-referanse)
