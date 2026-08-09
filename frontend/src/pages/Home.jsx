@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
+import { pickupIcon, dropoffIcon, fleetCarIcon } from "../lib/mapAssets";
 import { tripsApi, carsApi, placesApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star } from "lucide-react";
@@ -10,26 +11,6 @@ import { Orb } from "../components/UIKit";
 
 // Oslo defaults
 const DEFAULT_CENTER = [59.9139, 10.7522];
-
-const PICKUP_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:14px;height:14px;background:#2fe08c;border-radius:50%;border:3px solid #050708;box-shadow:0 0 0 4px rgba(47,224,140,0.3), 0 0 20px rgba(47,224,140,0.6)"></div>',
-  iconSize: [14, 14],
-  iconAnchor: [7, 7],
-});
-const DROPOFF_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:16px;height:16px;background:#fff;border-radius:3px;border:3px solid #050708;box-shadow:0 0 0 3px rgba(255,255,255,0.3)"></div>',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-});
-
-const CAR_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:26px;height:26px;background:#0e1113;border:2px solid #2fe08c;border-radius:50%;display:grid;place-items:center;box-shadow:0 0 20px rgba(47,224,140,0.4)"><span style="font-size:12px">🚗</span></div>',
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
-});
 
 const PLACES_FALLBACK = [
   { name: "Karl Johans gate 1", lat: 59.9127, lng: 10.7461, label: "Hjem" },
@@ -173,11 +154,11 @@ export default function Home() {
             url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
             attribution='&copy; OpenStreetMap, &copy; CartoDB'
           />
-          <Marker position={[pickup.lat, pickup.lng]} icon={PICKUP_ICON} />
+          <Marker position={[pickup.lat, pickup.lng]} icon={pickupIcon} />
           {!dropoff && cars.map((c) => (
-            <Marker key={c.id} position={[c.lat, c.lng]} icon={CAR_ICON} />
+            <Marker key={c.id} position={[c.lat, c.lng]} icon={fleetCarIcon} />
           ))}
-          {dropoff && <Marker position={[dropoff.lat, dropoff.lng]} icon={DROPOFF_ICON} />}
+          {dropoff && <Marker position={[dropoff.lat, dropoff.lng]} icon={dropoffIcon} />}
           {routePoints && (
             <Polyline positions={routePoints} pathOptions={{ color: "#2fe08c", weight: 4, opacity: 0.9, dashArray: "0" }} />
           )}

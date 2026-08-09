@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { driverApi } from "../lib/api";
 import { subscribePush } from "../lib/push";
-import { LogOut, Bell, Star, Car, ChevronLeft } from "lucide-react";
+import { LogOut, Bell, Star, Car, ChevronLeft, MapPin } from "lucide-react";
 
 export default function DriverProfile() {
   const { user, logout } = useAuth();
   const [summary, setSummary] = useState({ income: 0, trips: 0, satisfaction: 98 });
   const [pushOn, setPushOn] = useState(false);
+  const [autoNav, setAutoNav] = useState(() => localStorage.getItem("kjapp_auto_nav") === "true");
   const [msg, setMsg] = useState("");
   const navigate = useNavigate();
 
@@ -66,6 +67,19 @@ export default function DriverProfile() {
           <Bell size={18} className={pushOn ? "text-mint" : "text-[#7a8388]"} />
           <span className="flex-1 text-white text-sm">Push-varsler</span>
           <span className={`text-xs ${pushOn ? "text-mint" : "text-[#7a8388]"}`}>{pushOn ? "På" : "Slå på"}</span>
+        </button>
+        <button
+          onClick={() => {
+            const v = !autoNav;
+            setAutoNav(v);
+            localStorage.setItem("kjapp_auto_nav", String(v));
+          }}
+          data-testid="dprof-autonav"
+          className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#141719] transition-colors"
+        >
+          <MapPin size={18} className={autoNav ? "text-mint" : "text-[#7a8388]"} />
+          <span className="flex-1 text-white text-sm">Auto-åpne Google Maps ved ny tur</span>
+          <span className={`text-xs ${autoNav ? "text-mint" : "text-[#7a8388]"}`}>{autoNav ? "På" : "Slå på"}</span>
         </button>
         <div className="w-full flex items-center gap-4 px-4 py-4 last:rounded-b-[22px]">
           <Car size={18} className="text-mint" />

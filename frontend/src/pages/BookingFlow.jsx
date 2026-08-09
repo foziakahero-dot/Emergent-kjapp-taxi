@@ -4,24 +4,9 @@ import { tripsApi } from "../lib/api";
 import { StatusBar, Orb, ProgressRing } from "../components/UIKit";
 import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
 import L from "leaflet";
+import { pickupIcon, dropoffIcon, carIcon } from "../lib/mapAssets";
 import { X, Phone, MessageCircle, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const PICKUP_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:14px;height:14px;background:#2fe08c;border-radius:50%;border:3px solid #050708;box-shadow:0 0 0 4px rgba(47,224,140,0.3)"></div>',
-  iconSize: [14, 14], iconAnchor: [7, 7],
-});
-const DROPOFF_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:16px;height:16px;background:#fff;border-radius:3px;border:3px solid #050708"></div>',
-  iconSize: [16, 16], iconAnchor: [8, 8],
-});
-const CAR_ICON = L.divIcon({
-  className: "kjapp-car",
-  html: '<div style="width:34px;height:34px;background:#2fe08c;border-radius:50%;display:grid;place-items:center;box-shadow:0 0 40px rgba(47,224,140,0.6),0 0 0 6px rgba(47,224,140,0.15);color:#04120a;font-weight:700">🚗</div>',
-  iconSize: [34, 34], iconAnchor: [17, 17],
-});
 
 const STATUS_META = {
   searching: { title: "AI finner din posisjon", subtitle: "Karter din posisjon…", progress: 15 },
@@ -92,11 +77,11 @@ export default function BookingFlow() {
             url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
             attribution='&copy; OpenStreetMap, &copy; CartoDB'
           />
-          <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={PICKUP_ICON} />
-          <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={DROPOFF_ICON} />
+          <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={pickupIcon} />
+          <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={dropoffIcon} />
           <Polyline positions={routePoints} pathOptions={{ color: "#2fe08c", weight: 4, opacity: 0.9 }} />
           {(trip.status === "driver_on_way" || trip.status === "in_trip") && (
-            <Marker position={carPos} icon={CAR_ICON} />
+            <Marker position={carPos} icon={carIcon} />
           )}
         </MapContainer>
       </div>

@@ -3,20 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { driverApi } from "../lib/api";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
+import { pickupIcon, dropoffIcon, openMapsNavigation } from "../lib/mapAssets";
 import { motion } from "framer-motion";
-import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag } from "lucide-react";
+import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag, MapPin } from "lucide-react";
 import { Orb } from "../components/UIKit";
 
-const PICKUP_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:14px;height:14px;background:#2fe08c;border-radius:50%;border:3px solid #050708;box-shadow:0 0 0 4px rgba(47,224,140,0.3)"></div>',
-  iconSize: [14, 14], iconAnchor: [7, 7],
-});
-const DROPOFF_ICON = L.divIcon({
-  className: "kjapp-marker",
-  html: '<div style="width:16px;height:16px;background:#fff;border-radius:3px;border:3px solid #050708"></div>',
-  iconSize: [16, 16], iconAnchor: [8, 8],
-});
+const PICKUP_ICON = pickupIcon;
+const DROPOFF_ICON = dropoffIcon;
 
 function FitBounds({ points }) {
   const map = useMap();
@@ -31,6 +24,8 @@ function FitBounds({ points }) {
 export default function DriverTrip() {
   const [trip, setTrip] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [autoNav, setAutoNav] = useState(() => localStorage.getItem("kjapp_auto_nav") === "true");
+  const lastStatusRef = React.useRef(null);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -47,6 +42,34 @@ export default function DriverTrip() {
     const i = setInterval(load, 3000);
     return () => clearInterval(i);
   }, []);
+
+  // Auto-open Google Maps when a new trip becomes active (transition into driver_on_way or in_trip)
+  useEffect(() => {
+    if (!trip || !autoNav) return;
+    const prev = lastStatusRef.current;
+    lastStatusRef.current = trip.status;
+    if (prev !== trip.status && (trip.status === "driver_on_way" || trip.status === "in_trip")) {
+      const [lat, lng] = trip.status === "driver_on_way"
+        ? [trip.pickup_lat, trip.pickup_lng]
+        : [trip.dropoff_lat, trip.dropoff_lng];
+      // small delay so UI can settle
+      setTimeout(() => openMapsNavigation(lat, lng), 500);
+    }
+  }, [trip?.status, autoNav]);
+
+  const openNav = () => {
+    if (!trip) return;
+    const [lat, lng] = trip.status === "driver_on_way"
+      ? [trip.pickup_lat, trip.pickup_lng]
+      : [trip.dropoff_lat, trip.dropoff_lng];
+    openMapsNavigation(lat, lng);
+  };
+
+  const toggleAutoNav = () => {
+    const v = !autoNav;
+    setAutoNav(v);
+    localStorage.setItem("kjapp_auto_nav", String(v));
+  };
 
   const start = async () => {
     setBusy(true);
@@ -150,6 +173,32 @@ export default function DriverTrip() {
             <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="dtrip-msg" />
             <ActionBtn icon={<Flag size={16} />} label="Support" testid="dtrip-support" />
           </div>
+
+          {/* Prominent open-in-Google-Maps for turn-by-turn */}
+          {(trip.status === "driver_on_way" || trip.status === "in_trip") && (
+            <>
+              <button
+                onClick={openNav}
+                data-testid="dtrip-open-maps"
+                className="w-full mb-2 py-3 rounded-full bg-[#141719] border border-mint/40 text-white flex items-center justify-center gap-2 hover:border-mint transition-colors"
+              >
+                <MapPin size={16} className="text-mint" />
+                <span className="text-sm font-medium">
+                  Naviger i Google Maps
+                </span>
+              </button>
+              <label className="flex items-center gap-2 px-2 mb-3 text-[11px] text-[#a1a7ab] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoNav}
+                  onChange={toggleAutoNav}
+                  data-testid="dtrip-auto-nav"
+                  className="accent-mint"
+                />
+                Åpne Google Maps automatisk ved nye turer
+              </label>
+            </>
+          )}
 
           {trip.status === "driver_on_way" && (
             <button onClick={start} disabled={busy} data-testid="dtrip-start" className="btn-primary w-full flex items-center justify-center gap-2">
