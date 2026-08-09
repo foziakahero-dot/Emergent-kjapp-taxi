@@ -1,40 +1,48 @@
 # KJAPP — Test Credentials
 
-## Passasjer (bruker)
+## Kunde (passasjer)
+- URL: `/login`
 - Email: `ola@kjapp.no`
 - Password: `test1234`
 - Role: `user`
+- Alt: Google Sign In fungerer også (`/login` → Google-knapp → Emergent-managed OAuth)
 
 ## Sjåfør
+- URL: `/driver/login`
 - Email: `sjafor@kjapp.no`
 - Password: `sjafor1234`
-- Role: `driver`  (linked to `car-1` — Tesla Model Y)
+- Role: `driver`, approved: `true`, linked to `car-1` (Tesla Model Y)
 
 ## Admin
+- URL: `/login` (redirectes automatisk til `/admin`)
 - Email: `admin@kjapp.no`
 - Password: `admin123`
 - Role: `admin`
 
 ## Auth Endpoints
-- POST /api/auth/register
-- POST /api/auth/login  (returns `{ token, user: { id, email, fullName, phone, role, driver_id } }`)
+- POST /api/auth/register (kun kunde)
+- POST /api/auth/login
 - POST /api/auth/logout
-- GET /api/auth/me  (Authorization: Bearer <token>)
+- POST /api/auth/google/session (Emergent OAuth callback)
+- GET /api/auth/me
 
-## Driver Endpoints (role=driver required)
-- GET /api/driver/pending
-- POST /api/driver/accept { trip_id }
-- GET /api/driver/current
-- POST /api/driver/trip/{trip_id}/start
-- POST /api/driver/trip/{trip_id}/arrive
-- GET /api/driver/summary/today
+## Sjåfør-registrering (kun via admin-invitasjon)
+- Admin: POST /api/admin/driver-invites { driver_id, note } → returnerer token
+- Delbar lenke: `/driver-signup/{token}`
+- Sjåfør fyller ut skjema → POST /api/driver-invites/accept
+- Kontoen får `approved: false` → kan logge inn, men får 403 på pending trips
+- Admin godkjenner: POST /api/admin/drivers/{user_id}/approve { approved: true }
 
-## Push Endpoints
-- GET /api/push/vapid-public-key
-- POST /api/push/subscribe { subscription }
-- POST /api/push/test
+## Admin Endpoints (role=admin required)
+- GET /api/admin/overview
+- GET /api/admin/users
+- GET /api/admin/drivers
+- GET /api/admin/trips
+- POST /api/admin/drivers/{id}/approve
+- POST /api/admin/driver-invites
+- GET /api/admin/driver-invites
 
-## Auth Flow
-- Login/register returns `{ token, user }` JSON. Token also set as `access_token` httpOnly cookie.
-- Frontend stores token in `localStorage.kjapp_token` and sends as `Authorization: Bearer <token>` on every request.
-- Drivers are auto-routed to `/driver`, passengers to `/app`.
+## Auto-routing etter login
+- role=admin → `/admin`
+- role=driver → `/driver`
+- role=user → `/app`

@@ -49,20 +49,28 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
   - Push subscribe UI in both Profile (passenger) and DriverProfile
 - PWA: manifest.json + SVG icons (192, 512) + apple-touch-icon + safe-area CSS + service worker
 
-## Verified (testing agent iteration_1 + iteration_2)
-- **iteration_1**: 13/13 backend endpoints passing (auth, places, cars, trips, AI chat, payment, settings) — 100%
-- **iteration_2**: 10/10 new endpoints passing (driver flow, web-push, OSRM routing) — 100%
-- Frontend visually verified via screenshot: passenger flow (login → home → AI booking → receipt), driver flow (login → driver home with pending/active trips and stats)
+## Verified (testing agent iteration_1 + iteration_2 + iteration_3)
+- **iter_1**: 13/13 basis-endepunkter — 100%
+- **iter_2**: 10/10 sjåfør + push + OSRM — 100%
+- **iter_3**: 10/10 real prices + admin + driver-invite + Google session — 100%
+- Total: **33/33 backend-tester passert** uten bugs
 
 ## Test Credentials
-- Passenger: `ola@kjapp.no` / `test1234`
-- Sjåfør: `sjafor@kjapp.no` / `sjafor1234`
-- Admin: `admin@kjapp.no` / `admin123`
+- Kunde: `ola@kjapp.no` / `test1234` → `/app`
+- Sjåfør: `sjafor@kjapp.no` / `sjafor1234` → `/driver`
+- Admin: `admin@kjapp.no` / `admin123` → `/admin`
+- Se `/app/memory/test_credentials.md` for detaljer
+
+## APK / iOS publisering
+- Se `/app/memory/PUBLISHING_AUDIT.md` for komplett 6-ukers roadmap
+- Nøkkelinnsikt: **Skatteetatens ARS-godkjenning** er lengste kritiske vei for norsk drosje-lansering
 
 ## Backlog / Next
-- P1: Real payment processing (Stripe/Vipps SDK) at receipt/checkout
-- P2: Voice input (OpenAI Whisper) for AI chat and driver assistant
-- P2: Admin dashboard (view all trips, driver management)
+- P1: Ekte betaling (Stripe/Vipps SDK) ved kvittering
+- P1: Ekte Apple Sign In (krever Apple Developer $99/år + egne nøkler)
+- P1: Norsk personvernerklæring + brukervilkår (påkrevd for App Store/Play)
+- P2: Voice input (OpenAI Whisper) for AI chat
 - P2: Trip receipts sent via email (SendGrid/Resend)
-- P3: Native APK/IPA via Capacitor wrap
-- Minor tech debt: date filter uses string comparison; consider splitting server.py by module; AI history replay is O(n²) — use provider-native history
+- P2: SendGrid-integrasjon for å sende sjåfør-invitasjoner via ekte e-post
+- P3: Capacitor wrap for native iOS/Android
+- P3: Skatteetaten ARS-godkjenning
