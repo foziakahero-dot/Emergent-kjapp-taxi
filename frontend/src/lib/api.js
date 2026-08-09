@@ -17,8 +17,24 @@ api.interceptors.request.use((config) => {
 export const authApi = {
   register: (data) => api.post("/auth/register", data).then((r) => r.data),
   login: (data) => api.post("/auth/login", data).then((r) => r.data),
+  googleSession: (session_id) => api.post("/auth/google/session", { session_id }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
   logout: () => api.post("/auth/logout").then((r) => r.data),
+};
+
+export const adminApi = {
+  overview: () => api.get("/admin/overview").then((r) => r.data),
+  users: () => api.get("/admin/users").then((r) => r.data),
+  drivers: () => api.get("/admin/drivers").then((r) => r.data),
+  trips: () => api.get("/admin/trips").then((r) => r.data),
+  approveDriver: (id, approved = true) => api.post(`/admin/drivers/${id}/approve`, { approved }).then((r) => r.data),
+  createInvite: (driver_id, note = "") => api.post("/admin/driver-invites", { driver_id, note }).then((r) => r.data),
+  invites: () => api.get("/admin/driver-invites").then((r) => r.data),
+};
+
+export const driverInviteApi = {
+  get: (token) => api.get(`/driver-invites/${token}`).then((r) => r.data),
+  accept: (data) => api.post("/driver-invites/accept", data).then((r) => r.data),
 };
 
 export const tripsApi = {

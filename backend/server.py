@@ -79,6 +79,8 @@ async def get_current_user(request: Request) -> dict:
         user["id"] = str(user["_id"])
         user.pop("_id", None)
         user.pop("password_hash", None)
+        # ensure default role
+        user.setdefault("role", "user")
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token utløpt")
@@ -193,10 +195,19 @@ async def osrm_route(plat, plng, dlat, dlng):
         return None
 
 
-def price_for(distance_km: float, vehicle_type: str) -> int:
-    base = {"ai-first": 49, "enkelt": 39, "trygg": 59, "premium": 89}[vehicle_type]
-    per_km = {"ai-first": 18, "enkelt": 14, "trygg": 22, "premium": 34}[vehicle_type]
-    return int(base + distance_km * per_km)
+def price_for(distance_km: float, vehicle_type: str, duration_min: float = None) -> int:
+    """Norwegian taxi rates (based on Oslo Taxi 2024/2025 tariffs):
+    startpris + km-pris + minutt-pris (tidstillegg)."""
+    if duration_min is None:
+        duration_min = max(3, distance_km * 2.2)
+    rates = {
+        "ai-first": {"start": 70, "km": 16.0, "min": 4.0},   # Standard
+        "enkelt":   {"start": 55, "km": 14.0, "min": 3.5},   # Beste pris
+        "trygg":    {"start": 90, "km": 22.0, "min": 5.0},   # Familie / XL / 7 seter
+        "premium":  {"start": 120, "km": 28.0, "min": 6.0},  # Business
+    }
+    r = rates.get(vehicle_type, rates["ai-first"])
+    return int(round(r["start"] + distance_km * r["km"] + duration_min * r["min"]))
 
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app"):
@@ -372,7 +383,8 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Sjåfør",
             "phone": "+4790000001",
             "role": "driver",
-            "driver_id": "car-1",  # linked to Tesla Model Y in fleet
+            "driver_id": "car-1",
+            "approved": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     yield
@@ -449,7 +461,7 @@ async def trip_estimate(body: EstimateRequest):
     for vt, mult in [("ai-first", 1.0), ("enkelt", 0.85), ("trygg", 1.2), ("premium", 1.8)]:
         options.append({
             "vehicle_type": vt,
-            "price": int(price_for(est, vt)),
+            "price": int(price_for(est, vt, duration)),
             "eta_min": duration,
         })
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry}
@@ -513,7 +525,7 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
         eta_min = max(3, int(est * 2.2))
         geometry = None
-    price = price_for(est, body.vehicle_type)
+    price = price_for(est, body.vehicle_type, eta_min)
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
@@ -747,6 +759,8 @@ async def summary_today(current=Depends(get_current_user)):
 def require_driver(current=Depends(get_current_user)):
     if current.get("role") not in ("driver", "admin"):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
+    if current.get("role") == "driver" and current.get("approved") is False:
+        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
     return current
 
 
@@ -883,6 +897,223 @@ async def push_subscribe(body: PushSubscribeRequest, current=Depends(get_current
 async def push_test(current=Depends(get_current_user)):
     await send_push_to_user(current["id"], "KJAPP", "Push-varsler er slått på ✨", "/app")
     return {"ok": True}
+
+
+# ============================================================
+# Google Sign-In via Emergent-managed auth
+# ============================================================
+class GoogleSessionRequest(BaseModel):
+    session_id: str
+
+
+@api.post("/auth/google/session")
+async def google_session(body: GoogleSessionRequest, response: Response):
+    """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        r = await client.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": body.session_id},
+        )
+        if r.status_code != 200:
+            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
+        data = r.json()
+    email = (data.get("email") or "").strip().lower()
+    name = data.get("name") or email
+    if not email:
+        raise HTTPException(status_code=400, detail="Ingen e-post fra Google")
+    user = await db.users.find_one({"email": email})
+    if not user:
+        result = await db.users.insert_one({
+            "email": email,
+            "password_hash": hash_password(secrets.token_hex(16)),  # random password, unused
+            "fullName": name,
+            "phone": "",
+            "picture": data.get("picture"),
+            "role": "user",
+            "google_linked": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        uid = str(result.inserted_id)
+        role = "user"
+        driver_id = None
+    else:
+        uid = str(user["_id"])
+        role = user.get("role", "user")
+        driver_id = user.get("driver_id")
+        if not user.get("google_linked"):
+            await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
+
+
+# ============================================================
+# Admin dashboard
+# ============================================================
+def require_admin(current=Depends(get_current_user)):
+    if current.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Kun for admin")
+    return current
+
+
+@api.get("/admin/overview")
+async def admin_overview(current=Depends(require_admin)):
+    users_total = await db.users.count_documents({"role": "user"})
+    drivers_total = await db.users.count_documents({"role": "driver"})
+    drivers_pending = await db.users.count_documents({"role": "driver", "approved": False})
+    trips_today = 0
+    revenue_today = 0
+    today = datetime.now(timezone.utc).date().isoformat()
+    async for t in db.trips.find({"created_at": {"$gte": today}}):
+        trips_today += 1
+        if t.get("status") in ("arrived", "completed", "rated"):
+            revenue_today += t.get("price", 0)
+    trips_total = await db.trips.count_documents({})
+    return {
+        "users": users_total,
+        "drivers": drivers_total,
+        "drivers_pending": drivers_pending,
+        "trips_today": trips_today,
+        "revenue_today": revenue_today,
+        "trips_total": trips_total,
+    }
+
+
+@api.get("/admin/users")
+async def admin_users(current=Depends(require_admin)):
+    out = []
+    async for u in db.users.find({}, {"password_hash": 0}).sort("created_at", -1).limit(200):
+        u["id"] = str(u["_id"])
+        u.pop("_id", None)
+        out.append(u)
+    return {"users": out}
+
+
+@api.get("/admin/drivers")
+async def admin_drivers(current=Depends(require_admin)):
+    out = []
+    async for u in db.users.find({"role": "driver"}, {"password_hash": 0}).sort("created_at", -1):
+        u["id"] = str(u["_id"])
+        u.pop("_id", None)
+        out.append(u)
+    return {"drivers": out}
+
+
+@api.get("/admin/trips")
+async def admin_trips(current=Depends(require_admin), limit: int = 100):
+    out = []
+    async for t in db.trips.find({}).sort("created_at", -1).limit(limit):
+        t["id"] = str(t["_id"])
+        t.pop("_id", None)
+        out.append(t)
+    return {"trips": out}
+
+
+class ApproveDriverRequest(BaseModel):
+    approved: bool = True
+
+
+@api.post("/admin/drivers/{user_id}/approve")
+async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
+    await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
+    return {"ok": True}
+
+
+# ============================================================
+# Driver invitation flow (fleet owner / admin invites drivers)
+# ============================================================
+class DriverInviteRequest(BaseModel):
+    driver_id: str  # which fleet car
+    note: Optional[str] = ""
+
+
+class DriverSignupRequest(BaseModel):
+    token: str
+    fullName: str
+    email: str
+    phone: str
+    password: str
+
+
+@api.post("/admin/driver-invites")
+async def create_driver_invite(body: DriverInviteRequest, current=Depends(require_admin)):
+    token = secrets.token_urlsafe(24)
+    d = await db.drivers.find_one({"driver_id": body.driver_id})
+    if not d:
+        raise HTTPException(status_code=404, detail="Bil (driver_id) finnes ikke")
+    doc = {
+        "token": token,
+        "driver_id": body.driver_id,
+        "note": body.note or "",
+        "created_by": current["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=14)).isoformat(),
+        "used": False,
+    }
+    await db.driver_invites.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/admin/driver-invites")
+async def list_driver_invites(current=Depends(require_admin)):
+    out = []
+    async for i in db.driver_invites.find({}).sort("created_at", -1).limit(100):
+        i["id"] = str(i["_id"])
+        i.pop("_id", None)
+        out.append(i)
+    return {"invites": out}
+
+
+@api.get("/driver-invites/{token}")
+async def get_driver_invite(token: str):
+    inv = await db.driver_invites.find_one({"token": token})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invitasjon ikke funnet")
+    if inv.get("used"):
+        raise HTTPException(status_code=410, detail="Invitasjon allerede brukt")
+    expires = inv.get("expires_at")
+    if expires and expires < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=410, detail="Invitasjon utløpt")
+    d = await db.drivers.find_one({"driver_id": inv["driver_id"]})
+    return {
+        "token": inv["token"],
+        "driver_id": inv["driver_id"],
+        "car": d["car"] if d else None,
+        "plate": d["plate"] if d else None,
+        "note": inv.get("note", ""),
+    }
+
+
+@api.post("/driver-invites/accept")
+async def accept_driver_invite(body: DriverSignupRequest, response: Response):
+    inv = await db.driver_invites.find_one({"token": body.token})
+    if not inv or inv.get("used"):
+        raise HTTPException(status_code=410, detail="Invitasjon ugyldig")
+    email = body.email.strip().lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="E-post er allerede registrert")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    result = await db.users.insert_one({
+        "email": email,
+        "password_hash": hash_password(body.password),
+        "fullName": body.fullName,
+        "phone": body.phone,
+        "role": "driver",
+        "driver_id": inv["driver_id"],
+        "approved": False,  # requires admin approval before pending trips visible
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    uid = str(result.inserted_id)
+    await db.driver_invites.update_one({"token": body.token}, {"$set": {"used": True, "used_by": uid, "used_at": datetime.now(timezone.utc).isoformat()}})
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {
+        "token": token,
+        "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": body.phone, "role": "driver", "driver_id": inv["driver_id"], "approved": False},
+        "pending_approval": True,
+    }
 
 
 app.include_router(api)

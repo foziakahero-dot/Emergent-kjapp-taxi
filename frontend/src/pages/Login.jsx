@@ -20,7 +20,7 @@ export default function Login() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      navigate(u.role === "driver" ? "/driver" : "/app");
+      navigate(u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : "/app");
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
     } finally {
@@ -104,9 +104,9 @@ export default function Login() {
         </div>
 
         <div className="mt-8 flex items-center justify-center gap-4">
-          <SocialButton icon={<Apple size={20} />} testid="social-apple" />
-          <SocialButton icon={<GoogleIcon />} testid="social-google" />
-          <SocialButton icon={<PhoneIcon />} testid="social-phone" />
+          <SocialButton icon={<Apple size={20} />} testid="social-apple" onClick={() => alert("Apple Sign In krever Apple Developer-nøkler — kommer snart.")} />
+          <SocialButton icon={<GoogleIcon />} testid="social-google" onClick={loginWithGoogle} />
+          <SocialButton icon={<PhoneIcon />} testid="social-phone" onClick={() => alert("SMS-logg inn kommer snart.")} />
         </div>
       </div>
 
@@ -117,20 +117,33 @@ export default function Login() {
             Opprett en
           </Link>
         </p>
+        <p className="text-[#5a6166] text-xs mt-3">
+          Er du sjåfør?{" "}
+          <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
+            Sjåfør-innlogging
+          </Link>
+        </p>
       </div>
     </div>
   );
 }
 
-function SocialButton({ icon, testid }) {
+function SocialButton({ icon, testid, onClick }) {
   return (
     <button
+      onClick={onClick}
       data-testid={testid}
       className="w-14 h-14 rounded-full card grid place-items-center text-white hover:border-mint transition-colors"
     >
       {icon}
     </button>
   );
+}
+
+// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+function loginWithGoogle() {
+  const redirectUrl = window.location.origin + "/auth/callback";
+  window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
 }
 function GoogleIcon() {
   return (

@@ -23,11 +23,16 @@ import DriverTrip from "./pages/DriverTrip";
 import DriverSummary from "./pages/DriverSummary";
 import DriverProfile from "./pages/DriverProfile";
 import DriverNav from "./components/DriverNav";
+import DriverLogin from "./pages/DriverLogin";
+import DriverSignup from "./pages/DriverSignup";
+import AdminDashboard from "./pages/AdminDashboard";
+import AuthCallback from "./pages/AuthCallback";
 
-function Protected({ children, driverOnly = false }) {
+function Protected({ children, driverOnly = false, adminOnly = false }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (!user) return <Navigate to="/login" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/app" replace />;
   if (driverOnly && user.role !== "driver" && user.role !== "admin") return <Navigate to="/app" replace />;
   return children;
 }
@@ -35,7 +40,10 @@ function Protected({ children, driverOnly = false }) {
 function PublicOnly({ children }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
-  if (user) return <Navigate to={user.role === "driver" ? "/driver" : "/app"} replace />;
+  if (user) {
+    const to = user.role === "admin" ? "/admin" : user.role === "driver" ? "/driver" : "/app";
+    return <Navigate to={to} replace />;
+  }
   return children;
 }
 
@@ -65,6 +73,9 @@ function AppRoutes() {
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/voice-signin" element={<PublicOnly><VoiceSignIn /></PublicOnly>} />
+      <Route path="/driver/login" element={<PublicOnly><DriverLogin /></PublicOnly>} />
+      <Route path="/driver-signup/:token" element={<DriverSignup />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       <Route path="/app" element={<Protected><Shell><Home /></Shell></Protected>} />
       <Route path="/app/booking/:tripId" element={<Protected><Shell withNav={false}><BookingFlow /></Shell></Protected>} />
@@ -81,6 +92,9 @@ function AppRoutes() {
       <Route path="/driver/trip" element={<Protected driverOnly><Shell driver><DriverTrip /></Shell></Protected>} />
       <Route path="/driver/summary" element={<Protected driverOnly><Shell driver><DriverSummary /></Shell></Protected>} />
       <Route path="/driver/profile" element={<Protected driverOnly><Shell driver><DriverProfile /></Shell></Protected>} />
+
+      {/* Admin */}
+      <Route path="/admin" element={<Protected adminOnly><AdminDashboard /></Protected>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

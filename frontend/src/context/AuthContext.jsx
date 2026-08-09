@@ -23,9 +23,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    // Skip /me check if returning from Google OAuth — AuthCallback handles it
+    if (typeof window !== "undefined" && window.location.hash?.includes("session_id=")) {
+      setUser(null);
+      return;
+    }
     refresh();
     ensureServiceWorker();
   }, [refresh]);
+
+  const googleSession = async (session_id) => {
+    const { authApi } = await import("../lib/api");
+    const res = await authApi.googleSession(session_id);
+    localStorage.setItem("kjapp_token", res.token);
+    setUser(res.user);
+    return res.user;
+  };
 
   const login = async (email, password) => {
     const res = await authApi.login({ email, password });
@@ -47,7 +60,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, refresh }}>
+    <AuthContext.Provider value={{ user, login, register, logout, refresh, googleSession }}>
       {children}
     </AuthContext.Provider>
   );
