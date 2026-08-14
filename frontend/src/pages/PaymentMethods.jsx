@@ -29,7 +29,7 @@ export default function PaymentMethods() {
   return (
     <div className="px-4 pt-2 pb-10 page-enter">
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a8388]" data-testid="pay-back">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="pay-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Betalingsmetoder</h1>
@@ -41,7 +41,7 @@ export default function PaymentMethods() {
             key={m.id}
             data-testid={`pay-method-${m.type}`}
             className="rounded-2xl p-4 flex items-center gap-4 border border-line"
-            style={{ background: BRAND[m.type]?.bg || "#0e1113" }}
+            style={{ background: BRAND[m.type]?.bg || "#111a2b" }}
           >
             <CreditCard className="text-white" size={22} />
             <div className="flex-1">
@@ -71,7 +71,7 @@ export default function PaymentMethods() {
                 key={t}
                 onClick={() => setNewCard({ ...newCard, type: t, label: t === "vipps" ? "Vipps" : t === "visa" ? "Visa" : "Mastercard" })}
                 data-testid={`newcard-type-${t}`}
-                className={`py-2 rounded-lg border ${newCard.type === t ? "border-mint bg-mint/10" : "border-line bg-[#141719]"} text-white text-sm capitalize`}
+                className={`py-2 rounded-lg border ${newCard.type === t ? "border-mint bg-mint/10" : "border-line bg-[#17223a]"} text-white text-sm capitalize`}
               >
                 {t}
               </button>

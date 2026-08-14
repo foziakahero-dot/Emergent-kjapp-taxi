@@ -27,11 +27,11 @@ export default function CookieConsent() {
 
   return (
     <div
-      className="fixed left-3 right-3 bottom-3 z-[10000] rounded-2xl border border-line bg-[#0e1113]/95 backdrop-blur-xl p-4 shadow-2xl"
+      className="fixed left-3 right-3 bottom-3 z-[10000] rounded-2xl border border-line bg-[#111a2b]/95 backdrop-blur-xl p-4 shadow-2xl"
       data-testid="cookie-consent"
     >
       <div className="text-white text-sm font-medium">Vi bruker informasjonskapsler</div>
-      <div className="text-[#a1a7ab] text-[12px] mt-1 leading-relaxed">
+      <div className="text-[#b8bfd0] text-[12px] mt-1 leading-relaxed">
         KJAPP bruker cookies for pålogging, betaling og analyse. Les
         {" "}<Link to="/privacy" className="text-mint underline">personvernerklæringen</Link>
         {" "}og{" "}<Link to="/terms" className="text-mint underline">vilkårene</Link>.

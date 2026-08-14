@@ -54,7 +54,7 @@ export default function TripReceipt() {
         <div className="font-display text-[56px] text-white mt-6" data-testid="receipt-total">
           {trip.price} <span className="text-2xl align-top mt-2 inline-block">kr</span>
         </div>
-        <div className="text-[13px] text-[#7a8388]" data-testid="receipt-status">
+        <div className="text-[13px] text-[#8a94a8]" data-testid="receipt-status">
           {isPaid ? "Betalt" : "Venter på betaling"}
         </div>
       </motion.div>
@@ -89,11 +89,11 @@ export default function TripReceipt() {
       {!submitted ? (
         <div className="mt-6 card p-5">
           <div className="text-white font-medium mb-1">Vurder turen</div>
-          <div className="text-[13px] text-[#7a8388] mb-4">Hvordan var opplevelsen?</div>
+          <div className="text-[13px] text-[#8a94a8] mb-4">Hvordan var opplevelsen?</div>
           <div className="flex items-center justify-center gap-2">
             {[1,2,3,4,5].map((n) => (
               <button key={n} onClick={() => setRating(n)} data-testid={`rate-${n}`} className="transition-transform hover:scale-110">
-                <Star size={34} fill={n <= rating ? "#2fe08c" : "transparent"} stroke={n <= rating ? "#2fe08c" : "#7a8388"} strokeWidth={1.5} />
+                <Star size={34} fill={n <= rating ? "#2fe08c" : "transparent"} stroke={n <= rating ? "#2fe08c" : "#8a94a8"} strokeWidth={1.5} />
               </button>
             ))}
           </div>
@@ -117,7 +117,7 @@ export default function TripReceipt() {
 function Row({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4 text-sm">
-      <span className="text-[#7a8388]">{label}</span>
+      <span className="text-[#8a94a8]">{label}</span>
       <span className="text-white text-right flex-1 truncate">{value}</span>
     </div>
   );

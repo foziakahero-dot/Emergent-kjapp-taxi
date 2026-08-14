@@ -74,7 +74,7 @@ export default function ChatModal({ open, onClose, tripId, role }) {
             exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 320, damping: 32 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-[440px] mx-auto bg-[#0e1113] border-t border-line rounded-t-3xl flex flex-col"
+            className="w-full max-w-[440px] mx-auto bg-[#111a2b] border-t border-line rounded-t-3xl flex flex-col"
             style={{ maxHeight: "82dvh", minHeight: "60dvh" }}
           >
             {/* Header */}
@@ -88,7 +88,7 @@ export default function ChatModal({ open, onClose, tripId, role }) {
                   {role === "driver" ? "Til kunde" : "Til sjåfør"} · sikker tilkobling
                 </div>
               </div>
-              <button onClick={onClose} data-testid="chat-close" className="w-9 h-9 grid place-items-center text-[#7a8388] rounded-full hover:bg-[#141719]">
+              <button onClick={onClose} data-testid="chat-close" className="w-9 h-9 grid place-items-center text-[#8a94a8] rounded-full hover:bg-[#17223a]">
                 <X size={18} />
               </button>
             </div>
@@ -98,8 +98,8 @@ export default function ChatModal({ open, onClose, tripId, role }) {
               {messages.length === 0 && (
                 <div className="text-center py-8">
                   <div className="orb orb-tiny mx-auto" style={{ width: 40, height: 40 }} />
-                  <div className="text-[#7a8388] text-sm mt-3">Ingen meldinger ennå</div>
-                  <div className="text-[11px] text-[#5a6166] mt-1">Bruk hurtigsvar under, eller skriv fritt</div>
+                  <div className="text-[#8a94a8] text-sm mt-3">Ingen meldinger ennå</div>
+                  <div className="text-[11px] text-[#6d7690] mt-1">Bruk hurtigsvar under, eller skriv fritt</div>
                 </div>
               )}
               {messages.map((m, i) => {
@@ -109,7 +109,7 @@ export default function ChatModal({ open, onClose, tripId, role }) {
                     <div
                       data-testid={`chatmsg-${m.from_role}`}
                       className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-[14px] leading-relaxed ${
-                        isMe ? "bg-mint text-[#04120a] rounded-br-md" : "bg-[#141719] border border-line text-[#e6ecef] rounded-bl-md"
+                        isMe ? "bg-mint text-[#04120a] rounded-br-md" : "bg-[#17223a] border border-line text-[#f4f1e8] rounded-bl-md"
                       }`}
                     >
                       {m.text}
@@ -128,7 +128,7 @@ export default function ChatModal({ open, onClose, tripId, role }) {
                   onClick={() => send(q)}
                   disabled={sending}
                   data-testid={`quick-${q}`}
-                  className="whitespace-nowrap px-3 py-1.5 rounded-full bg-[#141719] border border-line text-[#a1a7ab] text-[12px] hover:border-mint hover:text-mint transition-colors"
+                  className="whitespace-nowrap px-3 py-1.5 rounded-full bg-[#17223a] border border-line text-[#b8bfd0] text-[12px] hover:border-mint hover:text-mint transition-colors"
                 >
                   {q}
                 </button>

@@ -28,7 +28,14 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08 — Iteration 6: Beta-readiness overhaul)
+## What's Been Implemented (2026-08 — Iteration 6+7: Beta-readiness + Nordic theme)
+
+### Iter 7 tillegg (nåværende sesjon, del 2)
+- **Nordisk theme**: `index.css` og `tailwind.config.js` byttet fra kold svart (#050708) til varm midnattsblå (#0a1220) med perlehvit tekst (#f4f1e8). Alle `.card` bruker nå ekte glassmorphism (backdrop-blur 24px + rgba(255,255,255,0.045) + rgba(244,241,232,0.09) border). Mint (#2fe08c) reservert for CTA. `sed`-swap på tvers av 17 filer erstattet 43 hardkodede hex-referanser.
+- **Push-lyd for sjåfør**: `lib/sound.js` bruker WebAudio for å synthesizere en to-tone (E5→A5) "ping" når nye turer dukker opp i pending. Låser opp audio-context ved første touch/click (Safari/Chrome autoplay-restriksjon).
+- **Native wrapping-oppsett**: `/app/mobile/capacitor.config.json` (klar til `cp` til frontend), `/app/memory/MOBILE_BUILD.md` med komplett steg-for-steg iOS/Android build-guide inkl. plugins, Info.plist-nøkler, AndroidManifest permissions, signing, TestFlight/Play Console-submission, og tidsestimat.
+
+### Iter 6 (nåværende sesjon, del 1)
 - **REMOVED**: `_simulate_trip_lifecycle` asyncio.sleep-based fake trip progression. Trips now progress ONLY when real drivers act.
 - **REMOVED**: 8 fake seed drivers in `db.drivers` collection. Legacy collection is dropped on startup.
 - **NEW**: Real driver GPS heartbeat — `POST /api/driver/location {lat,lng,heading?,speed?}` sent every ~5s from `DriverHome` via `navigator.geolocation.watchPosition` while driver is online. Also updates active trip's `driver_lat/driver_lng` for live passenger view.

@@ -33,14 +33,14 @@ export default function Register() {
     <div className="phone-shell grain flex flex-col">
       
       <div className="px-6 pt-2 flex items-center">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a8388]" data-testid="register-back">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 -ml-2 grid place-items-center text-[#8a94a8]" data-testid="register-back">
           <ChevronLeft size={22} />
         </button>
       </div>
 
       <div className="px-8 pt-4 flex-1">
         <h1 className="font-display text-[28px] tracking-tight text-white">Opprett konto</h1>
-        <p className="text-[#7a8388] text-sm mt-2">Bli med KJAPP på under 30 sekunder</p>
+        <p className="text-[#8a94a8] text-sm mt-2">Bli med KJAPP på under 30 sekunder</p>
 
         <form onSubmit={submit} className="mt-10 space-y-4">
           <input className="input" placeholder="Fullt navn" value={form.fullName} onChange={change("fullName")} data-testid="register-name" required />
@@ -49,14 +49,14 @@ export default function Register() {
             <div className="w-24">
               <div className="input flex items-center gap-1 justify-center">
                 <span>🇳🇴</span>
-                <span className="text-[#e6ecef]">+47</span>
+                <span className="text-[#f4f1e8]">+47</span>
               </div>
             </div>
             <input className="input flex-1" placeholder="Telefonnummer" value={form.phone} onChange={change("phone")} data-testid="register-phone" />
           </div>
           <div className="relative">
             <input className="input pr-12" type={showPw ? "text" : "password"} placeholder="Passord (min. 6 tegn)" value={form.password} onChange={change("password")} data-testid="register-password" required />
-            <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a8388]" onClick={() => setShowPw((v) => !v)}>
+            <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8a94a8]" onClick={() => setShowPw((v) => !v)}>
               {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
@@ -79,7 +79,7 @@ export default function Register() {
           </div>
         </form>
 
-        <p className="mt-6 text-center text-[11px] text-[#7a8388] leading-relaxed">
+        <p className="mt-6 text-center text-[11px] text-[#8a94a8] leading-relaxed">
           Ved å opprette konto godtar du våre{" "}
           <Link to="/terms" className="text-mint">vilkår</Link> og{" "}
           <Link to="/privacy" className="text-mint">personvernregler</Link>.
@@ -87,7 +87,7 @@ export default function Register() {
       </div>
 
       <div className="px-8 pb-10 text-center">
-        <p className="text-[#7a8388] text-sm">
+        <p className="text-[#8a94a8] text-sm">
           Allerede konto?{" "}
           <Link to="/login" className="text-mint font-medium" data-testid="link-login">
             Logg inn

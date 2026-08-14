@@ -31,7 +31,7 @@ export default function Profile() {
   return (
     <div className="px-6 pt-2 pb-24 page-enter">
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => navigate("/app")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a8388]" data-testid="profile-back">
+        <button onClick={() => navigate("/app")} className="w-10 h-10 -ml-2 grid place-items-center text-[#8a94a8]" data-testid="profile-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Profil</h1>
@@ -42,7 +42,7 @@ export default function Profile() {
         </div>
         <div>
           <div className="text-white font-medium">{user?.fullName || "Bruker"}</div>
-          <div className="text-[13px] text-[#7a8388]">{user?.email}</div>
+          <div className="text-[13px] text-[#8a94a8]">{user?.email}</div>
         </div>
       </div>
 
@@ -52,11 +52,11 @@ export default function Profile() {
             key={label}
             onClick={() => (onClick ? onClick() : to && navigate(to))}
             data-testid={testid}
-            className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#141719] transition-colors first:rounded-t-[22px] last:rounded-b-[22px]"
+            className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17223a] transition-colors first:rounded-t-[22px] last:rounded-b-[22px]"
           >
             <Icon size={18} className={active ? "text-mint" : "text-mint"} />
             <span className="flex-1 text-white text-sm">{label}</span>
-            <ChevronRight size={16} className="text-[#7a8388]" />
+            <ChevronRight size={16} className="text-[#8a94a8]" />
           </button>
         ))}
       </div>
@@ -76,10 +76,10 @@ export default function Profile() {
         <div className="font-display text-white text-lg">
           KJ<span className="text-mint">A</span>PP
         </div>
-        <div className="text-[10px] text-[#7a8388] tracking-widest mt-1 uppercase">
+        <div className="text-[10px] text-[#8a94a8] tracking-widest mt-1 uppercase">
           AI som jobber for deg, ikke motsatt.
         </div>
-        <div className="text-[10px] text-[#5a6166] mt-3">Versjon 2.0.0</div>
+        <div className="text-[10px] text-[#6d7690] mt-3">Versjon 2.0.0</div>
       </div>
     </div>
   );

@@ -6,17 +6,21 @@ module.exports = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#050708",
-          card: "#0e1113",
-          soft: "#141719",
+          DEFAULT: "#0a1220",
+          card: "rgba(255,255,255,0.045)",
+          soft: "rgba(255,255,255,0.03)",
         },
         mint: {
           DEFAULT: "#2fe08c",
           bright: "#3dffa2",
           dim: "#1fa76a",
         },
-        line: "#1c2124",
-        muted: "#7a8388",
+        pearl: {
+          DEFAULT: "#f4f1e8",
+          muted: "#a9b1c4",
+        },
+        line: "rgba(244,241,232,0.09)",
+        muted: "#8a94a8",
       },
       fontFamily: {
         display: ["'Instrument Sans'", "'DM Sans'", "system-ui", "sans-serif"],

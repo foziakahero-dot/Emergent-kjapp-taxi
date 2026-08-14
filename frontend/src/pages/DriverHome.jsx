@@ -5,6 +5,7 @@ import { Orb, VoiceBars } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, Navigation, Clock, Check, Power } from "lucide-react";
+import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
 
 export default function DriverHome() {
   const { user } = useAuth();
@@ -15,12 +16,29 @@ export default function DriverHome() {
   const [online, setOnline] = useState(() => localStorage.getItem("kjapp_driver_online") === "true");
   const [gpsError, setGpsError] = useState(null);
   const watchIdRef = useRef(null);
+  const prevPendingIdsRef = useRef(new Set());
   const navigate = useNavigate();
+
+  // Prime audio unlock on first user gesture (mobile browsers block autoplay)
+  useEffect(() => { primeAudioOnUserGesture(); }, []);
 
   const load = async () => {
     try {
       const [p, c, s] = await Promise.all([driverApi.pending(), driverApi.current(), driverApi.summary()]);
-      setPending(p.trips || []);
+      const trips = p.trips || [];
+      // Play ping when a new trip appears (only if online)
+      const currentIds = new Set(trips.map((t) => t.trip_id));
+      const prev = prevPendingIdsRef.current;
+      const newOnes = [...currentIds].filter((id) => !prev.has(id));
+      if (newOnes.length > 0 && prev.size >= 0 && online) {
+        // Skip the first load (prev.size === 0 means we don't know previous state yet)
+        if (prevPendingIdsRef.current.__initialized) {
+          try { playNewTripPing(); } catch { /* audio play blocked */ }
+        }
+      }
+      currentIds.__initialized = true;
+      prevPendingIdsRef.current = currentIds;
+      setPending(trips);
       setCurrent(c);
       setSummary(s);
     } catch (e) {
@@ -81,17 +99,17 @@ export default function DriverHome() {
     <div className="px-4 pt-2 pb-24 page-enter">
       {/* Online toggle */}
       <div className="mt-2 card p-4 flex items-center gap-3">
-        <div className={`w-11 h-11 rounded-full grid place-items-center ${online ? "bg-mint/15" : "bg-[#141719]"}`}>
-          <Power size={18} className={online ? "text-mint" : "text-[#7a8388]"} />
+        <div className={`w-11 h-11 rounded-full grid place-items-center ${online ? "bg-mint/15" : "bg-[#17223a]"}`}>
+          <Power size={18} className={online ? "text-mint" : "text-[#8a94a8]"} />
         </div>
         <div className="flex-1">
           <div className="text-white text-sm font-medium">{online ? "På vakt" : "Offline"}</div>
-          <div className="text-[11px] text-[#7a8388]">{online ? (gpsError || "Du mottar turer") : "Slå på for å motta turer"}</div>
+          <div className="text-[11px] text-[#8a94a8]">{online ? (gpsError || "Du mottar turer") : "Slå på for å motta turer"}</div>
         </div>
         <button
           onClick={() => setOnline((v) => !v)}
           data-testid="driver-online-toggle"
-          className={`relative w-14 h-8 rounded-full transition-colors ${online ? "bg-mint" : "bg-[#22262a]"}`}
+          className={`relative w-14 h-8 rounded-full transition-colors ${online ? "bg-mint" : "bg-[#2a3550]"}`}
           aria-pressed={online}
         >
           <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform ${online ? "translate-x-6" : ""}`} />
@@ -111,7 +129,7 @@ export default function DriverHome() {
               ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} nå.`
               : online ? "Ingen turer akkurat nå." : "Slå på for å begynne."}
           </h1>
-          <p className="text-[#7a8388] text-sm mt-1">
+          <p className="text-[#8a94a8] text-sm mt-1">
             {current ? "Du har en aktiv tur." : pending.length ? "Klar til å kjøre?" : online ? "Vi varsler deg når det kommer en tur." : "Du er offline."}
           </p>
         </div>
@@ -140,7 +158,7 @@ export default function DriverHome() {
       {/* Next / pending trips */}
       <div className="mt-5 px-1 flex items-center justify-between">
         <h2 className="text-white text-sm font-medium">Neste tur</h2>
-        <span className="text-[11px] text-[#7a8388]">{pending.length} venter</span>
+        <span className="text-[11px] text-[#8a94a8]">{pending.length} venter</span>
       </div>
 
       <div className="mt-2 space-y-2">
@@ -148,8 +166,8 @@ export default function DriverHome() {
           {pending.length === 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-6 text-center">
               <Orb size="small" />
-              <div className="text-[#7a8388] text-sm mt-3">Ingen turer venter</div>
-              <div className="text-[11px] text-[#5a6166] mt-1">Turer dukker opp automatisk her</div>
+              <div className="text-[#8a94a8] text-sm mt-3">Ingen turer venter</div>
+              <div className="text-[11px] text-[#6d7690] mt-1">Turer dukker opp automatisk her</div>
             </motion.div>
           ) : (
             pending.map((t) => (
@@ -164,17 +182,17 @@ export default function DriverHome() {
                 <div className="flex items-center gap-3 mb-3">
                   <div className="flex flex-col items-center pt-1">
                     <div className="w-2 h-2 rounded-full bg-mint" />
-                    <div className="w-px h-6 bg-[#22262a]" />
+                    <div className="w-px h-6 bg-[#2a3550]" />
                     <div className="w-2 h-2 rounded-sm bg-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] text-[#7a8388]">Henting</div>
+                    <div className="text-[11px] text-[#8a94a8]">Henting</div>
                     <div className="text-white text-sm truncate">{t.pickup_address}</div>
-                    <div className="text-[11px] text-[#7a8388] mt-1">Til</div>
+                    <div className="text-[11px] text-[#8a94a8] mt-1">Til</div>
                     <div className="text-white text-sm truncate">{t.dropoff_address}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 text-[12px] text-[#a1a7ab] mb-3 border-t border-line pt-2">
+                <div className="flex items-center gap-4 text-[12px] text-[#b8bfd0] mb-3 border-t border-line pt-2">
                   <span>{t.distance_km} km</span>
                   <span>·</span>
                   <span>{t.duration_min} min</span>
@@ -213,7 +231,7 @@ export default function DriverHome() {
 function Stat({ label, value, testid }) {
   return (
     <div className="card p-3" data-testid={testid}>
-      <div className="text-[10px] text-[#7a8388] uppercase tracking-widest">{label}</div>
+      <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">{label}</div>
       <div className="font-display text-lg text-white mt-1">{value}</div>
     </div>
   );

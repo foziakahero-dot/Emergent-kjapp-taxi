@@ -52,7 +52,7 @@ export default function Onboarding() {
                 {s.title}
               </h1>
             )}
-            <p className="mt-4 text-[15px] leading-relaxed text-[#8a9095] whitespace-pre-line max-w-[290px]">
+            <p className="mt-4 text-[15px] leading-relaxed text-[#a9b1c4] whitespace-pre-line max-w-[290px]">
               {s.subtitle}
             </p>
           </motion.div>
@@ -65,7 +65,7 @@ export default function Onboarding() {
             <span
               key={idx}
               className={`h-[3px] rounded-full transition-all duration-500 ${
-                idx === i ? "w-8 bg-mint" : "w-4 bg-[#22262a]"
+                idx === i ? "w-8 bg-mint" : "w-4 bg-[#2a3550]"
               }`}
             />
           ))}
@@ -74,7 +74,7 @@ export default function Onboarding() {
           <button
             onClick={skip}
             data-testid="onboarding-skip"
-            className="text-[#7a8388] text-sm hover:text-white transition-colors"
+            className="text-[#8a94a8] text-sm hover:text-white transition-colors"
           >
             Hopp over
           </button>
@@ -143,12 +143,12 @@ function TaxiMark() {
     <div className="w-44 h-44 relative flex items-center justify-center">
       <div className="absolute inset-0 rounded-full bg-mint/10 blur-3xl" />
       <svg viewBox="0 0 100 100" className="w-44 h-44 relative">
-        <circle cx="50" cy="50" r="45" fill="#0e1113" stroke="#2fe08c" strokeOpacity="0.25" strokeWidth="1" />
+        <circle cx="50" cy="50" r="45" fill="#111a2b" stroke="#2fe08c" strokeOpacity="0.25" strokeWidth="1" />
         <g transform="translate(50 50) scale(2.6)">
           {/* body */}
           <path
             d="M -6 -10 Q -6 -12 -4 -12 L 4 -12 Q 6 -12 6 -10 L 6 10 Q 6 12 4 12 L -4 12 Q -6 12 -6 10 Z"
-            fill="#141719"
+            fill="#17223a"
             stroke="#2fe08c"
             strokeWidth="0.6"
           />

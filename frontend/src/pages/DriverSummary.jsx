@@ -15,7 +15,7 @@ export default function DriverSummary() {
   return (
     <div className="px-4 pt-2 pb-24 page-enter">
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center text-[#7a8388]" data-testid="dsum-back">
+        <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="dsum-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Dagens oppsummering</h1>
@@ -28,16 +28,16 @@ export default function DriverSummary() {
             <div className="text-mint text-[11px] mt-1 uppercase tracking-widest">kr i dag</div>
           </div>
         </ProgressRing>
-        <div className="mt-4 text-[#7a8388] text-xs">Betalt av kunde · via Vipps/kort</div>
+        <div className="mt-4 text-[#8a94a8] text-xs">Betalt av kunde · via Vipps/kort</div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="card p-4">
-          <div className="text-[10px] text-[#7a8388] uppercase tracking-widest">Turer</div>
+          <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">Turer</div>
           <div className="font-display text-3xl text-white mt-2">{summary.trips}</div>
         </div>
         <div className="card p-4">
-          <div className="text-[10px] text-[#7a8388] uppercase tracking-widest">Tilfredshet</div>
+          <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">Tilfredshet</div>
           <div className="font-display text-3xl text-white mt-2">{summary.satisfaction}%</div>
         </div>
       </div>
@@ -46,7 +46,7 @@ export default function DriverSummary() {
         <Orb size="tiny" />
         <div className="flex-1">
           <div className="text-white text-sm font-medium">Godt jobbet!</div>
-          <div className="text-[#7a8388] text-xs">KJAPP AI analyserer dagen for deg. Fortsett den gode innsatsen.</div>
+          <div className="text-[#8a94a8] text-xs">KJAPP AI analyserer dagen for deg. Fortsett den gode innsatsen.</div>
         </div>
       </div>
     </div>
