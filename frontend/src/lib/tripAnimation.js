@@ -8,6 +8,20 @@ export function computeDriverPosition(trip, nowMs = Date.now()) {
   if (!trip) return null;
   const status = trip.status;
 
+  // Prefer real driver GPS from backend (last pinged within 20s)
+  if (trip.driver_lat != null && trip.driver_lng != null && trip.driver_location_at) {
+    const age = nowMs - new Date(trip.driver_location_at).getTime();
+    if (age < 20_000) {
+      return {
+        lat: trip.driver_lat,
+        lng: trip.driver_lng,
+        bearing: trip.driver_heading ?? 0,
+        progress: 0,
+        realtime: true,
+      };
+    }
+  }
+
   if (status === "driver_on_way") {
     if (trip.driver_start_lat == null || trip.driver_route_started_at == null) return null;
     const start = { lat: trip.driver_start_lat, lng: trip.driver_start_lng };

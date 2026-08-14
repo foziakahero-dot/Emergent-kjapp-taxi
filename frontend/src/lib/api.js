@@ -28,7 +28,8 @@ export const adminApi = {
   drivers: () => api.get("/admin/drivers").then((r) => r.data),
   trips: () => api.get("/admin/trips").then((r) => r.data),
   approveDriver: (id, approved = true) => api.post(`/admin/drivers/${id}/approve`, { approved }).then((r) => r.data),
-  createInvite: (driver_id, note = "", email = "") => api.post("/admin/driver-invites", { driver_id, note, email: email || undefined }).then((r) => r.data),
+  createInvite: ({ car, plate, vehicle_type = "ai-first", note = "", email = "" }) =>
+    api.post("/admin/driver-invites", { car, plate, vehicle_type, note, email: email || undefined }).then((r) => r.data),
   invites: () => api.get("/admin/driver-invites").then((r) => r.data),
 };
 
@@ -84,6 +85,18 @@ export const driverApi = {
   start: (trip_id) => api.post(`/driver/trip/${trip_id}/start`).then((r) => r.data),
   arrive: (trip_id) => api.post(`/driver/trip/${trip_id}/arrive`).then((r) => r.data),
   summary: () => api.get("/driver/summary/today").then((r) => r.data),
+  location: (lat, lng, heading, speed) => api.post("/driver/location", { lat, lng, heading, speed }).then((r) => r.data),
+  online: (online) => api.post("/driver/online", { online }).then((r) => r.data),
+};
+
+export const paymentsApi = {
+  checkout: (trip_id, origin_url) => api.post("/payments/checkout", { trip_id, origin_url }).then((r) => r.data),
+  status: (session_id) => api.get(`/payments/status/${session_id}`).then((r) => r.data),
+};
+
+export const gdprApi = {
+  export: () => api.get("/gdpr/export").then((r) => r.data),
+  delete: () => api.delete("/gdpr/delete").then((r) => r.data),
 };
 
 export const pushApi = {

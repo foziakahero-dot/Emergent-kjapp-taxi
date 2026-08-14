@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { tripsApi } from "../lib/api";
-import { Star, Share2 } from "lucide-react";
+import { tripsApi, paymentsApi } from "../lib/api";
+import { Star, CreditCard, Check } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function TripReceipt() {
@@ -9,19 +9,32 @@ export default function TripReceipt() {
   const [trip, setTrip] = useState(null);
   const [rating, setRating] = useState(5);
   const [submitted, setSubmitted] = useState(false);
+  const [paying, setPaying] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    tripsApi.get(tripId).then(setTrip).catch(() => {});
-  }, [tripId]);
+  const load = () => tripsApi.get(tripId).then(setTrip).catch(() => {});
+  useEffect(() => { load(); }, [tripId]);
 
   const submit = async () => {
     await tripsApi.rate(tripId, { rating, feedback: "" });
     setSubmitted(true);
-    setTimeout(() => navigate("/app"), 1200);
+  };
+
+  const pay = async () => {
+    setPaying(true);
+    try {
+      const origin = window.location.origin;
+      const res = await paymentsApi.checkout(tripId, origin);
+      if (res.checkout_url) window.location.href = res.checkout_url;
+    } catch (e) {
+      alert("Kunne ikke starte betaling. Prøv igjen.");
+      setPaying(false);
+    }
   };
 
   if (!trip) return <div className="min-h-[60vh] grid place-items-center"><div className="orb orb-small" /></div>;
+
+  const isPaid = trip.payment_status === "paid";
 
   return (
     <div className="px-6 pt-4 pb-10 page-enter">
@@ -37,9 +50,13 @@ export default function TripReceipt() {
           </svg>
         </div>
         <div className="mt-4 text-[11px] text-mint uppercase tracking-widest">Kvittering</div>
-        <div className="text-white text-lg mt-1">Takk for turen!</div>
-        <div className="font-display text-[56px] text-white mt-6">{trip.price} <span className="text-2xl align-top mt-2 inline-block">kr</span></div>
-        <div className="text-[13px] text-[#7a8388]">Betalt med Vipps</div>
+        <div className="text-white text-lg mt-1">Takk for turen</div>
+        <div className="font-display text-[56px] text-white mt-6" data-testid="receipt-total">
+          {trip.price} <span className="text-2xl align-top mt-2 inline-block">kr</span>
+        </div>
+        <div className="text-[13px] text-[#7a8388]" data-testid="receipt-status">
+          {isPaid ? "Betalt" : "Venter på betaling"}
+        </div>
       </motion.div>
 
       <div className="mt-8 card p-4 space-y-3">
@@ -47,8 +64,27 @@ export default function TripReceipt() {
         <Row label="Til" value={trip.dropoff_address} />
         <Row label="Avstand" value={`${trip.distance_km} km`} />
         <Row label="Varighet" value={`${trip.duration_min} min`} />
-        <Row label="Sjåfør" value={`${trip.driver?.name} · ${trip.driver?.car}`} />
+        {trip.driver?.name && <Row label="Sjåfør" value={`${trip.driver.name}${trip.driver.car ? " · " + trip.driver.car : ""}`} />}
       </div>
+
+      {!isPaid ? (
+        <button onClick={pay} disabled={paying} data-testid="pay-stripe" className="btn-primary w-full mt-6 flex items-center justify-center gap-2">
+          {paying ? (
+            <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <CreditCard size={16} /> Betal {trip.price} kr med kort
+            </>
+          )}
+        </button>
+      ) : (
+        <div className="mt-6 card p-4 flex items-center gap-3 border-mint/40" data-testid="paid-banner">
+          <div className="w-9 h-9 rounded-full bg-mint grid place-items-center">
+            <Check size={16} className="text-[#04120a]" />
+          </div>
+          <div className="text-white text-sm">Betaling fullført</div>
+        </div>
+      )}
 
       {!submitted ? (
         <div className="mt-6 card p-5">
@@ -61,13 +97,13 @@ export default function TripReceipt() {
               </button>
             ))}
           </div>
-          <button onClick={submit} data-testid="rate-submit" className="btn-primary w-full mt-5">
+          <button onClick={submit} data-testid="rate-submit" className="btn-ghost w-full mt-5">
             Send vurdering
           </button>
         </div>
       ) : (
         <div className="mt-6 card p-5 text-center">
-          <div className="text-mint text-sm">Takk for tilbakemeldingen! ✨</div>
+          <div className="text-mint text-sm">Takk for tilbakemeldingen</div>
         </div>
       )}
 

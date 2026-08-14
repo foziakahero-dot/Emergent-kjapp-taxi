@@ -11,7 +11,9 @@
 - URL: `/driver/login`
 - Email: `sjafor@kjapp.no`
 - Password: `sjafor1234`
-- Role: `driver`, approved: `true`, linked to `car-1` (Tesla Model Y)
+- Role: `driver`, approved: `true`
+- Car: `Tesla Model Y · EL12345` (stored on user record)
+- **VIKTIG**: Sjåfør må slå på "På vakt"-toggle på DriverHome for å motta turer og for at cars/nearby skal returnere dem. Toggle sender GPS-heartbeat hvert ~5s til `/api/driver/location`.
 
 ## Admin
 - URL: `/login` (redirectes automatisk til `/admin`)
@@ -27,11 +29,31 @@
 - GET /api/auth/me
 
 ## Sjåfør-registrering (kun via admin-invitasjon)
-- Admin: POST /api/admin/driver-invites { driver_id, note } → returnerer token
+- Admin: POST /api/admin/driver-invites { car, plate, vehicle_type, note, email? } → returnerer token
 - Delbar lenke: `/driver-signup/{token}`
 - Sjåfør fyller ut skjema → POST /api/driver-invites/accept
 - Kontoen får `approved: false` → kan logge inn, men får 403 på pending trips
 - Admin godkjenner: POST /api/admin/drivers/{user_id}/approve { approved: true }
+
+## Sjåfør-flyt (NY: ekte GPS, ingen simulator)
+- Sjåfør slår på "På vakt" → POST /api/driver/online {online:true}
+- Frontend `navigator.geolocation.watchPosition` sender POST /api/driver/location {lat,lng,heading} ~hvert 5. sekund
+- Turer STÅR i "searching" til en ekte sjåfør trykker "Godta tur" (POST /api/driver/accept)
+- Turen går videre KUN når sjåfør trykker:
+  - POST /api/driver/trip/{id}/start → status: in_trip
+  - POST /api/driver/trip/{id}/arrive → status: arrived
+- Passasjer ser bilen live på kartet via trip.driver_lat/driver_lng (oppdateres når sjåfør pinger)
+
+## Betaling (Stripe)
+- Etter turen (status=arrived), passasjer trykker "Betal med kort" på TripReceipt
+- POST /api/payments/checkout {trip_id, origin_url} → returnerer Stripe checkout_url
+- Testkort: `4242 4242 4242 4242`, hvilken som helst framtidig dato, hvilken som helst CVC
+- Suksess: /payment/success?session_id=... → poller GET /api/payments/status/{session_id}
+- Webhook: /api/stripe/webhook (Stripe → backend, oppdaterer trip.payment_status=paid)
+
+## GDPR
+- GET /api/gdpr/export → returnerer JSON med all brukerens data
+- DELETE /api/gdpr/delete → sletter personlig data, anonymiserer turer
 
 ## Admin Endpoints (role=admin required)
 - GET /api/admin/overview
@@ -39,7 +61,7 @@
 - GET /api/admin/drivers
 - GET /api/admin/trips
 - POST /api/admin/drivers/{id}/approve
-- POST /api/admin/driver-invites
+- POST /api/admin/driver-invites { car, plate, vehicle_type, note?, email? }
 - GET /api/admin/driver-invites
 
 ## Auto-routing etter login

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { settingsApi } from "../lib/api";
-import { ChevronLeft, ChevronRight, Mic } from "lucide-react";
+import { settingsApi, gdprApi } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import { ChevronLeft, ChevronRight, Mic, Download, Trash2 } from "lucide-react";
 
 const TOGGLES = [
   { key: "notifications", label: "Varslinger" },
@@ -17,6 +18,8 @@ const ROWS = [
 
 export default function Settings() {
   const [s, setS] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,6 +29,37 @@ export default function Settings() {
   const update = async (k, v) => {
     setS({ ...s, [k]: v });
     await settingsApi.update({ [k]: v });
+  };
+
+  const exportData = async () => {
+    setBusy(true);
+    try {
+      const data = await gdprApi.export();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kjapp-data-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Kunne ikke eksportere data.");
+    } finally { setBusy(false); }
+  };
+
+  const deleteAccount = async () => {
+    if (!window.confirm("Er du sikker på at du vil slette kontoen din permanent?\n\nDette kan ikke angres. Personlige data slettes umiddelbart, men turer beholdes anonymisert av regnskapsmessige årsaker (norsk lov).")) return;
+    setBusy(true);
+    try {
+      await gdprApi.delete();
+      await logout();
+      navigate("/", { replace: true });
+    } catch (e) {
+      alert("Kunne ikke slette kontoen. Kontakt support@kjapp.no.");
+      setBusy(false);
+    }
   };
 
   if (!s) return <div className="min-h-[40vh] grid place-items-center"><div className="orb orb-tiny" /></div>;
@@ -86,6 +120,36 @@ export default function Settings() {
               <ChevronRight size={14} className="text-[#7a8388] ml-1" />
             </div>
           ))}
+        </div>
+
+        {/* GDPR */}
+        <div className="pt-2">
+          <div className="text-[10px] text-[#5a6166] tracking-widest uppercase px-2 mb-2">Personvern (GDPR)</div>
+          <div className="card divide-y divide-line">
+            <button
+              onClick={exportData}
+              disabled={busy}
+              data-testid="gdpr-export"
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[#141719] transition-colors"
+            >
+              <Download size={16} className="text-mint mr-3" />
+              <span className="flex-1 text-left text-white text-sm">Eksporter mine data</span>
+              <ChevronRight size={14} className="text-[#7a8388]" />
+            </button>
+            <button
+              onClick={deleteAccount}
+              disabled={busy}
+              data-testid="gdpr-delete"
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[#141719] transition-colors"
+            >
+              <Trash2 size={16} className="text-red-400 mr-3" />
+              <span className="flex-1 text-left text-red-400 text-sm">Slett kontoen min</span>
+              <ChevronRight size={14} className="text-[#7a8388]" />
+            </button>
+          </div>
+          <p className="text-[11px] text-[#5a6166] px-2 mt-2 leading-relaxed">
+            Turer beholdes anonymisert i henhold til norsk bokføringslov. Alt annet slettes umiddelbart.
+          </p>
         </div>
 
         <div className="text-center pt-2">

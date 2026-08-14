@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { driverApi } from "../lib/api";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
@@ -29,7 +29,8 @@ export default function DriverTrip() {
   const [autoNav, setAutoNav] = useState(() => localStorage.getItem("kjapp_auto_nav") === "true");
   const [chatOpen, setChatOpen] = useState(false);
   const [carPos, setCarPos] = useState(null);
-  const lastStatusRef = React.useRef(null);
+  const lastStatusRef = useRef(null);
+  const watchIdRef = useRef(null);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -47,7 +48,30 @@ export default function DriverTrip() {
     return () => clearInterval(i);
   }, []);
 
-  // Animate driver car along route
+  // Push real GPS while trip is active
+  useEffect(() => {
+    if (!trip || (trip.status !== "driver_on_way" && trip.status !== "in_trip")) {
+      if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+      return;
+    }
+    if (!navigator.geolocation) return;
+    let lastSent = 0;
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastSent < 4500) return;
+        lastSent = now;
+        driverApi.location(pos.coords.latitude, pos.coords.longitude, pos.coords.heading, pos.coords.speed).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
+    );
+    return () => {
+      if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+    };
+  }, [trip?.status]);
+
+  // Animate driver car (prefer real GPS from trip, fallback to interpolation)
   useEffect(() => {
     if (!trip) { setCarPos(null); return; }
     if (trip.status !== "driver_on_way" && trip.status !== "in_trip") { setCarPos(null); return; }

@@ -123,7 +123,7 @@ function Drivers() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm">{d.fullName}</div>
-                <div className="text-[11px] text-[#7a8388]">{d.email} · {d.driver_id || "—"}</div>
+                <div className="text-[11px] text-[#7a8388]">{d.email} · {d.plate || d.car || "—"}</div>
               </div>
               <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full ${approved ? "bg-mint/10 text-mint" : "bg-yellow-500/10 text-yellow-400"}`}>
                 {approved ? "Godkjent" : "Venter"}
@@ -194,7 +194,9 @@ function UsersList() {
 function Invites() {
   const [invites, setInvites] = useState([]);
   const [creating, setCreating] = useState(false);
-  const [driverId, setDriverId] = useState("car-2");
+  const [car, setCar] = useState("Tesla Model Y");
+  const [plate, setPlate] = useState("");
+  const [vehicleType, setVehicleType] = useState("ai-first");
   const [inviteEmail, setInviteEmail] = useState("");
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState(null);
@@ -203,12 +205,14 @@ function Invites() {
   useEffect(() => { load(); }, []);
 
   const create = async () => {
+    if (!plate.trim()) { alert("Skilt er påkrevd"); return; }
     setCreating(true);
     try {
-      const res = await adminApi.createInvite(driverId, note, inviteEmail);
+      const res = await adminApi.createInvite({ car, plate, vehicle_type: vehicleType, note, email: inviteEmail });
       await load();
       setNote("");
       setInviteEmail("");
+      setPlate("");
       if (res?.email_sent === false && inviteEmail) {
         alert("Invitasjon opprettet, men e-post ble ikke sendt (SendGrid ikke konfigurert). Kopier lenken manuelt.");
       }
@@ -232,11 +236,16 @@ function Invites() {
         <div className="text-white text-sm font-medium mb-3">Ny sjåfør-invitasjon</div>
         <div className="space-y-2 mb-2">
           <div className="grid grid-cols-2 gap-2">
-            <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className="input" data-testid="invite-car">
-              {["car-1", "car-2", "car-3", "car-4", "car-5", "car-6", "car-7", "car-8"].map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input className="input" placeholder="Notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="invite-note" />
+            <input className="input" placeholder="Bilmerke" value={car} onChange={(e) => setCar(e.target.value)} data-testid="invite-car" />
+            <input className="input" placeholder="Skilt (f.eks. EL12345)" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} data-testid="invite-plate" />
           </div>
+          <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} className="input" data-testid="invite-vtype">
+            <option value="enkelt">Enkelt (beste pris)</option>
+            <option value="ai-first">Standard</option>
+            <option value="trygg">Trygg / XL (7 seter)</option>
+            <option value="premium">Premium (business)</option>
+          </select>
+          <input className="input" placeholder="Notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="invite-note" />
           <input className="input" placeholder="E-post til sjåfør (valgfritt — sendes automatisk)" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} data-testid="invite-email" />
         </div>
         <button onClick={create} disabled={creating} className="btn-primary w-full text-sm" data-testid="invite-create">
@@ -251,7 +260,7 @@ function Invites() {
             <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full ${inv.used ? "bg-[#141719] text-[#7a8388]" : "bg-mint/10 text-mint"}`}>
               {inv.used ? "Brukt" : "Aktiv"}
             </span>
-            <span className="text-[11px] text-[#7a8388]">{inv.driver_id}</span>
+            <span className="text-[11px] text-[#7a8388]">{inv.car} · {inv.plate}</span>
             <span className="text-[11px] text-[#7a8388] ml-auto">{new Date(inv.created_at).toLocaleDateString("nb-NO")}</span>
           </div>
           {inv.note && <div className="text-[12px] text-[#a1a7ab] mb-2">{inv.note}</div>}

@@ -1,22 +1,21 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { StatusBar, Orb } from "../components/UIKit";
 
 const slides = [
   {
-    logo: true,
-    subtitle: "Din premium reise,\nkun ett pust unna.",
+    kind: "logo",
+    subtitle: "Enkel og trygg\ntransport, hvor du enn skal.",
   },
   {
-    title: "AI som forstår deg.",
-    subtitle: "Reiser som tilpasser seg deg.",
-    orb: "medium",
+    kind: "route",
+    title: "Alltid en bil i nærheten.",
+    subtitle: "Vi finner nærmeste sjåfør automatisk.",
   },
   {
-    title: "Trygghet. Komfort.",
-    subtitle: "Teknologi som bryr seg.",
-    car: true,
+    kind: "car",
+    title: "Snille priser. Vennlige sjåfører.",
+    subtitle: "Ingen påslag i rushtid. Bare rettferdig norsk taxi.",
   },
 ];
 
@@ -33,8 +32,7 @@ export default function Onboarding() {
   const s = slides[i];
 
   return (
-    <div className="phone-shell grain flex flex-col">
-      
+    <div className="phone-shell grain flex flex-col" data-testid="onboarding">
       <div className="flex-1 flex flex-col items-center justify-center px-8 relative">
         <AnimatePresence mode="wait">
           <motion.div
@@ -45,16 +43,16 @@ export default function Onboarding() {
             transition={{ duration: 0.55, ease: "easeOut" }}
             className="flex flex-col items-center text-center"
           >
-            {s.logo && <BrandMark />}
-            {s.orb && <Orb size="default" />}
-            {s.car && <CarSilhouette />}
+            {s.kind === "logo" && <BrandMark />}
+            {s.kind === "route" && <RouteMark />}
+            {s.kind === "car" && <TaxiMark />}
 
             {s.title && (
-              <h1 className="mt-14 font-display text-[28px] tracking-tight text-white">
+              <h1 className="mt-14 font-display text-[26px] tracking-tight text-white max-w-[300px]">
                 {s.title}
               </h1>
             )}
-            <p className="mt-4 text-[15px] leading-relaxed text-[#8a9095] whitespace-pre-line max-w-[280px]">
+            <p className="mt-4 text-[15px] leading-relaxed text-[#8a9095] whitespace-pre-line max-w-[290px]">
               {s.subtitle}
             </p>
           </motion.div>
@@ -100,27 +98,71 @@ function BrandMark() {
         KJ<span className="text-mint">A</span>PP
       </div>
       <div className="mt-2 text-[10px] tracking-[0.4em] text-mint uppercase">
-        Smart AI Taxi
+        Norsk taxi
       </div>
     </div>
   );
 }
 
-function CarSilhouette() {
+// Slide 2 — minimal route/map icon (no robotic AI orb)
+function RouteMark() {
   return (
-    <div className="w-40 h-40 relative flex items-center justify-center">
-      <div className="absolute inset-0 rounded-full bg-mint/10 blur-3xl" />
-      <svg viewBox="0 0 200 100" className="w-40 relative" fill="none">
+    <div className="w-44 h-44 relative flex items-center justify-center">
+      <div className="absolute inset-0 rounded-full bg-mint/8 blur-3xl" />
+      <svg viewBox="0 0 200 200" className="w-44 h-44 relative">
+        {/* subtle grid backdrop */}
+        <g opacity="0.15" stroke="#2fe08c" strokeWidth="0.6">
+          <line x1="0" y1="60" x2="200" y2="60" />
+          <line x1="0" y1="120" x2="200" y2="120" />
+          <line x1="60" y1="0" x2="60" y2="200" />
+          <line x1="140" y1="0" x2="140" y2="200" />
+        </g>
+        {/* route path */}
         <path
-          d="M20 70 Q30 40 60 35 L140 35 Q170 40 180 70 L180 78 L20 78 Z"
-          fill="#0e1113"
+          d="M 40 150 Q 70 120 90 110 Q 120 95 130 70 Q 140 45 160 40"
+          fill="none"
           stroke="#2fe08c"
-          strokeWidth="1.2"
-          opacity="0.7"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray="0"
         />
-        <circle cx="55" cy="78" r="10" fill="#141719" stroke="#2fe08c" strokeWidth="1" />
-        <circle cx="145" cy="78" r="10" fill="#141719" stroke="#2fe08c" strokeWidth="1" />
-        <path d="M65 38 L80 55 L120 55 L135 38" stroke="#2fe08c" strokeWidth="0.8" opacity="0.4" />
+        {/* start pin */}
+        <circle cx="40" cy="150" r="10" fill="#2fe08c" opacity="0.2" />
+        <circle cx="40" cy="150" r="5" fill="#2fe08c" />
+        {/* end pin */}
+        <circle cx="160" cy="40" r="10" fill="#ffffff" opacity="0.15" />
+        <rect x="155" y="35" width="10" height="10" rx="1.5" fill="#ffffff" />
+      </svg>
+    </div>
+  );
+}
+
+// Slide 3 — professional top-down taxi (matches map marker)
+function TaxiMark() {
+  return (
+    <div className="w-44 h-44 relative flex items-center justify-center">
+      <div className="absolute inset-0 rounded-full bg-mint/10 blur-3xl" />
+      <svg viewBox="0 0 100 100" className="w-44 h-44 relative">
+        <circle cx="50" cy="50" r="45" fill="#0e1113" stroke="#2fe08c" strokeOpacity="0.25" strokeWidth="1" />
+        <g transform="translate(50 50) scale(2.6)">
+          {/* body */}
+          <path
+            d="M -6 -10 Q -6 -12 -4 -12 L 4 -12 Q 6 -12 6 -10 L 6 10 Q 6 12 4 12 L -4 12 Q -6 12 -6 10 Z"
+            fill="#141719"
+            stroke="#2fe08c"
+            strokeWidth="0.6"
+          />
+          {/* windshield */}
+          <path d="M -4.5 -9 Q -4.5 -10 -3 -10 L 3 -10 Q 4.5 -10 4.5 -9 L 4.5 -3 L -4.5 -3 Z" fill="#2fe08c" fillOpacity="0.35" />
+          {/* rear window */}
+          <path d="M -4.5 3 L 4.5 3 L 4.5 9 Q 4.5 10 3 10 L -3 10 Q -4.5 10 -4.5 9 Z" fill="#2fe08c" fillOpacity="0.22" />
+          {/* headlights */}
+          <circle cx="-3.6" cy="-11" r="0.7" fill="#ffffff" />
+          <circle cx="3.6" cy="-11" r="0.7" fill="#ffffff" />
+          {/* side mirrors */}
+          <rect x="-7" y="-6" width="1" height="1.6" fill="#2fe08c" opacity="0.7" />
+          <rect x="6" y="-6" width="1" height="1.6" fill="#2fe08c" opacity="0.7" />
+        </g>
       </svg>
     </div>
   );

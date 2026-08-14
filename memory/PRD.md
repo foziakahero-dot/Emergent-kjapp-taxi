@@ -28,7 +28,24 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08)
+## What's Been Implemented (2026-08 — Iteration 6: Beta-readiness overhaul)
+- **REMOVED**: `_simulate_trip_lifecycle` asyncio.sleep-based fake trip progression. Trips now progress ONLY when real drivers act.
+- **REMOVED**: 8 fake seed drivers in `db.drivers` collection. Legacy collection is dropped on startup.
+- **NEW**: Real driver GPS heartbeat — `POST /api/driver/location {lat,lng,heading?,speed?}` sent every ~5s from `DriverHome` via `navigator.geolocation.watchPosition` while driver is online. Also updates active trip's `driver_lat/driver_lng` for live passenger view.
+- **NEW**: Driver "På vakt"-toggle — `POST /api/driver/online {online:true|false}`. `/api/cars/nearby` only returns drivers with `online:true` AND last GPS ping <60s old.
+- **NEW**: Real Stripe payment via Emergent claimable sandbox — keys already in backend/.env. Endpoints: `POST /api/payments/checkout {trip_id, origin_url}`, `GET /api/payments/status/{session_id}`, `POST /api/stripe/webhook`. TripReceipt now has "Betal med kort"-knapp; success/cancel pages at `/payment/success` and `/payment/cancel`.
+- **NEW**: GDPR endpoints — `GET /api/gdpr/export` (full JSON export), `DELETE /api/gdpr/delete` (personal data deleted, trips anonymized per norsk bokføringslov).
+- **NEW**: Cookie consent banner (`CookieConsent.jsx`) on first visit — "Kun nødvendige" / "Godta alle".
+- **NEW**: AI guardrails — system prompt strictly rejects non-taxi questions ("Beklager, det kan jeg dessverre ikke hjelpe med…").
+- **UPDATED**: Onboarding redesigned with humble Nordic tone. Slide 1: "Enkel og trygg transport, hvor du enn skal." Slide 2: Route/map SVG (no robotic AI orb). Slide 3: Professional top-down taxi SVG (matches map marker) — "Snille priser. Vennlige sjåfører."
+- **UPDATED**: Driver invite schema from `{driver_id}` → `{car, plate, vehicle_type, note?, email?}`. Driver info now lives on user record (car/plate/vehicle_type/rating/online/last_lat/last_lng).
+- **PLACEHOLDER**: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` added to backend/.env (empty). Emergent-managed Google Auth still works as fallback.
+
+### Iteration 6 tests
+- **iter_6**: 29/29 · beta-readiness overhaul (real GPS, no simulator, Stripe, GDPR, AI guardrails)
+- **Total: 107/107 backend-tester grønne**
+
+## What's Been Implemented (2026-08 — earlier)
 - Backend `/app/backend/server.py`
   - JWT auth (register, login, logout, me) with bcrypt hashing, Bearer-token header
   - Seeded MongoDB collections: `users`, `drivers` (8), `places` (8), `payment_methods`, `vapid`

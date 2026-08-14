@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { driverApi, tripsApi } from "../lib/api";
 import { Orb, VoiceBars } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Navigation, Clock, Check } from "lucide-react";
+import { MapPin, Navigation, Clock, Check, Power } from "lucide-react";
 
 export default function DriverHome() {
   const { user } = useAuth();
@@ -12,6 +12,9 @@ export default function DriverHome() {
   const [current, setCurrent] = useState(null);
   const [summary, setSummary] = useState({ income: 0, trips: 0, satisfaction: 98 });
   const [accepting, setAccepting] = useState(null);
+  const [online, setOnline] = useState(() => localStorage.getItem("kjapp_driver_online") === "true");
+  const [gpsError, setGpsError] = useState(null);
+  const watchIdRef = useRef(null);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -31,6 +34,33 @@ export default function DriverHome() {
     return () => clearInterval(t);
   }, []);
 
+  // Start / stop GPS heartbeat when online toggled
+  useEffect(() => {
+    localStorage.setItem("kjapp_driver_online", String(online));
+    driverApi.online(online).catch(() => {});
+    if (online) {
+      if (!navigator.geolocation) { setGpsError("Nettleseren støtter ikke GPS"); return; }
+      const opts = { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 };
+      let lastSent = 0;
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          setGpsError(null);
+          const now = Date.now();
+          if (now - lastSent < 4500) return;  // throttle to every ~5s
+          lastSent = now;
+          driverApi.location(pos.coords.latitude, pos.coords.longitude, pos.coords.heading, pos.coords.speed).catch(() => {});
+        },
+        (err) => { setGpsError("GPS-feil: " + err.message); },
+        opts,
+      );
+    } else {
+      if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+    }
+    return () => {
+      if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+    };
+  }, [online]);
+
   const accept = async (trip_id) => {
     setAccepting(trip_id);
     try {
@@ -49,31 +79,41 @@ export default function DriverHome() {
 
   return (
     <div className="px-4 pt-2 pb-24 page-enter">
-      {/* AI Assistant hero */}
-      <div className="mt-2 card p-5 relative overflow-hidden">
+      {/* Online toggle */}
+      <div className="mt-2 card p-4 flex items-center gap-3">
+        <div className={`w-11 h-11 rounded-full grid place-items-center ${online ? "bg-mint/15" : "bg-[#141719]"}`}>
+          <Power size={18} className={online ? "text-mint" : "text-[#7a8388]"} />
+        </div>
+        <div className="flex-1">
+          <div className="text-white text-sm font-medium">{online ? "På vakt" : "Offline"}</div>
+          <div className="text-[11px] text-[#7a8388]">{online ? (gpsError || "Du mottar turer") : "Slå på for å motta turer"}</div>
+        </div>
+        <button
+          onClick={() => setOnline((v) => !v)}
+          data-testid="driver-online-toggle"
+          className={`relative w-14 h-8 rounded-full transition-colors ${online ? "bg-mint" : "bg-[#22262a]"}`}
+          aria-pressed={online}
+        >
+          <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform ${online ? "translate-x-6" : ""}`} />
+        </button>
+      </div>
+
+      {/* Hero */}
+      <div className="mt-3 card p-5 relative overflow-hidden">
         <div className="absolute -right-8 -top-8 opacity-40 pointer-events-none">
           <div className="orb" style={{ width: 130, height: 130 }} />
         </div>
         <div className="relative">
-          <div className="text-[11px] text-mint uppercase tracking-widest">AI Assistent</div>
+          <div className="text-[11px] text-mint uppercase tracking-widest">Oversikt</div>
           <h1 className="mt-2 font-display text-[22px] tracking-tight text-white leading-tight">
-            Hei {firstName}!<br />
+            Hei {firstName}.<br />
             {pending.length > 0 || current
-              ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} klar nå.`
-              : "Ingen turer akkurat nå."}
+              ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} nå.`
+              : online ? "Ingen turer akkurat nå." : "Slå på for å begynne."}
           </h1>
           <p className="text-[#7a8388] text-sm mt-1">
-            {current ? "Du har en aktiv tur." : pending.length ? "Klar for å kjøre?" : "Vi varsler deg når det kommer en tur."}
+            {current ? "Du har en aktiv tur." : pending.length ? "Klar til å kjøre?" : online ? "Vi varsler deg når det kommer en tur." : "Du er offline."}
           </p>
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={() => navigate(current ? "/driver/trip" : "/driver/summary")}
-              data-testid="driver-hero-cta"
-              className="btn-ghost text-sm flex items-center gap-2"
-            >
-              <VoiceBars /> Trykk for å snakke
-            </button>
-          </div>
         </div>
       </div>
 
