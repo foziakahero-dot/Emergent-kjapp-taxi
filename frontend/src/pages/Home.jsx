@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { pickupIcon, dropoffIcon, fleetCarIcon } from "../lib/mapAssets";
-import { tripsApi, carsApi, placesApi } from "../lib/api";
+import { tripsApi, carsApi, placesApi, pricingApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,6 +48,16 @@ export default function Home() {
   const [places, setPlaces] = useState(PLACES_FALLBACK);
   const [routeGeom, setRouteGeom] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null); // {distance_km, duration_min, options[]}
+  const [surge, setSurge] = useState({ active: false, multiplier: 1.0, reasons: [] });
+  const [pickupSheetOpen, setPickupSheetOpen] = useState(false);
+
+  // Load surge info once + every 5 min
+  useEffect(() => {
+    const load = () => pricingApi.surge().then(setSurge).catch(() => {});
+    load();
+    const t = setInterval(load, 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
 
   // Load real route via OSRM whenever a destination is chosen
   useEffect(() => {
@@ -187,13 +197,42 @@ export default function Home() {
         className="absolute left-0 right-0 bottom-6 z-[1000] px-4"
       >
         <div className="card p-4 shadow-card backdrop-blur-xl bg-[#111a2b]/95">
-          {!dropoff && cars.length > 0 && (
+          {/* Pickup line — editable */}
+          <button
+            onClick={() => setPickupSheetOpen(true)}
+            data-testid="home-edit-pickup"
+            className="w-full flex items-center gap-3 px-3 py-2 mb-2 rounded-xl bg-white/5 border border-line text-left hover:border-mint transition-colors"
+          >
+            <div className="w-2 h-2 rounded-full bg-mint shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">Fra</div>
+              <div className="text-white text-sm truncate">{pickup.name}</div>
+            </div>
+            <span className="text-[11px] text-mint">Endre</span>
+          </button>
+
+          {!dropoff && (
             <div className="mb-3 flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-mint animate-pulse" />
-                <span className="text-[12px] text-mint font-medium">{cars.length} ledige biler nær deg</span>
+                <span className="text-[12px] text-mint font-medium">
+                  {cars.length > 0 ? `${cars.length} ledige biler nær deg` : "Ingen sjåfører på vakt akkurat nå"}
+                </span>
               </div>
-              <span className="text-[11px] text-[#8a94a8]">nærmeste {cars[0]?.eta_min} min</span>
+              {cars.length > 0 && <span className="text-[11px] text-[#8a94a8]">nærmeste {cars[0]?.eta_min} min</span>}
+            </div>
+          )}
+
+          {/* Surge chip */}
+          {surge.active && !dropoff && (
+            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/25" data-testid="surge-chip">
+              <span className="text-yellow-400 text-lg">⚡</span>
+              <div className="flex-1">
+                <div className="text-yellow-200 text-[12px] font-medium">
+                  {surge.reasons.join(" + ")} · +{Math.round((surge.multiplier - 1) * 100)}%
+                </div>
+                <div className="text-[10px] text-yellow-100/70">Høyere etterspørsel akkurat nå</div>
+              </div>
             </div>
           )}
           {!dropoff ? (
@@ -239,7 +278,7 @@ export default function Home() {
         </div>
       </motion.div>
 
-      {/* Search sheet modal */}
+      {/* Search sheet modal — destination */}
       <AnimatePresence>
         {showSheet && (
           <SearchSheet
@@ -248,6 +287,20 @@ export default function Home() {
             onPick={(p) => {
               setDropoff(p);
               setShowSheet(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Search sheet modal — pickup */}
+      <AnimatePresence>
+        {pickupSheetOpen && (
+          <SearchSheet
+            places={places}
+            onClose={() => setPickupSheetOpen(false)}
+            onPick={(p) => {
+              setPickup(p);
+              setPickupSheetOpen(false);
             }}
           />
         )}
@@ -313,7 +366,27 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
 
 function SearchSheet({ onClose, onPick, places = [] }) {
   const [query, setQuery] = useState("");
-  const filtered = places.filter((p) => p.name.toLowerCase().includes(query.toLowerCase()));
+  const [remote, setRemote] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = React.useRef(null);
+
+  const q = query.trim();
+  const local = places.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
+
+  useEffect(() => {
+    if (q.length < 3) { setRemote([]); return; }
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await placesApi.search(q);
+        setRemote(r.results || []);
+      } catch { setRemote([]); }
+      finally { setLoading(false); }
+    }, 350);
+    return () => clearTimeout(debounceRef.current);
+  }, [q]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -328,27 +401,30 @@ function SearchSheet({ onClose, onPick, places = [] }) {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="p-6 pt-14"
       >
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <button onClick={onClose} className="text-[#8a94a8]" data-testid="search-close">✕</button>
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="input"
-            placeholder="Søk etter destinasjon"
+            placeholder="Skriv en adresse i Norge…"
             data-testid="search-input"
           />
         </div>
-        <div className="space-y-2">
-          {filtered.map((p) => (
+        <div className="space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar">
+          {local.length > 0 && (
+            <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest px-2 mt-1">Favoritter</div>
+          )}
+          {local.map((p) => (
             <button
-              key={p.name}
+              key={"local-" + p.name}
               onClick={() => onPick(p)}
               data-testid={`search-result-${p.name}`}
               className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#111a2b] border border-line hover:border-mint transition-colors text-left"
             >
               <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
-                <MapPin size={18} className="text-mint" />
+                <Star size={16} className="text-mint" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-medium truncate">{p.name}</div>
@@ -357,8 +433,37 @@ function SearchSheet({ onClose, onPick, places = [] }) {
               <Navigation size={16} className="text-[#8a94a8]" />
             </button>
           ))}
-          {filtered.length === 0 && (
-            <div className="text-center py-10 text-[#8a94a8] text-sm">Ingen treff. Prøv et annet søk.</div>
+          {(remote.length > 0 || loading) && (
+            <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest px-2 mt-3">
+              {loading ? "Søker…" : "Adresser i Norge"}
+            </div>
+          )}
+          {remote.map((p, idx) => (
+            <button
+              key={"remote-" + idx + "-" + p.lat}
+              onClick={() => onPick({ name: p.name, lat: p.lat, lng: p.lng })}
+              data-testid={`geo-result-${idx}`}
+              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#111a2b] border border-line hover:border-mint transition-colors text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
+                <MapPin size={18} className="text-mint" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-sm font-medium truncate">{p.name}</div>
+                <div className="text-[#8a94a8] text-xs truncate">{p.display_name}</div>
+              </div>
+              <Navigation size={16} className="text-[#8a94a8]" />
+            </button>
+          ))}
+          {!loading && q.length >= 3 && remote.length === 0 && local.length === 0 && (
+            <div className="text-center py-10 text-[#8a94a8] text-sm">
+              Ingen treff for &quot;{q}&quot;. Prøv full adresse med gatenavn + husnummer.
+            </div>
+          )}
+          {q.length < 3 && local.length === 0 && (
+            <div className="text-center py-10 text-[#8a94a8] text-sm">
+              Skriv minst 3 tegn (f.eks. &quot;Storgata 15&quot;)
+            </div>
           )}
         </div>
       </motion.div>

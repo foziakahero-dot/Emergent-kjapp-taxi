@@ -243,9 +243,9 @@ def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = 
     """
 
 
-def price_for(distance_km: float, vehicle_type: str, duration_min: float = None) -> int:
+def price_for(distance_km: float, vehicle_type: str, duration_min: float = None, when: datetime = None) -> int:
     """Norwegian taxi rates (based on Oslo Taxi 2024/2025 tariffs):
-    startpris + km-pris + minutt-pris (tidstillegg)."""
+    startpris + km-pris + minutt-pris + surge (helg / natt)."""
     if duration_min is None:
         duration_min = max(3, distance_km * 2.2)
     rates = {
@@ -255,7 +255,34 @@ def price_for(distance_km: float, vehicle_type: str, duration_min: float = None)
         "premium":  {"start": 120, "km": 28.0, "min": 6.0},  # Business
     }
     r = rates.get(vehicle_type, rates["ai-first"])
-    return int(round(r["start"] + distance_km * r["km"] + duration_min * r["min"]))
+    base = r["start"] + distance_km * r["km"] + duration_min * r["min"]
+    # Norwegian surge model
+    now = when or datetime.now(timezone.utc)
+    # Convert to Norway time (UTC+1, UTC+2 in summer — simple UTC+1 approximation for tariff logic)
+    local_hour = (now.hour + 1) % 24
+    weekday = now.weekday()  # 0=Mon .. 6=Sun
+    surge = 1.0
+    # Weekend: Fri 18:00 → Sun 23:00
+    if (weekday == 4 and local_hour >= 18) or weekday == 5 or (weekday == 6 and local_hour <= 23):
+        surge = max(surge, 1.25)
+    # Night: 22:00 → 06:00 all days
+    if local_hour >= 22 or local_hour < 6:
+        surge = max(surge, 1.15)
+    return int(round(base * surge))
+
+
+def current_surge_info(when: datetime = None) -> dict:
+    """Return current surge multiplier + reason so UI can display it."""
+    now = when or datetime.now(timezone.utc)
+    local_hour = (now.hour + 1) % 24
+    weekday = now.weekday()
+    reasons = []
+    surge = 1.0
+    if (weekday == 4 and local_hour >= 18) or weekday == 5 or (weekday == 6 and local_hour <= 23):
+        surge = max(surge, 1.25); reasons.append("Helgetillegg")
+    if local_hour >= 22 or local_hour < 6:
+        surge = max(surge, 1.15); reasons.append("Natt-tillegg")
+    return {"multiplier": surge, "reasons": reasons, "active": surge > 1.0}
 
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app"):
@@ -454,6 +481,45 @@ async def list_places(featured_only: bool = False):
         p.pop("_id", None)
         places.append(p)
     return {"places": places}
+
+
+@api.get("/places/search")
+async def search_places(q: str, limit: int = 8):
+    """Free-text address search via Nominatim (OpenStreetMap). Norway-biased."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"results": []}
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": q, "format": "json", "addressdetails": 1,
+                    "limit": limit, "countrycodes": "no", "accept-language": "no",
+                },
+                headers={"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"},
+            )
+            data = r.json() if r.status_code == 200 else []
+    except Exception:
+        data = []
+    results = []
+    for item in data:
+        try:
+            addr = item.get("address", {})
+            street = addr.get("road") or addr.get("pedestrian") or ""
+            hn = addr.get("house_number") or ""
+            street_line = (street + (" " + hn if hn else "")).strip() or item.get("display_name", "").split(",")[0]
+            city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("municipality") or ""
+            label = (street_line + (", " + city if city else "")).strip(", ")
+            results.append({
+                "name": label,
+                "display_name": item.get("display_name"),
+                "lat": float(item["lat"]),
+                "lng": float(item["lon"]),
+            })
+        except Exception:
+            continue
+    return {"results": results}
 
 
 @api.post("/trips/estimate")
@@ -786,7 +852,7 @@ async def ai_chat(body: ChatRequest, current=Depends(get_current_user)):
         api_key=EMERGENT_LLM_KEY,
         session_id=session_id,
         system_message=AI_SYSTEM,
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+    ).with_model("openai", "gpt-5.6-sol")
 
     try:
         # replay previous turns except the just-added user message
@@ -1550,6 +1616,62 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
     if response is not None:
         response.delete_cookie("access_token", path="/")
     return {"deleted": True, "anonymized_trip_owner": anon_id}
+
+
+@api.get("/pricing/surge")
+async def pricing_surge():
+    """Current surge multiplier + reason (weekend/night)."""
+    return current_surge_info()
+
+
+@api.post("/driver/trip/{trip_id}/cancel")
+async def driver_cancel(trip_id: str, current=Depends(require_driver)):
+    """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
+    driver_id = current["id"]
+    result = await db.trips.update_one(
+        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}},
+        {"$set": {
+            "status": "cancelled_by_driver",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Kunne ikke avbryte turen")
+    t = await db.trips.find_one({"trip_id": trip_id})
+    await send_push_to_user(t["user_id"], "Turen ble avbrutt", "Sjåføren har avbrutt turen. Beklager!", "/app")
+    return {"ok": True}
+
+
+@api.get("/driver/history")
+async def driver_history(current=Depends(require_driver), limit: int = 30):
+    """Sjåførens siste gjennomførte turer."""
+    driver_id = current["id"]
+    trips = []
+    async for t in db.trips.find(
+        {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}}
+    ).sort("created_at", -1).limit(limit):
+        t["id"] = str(t["_id"]); t.pop("_id", None); trips.append(t)
+    return {"trips": trips}
+
+
+@api.get("/driver/history/weekly")
+async def driver_history_weekly(current=Depends(require_driver)):
+    """Siste 7 dager inntekt per dag (for graf)."""
+    driver_id = current["id"]
+    days = []
+    for i in range(6, -1, -1):
+        day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
+        total = 0
+        trips = 0
+        async for t in db.trips.find({
+            "driver_id": driver_id,
+            "created_at": {"$gte": day.isoformat(), "$lt": (day + timedelta(days=1)).isoformat()},
+            "status": {"$in": ["arrived", "completed", "rated"]},
+        }):
+            trips += 1
+            total += t.get("price", 0)
+        days.append({"date": day.isoformat(), "day_label": day.strftime("%a"), "income": total, "trips": trips})
+    return {"days": days}
 
 
 app.include_router(api)

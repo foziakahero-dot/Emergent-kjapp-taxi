@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 7 backend verification — 31/31 pytest tests PASS. Covered all new/changed endpoints: (1) /api/places/search (Nominatim OSM address geocoding) returns {results:[{name,lat,lng,display_name}]} for 'storgata 15 oslo', 'aker brygge', 'oslo lufthavn'; empty q or q<2 returns {results:[]} (never 500). (2) BUG FIX confirmed: POST /api/trips/request creates trip in 'searching' status; after 6s STILL 'searching' (no asyncio simulator). Only after driver /accept does it flip to 'driver_on_way'. (3) AI model switch to gpt-5.6-sol works: taxi-question returns Norwegian reply within timeout; off-topic 'skriv python-kode' → refusal starting with 'Beklager' (guardrails intact). (4) /api/pricing/surge returns {multiplier, reasons, active}; /trips/estimate 'enkelt' price matches expected formula (55 + 14*dist + 3.5*dur) * surge within ±2 kr; stacking is max() (not multiplication) confirmed. (5) POST /api/driver/trip/{id}/cancel works from driver_on_way AND in_trip → status 'cancelled_by_driver'; rejects 400 when searching (not accepted) and 400 after arrived. Push send call fires (no crash). (6) GET /api/driver/history returns {trips:[]} newest-first with only arrived/completed/rated/cancelled_by_driver statuses; no MongoDB _id leaked. GET /api/driver/history/weekly returns exactly 7 days with date/day_label/income/trips and total sums correctly. (7) Regressions PASS: auth/login, driver/online, driver/location, cars/nearby empty↔populated, trips/estimate, driver/pending, driver/accept, driver/trip/{id}/start, driver/trip/{id}/arrive, payments/checkout on arrived trip (+400 when not arrived), gdpr/export, gdpr/delete on throwaway user (login 401 after), admin/driver-invites with NEW schema {car,plate,vehicle_type,note,email}.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/driver/trip/{id}/cancel", "issue": "Response is {ok:true} without echoing new status. Frontend must re-fetch trip. Consider returning trip document for consistency with /driver/accept."},
+      {"endpoint": "/api/driver/history", "issue": "Uses .sort('created_at', -1) but stores created_at as ISO string; works because ISO 8601 strings sort correctly, but relies on that convention. Consider persisting as native datetime for safety."},
+      {"endpoint": "/api/driver/history/weekly", "issue": "created_at range filter uses date().isoformat() (10-char) compared against full ISO strings; string comparison works but is fragile — a created_at like '2026-01-05T23:59:59Z' correctly compares < '2026-01-06'. OK for now but tie to native datetimes for robustness."},
+      {"endpoint": "/api/places/search", "issue": "No caching / rate-limit. Nominatim usage policy limits to 1 req/sec — under user typeahead load this may 429. Add debounce on frontend (already done per note) + optional server-side cache."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter7_results.xml"
+  ],
+  "action_items": [
+    "Consider returning updated trip document from /driver/trip/{id}/cancel for FE parity with /accept.",
+    "Persist trip.created_at as native datetime (BSON Date) instead of ISO string — future-proofs history queries and range filters.",
+    "server.py is now 1683 lines — split into modules (auth, trips, driver, admin, payments, ai, push, places, pricing) before further growth.",
+    "Add server-side cache/rate-limit for /places/search to respect Nominatim's 1 req/sec policy."
+  ],
+  "critical_code_review_comments": [
+    "surge logic uses `(now.hour + 1) % 24` as a naive UTC→CET conversion; this is INCORRECT during summer time (CEST is UTC+2). During DST, a request at 21:00 UTC would map to local_hour=22 and trigger night surge, but actual local time is 23:00 (still night, OK). Reverse: 20:00 UTC maps to local_hour=21 (no night surge), but actual local is 22:00 (should trigger). Consider using zoneinfo('Europe/Oslo').",
+    "price_for/current_surge_info duplicate the same weekday+hour logic; refactor into a single _compute_surge(when) helper called by both.",
+    "/api/driver/trip/{id}/cancel push notification to passenger has no fallback — verified webpush fires; if user has no subscriptions send_push_to_user returns silently (good).",
+    "history_weekly loops per-day with N find() calls (7 round-trips). For a busy driver, use a single aggregate with $group by date. Not urgent for beta.",
+    "server.py exceeds 700-line threshold (1683). Modularize."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (rewritten for iter7; iter6 preserved as backend_test_iter6.py.bak)"
+  ],
+  "success_rate": {"backend": "100% (31/31)", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "ola@kjapp.no/test1234 (customer), sjafor@kjapp.no/sjafor1234 (approved driver, Tesla Model Y EL12345), admin@kjapp.no/admin123 — all verified.",
+  "seed_data_creation": "Multiple TEST_-prefixed trips created and left in various states (searching/arrived/cancelled_by_driver) for driver history verification. One TEST_gdpr7_* throwaway user created + deleted via /gdpr/delete. One TEST_iter7_* driver invite created (Kia EV6 EL77777). No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter7 backend_test.py adds coverage for /places/search, /pricing/surge, /driver/trip/{id}/cancel, /driver/history[/weekly] and confirms AI model swap to gpt-5.6-sol. Old iter6 backup preserved as backend_test_iter6.py.bak. Nominatim can be flaky — test_storgata/aker/lufthavn skip when results empty (public service). Driver cancel path: only valid from driver_on_way or in_trip; searching or arrived → 400. AI refusal is guaranteed to start with 'Beklager,' by AI_SYSTEM prompt at server.py:825. Surge stacking is max() not product.",
+  "rca of the issue": "The original 'stuck on AI finner din posisjon' user complaint was a FRONTEND messaging issue, not a backend bug. Backend correctly holds trips in 'searching' status until a real driver accepts (asyncio simulator was removed in iter6). No backend action needed. New /places/search endpoint (Nominatim) resolves the 'cannot enter arbitrary addresses' complaint — verified returning street-level results for Norwegian queries."
+}

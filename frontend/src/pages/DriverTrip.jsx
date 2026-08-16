@@ -117,6 +117,15 @@ export default function DriverTrip() {
     setBusy(true);
     try { await driverApi.arrive(trip.trip_id); await load(); setTimeout(() => navigate("/driver"), 1500); } catch (e) { alert("Kunne ikke fullføre"); } finally { setBusy(false); }
   };
+  const cancel = async () => {
+    if (!window.confirm("Er du sikker på at du vil avbryte turen?\n\nBruk dette KUN hvis kunden ikke dukker opp eller det oppstår et problem.")) return;
+    setBusy(true);
+    try {
+      await driverApi.cancel(trip.trip_id);
+      await load();
+      setTimeout(() => navigate("/driver"), 1000);
+    } catch (e) { alert("Kunne ikke avbryte"); } finally { setBusy(false); }
+  };
 
   if (!trip) {
     return (
@@ -242,9 +251,14 @@ export default function DriverTrip() {
           )}
 
           {trip.status === "driver_on_way" && (
-            <button onClick={start} disabled={busy} data-testid="dtrip-start" className="btn-primary w-full flex items-center justify-center gap-2">
-              <Play size={16} /> Start tur
-            </button>
+            <>
+              <button onClick={start} disabled={busy} data-testid="dtrip-start" className="btn-primary w-full flex items-center justify-center gap-2">
+                <Play size={16} /> Start tur
+              </button>
+              <button onClick={cancel} disabled={busy} data-testid="dtrip-cancel" className="btn-ghost w-full flex items-center justify-center gap-2 text-red-400 border-red-400/20 hover:border-red-400/60 mt-2">
+                Kunden dukket ikke opp
+              </button>
+            </>
           )}
           {trip.status === "in_trip" && (
             <button onClick={arrive} disabled={busy} data-testid="dtrip-arrive" className="btn-primary w-full flex items-center justify-center gap-2">

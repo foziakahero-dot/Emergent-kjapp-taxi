@@ -28,7 +28,26 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08 — Iteration 6+7: Beta-readiness + Nordic theme)
+## What's Been Implemented (2026-08 — Iteration 8: Bug fixes + Driver oppgradering)
+
+### Iter 8 (nåværende sesjon, del 3)
+- **BUG FIX**: SearchSheet lot bare velge forhåndsdefinerte steder. Ny endpoint `GET /api/places/search?q=` bruker Nominatim (OpenStreetMap) med Norge-filter → kunden kan skrive hvilken som helst norsk adresse ("Storgata 15 Oslo") og få treff med lat/lng. 350ms debounce på frontend
+- **BUG FIX**: Booking-flyten hang på "AI finner din posisjon" fordi trip stod i "searching" til en ekte sjåfør aksepterer. Statustekst er nå endret til "Venter på sjåfør — vi varsler alle ledige sjåfører nær deg" så det er tydelig hva som skjer
+- **BUG FIX**: Kunde kunne ikke endre henteadresse. Ny "Endre"-knapp åpner samme adressesøk-modal for pickup
+- **AI-modell byttet fra Claude Sonnet 4.5 → GPT-5.6-sol** (svar på "ekte ChatGPT"-spørsmålet). Guardrails fungerer fortsatt
+- **Live-kart på DriverHome**: 220px Leaflet-kart med sjåførens egen GPS-marker + "LIVE POSISJON"-badge, kun synlig når "På vakt"
+- **Trippel-ping + vibrasjon** ved ny tur (3 ping i rekkefølge + `navigator.vibrate([200,100,200,100,200])`)
+- **Sjåfør-profilbilde** synlig i hero (avatar med initialer eller `user.photo`), viser bil + skilt-etikett
+- **Turhistorikk-side** `/driver/history`: siste 30 turer + 7-dagers inntektsgraf (`GET /driver/history` + `/driver/history/weekly`)
+- **Avbryt tur som sjåfør**: "Kunden dukket ikke opp"-knapp på DriverTrip (`POST /driver/trip/{id}/cancel`) → status "cancelled_by_driver", push til kunde
+- **Surge-priser**: `+25% helg (fre 18–søn 23)` og `+15% natt (22–06)`. Nordisk-taxi-modell (stackes ikke, tar max). Ny `GET /api/pricing/surge` viser aktive årsaker. Kunde ser synlig gul chip på Home
+- **Rute-info på pending trip-kort**: viser sjåførens avstand til henting live basert på sjåførens GPS
+
+### Iter 8 tests
+- **iter_8**: 31/31 · adresse-søk, GPT-5.6-sol, surge, cancel, history, alle regresjonstester
+- **Total: 138/138 backend-tester grønne**
+
+## What's Been Implemented (2026-08 — Iteration 6+7)
 
 ### Iter 7 tillegg (nåværende sesjon, del 2)
 - **Nordisk theme**: `index.css` og `tailwind.config.js` byttet fra kold svart (#050708) til varm midnattsblå (#0a1220) med perlehvit tekst (#f4f1e8). Alle `.card` bruker nå ekte glassmorphism (backdrop-blur 24px + rgba(255,255,255,0.045) + rgba(244,241,232,0.09) border). Mint (#2fe08c) reservert for CTA. `sed`-swap på tvers av 17 filer erstattet 43 hardkodede hex-referanser.

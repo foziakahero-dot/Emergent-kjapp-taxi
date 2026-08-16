@@ -57,6 +57,7 @@ export const carsApi = {
 
 export const placesApi = {
   list: (featuredOnly = false) => api.get("/places", { params: { featured_only: featuredOnly } }).then((r) => r.data),
+  search: (q) => api.get("/places/search", { params: { q } }).then((r) => r.data),
 };
 
 export const paymentApi = {
@@ -84,9 +85,16 @@ export const driverApi = {
   current: () => api.get("/driver/current").then((r) => r.data),
   start: (trip_id) => api.post(`/driver/trip/${trip_id}/start`).then((r) => r.data),
   arrive: (trip_id) => api.post(`/driver/trip/${trip_id}/arrive`).then((r) => r.data),
+  cancel: (trip_id) => api.post(`/driver/trip/${trip_id}/cancel`).then((r) => r.data),
   summary: () => api.get("/driver/summary/today").then((r) => r.data),
+  history: () => api.get("/driver/history").then((r) => r.data),
+  weeklyHistory: () => api.get("/driver/history/weekly").then((r) => r.data),
   location: (lat, lng, heading, speed) => api.post("/driver/location", { lat, lng, heading, speed }).then((r) => r.data),
   online: (online) => api.post("/driver/online", { online }).then((r) => r.data),
+};
+
+export const pricingApi = {
+  surge: () => api.get("/pricing/surge").then((r) => r.data),
 };
 
 export const paymentsApi = {

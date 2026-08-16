@@ -4,8 +4,19 @@ import { driverApi, tripsApi } from "../lib/api";
 import { Orb, VoiceBars } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Navigation, Clock, Check, Power } from "lucide-react";
+import { MapPin, Navigation, Clock, Check, Power, History } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
+import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
+import { carIconRotated, pickupIcon, dropoffIcon } from "../lib/mapAssets";
+import L from "leaflet";
+
+function RecenterOn({ lat, lng }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat != null && lng != null) map.setView([lat, lng], 14, { animate: true });
+  }, [lat, lng, map]);
+  return null;
+}
 
 export default function DriverHome() {
   const { user } = useAuth();
@@ -15,6 +26,7 @@ export default function DriverHome() {
   const [accepting, setAccepting] = useState(null);
   const [online, setOnline] = useState(() => localStorage.getItem("kjapp_driver_online") === "true");
   const [gpsError, setGpsError] = useState(null);
+  const [pos, setPos] = useState(null); // {lat, lng, heading}
   const watchIdRef = useRef(null);
   const prevPendingIdsRef = useRef(new Set());
   const navigate = useNavigate();
@@ -26,14 +38,18 @@ export default function DriverHome() {
     try {
       const [p, c, s] = await Promise.all([driverApi.pending(), driverApi.current(), driverApi.summary()]);
       const trips = p.trips || [];
-      // Play ping when a new trip appears (only if online)
       const currentIds = new Set(trips.map((t) => t.trip_id));
       const prev = prevPendingIdsRef.current;
       const newOnes = [...currentIds].filter((id) => !prev.has(id));
-      if (newOnes.length > 0 && prev.size >= 0 && online) {
-        // Skip the first load (prev.size === 0 means we don't know previous state yet)
+      if (newOnes.length > 0 && online) {
         if (prevPendingIdsRef.current.__initialized) {
-          try { playNewTripPing(); } catch { /* audio play blocked */ }
+          // Triple ping + vibration for new trips (harder to miss)
+          try {
+            playNewTripPing();
+            setTimeout(() => { try { playNewTripPing(); } catch { /* audio blocked */ } }, 700);
+            setTimeout(() => { try { playNewTripPing(); } catch { /* audio blocked */ } }, 1400);
+          } catch { /* blocked */ }
+          try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch { /* vibrate unsupported */ }
         }
       }
       currentIds.__initialized = true;
@@ -61,12 +77,13 @@ export default function DriverHome() {
       const opts = { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 };
       let lastSent = 0;
       watchIdRef.current = navigator.geolocation.watchPosition(
-        (pos) => {
+        (p) => {
           setGpsError(null);
+          setPos({ lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading || 0 });
           const now = Date.now();
           if (now - lastSent < 4500) return;  // throttle to every ~5s
           lastSent = now;
-          driverApi.location(pos.coords.latitude, pos.coords.longitude, pos.coords.heading, pos.coords.speed).catch(() => {});
+          driverApi.location(p.coords.latitude, p.coords.longitude, p.coords.heading, p.coords.speed).catch(() => {});
         },
         (err) => { setGpsError("GPS-feil: " + err.message); },
         opts,
@@ -116,22 +133,58 @@ export default function DriverHome() {
         </button>
       </div>
 
-      {/* Hero */}
+      {/* Live map — only when online + has GPS */}
+      {online && pos && (
+        <div className="mt-3 card overflow-hidden" data-testid="driver-live-map">
+          <div className="relative h-[220px] w-full">
+            <MapContainer
+              center={[pos.lat, pos.lng]}
+              zoom={14}
+              zoomControl={false}
+              attributionControl={false}
+              scrollWheelZoom={false}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+              <Marker position={[pos.lat, pos.lng]} icon={carIconRotated(pos.heading || 0)} />
+              <RecenterOn lat={pos.lat} lng={pos.lng} />
+            </MapContainer>
+            <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md">
+              <span className="w-2 h-2 rounded-full bg-mint animate-pulse" />
+              <span className="text-white text-[11px] font-medium tracking-wide">LIVE POSISJON</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hero — with driver avatar */}
       <div className="mt-3 card p-5 relative overflow-hidden">
         <div className="absolute -right-8 -top-8 opacity-40 pointer-events-none">
           <div className="orb" style={{ width: 130, height: 130 }} />
         </div>
-        <div className="relative">
-          <div className="text-[11px] text-mint uppercase tracking-widest">Oversikt</div>
-          <h1 className="mt-2 font-display text-[22px] tracking-tight text-white leading-tight">
-            Hei {firstName}.<br />
-            {pending.length > 0 || current
-              ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} nå.`
-              : online ? "Ingen turer akkurat nå." : "Slå på for å begynne."}
-          </h1>
-          <p className="text-[#8a94a8] text-sm mt-1">
-            {current ? "Du har en aktiv tur." : pending.length ? "Klar til å kjøre?" : online ? "Vi varsler deg når det kommer en tur." : "Du er offline."}
-          </p>
+        <div className="relative flex items-start gap-4">
+          {/* Avatar */}
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-mint to-[#0e8a55] grid place-items-center text-[#04120a] font-display text-lg shrink-0 mint-glow" data-testid="driver-avatar">
+            {user?.photo ? (
+              <img src={user.photo} alt="" className="w-14 h-14 rounded-full object-cover" />
+            ) : (
+              (user?.fullName || "S").split(" ").map(n => n[0]).slice(0,2).join("").toUpperCase()
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] text-mint uppercase tracking-widest">
+              {user?.car || "Sjåfør"} {user?.plate ? ` · ${user.plate}` : ""}
+            </div>
+            <h1 className="mt-1 font-display text-[20px] tracking-tight text-white leading-tight">
+              Hei {firstName}.<br />
+              {pending.length > 0 || current
+                ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} nå.`
+                : online ? "Ingen turer akkurat nå." : "Slå på for å begynne."}
+            </h1>
+            <p className="text-[#8a94a8] text-sm mt-1">
+              {current ? "Du har en aktiv tur." : pending.length ? "Klar til å kjøre?" : online ? "Vi varsler deg når det kommer en tur." : "Du er offline."}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -196,6 +249,14 @@ export default function DriverHome() {
                   <span>{t.distance_km} km</span>
                   <span>·</span>
                   <span>{t.duration_min} min</span>
+                  {pos && (
+                    <>
+                      <span>·</span>
+                      <span data-testid={`pickup-dist-${t.trip_id}`}>
+                        {haversineKm(pos.lat, pos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km til henting
+                      </span>
+                    </>
+                  )}
                   <span className="ml-auto text-white font-semibold text-base">{t.price} kr</span>
                 </div>
                 <button
@@ -224,8 +285,27 @@ export default function DriverHome() {
         <Stat label="Turer" value={summary.trips} testid="stat-trips" />
         <Stat label="Tilfredshet" value={`${summary.satisfaction}%`} testid="stat-satisfaction" />
       </div>
+
+      {/* History link */}
+      <button
+        onClick={() => navigate("/driver/history")}
+        data-testid="driver-history-link"
+        className="btn-ghost w-full mt-3 flex items-center justify-center gap-2 text-sm"
+      >
+        <History size={16} /> Se turhistorikk
+      </button>
     </div>
   );
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  if (lat1 == null || lat2 == null) return 0;
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 function Stat({ label, value, testid }) {

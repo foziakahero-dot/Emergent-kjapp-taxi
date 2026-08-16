@@ -11,11 +11,13 @@ import { X, Phone, MessageCircle, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const STATUS_META = {
-  searching: { title: "AI finner din posisjon", subtitle: "Karter din posisjon…", progress: 15 },
+  searching: { title: "Venter på sjåfør", subtitle: "Vi varsler alle ledige sjåfører nær deg", progress: 20 },
   booking: { title: "Bestiller for deg", subtitle: "Vi finner nærmeste sjåfør og bestiller turen for deg.", progress: 40 },
   driver_on_way: { title: "Sjåfør på vei", subtitle: "kommer om noen minutter", progress: 65 },
   in_trip: { title: "Turen din", subtitle: "km igjen", progress: 85 },
-  arrived: { title: "Du er fremme!", subtitle: "Takk for turen 🙏", progress: 100 },
+  arrived: { title: "Du er fremme!", subtitle: "Takk for turen", progress: 100 },
+  cancelled_by_driver: { title: "Sjåføren avbrøt", subtitle: "Vi prøver å finne en annen sjåfør — eller bestill på nytt", progress: 0 },
+  cancelled: { title: "Turen ble avbrutt", subtitle: "", progress: 0 },
 };
 
 export default function BookingFlow() {

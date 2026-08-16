@@ -21,6 +21,7 @@ import HelpSupport from "./pages/HelpSupport";
 import DriverHome from "./pages/DriverHome";
 import DriverTrip from "./pages/DriverTrip";
 import DriverSummary from "./pages/DriverSummary";
+import DriverHistory from "./pages/DriverHistory";
 import DriverProfile from "./pages/DriverProfile";
 import DriverNav from "./components/DriverNav";
 import DriverLogin from "./pages/DriverLogin";
@@ -99,6 +100,7 @@ function AppRoutes() {
       <Route path="/driver" element={<Protected driverOnly><Shell driver><DriverHome /></Shell></Protected>} />
       <Route path="/driver/trip" element={<Protected driverOnly><Shell driver><DriverTrip /></Shell></Protected>} />
       <Route path="/driver/summary" element={<Protected driverOnly><Shell driver><DriverSummary /></Shell></Protected>} />
+      <Route path="/driver/history" element={<Protected driverOnly><Shell driver><DriverHistory /></Shell></Protected>} />
       <Route path="/driver/profile" element={<Protected driverOnly><Shell driver><DriverProfile /></Shell></Protected>} />
 
       {/* Admin */}
