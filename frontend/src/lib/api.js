@@ -63,6 +63,10 @@ export const placesApi = {
 export const paymentApi = {
   list: () => api.get("/payment-methods").then((r) => r.data),
   add: (data) => api.post("/payment-methods", data).then((r) => r.data),
+  remove: (id) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
+  cardSetup: (origin_url) => api.post("/payments/card/setup", { origin_url }).then((r) => r.data),
+  cardSetupStatus: (session_id) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),
+  vippsConfig: () => api.get("/payments/vipps/config").then((r) => r.data),
 };
 
 export const settingsApi = {

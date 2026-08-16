@@ -28,7 +28,28 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08 — Iteration 8: Bug fixes + Driver oppgradering)
+## What's Been Implemented (2026-08 — Iter 9: Betalingsgate + Stripe SetupIntent + UI-oppdatering)
+
+### Iter 9 (nåværende sesjon, del 4)
+- **Betalingsgate**: `POST /api/trips/request` returnerer nå 402 hvis brukeren ikke har et betalingskort. Frontend redirect til `/app/payment-methods?required=1` med gul banner
+- **Ekte Stripe-kort-oppsett**: Nye endepunkter `POST /api/payments/card/setup` (SetupIntent Checkout — ingen forhåndstrekk) + `GET /api/payments/card/setup/{session_id}` (henter kortdata fra Stripe etter redirect og lagrer med `stripe_payment_method_id`, `last4`, `exp_month`, `exp_year`). Reuser Stripe-kunde-ID (idempotent)
+- **Slett kort**: `DELETE /api/payment-methods/{id}` med eier-sjekk
+- **Vipps stub**: `GET /api/payments/vipps/config` returnerer `{enabled: false}` — UI viser "Kommer snart"-badge til `VIPPS_CLIENT_ID` er satt i .env
+- **Nye bil-kategorier** i UI (backend `vehicle_type`-ID uendret for bakover-kompatibilitet):
+  - AI-First → **Standard** (Rask og pålitelig)
+  - Enkelt → **Sparsom** (Beste pris)
+  - Trygg → **Komfort** (Rommelig / familie)
+  - Premium → **Premium** (Business)
+- **Surge-chip**: skjuler prosent (25% osv.) fra kunden — viser kun "Helgetillegg" / "Natt-tillegg" + "Litt høyere pris akkurat nå"
+- **Kart-oppførsel bekreftet**: Home viser alle online biler i nærheten før booking. Etter booking navigeres kunden til BookingFlow som viser KUN tildelte sjåfør (via `computeDriverPosition(trip)` som leser `trip.driver_lat/driver_lng`)
+- **Bestillings-kort** viser nå kunde standard-kort (label + last4) med "Endre"-knapp. Hvis ingen kort: stor gul CTA "Legg til betalingskort først"
+- **PaymentMethods-siden** helt bygd om: real Stripe-integrasjon, sletting av kort, Vipps-badge, "Sikker hos Stripe. Ingen forhåndstrekk"-fottekst
+
+### Iter 9 tests
+- **iter_9**: 44/44 · betalingsgate, Stripe SetupIntent, DELETE kort, Vipps stub, alle iter6+7+8-regresjoner
+- **Total: 182/182 backend-tester grønne**
+
+## What's Been Implemented (2026-08 — Iter 8: Bug fixes + Driver oppgradering)
 
 ### Iter 8 (nåværende sesjon, del 3)
 - **BUG FIX**: SearchSheet lot bare velge forhåndsdefinerte steder. Ny endpoint `GET /api/places/search?q=` bruker Nominatim (OpenStreetMap) med Norge-filter → kunden kan skrive hvilken som helst norsk adresse ("Storgata 15 Oslo") og få treff med lat/lng. 350ms debounce på frontend

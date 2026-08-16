@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { pickupIcon, dropoffIcon, fleetCarIcon } from "../lib/mapAssets";
-import { tripsApi, carsApi, placesApi, pricingApi } from "../lib/api";
+import { tripsApi, carsApi, placesApi, pricingApi, paymentApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -19,10 +19,10 @@ const PLACES_FALLBACK = [
 ];
 
 const VEHICLES = [
-  { id: "ai-first", name: "AI-First", desc: "Smart tildeling", multiplier: 1.0 },
-  { id: "enkelt", name: "Enkelt", desc: "Beste pris", multiplier: 0.85 },
-  { id: "trygg", name: "Trygg", desc: "Erfarne sjåfører", multiplier: 1.2 },
-  { id: "premium", name: "Premium", desc: "Tesla Model S", multiplier: 1.8 },
+  { id: "ai-first", name: "Standard", desc: "Rask og pålitelig", multiplier: 1.0 },
+  { id: "enkelt", name: "Sparsom", desc: "Beste pris", multiplier: 0.85 },
+  { id: "trygg", name: "Komfort", desc: "Rommelig / familie", multiplier: 1.2 },
+  { id: "premium", name: "Premium", desc: "Business", multiplier: 1.8 },
 ];
 
 function FitBounds({ points }) {
@@ -50,6 +50,13 @@ export default function Home() {
   const [routeInfo, setRouteInfo] = useState(null); // {distance_km, duration_min, options[]}
   const [surge, setSurge] = useState({ active: false, multiplier: 1.0, reasons: [] });
   const [pickupSheetOpen, setPickupSheetOpen] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const hasPaymentMethod = paymentMethods.length > 0;
+
+  // Load payment methods to gate booking
+  useEffect(() => {
+    paymentApi.list().then(setPaymentMethods).catch(() => setPaymentMethods([]));
+  }, []);
 
   // Load surge info once + every 5 min
   useEffect(() => {
@@ -130,6 +137,10 @@ export default function Home() {
 
   const requestTrip = async () => {
     if (!dropoff) return;
+    if (!hasPaymentMethod) {
+      navigate("/app/payment-methods?required=1");
+      return;
+    }
     setRequesting(true);
     try {
       const trip = await tripsApi.request({
@@ -143,7 +154,11 @@ export default function Home() {
       });
       navigate(`/app/booking/${trip.trip_id}`);
     } catch (e) {
-      alert("Kunne ikke bestille tur. Prøv igjen.");
+      if (e?.response?.status === 402) {
+        navigate("/app/payment-methods?required=1");
+      } else {
+        alert("Kunne ikke bestille tur. Prøv igjen.");
+      }
     } finally {
       setRequesting(false);
     }
@@ -223,15 +238,15 @@ export default function Home() {
             </div>
           )}
 
-          {/* Surge chip */}
+          {/* Surge chip — reason only, no percentage */}
           {surge.active && !dropoff && (
             <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/25" data-testid="surge-chip">
               <span className="text-yellow-400 text-lg">⚡</span>
               <div className="flex-1">
                 <div className="text-yellow-200 text-[12px] font-medium">
-                  {surge.reasons.join(" + ")} · +{Math.round((surge.multiplier - 1) * 100)}%
+                  {surge.reasons.join(" + ")}
                 </div>
-                <div className="text-[10px] text-yellow-100/70">Høyere etterspørsel akkurat nå</div>
+                <div className="text-[10px] text-yellow-100/70">Litt høyere pris akkurat nå</div>
               </div>
             </div>
           )}
@@ -273,6 +288,10 @@ export default function Home() {
               onCancel={() => setDropoff(null)}
               onConfirm={requestTrip}
               requesting={requesting}
+              hasPaymentMethod={hasPaymentMethod}
+              defaultCardLabel={paymentMethods.find(m => m.is_default)?.label || paymentMethods[0]?.label}
+              defaultCardLast4={paymentMethods.find(m => m.is_default)?.last4 || paymentMethods[0]?.last4}
+              onAddCard={() => navigate("/app/payment-methods?required=1")}
             />
           )}
         </div>
@@ -309,7 +328,7 @@ export default function Home() {
   );
 }
 
-function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, onCancel, onConfirm, requesting }) {
+function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, onCancel, onConfirm, requesting, hasPaymentMethod, defaultCardLabel, defaultCardLast4, onAddCard }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
@@ -348,16 +367,50 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         <span className="text-white text-lg font-semibold">{estPrice} kr</span>
       </div>
 
+      {/* Payment method row */}
+      {hasPaymentMethod ? (
+        <button
+          onClick={onAddCard}
+          data-testid="booking-payment-row"
+          className="w-full mb-3 flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-line hover:border-mint transition-colors text-left"
+        >
+          <div className="w-8 h-8 rounded-lg bg-mint/10 grid place-items-center">
+            <span className="text-mint text-sm">💳</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-white text-sm">{defaultCardLabel || "Kort"}{defaultCardLast4 ? ` •• ${defaultCardLast4}` : ""}</div>
+            <div className="text-[10px] text-[#8a94a8]">Trykk for å bytte</div>
+          </div>
+          <span className="text-[11px] text-mint">Endre</span>
+        </button>
+      ) : (
+        <button
+          onClick={onAddCard}
+          data-testid="booking-add-card"
+          className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 hover:border-yellow-400 transition-colors text-left"
+        >
+          <div className="w-8 h-8 rounded-lg bg-yellow-500/20 grid place-items-center">
+            <span className="text-yellow-400">⚠</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-yellow-200 text-sm font-medium">Legg til betalingskort først</div>
+            <div className="text-[10px] text-yellow-100/70">Vi må ha et gyldig kort før du kan bestille</div>
+          </div>
+        </button>
+      )}
+
       <button
         onClick={onConfirm}
-        disabled={requesting}
+        disabled={requesting || !hasPaymentMethod}
         data-testid="booking-confirm"
         className="btn-primary w-full flex items-center justify-center gap-2"
       >
         {requesting ? (
           <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" />
-        ) : (
+        ) : hasPaymentMethod ? (
           <>Bestill nå · {estPrice} kr</>
+        ) : (
+          <>Legg til kort for å bestille</>
         )}
       </button>
     </div>

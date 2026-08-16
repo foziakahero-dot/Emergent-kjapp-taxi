@@ -272,7 +272,8 @@ def price_for(distance_km: float, vehicle_type: str, duration_min: float = None,
 
 
 def current_surge_info(when: datetime = None) -> dict:
-    """Return current surge multiplier + reason so UI can display it."""
+    """Return current surge multiplier + reason so UI can display it.
+    NOTE: multiplier is kept for internal use only — do not display the % to customers."""
     now = when or datetime.now(timezone.utc)
     local_hour = (now.hour + 1) % 24
     weekday = now.weekday()
@@ -591,6 +592,10 @@ async def me(current=Depends(get_current_user)):
 # ---- Trips ----
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+    # Payment gate: user must have at least one saved payment method to book
+    pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
+    if pm_count == 0:
+        raise HTTPException(status_code=402, detail="Legg til et betalingskort før du bestiller tur")
     trip_id = str(uuid.uuid4())
     route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
     if route:
@@ -784,7 +789,105 @@ async def add_payment_method(body: PaymentMethodRequest, current=Depends(get_cur
     }
     res = await db.payment_methods.insert_one(doc)
     doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
     return doc
+
+
+@api.delete("/payment-methods/{pm_id}")
+async def delete_payment_method(pm_id: str, current=Depends(get_current_user)):
+    from bson.errors import InvalidId
+    try:
+        oid = ObjectId(pm_id)
+    except InvalidId:
+        raise HTTPException(400, "Ugyldig ID")
+    r = await db.payment_methods.delete_one({"_id": oid, "user_id": current["id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Ikke funnet")
+    return {"deleted": True}
+
+
+# ---- Stripe SetupIntent: add a real payment card ----
+class CardSetupRequest(BaseModel):
+    origin_url: str
+
+
+@api.post("/payments/card/setup")
+async def stripe_card_setup(body: CardSetupRequest, current=Depends(get_current_user)):
+    """Start a Stripe Checkout Session in 'setup' mode to save a card for future use."""
+    if not stripe.api_key:
+        raise HTTPException(500, "Stripe er ikke konfigurert")
+    # Reuse or create Stripe customer
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    customer_id = (user or {}).get("stripe_customer_id")
+    if not customer_id:
+        cust = stripe.Customer.create(email=user["email"], name=user.get("fullName") or user["email"], metadata={"user_id": current["id"]})
+        customer_id = cust.id
+        await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"stripe_customer_id": customer_id}})
+    session = stripe.checkout.Session.create(
+        mode="setup",
+        customer=customer_id,
+        payment_method_types=["card"],
+        success_url=f"{body.origin_url}/app/payment-methods?setup=success&session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/app/payment-methods?setup=cancel",
+        metadata={"user_id": current["id"]},
+    )
+    return {"checkout_url": session.url, "session_id": session.id}
+
+
+@api.get("/payments/card/setup/{session_id}")
+async def stripe_card_setup_status(session_id: str, current=Depends(get_current_user)):
+    """After Stripe redirects back, fetch the saved payment method and store it in Mongo."""
+    try:
+        s = stripe.checkout.Session.retrieve(session_id, expand=["setup_intent"])
+    except stripe.error.StripeError as e:
+        raise HTTPException(400, f"Kunne ikke hente sesjon: {e}")
+    if s.mode != "setup" or s.status != "complete":
+        return {"ready": False, "status": s.status}
+    si = s.setup_intent
+    if hasattr(si, "id"):
+        si_obj = si
+    else:
+        si_obj = stripe.SetupIntent.retrieve(si)
+    pm_id = si_obj.payment_method
+    if not pm_id:
+        return {"ready": False, "reason": "no payment method attached"}
+    pm = stripe.PaymentMethod.retrieve(pm_id)
+    card = pm.card
+    # Upsert into payment_methods collection
+    existing = await db.payment_methods.find_one({"user_id": current["id"], "stripe_payment_method_id": pm_id})
+    if not existing:
+        # If this is the first real card, make it default
+        has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
+        if not has_any:
+            is_default = True
+        else:
+            is_default = False
+            # Unset other defaults if we're setting this as default
+        doc = {
+            "user_id": current["id"],
+            "type": card.brand,  # visa, mastercard, amex ...
+            "label": card.brand.capitalize(),
+            "last4": card.last4,
+            "exp_month": card.exp_month,
+            "exp_year": card.exp_year,
+            "stripe_payment_method_id": pm_id,
+            "stripe_customer_id": s.customer,
+            "is_default": is_default,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        res = await db.payment_methods.insert_one(doc)
+        doc["id"] = str(res.inserted_id); doc.pop("_id", None)
+        return {"ready": True, "card": doc}
+    existing["id"] = str(existing["_id"]); existing.pop("_id", None)
+    return {"ready": True, "card": existing}
+
+
+# ---- Vipps (stub, awaiting API keys) ----
+@api.get("/payments/vipps/config")
+async def vipps_config():
+    """Vipps availability. Returns enabled=false until VIPPS_CLIENT_ID / secret are in env."""
+    enabled = bool(os.environ.get("VIPPS_CLIENT_ID"))
+    return {"enabled": enabled, "provider": "Vipps"}
 
 
 # ---- Settings ----
