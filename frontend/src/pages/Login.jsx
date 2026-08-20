@@ -187,7 +187,19 @@ function SocialButton({ icon, testid, onClick }) {
 // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
 function loginWithGoogle() {
   const redirectUrl = window.location.origin + "/auth/callback";
-  window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const oauthUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  // In PWA standalone mode (Safari iOS, some Android), full-page redirect to external
+  // OAuth providers can fail silently. Open in a new tab / external browser instead.
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+  if (isStandalone) {
+    const win = window.open(oauthUrl, "_blank", "noopener");
+    // Some PWAs block window.open — fall back to full-page redirect
+    if (!win) window.location.href = oauthUrl;
+    return;
+  }
+  window.location.href = oauthUrl;
 }
 function GoogleIcon() {
   return (
