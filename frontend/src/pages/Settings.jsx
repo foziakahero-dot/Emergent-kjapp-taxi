@@ -67,7 +67,7 @@ export default function Settings() {
   return (
     <div className="px-4 pt-2 pb-10 page-enter">
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="settings-back">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="settings-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">AI Innstillinger</h1>
@@ -80,14 +80,14 @@ export default function Settings() {
               <Mic size={16} className="text-mint" />
             </div>
             <div className="flex-1">
-              <div className="text-[13px] text-[#8a94a8]">AI-stemme</div>
+              <div className="text-[13px] text-[#7a827a]">AI-stemme</div>
               <div className="text-white text-sm mt-0.5">{s.ai_voice}</div>
             </div>
             <select
               value={s.ai_voice}
               onChange={(e) => update("ai_voice", e.target.value)}
               data-testid="setting-voice"
-              className="bg-[#17223a] border border-line text-white text-xs rounded-lg px-2 py-1"
+              className="bg-[#17222a] border border-line text-white text-xs rounded-lg px-2 py-1"
             >
               {["Nora (Standard)", "Emma", "Henrik", "Sofie"].map((v) => (
                 <option key={v} value={v}>{v}</option>
@@ -117,43 +117,43 @@ export default function Settings() {
               >
                 {options.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
-              <ChevronRight size={14} className="text-[#8a94a8] ml-1" />
+              <ChevronRight size={14} className="text-[#7a827a] ml-1" />
             </div>
           ))}
         </div>
 
         {/* GDPR */}
         <div className="pt-2">
-          <div className="text-[10px] text-[#6d7690] tracking-widest uppercase px-2 mb-2">Personvern (GDPR)</div>
+          <div className="text-[10px] text-[#5f6862] tracking-widest uppercase px-2 mb-2">Personvern (GDPR)</div>
           <div className="card divide-y divide-line">
             <button
               onClick={exportData}
               disabled={busy}
               data-testid="gdpr-export"
-              className="w-full flex items-center px-4 py-3.5 hover:bg-[#17223a] transition-colors"
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[#17222a] transition-colors"
             >
               <Download size={16} className="text-mint mr-3" />
               <span className="flex-1 text-left text-white text-sm">Eksporter mine data</span>
-              <ChevronRight size={14} className="text-[#8a94a8]" />
+              <ChevronRight size={14} className="text-[#7a827a]" />
             </button>
             <button
               onClick={deleteAccount}
               disabled={busy}
               data-testid="gdpr-delete"
-              className="w-full flex items-center px-4 py-3.5 hover:bg-[#17223a] transition-colors"
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[#17222a] transition-colors"
             >
               <Trash2 size={16} className="text-red-400 mr-3" />
               <span className="flex-1 text-left text-red-400 text-sm">Slett kontoen min</span>
-              <ChevronRight size={14} className="text-[#8a94a8]" />
+              <ChevronRight size={14} className="text-[#7a827a]" />
             </button>
           </div>
-          <p className="text-[11px] text-[#6d7690] px-2 mt-2 leading-relaxed">
+          <p className="text-[11px] text-[#5f6862] px-2 mt-2 leading-relaxed">
             Turer beholdes anonymisert i henhold til norsk bokføringslov. Alt annet slettes umiddelbart.
           </p>
         </div>
 
         <div className="text-center pt-2">
-          <div className="text-[10px] text-[#6d7690] tracking-widest uppercase">Versjon 2.0.0</div>
+          <div className="text-[10px] text-[#5f6862] tracking-widest uppercase">Versjon 2.0.0</div>
         </div>
       </div>
     </div>
@@ -167,7 +167,7 @@ function Toggle({ checked, onChange, testid }) {
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       data-testid={testid}
-      className={`w-11 h-6 rounded-full transition-colors relative ${checked ? "bg-mint" : "bg-[#2a3550]"}`}
+      className={`w-11 h-6 rounded-full transition-colors relative ${checked ? "bg-mint" : "bg-[#263038]"}`}
     >
       <span
         className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${checked ? "left-[22px]" : "left-0.5"}`}

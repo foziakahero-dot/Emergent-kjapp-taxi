@@ -35,7 +35,7 @@ export default function PaymentSuccess() {
         <>
           <div className="orb orb-small" />
           <div className="text-white text-lg mt-6">Bekrefter betaling…</div>
-          <div className="text-[#8a94a8] text-sm mt-1">Dette tar noen sekunder</div>
+          <div className="text-[#7a827a] text-sm mt-1">Dette tar noen sekunder</div>
         </>
       )}
       {status === "paid" && (
@@ -44,7 +44,7 @@ export default function PaymentSuccess() {
             <Check size={32} className="text-[#04120a]" />
           </div>
           <div className="text-white text-2xl font-display mt-6">Betaling fullført</div>
-          <div className="text-[#8a94a8] text-sm mt-2">Takk for at du reiste med KJAPP.</div>
+          <div className="text-[#7a827a] text-sm mt-2">Takk for at du reiste med KJAPP.</div>
           <button
             onClick={() => navigate(tripId ? `/app/receipt/${tripId}` : "/app")}
             data-testid="payment-success-continue"
@@ -57,7 +57,7 @@ export default function PaymentSuccess() {
       {(status === "failed" || status === "error" || status === "timeout") && (
         <>
           <div className="text-white text-lg">Noe gikk galt</div>
-          <div className="text-[#8a94a8] text-sm mt-2">Vi klarte ikke å bekrefte betalingen. Prøv igjen.</div>
+          <div className="text-[#7a827a] text-sm mt-2">Vi klarte ikke å bekrefte betalingen. Prøv igjen.</div>
           <button onClick={() => navigate("/app")} className="btn-primary mt-6">Til hjem</button>
         </>
       )}

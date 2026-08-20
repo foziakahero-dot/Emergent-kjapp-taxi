@@ -14,7 +14,7 @@ export default function HelpSupport() {
   return (
     <div className="px-4 pt-2 pb-10 page-enter">
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="help-back">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="help-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Hjelp og support</h1>
@@ -26,11 +26,11 @@ export default function HelpSupport() {
             key={label}
             onClick={() => label.includes("Chat") && navigate("/app/ai")}
             data-testid={testid}
-            className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17223a] transition-colors first:rounded-t-[22px] last:rounded-b-[22px]"
+            className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17222a] transition-colors first:rounded-t-[22px] last:rounded-b-[22px]"
           >
             <Icon size={18} className="text-mint" />
             <span className="flex-1 text-white text-sm">{label}</span>
-            <ChevronRight size={16} className="text-[#8a94a8]" />
+            <ChevronRight size={16} className="text-[#7a827a]" />
           </button>
         ))}
       </div>
@@ -38,7 +38,7 @@ export default function HelpSupport() {
       <div className="mt-6 card p-5 text-center">
         <div className="orb orb-tiny mx-auto" style={{ width: 40, height: 40 }} />
         <div className="mt-3 text-white text-sm font-medium">Trenger du hjelp?</div>
-        <div className="text-[#8a94a8] text-xs mt-1">KJAPP AI er tilgjengelig 24/7</div>
+        <div className="text-[#7a827a] text-xs mt-1">KJAPP AI er tilgjengelig 24/7</div>
         <button
           onClick={() => navigate("/app/ai")}
           className="btn-primary mt-4 w-full"

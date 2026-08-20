@@ -77,7 +77,7 @@ export default function PaymentMethods() {
   return (
     <div className="px-4 pt-2 pb-10 page-enter">
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="pay-back">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="pay-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Betalingsmetoder</h1>
@@ -106,7 +106,7 @@ export default function PaymentMethods() {
             key={m.id}
             data-testid={`pay-method-${m.type}`}
             className="rounded-2xl p-4 flex items-center gap-4 border border-line shadow-lg"
-            style={{ background: BRAND[m.type]?.bg || "linear-gradient(135deg, #17223a, #263149)" }}
+            style={{ background: BRAND[m.type]?.bg || "linear-gradient(135deg, #17222a, #1e2530)" }}
           >
             <CreditCard className="text-white" size={22} />
             <div className="flex-1">
@@ -130,7 +130,7 @@ export default function PaymentMethods() {
           </div>
         ))}
         {methods.length === 0 && (
-          <div className="card p-6 text-center text-[#8a94a8] text-sm">Ingen kort ennå. Legg til under.</div>
+          <div className="card p-6 text-center text-[#7a827a] text-sm">Ingen kort ennå. Legg til under.</div>
         )}
       </div>
 
@@ -145,7 +145,7 @@ export default function PaymentMethods() {
 
       {/* Vipps section */}
       <div className="mt-6">
-        <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest px-2 mb-2">Norsk betaling</div>
+        <div className="text-[10px] text-[#7a827a] uppercase tracking-widest px-2 mb-2">Norsk betaling</div>
         {vippsEnabled ? (
           <button
             data-testid="pay-add-vipps"
@@ -167,7 +167,7 @@ export default function PaymentMethods() {
         )}
       </div>
 
-      <div className="mt-6 flex items-center gap-2 text-[11px] text-[#8a94a8] px-2">
+      <div className="mt-6 flex items-center gap-2 text-[11px] text-[#7a827a] px-2">
         <ShieldCheck size={14} className="text-mint" />
         <span>Kortet lagres sikkert hos Stripe. Vi belaster kun etter fullført tur.</span>
       </div>

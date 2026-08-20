@@ -27,13 +27,13 @@ export default function TripHistory() {
   return (
     <div className="px-4 pt-2 pb-24 page-enter">
       <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate("/app")} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="history-back">
+        <button onClick={() => navigate("/app")} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="history-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Turer</h1>
       </div>
       <div className="px-2 mb-4">
-        <p className="text-[#8a94a8] text-sm">Dine reiser med KJAPP</p>
+        <p className="text-[#7a827a] text-sm">Dine reiser med KJAPP</p>
       </div>
 
       <div className="card p-4 mb-4">
@@ -43,7 +43,7 @@ export default function TripHistory() {
             <div className="font-display text-2xl text-white mt-1">{total.toLocaleString("nb-NO")} kr</div>
           </div>
           <div className="text-right">
-            <div className="text-[11px] text-[#8a94a8]">Turer</div>
+            <div className="text-[11px] text-[#7a827a]">Turer</div>
             <div className="font-display text-2xl text-white mt-1">{trips.length}</div>
           </div>
         </div>
@@ -52,7 +52,7 @@ export default function TripHistory() {
       {trips.length === 0 ? (
         <div className="text-center pt-16">
           <div className="orb orb-tiny mx-auto" />
-          <div className="text-[#8a94a8] text-sm mt-4">Ingen turer ennå.</div>
+          <div className="text-[#7a827a] text-sm mt-4">Ingen turer ennå.</div>
         </div>
       ) : (
         <div className="space-y-2">
@@ -72,19 +72,19 @@ export default function TripHistory() {
               <div className="flex items-start gap-3">
                 <div className="flex flex-col items-center pt-1.5">
                   <div className="w-2 h-2 rounded-full bg-mint" />
-                  <div className="w-px h-5 bg-[#2a3550]" />
+                  <div className="w-px h-5 bg-[#263038]" />
                   <div className="w-2 h-2 rounded-sm bg-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-white text-sm truncate">{t.pickup_address}</div>
                   <div className="text-white text-sm truncate mt-1">{t.dropoff_address}</div>
-                  <div className="text-[11px] text-[#8a94a8] mt-1">
+                  <div className="text-[11px] text-[#7a827a] mt-1">
                     {STATUS_LABEL[t.status] || t.status} · {new Date(t.created_at).toLocaleDateString("nb-NO", { day: "numeric", month: "short" })}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-white font-medium">{t.price} kr</div>
-                  <ChevronRight size={16} className="text-[#8a94a8] mt-1 ml-auto" />
+                  <ChevronRight size={16} className="text-[#7a827a] mt-1 ml-auto" />
                 </div>
               </div>
             </button>

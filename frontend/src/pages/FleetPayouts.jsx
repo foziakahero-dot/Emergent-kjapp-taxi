@@ -20,7 +20,7 @@ export default function FleetPayouts() {
       </div>
 
       {payouts.length === 0 ? (
-        <div className="card p-6 text-center text-[#8a94a8] text-sm" data-testid="no-payouts">
+        <div className="card p-6 text-center text-[#7a827a] text-sm" data-testid="no-payouts">
           Ingen utbetalinger registrert ennå. Første utbetaling skjer neste mandag.
         </div>
       ) : (
@@ -32,7 +32,7 @@ export default function FleetPayouts() {
               </div>
               <div className="flex-1">
                 <div className="text-white text-sm font-medium">{dateFmt(p.period_start)} → {dateFmt(p.period_end)}</div>
-                <div className="text-[11px] text-[#8a94a8]">{p.trips || 0} turer · brutto {p.gross || 0} kr</div>
+                <div className="text-[11px] text-[#7a827a]">{p.trips || 0} turer · brutto {p.gross || 0} kr</div>
               </div>
               <div className="text-right">
                 <div className="text-white font-semibold">{p.net || 0} kr</div>

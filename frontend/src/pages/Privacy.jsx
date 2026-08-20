@@ -7,13 +7,13 @@ export default function Privacy() {
   return (
     <div className="phone-shell grain">
       <div className="px-4 pt-4 flex items-center gap-2 sticky top-0 bg-bg/95 backdrop-blur z-10">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="privacy-back">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="privacy-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Personvernerklæring</h1>
       </div>
       <div className="px-6 pt-4 pb-16 text-[#c9cfd3] text-[14px] leading-relaxed space-y-5">
-        <div className="text-[11px] text-[#8a94a8] uppercase tracking-widest">Sist oppdatert: 9. januar 2026</div>
+        <div className="text-[11px] text-[#7a827a] uppercase tracking-widest">Sist oppdatert: 9. januar 2026</div>
 
         <Section title="1. Behandlingsansvarlig">
           KJAPP AS (org.nr. under registrering), heretter «KJAPP», er behandlingsansvarlig for personopplysningene som samles inn og behandles gjennom KJAPP-appen og tilhørende tjenester.

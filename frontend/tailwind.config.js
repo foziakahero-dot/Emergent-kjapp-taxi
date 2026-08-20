@@ -6,21 +6,30 @@ module.exports = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0a1220",
-          card: "rgba(255,255,255,0.045)",
-          soft: "rgba(255,255,255,0.03)",
+          DEFAULT: "#0c1216",
+          card: "rgba(255,255,255,0.028)",
+          soft: "rgba(255,255,255,0.02)",
         },
-        mint: {
-          DEFAULT: "#2fe08c",
-          bright: "#3dffa2",
-          dim: "#1fa76a",
+        mint: {  /* keep 'mint' as alias for accent so old classes still work */
+          DEFAULT: "#c9a15b",
+          bright: "#d9b170",
+          dim: "#8a6f3f",
+        },
+        accent: {
+          DEFAULT: "#c9a15b",
+          soft: "rgba(201,161,91,0.14)",
         },
         pearl: {
-          DEFAULT: "#f4f1e8",
-          muted: "#a9b1c4",
+          DEFAULT: "#e8e0d0",
+          muted: "#7a827a",
         },
-        line: "rgba(244,241,232,0.09)",
-        muted: "#8a94a8",
+        line: "rgba(232,224,208,0.08)",
+        muted: "#7a827a",
+      },
+      fontFamily: {
+        display: ["'Instrument Serif'", "Georgia", "serif"],
+        body: ["'Inter'", "system-ui", "sans-serif"],
+        mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
       },
       fontFamily: {
         display: ["'Instrument Sans'", "'DM Sans'", "system-ui", "sans-serif"],

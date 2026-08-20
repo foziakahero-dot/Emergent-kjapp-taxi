@@ -38,7 +38,7 @@ export default function DriverProfile() {
   return (
     <div className="px-6 pt-2 pb-24 page-enter">
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => navigate("/driver")} className="w-10 h-10 -ml-2 grid place-items-center text-[#8a94a8]" data-testid="dprof-back">
+        <button onClick={() => navigate("/driver")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a827a]" data-testid="dprof-back">
           <ChevronLeft size={22} />
         </button>
         <h1 className="text-white text-lg font-medium">Profil</h1>
@@ -57,16 +57,16 @@ export default function DriverProfile() {
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-5">
-        <div className="card p-3"><div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">I dag</div><div className="font-display text-lg text-white mt-1">{summary.income} kr</div></div>
-        <div className="card p-3"><div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">Turer</div><div className="font-display text-lg text-white mt-1">{summary.trips}</div></div>
-        <div className="card p-3"><div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">Tilfredshet</div><div className="font-display text-lg text-white mt-1">{summary.satisfaction}%</div></div>
+        <div className="card p-3"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">I dag</div><div className="font-display text-lg text-white mt-1">{summary.income} kr</div></div>
+        <div className="card p-3"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Turer</div><div className="font-display text-lg text-white mt-1">{summary.trips}</div></div>
+        <div className="card p-3"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Tilfredshet</div><div className="font-display text-lg text-white mt-1">{summary.satisfaction}%</div></div>
       </div>
 
       <div className="card divide-y divide-line">
-        <button onClick={enablePush} disabled={pushOn} data-testid="dprof-push" className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17223a] transition-colors first:rounded-t-[22px]">
-          <Bell size={18} className={pushOn ? "text-mint" : "text-[#8a94a8]"} />
+        <button onClick={enablePush} disabled={pushOn} data-testid="dprof-push" className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17222a] transition-colors first:rounded-t-[22px]">
+          <Bell size={18} className={pushOn ? "text-mint" : "text-[#7a827a]"} />
           <span className="flex-1 text-white text-sm">Push-varsler</span>
-          <span className={`text-xs ${pushOn ? "text-mint" : "text-[#8a94a8]"}`}>{pushOn ? "På" : "Slå på"}</span>
+          <span className={`text-xs ${pushOn ? "text-mint" : "text-[#7a827a]"}`}>{pushOn ? "På" : "Slå på"}</span>
         </button>
         <button
           onClick={() => {
@@ -75,16 +75,16 @@ export default function DriverProfile() {
             localStorage.setItem("kjapp_auto_nav", String(v));
           }}
           data-testid="dprof-autonav"
-          className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17223a] transition-colors"
+          className="w-full flex items-center gap-4 px-4 py-4 text-left hover:bg-[#17222a] transition-colors"
         >
-          <MapPin size={18} className={autoNav ? "text-mint" : "text-[#8a94a8]"} />
+          <MapPin size={18} className={autoNav ? "text-mint" : "text-[#7a827a]"} />
           <span className="flex-1 text-white text-sm">Auto-åpne Google Maps ved ny tur</span>
-          <span className={`text-xs ${autoNav ? "text-mint" : "text-[#8a94a8]"}`}>{autoNav ? "På" : "Slå på"}</span>
+          <span className={`text-xs ${autoNav ? "text-mint" : "text-[#7a827a]"}`}>{autoNav ? "På" : "Slå på"}</span>
         </button>
         <div className="w-full flex items-center gap-4 px-4 py-4 last:rounded-b-[22px]">
           <Car size={18} className="text-mint" />
           <span className="flex-1 text-white text-sm">Bil</span>
-          <span className="text-[#8a94a8] text-xs">{user?.driver_id || "car-1"}</span>
+          <span className="text-[#7a827a] text-xs">{user?.driver_id || "car-1"}</span>
         </div>
       </div>
 

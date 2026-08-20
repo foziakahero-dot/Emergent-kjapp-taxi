@@ -67,6 +67,12 @@ function LoadingSplash() {
 }
 
 function Shell({ children, withNav = true, driver = false }) {
+  // Toggle body class for role-based theming (customer=warm nordic, driver=HUD)
+  React.useEffect(() => {
+    if (driver) document.body.classList.add("driver-theme");
+    else document.body.classList.remove("driver-theme");
+    return () => document.body.classList.remove("driver-theme");
+  }, [driver]);
   return (
     <div className="phone-shell grain">
       <div style={{ minHeight: "100dvh" }}>{children}</div>

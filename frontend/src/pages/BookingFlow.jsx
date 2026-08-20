@@ -97,10 +97,10 @@ export default function BookingFlow() {
 
       {/* Top */}
       <div className="relative z-[1000] px-4 pt-2 flex items-center justify-between">
-        <button onClick={cancel} data-testid="trip-cancel" className="w-10 h-10 grid place-items-center rounded-full bg-[#111a2b]/85 border border-line backdrop-blur-md">
+        <button onClick={cancel} data-testid="trip-cancel" className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md">
           <X size={18} className="text-white" />
         </button>
-        <div className="font-display text-lg text-white bg-[#111a2b]/85 border border-line backdrop-blur-md rounded-full px-4 py-2">
+        <div className="font-display text-lg text-white bg-[#131a1f]/85 border border-line backdrop-blur-md rounded-full px-4 py-2">
           {meta.title}
         </div>
         <div className="w-10 h-10" />
@@ -113,7 +113,7 @@ export default function BookingFlow() {
         transition={{ duration: 0.5 }}
         className="absolute left-0 right-0 bottom-0 z-[1000]"
       >
-        <div className="card m-4 mb-6 p-5 shadow-card backdrop-blur-xl bg-[#111a2b]/95">
+        <div className="card m-4 mb-6 p-5 shadow-card backdrop-blur-xl bg-[#131a1f]/95">
           <AnimatePresence mode="wait">
             <motion.div
               key={trip.status}
@@ -128,7 +128,7 @@ export default function BookingFlow() {
                     <div className="orb orb-small" />
                   </ProgressRing>
                   <div className="mt-4 text-white text-lg font-medium">{meta.title}</div>
-                  <div className="text-[#8a94a8] text-sm mt-1 text-center max-w-[240px]">{meta.subtitle}</div>
+                  <div className="text-[#7a827a] text-sm mt-1 text-center max-w-[240px]">{meta.subtitle}</div>
                 </div>
               ) : trip.status === "driver_on_way" ? (
                 <div>
@@ -139,8 +139,8 @@ export default function BookingFlow() {
                     <div className="flex-1">
                       <div className="text-[11px] text-mint uppercase tracking-widest">min unna</div>
                       <div className="text-white font-medium mt-1">{trip.driver?.name}</div>
-                      <div className="text-[13px] text-[#b8bfd0]">{trip.driver?.car} · {trip.driver?.plate}</div>
-                      <div className="text-[12px] text-[#8a94a8] flex items-center gap-1 mt-1">
+                      <div className="text-[13px] text-[#a8b0a8]">{trip.driver?.car} · {trip.driver?.plate}</div>
+                      <div className="text-[12px] text-[#7a827a] flex items-center gap-1 mt-1">
                         ⭐ {trip.driver?.rating}
                       </div>
                     </div>
@@ -160,20 +160,20 @@ export default function BookingFlow() {
                     </div>
                     <div className="text-right">
                       <div className="font-display text-3xl text-white">{trip.price} kr</div>
-                      <div className="text-[11px] text-[#8a94a8]">Estimert pris</div>
+                      <div className="text-[11px] text-[#7a827a]">Estimert pris</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4 py-2 border-t border-line">
                     <div className="flex-1">
-                      <div className="text-[11px] text-[#8a94a8]">Avstand</div>
+                      <div className="text-[11px] text-[#7a827a]">Avstand</div>
                       <div className="text-white text-sm">{trip.distance_km} km</div>
                     </div>
                     <div className="flex-1">
-                      <div className="text-[11px] text-[#8a94a8]">Tid</div>
+                      <div className="text-[11px] text-[#7a827a]">Tid</div>
                       <div className="text-white text-sm">{trip.duration_min} min</div>
                     </div>
                     <div className="flex-1">
-                      <div className="text-[11px] text-[#8a94a8]">Betaling</div>
+                      <div className="text-[11px] text-[#7a827a]">Betaling</div>
                       <div className="text-white text-sm">Vipps</div>
                     </div>
                   </div>
@@ -189,7 +189,7 @@ export default function BookingFlow() {
                     </svg>
                   </div>
                   <div className="mt-4 text-white text-lg font-medium">{meta.title}</div>
-                  <div className="text-[#8a94a8] text-sm mt-1">{meta.subtitle}</div>
+                  <div className="text-[#7a827a] text-sm mt-1">{meta.subtitle}</div>
                 </div>
               )}
             </motion.div>
@@ -204,9 +204,9 @@ export default function BookingFlow() {
 
 function ActionBtn({ icon, label, testid, onClick }) {
   return (
-    <button onClick={onClick} data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#17223a] border border-line hover:border-mint transition-colors">
+    <button onClick={onClick} data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#17222a] border border-line hover:border-mint transition-colors">
       <span className="text-mint">{icon}</span>
-      <span className="text-[10px] text-[#b8bfd0]">{label}</span>
+      <span className="text-[10px] text-[#a8b0a8]">{label}</span>
     </button>
   );
 }

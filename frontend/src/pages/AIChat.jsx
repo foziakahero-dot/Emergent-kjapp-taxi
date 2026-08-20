@@ -167,7 +167,7 @@ export default function AIChat() {
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - 80px)" }}>
       <div className="px-4 pt-2 pb-1 flex items-center gap-2">
-        <button onClick={() => navigate("/app")} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="ai-back">
+        <button onClick={() => navigate("/app")} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="ai-back">
           <ChevronLeft size={22} />
         </button>
         <div className="orb orb-tiny" style={{ width: 30, height: 30 }} />
@@ -183,7 +183,7 @@ export default function AIChat() {
         <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
           <Orb size="default" />
           <div className="mt-10 text-white text-lg">Spør KJAPP AI</div>
-          <div className="text-[#8a94a8] text-sm mt-1">om hva som helst…</div>
+          <div className="text-[#7a827a] text-sm mt-1">om hva som helst…</div>
 
           <div className="mt-8 w-full space-y-2 max-w-[300px]">
             {SUGGESTIONS.map((s) => (
@@ -191,7 +191,7 @@ export default function AIChat() {
                 key={s.text}
                 onClick={() => (s.action === "book" ? startBooking() : send(s.text))}
                 data-testid={`suggestion-${s.text}`}
-                className="w-full text-left px-4 py-3 rounded-full bg-[#111a2b] border border-line hover:border-mint transition-colors text-[#f4f1e8] text-sm"
+                className="w-full text-left px-4 py-3 rounded-full bg-[#131a1f] border border-line hover:border-mint transition-colors text-[#e8e0d0] text-sm"
               >
                 {s.text}
               </button>
@@ -212,7 +212,7 @@ export default function AIChat() {
                   className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-[14px] leading-relaxed whitespace-pre-wrap ${
                     m.role === "user"
                       ? "bg-mint text-[#04120a] rounded-br-md"
-                      : "bg-[#17223a] border border-line text-[#f4f1e8] rounded-bl-md"
+                      : "bg-[#17222a] border border-line text-[#e8e0d0] rounded-bl-md"
                   }`}
                 >
                   {m.content}
@@ -227,7 +227,7 @@ export default function AIChat() {
                       key={p.name}
                       onClick={() => pickPlace(p)}
                       data-testid={`ai-place-${p.name}`}
-                      className="text-left px-3 py-2.5 rounded-xl bg-[#17223a] border border-line hover:border-mint transition-colors"
+                      className="text-left px-3 py-2.5 rounded-xl bg-[#17222a] border border-line hover:border-mint transition-colors"
                     >
                       <div className="flex items-center gap-1.5 text-mint text-[11px] uppercase tracking-widest">
                         <MapPin size={11} /> Sted
@@ -247,12 +247,12 @@ export default function AIChat() {
                         key={opt.vehicle_type}
                         onClick={() => pickCategory(opt)}
                         data-testid={`ai-category-${opt.vehicle_type}`}
-                        className="w-full flex items-center gap-3 p-3 rounded-2xl bg-[#17223a] border border-line hover:border-mint transition-colors text-left"
+                        className="w-full flex items-center gap-3 p-3 rounded-2xl bg-[#17222a] border border-line hover:border-mint transition-colors text-left"
                       >
                         <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center text-lg">{meta.icon}</div>
                         <div className="flex-1">
                           <div className="text-white text-sm font-medium">{meta.name}</div>
-                          <div className="text-[11px] text-[#8a94a8]">{meta.desc} · {opt.eta_min} min</div>
+                          <div className="text-[11px] text-[#7a827a]">{meta.desc} · {opt.eta_min} min</div>
                         </div>
                         <div className="text-white font-semibold">{opt.price} kr</div>
                       </button>
@@ -265,10 +265,10 @@ export default function AIChat() {
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-4 space-y-3">
                   <div className="text-[11px] text-mint uppercase tracking-widest">Bekreft bestilling</div>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between"><span className="text-[#8a94a8]">Fra</span><span className="text-white text-right truncate max-w-[60%]">{booking.pickup?.name}</span></div>
-                    <div className="flex justify-between"><span className="text-[#8a94a8]">Til</span><span className="text-white text-right truncate max-w-[60%]">{booking.dropoff?.name}</span></div>
-                    <div className="flex justify-between"><span className="text-[#8a94a8]">Kategori</span><span className="text-white">{VEHICLE_META[m.option.vehicle_type].name}</span></div>
-                    <div className="flex justify-between"><span className="text-[#8a94a8]">Estimert tid</span><span className="text-white">{m.option.eta_min} min</span></div>
+                    <div className="flex justify-between"><span className="text-[#7a827a]">Fra</span><span className="text-white text-right truncate max-w-[60%]">{booking.pickup?.name}</span></div>
+                    <div className="flex justify-between"><span className="text-[#7a827a]">Til</span><span className="text-white text-right truncate max-w-[60%]">{booking.dropoff?.name}</span></div>
+                    <div className="flex justify-between"><span className="text-[#7a827a]">Kategori</span><span className="text-white">{VEHICLE_META[m.option.vehicle_type].name}</span></div>
+                    <div className="flex justify-between"><span className="text-[#7a827a]">Estimert tid</span><span className="text-white">{m.option.eta_min} min</span></div>
                     <div className="flex justify-between border-t border-line pt-2 mt-2">
                       <span className="text-white font-medium">Total</span>
                       <span className="text-white font-semibold text-lg">{m.option.price} kr</span>
@@ -286,7 +286,7 @@ export default function AIChat() {
           ))}
           {sending && (
             <div className="flex justify-start">
-              <div className="bg-[#17223a] border border-line rounded-2xl px-4 py-3">
+              <div className="bg-[#17222a] border border-line rounded-2xl px-4 py-3">
                 <VoiceBars />
               </div>
             </div>

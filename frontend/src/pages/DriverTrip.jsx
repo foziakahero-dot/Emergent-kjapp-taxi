@@ -149,7 +149,7 @@ export default function DriverTrip() {
     return (
       <div className="px-4 pt-2 pb-24 page-enter">
         <div className="flex items-center gap-2 mb-4">
-          <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="dtrip-back">
+          <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="dtrip-back">
             <ChevronLeft size={22} />
           </button>
           <h1 className="text-white text-lg font-medium">Navigasjon</h1>
@@ -157,7 +157,7 @@ export default function DriverTrip() {
         <div className="card p-8 text-center">
           <Orb size="small" />
           <div className="text-white text-sm mt-4">Ingen aktiv tur</div>
-          <div className="text-[#8a94a8] text-xs mt-1">Godta en tur fra hjem-skjermen</div>
+          <div className="text-[#7a827a] text-xs mt-1">Godta en tur fra hjem-skjermen</div>
         </div>
       </div>
     );
@@ -202,10 +202,10 @@ export default function DriverTrip() {
 
       {/* Top */}
       <div className="relative z-[1000] px-4 pt-2 flex items-center justify-between">
-        <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center rounded-full bg-[#111a2b]/85 border border-line backdrop-blur-md" data-testid="dtrip-back-map">
+        <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md" data-testid="dtrip-back-map">
           <ChevronLeft size={18} className="text-white" />
         </button>
-        <div className="text-sm text-white bg-[#111a2b]/85 border border-line backdrop-blur-md rounded-full px-4 py-2">
+        <div className="text-sm text-white bg-[#131a1f]/85 border border-line backdrop-blur-md rounded-full px-4 py-2">
           {statusLabel}
         </div>
         <div className="w-10 h-10" />
@@ -232,7 +232,7 @@ export default function DriverTrip() {
             </div>
             <div className="text-right">
               <div className="text-white font-semibold">{trip.distance_km} km</div>
-              <div className="text-[11px] text-[#8a94a8]">{trip.duration_min} min</div>
+              <div className="text-[11px] text-[#7a827a]">{trip.duration_min} min</div>
             </div>
           </div>
 
@@ -248,14 +248,14 @@ export default function DriverTrip() {
               <button
                 onClick={openNav}
                 data-testid="dtrip-open-maps"
-                className="w-full mb-2 py-3 rounded-full bg-[#17223a] border border-mint/40 text-white flex items-center justify-center gap-2 hover:border-mint transition-colors"
+                className="w-full mb-2 py-3 rounded-full bg-[#17222a] border border-mint/40 text-white flex items-center justify-center gap-2 hover:border-mint transition-colors"
               >
                 <MapPin size={16} className="text-mint" />
                 <span className="text-sm font-medium">
                   Naviger i Google Maps
                 </span>
               </button>
-              <label className="flex items-center gap-2 px-2 mb-3 text-[11px] text-[#b8bfd0] cursor-pointer">
+              <label className="flex items-center gap-2 px-2 mb-3 text-[11px] text-[#a8b0a8] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={autoNav}
@@ -289,7 +289,7 @@ export default function DriverTrip() {
                 <Flag size={22} className="text-[#04120a]" />
               </div>
               <div className="text-white text-sm font-medium mt-3">Tur fullført</div>
-              <div className="text-[#8a94a8] text-xs">+{trip.price} kr til inntekt</div>
+              <div className="text-[#7a827a] text-xs">+{trip.price} kr til inntekt</div>
             </div>
           )}
         </div>
@@ -302,9 +302,9 @@ export default function DriverTrip() {
 
 function ActionBtn({ icon, label, testid, onClick, badge = 0 }) {
   return (
-    <button onClick={onClick} data-testid={testid} className="relative flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#17223a] border border-line hover:border-mint transition-colors">
+    <button onClick={onClick} data-testid={testid} className="relative flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#17222a] border border-line hover:border-mint transition-colors">
       <span className="text-mint">{icon}</span>
-      <span className="text-[10px] text-[#b8bfd0]">{label}</span>
+      <span className="text-[10px] text-[#a8b0a8]">{label}</span>
       {badge > 0 && (
         <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold grid place-items-center" data-testid={`${testid}-badge`}>
           {badge > 9 ? "9+" : badge}

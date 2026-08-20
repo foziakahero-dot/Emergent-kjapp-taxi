@@ -35,7 +35,7 @@ export default function DriverLogin() {
     <div className="phone-shell grain flex flex-col">
       
       <div className="px-6 pt-2 flex items-center">
-        <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#8a94a8]" data-testid="dlogin-back">
+        <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a827a]" data-testid="dlogin-back">
           <ChevronLeft size={22} />
         </button>
       </div>
@@ -50,7 +50,7 @@ export default function DriverLogin() {
             <h1 className="font-display text-[24px] tracking-tight text-white">Kjør med KJAPP</h1>
           </div>
         </div>
-        <p className="text-[#8a94a8] text-sm mt-3 leading-relaxed">
+        <p className="text-[#7a827a] text-sm mt-3 leading-relaxed">
           Logg inn for å motta turer, navigere og se dagens inntekt.
         </p>
 
@@ -75,7 +75,7 @@ export default function DriverLogin() {
               autoComplete="current-password"
               required
             />
-            <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8a94a8]" onClick={() => setShowPw((v) => !v)}>
+            <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a827a]" onClick={() => setShowPw((v) => !v)}>
               {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
@@ -100,14 +100,14 @@ export default function DriverLogin() {
 
         <div className="mt-10 card p-4">
           <div className="text-[11px] text-mint uppercase tracking-widest">Vil du bli sjåfør?</div>
-          <p className="text-[#b8bfd0] text-sm mt-2 leading-relaxed">
+          <p className="text-[#a8b0a8] text-sm mt-2 leading-relaxed">
             Sjåfør-kontoer opprettes kun via invitasjon fra en løyvehaver med flåte. Kontakt din flåte-eier for å få en registreringslenke.
           </p>
         </div>
       </div>
 
       <div className="px-8 pb-10 text-center">
-        <p className="text-[#8a94a8] text-sm">
+        <p className="text-[#7a827a] text-sm">
           Er du kunde?{" "}
           <Link to="/login" className="text-mint font-medium" data-testid="dlogin-customer">
             Kunde-innlogging

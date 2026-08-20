@@ -9,10 +9,10 @@ export default function VoiceSignIn() {
     <div className="phone-shell grain flex flex-col">
       
       <div className="px-6 flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#8a94a8]" data-testid="voice-close">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 grid place-items-center text-[#7a827a]" data-testid="voice-close">
           <X size={22} />
         </button>
-        <button className="w-10 h-10 grid place-items-center text-[#8a94a8]">
+        <button className="w-10 h-10 grid place-items-center text-[#7a827a]">
           <Mic size={20} />
         </button>
       </div>

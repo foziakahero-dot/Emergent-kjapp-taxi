@@ -28,7 +28,44 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08 — Iter 10: Flåteier-portal + sjåfør-oppgraderinger + lys nordisk kart)
+## What's Been Implemented (2026-08 — Iter 11: Nordic Premium redesign + rolle-basert visuell identitet)
+
+### Iter 11 (nåværende sesjon, del 6)
+**BAKGRUNN**: Full designoverhalering fra "mint neon tech-startup" til "Nordisk premium editorial".
+
+**Ny palett** (kunde-side default):
+- Bakgrunn: `#0c1216` fjordsvart (var: kald midnattsblå)
+- Accent: `#c9a15b` varm messing (var: neon mint)
+- Sekundær accent: `#7ba69e` dempet sjøgrønn
+- Tekst: `#e8e0d0` matt kremhvit (var: perlehvit)
+- Muted: `#7a827a` tåkegrå
+- Linjer: `rgba(232,224,208,0.08)` nesten usynlig
+
+**Sjåfør-side** (aktiveres via `body.driver-theme` klasse i Shell):
+- Bakgrunn: `#050708` rent svart (dashbord)
+- Accent: `#2fe08c` skarp mint (HUD-signatur)
+- Card border-radius: 12px stramere (kunde 20px)
+- Ingen backdrop-blur — verktøy, ikke kunst
+- Info-tett layout
+
+**Typografi**:
+- Headlines: **Instrument Serif** (editorial, som Aftenposten)
+- Body: **Inter** 300-700
+- Tall: **JetBrains Mono** (tabnum)
+
+**Navigasjon**:
+- **Kunde**: Erstattet 4-tabs bottom-nav med **Floating Command Bar** — kun én hamburger-knapp nederst-venstre + glidende ark. Airbnb 2023 / Revolut-følelse. Ingen visuell støy på hjem-siden.
+- **Sjåfør**: Redusert fra 4 tabs → **2 tabs** (Kjør + Konto). Verktøy-fokus.
+
+**Papir-tekstur**: Kunde-siden får subtil noise/paper overlay via SVG turbulens. Sjåfør-siden får rent svart uten tekstur.
+
+**Ingen backend-endring** — kun `.jsx`/`.css`/`.js` frontend. Global sed-swap av gamle hex-koder.
+
+### Iter 11 tests
+- **iter_11**: 25/25 backend regresjon + full frontend design-verifisering (Instrument Serif applied, FloatingCommand testids OK, driver 2-tab nav OK, body.driver-theme class toggles per rolle)
+- **Total: 238/238 backend-tester grønne**
+
+## What's Been Implemented (2026-08 — Iter 10: Flåteier-portal)
 
 ### Iter 10 (nåværende sesjon, del 5)
 - **Lys nordisk kart** (Voyager tile) på kunde-siden i Home + BookingFlow — mye mer imøtekommende enn den mørke Uber-lignende Dark_all

@@ -71,14 +71,14 @@ export default function Login() {
     <div className="phone-shell grain flex flex-col">
       
       <div className="px-6 pt-2 flex items-center">
-        <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#8a94a8]" data-testid="login-back">
+        <button onClick={() => navigate("/")} className="w-10 h-10 -ml-2 grid place-items-center text-[#7a827a]" data-testid="login-back">
           <ChevronLeft size={22} />
         </button>
       </div>
 
       <div className="px-8 pt-4 flex-1">
         <h1 className="font-display text-[28px] tracking-tight text-white">Velkommen tilbake</h1>
-        <p className="text-[#8a94a8] text-sm mt-2">Logg inn for å fortsette reisen</p>
+        <p className="text-[#7a827a] text-sm mt-2">Logg inn for å fortsette reisen</p>
 
         <form onSubmit={submit} className="mt-10 space-y-4">
           <input
@@ -103,7 +103,7 @@ export default function Login() {
             />
             <button
               type="button"
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8a94a8]"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a827a]"
               onClick={() => setShowPw((v) => !v)}
               aria-label="Vis passord"
               data-testid="login-toggle-pw"
@@ -113,7 +113,7 @@ export default function Login() {
           </div>
 
           <div className="text-right">
-            <button type="button" className="text-[#8a94a8] text-sm hover:text-mint transition-colors">
+            <button type="button" className="text-[#7a827a] text-sm hover:text-mint transition-colors">
               Glemt passord?
             </button>
           </div>
@@ -138,7 +138,7 @@ export default function Login() {
 
         <div className="mt-10 flex items-center gap-4">
           <div className="flex-1 h-px bg-line" />
-          <span className="text-[11px] text-[#8a94a8] tracking-widest uppercase">eller fortsett med</span>
+          <span className="text-[11px] text-[#7a827a] tracking-widest uppercase">eller fortsett med</span>
           <div className="flex-1 h-px bg-line" />
         </div>
 
@@ -150,19 +150,19 @@ export default function Login() {
       </div>
 
       <div className="px-8 pb-10 text-center">
-        <p className="text-[#8a94a8] text-sm">
+        <p className="text-[#7a827a] text-sm">
           Ingen konto?{" "}
           <Link to="/register" className="text-mint font-medium" data-testid="link-register">
             Opprett en
           </Link>
         </p>
-        <p className="text-[#6d7690] text-xs mt-3">
+        <p className="text-[#5f6862] text-xs mt-3">
           Er du sjåfør?{" "}
           <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
             Sjåfør-innlogging
           </Link>
         </p>
-        <p className="text-[#6d7690] text-[11px] mt-4">
+        <p className="text-[#5f6862] text-[11px] mt-4">
           <Link to="/privacy" className="hover:text-mint">Personvern</Link>
           <span className="mx-2">·</span>
           <Link to="/terms" className="hover:text-mint">Vilkår</Link>

@@ -26,21 +26,21 @@ export default function DriverPayouts() {
           <Wallet size={12} /> Neste utbetaling
         </div>
         <div className="mt-1 font-display text-4xl text-white" data-testid="payouts-net">{data.pending_net} kr</div>
-        <div className="mt-1 text-[13px] text-[#8a94a8]">
+        <div className="mt-1 text-[13px] text-[#7a827a]">
           <Calendar size={12} className="inline mr-1" />
           {dateFmt(data.next_payout_date)}
         </div>
         <div className="mt-4 flex items-center justify-between pt-3 border-t border-line text-[12px]">
           <div>
-            <div className="text-[#8a94a8]">Brutto</div>
+            <div className="text-[#7a827a]">Brutto</div>
             <div className="text-white font-medium">{data.pending_gross} kr</div>
           </div>
           <div>
-            <div className="text-[#8a94a8]">Turer</div>
+            <div className="text-[#7a827a]">Turer</div>
             <div className="text-white font-medium">{data.pending_trips}</div>
           </div>
           <div>
-            <div className="text-[#8a94a8]">KJAPP</div>
+            <div className="text-[#7a827a]">KJAPP</div>
             <div className="text-white font-medium">−{data.commission_pct}%</div>
           </div>
         </div>
@@ -51,7 +51,7 @@ export default function DriverPayouts() {
           <TrendingUp size={14} /> Tidligere utbetalinger
         </h2>
         {data.history.length === 0 ? (
-          <div className="card p-5 text-center text-[#8a94a8] text-sm">Ingen utbetalinger ennå</div>
+          <div className="card p-5 text-center text-[#7a827a] text-sm">Ingen utbetalinger ennå</div>
         ) : (
           <div className="space-y-2">
             {data.history.map((p) => (
@@ -61,7 +61,7 @@ export default function DriverPayouts() {
                 </div>
                 <div className="flex-1">
                   <div className="text-white text-sm font-medium">{dateFmt(p.period_start)} → {dateFmt(p.period_end)}</div>
-                  <div className="text-[11px] text-[#8a94a8]">{p.trips} turer</div>
+                  <div className="text-[11px] text-[#7a827a]">{p.trips} turer</div>
                 </div>
                 <div className="text-white font-semibold">{p.net} kr</div>
               </div>
@@ -70,7 +70,7 @@ export default function DriverPayouts() {
         )}
       </div>
 
-      <div className="mt-8 card-soft p-4 text-[12px] text-[#8a94a8]">
+      <div className="mt-8 card-soft p-4 text-[12px] text-[#7a827a]">
         Utbetaling skjer hver mandag for uken før. KJAPP holder tilbake {data.commission_pct}% som plattform-avgift. Alle utbetalinger er skattepliktig — se dine 1099-tall i «Skattemeldinger» (kommer snart).
       </div>
     </div>

@@ -59,7 +59,7 @@ export default function DriverSignup() {
             <ShieldCheck size={22} className="text-red-400" />
           </div>
           <h1 className="mt-4 text-white text-lg">Ugyldig invitasjon</h1>
-          <p className="text-[#8a94a8] text-sm mt-2">{err || "Denne lenken finnes ikke, er brukt eller utløpt."}</p>
+          <p className="text-[#7a827a] text-sm mt-2">{err || "Denne lenken finnes ikke, er brukt eller utløpt."}</p>
           <button onClick={() => navigate("/")} className="btn-primary mt-6" data-testid="dsignup-home">Til forsiden</button>
         </div>
       </div>
@@ -75,7 +75,7 @@ export default function DriverSignup() {
             <ShieldCheck size={24} className="text-[#04120a]" />
           </div>
           <h1 className="mt-4 text-white text-lg font-medium">Registrering mottatt!</h1>
-          <p className="text-[#8a94a8] text-sm mt-2 max-w-[280px]">
+          <p className="text-[#7a827a] text-sm mt-2 max-w-[280px]">
             Vi må godkjenne kontoen din før du kan motta turer. Din flåte-eier eller KJAPP vil godkjenne deg snart.
           </p>
           <button onClick={() => navigate("/driver/login")} className="btn-ghost mt-6" data-testid="dsignup-continue">Til innlogging</button>
@@ -95,7 +95,7 @@ export default function DriverSignup() {
             <Car size={18} className="text-mint" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-[#8a94a8]">Bil tildelt</div>
+            <div className="text-[11px] text-[#7a827a]">Bil tildelt</div>
             <div className="text-white text-sm">{invite.car} · {invite.plate}</div>
           </div>
         </div>
@@ -107,7 +107,7 @@ export default function DriverSignup() {
         <input className="input" placeholder="Telefonnummer" value={form.phone} onChange={change("phone")} data-testid="dsignup-phone" required />
         <div className="relative">
           <input className="input pr-12" type={showPw ? "text" : "password"} placeholder="Passord (min. 6 tegn)" value={form.password} onChange={change("password")} data-testid="dsignup-password" required />
-          <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8a94a8]" onClick={() => setShowPw((v) => !v)}>
+          <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-[#7a827a]" onClick={() => setShowPw((v) => !v)}>
             {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
@@ -116,7 +116,7 @@ export default function DriverSignup() {
           <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3" data-testid="dsignup-error">{err}</div>
         )}
 
-        <p className="text-[11px] text-[#8a94a8] leading-relaxed">
+        <p className="text-[11px] text-[#7a827a] leading-relaxed">
           Ved å registrere deg godtar du KJAPPs{" "}
           <Link to="/terms" className="text-mint">sjåfør-vilkår</Link> og{" "}
           <Link to="/privacy" className="text-mint">personvernerklæring</Link>. KJAPP behandler personopplysninger for å tildele turer.

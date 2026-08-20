@@ -193,13 +193,13 @@ export default function Home() {
 
       {/* Top header */}
       <div className="relative z-[1000] px-4 pt-2 flex items-center justify-between">
-        <button className="w-10 h-10 grid place-items-center rounded-full bg-[#111a2b]/85 border border-line backdrop-blur-md" data-testid="home-menu">
+        <button className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md" data-testid="home-menu">
           <Menu size={18} className="text-white" />
         </button>
-        <div className="font-display text-lg tracking-tight text-white bg-[#111a2b]/85 border border-line backdrop-blur-md rounded-full px-5 py-2">
+        <div className="font-display text-lg tracking-tight text-white bg-[#131a1f]/85 border border-line backdrop-blur-md rounded-full px-5 py-2">
           KJ<span className="text-mint">A</span>PP
         </div>
-        <button className="w-10 h-10 grid place-items-center rounded-full bg-[#111a2b]/85 border border-line backdrop-blur-md" data-testid="home-orb-btn" onClick={() => navigate("/app/ai")}>
+        <button className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md" data-testid="home-orb-btn" onClick={() => navigate("/app/ai")}>
           <div className="orb orb-tiny" style={{ width: 24, height: 24 }} />
         </button>
       </div>
@@ -211,7 +211,7 @@ export default function Home() {
         transition={{ duration: 0.4, delay: 0.1 }}
         className="absolute left-0 right-0 bottom-6 z-[1000] px-4"
       >
-        <div className="card p-4 shadow-card backdrop-blur-xl bg-[#111a2b]/95">
+        <div className="card p-4 shadow-card backdrop-blur-xl bg-[#131a1f]/95">
           {/* Pickup line — editable */}
           <button
             onClick={() => setPickupSheetOpen(true)}
@@ -220,7 +220,7 @@ export default function Home() {
           >
             <div className="w-2 h-2 rounded-full bg-mint shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest">Fra</div>
+              <div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Fra</div>
               <div className="text-white text-sm truncate">{pickup.name}</div>
             </div>
             <span className="text-[11px] text-mint">Endre</span>
@@ -234,7 +234,7 @@ export default function Home() {
                   {cars.length > 0 ? `${cars.length} ledige biler nær deg` : "Ingen sjåfører på vakt akkurat nå"}
                 </span>
               </div>
-              {cars.length > 0 && <span className="text-[11px] text-[#8a94a8]">nærmeste {cars[0]?.eta_min} min</span>}
+              {cars.length > 0 && <span className="text-[11px] text-[#7a827a]">nærmeste {cars[0]?.eta_min} min</span>}
             </div>
           )}
 
@@ -254,11 +254,11 @@ export default function Home() {
             <>
               <button
                 onClick={() => setShowSheet(true)}
-                className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-[#17223a] border border-line hover:border-mint transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-[#17222a] border border-line hover:border-mint transition-colors"
                 data-testid="home-where-to"
               >
                 <Search size={18} className="text-mint" />
-                <span className="text-[#f4f1e8]">Hvor skal du?</span>
+                <span className="text-[#e8e0d0]">Hvor skal du?</span>
               </button>
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {places.filter(p => ["Hjem", "Jobb", "Sentralstasjon"].includes(p.label)).slice(0, 3).map((p) => {
@@ -267,11 +267,11 @@ export default function Home() {
                     <button
                       key={p.name}
                       onClick={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
-                      className="flex flex-col items-center gap-2 py-3 rounded-xl bg-[#17223a] border border-line hover:border-mint transition-colors"
+                      className="flex flex-col items-center gap-2 py-3 rounded-xl bg-[#17222a] border border-line hover:border-mint transition-colors"
                       data-testid={`quick-${p.label}`}
                     >
                       <Ic size={18} className="text-mint" />
-                      <span className="text-[11px] text-[#b8bfd0]">{p.label}</span>
+                      <span className="text-[11px] text-[#a8b0a8]">{p.label}</span>
                     </button>
                   );
                 })}
@@ -334,16 +334,16 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
       <div className="flex items-center gap-3 mb-3">
         <div className="flex flex-col items-center pt-1">
           <div className="w-2.5 h-2.5 rounded-full bg-mint" />
-          <div className="w-px h-8 bg-[#2a3550]" />
+          <div className="w-px h-8 bg-[#263038]" />
           <div className="w-2.5 h-2.5 rounded-sm bg-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] text-[#8a94a8]">Fra</div>
+          <div className="text-[13px] text-[#7a827a]">Fra</div>
           <div className="text-white text-sm truncate">{pickup.name}</div>
-          <div className="text-[13px] text-[#8a94a8] mt-2">Til</div>
+          <div className="text-[13px] text-[#7a827a] mt-2">Til</div>
           <div className="text-white text-sm truncate">{dropoff.name}</div>
         </div>
-        <button onClick={onCancel} className="text-[#8a94a8] text-xs hover:text-white" data-testid="booking-cancel">Endre</button>
+        <button onClick={onCancel} className="text-[#7a827a] text-xs hover:text-white" data-testid="booking-cancel">Endre</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -353,17 +353,17 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
             onClick={() => onVehicleChange(v.id)}
             data-testid={`vehicle-${v.id}`}
             className={`px-3 py-2.5 rounded-xl border text-left transition-all ${
-              vehicle === v.id ? "border-mint bg-mint/10" : "border-line bg-[#17223a]"
+              vehicle === v.id ? "border-mint bg-mint/10" : "border-line bg-[#17222a]"
             }`}
           >
             <div className="text-white text-sm font-medium">{v.name}</div>
-            <div className="text-[11px] text-[#8a94a8]">{v.desc}</div>
+            <div className="text-[11px] text-[#7a827a]">{v.desc}</div>
           </button>
         ))}
       </div>
 
       <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-[#8a94a8] text-sm">{distanceKm.toFixed(1)} km · est.</span>
+        <span className="text-[#7a827a] text-sm">{distanceKm.toFixed(1)} km · est.</span>
         <span className="text-white text-lg font-semibold">{estPrice} kr</span>
       </div>
 
@@ -379,7 +379,7 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-white text-sm">{defaultCardLabel || "Kort"}{defaultCardLast4 ? ` •• ${defaultCardLast4}` : ""}</div>
-            <div className="text-[10px] text-[#8a94a8]">Trykk for å bytte</div>
+            <div className="text-[10px] text-[#7a827a]">Trykk for å bytte</div>
           </div>
           <span className="text-[11px] text-mint">Endre</span>
         </button>
@@ -455,7 +455,7 @@ function SearchSheet({ onClose, onPick, places = [] }) {
         className="p-6 pt-14"
       >
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={onClose} className="text-[#8a94a8]" data-testid="search-close">✕</button>
+          <button onClick={onClose} className="text-[#7a827a]" data-testid="search-close">✕</button>
           <input
             autoFocus
             value={query}
@@ -467,27 +467,27 @@ function SearchSheet({ onClose, onPick, places = [] }) {
         </div>
         <div className="space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar">
           {local.length > 0 && (
-            <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest px-2 mt-1">Favoritter</div>
+            <div className="text-[10px] text-[#7a827a] uppercase tracking-widest px-2 mt-1">Favoritter</div>
           )}
           {local.map((p) => (
             <button
               key={"local-" + p.name}
               onClick={() => onPick(p)}
               data-testid={`search-result-${p.name}`}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#111a2b] border border-line hover:border-mint transition-colors text-left"
+              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#131a1f] border border-line hover:border-mint transition-colors text-left"
             >
               <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
                 <Star size={16} className="text-mint" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-medium truncate">{p.name}</div>
-                <div className="text-[#8a94a8] text-xs">{p.label}</div>
+                <div className="text-[#7a827a] text-xs">{p.label}</div>
               </div>
-              <Navigation size={16} className="text-[#8a94a8]" />
+              <Navigation size={16} className="text-[#7a827a]" />
             </button>
           ))}
           {(remote.length > 0 || loading) && (
-            <div className="text-[10px] text-[#8a94a8] uppercase tracking-widest px-2 mt-3">
+            <div className="text-[10px] text-[#7a827a] uppercase tracking-widest px-2 mt-3">
               {loading ? "Søker…" : "Adresser i Norge"}
             </div>
           )}
@@ -496,25 +496,25 @@ function SearchSheet({ onClose, onPick, places = [] }) {
               key={"remote-" + idx + "-" + p.lat}
               onClick={() => onPick({ name: p.name, lat: p.lat, lng: p.lng })}
               data-testid={`geo-result-${idx}`}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#111a2b] border border-line hover:border-mint transition-colors text-left"
+              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#131a1f] border border-line hover:border-mint transition-colors text-left"
             >
               <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
                 <MapPin size={18} className="text-mint" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-medium truncate">{p.name}</div>
-                <div className="text-[#8a94a8] text-xs truncate">{p.display_name}</div>
+                <div className="text-[#7a827a] text-xs truncate">{p.display_name}</div>
               </div>
-              <Navigation size={16} className="text-[#8a94a8]" />
+              <Navigation size={16} className="text-[#7a827a]" />
             </button>
           ))}
           {!loading && q.length >= 3 && remote.length === 0 && local.length === 0 && (
-            <div className="text-center py-10 text-[#8a94a8] text-sm">
+            <div className="text-center py-10 text-[#7a827a] text-sm">
               Ingen treff for &quot;{q}&quot;. Prøv full adresse med gatenavn + husnummer.
             </div>
           )}
           {q.length < 3 && local.length === 0 && (
-            <div className="text-center py-10 text-[#8a94a8] text-sm">
+            <div className="text-center py-10 text-[#7a827a] text-sm">
               Skriv minst 3 tegn (f.eks. &quot;Storgata 15&quot;)
             </div>
           )}
