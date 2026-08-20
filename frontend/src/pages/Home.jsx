@@ -176,7 +176,7 @@ export default function Home() {
           attributionControl={true}
         >
           <TileLayer
-            url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
             attribution='&copy; OpenStreetMap, &copy; CartoDB'
           />
           <Marker position={[pickup.lat, pickup.lng]} icon={pickupIcon} />

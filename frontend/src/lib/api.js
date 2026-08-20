@@ -93,8 +93,28 @@ export const driverApi = {
   summary: () => api.get("/driver/summary/today").then((r) => r.data),
   history: () => api.get("/driver/history").then((r) => r.data),
   weeklyHistory: () => api.get("/driver/history/weekly").then((r) => r.data),
+  ratings: () => api.get("/driver/ratings").then((r) => r.data),
+  payouts: () => api.get("/driver/payouts").then((r) => r.data),
   location: (lat, lng, heading, speed) => api.post("/driver/location", { lat, lng, heading, speed }).then((r) => r.data),
   online: (online) => api.post("/driver/online", { online }).then((r) => r.data),
+};
+
+export const messagesApi = {
+  unreadCount: () => api.get("/messages/unread-count").then((r) => r.data),
+  markSeen: (trip_id) => api.post(`/messages/mark-seen/${trip_id}`).then((r) => r.data),
+};
+
+export const fleetApi = {
+  me: () => api.get("/fleet/me").then((r) => r.data),
+  overview: () => api.get("/fleet/overview").then((r) => r.data),
+  drivers: () => api.get("/fleet/drivers").then((r) => r.data),
+  payouts: () => api.get("/fleet/payouts").then((r) => r.data),
+};
+
+export const adminFleetsApi = {
+  list: () => api.get("/admin/fleets").then((r) => r.data),
+  create: (data) => api.post("/admin/fleets", data).then((r) => r.data),
+  attachDriver: (fleet_id, driver_user_id) => api.post("/admin/fleets/attach-driver", { fleet_id, driver_user_id }).then((r) => r.data),
 };
 
 export const pricingApi = {

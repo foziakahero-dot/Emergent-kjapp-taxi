@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { adminApi } from "../lib/api";
+import { adminApi, adminFleetsApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { StatusBar } from "../components/UIKit";
 import { LogOut, Users, Car, MapPin, TrendingUp, LinkIcon, Copy, Check, ShieldCheck } from "lucide-react";
@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 const TABS = [
   { id: "overview", label: "Oversikt" },
   { id: "drivers", label: "Sjåfører" },
+  { id: "fleets", label: "Flåter" },
   { id: "trips", label: "Turer" },
   { id: "users", label: "Brukere" },
   { id: "invites", label: "Invitasjoner" },
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
         {tab === "trips" && <Trips />}
         {tab === "users" && <UsersList />}
         {tab === "invites" && <Invites />}
+        {tab === "fleets" && <Fleets />}
       </div>
     </div>
   );
@@ -272,6 +274,62 @@ function Invites() {
             {copied === inv.token ? <Check size={14} /> : <Copy size={14} />}
             <span className="truncate">{window.location.origin}/driver-signup/{inv.token}</span>
           </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+function Fleets() {
+  const [fleets, setFleets] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ name: "", org_number: "", owner_email: "", commission_rate: 0.20 });
+
+  const load = () => adminFleetsApi.list().then((r) => setFleets(r.fleets)).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const submit = async () => {
+    if (!form.name.trim() || !form.owner_email.trim()) { alert("Navn + eier-e-post påkrevd"); return; }
+    setCreating(true);
+    try {
+      await adminFleetsApi.create(form);
+      setForm({ name: "", org_number: "", owner_email: "", commission_rate: 0.20 });
+      await load();
+    } catch (e) {
+      alert("Kunne ikke opprette: " + (e.response?.data?.detail || e.message));
+    } finally { setCreating(false); }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="card p-4">
+        <div className="text-white text-sm font-medium mb-3">Ny flåte</div>
+        <div className="space-y-2 mb-2">
+          <input className="input" placeholder="Flåtenavn (f.eks. Oslo Nord Taxi AS)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="fleet-name" />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input" placeholder="Org.nr" value={form.org_number} onChange={(e) => setForm({ ...form, org_number: e.target.value })} data-testid="fleet-org" />
+            <input className="input" type="number" step="0.01" min="0" max="0.5" placeholder="Provisjon 0.20" value={form.commission_rate} onChange={(e) => setForm({ ...form, commission_rate: parseFloat(e.target.value) || 0 })} data-testid="fleet-commission" />
+          </div>
+          <input className="input" type="email" placeholder="Eier e-post" value={form.owner_email} onChange={(e) => setForm({ ...form, owner_email: e.target.value })} data-testid="fleet-owner-email" />
+        </div>
+        <button onClick={submit} disabled={creating} className="btn-primary w-full text-sm" data-testid="fleet-create">
+          {creating ? "Oppretter…" : "Opprett flåte"}
+        </button>
+      </div>
+      {fleets.length === 0 && <div className="text-center py-6 text-[#8a94a8] text-sm">Ingen flåter ennå</div>}
+      {fleets.map((f) => (
+        <div key={f.id} className="card p-4" data-testid={`fleet-${f.id}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full ${f.active ? "bg-mint/10 text-mint" : "bg-[#17223a] text-[#8a94a8]"}`}>
+              {f.active ? "Aktiv" : "Inaktiv"}
+            </span>
+            <span className="text-[11px] text-[#8a94a8]">{f.owner_email}</span>
+            <span className="text-[11px] text-[#8a94a8] ml-auto">{Math.round((f.commission_rate || 0) * 100)}% avgift</span>
+          </div>
+          <div className="text-white text-sm font-medium">{f.name}</div>
+          {f.org_number && <div className="text-[11px] text-[#8a94a8]">Org.nr {f.org_number}</div>}
+          <div className="mt-2 text-[12px] text-[#b8bfd0]">{f.driver_count || 0} sjåfører tilknyttet</div>
         </div>
       ))}
     </div>

@@ -9,6 +9,7 @@ import ChatModal from "../components/ChatModal";
 import { motion } from "framer-motion";
 import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag, MapPin } from "lucide-react";
 import { Orb } from "../components/UIKit";
+import { messagesApi } from "../lib/api";
 
 const PICKUP_ICON = pickupIcon;
 const DROPOFF_ICON = dropoffIcon;
@@ -28,6 +29,7 @@ export default function DriverTrip() {
   const [busy, setBusy] = useState(false);
   const [autoNav, setAutoNav] = useState(() => localStorage.getItem("kjapp_auto_nav") === "true");
   const [chatOpen, setChatOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [carPos, setCarPos] = useState(null);
   const lastStatusRef = useRef(null);
   const watchIdRef = useRef(null);
@@ -113,6 +115,22 @@ export default function DriverTrip() {
     setBusy(true);
     try { await driverApi.start(trip.trip_id); await load(); } catch (e) { alert("Kunne ikke starte"); } finally { setBusy(false); }
   };
+  // Poll unread messages every 3s while trip active
+  useEffect(() => {
+    if (!trip || (trip.status !== "driver_on_way" && trip.status !== "in_trip")) return;
+    const load = () => messagesApi.unreadCount().then((r) => setUnread(r.unread || 0)).catch(() => {});
+    load();
+    const i = setInterval(load, 3000);
+    return () => clearInterval(i);
+  }, [trip?.status]);
+
+  // When chat opens, mark as seen
+  useEffect(() => {
+    if (chatOpen && trip?.trip_id) {
+      messagesApi.markSeen(trip.trip_id).then(() => setUnread(0)).catch(() => {});
+    }
+  }, [chatOpen, trip?.trip_id]);
+
   const arrive = async () => {
     setBusy(true);
     try { await driverApi.arrive(trip.trip_id); await load(); setTimeout(() => navigate("/driver"), 1500); } catch (e) { alert("Kunne ikke fullføre"); } finally { setBusy(false); }
@@ -220,7 +238,7 @@ export default function DriverTrip() {
 
           <div className="grid grid-cols-3 gap-2 mb-3">
             <ActionBtn icon={<Phone size={16} />} label="Ring" testid="dtrip-call" onClick={() => alert("Ring-funksjon aktiveres i produksjon.")} />
-            <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="dtrip-msg" onClick={() => setChatOpen(true)} />
+            <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="dtrip-msg" onClick={() => setChatOpen(true)} badge={unread} />
             <ActionBtn icon={<Flag size={16} />} label="Support" testid="dtrip-support" onClick={() => alert("Kontakt: support@kjapp.no")} />
           </div>
 
@@ -282,11 +300,16 @@ export default function DriverTrip() {
   );
 }
 
-function ActionBtn({ icon, label, testid, onClick }) {
+function ActionBtn({ icon, label, testid, onClick, badge = 0 }) {
   return (
-    <button onClick={onClick} data-testid={testid} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#17223a] border border-line hover:border-mint transition-colors">
+    <button onClick={onClick} data-testid={testid} className="relative flex flex-col items-center gap-1 py-2.5 rounded-xl bg-[#17223a] border border-line hover:border-mint transition-colors">
       <span className="text-mint">{icon}</span>
       <span className="text-[10px] text-[#b8bfd0]">{label}</span>
+      {badge > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold grid place-items-center" data-testid={`${testid}-badge`}>
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
     </button>
   );
 }

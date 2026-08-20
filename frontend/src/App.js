@@ -22,11 +22,15 @@ import DriverHome from "./pages/DriverHome";
 import DriverTrip from "./pages/DriverTrip";
 import DriverSummary from "./pages/DriverSummary";
 import DriverHistory from "./pages/DriverHistory";
+import DriverPayouts from "./pages/DriverPayouts";
 import DriverProfile from "./pages/DriverProfile";
 import DriverNav from "./components/DriverNav";
 import DriverLogin from "./pages/DriverLogin";
 import DriverSignup from "./pages/DriverSignup";
 import AdminDashboard from "./pages/AdminDashboard";
+import FleetOverview from "./pages/FleetOverview";
+import FleetDrivers from "./pages/FleetDrivers";
+import FleetPayouts from "./pages/FleetPayouts";
 import AuthCallback from "./pages/AuthCallback";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
@@ -34,11 +38,12 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 import CookieConsent from "./components/CookieConsent";
 
-function Protected({ children, driverOnly = false, adminOnly = false }) {
+function Protected({ children, driverOnly = false, adminOnly = false, fleetOnly = false }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (!user) return <Navigate to="/login" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/app" replace />;
+  if (fleetOnly && user.role !== "fleet_owner" && user.role !== "admin") return <Navigate to="/app" replace />;
   if (driverOnly && user.role !== "driver" && user.role !== "admin") return <Navigate to="/app" replace />;
   return children;
 }
@@ -47,7 +52,7 @@ function PublicOnly({ children }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (user) {
-    const to = user.role === "admin" ? "/admin" : user.role === "driver" ? "/driver" : "/app";
+    const to = user.role === "admin" ? "/admin" : user.role === "driver" ? "/driver" : user.role === "fleet_owner" ? "/fleet" : "/app";
     return <Navigate to={to} replace />;
   }
   return children;
@@ -93,6 +98,7 @@ function AppRoutes() {
       <Route path="/app/history" element={<Protected><Shell><TripHistory /></Shell></Protected>} />
       <Route path="/app/profile" element={<Protected><Shell><Profile /></Shell></Protected>} />
       <Route path="/app/payment" element={<Protected><Shell withNav={false}><PaymentMethods /></Shell></Protected>} />
+      <Route path="/app/payment-methods" element={<Protected><Shell withNav={false}><PaymentMethods /></Shell></Protected>} />
       <Route path="/app/settings" element={<Protected><Shell withNav={false}><Settings /></Shell></Protected>} />
       <Route path="/app/help" element={<Protected><Shell withNav={false}><HelpSupport /></Shell></Protected>} />
 
@@ -101,7 +107,13 @@ function AppRoutes() {
       <Route path="/driver/trip" element={<Protected driverOnly><Shell driver><DriverTrip /></Shell></Protected>} />
       <Route path="/driver/summary" element={<Protected driverOnly><Shell driver><DriverSummary /></Shell></Protected>} />
       <Route path="/driver/history" element={<Protected driverOnly><Shell driver><DriverHistory /></Shell></Protected>} />
+      <Route path="/driver/payouts" element={<Protected driverOnly><Shell driver><DriverPayouts /></Shell></Protected>} />
       <Route path="/driver/profile" element={<Protected driverOnly><Shell driver><DriverProfile /></Shell></Protected>} />
+
+      {/* Fleet owner */}
+      <Route path="/fleet" element={<Protected fleetOnly><Shell withNav={false}><FleetOverview /></Shell></Protected>} />
+      <Route path="/fleet/drivers" element={<Protected fleetOnly><Shell withNav={false}><FleetDrivers /></Shell></Protected>} />
+      <Route path="/fleet/payouts" element={<Protected fleetOnly><Shell withNav={false}><FleetPayouts /></Shell></Protected>} />
 
       {/* Admin */}
       <Route path="/admin" element={<Protected adminOnly><AdminDashboard /></Protected>} />

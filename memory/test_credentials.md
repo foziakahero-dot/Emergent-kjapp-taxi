@@ -13,7 +13,16 @@
 - Password: `sjafor1234`
 - Role: `driver`, approved: `true`
 - Car: `Tesla Model Y · EL12345` (stored on user record)
+- Fleet: tilknyttet "Oslo Nord Taxi AS" (Iter 10)
 - **VIKTIG**: Sjåfør må slå på "På vakt"-toggle på DriverHome for å motta turer og for at cars/nearby skal returnere dem. Toggle sender GPS-heartbeat hvert ~5s til `/api/driver/location`.
+
+## Flåteier (Fleet Owner)
+- URL: `/login` (redirectes automatisk til `/fleet`)
+- Email: `floteier1@kjapp.no`
+- Password: `fleet1234`
+- Role: `fleet_owner`
+- Fleet: "Oslo Nord Taxi AS" (org.nr 999888777, 20% avgift)
+- Tilknyttet sjåfør: `sjafor@kjapp.no`
 
 ## Admin
 - URL: `/login` (redirectes automatisk til `/admin`)

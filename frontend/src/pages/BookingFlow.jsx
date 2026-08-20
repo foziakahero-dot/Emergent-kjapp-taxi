@@ -83,7 +83,7 @@ export default function BookingFlow() {
       <div className="absolute inset-x-0" style={{ top: 0, bottom: 0 }}>
         <MapContainer center={[(trip.pickup_lat + trip.dropoff_lat) / 2, (trip.pickup_lng + trip.dropoff_lng) / 2]} zoom={13} zoomControl={false} className="w-full h-full">
           <TileLayer
-            url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
             attribution='&copy; OpenStreetMap, &copy; CartoDB'
           />
           <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={pickupIcon} />

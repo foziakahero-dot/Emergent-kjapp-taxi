@@ -294,6 +294,13 @@ export default function DriverHome() {
       >
         <History size={16} /> Se turhistorikk
       </button>
+      <button
+        onClick={() => navigate("/driver/payouts")}
+        data-testid="driver-payouts-link"
+        className="btn-ghost w-full mt-2 flex items-center justify-center gap-2 text-sm"
+      >
+        Utbetalinger
+      </button>
     </div>
   );
 }

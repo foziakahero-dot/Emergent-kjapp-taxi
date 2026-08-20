@@ -59,7 +59,7 @@ export default function Login() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      navigate(u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : "/app");
+      navigate(u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : u.role === "fleet_owner" ? "/fleet" : "/app");
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
     } finally {

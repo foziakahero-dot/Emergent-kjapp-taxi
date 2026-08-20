@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { driverApi } from "../lib/api";
-import { ChevronLeft, MapPin, X, Check } from "lucide-react";
+import { ChevronLeft, MapPin, X, Check, Star } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function DriverHistory() {
   const [trips, setTrips] = useState([]);
   const [weekly, setWeekly] = useState({ days: [] });
+  const [ratings, setRatings] = useState({ average: 0, count: 0, recent: [] });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    Promise.all([driverApi.history(), driverApi.weeklyHistory()])
-      .then(([h, w]) => { setTrips(h.trips || []); setWeekly(w); })
+    Promise.all([driverApi.history(), driverApi.weeklyHistory(), driverApi.ratings()])
+      .then(([h, w, r]) => { setTrips(h.trips || []); setWeekly(w); setRatings(r); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -49,6 +50,22 @@ export default function DriverHistory() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Rating card */}
+      <div className="mt-3 card p-5" data-testid="rating-card">
+        <div className="text-[11px] text-mint uppercase tracking-widest flex items-center gap-2">
+          <Star size={12} /> Din rating
+        </div>
+        <div className="mt-1 flex items-baseline gap-3">
+          <span className="font-display text-3xl text-white">{ratings.average || "—"}</span>
+          {ratings.count > 0 && (
+            <span className="text-[#8a94a8] text-sm">basert på {ratings.count} vurderinger</span>
+          )}
+        </div>
+        {ratings.count === 0 && (
+          <div className="text-[12px] text-[#8a94a8] mt-1">Ingen vurderinger ennå. Vær hyggelig — de kommer</div>
+        )}
       </div>
 
       {/* Trip list */}

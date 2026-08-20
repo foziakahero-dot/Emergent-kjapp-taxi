@@ -28,7 +28,27 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08 — Iter 9: Betalingsgate + Stripe SetupIntent + UI-oppdatering)
+## What's Been Implemented (2026-08 — Iter 10: Flåteier-portal + sjåfør-oppgraderinger + lys nordisk kart)
+
+### Iter 10 (nåværende sesjon, del 5)
+- **Lys nordisk kart** (Voyager tile) på kunde-siden i Home + BookingFlow — mye mer imøtekommende enn den mørke Uber-lignende Dark_all
+- **Sjåfør P0**:
+  - **Utbetalings-side** `/driver/payouts`: brutto+netto med 20% KJAPP-provisjon, neste utbetaling (neste mandag), historikk
+  - **Ratings-kort** på DriverHistory med snitt + antall vurderinger + brutt-ned per stjerne (backend `/api/driver/ratings`)
+  - **Uleses-badge** rød sirkel på "Melding"-knappen i DriverTrip når kunden har sendt melding (backend `/api/messages/unread-count` + `mark-seen`)
+- **Flåteier-portal** (`/fleet`) — helt ny rolle:
+  - Ny `fleet_owner`-rolle i users, ny `fleets`-kolleksjon, `fleet_id` på sjåfører
+  - Backend: `/api/fleet/me`, `/api/fleet/overview`, `/api/fleet/drivers`, `/api/fleet/payouts`, `/api/admin/fleets` (POST+GET), `/api/admin/fleets/attach-driver`
+  - Frontend: `FleetOverview` (uke-netto, sjåfører online/total, turer i dag), `FleetDrivers` (liste + søk), `FleetPayouts` (utbetalinger)
+  - RBAC: `fleet_owner`/`admin` for `/fleet/*`, kun `admin` for `/admin/fleets/*`
+  - Admin får ny "Flåter"-tab med opprettelses-skjema (navn, org.nr, eier-e-post, provisjon)
+- **Seedet test-flåte**: "Oslo Nord Taxi AS" (org.nr 999888777, 20% avgift, eier `floteier1@kjapp.no` / `fleet1234`), sjafor tilknyttet
+
+### Iter 10 tests
+- **iter_10**: 25/25 · nye endepunkter + fleet-RBAC + regresjon
+- **Total: 213/213 backend-tester grønne**
+
+## What's Been Implemented (2026-08 — Iter 9: Betalingsgate + ekte Stripe-kort)
 
 ### Iter 9 (nåværende sesjon, del 4)
 - **Betalingsgate**: `POST /api/trips/request` returnerer nå 402 hvis brukeren ikke har et betalingskort. Frontend redirect til `/app/payment-methods?required=1` med gul banner
