@@ -28,6 +28,49 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
+## What's Been Implemented (2026-08 — Iter 12: Kunde-app Nordic Premium polish)
+
+### Iter 12 (nåværende sesjon, del 7) — fullstendig utrulling av passasjer-visuell identitet
+
+**Kontekst**: Brukeren rapporterte at kunde-appen «så amatør ut» sammenlignet med sjåfør-appen etter Iter 11. Årsak: Nordic Premium-paletten var kun halvveis rullet ut — CSS-variabler + Login/Onboarding, men Home, BookingFlow og karttegn brukte fortsatt gammel `#131a1f` tech-blå bakgrunn og `#2fe08c` neon-mint aksent (feil rolle-farge).
+
+**Endringer (kun frontend, ingen backend-berøring)**:
+
+- **Karttegn full-rewrite** (`lib/mapAssets.js`):
+  - Pickup: brass droplet-pin med gradient (`#e0b876 → #a8834a`) + kremhvit inner dot
+  - Dropoff: mørk fjordsvart-pin med brass sjakkbrettflagg-detalj
+  - Bil (sedan-silhuett fra toppen): brass utline + halo, taillights terrakotta
+  - Ny eksport `carIconRotatedDriver()` for sjåfør-siden (mint variant)
+- **Polyline**: mint `#2fe08c` (weight 4) → brass `#c9a15b` (weight 5–6) + kremhvit dashet shimmer-overlay via `.polyline-shimmer` (dashShift 22s animasjon)
+- **Home.jsx**:
+  - Fjernet alle `bg-[#131a1f]` (tech-blå) → theme vars `var(--bg-base)` + rgba glassmorph
+  - Emoji `💳 ⚡ ⚠` → lucide `CreditCard`, `Zap`, `AlertTriangle`, `ChevronRight`
+  - Surge-chip: gul → varm terrakotta med brass typografi
+  - Bottom sheet: nytt `.sheet-handle` (44×4 pill) på toppen
+- **BookingFlow.jsx** helt strukturert på nytt:
+  - `SearchingState` med tre pulserende radar-ringer i brass + animerte punkter
+  - `SafetyModal` med tel:112 nødrad, KJAPP-support, «Del turen med en du stoler på» copy-link
+  - `CallModal` med formatert sjåfør-nummer + brass «Ring nå» tel:-knapp
+  - `PremiumLoader` (3 brass dots med pulse) — erstatter tidligere «giant orb blob»
+  - Brass ETA-sirkel med tabular-nums «{min} MIN» + editorial uppercase label
+  - `MetricCell`-rader for Avstand / Tid / Betaling (dynamisk viser «Vipps» eller «Kort» basert på `trip.payment_method`)
+  - Alle `alert()`-dialoger fjernet — Ring/Sikkerhet/Meld åpner premium modaler
+- **UIKit.jsx**: `ProgressRing` stroke hardkodet `#2fe08c` → `var(--accent)` (respekterer rolle-theme)
+- **index.css**:
+  - `.leaflet-control-attribution` + `.leaflet-control-zoom` → `display: none` (kunde-visning)
+  - `.leaflet-tile-container` filter saturate(0.72) — dempet karttegn-farger
+  - `.sheet-handle` utility + `.polyline-shimmer` keyframe
+
+### Iter 12 tests
+- **iter_12**: 25/25 backend regresjon (uendret) + full frontend design-verifisering:
+  - Polyline `#c9a15b` bekreftet
+  - Leaflet zoom/attribution `display:none` bekreftet
+  - Nye test-ids `searching-cancel`, `safety-close`, `call-do`, `call-close` FOUND + interactive
+  - INGEN emoji 💳⚡⚠⭐ på Home / BookingReview / BookingFlow
+  - INGEN `alert()`-dialoger fyres
+  - Sjåfør-tema mint fortsatt korrekt isolert via `body.driver-theme`
+- **Total: 263/263 backend-tester grønne**
+
 ## What's Been Implemented (2026-08 — Iter 11: Nordic Premium redesign + rolle-basert visuell identitet)
 
 ### Iter 11 (nåværende sesjon, del 6)

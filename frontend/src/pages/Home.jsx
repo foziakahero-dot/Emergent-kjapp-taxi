@@ -5,7 +5,7 @@ import L from "leaflet";
 import { pickupIcon, dropoffIcon, fleetCarIcon } from "../lib/mapAssets";
 import { tripsApi, carsApi, placesApi, pricingApi, paymentApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star } from "lucide-react";
+import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Orb } from "../components/UIKit";
 
@@ -185,22 +185,43 @@ export default function Home() {
           ))}
           {dropoff && <Marker position={[dropoff.lat, dropoff.lng]} icon={dropoffIcon} />}
           {routePoints && (
-            <Polyline positions={routePoints} pathOptions={{ color: "#2fe08c", weight: 4, opacity: 0.9, dashArray: "0" }} />
+            <Polyline
+              positions={routePoints}
+              pathOptions={{ color: "#c9a15b", weight: 5, opacity: 0.95, lineCap: "round", lineJoin: "round" }}
+            />
+          )}
+          {routePoints && (
+            <Polyline
+              positions={routePoints}
+              pathOptions={{ color: "#f4ecd8", weight: 1.2, opacity: 0.9, lineCap: "round", className: "polyline-shimmer" }}
+            />
           )}
           {routePoints && <FitBounds points={routePoints} />}
         </MapContainer>
       </div>
 
-      {/* Top header */}
-      <div className="relative z-[1000] px-4 pt-2 flex items-center justify-between">
-        <button className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md" data-testid="home-menu">
-          <Menu size={18} className="text-white" />
+      {/* Top header — glass pills, brass accent */}
+      <div className="relative z-[1000] px-4 pt-3 flex items-center justify-between">
+        <button
+          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl"
+          data-testid="home-menu"
+          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)" }}
+        >
+          <Menu size={18} style={{ color: "var(--text)" }} />
         </button>
-        <div className="font-display text-lg tracking-tight text-white bg-[#131a1f]/85 border border-line backdrop-blur-md rounded-full px-5 py-2">
-          KJ<span className="text-mint">A</span>PP
+        <div
+          className="font-display text-[19px] tracking-tight backdrop-blur-xl rounded-full px-5 py-2"
+          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)", color: "var(--text)" }}
+        >
+          KJ<span style={{ color: "var(--accent)" }}>A</span>PP
         </div>
-        <button className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md" data-testid="home-orb-btn" onClick={() => navigate("/app/ai")}>
-          <div className="orb orb-tiny" style={{ width: 24, height: 24 }} />
+        <button
+          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl"
+          data-testid="home-orb-btn"
+          onClick={() => navigate("/app/ai")}
+          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)" }}
+        >
+          <div className="orb orb-tiny" style={{ width: 22, height: 22 }} />
         </button>
       </div>
 
@@ -211,42 +232,62 @@ export default function Home() {
         transition={{ duration: 0.4, delay: 0.1 }}
         className="absolute left-0 right-0 bottom-6 z-[1000] px-4"
       >
-        <div className="card p-4 shadow-card backdrop-blur-xl bg-[#131a1f]/95">
+        <div
+          className="card p-4 shadow-card"
+          style={{
+            background: "rgba(12,18,22,0.92)",
+            border: "1px solid rgba(232,224,208,0.10)",
+            backdropFilter: "blur(28px) saturate(140%)",
+            WebkitBackdropFilter: "blur(28px) saturate(140%)",
+          }}
+        >
+          <div className="sheet-handle" />
           {/* Pickup line — editable */}
           <button
             onClick={() => setPickupSheetOpen(true)}
             data-testid="home-edit-pickup"
-            className="w-full flex items-center gap-3 px-3 py-2 mb-2 rounded-xl bg-white/5 border border-line text-left hover:border-mint transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 mb-2 rounded-2xl text-left transition-colors"
+            style={{
+              background: "rgba(232,224,208,0.04)",
+              border: "1px solid rgba(232,224,208,0.08)",
+            }}
           >
-            <div className="w-2 h-2 rounded-full bg-mint shrink-0" />
+            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Fra</div>
-              <div className="text-white text-sm truncate">{pickup.name}</div>
+              <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Fra</div>
+              <div className="text-sm truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
             </div>
-            <span className="text-[11px] text-mint">Endre</span>
+            <span className="text-[11px]" style={{ color: "var(--accent)" }}>Endre</span>
           </button>
 
           {!dropoff && (
             <div className="mb-3 flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-mint animate-pulse" />
-                <span className="text-[12px] text-mint font-medium">
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
+                <span className="text-[12px] font-medium" style={{ color: "var(--accent)" }}>
                   {cars.length > 0 ? `${cars.length} ledige biler nær deg` : "Ingen sjåfører på vakt akkurat nå"}
                 </span>
               </div>
-              {cars.length > 0 && <span className="text-[11px] text-[#7a827a]">nærmeste {cars[0]?.eta_min} min</span>}
+              {cars.length > 0 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>nærmeste {cars[0]?.eta_min} min</span>}
             </div>
           )}
 
           {/* Surge chip — reason only, no percentage */}
           {surge.active && !dropoff && (
-            <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-500/10 border border-yellow-500/25" data-testid="surge-chip">
-              <span className="text-yellow-400 text-lg">⚡</span>
+            <div
+              className="mb-3 flex items-center gap-2 px-3 py-2.5 rounded-2xl"
+              style={{
+                background: "rgba(215, 106, 90, 0.10)",
+                border: "1px solid rgba(215, 106, 90, 0.25)",
+              }}
+              data-testid="surge-chip"
+            >
+              <Zap size={16} style={{ color: "#e39e5c" }} />
               <div className="flex-1">
-                <div className="text-yellow-200 text-[12px] font-medium">
+                <div className="text-[12px] font-medium" style={{ color: "#e8c9b0" }}>
                   {surge.reasons.join(" + ")}
                 </div>
-                <div className="text-[10px] text-yellow-100/70">Litt høyere pris akkurat nå</div>
+                <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Litt høyere pris akkurat nå</div>
               </div>
             </div>
           )}
@@ -254,24 +295,32 @@ export default function Home() {
             <>
               <button
                 onClick={() => setShowSheet(true)}
-                className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl bg-[#17222a] border border-line hover:border-mint transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-colors"
+                style={{
+                  background: "rgba(232,224,208,0.05)",
+                  border: "1px solid rgba(232,224,208,0.10)",
+                }}
                 data-testid="home-where-to"
               >
-                <Search size={18} className="text-mint" />
-                <span className="text-[#e8e0d0]">Hvor skal du?</span>
+                <Search size={18} style={{ color: "var(--accent)" }} />
+                <span style={{ color: "var(--text)" }}>Hvor skal du?</span>
               </button>
-              <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="mt-3 grid grid-cols-3 gap-2">
                 {places.filter(p => ["Hjem", "Jobb", "Sentralstasjon"].includes(p.label)).slice(0, 3).map((p) => {
                   const Ic = iconFor(p.label);
                   return (
                     <button
                       key={p.name}
                       onClick={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
-                      className="flex flex-col items-center gap-2 py-3 rounded-xl bg-[#17222a] border border-line hover:border-mint transition-colors"
+                      className="flex flex-col items-center gap-2 py-3 rounded-2xl transition-colors"
+                      style={{
+                        background: "rgba(232,224,208,0.04)",
+                        border: "1px solid rgba(232,224,208,0.08)",
+                      }}
                       data-testid={`quick-${p.label}`}
                     >
-                      <Ic size={18} className="text-mint" />
-                      <span className="text-[11px] text-[#a8b0a8]">{p.label}</span>
+                      <Ic size={18} style={{ color: "var(--accent)" }} />
+                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{p.label}</span>
                     </button>
                   );
                 })}
@@ -333,17 +382,17 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
     <div>
       <div className="flex items-center gap-3 mb-3">
         <div className="flex flex-col items-center pt-1">
-          <div className="w-2.5 h-2.5 rounded-full bg-mint" />
-          <div className="w-px h-8 bg-[#263038]" />
-          <div className="w-2.5 h-2.5 rounded-sm bg-white" />
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />
+          <div className="w-px h-8" style={{ background: "rgba(232,224,208,0.14)" }} />
+          <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "var(--text)" }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] text-[#7a827a]">Fra</div>
-          <div className="text-white text-sm truncate">{pickup.name}</div>
-          <div className="text-[13px] text-[#7a827a] mt-2">Til</div>
-          <div className="text-white text-sm truncate">{dropoff.name}</div>
+          <div className="text-[13px]" style={{ color: "var(--text-muted)" }}>Fra</div>
+          <div className="text-sm truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
+          <div className="text-[13px] mt-2" style={{ color: "var(--text-muted)" }}>Til</div>
+          <div className="text-sm truncate" style={{ color: "var(--text)" }}>{dropoff.name}</div>
         </div>
-        <button onClick={onCancel} className="text-[#7a827a] text-xs hover:text-white" data-testid="booking-cancel">Endre</button>
+        <button onClick={onCancel} className="text-xs hover:opacity-70" style={{ color: "var(--text-muted)" }} data-testid="booking-cancel">Endre</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -352,19 +401,21 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
             key={v.id}
             onClick={() => onVehicleChange(v.id)}
             data-testid={`vehicle-${v.id}`}
-            className={`px-3 py-2.5 rounded-xl border text-left transition-all ${
-              vehicle === v.id ? "border-mint bg-mint/10" : "border-line bg-[#17222a]"
-            }`}
+            className="px-3 py-2.5 rounded-2xl text-left transition-all"
+            style={{
+              background: vehicle === v.id ? "rgba(201,161,91,0.10)" : "rgba(232,224,208,0.04)",
+              border: `1px solid ${vehicle === v.id ? "rgba(201,161,91,0.35)" : "rgba(232,224,208,0.08)"}`,
+            }}
           >
-            <div className="text-white text-sm font-medium">{v.name}</div>
-            <div className="text-[11px] text-[#7a827a]">{v.desc}</div>
+            <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{v.name}</div>
+            <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{v.desc}</div>
           </button>
         ))}
       </div>
 
       <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-[#7a827a] text-sm">{distanceKm.toFixed(1)} km · est.</span>
-        <span className="text-white text-lg font-semibold">{estPrice} kr</span>
+        <span className="text-sm" style={{ color: "var(--text-muted)" }}>{distanceKm.toFixed(1)} km · est.</span>
+        <span className="font-display text-[22px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estPrice} kr</span>
       </div>
 
       {/* Payment method row */}
@@ -372,29 +423,37 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         <button
           onClick={onAddCard}
           data-testid="booking-payment-row"
-          className="w-full mb-3 flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-line hover:border-mint transition-colors text-left"
+          className="w-full mb-3 flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-colors text-left"
+          style={{
+            background: "rgba(232,224,208,0.04)",
+            border: "1px solid rgba(232,224,208,0.08)",
+          }}
         >
-          <div className="w-8 h-8 rounded-lg bg-mint/10 grid place-items-center">
-            <span className="text-mint text-sm">💳</span>
+          <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(201,161,91,0.12)" }}>
+            <CreditCard size={16} style={{ color: "var(--accent)" }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-sm">{defaultCardLabel || "Kort"}{defaultCardLast4 ? ` •• ${defaultCardLast4}` : ""}</div>
-            <div className="text-[10px] text-[#7a827a]">Trykk for å bytte</div>
+            <div className="text-sm" style={{ color: "var(--text)" }}>{defaultCardLabel || "Kort"}{defaultCardLast4 ? ` •• ${defaultCardLast4}` : ""}</div>
+            <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Trykk for å bytte</div>
           </div>
-          <span className="text-[11px] text-mint">Endre</span>
+          <ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
         </button>
       ) : (
         <button
           onClick={onAddCard}
           data-testid="booking-add-card"
-          className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 hover:border-yellow-400 transition-colors text-left"
+          className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors text-left"
+          style={{
+            background: "rgba(215,106,90,0.10)",
+            border: "1px solid rgba(215,106,90,0.30)",
+          }}
         >
-          <div className="w-8 h-8 rounded-lg bg-yellow-500/20 grid place-items-center">
-            <span className="text-yellow-400">⚠</span>
+          <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(215,106,90,0.18)" }}>
+            <AlertTriangle size={16} style={{ color: "#e39e5c" }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-yellow-200 text-sm font-medium">Legg til betalingskort først</div>
-            <div className="text-[10px] text-yellow-100/70">Vi må ha et gyldig kort før du kan bestille</div>
+            <div className="text-sm font-medium" style={{ color: "#e8c9b0" }}>Legg til betalingskort først</div>
+            <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Vi må ha et gyldig kort før du kan bestille</div>
           </div>
         </button>
       )}
@@ -406,7 +465,7 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         className="btn-primary w-full flex items-center justify-center gap-2"
       >
         {requesting ? (
-          <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" />
+          <span className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--accent-on)", borderTopColor: "transparent" }} />
         ) : hasPaymentMethod ? (
           <>Bestill nå · {estPrice} kr</>
         ) : (
@@ -445,7 +504,8 @@ function SearchSheet({ onClose, onPick, places = [] }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[1002] bg-bg/95 backdrop-blur-xl"
+      className="absolute inset-0 z-[1002]"
+      style={{ background: "rgba(12,18,22,0.96)", backdropFilter: "blur(20px)" }}
     >
       <motion.div
         initial={{ y: 50 }}
@@ -455,7 +515,7 @@ function SearchSheet({ onClose, onPick, places = [] }) {
         className="p-6 pt-14"
       >
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={onClose} className="text-[#7a827a]" data-testid="search-close">✕</button>
+          <button onClick={onClose} className="w-9 h-9 rounded-full grid place-items-center" style={{ background: "rgba(232,224,208,0.06)", color: "var(--text-muted)" }} data-testid="search-close">✕</button>
           <input
             autoFocus
             value={query}
@@ -467,27 +527,28 @@ function SearchSheet({ onClose, onPick, places = [] }) {
         </div>
         <div className="space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar">
           {local.length > 0 && (
-            <div className="text-[10px] text-[#7a827a] uppercase tracking-widest px-2 mt-1">Favoritter</div>
+            <div className="text-[10px] uppercase tracking-widest px-2 mt-1" style={{ color: "var(--text-muted)" }}>Favoritter</div>
           )}
           {local.map((p) => (
             <button
               key={"local-" + p.name}
               onClick={() => onPick(p)}
               data-testid={`search-result-${p.name}`}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#131a1f] border border-line hover:border-mint transition-colors text-left"
+              className="w-full flex items-center gap-4 p-4 rounded-2xl transition-colors text-left"
+              style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.08)" }}
             >
-              <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
-                <Star size={16} className="text-mint" />
+              <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.14)" }}>
+                <Star size={16} style={{ color: "var(--accent)" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-sm font-medium truncate">{p.name}</div>
-                <div className="text-[#7a827a] text-xs">{p.label}</div>
+                <div className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>{p.name}</div>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>{p.label}</div>
               </div>
-              <Navigation size={16} className="text-[#7a827a]" />
+              <Navigation size={16} style={{ color: "var(--text-muted)" }} />
             </button>
           ))}
           {(remote.length > 0 || loading) && (
-            <div className="text-[10px] text-[#7a827a] uppercase tracking-widest px-2 mt-3">
+            <div className="text-[10px] uppercase tracking-widest px-2 mt-3" style={{ color: "var(--text-muted)" }}>
               {loading ? "Søker…" : "Adresser i Norge"}
             </div>
           )}
@@ -496,25 +557,26 @@ function SearchSheet({ onClose, onPick, places = [] }) {
               key={"remote-" + idx + "-" + p.lat}
               onClick={() => onPick({ name: p.name, lat: p.lat, lng: p.lng })}
               data-testid={`geo-result-${idx}`}
-              className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#131a1f] border border-line hover:border-mint transition-colors text-left"
+              className="w-full flex items-center gap-4 p-4 rounded-2xl transition-colors text-left"
+              style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.08)" }}
             >
-              <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
-                <MapPin size={18} className="text-mint" />
+              <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.14)" }}>
+                <MapPin size={18} style={{ color: "var(--accent)" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-sm font-medium truncate">{p.name}</div>
-                <div className="text-[#7a827a] text-xs truncate">{p.display_name}</div>
+                <div className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>{p.name}</div>
+                <div className="text-xs truncate" style={{ color: "var(--text-muted)" }}>{p.display_name}</div>
               </div>
-              <Navigation size={16} className="text-[#7a827a]" />
+              <Navigation size={16} style={{ color: "var(--text-muted)" }} />
             </button>
           ))}
           {!loading && q.length >= 3 && remote.length === 0 && local.length === 0 && (
-            <div className="text-center py-10 text-[#7a827a] text-sm">
+            <div className="text-center py-10 text-sm" style={{ color: "var(--text-muted)" }}>
               Ingen treff for &quot;{q}&quot;. Prøv full adresse med gatenavn + husnummer.
             </div>
           )}
           {q.length < 3 && local.length === 0 && (
-            <div className="text-center py-10 text-[#7a827a] text-sm">
+            <div className="text-center py-10 text-sm" style={{ color: "var(--text-muted)" }}>
               Skriv minst 3 tegn (f.eks. &quot;Storgata 15&quot;)
             </div>
           )}

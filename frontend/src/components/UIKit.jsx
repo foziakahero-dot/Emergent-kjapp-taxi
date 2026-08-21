@@ -88,7 +88,7 @@ export function ProgressRing({ value = 0, size = 120, stroke = 6, children }) {
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke="#1e2530"
+          stroke="rgba(232, 224, 208, 0.10)"
           strokeWidth={stroke}
           fill="transparent"
         />
@@ -96,13 +96,14 @@ export function ProgressRing({ value = 0, size = 120, stroke = 6, children }) {
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke="#2fe08c"
+          stroke="var(--accent)"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={offset}
           fill="transparent"
           style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">{children}</div>

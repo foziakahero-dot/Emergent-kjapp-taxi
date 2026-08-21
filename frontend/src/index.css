@@ -112,21 +112,28 @@ body.driver-theme {
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Leaflet tweaks */
-.leaflet-container { background: var(--bg-base) !important; outline: none; }
-.leaflet-control-attribution {
-  background: rgba(12, 18, 22, 0.55) !important;
-  color: var(--text-muted) !important;
-  font-size: 9px !important;
-  padding: 2px 6px !important;
+.leaflet-container { background: var(--bg-base) !important; outline: none; font-family: var(--font-body) !important; }
+.leaflet-control-attribution { display: none !important; }
+.leaflet-control-zoom { display: none !important; }
+/* Dempet karttegn — labels bleknes, veier beholder farge */
+.leaflet-tile-container { filter: saturate(0.72) brightness(0.99); }
+.leaflet-marker-icon.kjapp-marker { will-change: transform; }
+/* Passenger polyline animation — dashed brass shimmer */
+.polyline-shimmer {
+  stroke-dasharray: 1 12;
+  animation: dashShift 22s linear infinite;
 }
-.leaflet-control-attribution a { color: var(--text-muted) !important; }
-.leaflet-control-zoom { border: none !important; box-shadow: none !important; margin: 12px !important; }
-.leaflet-control-zoom a {
-  background: rgba(19, 26, 31, 0.85) !important;
-  color: var(--text) !important;
-  border: 1px solid var(--line) !important;
-  backdrop-filter: blur(12px);
+@keyframes dashShift { to { stroke-dashoffset: -400; } }
+
+/* === Bottom sheet — drag handle bar === */
+.sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(232, 224, 208, 0.22);
+  margin: -2px auto 12px auto;
 }
+body.driver-theme .sheet-handle { background: rgba(255,255,255,0.16); }
 
 /* Grain overlay (subtil, only on cards + hero) */
 .grain::before {
