@@ -28,6 +28,48 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
+## What's Been Implemented (2026-08 — Iter 13: Superadmin panel + Løyvehaver-søknader + Object Storage)
+
+### Iter 13 (nåværende sesjon, del 8) — kun-for-eier admin med subdomain-strategi
+
+**Kontekst**: Bruker ba om et super-admin-panel «kun for meg» som kan nås via subdomen (`admin.kjapp.no` i prod), for å motta løyvehaver-søknader med dokumenter, og for å godkjenne sjåfører som løyvehavere inviterer.
+
+**Nye komponenter**:
+
+- **Ny rolle `superadmin`** — kun tildelt `admin@kjapp.no` (auto-backfilt fra `admin` ved oppstart). Backend `require_superadmin`-dependency for eksklusive endepunkter. `require_admin` og `require_fleet_owner` aksepterer nå også `superadmin` for bakover-kompatibilitet.
+- **Route-vakt (frontend)**: `Protected superadminOnly` returnerer `/app`-redirect for alle andre roller. I prod peker `admin.kjapp.no` mot samme app; vakten sørger for isolering. Ingen egen React-app trengs.
+- **Emergent Object Storage** integrert (via `INTEGRATION_PROXY_URL` + `EMERGENT_LLM_KEY`):
+  - `init_storage()`, `storage_put()`, `storage_get()` med force-reinit ved 404
+  - Paths: `kjapp/{scope}/{subject_id}/{uuid}.{ext}`
+  - MIME whitelist: image/jpeg|png|webp|heic|heif + application/pdf. Max 8 MB.
+  - `/api/upload` (auth), `/api/upload/public` (via application_token), `/api/upload/driver-doc` (via invite_token)
+  - `/api/files/{path:path}` (auth-gated download; superadmin ser alt, eier ser egne, flåte-eier ser sine sjåførers dokumenter)
+- **Løyvehaver-søknad (offentlig)**:
+  - `POST /api/fleet-applications/draft` → oppretter draft, returnerer `upload_token`
+  - 5x `POST /api/upload/public` (firmaattest, løyvebevis, vognkort, forsikring, bank)
+  - `POST /api/fleet-applications/submit` → status=pending, sender e-post til alle superadmin-brukere (SendGrid graceful fallback)
+  - Frontend: `/apply/fleet` (2-stegs skjema)
+- **Superadmin-panel** `/loyver`:
+  - Statistikk-kort: Nye søknader, Godkjente flåter, Sjåfører som venter
+  - Faneblad: Venter/Godkjent/Avslått
+  - Detaljside `/loyver/applications/:id`: iframe-forhåndsvisning av PDF/bilder via blob-URL fra `/api/files/{path}`, beslutning-blokk (godkjenn med kommisjonsrate, eller avslå), notat til søker
+  - `/loyver/pending-drivers`: se førerkort/kjøreseddel/profilbilde per sjåfør, Godkjenn/Avvis
+- **Fleet-eier kan invitere sjåfører direkte**:
+  - `POST /api/fleet/driver-invites` (scoped til deres `fleet_id`), `GET /api/fleet/driver-invites`
+  - Invite lagrer `fleet_id`, sjåfør blir automatisk tilknyttet ved akseptert invitasjon
+- **Sjåfør-signup krever dokumenter**:
+  - Nye felter i `DriverSignupRequest`: `drivers_license_path`, `taxi_license_path`, `profile_photo_path` (alle påkrevd)
+  - `POST /api/driver-invites/accept` returnerer 400 uten alle 3 dokumenter, ellers oppretter driver med `approved: false`, kobler til fleet, og re-tilordner `uploaded_files.owner_user_id` til den nye brukeren
+  - Frontend: `/driver-signup/{token}` er nå 2-stegs: kontodetaljer → dokumentopplasting → send til godkjenning
+
+### Iter 13 tests
+- **iter_13**: 26/26 nye + 25/25 iter10-regresjon = **51/51 grønn**
+- Object Storage E2E verifisert (upload → storage_path → auth-gated download)
+- Superadmin auto-backfill verifisert (admin@kjapp.no returnerer `role='superadmin'`)
+- Route-vakt verifisert (ola@kjapp.no → /loyver → /app redirect)
+- Alle 5 fleet-doc-typer + 3 driver-doc-typer enforced
+- **Total: 314/314 backend-tester grønne**
+
 ## What's Been Implemented (2026-08 — Iter 12: Kunde-app Nordic Premium polish)
 
 ### Iter 12 (nåværende sesjon, del 7) — fullstendig utrulling av passasjer-visuell identitet

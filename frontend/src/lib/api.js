@@ -137,6 +137,62 @@ export const pushApi = {
   test: () => api.post("/push/test").then((r) => r.data),
 };
 
+// ==================================================
+// Løyvehaver applications + Superadmin panel + Uploads
+// ==================================================
+export const fleetApplicationApi = {
+  createDraft: (data) => api.post("/fleet-applications/draft", data).then((r) => r.data),
+  submit: (upload_token, documents) => api.post("/fleet-applications/submit", { upload_token, documents }).then((r) => r.data),
+};
+
+export const superadminApi = {
+  listApplications: (status) => api.get("/superadmin/fleet-applications", { params: status ? { status } : {} }).then((r) => r.data),
+  getApplication: (id) => api.get(`/superadmin/fleet-applications/${id}`).then((r) => r.data),
+  approve: (id, data) => api.post(`/superadmin/fleet-applications/${id}/approve`, data).then((r) => r.data),
+  reject: (id, data) => api.post(`/superadmin/fleet-applications/${id}/reject`, data).then((r) => r.data),
+  pendingDrivers: () => api.get("/admin/pending-drivers").then((r) => r.data),
+};
+
+export const uploadApi = {
+  /** Public upload during fleet application flow */
+  uploadPublic: (file, applicationToken) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("application_token", applicationToken);
+    return api.post("/upload/public", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+  /** Public upload during driver-invite signup */
+  uploadDriverDoc: (file, inviteToken, docType) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("invite_token", inviteToken);
+    fd.append("doc_type", docType);
+    return api.post("/upload/driver-doc", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+  /** Authenticated upload */
+  upload: (file, scope = "misc") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("scope", scope);
+    return api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data);
+  },
+  /** Fetch a file (auth) as blob URL suitable for <img src> or <iframe src> */
+  fetchAsBlobUrl: async (storagePath) => {
+    const token = localStorage.getItem("kjapp_token");
+    const url = `${BACKEND}/api/files/${storagePath}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`file ${res.status}`);
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
+};
+
+export const fleetInviteApi = {
+  create: ({ car, plate, vehicle_type = "ai-first", note = "", email = "" }) =>
+    api.post("/fleet/driver-invites", { car, plate, vehicle_type, note, email: email || undefined }).then((r) => r.data),
+  list: () => api.get("/fleet/driver-invites").then((r) => r.data),
+};
+
 export function formatApiErrorDetail(detail) {
   if (detail == null) return "Noe gikk galt. Prøv igjen.";
   if (typeof detail === "string") return detail;

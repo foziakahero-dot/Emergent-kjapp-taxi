@@ -24,11 +24,13 @@
 - Fleet: "Oslo Nord Taxi AS" (org.nr 999888777, 20% avgift)
 - Tilknyttet sjåfør: `sjafor@kjapp.no`
 
-## Admin
-- URL: `/login` (redirectes automatisk til `/admin`)
+## Admin (Superadmin — kun eier)
+- URL: `/login` (redirectes automatisk til `/loyver`)
 - Email: `admin@kjapp.no`
 - Password: `admin123`
-- Role: `admin`
+- Role: `superadmin` (auto-backfilt fra `admin` ved backend-oppstart, Iter 13)
+- Har tilgang til: `/loyver` (søknader), `/loyver/applications/:id`, `/loyver/pending-drivers`, samt alle eksisterende `/admin/*` endepunkter (require_admin aksepterer både `admin` og `superadmin`)
+- I prod: pek `admin.kjapp.no` mot samme app. Route-vakt `superadminOnly` gjør at ingen andre roller kommer inn på `/loyver`.
 
 ## Auth Endpoints
 - POST /api/auth/register (kun kunde)

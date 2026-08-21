@@ -62,7 +62,7 @@ def fleet_token():
 
 # ---------- Auth for all 4 roles ----------
 def test_login_all_roles():
-    for creds, expected_role in [(ADMIN, "admin"), (USER, "user"), (DRIVER, "driver"), (FLEET, "fleet_owner")]:
+    for creds, expected_role in [(ADMIN, "superadmin"), (USER, "user"), (DRIVER, "driver"), (FLEET, "fleet_owner")]:
         data = _login(**creds)
         assert "token" in data
         # /auth/me

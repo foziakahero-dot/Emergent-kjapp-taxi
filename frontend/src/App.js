@@ -37,14 +37,19 @@ import Terms from "./pages/Terms";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 import CookieConsent from "./components/CookieConsent";
+import ApplyFleet from "./pages/ApplyFleet";
+import SuperadminApplications from "./pages/SuperadminApplications";
+import SuperadminApplicationDetail from "./pages/SuperadminApplicationDetail";
+import SuperadminPending from "./pages/SuperadminPending";
 
-function Protected({ children, driverOnly = false, adminOnly = false, fleetOnly = false }) {
+function Protected({ children, driverOnly = false, adminOnly = false, fleetOnly = false, superadminOnly = false }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/app" replace />;
-  if (fleetOnly && user.role !== "fleet_owner" && user.role !== "admin") return <Navigate to="/app" replace />;
-  if (driverOnly && user.role !== "driver" && user.role !== "admin") return <Navigate to="/app" replace />;
+  if (superadminOnly && user.role !== "superadmin") return <Navigate to="/app" replace />;
+  if (adminOnly && !["admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
+  if (fleetOnly && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
+  if (driverOnly && !["driver", "admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
   return children;
 }
 
@@ -52,7 +57,7 @@ function PublicOnly({ children }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (user) {
-    const to = user.role === "admin" ? "/admin" : user.role === "driver" ? "/driver" : user.role === "fleet_owner" ? "/fleet" : "/app";
+    const to = user.role === "superadmin" ? "/loyver" : user.role === "admin" ? "/admin" : user.role === "driver" ? "/driver" : user.role === "fleet_owner" ? "/fleet" : "/app";
     return <Navigate to={to} replace />;
   }
   return children;
@@ -123,6 +128,14 @@ function AppRoutes() {
 
       {/* Admin */}
       <Route path="/admin" element={<Protected adminOnly><AdminDashboard /></Protected>} />
+
+      {/* Public løyvehaver application */}
+      <Route path="/apply/fleet" element={<ApplyFleet />} />
+
+      {/* Superadmin (kun for eier) */}
+      <Route path="/loyver" element={<Protected superadminOnly><SuperadminApplications /></Protected>} />
+      <Route path="/loyver/applications/:id" element={<Protected superadminOnly><SuperadminApplicationDetail /></Protected>} />
+      <Route path="/loyver/pending-drivers" element={<Protected superadminOnly><SuperadminPending /></Protected>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

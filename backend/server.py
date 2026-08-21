@@ -15,9 +15,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
@@ -31,12 +31,86 @@ try:
 except Exception:
     PUSH_AVAILABLE = False
 
+import requests as http_requests
+
 # ------------------ Config ------------------
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+
+# ------------------ Object storage (Emergent) ------------------
+_STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = _STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+STORAGE_APP = "kjapp"
+_storage_key: Optional[str] = None
+
+
+def init_storage(force: bool = False) -> Optional[str]:
+    """Fetch a session-scoped storage_key. Safe if EMERGENT_LLM_KEY is missing (returns None)."""
+    global _storage_key
+    if _storage_key and not force:
+        return _storage_key
+    if not EMERGENT_LLM_KEY:
+        return None
+    try:
+        r = http_requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_LLM_KEY}, timeout=15)
+        r.raise_for_status()
+        _storage_key = r.json().get("storage_key")
+    except Exception as e:
+        print(f"[storage/init] failed: {e}")
+        _storage_key = None
+    return _storage_key
+
+
+def storage_put(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=503, detail="Objektlager utilgjengelig")
+    r = http_requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data,
+        timeout=120,
+    )
+    if r.status_code == 404:
+        # Try re-init once
+        key = init_storage(force=True)
+        r = http_requests.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key or "", "Content-Type": content_type},
+            data=data,
+            timeout=120,
+        )
+    r.raise_for_status()
+    return r.json()
+
+
+def storage_get(path: str) -> tuple[bytes, str]:
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=503, detail="Objektlager utilgjengelig")
+    r = http_requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key},
+        timeout=60,
+    )
+    if r.status_code == 404:
+        key = init_storage(force=True)
+        r = http_requests.get(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key or ""},
+            timeout=60,
+        )
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+ALLOWED_UPLOAD_MIME = {
+    "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf",
+}
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB per file
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -360,7 +434,7 @@ async def lifespan(app: FastAPI):
             {"slug": "gardermoen", "name": "Gardermoen (OSL)", "lat": 60.1975, "lng": 11.1004, "label": "Flyplass", "icon": "map-pin", "featured": False},
             {"slug": "sandvika", "name": "Sandvika", "lat": 59.8909, "lng": 10.5245, "label": "Kjøpesenter", "icon": "map-pin", "featured": False},
         ])
-    # seed admin
+    # seed admin (upgrade to superadmin)
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@kjapp.no")
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
@@ -368,11 +442,20 @@ async def lifespan(app: FastAPI):
         await db.users.insert_one({
             "email": admin_email,
             "password_hash": hash_password(admin_password),
-            "fullName": "Admin",
+            "fullName": "Superadmin",
             "phone": "+4700000000",
-            "role": "admin",
+            "role": "superadmin",
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+    elif existing.get("role") != "superadmin":
+        # Backfill: upgrade legacy admin -> superadmin
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": {"role": "superadmin"}})
+
+    # Initialize object storage
+    try:
+        init_storage()
+    except Exception as e:
+        print(f"[storage] init on startup failed: {e}")
     # seed test user
     test_email = "ola@kjapp.no"
     if not await db.users.find_one({"email": test_email}):
@@ -1269,13 +1352,19 @@ async def google_session(body: GoogleSessionRequest, response: Response):
 # Fleet owner portal
 # ============================================================
 def require_admin(current=Depends(get_current_user)):
-    if current.get("role") != "admin":
+    if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
     return current
 
 
+def require_superadmin(current=Depends(get_current_user)):
+    if current.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Kun for superadmin")
+    return current
+
+
 def require_fleet_owner(current=Depends(get_current_user)):
-    if current.get("role") not in ("fleet_owner", "admin"):
+    if current.get("role") not in ("fleet_owner", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for flåteiere")
     return current
 
@@ -1523,6 +1612,10 @@ class DriverSignupRequest(BaseModel):
     email: str
     phone: str
     password: str
+    # New: uploaded document paths (from /api/upload/public via a public driver-invite upload token)
+    drivers_license_path: Optional[str] = None
+    taxi_license_path: Optional[str] = None
+    profile_photo_path: Optional[str] = None
 
 
 @api.post("/admin/driver-invites")
@@ -1597,7 +1690,10 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
-    result = await db.users.insert_one({
+    # Require all three documents
+    if not (body.drivers_license_path and body.taxi_license_path and body.profile_photo_path):
+        raise HTTPException(status_code=400, detail="Du må laste opp førerkort, kjøreseddel og profilbilde")
+    doc = {
         "email": email,
         "password_hash": hash_password(body.password),
         "fullName": body.fullName,
@@ -1610,8 +1706,20 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+        "drivers_license_path": body.drivers_license_path,
+        "taxi_license_path": body.taxi_license_path,
+        "profile_photo_path": body.profile_photo_path,
+        "documents_uploaded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if inv.get("fleet_id"):
+        doc["fleet_id"] = inv["fleet_id"]
+    result = await db.users.insert_one(doc)
     uid = str(result.inserted_id)
+    # Reassign uploaded docs to this driver's owner_user_id (they were uploaded before user existed)
+    await db.uploaded_files.update_many(
+        {"storage_path": {"$in": [body.drivers_license_path, body.taxi_license_path, body.profile_photo_path]}},
+        {"$set": {"owner_user_id": uid, "scope": "driver-docs"}},
+    )
     await db.driver_invites.update_one({"token": body.token}, {"$set": {"used": True, "used_by": uid, "used_at": datetime.now(timezone.utc).isoformat()}})
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
@@ -1620,6 +1728,35 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": body.phone, "role": "driver", "approved": False},
         "pending_approval": True,
     }
+
+
+@api.post("/upload/driver-doc")
+async def upload_driver_doc(file: UploadFile = File(...), invite_token: str = Form(...), doc_type: str = Form(...)):
+    """Public upload used inside the driver-signup flow. Validated by invite token."""
+    if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
+        raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
+    inv = await db.driver_invites.find_one({"token": invite_token})
+    if not inv or inv.get("used"):
+        raise HTTPException(status_code=403, detail="Ugyldig invitasjon")
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("driver-docs", f"invite-{invite_token[:12]}", file.filename or "file", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": None,  # set after driver signup completes
+        "scope": "driver-docs",
+        "doc_type": doc_type,
+        "invite_token": invite_token,
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.uploaded_files.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
 
 
 # ============================================================
@@ -2042,6 +2179,406 @@ async def mark_messages_seen(trip_id: str, current=Depends(get_current_user)):
         {"$set": {seen_key: datetime.now(timezone.utc).isoformat()}},
     )
     return {"ok": True}
+
+
+# ============================================================
+# File upload / download (Emergent Object Storage backed)
+# ============================================================
+_EXT_FROM_MIME = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+    "image/heic": "heic", "image/heif": "heif", "application/pdf": "pdf",
+}
+
+
+async def _read_uploaded_file(file: UploadFile) -> bytes:
+    if file.content_type not in ALLOWED_UPLOAD_MIME:
+        raise HTTPException(status_code=415, detail=f"Filtype ikke støttet: {file.content_type}. Godkjent: bilde eller PDF.")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Filen er større enn 8 MB")
+    if not data:
+        raise HTTPException(status_code=400, detail="Tom fil")
+    return data
+
+
+def _mk_upload_path(scope: str, subject_id: str, filename: str, content_type: str) -> str:
+    ext = _EXT_FROM_MIME.get(content_type)
+    if not ext and filename and "." in filename:
+        ext = filename.rsplit(".", 1)[-1].lower()
+    ext = (ext or "bin").replace("/", "").replace(".", "")
+    return f"{STORAGE_APP}/{scope}/{subject_id}/{uuid.uuid4()}.{ext}"
+
+
+@api.post("/upload")
+async def upload_auth(file: UploadFile = File(...), scope: str = Form("misc"), current=Depends(get_current_user)):
+    data = await _read_uploaded_file(file)
+    safe_scope = scope if scope in ("driver-docs", "profile", "misc") else "misc"
+    path = _mk_upload_path(safe_scope, current["id"], file.filename or "file", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": safe_scope,
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.uploaded_files.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.post("/upload/public")
+async def upload_public(file: UploadFile = File(...), application_token: str = Form(...)):
+    """Public upload — only accepted with a valid fleet application token."""
+    app_doc = await db.fleet_applications.find_one({"upload_token": application_token})
+    if not app_doc or app_doc.get("status") not in (None, "draft"):
+        raise HTTPException(status_code=403, detail="Ugyldig eller lukket søknad")
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("fleet-applications", application_token, file.filename or "file", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": None,
+        "scope": "fleet-applications",
+        "application_token": application_token,
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.uploaded_files.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/files/{path:path}")
+async def download_file(path: str, current=Depends(get_current_user)):
+    rec = await db.uploaded_files.find_one({"storage_path": path, "is_deleted": {"$ne": True}})
+    if not rec:
+        raise HTTPException(status_code=404, detail="Fil ikke funnet")
+    role = current.get("role", "user")
+    is_owner = rec.get("owner_user_id") == current["id"]
+    # Access rules
+    allowed = False
+    if role == "superadmin":
+        allowed = True
+    elif rec.get("scope") == "fleet-applications" and role in ("admin",):
+        allowed = True
+    elif rec.get("scope") == "driver-docs":
+        if is_owner or role in ("admin", "superadmin"):
+            allowed = True
+        elif role == "fleet_owner":
+            # Fleet owner can view docs of drivers linked to their fleet
+            fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+            driver_user = await db.users.find_one({"_id": ObjectId(rec.get("owner_user_id", "") or "000000000000000000000000")}) if rec.get("owner_user_id") else None
+            if driver_user and fleet_id and driver_user.get("fleet_id") == fleet_id:
+                allowed = True
+    elif is_owner:
+        allowed = True
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Ingen tilgang til denne filen")
+    data, ct = storage_get(path)
+    return FastResponse(content=data, media_type=rec.get("content_type") or ct)
+
+
+# ============================================================
+# Løyvehaver (fleet owner) applications — PUBLIC intake + superadmin review
+# ============================================================
+class FleetApplicationDraftRequest(BaseModel):
+    company_name: str
+    org_number: str
+    contact_name: str
+    contact_email: EmailStr
+    contact_phone: str
+    bank_account: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class FleetApplicationSubmitRequest(BaseModel):
+    upload_token: str
+    documents: dict  # {type: {path, original_filename, content_type}}
+
+
+class FleetApplicationDecisionRequest(BaseModel):
+    review_notes: Optional[str] = ""
+    commission_rate: Optional[float] = 0.20
+
+
+@api.post("/fleet-applications/draft")
+async def create_fleet_application_draft(body: FleetApplicationDraftRequest):
+    """Public: creates a draft application, returns an upload_token used to attach documents."""
+    upload_token = secrets.token_urlsafe(24)
+    doc = {
+        "upload_token": upload_token,
+        "company_name": body.company_name.strip(),
+        "org_number": body.org_number.strip(),
+        "contact_name": body.contact_name.strip(),
+        "contact_email": body.contact_email.strip().lower(),
+        "contact_phone": body.contact_phone.strip(),
+        "bank_account": (body.bank_account or "").strip(),
+        "notes": (body.notes or "").strip(),
+        "documents": {},
+        "status": "draft",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.fleet_applications.insert_one(doc)
+    return {"upload_token": upload_token, "status": "draft"}
+
+
+@api.post("/fleet-applications/submit")
+async def submit_fleet_application(body: FleetApplicationSubmitRequest, request: Request):
+    app_doc = await db.fleet_applications.find_one({"upload_token": body.upload_token})
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Søknad ikke funnet")
+    if app_doc.get("status") not in ("draft",):
+        raise HTTPException(status_code=410, detail="Søknad allerede sendt inn")
+    required = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
+    missing = [k for k in required if k not in (body.documents or {})]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Mangler dokumenter: {', '.join(missing)}")
+    await db.fleet_applications.update_one(
+        {"upload_token": body.upload_token},
+        {"$set": {
+            "documents": body.documents,
+            "status": "pending",
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    # Notify superadmin(s)
+    superadmins = db.users.find({"role": "superadmin"})
+    async for sa in superadmins:
+        send_email(
+            sa.get("email", ""),
+            f"Ny løyvehaver-søknad: {app_doc.get('company_name', '')}",
+            _fleet_application_notify_html(app_doc.get("company_name", ""), app_doc.get("contact_email", ""), app_doc.get("org_number", "")),
+        )
+    return {"ok": True, "status": "pending"}
+
+
+def _fleet_application_notify_html(company: str, contact: str, org: str) -> str:
+    return f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;background:#0c1216;color:#e8e0d0;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
+      <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:#c9a15b">A</span>PP</div>
+      <div style="font-size:11px;letter-spacing:4px;color:#c9a15b;text-transform:uppercase;margin-top:4px">Ny løyvehaver-søknad</div>
+      <h1 style="font-size:22px;color:#fff;margin-top:24px;line-height:1.3">{company}</h1>
+      <p style="color:#a8b0a8;font-size:14px;line-height:1.6">Org.nr <strong>{org}</strong> · kontakt: <a href="mailto:{contact}" style="color:#c9a15b">{contact}</a></p>
+      <p style="color:#a8b0a8;font-size:13px">Logg inn i superadmin-panelet for å vurdere dokumentene.</p>
+    </div>
+    """
+
+
+@api.get("/superadmin/fleet-applications")
+async def superadmin_list_applications(status: Optional[str] = None, current=Depends(require_superadmin)):
+    q = {}
+    if status:
+        q["status"] = status
+    else:
+        q["status"] = {"$in": ["pending", "approved", "rejected"]}
+    out = []
+    async for a in db.fleet_applications.find(q).sort("submitted_at", -1).limit(200):
+        a["id"] = str(a["_id"]); a.pop("_id", None)
+        # Strip large document payload, keep counts
+        docs = a.get("documents") or {}
+        a["documents_count"] = len(docs)
+        out.append(a)
+    return {"applications": out}
+
+
+@api.get("/superadmin/fleet-applications/{app_id}")
+async def superadmin_get_application(app_id: str, current=Depends(require_superadmin)):
+    try:
+        a = await db.fleet_applications.find_one({"_id": ObjectId(app_id)})
+    except Exception:
+        a = None
+    if not a:
+        raise HTTPException(status_code=404, detail="Søknad ikke funnet")
+    a["id"] = str(a["_id"]); a.pop("_id", None)
+    return a
+
+
+@api.post("/superadmin/fleet-applications/{app_id}/approve")
+async def superadmin_approve_application(app_id: str, body: FleetApplicationDecisionRequest, current=Depends(require_superadmin)):
+    try:
+        app_doc = await db.fleet_applications.find_one({"_id": ObjectId(app_id)})
+    except Exception:
+        app_doc = None
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Søknad ikke funnet")
+    if app_doc.get("status") == "approved":
+        raise HTTPException(status_code=400, detail="Allerede godkjent")
+    owner_email = app_doc.get("contact_email")
+    owner = await db.users.find_one({"email": owner_email})
+    if not owner:
+        temp_pw = secrets.token_urlsafe(10)
+        res = await db.users.insert_one({
+            "email": owner_email,
+            "password_hash": hash_password(temp_pw),
+            "fullName": app_doc.get("contact_name") or app_doc.get("company_name"),
+            "phone": app_doc.get("contact_phone", ""),
+            "role": "fleet_owner",
+            "approved": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "must_reset_password": True,
+        })
+        owner_id = str(res.inserted_id)
+    else:
+        owner_id = str(owner["_id"])
+        temp_pw = None
+        await db.users.update_one({"_id": owner["_id"]}, {"$set": {"role": "fleet_owner", "approved": True}})
+    fleet_doc = {
+        "name": app_doc.get("company_name"),
+        "org_number": app_doc.get("org_number", ""),
+        "owner_user_id": owner_id,
+        "commission_rate": float(body.commission_rate or 0.20),
+        "active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "application_id": app_id,
+    }
+    fres = await db.fleets.insert_one(fleet_doc)
+    fleet_id = str(fres.inserted_id)
+    await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
+    await db.fleet_applications.update_one(
+        {"_id": ObjectId(app_id)},
+        {"$set": {
+            "status": "approved",
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "reviewed_by": current["id"],
+            "review_notes": body.review_notes or "",
+            "fleet_id": fleet_id,
+            "fleet_owner_user_id": owner_id,
+        }},
+    )
+    # Email the applicant
+    send_email(
+        owner_email,
+        "KJAPP: Løyvehaver-søknaden er godkjent",
+        _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", temp_pw),
+    )
+    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw}
+
+
+@api.post("/superadmin/fleet-applications/{app_id}/reject")
+async def superadmin_reject_application(app_id: str, body: FleetApplicationDecisionRequest, current=Depends(require_superadmin)):
+    try:
+        app_doc = await db.fleet_applications.find_one({"_id": ObjectId(app_id)})
+    except Exception:
+        app_doc = None
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Søknad ikke funnet")
+    await db.fleet_applications.update_one(
+        {"_id": ObjectId(app_id)},
+        {"$set": {
+            "status": "rejected",
+            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "reviewed_by": current["id"],
+            "review_notes": body.review_notes or "",
+        }},
+    )
+    send_email(
+        app_doc.get("contact_email", ""),
+        "KJAPP: Løyvehaver-søknaden er avslått",
+        _fleet_application_decision_html(app_doc.get("company_name", ""), False, body.review_notes or "", None),
+    )
+    return {"ok": True}
+
+
+def _fleet_application_decision_html(company: str, approved: bool, notes: str, temp_password: Optional[str]) -> str:
+    accent = "#c9a15b"
+    heading = "Søknaden er godkjent" if approved else "Søknaden er avslått"
+    body_html = ""
+    if approved:
+        pw_html = f"<p style='color:#a8b0a8;font-size:13px'>Midlertidig passord: <code style='color:#fff;background:#171d22;padding:4px 8px;border-radius:6px'>{temp_password}</code> — bytt det så snart du logger inn.</p>" if temp_password else ""
+        body_html = f"""
+          <p style="color:#a8b0a8;font-size:14px;line-height:1.6">Velkommen ombord, <strong style="color:#fff">{company}</strong>. Din flåte er opprettet på KJAPP og du kan nå logge inn i flåte-portalen.</p>
+          {pw_html}
+        """
+    else:
+        body_html = f"""
+          <p style="color:#a8b0a8;font-size:14px;line-height:1.6">Vi kunne dessverre ikke godkjenne søknaden fra <strong style="color:#fff">{company}</strong>.</p>
+        """
+    note_html = f"<p style='color:#a8b0a8;font-size:13px;border-left:2px solid {accent};padding-left:12px'>{notes}</p>" if notes else ""
+    return f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;background:#0c1216;color:#e8e0d0;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
+      <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:{accent}">A</span>PP</div>
+      <div style="font-size:11px;letter-spacing:4px;color:{accent};text-transform:uppercase;margin-top:4px">Løyvehaver</div>
+      <h1 style="font-size:22px;color:#fff;margin-top:24px;line-height:1.3">{heading}</h1>
+      {body_html}
+      {note_html}
+    </div>
+    """
+
+
+# ============================================================
+# Fleet-owner driver invites (extends /admin/driver-invites)
+# ============================================================
+@api.post("/fleet/driver-invites")
+async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request, current=Depends(require_fleet_owner)):
+    fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+    if not fleet_id and current.get("role") not in ("admin", "superadmin"):
+        raise HTTPException(status_code=400, detail="Du er ikke tilknyttet en flåte")
+    token = secrets.token_urlsafe(24)
+    doc = {
+        "token": token,
+        "car": body.car.strip(),
+        "plate": body.plate.strip().upper(),
+        "vehicle_type": body.vehicle_type,
+        "note": body.note or "",
+        "email": (body.email or "").strip().lower() or None,
+        "created_by": current["id"],
+        "fleet_id": fleet_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=14)).isoformat(),
+        "used": False,
+        "email_sent": False,
+    }
+    await db.driver_invites.insert_one(doc)
+    if body.email:
+        origin = str(request.base_url).rstrip("/").replace("/api", "")
+        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
+        invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
+        ok = send_email(
+            body.email,
+            "Invitasjon: Bli sjåfør for KJAPP",
+            email_driver_invite_html(body.car, body.plate, invite_url, body.note or ""),
+        )
+        if ok:
+            await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
+            doc["email_sent"] = True
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/fleet/driver-invites")
+async def fleet_list_driver_invites(current=Depends(require_fleet_owner)):
+    fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+    q = {} if current.get("role") in ("admin", "superadmin") else {"fleet_id": fleet_id}
+    out = []
+    async for i in db.driver_invites.find(q).sort("created_at", -1).limit(100):
+        i["id"] = str(i["_id"]); i.pop("_id", None)
+        out.append(i)
+    return {"invites": out}
+
+
+# ============================================================
+# Driver docs — pending drivers awaiting superadmin approval
+# ============================================================
+@api.get("/admin/pending-drivers")
+async def admin_list_pending_drivers(current=Depends(require_admin)):
+    out = []
+    async for u in db.users.find({"role": "driver", "approved": {"$ne": True}}).sort("created_at", -1).limit(200):
+        u["id"] = str(u["_id"]); u.pop("_id", None); u.pop("password_hash", None)
+        # Enrich with fleet
+        if u.get("fleet_id"):
+            f = await db.fleets.find_one({"_id": ObjectId(u["fleet_id"])})
+            u["fleet_name"] = (f or {}).get("name")
+        out.append(u)
+    return {"drivers": out}
 
 
 app.include_router(api)

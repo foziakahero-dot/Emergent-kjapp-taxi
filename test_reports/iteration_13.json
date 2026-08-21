@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 13 (Superadmin panel + Løyvehaver application flow + Object Storage) — FULL PASS. Backend: 51/51 tests green (25/25 iter10 regression + 26/26 new iter13). All new endpoints work: POST /api/fleet-applications/draft (public, returns upload_token), POST /api/upload/public (multipart, gated by application_token, rejects invalid MIME & bogus tokens with 403), POST /api/fleet-applications/submit (requires all 5 doc types, 410 on 2nd submit, notifies superadmin gracefully), GET /api/superadmin/fleet-applications (?status filter, 403 for non-superadmin), GET /{id} (returns full documents dict), POST /approve (creates fleet + fleet_owner user with temp_password verified via login → role=fleet_owner), POST /reject (sets status=rejected), GET /api/files/{path} (401 without auth, 200 for superadmin w/ correct Content-Type, 403 for user), POST /api/upload/driver-doc (validates doc_type + invite_token), POST /api/driver-invites/accept (400 without all 3 doc paths, 200 with them and creates driver approved=false), POST /api/fleet/driver-invites (fleet_owner-scoped, 403 for regular user), GET /api/admin/pending-drivers (returns approved!=true drivers with fleet_name enrichment). Admin backfill confirmed: admin@kjapp.no now returns role='superadmin' from /api/auth/login and /api/auth/me. Backward compat require_admin accepts superadmin (verified via GET /api/admin/fleets → 200). Full regression on iter10 25/25 (updated only one assertion: admin=>superadmin) still green (33.96s). Frontend (desktop 1280x800 + mobile 390x844): /apply/fleet public 2-step form works — all 8 step-1 fields present (apply-company-name/org-number/contact-name/contact-email/contact-phone/bank-account/notes/apply-next), Fortsett til dokumenter transitions to step 2 with all 5 doc rows (apply-doc-upload-firmaattest/loyvebevis/vognkort/forsikring/bank) + apply-submit brass button. /loyver superadmin panel renders Nordic Premium 'Løyvehaver-panelet' with all 3 stat cards (sa-stat-pending=1, sa-stat-approved=0, sa-stat-pending-drivers=8) and 3 tabs (sa-tab-pending/approved/rejected). Application list items (sa-app-{id}) are clickable and navigate to detail page. Detail page shows KONTAKT/TELEFON/BANKKONTO tiles, NOTAT block, 5 document tiles (sad-doc-firmaattest/loyvebevis/vognkort/forsikring/bank), Beslutning block with sad-choose-approve, sad-choose-reject, sad-notes, sad-submit, and sad-commission (which appears conditionally AFTER clicking sad-choose-approve — verified). /loyver/pending-drivers renders 3-doc-buttons/driver with sap-approve-{id} and sap-reject-{id} pairs (8 pairs found). Superadmin login (admin@kjapp.no) auto-routes to /loyver via PublicOnly. Route guard verified: ola@kjapp.no visiting /loyver is redirected to /app (Protected superadminOnly works). Driver signup 2-step flow (mobile) works — step 1 has dsignup-name/email/phone/password/next; after dsignup-next step 2 has dsignup-doc-upload-drivers_license/taxi_license/profile_photo + dsignup-submit 'Send til godkjenning'. Nordic Premium brass accent theme consistent across all superadmin pages. Object Storage init working — draft+upload created storage_path='kjapp/fleet-applications/{token}/{uuid}.pdf' successfully.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13.py",
+    "/app/backend/tests/test_iter10.py",
+    "/app/test_reports/pytest/iter13_new.xml",
+    "/app/test_reports/pytest/iter13_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py now at 2589 lines (up from 2052 in iter12) — still monolithic. Should be modularized into routers/(superadmin.py, fleet_applications.py, uploads.py, driver_invites.py). Carry-over from iter10/11/12.",
+    "TestFleetApplicationFlow uses a class-scoped instance fixture (draft_ctx) — pytest 10 will remove this. Should be refactored to @classmethod or module-scoped, non-blocking today.",
+    "GET /api/files/{path} uses `path:path` — good. Access-control logic is centralized in the endpoint. Consider extracting to a reusable dependency for future audit endpoints.",
+    "approve endpoint: when contact_email already belongs to an existing user, temp_password=None but response still contains 'temp_password' field (null) — clients should be aware. Consider omitting the field or documenting the shape.",
+    "SendGrid graceful fallback verified — submit + approve + reject all return 200 even without SENDGRID_API_KEY. No crashes observed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10.py (single assertion change: admin role expected='superadmin' post-backfill)",
+    "/app/backend/tests/test_iter13.py (NEW, 26 tests covering all iter13 endpoints)"
+  ],
+  "success_rate": {"backend": "100% (51/51: 25 regression + 26 new)", "frontend": "100% of iter13 checks"},
+  "test_credentials": "Used /app/memory/test_credentials.md as-is. admin@kjapp.no is now role=superadmin (auto-backfilled on backend boot).",
+  "seed_data_creation": "Created ~4 TEST_ fleet-application drafts + submitted 3 as pending (1 remaining in /loyver list, 2 approved to test fleet+owner creation, 1 rejected). Created ~5 TEST_ driver-invites and 1 completed TEST driver signup with 3 uploaded PDFs. All prefixed with TEST_ for cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 13 is stable. Storage backend (Emergent Object Storage) confirmed working end-to-end via /api/upload/public → storage_path 'kjapp/fleet-applications/{token}/{uuid}.pdf'. /api/files/{path:path} correctly returns raw bytes with content-type. All 5 fleet-app doc types (firmaattest/loyvebevis/vognkort/forsikring/bank) and 3 driver doc types (drivers_license/taxi_license/profile_photo) enforced by backend. Superadmin role auto-backfilled on every FastAPI startup event — legacy tests expecting role='admin' for admin@kjapp.no will need updating (already done for test_iter10.py). PublicOnly redirect map: superadmin→/loyver, admin→/admin, driver→/driver, fleet_owner→/fleet, user→/app. sad-commission is CONDITIONALLY rendered — only after sad-choose-approve is clicked (not on initial render, not when sad-choose-reject is chosen). This is by design. Cookie banner (cookie-essential) still needs to be dismissed once per session before form clicks work. To create a fresh sample: POST /api/fleet-applications/draft (no auth) → 5x POST /api/upload/public with application_token → POST /api/fleet-applications/submit with all 5 doc paths.",
+  "rca of the issue": "N/A — no bugs found."
+}
