@@ -86,6 +86,15 @@ export default function Onboarding() {
             {i < slides.length - 1 ? "Neste" : "Kom i gang"}
           </button>
         </div>
+        <div className="pt-2 text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
+          <button onClick={() => navigate("/driver/login")} className="hover:opacity-90" data-testid="onboarding-driver-link" style={{ color: "var(--accent)" }}>
+            Er du sjåfør?
+          </button>
+          <span className="mx-2 opacity-40">·</span>
+          <button onClick={() => navigate("/apply/fleet")} className="hover:opacity-90" data-testid="onboarding-loyver-link" style={{ color: "var(--accent)" }}>
+            Bli løyvehaver
+          </button>
+        </div>
       </div>
     </div>
   );

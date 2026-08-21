@@ -116,17 +116,21 @@ export default function DriverHome() {
     <div className="px-4 pt-2 pb-24 page-enter">
       {/* Online toggle */}
       <div className="mt-2 card p-4 flex items-center gap-3">
-        <div className={`w-11 h-11 rounded-full grid place-items-center ${online ? "bg-mint/15" : "bg-[#17222a]"}`}>
-          <Power size={18} className={online ? "text-mint" : "text-[#7a827a]"} />
+        <div
+          className="w-11 h-11 rounded-full grid place-items-center"
+          style={{ background: online ? "rgba(47,224,140,0.15)" : "rgba(255,255,255,0.05)" }}
+        >
+          <Power size={18} className={online ? "text-mint" : ""} style={!online ? { color: "var(--text-muted)" } : undefined} />
         </div>
         <div className="flex-1">
-          <div className="text-white text-sm font-medium">{online ? "På vakt" : "Offline"}</div>
-          <div className="text-[11px] text-[#7a827a]">{online ? (gpsError || "Du mottar turer") : "Slå på for å motta turer"}</div>
+          <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{online ? "På vakt" : "Offline"}</div>
+          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{online ? (gpsError || "Du mottar turer") : "Slå på for å motta turer"}</div>
         </div>
         <button
           onClick={() => setOnline((v) => !v)}
           data-testid="driver-online-toggle"
-          className={`relative w-14 h-8 rounded-full transition-colors ${online ? "bg-mint" : "bg-[#263038]"}`}
+          className="relative w-14 h-8 rounded-full transition-colors"
+          style={{ background: online ? "#2fe08c" : "rgba(255,255,255,0.10)" }}
           aria-pressed={online}
         >
           <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform ${online ? "translate-x-6" : ""}`} />

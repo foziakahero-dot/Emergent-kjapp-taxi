@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { tripsApi } from "../lib/api";
-import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet";
-import { pickupIcon, dropoffIcon, carIconRotated } from "../lib/mapAssets";
+import PremiumMap from "../components/PremiumMap";
 import { computeDriverPosition } from "../lib/tripAnimation";
 import ChatModal from "../components/ChatModal";
 import { X, Phone, MessageCircle, ShieldCheck, Star, CreditCard, MapPin, Navigation, Copy } from "lucide-react";
@@ -69,36 +68,29 @@ export default function BookingFlow() {
   }
 
   const meta = STATUS_META[trip.status] || STATUS_META.searching;
-  let routePoints;
+  let routeCoords;
   if (trip.geometry?.coordinates?.length) {
-    routePoints = trip.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    routeCoords = trip.geometry.coordinates; // [lng,lat]
   } else {
-    routePoints = [[trip.pickup_lat, trip.pickup_lng], [trip.dropoff_lat, trip.dropoff_lng]];
+    routeCoords = [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
   }
-
   const paymentLabel = trip.payment_method === "vipps" ? "Vipps" : "Kort";
+  const showingActiveCar = (trip.status === "driver_on_way" || trip.status === "in_trip") && carPos;
 
   return (
-    <div className="relative min-h-screen">
-      <div className="absolute inset-x-0" style={{ top: 0, bottom: 0 }}>
-        <MapContainer
-          center={[(trip.pickup_lat + trip.dropoff_lat) / 2, (trip.pickup_lng + trip.dropoff_lng) / 2]}
-          zoom={13}
-          zoomControl={false}
-          attributionControl={false}
-          className="w-full h-full"
-        >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          />
-          <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={pickupIcon} />
-          <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={dropoffIcon} />
-          <Polyline positions={routePoints} pathOptions={{ color: "#c9a15b", weight: 6, opacity: 0.95, lineCap: "round", lineJoin: "round" }} />
-          <Polyline positions={routePoints} pathOptions={{ color: "#f4ecd8", weight: 1.4, opacity: 0.9, className: "polyline-shimmer" }} />
-          {(trip.status === "driver_on_way" || trip.status === "in_trip") && carPos && (
-            <Marker position={[carPos.lat, carPos.lng]} icon={carIconRotated(carPos.bearing)} />
-          )}
-        </MapContainer>
+    <div className="relative" style={{ height: "100dvh" }}>
+      <div className="absolute inset-0">
+        <PremiumMap
+          center={[(trip.pickup_lng + trip.dropoff_lng) / 2, (trip.pickup_lat + trip.dropoff_lat) / 2]}
+          zoom={13.5}
+          pitch={50}
+          route={routeCoords}
+          pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+          dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+          activeCar={showingActiveCar ? { lat: carPos.lat, lng: carPos.lng, bearing: carPos.bearing } : null}
+          followActive={trip.status === "in_trip"}
+          testid="booking-map"
+        />
       </div>
 
       {/* Top row — close + status chip */}

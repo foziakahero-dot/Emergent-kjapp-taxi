@@ -675,10 +675,13 @@ async def me(current=Depends(get_current_user)):
 # ---- Trips ----
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
-    # Payment gate: user must have at least one saved payment method to book
+    # Payment gate: user must have at least one VERIFIED payment method to book
     pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
     if pm_count == 0:
         raise HTTPException(status_code=402, detail="Legg til et betalingskort før du bestiller tur")
+    verified_count = await db.payment_methods.count_documents({"user_id": current["id"], "verified": {"$ne": False}})
+    if verified_count == 0:
+        raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
     trip_id = str(uuid.uuid4())
     route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
     if route:
@@ -854,6 +857,9 @@ async def list_payment_methods(current=Depends(get_current_user)):
     async for m in cursor:
         m["id"] = str(m["_id"])
         m.pop("_id", None)
+        # Default: legacy records without the field are treated as verified=True
+        # (they were seeded/imported manually; Stripe SetupIntent-created ones set it explicitly)
+        m["verified"] = bool(m.get("verified", True))
         methods.append(m)
     return methods
 
@@ -934,6 +940,9 @@ async def stripe_card_setup_status(session_id: str, current=Depends(get_current_
     pm_id = si_obj.payment_method
     if not pm_id:
         return {"ready": False, "reason": "no payment method attached"}
+    # A SetupIntent is 'succeeded' only when the card passed 3DS/CVV. Anything else is not verified.
+    setup_status = getattr(si_obj, "status", None) or "unknown"
+    verified = setup_status == "succeeded"
     pm = stripe.PaymentMethod.retrieve(pm_id)
     card = pm.card
     # Upsert into payment_methods collection
@@ -955,14 +964,24 @@ async def stripe_card_setup_status(session_id: str, current=Depends(get_current_
             "exp_year": card.exp_year,
             "stripe_payment_method_id": pm_id,
             "stripe_customer_id": s.customer,
-            "is_default": is_default,
+            "stripe_setup_intent_id": getattr(si_obj, "id", None),
+            "setup_status": setup_status,
+            "verified": verified,
+            "is_default": is_default and verified,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         res = await db.payment_methods.insert_one(doc)
         doc["id"] = str(res.inserted_id); doc.pop("_id", None)
-        return {"ready": True, "card": doc}
+        return {"ready": True, "card": doc, "verified": verified}
+    # Update existing record's verification state
+    await db.payment_methods.update_one(
+        {"_id": existing["_id"]},
+        {"$set": {"setup_status": setup_status, "verified": verified}},
+    )
     existing["id"] = str(existing["_id"]); existing.pop("_id", None)
-    return {"ready": True, "card": existing}
+    existing["setup_status"] = setup_status
+    existing["verified"] = verified
+    return {"ready": True, "card": existing, "verified": verified}
 
 
 # ---- Vipps (stub, awaiting API keys) ----

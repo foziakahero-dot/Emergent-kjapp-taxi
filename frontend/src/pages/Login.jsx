@@ -157,10 +157,23 @@ export default function Login() {
             Opprett en
           </Link>
         </p>
+        <button
+          type="button"
+          onClick={() => { setEmail("ola@kjapp.no"); setPassword("test1234"); }}
+          className="mt-4 text-[11px] px-4 py-1.5 rounded-full inline-flex items-center gap-2 transition-colors"
+          style={{ background: "rgba(201,161,91,0.10)", border: "1px solid rgba(201,161,91,0.25)", color: "var(--accent)" }}
+          data-testid="login-demo-fill"
+        >
+          Fyll inn demo-konto (Ola)
+        </button>
         <p className="text-[#5f6862] text-xs mt-3">
           Er du sjåfør?{" "}
           <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
             Sjåfør-innlogging
+          </Link>
+          <span className="mx-2 opacity-40">·</span>
+          <Link to="/apply/fleet" className="text-mint" data-testid="link-loyver-apply">
+            Bli løyvehaver
           </Link>
         </p>
         <p className="text-[#5f6862] text-[11px] mt-4">

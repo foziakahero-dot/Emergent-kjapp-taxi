@@ -28,6 +28,45 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
+## What's Been Implemented (2026-08 — Iter 14: Premium 3D-ish Map + Card Verification + Vehicle Picker Redesign)
+
+### Iter 14 — visuell premium-oppgradering på kunde-siden
+
+**Kontekst**: Bruker rapporterte at kart-navigasjonen var "smsyørlig" (amatør), ba om 3D-biler på kartet, krevet at kort skal være verifisert (ikke bare lagret), bilkategori-UI så amatør ut, og etterlyste synlig sjåfør-inngang.
+
+**Nye komponenter**:
+
+- **`PremiumMap`** (`/app/frontend/src/components/PremiumMap.jsx`) — MapLibre GL JS-wrapper med:
+  - Pitch 45–50° for 3D-effekt (ingen API-nøkkel)
+  - Primary: OpenFreeMap Liberty vektor-stil m/ 3D-bygninger extrusion
+  - Fallback: CartoDB Voyager raster (4s timeout, robust)
+  - Brass polyline i 3 lag (glow + line + kremhvit shimmer-dash)
+  - Custom HTML markers: brass droplet pickup, sjakkflagg dropoff, isometrisk sedan-silhuett med halo (aktiv bil bruker større scale + brass glow)
+  - `followActive`-modus følger bilen med `easeTo` under `in_trip`
+- **Kort-verifisering**:
+  - Backend: `verified` flag på `payment_methods`. `POST /api/trips/request` returnerer nå 402 med "Kortet ditt må verifiseres" dersom ingen metoder har `verified: true`. Stripe SetupIntent-callback setter `verified = (setup_status === "succeeded")`.
+  - Frontend: 3-tilstands `PaymentRow` (mangler kort → Legg til / uverifisert → Kortet må verifiseres / verifisert → grønn "Verifisert"-pill). CTA-knappen viser rett tekst per tilstand.
+- **Premium Vehicle Picker** (`BookingReview`):
+  - Horisontal snap-scroll med 4 kort (Standard/Sparsom/Komfort/Premium)
+  - Unik isometrisk SVG-glyf per kategori (sedan, kompakt m/ løvblad, minivan m/ 3 vinduer, luksus-sedan)
+  - Tagline-chip (RASK / SPAR / FAMILIE / SIGNATURE), kapasitetsikon, pris i tabular-nums
+  - Valgt-tilstand: brass gradient + brass border + brass sjekkmark-badge topphøyre + brass glow
+- **Sjåfør-inngang + Bli løyvehaver** synlige:
+  - Onboarding: nye lenker `onboarding-driver-link` + `onboarding-loyver-link` i footer
+  - Login: eksisterende sjåfør-link + ny `link-loyver-apply` + demo-fill-knapp `login-demo-fill` (autofyller `ola@kjapp.no`/`test1234`)
+- **Sjåfør-app polish**: `DriverHome` online-toggle bruker theme-variabler (rgba white) i stedet for hardkodede tech-blå (`#17222a`/`#263038`). Mint-aksent bevart.
+
+### Iter 14 tests
+- **iter_14**: 59/59 backend grønn (8 nye + 26 iter13 + 25 iter10 regresjon) i 36.6s
+- Full frontend-verifisering på mobil (390×844):
+  - PremiumMap canvas renderer korrekt (Voyager fallback engagerer som designet)
+  - Vehicle picker snap-scroll m/ alle 4 test-ids
+  - PaymentRow 3-tilstands-flyt verifisert ende-til-ende
+  - 0-height-bug på MapLibre fikset (inline `height:100dvh` + `position:absolute inset:0`)
+  - Onboarding + Login lenker verifisert
+- **Total: 373/373 backend-tester grønne**
+- Post-test polish: `defaultMethodVerified`-prop lagt til så "Verifisert"-pill reflekterer FAKTISK default-kort (ikke bare "en verifisert et sted"). Fallback-timer clearer nå på `load`-event (unngår sen swap).
+
 ## What's Been Implemented (2026-08 — Iter 13: Superadmin panel + Løyvehaver-søknader + Object Storage)
 
 ### Iter 13 (nåværende sesjon, del 8) — kun-for-eier admin med subdomain-strategi

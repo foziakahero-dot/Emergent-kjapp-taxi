@@ -1,11 +1,9 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
-import L from "leaflet";
-import { pickupIcon, dropoffIcon, fleetCarIcon } from "../lib/mapAssets";
+import PremiumMap from "../components/PremiumMap";
 import { tripsApi, carsApi, placesApi, pricingApi, paymentApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight } from "lucide-react";
+import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight, Users, Sparkles, Car as CarIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Orb } from "../components/UIKit";
 
@@ -19,21 +17,11 @@ const PLACES_FALLBACK = [
 ];
 
 const VEHICLES = [
-  { id: "ai-first", name: "Standard", desc: "Rask og pålitelig", multiplier: 1.0 },
-  { id: "enkelt", name: "Sparsom", desc: "Beste pris", multiplier: 0.85 },
-  { id: "trygg", name: "Komfort", desc: "Rommelig / familie", multiplier: 1.2 },
-  { id: "premium", name: "Premium", desc: "Business", multiplier: 1.8 },
+  { id: "ai-first",  name: "Standard", desc: "Din raskeste vei hjem",  multiplier: 1.0,  capacity: 4, tagline: "Rask", eta: 3 },
+  { id: "enkelt",    name: "Sparsom",  desc: "Grønnere · lavere pris",  multiplier: 0.85, capacity: 4, tagline: "Spar",  eta: 4 },
+  { id: "trygg",     name: "Komfort",  desc: "Ekstra plass · barnesete", multiplier: 1.2,  capacity: 6, tagline: "Familie", eta: 5 },
+  { id: "premium",   name: "Premium",  desc: "Business · sort bil",     multiplier: 1.8,  capacity: 4, tagline: "Signature", eta: 6 },
 ];
-
-function FitBounds({ points }) {
-  const map = useMap();
-  useEffect(() => {
-    if (points && points.length >= 2) {
-      map.fitBounds(points, { padding: [60, 60], maxZoom: 15 });
-    }
-  }, [points, map]);
-  return null;
-}
 
 export default function Home() {
   const { user } = useAuth();
@@ -51,7 +39,11 @@ export default function Home() {
   const [surge, setSurge] = useState({ active: false, multiplier: 1.0, reasons: [] });
   const [pickupSheetOpen, setPickupSheetOpen] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const verifiedMethods = useMemo(() => paymentMethods.filter((m) => m.verified !== false), [paymentMethods]);
   const hasPaymentMethod = paymentMethods.length > 0;
+  const hasVerifiedPaymentMethod = verifiedMethods.length > 0;
+  const defaultMethod = useMemo(() => verifiedMethods.find((m) => m.is_default) || verifiedMethods[0] || paymentMethods.find((m) => m.is_default) || paymentMethods[0], [paymentMethods, verifiedMethods]);
+  const defaultMethodVerified = !!defaultMethod && defaultMethod.verified !== false;
 
   // Load payment methods to gate booking
   useEffect(() => {
@@ -121,12 +113,6 @@ export default function Home() {
     }
   }, []);
 
-  const routePoints = useMemo(() => {
-    if (!dropoff) return null;
-    if (routeGeom?.coordinates?.length) return routeGeom.coordinates.map(([lng, lat]) => [lat, lng]);
-    return [[pickup.lat, pickup.lng], [dropoff.lat, dropoff.lng]];
-  }, [pickup, dropoff, routeGeom]);
-
   const distanceKm = routeInfo?.distance_km ?? 0;
 
   const estPrice = useMemo(() => {
@@ -137,7 +123,7 @@ export default function Home() {
 
   const requestTrip = async () => {
     if (!dropoff) return;
-    if (!hasPaymentMethod) {
+    if (!hasVerifiedPaymentMethod) {
       navigate("/app/payment-methods?required=1");
       return;
     }
@@ -164,40 +150,31 @@ export default function Home() {
     }
   };
 
+  const mapRoute = useMemo(() => {
+    if (!dropoff) return null;
+    if (routeGeom?.coordinates?.length) return routeGeom.coordinates; // [lng,lat]
+    return [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]];
+  }, [pickup, dropoff, routeGeom]);
+
+  const nearbyCarsForMap = useMemo(() => {
+    if (dropoff) return []; // hide nearby when route is drawn
+    return cars.map((c, i) => ({ lat: c.lat, lng: c.lng, bearing: c.bearing || (i * 47) % 360 }));
+  }, [cars, dropoff]);
+
   return (
     <div className="relative" style={{ height: "calc(100dvh - 80px)" }}>
-      {/* Map */}
+      {/* Map — MapLibre GL 3D */}
       <div className="absolute inset-x-0 top-0 bottom-0">
-        <MapContainer
-          center={[pickup.lat, pickup.lng]}
-          zoom={13}
-          zoomControl={false}
-          className="w-full h-full"
-          attributionControl={true}
-        >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            attribution='&copy; OpenStreetMap, &copy; CartoDB'
-          />
-          <Marker position={[pickup.lat, pickup.lng]} icon={pickupIcon} />
-          {!dropoff && cars.map((c) => (
-            <Marker key={c.id} position={[c.lat, c.lng]} icon={fleetCarIcon} />
-          ))}
-          {dropoff && <Marker position={[dropoff.lat, dropoff.lng]} icon={dropoffIcon} />}
-          {routePoints && (
-            <Polyline
-              positions={routePoints}
-              pathOptions={{ color: "#c9a15b", weight: 5, opacity: 0.95, lineCap: "round", lineJoin: "round" }}
-            />
-          )}
-          {routePoints && (
-            <Polyline
-              positions={routePoints}
-              pathOptions={{ color: "#f4ecd8", weight: 1.2, opacity: 0.9, lineCap: "round", className: "polyline-shimmer" }}
-            />
-          )}
-          {routePoints && <FitBounds points={routePoints} />}
-        </MapContainer>
+        <PremiumMap
+          center={[pickup.lng, pickup.lat]}
+          zoom={13.5}
+          pitch={45}
+          route={mapRoute}
+          pickup={pickup}
+          dropoff={dropoff}
+          cars={nearbyCarsForMap}
+          testid="home-map"
+        />
       </div>
 
       {/* Top header — glass pills, brass accent */}
@@ -334,12 +311,14 @@ export default function Home() {
               onVehicleChange={setVehicle}
               distanceKm={distanceKm}
               estPrice={estPrice}
+              options={routeInfo?.options || []}
               onCancel={() => setDropoff(null)}
               onConfirm={requestTrip}
               requesting={requesting}
               hasPaymentMethod={hasPaymentMethod}
-              defaultCardLabel={paymentMethods.find(m => m.is_default)?.label || paymentMethods[0]?.label}
-              defaultCardLast4={paymentMethods.find(m => m.is_default)?.last4 || paymentMethods[0]?.last4}
+              hasVerifiedPaymentMethod={hasVerifiedPaymentMethod}
+              defaultMethod={defaultMethod}
+              defaultMethodVerified={defaultMethodVerified}
               onAddCard={() => navigate("/app/payment-methods?required=1")}
             />
           )}
@@ -377,7 +356,9 @@ export default function Home() {
   );
 }
 
-function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, onCancel, onConfirm, requesting, hasPaymentMethod, defaultCardLabel, defaultCardLast4, onAddCard }) {
+function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, options, onCancel, onConfirm, requesting, hasPaymentMethod, hasVerifiedPaymentMethod, defaultMethod, defaultMethodVerified, onAddCard }) {
+  const selected = VEHICLES.find((v) => v.id === vehicle) || VEHICLES[0];
+  const priceFor = (vid) => (options?.find?.((o) => o.vehicle_type === vid)?.price) || 0;
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
@@ -395,84 +376,206 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         <button onClick={onCancel} className="text-xs hover:opacity-70" style={{ color: "var(--text-muted)" }} data-testid="booking-cancel">Endre</button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        {VEHICLES.map((v) => (
-          <button
-            key={v.id}
-            onClick={() => onVehicleChange(v.id)}
-            data-testid={`vehicle-${v.id}`}
-            className="px-3 py-2.5 rounded-2xl text-left transition-all"
-            style={{
-              background: vehicle === v.id ? "rgba(201,161,91,0.10)" : "rgba(232,224,208,0.04)",
-              border: `1px solid ${vehicle === v.id ? "rgba(201,161,91,0.35)" : "rgba(232,224,208,0.08)"}`,
-            }}
-          >
-            <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{v.name}</div>
-            <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{v.desc}</div>
-          </button>
-        ))}
+      {/* Premium horizontal vehicle picker — snap-scroll on mobile */}
+      <div className="-mx-4 px-4 mb-3 flex gap-2.5 overflow-x-auto no-scrollbar scroll-smooth" style={{ scrollSnapType: "x mandatory" }}>
+        {VEHICLES.map((v) => {
+          const active = vehicle === v.id;
+          const price = priceFor(v.id);
+          return (
+            <button
+              key={v.id}
+              onClick={() => onVehicleChange(v.id)}
+              data-testid={`vehicle-${v.id}`}
+              className="shrink-0 rounded-2xl p-3 relative overflow-hidden transition-all"
+              style={{
+                minWidth: 138,
+                background: active ? "linear-gradient(155deg, rgba(201,161,91,0.16), rgba(201,161,91,0.06))" : "rgba(232,224,208,0.04)",
+                border: `1px solid ${active ? "rgba(201,161,91,0.55)" : "rgba(232,224,208,0.08)"}`,
+                boxShadow: active ? "0 8px 30px var(--accent-glow)" : "none",
+                scrollSnapAlign: "start",
+              }}
+            >
+              {/* car silhouette (SVG isometric) */}
+              <div className="h-11 flex items-center justify-center mb-1.5" aria-hidden>
+                <VehicleGlyph id={v.id} active={active} />
+              </div>
+              <div className="flex items-baseline justify-between mb-0.5">
+                <div className="text-[13px] font-medium" style={{ color: "var(--text)" }}>{v.name}</div>
+                <div className="text-[9px] tracking-widest uppercase" style={{ color: active ? "var(--accent)" : "var(--text-muted)" }}>{v.tagline}</div>
+              </div>
+              <div className="text-[10px] leading-tight" style={{ color: "var(--text-muted)" }}>{v.desc}</div>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: "rgba(232,224,208,0.08)" }}>
+                <div className="flex items-center gap-1 text-[10px]" style={{ color: "var(--text-muted)" }}>
+                  <Users size={11} /> {v.capacity}
+                </div>
+                <div className="font-display text-[15px] leading-none" style={{ color: active ? "var(--accent)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                  {price} kr
+                </div>
+              </div>
+              {active && (
+                <div className="absolute top-2 right-2 w-4 h-4 rounded-full grid place-items-center" style={{ background: "var(--accent)" }}>
+                  <svg viewBox="0 0 24 24" width="10" height="10" fill="none"><path d="M5 12l5 5L20 7" stroke="var(--accent-on)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-sm" style={{ color: "var(--text-muted)" }}>{distanceKm.toFixed(1)} km · est.</span>
-        <span className="font-display text-[22px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estPrice} kr</span>
+        <span className="text-sm" style={{ color: "var(--text-muted)" }}>{distanceKm.toFixed(1)} km · ~{selected.eta} min ventetid</span>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Estimat</div>
+          <div className="font-display text-[22px] leading-none" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estPrice} kr</div>
+        </div>
       </div>
 
-      {/* Payment method row */}
-      {hasPaymentMethod ? (
-        <button
-          onClick={onAddCard}
-          data-testid="booking-payment-row"
-          className="w-full mb-3 flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-colors text-left"
-          style={{
-            background: "rgba(232,224,208,0.04)",
-            border: "1px solid rgba(232,224,208,0.08)",
-          }}
-        >
-          <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(201,161,91,0.12)" }}>
-            <CreditCard size={16} style={{ color: "var(--accent)" }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm" style={{ color: "var(--text)" }}>{defaultCardLabel || "Kort"}{defaultCardLast4 ? ` •• ${defaultCardLast4}` : ""}</div>
-            <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Trykk for å bytte</div>
-          </div>
-          <ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
-        </button>
-      ) : (
-        <button
-          onClick={onAddCard}
-          data-testid="booking-add-card"
-          className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors text-left"
-          style={{
-            background: "rgba(215,106,90,0.10)",
-            border: "1px solid rgba(215,106,90,0.30)",
-          }}
-        >
-          <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(215,106,90,0.18)" }}>
-            <AlertTriangle size={16} style={{ color: "#e39e5c" }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium" style={{ color: "#e8c9b0" }}>Legg til betalingskort først</div>
-            <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Vi må ha et gyldig kort før du kan bestille</div>
-          </div>
-        </button>
-      )}
+      {/* Payment method row with verification status */}
+      <PaymentRow
+        hasPaymentMethod={hasPaymentMethod}
+        hasVerified={hasVerifiedPaymentMethod}
+        defaultMethod={defaultMethod}
+        defaultMethodVerified={defaultMethodVerified}
+        onAddCard={onAddCard}
+      />
 
       <button
         onClick={onConfirm}
-        disabled={requesting || !hasPaymentMethod}
+        disabled={requesting || !hasVerifiedPaymentMethod}
         data-testid="booking-confirm"
         className="btn-primary w-full flex items-center justify-center gap-2"
       >
         {requesting ? (
           <span className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--accent-on)", borderTopColor: "transparent" }} />
-        ) : hasPaymentMethod ? (
-          <>Bestill nå · {estPrice} kr</>
-        ) : (
+        ) : !hasPaymentMethod ? (
           <>Legg til kort for å bestille</>
+        ) : !hasVerifiedPaymentMethod ? (
+          <>Verifiser kortet for å bestille</>
+        ) : (
+          <>Bestill nå · {estPrice} kr</>
         )}
       </button>
     </div>
+  );
+}
+
+/* Premium isometric car glyph per category */
+function VehicleGlyph({ id, active }) {
+  const stroke = active ? "#c9a15b" : "rgba(232,224,208,0.55)";
+  const fill = active ? "#0c1216" : "#0e1418";
+  const glass = active ? "#c9a15b" : "rgba(232,224,208,0.45)";
+  if (id === "premium") {
+    return (
+      <svg viewBox="0 0 68 40" width="70" height="40" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="34" cy="35" rx="26" ry="3" fill="#000" opacity="0.35"/>
+        <path d="M8 26 Q10 16 24 14 L44 14 Q58 16 60 26 L60 30 Q60 32 58 32 L10 32 Q8 32 8 30 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
+        <path d="M18 18 Q20 12 26 12 L42 12 Q48 12 50 18 L50 22 L18 22 Z" fill={glass} opacity="0.9"/>
+        <circle cx="20" cy="32" r="4" fill="#000"/><circle cx="20" cy="32" r="2" fill={stroke}/>
+        <circle cx="48" cy="32" r="4" fill="#000"/><circle cx="48" cy="32" r="2" fill={stroke}/>
+        <rect x="55" y="24" width="4" height="2" rx="1" fill="#fff9e8"/>
+      </svg>
+    );
+  }
+  if (id === "trygg") {
+    return (
+      <svg viewBox="0 0 68 40" width="66" height="40" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="34" cy="35" rx="26" ry="3" fill="#000" opacity="0.35"/>
+        <path d="M8 22 L8 30 Q8 32 10 32 L58 32 Q60 32 60 30 L60 22 Q60 10 46 10 L22 10 Q8 10 8 22 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
+        <path d="M12 14 L26 14 L26 22 L12 22 Z" fill={glass} opacity="0.85"/>
+        <path d="M28 14 L44 14 L44 22 L28 22 Z" fill={glass} opacity="0.85"/>
+        <path d="M46 14 L56 14 Q56 22 56 22 L46 22 Z" fill={glass} opacity="0.85"/>
+        <circle cx="20" cy="32" r="4" fill="#000"/><circle cx="20" cy="32" r="2" fill={stroke}/>
+        <circle cx="48" cy="32" r="4" fill="#000"/><circle cx="48" cy="32" r="2" fill={stroke}/>
+      </svg>
+    );
+  }
+  if (id === "enkelt") {
+    return (
+      <svg viewBox="0 0 68 40" width="64" height="40" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="34" cy="35" rx="24" ry="3" fill="#000" opacity="0.35"/>
+        <path d="M12 24 Q14 18 22 16 L46 16 Q54 18 56 24 L56 30 Q56 32 54 32 L14 32 Q12 32 12 30 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
+        <path d="M22 18 L46 18 L48 22 L20 22 Z" fill={glass} opacity="0.85"/>
+        <circle cx="22" cy="32" r="4" fill="#000"/><circle cx="22" cy="32" r="2" fill={stroke}/>
+        <circle cx="46" cy="32" r="4" fill="#000"/><circle cx="46" cy="32" r="2" fill={stroke}/>
+        {/* leaf motif */}
+        <path d="M54 18 Q58 16 60 20 Q58 22 54 20 Z" fill="#8ac48f"/>
+      </svg>
+    );
+  }
+  // ai-first / Standard — modern sedan
+  return (
+    <svg viewBox="0 0 68 40" width="66" height="40" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="34" cy="35" rx="25" ry="3" fill="#000" opacity="0.35"/>
+      <path d="M10 25 Q12 18 22 15 L46 15 Q56 18 58 25 L58 30 Q58 32 56 32 L12 32 Q10 32 10 30 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
+      <path d="M20 18 L48 18 L50 22 L18 22 Z" fill={glass} opacity="0.9"/>
+      <circle cx="21" cy="32" r="4" fill="#000"/><circle cx="21" cy="32" r="2" fill={stroke}/>
+      <circle cx="47" cy="32" r="4" fill="#000"/><circle cx="47" cy="32" r="2" fill={stroke}/>
+    </svg>
+  );
+}
+
+/* Payment row with verification pill */
+function PaymentRow({ hasPaymentMethod, hasVerified, defaultMethod, defaultMethodVerified, onAddCard }) {
+  if (!hasPaymentMethod) {
+    return (
+      <button
+        onClick={onAddCard}
+        data-testid="booking-add-card"
+        className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors text-left"
+        style={{ background: "rgba(215,106,90,0.10)", border: "1px solid rgba(215,106,90,0.30)" }}
+      >
+        <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(215,106,90,0.18)" }}>
+          <AlertTriangle size={16} style={{ color: "#e39e5c" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium" style={{ color: "#e8c9b0" }}>Legg til betalingskort først</div>
+          <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Vi må ha et gyldig kort før du kan bestille</div>
+        </div>
+      </button>
+    );
+  }
+  if (!hasVerified) {
+    return (
+      <button
+        onClick={onAddCard}
+        data-testid="booking-verify-card"
+        className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors text-left"
+        style={{ background: "rgba(215,106,90,0.10)", border: "1px solid rgba(215,106,90,0.30)" }}
+      >
+        <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(215,106,90,0.18)" }}>
+          <AlertTriangle size={16} style={{ color: "#e39e5c" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium" style={{ color: "#e8c9b0" }}>Kortet må verifiseres</div>
+          <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Fullfør 3D-Secure på kortet før første tur</div>
+        </div>
+        <ChevronRight size={16} style={{ color: "#e39e5c" }} />
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onAddCard}
+      data-testid="booking-payment-row"
+      className="w-full mb-3 flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-colors text-left"
+      style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.08)" }}
+    >
+      <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(201,161,91,0.12)" }}>
+        <CreditCard size={16} style={{ color: "var(--accent)" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm flex items-center gap-2 flex-wrap" style={{ color: "var(--text)" }}>
+          <span className="truncate">{defaultMethod?.label || "Kort"}{defaultMethod?.last4 ? ` •• ${defaultMethod.last4}` : ""}</span>
+          {defaultMethodVerified ? (
+            <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(138,196,143,0.14)", color: "#8ac48f" }}>Verifisert</span>
+          ) : (
+            <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(215,106,90,0.14)", color: "#e39e5c" }}>Uverifisert</span>
+          )}
+        </div>
+        <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Trykk for å bytte</div>
+      </div>
+      <ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
+    </button>
   );
 }
 
