@@ -106,6 +106,17 @@ body.driver-theme {
   .phone-shell { max-width: 100%; }
 }
 
+/* Native app tweaks (Capacitor) */
+body.is-native {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+body.is-native .phone-shell {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 .status-bar { display: none !important; }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">KJAPP</string>
+    <string name="title_activity_main">KJAPP</string>
+    <string name="package_name">no.kjapp.app</string>
+    <string name="custom_url_scheme">no.kjapp.app</string>
+</resources>

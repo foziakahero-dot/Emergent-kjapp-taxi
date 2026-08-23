@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { aiApi, tripsApi, placesApi } from "../lib/api";
 import { Orb, VoiceBars } from "../components/UIKit";
-import { Mic, SendHorizonal, ChevronLeft, MapPin, Check } from "lucide-react";
+import { Mic, SendHorizonal, ChevronLeft, MapPin, Check, Sparkles, Wallet, Car as CarIcon, Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const SUGGESTIONS = [
@@ -22,10 +22,10 @@ const PLACES_FALLBACK = [
 ];
 
 const VEHICLE_META = {
-  "ai-first": { name: "AI-First", desc: "Smart tildeling", icon: "✨" },
-  "enkelt": { name: "Enkelt", desc: "Beste pris", icon: "🚗" },
-  "trygg": { name: "Trygg", desc: "Erfarne sjåfører", icon: "🛡️" },
-  "premium": { name: "Premium", desc: "Tesla Model S", icon: "⭐" },
+  "ai-first": { name: "Standard", desc: "Smart tildeling", Icon: Sparkles },
+  "enkelt": { name: "Sparsom", desc: "Beste pris", Icon: Wallet },
+  "trygg": { name: "Komfort", desc: "Familie / plassrik", Icon: CarIcon },
+  "premium": { name: "Premium", desc: "Business — Tesla / Mercedes", Icon: Star },
 };
 
 export default function AIChat() {
@@ -35,6 +35,10 @@ export default function AIChat() {
   const [bookingStep, setBookingStep] = useState(null); // null | 'pickup' | 'dropoff' | 'category' | 'confirm' | 'booking'
   const [booking, setBooking] = useState({ pickup: null, dropoff: null, vehicle: null, estimate: null });
   const [places, setPlaces] = useState(PLACES_FALLBACK);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recRef = useRef(null);
+  const chunksRef = useRef([]);
   const endRef = useRef(null);
   const navigate = useNavigate();
 
@@ -121,7 +125,7 @@ export default function AIChat() {
       });
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: `✅ Bestilling bekreftet! Vi finner en sjåfør til deg nå…` },
+        { role: "assistant", content: `Bestilling bekreftet. Vi finner en sjåfør til deg nå.` },
       ]);
       setTimeout(() => navigate(`/app/booking/${trip.trip_id}`), 1200);
     } catch (e) {
@@ -163,6 +167,56 @@ export default function AIChat() {
   };
 
   const empty = messages.length === 0 && !bookingStep;
+
+  const stopRecording = () => {
+    if (recRef.current && recRef.current.state !== "inactive") {
+      recRef.current.stop();
+    }
+  };
+
+  const startRecording = async () => {
+    if (recording || transcribing) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const rec = new MediaRecorder(stream, { mimeType: mime });
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: mime });
+        if (blob.size < 1000) return;
+        setTranscribing(true);
+        try {
+          const b64 = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result).split(",")[1]);
+            r.onerror = rej;
+            r.readAsDataURL(blob);
+          });
+          const r = await aiApi.transcribe(b64, mime, "no");
+          const text = (r.text || "").trim();
+          if (text) {
+            setInput(text);
+            // Auto-send after brief pause so user can see what was heard
+            setTimeout(() => send(text), 400);
+          }
+        } catch (e) {
+          alert("Kunne ikke transkribere: " + (e.response?.data?.detail || "prøv igjen"));
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      recRef.current = rec;
+      rec.start();
+      setRecording(true);
+      // Auto-stop after 15s max
+      setTimeout(() => { if (rec.state === "recording") rec.stop(); }, 15000);
+    } catch (e) {
+      alert("Mikrofon-tilgang avslått: " + (e.message || "prøv igjen"));
+    }
+  };
 
   return (
     <div className="flex flex-col" style={{ minHeight: "calc(100dvh - 80px)" }}>
@@ -242,19 +296,23 @@ export default function AIChat() {
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2 px-1">
                   {m.options.map((opt) => {
                     const meta = VEHICLE_META[opt.vehicle_type];
+                    const Ic = meta.Icon || Sparkles;
                     return (
                       <button
                         key={opt.vehicle_type}
                         onClick={() => pickCategory(opt)}
                         data-testid={`ai-category-${opt.vehicle_type}`}
-                        className="w-full flex items-center gap-3 p-3 rounded-2xl bg-[#17222a] border border-line hover:border-mint transition-colors text-left"
+                        className="w-full flex items-center gap-3 p-3 rounded-2xl transition-colors text-left"
+                        style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.10)" }}
                       >
-                        <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center text-lg">{meta.icon}</div>
-                        <div className="flex-1">
-                          <div className="text-white text-sm font-medium">{meta.name}</div>
-                          <div className="text-[11px] text-[#7a827a]">{meta.desc} · {opt.eta_min} min</div>
+                        <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.12)" }}>
+                          <Ic size={16} style={{ color: "var(--accent)" }} />
                         </div>
-                        <div className="text-white font-semibold">{opt.price} kr</div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{meta.name}</div>
+                          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{meta.desc} · {opt.eta_min} min</div>
+                        </div>
+                        <div className="font-display text-[16px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{opt.price} kr</div>
                       </button>
                     );
                   })}
@@ -307,18 +365,33 @@ export default function AIChat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="Skriv en melding…"
+            placeholder={transcribing ? "Hører hva du sier…" : recording ? "Snakker… (trykk stopp)" : "Skriv en melding…"}
             className="input flex-1"
+            disabled={recording || transcribing}
             data-testid="chat-input"
           />
-          <button
-            onClick={() => send()}
-            disabled={sending || !input.trim()}
-            data-testid="chat-send"
-            className="w-12 h-12 rounded-full bg-mint text-[#04120a] grid place-items-center mint-glow disabled:opacity-50"
-          >
-            {input.trim() ? <SendHorizonal size={18} /> : <Mic size={18} />}
-          </button>
+          {input.trim() ? (
+            <button
+              onClick={() => send()}
+              disabled={sending}
+              data-testid="chat-send"
+              className="w-12 h-12 rounded-full bg-mint text-[#04120a] grid place-items-center mint-glow disabled:opacity-50"
+            >
+              <SendHorizonal size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={recording ? stopRecording : startRecording}
+              disabled={transcribing}
+              data-testid="chat-mic"
+              className={`w-12 h-12 rounded-full grid place-items-center disabled:opacity-50 ${
+                recording ? "bg-red-500 text-white animate-pulse" : "bg-mint text-[#04120a] mint-glow"
+              }`}
+              title={recording ? "Stopp opptak" : "Snakk til KJAPP AI"}
+            >
+              <Mic size={18} />
+            </button>
+          )}
         </div>
       </div>
     </div>

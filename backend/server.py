@@ -3,6 +3,7 @@ load_dotenv()
 
 import os
 import asyncio
+import math
 import random
 import secrets
 import json
@@ -497,7 +498,81 @@ async def lifespan(app: FastAPI):
             {"email": driver_email, "role": "driver", "$or": [{"car": {"$exists": False}}, {"car": None}]},
             {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
         )
+
+    # ---- Seed always-online DEMO DRIVERS with live GPS heartbeats (Oslo) ----
+    # These are REAL driver records in the DB — passenger sees them as normal cars.
+    # A background task updates their positions every 6s so /api/cars/nearby returns them.
+    demo_drivers = [
+        {"email": "demo1@kjapp.no", "fullName": "Karl Kjøresen", "car": "Toyota Camry", "plate": "AB 11101", "vehicle_type": "ai-first", "lat": 59.9169, "lng": 10.7383, "bearing": 90},
+        {"email": "demo2@kjapp.no", "fullName": "Anna Andersen", "car": "Skoda Octavia", "plate": "CD 22202", "vehicle_type": "enkelt", "lat": 59.9106, "lng": 10.7285, "bearing": 45},
+        {"email": "demo3@kjapp.no", "fullName": "Erik Eriksen", "car": "VW ID.4", "plate": "EL 33303", "vehicle_type": "ai-first", "lat": 59.9210, "lng": 10.7450, "bearing": 180},
+        {"email": "demo4@kjapp.no", "fullName": "Marte Berg", "car": "Mercedes E-klasse", "plate": "SL 44404", "vehicle_type": "premium", "lat": 59.9055, "lng": 10.7561, "bearing": 270},
+        {"email": "demo5@kjapp.no", "fullName": "Jonas Hansen", "car": "Toyota Sienna", "plate": "TR 55505", "vehicle_type": "trygg", "lat": 59.9145, "lng": 10.7590, "bearing": 135},
+        {"email": "demo6@kjapp.no", "fullName": "Sara Solheim", "car": "Kia EV6", "plate": "EL 66606", "vehicle_type": "ai-first", "lat": 59.9245, "lng": 10.7370, "bearing": 210},
+    ]
+    for d in demo_drivers:
+        existing = await db.users.find_one({"email": d["email"]})
+        base = {
+            "email": d["email"],
+            "password_hash": hash_password("demo1234"),
+            "fullName": d["fullName"],
+            "phone": "+4790000000",
+            "role": "driver",
+            "car": d["car"],
+            "plate": d["plate"],
+            "vehicle_type": d["vehicle_type"],
+            "rating": 4.9,
+            "approved": True,
+            "online": True,
+            "demo": True,
+            "last_lat": d["lat"],
+            "last_lng": d["lng"],
+            "last_heading": d["bearing"],
+            "last_location_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if not existing:
+            base["created_at"] = datetime.now(timezone.utc).isoformat()
+            await db.users.insert_one(base)
+        else:
+            base.pop("password_hash")
+            await db.users.update_one({"_id": existing["_id"]}, {"$set": base})
+
+    # Background task: keep demo drivers cruising (updates every 6s)
+    async def cruise_demo_drivers():
+        while True:
+            try:
+                await asyncio.sleep(6)
+                async for u in db.users.find({"demo": True, "role": "driver"}):
+                    # Small random-ish forward step + slow bearing drift
+                    import random as _r
+                    heading = (u.get("last_heading", 0) + _r.uniform(-8, 8)) % 360
+                    step = 0.0006  # ~65m
+                    dlat = step * math.cos(math.radians(heading))
+                    dlng = step * math.sin(math.radians(heading)) / max(math.cos(math.radians(u.get("last_lat", 59.9139))), 0.1)
+                    new_lat = u.get("last_lat", 59.9139) + dlat
+                    new_lng = u.get("last_lng", 10.7522) + dlng
+                    # Keep them within Oslo bbox ~5km
+                    if abs(new_lat - 59.914) > 0.05 or abs(new_lng - 10.75) > 0.09:
+                        heading = (heading + 180) % 360
+                        new_lat = u.get("last_lat", 59.9139)
+                        new_lng = u.get("last_lng", 10.7522)
+                    await db.users.update_one(
+                        {"_id": u["_id"]},
+                        {"$set": {
+                            "last_lat": new_lat,
+                            "last_lng": new_lng,
+                            "last_heading": heading,
+                            "last_location_at": datetime.now(timezone.utc).isoformat(),
+                            "online": True,
+                        }},
+                    )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[cruise] error: {e}")
+    cruise_task = asyncio.create_task(cruise_demo_drivers())
     yield
+    cruise_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -516,6 +591,22 @@ api = APIRouter(prefix="/api")
 @api.get("/")
 async def root():
     return {"app": "KJAPP", "status": "ok"}
+
+
+@api.get("/health")
+async def health():
+    """Health check used by mobile apps + external uptime monitors."""
+    try:
+        await db.command("ping")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return {
+        "app": "KJAPP",
+        "status": "ok" if db_ok else "degraded",
+        "db": db_ok,
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 # ---- Available cars nearby (real driver fleet from DB) ----
@@ -550,6 +641,7 @@ async def cars_nearby(body: NearbyCarsRequest):
             "type": u.get("vehicle_type") or "ai-first",
             "lat": lat,
             "lng": lng,
+            "heading": u.get("last_heading") or 0,
             "eta_min": eta,
             "distance_km": round(d_km, 2),
         })
@@ -807,6 +899,28 @@ async def _load_trip_or_403(trip_id: str, current: dict):
     return trip, is_passenger, is_driver
 
 
+async def _translate_via_llm(text: str, target_lang: str) -> Optional[str]:
+    """Best-effort translation using Emergent LLM key (Claude Sonnet). Returns None on failure."""
+    if not EMERGENT_LLM_KEY or not text.strip():
+        return None
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"translate_{uuid.uuid4().hex[:8]}",
+            system_message=(
+                "You are a professional translator. Translate the user's message to the requested language. "
+                "Output ONLY the translated text — no preface, no quotes, no notes. Preserve slang and tone."
+            ),
+        ).with_model("openai", "gpt-5.6-luna")
+        prompt = f"Translate to {target_lang}: {text}"
+        out = await chat.send_message(UserMessage(text=prompt))
+        return (out or "").strip()
+    except Exception as e:
+        print(f"[translate] failed: {e}")
+        return None
+
+
 @api.post("/trips/{trip_id}/messages")
 async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depends(get_current_user)):
     trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
@@ -836,6 +950,117 @@ async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depe
             f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
         )
     return msg
+
+
+class TranslateRequest(BaseModel):
+    text: str
+    target_lang: str  # e.g. "no", "en", "pl", "ur", "so"
+
+
+@api.post("/ai/translate")
+async def ai_translate(body: TranslateRequest, current=Depends(get_current_user)):
+    """
+    Auto-translate a chat message. Passenger + driver both use this from ChatModal
+    (small "Oversett" button under each message). Cached per (text+target) in Mongo
+    to avoid re-hitting the LLM.
+    """
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "Mangler tekst")
+    if len(text) > 800:
+        raise HTTPException(400, "Teksten er for lang")
+    lang = (body.target_lang or "no").strip().lower()
+    if lang not in {"no", "nb", "nn", "en", "sv", "da", "de", "es", "fr", "pl", "ur", "ar", "so", "ti", "fa", "tr", "ru", "uk", "vi", "th", "zh", "hi"}:
+        raise HTTPException(400, "Språk støttes ikke")
+    # Cache lookup (30-day TTL — cache invalidates if translation is older than 30 days)
+    key = {"text": text, "target": lang}
+    now = datetime.now(timezone.utc)
+    ttl_cutoff = (now - timedelta(days=30)).isoformat()
+    cached = await db.translation_cache.find_one({**key, "created_at": {"$gte": ttl_cutoff}})
+    if cached and cached.get("translation"):
+        return {"translation": cached["translation"], "cached": True, "target_lang": lang}
+    # Full name of language for the prompt
+    lang_name = {
+        "no": "Norwegian (Bokmål)", "nb": "Norwegian (Bokmål)", "nn": "Norwegian Nynorsk",
+        "en": "English", "sv": "Swedish", "da": "Danish", "de": "German", "es": "Spanish",
+        "fr": "French", "pl": "Polish", "ur": "Urdu", "ar": "Arabic", "so": "Somali",
+        "ti": "Tigrinya", "fa": "Persian", "tr": "Turkish", "ru": "Russian", "uk": "Ukrainian",
+        "vi": "Vietnamese", "th": "Thai", "zh": "Chinese (Simplified)", "hi": "Hindi",
+    }.get(lang, "English")
+    translation = await _translate_via_llm(text, lang_name)
+    if not translation:
+        raise HTTPException(503, "AI-oversettelse er utilgjengelig akkurat nå")
+    await db.translation_cache.update_one(
+        key,
+        {"$set": {**key, "translation": translation, "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"translation": translation, "cached": False, "target_lang": lang}
+
+
+class TranscribeRequest(BaseModel):
+    audio_base64: str
+    mime_type: Optional[str] = "audio/webm"
+    language: Optional[str] = None  # optional ISO 639-1
+
+
+@api.post("/ai/transcribe")
+async def ai_transcribe(body: TranscribeRequest, current=Depends(get_current_user)):
+    """
+    Speech-to-text via OpenAI Whisper (via Emergent LLM key).
+    Used by:
+    - Passenger: hands-free chat with the KJAPP AI ("hvor er sjåføren?").
+    - Driver: dictate to passenger without touching phone.
+    """
+    if not body.audio_base64:
+        raise HTTPException(400, "Mangler lyd")
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(503, "AI-nøkkel mangler")
+    try:
+        raw = base64.b64decode(body.audio_base64)
+    except Exception:
+        raise HTTPException(400, "Ugyldig lyd (base64)")
+    if len(raw) < 500:
+        raise HTTPException(400, "Lydklipp for kort")
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(400, "Lydklipp for stort (maks 25 MB)")
+
+    try:
+        from emergentintegrations.llm.openai import OpenAISpeechToText
+        import io as _io
+
+        # Best-guess extension from mime type; whisper-1 supports: mp3, mp4, mpeg, mpga, m4a, wav, webm
+        mime = (body.mime_type or "audio/webm").lower()
+        ext = "webm"
+        if "mp3" in mime: ext = "mp3"
+        elif "wav" in mime: ext = "wav"
+        elif "m4a" in mime: ext = "m4a"
+        elif "mp4" in mime: ext = "mp4"
+        elif "mpeg" in mime: ext = "mpeg"
+        elif "ogg" in mime:
+            raise HTTPException(400, "Lydformat ogg støttes ikke — bruk webm eller mp3")
+
+        buf = _io.BytesIO(raw)
+        buf.name = f"audio.{ext}"
+
+        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        kwargs = {"file": buf, "model": "whisper-1", "response_format": "json"}
+        if body.language:
+            kwargs["language"] = body.language
+        response = await stt.transcribe(**kwargs)
+        text = getattr(response, "text", None) or (response.get("text") if isinstance(response, dict) else str(response))
+    except HTTPException:
+        raise
+    except Exception as e:
+        err = str(e).lower()
+        print(f"[whisper] failed: {e}")
+        if "quota" in err or "rate" in err or "limit" in err:
+            raise HTTPException(429, "For mange forespørsler — prøv igjen om litt")
+        if "unsupported" in err or "format" in err:
+            raise HTTPException(400, "Lydformat støttes ikke")
+        raise HTTPException(502, "STT-tjeneste utilgjengelig")
+
+    return {"text": (text or "").strip()}
 
 
 @api.get("/trips/{trip_id}/messages")
@@ -1319,6 +1544,36 @@ async def push_test(current=Depends(get_current_user)):
     return {"ok": True}
 
 
+class NativePushSubscribeRequest(BaseModel):
+    platform: Literal["ios", "android", "web"]
+    token: str
+    device_id: Optional[str] = None
+
+
+@api.post("/push/native-subscribe")
+async def push_native_subscribe(body: NativePushSubscribeRequest, current=Depends(get_current_user)):
+    """
+    Store a native push token (APNs for iOS or FCM for Android) so backend can push notifications
+    to the mobile app. Actual APNs/FCM sender is added later (server key required).
+    Composite key is (user_id, platform, device_id) so multi-device users don't overwrite each other.
+    """
+    if not body.token:
+        raise HTTPException(status_code=400, detail="Mangler token")
+    dev_id = body.device_id or body.token[-12:]  # fallback so key is stable per token
+    await db.native_push_tokens.update_one(
+        {"user_id": current["id"], "platform": body.platform, "device_id": dev_id},
+        {"$set": {
+            "user_id": current["id"],
+            "platform": body.platform,
+            "device_id": dev_id,
+            "token": body.token,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
 # ============================================================
 # Google Sign-In via Emergent-managed auth
 # ============================================================
@@ -1544,6 +1799,150 @@ async def fleet_payouts(current=Depends(require_fleet_owner)):
     async for p in db.fleet_payouts.find({"fleet_id": fid}).sort("period_end", -1).limit(24):
         p["id"] = str(p["_id"]); p.pop("_id", None); payouts.append(p)
     return {"payouts": payouts}
+
+
+@api.get("/fleet/export/monthly")
+async def fleet_export_monthly(
+    year: int,
+    month: int,
+    current=Depends(require_fleet_owner),
+):
+    """
+    Export a fleet's monthly trips + payouts as an Excel workbook (.xlsx).
+    Tax/regnskap-ready: 3 sheets → Summary, Trips, Drivers-breakdown.
+    """
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    if month < 1 or month > 12 or year < 2020 or year > 2100:
+        raise HTTPException(400, "Ugyldig år/måned")
+
+    fid = await get_fleet_id_for(current)
+    if not fid: raise HTTPException(404, "Ingen flåte")
+
+    fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
+    commission = float(fleet_doc.get("commission_rate", 0.20))
+    fleet_name = fleet_doc.get("name", "Flåte")
+
+    # Date range
+    start_iso = datetime(year, month, 1, tzinfo=timezone.utc).isoformat()
+    if month == 12:
+        end_dt = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end_dt = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    end_iso = end_dt.isoformat()
+
+    # Drivers
+    drivers_map = {}
+    async for d in db.users.find({"role": "driver", "fleet_id": fid}, {"password_hash": 0}):
+        drivers_map[str(d["_id"])] = {
+            "id": str(d["_id"]),
+            "name": d.get("full_name") or d.get("fullName") or "—",
+            "email": d.get("email", ""),
+            "plate": d.get("plate", ""),
+            "car": d.get("car", ""),
+            "trips": 0,
+            "gross": 0,
+        }
+    driver_ids = list(drivers_map.keys())
+
+    # Trips in month
+    trips = []
+    if driver_ids:
+        async for t in db.trips.find({
+            "driver_id": {"$in": driver_ids},
+            "status": {"$in": ["arrived", "completed", "rated"]},
+            "created_at": {"$gte": start_iso, "$lt": end_iso},
+        }):
+            trips.append(t)
+            did = t.get("driver_id")
+            if did in drivers_map:
+                drivers_map[did]["trips"] += 1
+                drivers_map[did]["gross"] += t.get("price", 0)
+
+    total_gross = sum(t.get("price", 0) for t in trips)
+    total_trips = len(trips)
+    total_commission = int(round(total_gross * commission))
+    total_net = total_gross - total_commission
+
+    # Build workbook
+    wb = Workbook()
+    thin_hdr = Font(bold=True, color="FFFFFF")
+    hdr_fill = PatternFill("solid", fgColor="0a1220")
+    total_fill = PatternFill("solid", fgColor="e9d9c1")
+
+    # 1) Summary sheet
+    ws = wb.active
+    ws.title = "Sammendrag"
+    ws.append([f"KJAPP — {fleet_name}"])
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.append([f"Periode: {year}-{month:02d}"])
+    ws.append([])
+    for k, v in [
+        ("Antall turer", total_trips),
+        ("Brutto omsetning (NOK)", total_gross),
+        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
+        ("Netto til flåte (NOK)", total_net),
+        ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
+    ]:
+        ws.append([k, v])
+    for row in ws["A4:B8"]:
+        row[0].font = Font(bold=True)
+    ws.column_dimensions["A"].width = 42
+    ws.column_dimensions["B"].width = 18
+
+    # 2) Sjåfør-brekke
+    ws2 = wb.create_sheet("Sjåfører")
+    headers = ["Sjåfør", "E-post", "Bil", "Skilt", "Turer", "Brutto (NOK)", "Provisjon (NOK)", "Netto (NOK)"]
+    ws2.append(headers)
+    for c in ws2[1]:
+        c.font = thin_hdr; c.fill = hdr_fill; c.alignment = Alignment(horizontal="center")
+    for d in sorted(drivers_map.values(), key=lambda x: -x["gross"]):
+        d_com = int(round(d["gross"] * commission))
+        ws2.append([d["name"], d["email"], d["car"], d["plate"], d["trips"], d["gross"], d_com, d["gross"] - d_com])
+    # Totals row
+    ws2.append([])
+    ws2.append(["TOTAL", "", "", "", total_trips, total_gross, total_commission, total_net])
+    for c in ws2[ws2.max_row]:
+        c.font = Font(bold=True); c.fill = total_fill
+    widths = [22, 26, 20, 12, 10, 16, 18, 16]
+    for i, w in enumerate(widths, 1):
+        ws2.column_dimensions[chr(64 + i)].width = w
+
+    # 3) All trips
+    ws3 = wb.create_sheet("Turer")
+    trip_headers = ["Dato", "Tur ID", "Sjåfør", "Hentested", "Destinasjon", "Distanse (km)", "Pris (NOK)", "Betaling", "Status"]
+    ws3.append(trip_headers)
+    for c in ws3[1]:
+        c.font = thin_hdr; c.fill = hdr_fill; c.alignment = Alignment(horizontal="center")
+    for t in sorted(trips, key=lambda x: x.get("created_at", "")):
+        drv = drivers_map.get(t.get("driver_id"), {})
+        ws3.append([
+            (t.get("created_at") or "")[:10],
+            str(t.get("_id", "")),
+            drv.get("name", "—"),
+            (t.get("origin") or {}).get("name", "") or (t.get("pickup") or {}).get("name", ""),
+            (t.get("destination") or {}).get("name", "") or (t.get("dropoff") or {}).get("name", ""),
+            round(float(t.get("distance_km", 0) or 0), 2),
+            t.get("price", 0),
+            t.get("payment_status", "—"),
+            t.get("status", ""),
+        ])
+    widths3 = [12, 26, 22, 28, 28, 14, 12, 14, 12]
+    for i, w in enumerate(widths3, 1):
+        ws3.column_dimensions[chr(64 + i)].width = w
+
+    # Stream out
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"kjapp_{fleet_name.replace(' ', '_')}_{year}-{month:02d}.xlsx"
+    return FastResponse(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 # ============================================================

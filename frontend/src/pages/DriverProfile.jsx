@@ -23,7 +23,7 @@ export default function DriverProfile() {
     const res = await subscribePush();
     if (res.ok) {
       setPushOn(true);
-      setMsg("Push-varsler er slått på ✨");
+      setMsg("Push-varsler er slått på");
     } else {
       setMsg(
         res.reason === "denied"

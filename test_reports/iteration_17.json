@@ -1,0 +1,41 @@
+{
+  "summary": "Iter 17 (beta polish) FULL PASS. Backend: 73/73 pytest green (fixed 1 regression — heading drift in cruise_demo_drivers not modulo-normalized, produced values >360; patched server.py L548 to wrap `%360`, restarted backend, retested → PASS). Frontend E2E on real preview URL (mobile 390x844): (1) Customer home hamburger menu (data-testid=home-menu) now opens customer-menu drawer with all 7 required items (menu--app-history, menu--app-payment-methods, menu--app-profile, menu--app-settings, menu--app-help, menu-logout, menu-close) — VERIFIED. (2) sheet-toggle collapses sheet; sheet-expand appears and restores — VERIFIED. (3) map-zoom-in + map-zoom-out present on PremiumMap, click works without error — VERIFIED. (4) surge-chip data-testid COMPLETELY ABSENT from DOM — VERIFIED (also grep of /app/frontend/src returns 0 occurrences). (5) booking-add-card warning block COMPLETELY REMOVED — VERIFIED (grep=0). booking-payment-row present as compact row. (6) booking-confirm shows 'Bestill bilen · 203 kr' for verified card, disabled=false, clicking redirects to /app/booking/{tripId} — E2E VERIFIED. (7) Wording audit PASSED: 'Hentes fra' present, '6 biler i nærheten' present, 'Nærmeste bil er 3 min unna' present. Legacy 'Estimat' and 'ledige biler nær deg' absent. (8) DevNavigator floating compass (dev-nav-open) present on /, /login, /apply/fleet, /app, /loyver, /driver — VERIFIED. Modal (dev-nav-panel) opens with all 5 groups (Kunde, Sjåfør, Flåteeier, Superadmin, Offentlig) and closes via dev-nav-close. (9) admin@kjapp.no auto-routes to /loyver, renders Løyvehaver-panelet with 5 new applications + 12 pending drivers cleanly. Screenshot confirms brass palette. (10) Trip cancel cleanup done for ola@ after booking E2E (trip 72784223-... cancelled).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "cruise_demo_drivers task (server.py L548)", "issue": "Heading not normalized to [0,360); after drift accumulates it can exceed 360. FIXED in this iter by wrapping with `% 360`."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10.py",
+    "/app/backend/tests/test_iter13.py",
+    "/app/backend/tests/test_iter14.py",
+    "/app/backend/tests/test_iter15.py",
+    "/app/backend/tests/test_iter16.py",
+    "/app/test_reports/pytest/iter17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still 2685 lines — modular refactor overdue (flagged since iter10).",
+    "cruise_demo_drivers still has broad `except Exception: pass` with no logging on failure (flagged in iter16, not addressed).",
+    "DevNavigator is currently shown to ALL users on ALL routes (including public /). Before real production launch, gate it behind an env flag (e.g. REACT_APP_DEV_NAV=on) or admin/superadmin role. Current comment says 'Hidden if URL has ?nav=off' but the compass is still visible on the passenger app to end users — that will confuse beta testers who aren't the owner. Recommend showing only when localStorage flag OR ?nav=on is set, defaulting off in prod.",
+    "The DevNav testid pattern `dev-nav-{path}` produces testids like `dev-nav--app` (double dash) and `dev-nav-` (empty) for path=`/`. Works but ugly; consider `dev-nav-item-{slug}`.",
+    "PremiumMap zoom buttons stack correctly on right edge but there is no keyboard accessibility (aria-label missing on the two zoom buttons — add aria-label='Zoom inn' / 'Zoom ut' for a11y).",
+    "customer-menu drawer close via menu-close relies on animation timing to hide; the query still returns the element after close due to slide-out animation. Non-issue for users but tests must wait ~600ms."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (bugfix: normalize heading % 360 in cruise_demo_drivers)"
+  ],
+  "success_rate": {"backend": "100% (73/73)", "frontend": "100% of iter17 gates (home-menu, customer-menu drawer + all items, sheet-toggle/expand, map-zoom-in/out, surge-chip removed, booking-add-card removed, booking-payment-row present, booking-confirm 'Bestill bilen · 203 kr', redirect to /app/booking/{id}, all soft wording, DevNav on 6 routes + all 5 groups, admin/loyver renders)"},
+  "test_credentials": "All 4 accounts verified working (ola@kjapp.no/test1234, sjafor@kjapp.no/sjafor1234, floteier1@kjapp.no/fleet1234, admin@kjapp.no/admin123).",
+  "seed_data_creation": "Cancelled 1 stale + 1 newly-created trip for ola@kjapp.no during E2E (72784223-06af-4ece-80c2-702be14e322b). Demo drivers unchanged (permanent seed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 17 beta-polish is GREEN. Small backend bug fixed (heading normalization in cruise_demo_drivers) — no other backend changes. DevNavigator is currently visible to ALL users on ALL routes; main agent should decide whether to hide it behind a flag before public launch (opinion above). Playwright note: cookie consent overlay blocks bottom-anchored interactions — always use `page.context.add_init_script(\"localStorage.setItem('kjapp_cookie_consent','all');\")` BEFORE page.goto (setting localStorage AFTER goto is too late because CookieConsent already rendered). Ola login form has no `input[type=email]`; use `input[placeholder*=\"post\"]` and `input[placeholder=\"Passord\"]` with Enter key to submit (there is no visible submit button role — it's a golden arrow icon).",
+  "rca of the issue": "Backend regression: cruise_demo_drivers accumulated heading over successive polls (`heading = last_heading + rand(-8,8)`) without modulo-normalizing, so after enough iterations values crossed 360 (test caught 376.49). Frontend map bearing rendering does its own modulo so this was silent for a while — only caught by iter16 assertion `0<=h<=360` on /api/cars/nearby response. Fix: wrap with `% 360` in the addition expression on server.py L548. Reproduced by pytest test_iter16::test_cars_nearby_returns_min_3_with_heading. After fix + backend restart: 5/5 passed in 8.45s."
+}

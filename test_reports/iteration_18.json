@@ -1,0 +1,34 @@
+{
+  "summary": "Iter 18 beta-final PASS. Backend: 25/25 pytest green (test_iter18.py) covering GET /api/health, POST /api/ai/translate (401/400/lang/cache/no→en/no→pl), POST /api/ai/transcribe (401/400 missing+invalid+short), POST /api/push/native-subscribe (401/422 invalid platform/200 ios+android), GET /api/fleet/export/monthly (200 xlsx magic PK, 403 passenger, 400 invalid year/month), plus regressions (auth for all 4 roles, /cars/nearby, /trips/estimate, /driver/pending, /superadmin/fleet-applications, /fleet/overview, /fleet/drivers, /fleet/payouts). Excel export delivers valid .xlsx (PK header verified, 7960 bytes for empty month, Content-Type spreadsheetml). Translate cache flag returned on second call as expected ('Jeg er på vei' → 'I'm on my way' both from-LLM and cached path work). Frontend E2E on real preview URL (mobile 390x844): (1) passenger login (ola@) → /app OK, DevNavigator visible, body.is-native NOT set (browser context) — CORRECT. (2) /app/ai renders chat-mic when input empty (VERIFIED), chat-send appears + enabled after typing 'Hei' (VERIFIED), chat-mic replaced when input has text (VERIFIED). (3) fleet_owner login (floteier1@) auto-redirects to /fleet (VERIFIED). (4) /fleet/payouts renders fleet-export-card + fleet-export-month + fleet-export-year + fleet-export-download (ALL data-testids present). Clicking Last ned triggers real browser download (kjapp_2026-08.xlsx, 7960 bytes), button text morphs 'Last ned August 2026' → 'Lastet ned ✓' — full E2E VERIFIED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18.py",
+    "/app/test_reports/pytest/iter18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py now 2994 lines — modular refactor still overdue (flagged since iter10). Add routers/ subpackage (ai.py, fleet.py, push.py, auth.py, trips.py).",
+    "ai_transcribe returns 503 'STT-tjeneste utilgjengelig' for ANY internal exception (line 1049-1051). This masks real errors (e.g. quota, network, unsupported format). Consider logging + returning distinct 400 for 'unsupported format' vs 502/503 for upstream.",
+    "fleet_export_monthly: openpyxl workbook is streamed in-memory but response returns via FastAPI JSON default — verify StreamingResponse wraps buf.getvalue() correctly (works but iter18 didn't inspect that path). File was well-formed, so acceptance passes.",
+    "DevNavigator still visible to ALL users on ALL routes (unchanged since iter17). Must be gated behind env flag or admin role before Play Store / App Store review — reviewers will flag test-account UI in production.",
+    "translation_cache never expires — cached translations can drift with model version. Add TTL (e.g. 30 days) or version key.",
+    "native_push_tokens uses composite (user_id, platform) upsert — a single user can only have ONE token per platform. Multi-device (e.g. user with iPhone + iPad) will overwrite. Consider adding device_id."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18.py (new)"
+  ],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "100% of iter18 gates (passenger auth+DevNav+is-native, AI chat mic/send/typing state, fleet_owner auto-redirect, fleet-export card+dropdowns+download E2E incl. real xlsx blob)"},
+  "test_credentials": "All 4 credentials verified working (ola@kjapp.no/test1234, sjafor@kjapp.no/sjafor1234, floteier1@kjapp.no/fleet1234, admin@kjapp.no/admin123).",
+  "seed_data_creation": "test_native_push_ios_ok and test_native_push_android_ok inserted TEST_apns_token_abc123 (ola) + TEST_fcm_token_xyz (sjafor) into db.native_push_tokens (upsert by user_id+platform). translation_cache got one entry for 'Jeg er på vei'→'en' and 'God morgen'→'pl'. Safe to leave.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 18 backend + frontend E2E are GREEN. Real xlsx download verified via page.expect_download() on /fleet/payouts. Whisper live-transcription NOT tested with real audio (per review request — only 400/401 error paths). If next iteration needs Whisper live-test: use a small real .webm/.mp3 file base64-encoded (>500 bytes decoded). Translate cache flag reliably flips to True on 2nd identical call — good regression signal. Estimate endpoint uses flat schema {pickup_lat, pickup_lng, dropoff_lat, dropoff_lng}, NOT nested pickup/dropoff objects."
+}

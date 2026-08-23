@@ -14,7 +14,7 @@ export default function Profile() {
   const enablePush = async () => {
     setMsg("");
     const res = await subscribePush();
-    if (res.ok) { setPushOn(true); setMsg("Push-varsler er slått på ✨"); }
+    if (res.ok) { setPushOn(true); setMsg("Push-varsler er slått på"); }
     else setMsg(res.reason === "denied" ? "Blokkert. Slå på i innstillinger." : "Kunne ikke slå på varsler.");
   };
 

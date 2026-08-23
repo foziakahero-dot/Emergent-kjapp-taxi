@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const slides = [
   {
     kind: "logo",
-    subtitle: "Enkel og trygg\ntransport, hvor du enn skal.",
+    subtitle: "Nordic taxi.\nEnkel og trygg — hvor du enn skal.",
   },
   {
     kind: "route",
@@ -14,8 +14,8 @@ const slides = [
   },
   {
     kind: "car",
-    title: "Snille priser. Vennlige sjåfører.",
-    subtitle: "Ingen påslag i rushtid. Bare rettferdig norsk taxi.",
+    title: "Rettferdige priser. Norske sjåfører.",
+    subtitle: "Ingen skjulte tillegg. Bare god taxi.",
   },
 ];
 
@@ -48,11 +48,11 @@ export default function Onboarding() {
             {s.kind === "car" && <TaxiMark />}
 
             {s.title && (
-              <h1 className="mt-14 font-display text-[26px] tracking-tight text-white max-w-[300px]">
+              <h1 className="mt-14 font-display text-[26px] tracking-tight max-w-[300px]" style={{ color: "var(--text)" }}>
                 {s.title}
               </h1>
             )}
-            <p className="mt-4 text-[15px] leading-relaxed text-[#9aa39d] whitespace-pre-line max-w-[290px]">
+            <p className="mt-4 text-[15px] leading-relaxed whitespace-pre-line max-w-[290px]" style={{ color: "var(--text-muted)" }}>
               {s.subtitle}
             </p>
           </motion.div>
@@ -64,9 +64,11 @@ export default function Onboarding() {
           {slides.map((_, idx) => (
             <span
               key={idx}
-              className={`h-[3px] rounded-full transition-all duration-500 ${
-                idx === i ? "w-8 bg-mint" : "w-4 bg-[#263038]"
-              }`}
+              className="h-[3px] rounded-full transition-all duration-500"
+              style={{
+                width: idx === i ? 32 : 16,
+                background: idx === i ? "var(--accent)" : "rgba(232,224,208,0.14)",
+              }}
             />
           ))}
         </div>
@@ -74,7 +76,8 @@ export default function Onboarding() {
           <button
             onClick={skip}
             data-testid="onboarding-skip"
-            className="text-[#7a827a] text-sm hover:text-white transition-colors"
+            className="text-sm transition-colors"
+            style={{ color: "var(--text-muted)" }}
           >
             Hopp over
           </button>
@@ -103,24 +106,30 @@ export default function Onboarding() {
 function BrandMark() {
   return (
     <div className="text-center">
-      <div className="font-display text-[52px] tracking-[0.02em] leading-none text-white">
-        KJ<span className="text-mint">A</span>PP
+      <div className="font-display text-[64px] tracking-[0.01em] leading-none" style={{ color: "var(--text)" }}>
+        KJ<span style={{ color: "var(--accent)" }}>A</span>PP
       </div>
-      <div className="mt-2 text-[10px] tracking-[0.4em] text-mint uppercase">
-        Norsk taxi
+      <div className="mt-2 text-[10px] tracking-[0.4em] uppercase" style={{ color: "var(--accent)" }}>
+        Nordic taxi
       </div>
     </div>
   );
 }
 
-// Slide 2 — minimal route/map icon (no robotic AI orb)
+/* Slide 2 — subtle map route, brass palette */
 function RouteMark() {
   return (
-    <div className="w-44 h-44 relative flex items-center justify-center">
-      <div className="absolute inset-0 rounded-full bg-mint/8 blur-3xl" />
-      <svg viewBox="0 0 200 200" className="w-44 h-44 relative">
+    <div className="w-52 h-52 relative flex items-center justify-center">
+      <div className="absolute inset-0 rounded-full blur-3xl" style={{ background: "rgba(201,161,91,0.08)" }} />
+      <svg viewBox="0 0 200 200" className="w-52 h-52 relative">
+        <defs>
+          <linearGradient id="ob-route" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#e0b876" />
+            <stop offset="100%" stopColor="#c9a15b" />
+          </linearGradient>
+        </defs>
         {/* subtle grid backdrop */}
-        <g opacity="0.15" stroke="#2fe08c" strokeWidth="0.6">
+        <g opacity="0.08" stroke="#e8e0d0" strokeWidth="0.6">
           <line x1="0" y1="60" x2="200" y2="60" />
           <line x1="0" y1="120" x2="200" y2="120" />
           <line x1="60" y1="0" x2="60" y2="200" />
@@ -130,47 +139,70 @@ function RouteMark() {
         <path
           d="M 40 150 Q 70 120 90 110 Q 120 95 130 70 Q 140 45 160 40"
           fill="none"
-          stroke="#2fe08c"
-          strokeWidth="3"
+          stroke="url(#ob-route)"
+          strokeWidth="3.2"
           strokeLinecap="round"
-          strokeDasharray="0"
         />
         {/* start pin */}
-        <circle cx="40" cy="150" r="10" fill="#2fe08c" opacity="0.2" />
-        <circle cx="40" cy="150" r="5" fill="#2fe08c" />
-        {/* end pin */}
-        <circle cx="160" cy="40" r="10" fill="#ffffff" opacity="0.15" />
-        <rect x="155" y="35" width="10" height="10" rx="1.5" fill="#ffffff" />
+        <circle cx="40" cy="150" r="12" fill="#c9a15b" opacity="0.18" />
+        <circle cx="40" cy="150" r="5" fill="#c9a15b" />
+        {/* end pin — checker flag */}
+        <circle cx="160" cy="40" r="12" fill="#0c1216" />
+        <rect x="156" y="36" width="8" height="8" fill="#f4ecd8" />
+        <rect x="158" y="36" width="2" height="2" fill="#c9a15b" />
+        <rect x="162" y="36" width="2" height="2" fill="#c9a15b" />
+        <rect x="156" y="38" width="2" height="2" fill="#c9a15b" />
+        <rect x="160" y="38" width="2" height="2" fill="#c9a15b" />
+        <rect x="158" y="40" width="2" height="2" fill="#c9a15b" />
+        <rect x="162" y="40" width="2" height="2" fill="#c9a15b" />
       </svg>
     </div>
   );
 }
 
-// Slide 3 — professional top-down taxi (matches map marker)
+/* Slide 3 — premium isometric taxi, brass palette */
 function TaxiMark() {
   return (
-    <div className="w-44 h-44 relative flex items-center justify-center">
-      <div className="absolute inset-0 rounded-full bg-mint/10 blur-3xl" />
-      <svg viewBox="0 0 100 100" className="w-44 h-44 relative">
-        <circle cx="50" cy="50" r="45" fill="#131a1f" stroke="#2fe08c" strokeOpacity="0.25" strokeWidth="1" />
-        <g transform="translate(50 50) scale(2.6)">
-          {/* body */}
+    <div className="w-52 h-52 relative flex items-center justify-center">
+      <div className="absolute inset-0 rounded-full blur-3xl" style={{ background: "rgba(201,161,91,0.10)" }} />
+      <svg viewBox="0 0 120 120" className="w-52 h-52 relative">
+        <defs>
+          <linearGradient id="ob-body" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#2b2f36" />
+            <stop offset="60%" stopColor="#171a1e" />
+            <stop offset="100%" stopColor="#0c1216" />
+          </linearGradient>
+          <linearGradient id="ob-glass" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#e0b876" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#c9a15b" stopOpacity="0.6" />
+          </linearGradient>
+        </defs>
+        <circle cx="60" cy="60" r="52" fill="#0c1216" />
+        <circle cx="60" cy="60" r="52" fill="none" stroke="#c9a15b" strokeOpacity="0.25" strokeWidth="1" />
+        {/* subtle inner ring */}
+        <circle cx="60" cy="60" r="44" fill="none" stroke="#c9a15b" strokeOpacity="0.12" strokeWidth="0.6" strokeDasharray="2 6" />
+        <g transform="translate(60 60) scale(2.6)">
+          {/* ground shadow */}
+          <ellipse cx="1" cy="2" rx="8" ry="12" fill="#000" opacity="0.35" />
+          {/* body silhouette */}
           <path
-            d="M -6 -10 Q -6 -12 -4 -12 L 4 -12 Q 6 -12 6 -10 L 6 10 Q 6 12 4 12 L -4 12 Q -6 12 -6 10 Z"
-            fill="#17222a"
-            stroke="#2fe08c"
-            strokeWidth="0.6"
+            d="M -7 -13 Q -7 -15 -5 -15 L 5 -15 Q 7 -15 7 -13 L 7 13 Q 7 15 5 15 L -5 15 Q -7 15 -7 13 Z"
+            fill="url(#ob-body)"
+            stroke="#c9a15b"
+            strokeWidth="0.7"
           />
+          {/* roof (subtle highlight) */}
+          <rect x="-5.6" y="-8" width="11.2" height="14" rx="1.2" fill="#ffffff" fillOpacity="0.04" />
           {/* windshield */}
-          <path d="M -4.5 -9 Q -4.5 -10 -3 -10 L 3 -10 Q 4.5 -10 4.5 -9 L 4.5 -3 L -4.5 -3 Z" fill="#2fe08c" fillOpacity="0.35" />
+          <path d="M -5 -11.5 Q -5 -13 -3.4 -13 L 3.4 -13 Q 5 -13 5 -11.5 L 5 -6.5 L -5 -6.5 Z" fill="url(#ob-glass)" />
           {/* rear window */}
-          <path d="M -4.5 3 L 4.5 3 L 4.5 9 Q 4.5 10 3 10 L -3 10 Q -4.5 10 -4.5 9 Z" fill="#2fe08c" fillOpacity="0.22" />
+          <path d="M -5 6 L 5 6 L 5 11.5 Q 5 13 3.4 13 L -3.4 13 Q -5 13 -5 11.5 Z" fill="url(#ob-glass)" fillOpacity="0.4" />
           {/* headlights */}
-          <circle cx="-3.6" cy="-11" r="0.7" fill="#ffffff" />
-          <circle cx="3.6" cy="-11" r="0.7" fill="#ffffff" />
-          {/* side mirrors */}
-          <rect x="-7" y="-6" width="1" height="1.6" fill="#2fe08c" opacity="0.7" />
-          <rect x="6" y="-6" width="1" height="1.6" fill="#2fe08c" opacity="0.7" />
+          <ellipse cx="-3.6" cy="-13.7" rx="1.1" ry="0.55" fill="#fff9e8" />
+          <ellipse cx="3.6" cy="-13.7" rx="1.1" ry="0.55" fill="#fff9e8" />
+          {/* taillights */}
+          <rect x="-4.5" y="13.3" width="1.5" height="0.9" rx="0.4" fill="#d76a5a" />
+          <rect x="3" y="13.3" width="1.5" height="0.9" rx="0.4" fill="#d76a5a" />
         </g>
       </svg>
     </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, SendHorizonal } from "lucide-react";
-import { tripsApi } from "../lib/api";
+import { X, SendHorizonal, Languages } from "lucide-react";
+import { tripsApi, aiApi } from "../lib/api";
 
 const QUICK_REPLIES_PASSENGER = [
   "Jeg står utenfor",
@@ -21,7 +21,25 @@ export default function ChatModal({ open, onClose, tripId, role }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [translations, setTranslations] = useState({});   // { msgId: text }
+  const [translating, setTranslating] = useState(null);   // msgId currently translating
+  const [targetLang, setTargetLang] = useState(() => (localStorage.getItem("kjapp_chat_lang") || "no"));
   const endRef = useRef(null);
+
+  const setLang = (l) => { setTargetLang(l); localStorage.setItem("kjapp_chat_lang", l); };
+
+  const translate = async (m) => {
+    if (translations[m.id]) return;
+    setTranslating(m.id);
+    try {
+      const r = await aiApi.translate(m.text, targetLang);
+      setTranslations((prev) => ({ ...prev, [m.id]: r.translation }));
+    } catch (e) {
+      alert("Kunne ikke oversette: " + (e.response?.data?.detail || "prøv igjen senere"));
+    } finally {
+      setTranslating(null);
+    }
+  };
 
   useEffect(() => {
     if (!open || !tripId) return;
@@ -88,6 +106,24 @@ export default function ChatModal({ open, onClose, tripId, role }) {
                   {role === "driver" ? "Til kunde" : "Til sjåfør"} · sikker tilkobling
                 </div>
               </div>
+              <select
+                value={targetLang}
+                onChange={(e) => setLang(e.target.value)}
+                className="bg-[#17222a] border border-line rounded-full text-[11px] text-[#a8b0a8] px-2 py-1 mr-1"
+                data-testid="chat-lang-select"
+                title="Oversett meldinger til dette språket"
+              >
+                <option value="no">NO</option>
+                <option value="en">EN</option>
+                <option value="pl">PL</option>
+                <option value="ur">UR</option>
+                <option value="ar">AR</option>
+                <option value="so">SO</option>
+                <option value="ru">RU</option>
+                <option value="tr">TR</option>
+                <option value="de">DE</option>
+                <option value="es">ES</option>
+              </select>
               <button onClick={onClose} data-testid="chat-close" className="w-9 h-9 grid place-items-center text-[#7a827a] rounded-full hover:bg-[#17222a]">
                 <X size={18} />
               </button>
@@ -104,8 +140,9 @@ export default function ChatModal({ open, onClose, tripId, role }) {
               )}
               {messages.map((m, i) => {
                 const isMe = m.from_role === role;
+                const tr = translations[m.id];
                 return (
-                  <div key={m.id || i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                  <div key={m.id || i} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
                     <div
                       data-testid={`chatmsg-${m.from_role}`}
                       className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-[14px] leading-relaxed ${
@@ -114,6 +151,22 @@ export default function ChatModal({ open, onClose, tripId, role }) {
                     >
                       {m.text}
                     </div>
+                    {tr && (
+                      <div className={`max-w-[80%] mt-1 px-3 py-1.5 rounded-xl text-[12px] italic text-[#a8b0a8] bg-white/5 border border-white/5`} data-testid={`chatmsg-translation-${m.id}`}>
+                        {tr}
+                      </div>
+                    )}
+                    {!isMe && !tr && (
+                      <button
+                        onClick={() => translate(m)}
+                        disabled={translating === m.id}
+                        className="mt-1 text-[10px] text-[#7a827a] hover:text-mint flex items-center gap-1"
+                        data-testid={`translate-btn-${m.id}`}
+                      >
+                        <Languages size={11} />
+                        {translating === m.id ? "Oversetter…" : `Oversett til ${targetLang.toUpperCase()}`}
+                      </button>
+                    )}
                   </div>
                 );
               })}

@@ -1,6 +1,6 @@
 # KJAPP — Native App Build Guide (iOS + Android)
 
-Denne guiden pakker KJAPP-PWA-en som native app for App Store og Google Play ved hjelp av **Capacitor**. Hele denne prosessen gjøres på din egen Mac (iOS krever Xcode).
+**Status per Iter 18 (Feb 2026)**: Native prosjektene er allerede generert i `/app/frontend/ios/` og `/app/frontend/android/`. Capacitor v8 + Node v22 er installert. Du trenger bare å åpne prosjektene på din egen Mac/PC for å bygge og signere.
 
 ---
 
@@ -10,70 +10,63 @@ Denne guiden pakker KJAPP-PWA-en som native app for App Store og Google Play ved
 - Mac med macOS 13+ og Xcode 15+
 - Apple Developer Program-medlemskap: **$99/år** — [developer.apple.com](https://developer.apple.com/programs/)
 - Aktivert to-faktor-autentisering på Apple ID
+- CocoaPods (`sudo gem install cocoapods`)
 
 **Android (Google Play)**:
 - Android Studio (Windows, Mac eller Linux)
 - Google Play Console-konto: **$25 engangs** — [play.google.com/console](https://play.google.com/console/)
+- JDK 17+ (leveres med Android Studio)
 
 **Begge**:
-- Node.js 20+, Yarn
+- Node.js **22+** (viktig — Capacitor 8 krever dette)
+- Yarn
 - Git
 
 ---
 
-## 2. Første oppsett (kjøres én gang)
+## 2. Overføre koden til din Mac/PC
 
-Klon eller last ned KJAPP-koden til Mac-en din, gå inn i `/frontend`-mappen:
+Klon eller last ned KJAPP-koden. Alt du trenger ligger allerede i `/frontend`:
 
 ```bash
 cd frontend
-
-# Bygg PWA-en først
 yarn install
 yarn build
-
-# Legg til Capacitor
-yarn add @capacitor/core @capacitor/cli
-yarn add @capacitor/ios @capacitor/android
-yarn add @capacitor/splash-screen @capacitor/status-bar @capacitor/geolocation @capacitor/push-notifications @capacitor/haptics
-
-# Initialiser Capacitor (bruk konfig fra /app/mobile/capacitor.config.json)
-cp ../mobile/capacitor.config.json ./capacitor.config.json
-
-# Legg til iOS + Android som "platforms"
-npx cap add ios
-npx cap add android
-
-# Kopier build inn i native-prosjektene
 npx cap sync
 ```
 
+Prosjektene ligger klare i:
+- iOS: `frontend/ios/App/App.xcworkspace`
+- Android: `frontend/android/`
+
 ---
 
-## 3. Bygg iOS-app (APP STORE / TESTFLIGHT)
+## 3. Bygg iOS-app (App Store / TestFlight)
 
 ```bash
+cd frontend
 npx cap open ios
 ```
 
-Xcode åpner. Gjør følgende:
+Xcode åpner `App.xcworkspace`. Gjør følgende:
 
-1. **Signing & Capabilities** (venstremeny → App → Signing):
+1. **Signing & Capabilities** (App-target → Signing & Capabilities):
    - Sett `Team` til din Apple Developer-konto
-   - `Bundle Identifier`: `no.kjapp.app` (må matche `capacitor.config.json`)
-   - Aktiver `Automatically manage signing`
+   - Bekreft `Bundle Identifier`: `no.kjapp.app` (må matche `capacitor.config.json`)
+   - Kryss av `Automatically manage signing`
 
-2. **Legg til Info.plist-nøkler** (App → Info → Custom iOS Target Properties):
-   - `NSLocationWhenInUseUsageDescription` = "KJAPP trenger posisjonen din for å finne nærmeste sjåfør"
-   - `NSLocationAlwaysAndWhenInUseUsageDescription` = "Sjåfør-appen sender posisjonen din under aktive turer"
-   - `NSCameraUsageDescription` (hvis vi legger til foto-verifisering senere)
+2. **Legg til Capabilities** (klikk `+ Capability`):
+   - `Push Notifications`
+   - `Background Modes` → aktiver `Location updates` + `Background fetch` + `Remote notifications`
+   - (Valgfritt, når `APPLE_CLIENT_ID` er klar) `Sign in with Apple`
 
-3. **Legg til Capabilities**:
-   - `Push Notifications` (App → Signing & Capabilities → + Capability)
-   - `Sign in with Apple` (hvis du skal aktivere Apple Sign In — krever `APPLE_CLIENT_ID` i backend .env)
-   - `Background Modes` → aktiver `Location updates` + `Remote notifications`
+3. **App-ikon**: Dra 1024×1024 ikonet inn i `Assets.xcassets/AppIcon` (Xcode genererer alle størrelsene)
 
-4. **App-ikon**: Dra ikonene inn i `Assets.xcassets/AppIcon` (1024×1024 base + alle størrelser)
+4. **Info.plist er allerede fylt ut med**:
+   - `NSLocationWhenInUseUsageDescription` (norsk tekst)
+   - `NSLocationAlwaysAndWhenInUseUsageDescription`
+   - `UIBackgroundModes` (location + fetch + remote-notification)
+   - `ITSAppUsesNonExemptEncryption = false` (for å hoppe over eksport-erklæring)
 
 5. **Kjør på simulator**: velg iPhone 15 Pro → trykk ▶
 
@@ -82,20 +75,21 @@ Xcode åpner. Gjør følgende:
    Product → Archive
    ```
    Ferdig arkiv → `Distribute App` → `App Store Connect` → `Upload`
-   Logg deretter inn på [App Store Connect](https://appstoreconnect.apple.com/) → TestFlight → Add testers
+   Logg deretter inn på [App Store Connect](https://appstoreconnect.apple.com/) → TestFlight → Add testers.
 
 7. **Submit for review** (fra App Store Connect):
    - Fyll ut app-beskrivelse (norsk + engelsk)
    - Legg ved 6.7"/6.5"/5.5" iPhone-skjermbilder
-   - Personvernerklæring URL: `https://kjapp.no/privacy`
+   - Personvernerklæring URL: `https://kjapp.no/privacy` (eller `/api/privacy`)
    - Test-konto til Apple: `ola@kjapp.no` / `test1234`
    - Review-tid: 24-72 timer
 
 ---
 
-## 4. Bygg Android APK/AAB (GOOGLE PLAY)
+## 4. Bygg Android APK/AAB (Google Play)
 
 ```bash
+cd frontend
 npx cap open android
 ```
 
@@ -110,26 +104,34 @@ Android Studio åpner. Gjør følgende:
    }
    ```
 
-2. **Legg til permissions** (`android/app/src/main/AndroidManifest.xml`):
+2. **AndroidManifest.xml er allerede fylt ut med**:
    ```xml
    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-   <uses-permission android:name="android.permission.INTERNET" />
    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
    <uses-permission android:name="android.permission.WAKE_LOCK" />
    <uses-permission android:name="android.permission.VIBRATE" />
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
    ```
 
-3. **Signer AAB**:
+3. **Test-APK på emulator**:
+   ```bash
+   ./gradlew assembleDebug
+   # APK i: android/app/build/outputs/apk/debug/app-debug.apk
+   ```
+   Eller trykk ▶ i Android Studio.
+
+4. **Signer AAB** (for Play Store):
    - Build → Generate Signed Bundle / APK → Android App Bundle
-   - Opprett keystore (kun første gang, TA VARE PÅ .jks-filen og passordet)
+   - Opprett keystore (kun første gang — **TA VARE PÅ .jks-filen og passordet**)
    - Alias: `kjapp-release`
    - `release` variant → Finish
 
-4. **Ferdig AAB** ligger i `android/app/release/app-release.aab`
+5. **Ferdig AAB** ligger i `android/app/release/app-release.aab`
 
-5. **Last opp til Play Console**:
+6. **Last opp til Play Console**:
    - [play.google.com/console](https://play.google.com/console/) → Ny app
    - App-innhold: fyll ut alt (personvern, kategori, målgruppe, annonser)
    - App-utgivelser → Intern testing → last opp AAB
@@ -141,6 +143,7 @@ Android Studio åpner. Gjør følgende:
 ## 5. Oppdatere appen etter kodendringer
 
 ```bash
+cd frontend
 yarn build              # rebuild PWA
 npx cap sync            # synk til native
 npx cap open ios        # eller android
@@ -151,53 +154,80 @@ npx cap open ios        # eller android
 
 ---
 
-## 6. Push-varsler (native)
+## 6. Native funksjoner allerede wired inn
 
-Web Push (den nåværende implementasjonen) fungerer i PWA-modus, men native apper trenger:
+Frontend bruker `/app/frontend/src/lib/native.js` som isomorf bridge — automatisk fall-back til web-APIer når appen ikke kjører native.
 
-- **iOS**: APNs (Apple Push Notification Service) via `@capacitor/push-notifications`
-- **Android**: Firebase Cloud Messaging (FCM)
+Wired og klar:
+- ✅ **Statusbar & Splash**: `initNativeShell()` kjøres på App-mount
+- ✅ **Native GPS**: `watchLocation()` bruker `@capacitor/geolocation` på native, `navigator.geolocation` på web (DriverHome.jsx)
+- ✅ **Native push**: `registerNativePush()` sender token til `/api/push/native-subscribe`
+- ✅ **Haptics**: `haptic("light|medium|heavy")` gir taktil feedback
+- ✅ **Device ID**: Sendt med push-token så multi-device fungerer (iPhone + iPad = to tokens)
+- ✅ **Safe area**: CSS bruker `env(safe-area-inset-*)` for notch-tilpasning
+- ✅ **Android back-button**: Håndteres → nettleser-history + exitApp på root
 
-Backend-endepunktet `/api/push/subscribe` må utvides til å ta imot native token i tillegg til web-push subscription:
-
-```js
-// I frontend, når native
-import { PushNotifications } from '@capacitor/push-notifications';
-
-PushNotifications.register();
-PushNotifications.addListener('registration', (token) => {
-  // Send token.value til backend
-  api.post('/push/native-subscribe', { platform: Capacitor.getPlatform(), token: token.value });
-});
-```
-
-Backend må lagre disse i egen kolleksjon og sende via Firebase Admin SDK (Android) og APNs HTTP/2 (iOS). Dette er en **egen oppgave** som ikke er dekket i grunn-wrappingen.
+Native push (APNs + FCM) — **serverside sender ikke fysisk push-melding ennå**:
+- Endepunktet `/api/push/native-subscribe` lagrer tokens
+- For å faktisk sende trenger du:
+  - **iOS**: APNs .p8-nøkkel (fra Apple Developer → Keys), key_id, team_id
+  - **Android**: FCM `google-services.json` + service account
+- Denne siste bit implementeres når du er klar for produksjonsvarsler (est. 8-16 timer)
 
 ---
 
-## 7. Kritiske ting å huske
+## 7. Konfigurer produksjons-backend
+
+Før du bygger for release:
+
+1. **Endre `REACT_APP_BACKEND_URL`** i `frontend/.env` fra preview-URL til produksjon:
+   ```
+   REACT_APP_BACKEND_URL=https://api.kjapp.no
+   ```
+
+2. **Slå av DevNavigator** (allerede env-gated fra iter 18):
+   ```
+   REACT_APP_DEV_NAV=false
+   ```
+   (eller fjern helt)
+
+3. **Rebuild**:
+   ```bash
+   yarn build && npx cap sync
+   ```
+
+4. **Sett `allowNavigation` i `capacitor.config.json`** til produksjons-domenet ditt:
+   ```json
+   "allowNavigation": ["kjapp.no", "*.kjapp.no"]
+   ```
+
+---
+
+## 8. Kritiske ting å huske
 
 - **Backend-URL må være HTTPS med gyldig sertifikat** — native apper avviser selvsignerte
-- **REACT_APP_BACKEND_URL** må peke til produksjon-URL (kjapp.no) før release
 - **Alle push-nøkler (VAPID)** må være permanente — hvis backend blir re-deployet mister eksisterende brukere push-abonnement
 - **Norske drosjekrav**: Skatteetaten ARS-godkjenning MÅ være på plass før kommersiell lansering — start den prosessen NÅ (2-6 uker saksbehandling)
 - **App Store-avvisning**: 90% av avvisninger skyldes: manglende personvern, uklar bruk av lokasjon, eller manglende Apple Sign In når Google Sign In er implementert (Apple regel 4.8). Vi har Apple Sign In stubbet — MÅ aktiveres før iOS-release
+- **Vipps checkout**: Ikke aktivert ennå — trenger `VIPPS_CLIENT_ID`, `VIPPS_CLIENT_SECRET`, `VIPPS_SUBSCRIPTION_KEY`, `VIPPS_MSN` i backend/.env
 
 ---
 
-## 8. Tidsestimat
+## 9. Tidsestimat til produksjonslansering
 
 | Steg | Tid | Kostnad |
 |---|---|---|
 | Apple Developer-registrering | 1-2 dager | $99 |
 | Google Play-registrering | 3-5 dager | $25 |
-| Første Xcode-oppsett + APK-build | 4-8 timer | 0 |
+| Xcode-oppsett + første build | 2-4 timer | 0 |
+| Android Studio-oppsett + første build | 1-2 timer | 0 |
 | App-ikoner + skjermbilder | 4 timer | 0 |
 | Personvern + vilkår | ✅ (allerede laget) | 0 |
 | Apple Sign In-aktivering | 2 timer (etter APPLE_CLIENT_ID) | 0 |
-| Native push-varsel (APNs + FCM) | 8-16 timer | 0 |
+| APNs + FCM native push senders | 8-16 timer | 0 |
+| Vipps integrasjon | 4-8 timer (etter nøkler) | 0 |
 | Skatteetaten ARS-godkjenning | 2-6 uker | Egen søknad |
 | App Store review | 1-3 dager | 0 |
 | Google Play review | 1-2 dager | 0 |
 
-**Realistisk lansering**: 3-5 uker fra i dag (forutsatt at ARS-godkjenning ikke er blokker)
+**Realistisk lansering**: 2-4 uker fra i dag (forutsatt at ARS-godkjenning ikke er blokker)

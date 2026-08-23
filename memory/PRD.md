@@ -28,7 +28,40 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Bottom navigation on primary screens; back button on all secondary screens
 - Norwegian language throughout
 
-## What's Been Implemented (2026-08 — Iter 14: Premium 3D-ish Map + Card Verification + Vehicle Picker Redesign)
+## What's Been Implemented (2026-08 — Iter 17: Beta polish, live cars, DevNavigator, softer wording)
+
+### Iter 17 — final pass før iOS/APK
+
+**Kontekst**: Bruker rapporterte data-ord/robotisk språk, sheet ikke minimerbar, ingen kart-zoom, hamburger-menu uten funksjon, ønsket screen-navigator, ville ha surge-chip + amateur "Legg til kort" fjernet, og live biler faktisk synlige.
+
+**Nye komponenter**:
+- **`DevNavigator`** (`/app/frontend/src/components/DevNavigator.jsx`) — flytende brass-kompass bottom-right på ALLE ruter. Modal med 5 grupper: Kunde / Sjåfør / Flåteeier / Superadmin / Offentlig. Test-konti listet nederst. Kan skjules med `?nav=off`.
+- **`CustomerMenu`** (inline i Home.jsx) — sliding drawer fra venstre når hamburger-ikonet trykkes. Avatar, Turhistorikk, Bankkort, Profil, Innstillinger, Hjelp, Logg ut.
+- **6 demo-sjåfører** som cruiser Oslo (backend simulator, real DB records, real API): `demo1@…demo6@kjapp.no`, kjører med `asyncio.create_task(cruise_demo_drivers)` som oppdaterer posisjon+heading hvert 6. sekund. Heading normaliseres nå `% 360` (bugfix fra testing agent i iter17).
+
+**Endringer i Home.jsx**:
+- Meny-ikonet åpner CustomerMenu-drawer
+- Bunn-sheet minimerbar via `sheet-toggle` → viser oppsummeringsrad
+- Surge-chip fjernet helt
+- Amateur "Legg til betalingskort først"-blokk fjernet (booking-add-card slettet)
+- PaymentRow er nå ett kompakt kort med "Verifisert"-pill eller "Ingen kort lagret"
+- Softer ord: "Hentes fra" / "Kjøres til", "biler i nærheten", "Nærmeste bil er X min unna", "Ca. pris", "sjåfør kan hente deg om X min"
+- CTA-labels: "Legg til bankkort for å bestille" → "Fullfør kortverifisering" → "Bestill bilen · X kr"
+
+**Endringer i PremiumMap.jsx**:
+- Zoom +/- brass-knapper på høyre side (data-testid `map-zoom-in`, `map-zoom-out`)
+- Markers rendrer umiddelbart (ready-gate fjernet)
+- Fallback-timer clearer på `load` event
+
+**Iter 17 tests**
+- **iter_17**: 73/73 backend grønn (inkludert bug-fix for heading normalisering) + 100% frontend UI-verifisering
+- Ingen data-testid `surge-chip` eller `booking-add-card` i DOM (grep = 0)
+- E2E-flyt verifisert: login → 6 biler synlige → Jobb → "Bestill bilen · 203 kr" → redirect til /app/booking/{tripId}
+- DevNav testet på 6 ruter, alle 5 grupper klikker OK
+- Admin @ admin@kjapp.no auto-router til /loyver, Løyvehaver-panelet rendrer med 5 søknader + 12 sjåfører venter
+- **Total: 386/386 backend-tester grønne (etter iter17 bug-fix)**
+
+## What's Been Implemented (2026-08 — Iter 16: Emoji removal, brass Onboarding, live cars simulator)
 
 ### Iter 14 — visuell premium-oppgradering på kunde-siden
 
@@ -348,3 +381,55 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - P2: Trip receipts via e-post
 - P3: Capacitor wrap for native iOS/Android
 - P3: Skatteetaten ARS-godkjenning
+
+---
+
+## Iter 18 — Siste innspurt: Native Mobile + AI Vekstpakke (2026-02-23)
+
+**Kontekst**: Bruker sa "Mobil appen skal være ekte ikke mockup. Kjør alt som mangler m dette er siste innspurt." + spurte om Supabase (svart NEI, beholder MongoDB+FastAPI+Emergent).
+
+### Native mobil (Capacitor v8)
+- ✅ Oppgradert Node.js fra 20 til 22 (Capacitor 8 krever ≥22)
+- ✅ Installert Capacitor v8 core + CLI + iOS + Android + 9 plugins: `@capacitor/{app,device,geolocation,haptics,network,preferences,push-notifications,splash-screen,status-bar}`
+- ✅ `/app/frontend/ios/App/App.xcworkspace` — komplett Xcode-prosjekt, klar til å åpne på Mac
+- ✅ `/app/frontend/android/` — komplett Android Studio-prosjekt, klar til gradle assembleDebug
+- ✅ `capacitor.config.json` med `appId=no.kjapp.app`, splash, statusbar, backgroundColor
+- ✅ `Info.plist` fylt ut med NSLocation*UsageDescription (norsk tekst), UIBackgroundModes (location+fetch+remote-notification), ITSAppUsesNonExemptEncryption=false
+- ✅ `AndroidManifest.xml` med ACCESS_FINE/COARSE/BACKGROUND_LOCATION, POST_NOTIFICATIONS, FOREGROUND_SERVICE_LOCATION, WAKE_LOCK, VIBRATE
+- ✅ **Isomorf `/app/frontend/src/lib/native.js`**: `initNativeShell()`, `watchLocation()`, `registerNativePush()`, `haptic()`, `getDeviceInfo()`, `nativeStore` — automatisk fall-back til web-API når ikke native
+- ✅ `DriverHome.jsx` bruker `watchLocation()` (ekte native GPS på native, `navigator.geolocation` på web)
+- ✅ `App.js` kaller `initNativeShell()` + `registerNativePush()` på boot når native
+- ✅ Safe-area CSS (`env(safe-area-inset-*)`) for notch-tilpasning
+
+### Bakcend nye endepunkter
+- ✅ `GET /api/health` — {app, status, db, time} for mobile-monitoring + uptime-poll
+- ✅ `POST /api/push/native-subscribe` — {platform: ios|android|web, token, device_id?} → lagrer APNs/FCM token med composite key (user_id, platform, device_id) så multi-device fungerer
+- ✅ `POST /api/ai/translate` — {text, target_lang} → GPT-5.6-luna via Emergent LLM Key, 22 språk støttet (no/en/pl/ur/ar/so/ti/fa/tr/ru/uk/vi/th/zh/hi/…), 30-dagers cache i `translation_cache`
+- ✅ `POST /api/ai/transcribe` — {audio_base64, mime_type, language?} → OpenAI Whisper via `OpenAISpeechToText`, dedikert 400/429/502-differentiering
+- ✅ `GET /api/fleet/export/monthly?year&month` — Skatte-klar Excel-rapport (3 ark: Sammendrag, Sjåfører-brekke, Turer) via openpyxl, kun for fleet_owner
+
+### Frontend nye komponenter
+- ✅ **FleetPayouts** — nytt "Månedsrapport (Excel)" kort med måned/år-velger + `data-testid="fleet-export-download"` som streamer .xlsx
+- ✅ **ChatModal** — språk-velger i header (NO/EN/PL/UR/AR/SO/RU/TR/DE/ES), "Oversett til XX"-knapp under hver innkommende melding, italic sub-boble med oversettelsen
+- ✅ **AIChat** — mikrofon-knapp (data-testid `chat-mic`) når input er tom, MediaRecorder → base64 → `/api/ai/transcribe`, auto-send etter 400ms hvis transkribering fungerer, 15s max-recording
+- ✅ **DevNavigator** env-gated: `REACT_APP_DEV_NAV=true` for beta, ikke synlig i produksjon (App Store review-safe)
+
+### Iter 18 tester (100%)
+- **backend**: 25/25 pytest grønn (`test_iter18.py`) — health, translate (401/400/lang/cache/no→en/no→pl), transcribe (401/400 short+invalid), native-subscribe (401/422/200 ios+android), fleet-export (200 xlsx + magic PK, 403 passenger, 400 invalid), regresjon på alle roller/endepunkter
+- **frontend**: 100% E2E — passenger login+DevNav+is-native-class, AI chat mic/send/typing states, fleet_owner auto-redirect, fleet-export card+dropdowns+ekte .xlsx-nedlasting verifisert via `page.expect_download()`
+- **regresjon**: 44 av iter 7-17 tester består (1 timeout var nettverksfeil, ikke kode)
+
+### Deferred
+- 🟡 Vipps checkout — venter på VIPPS_CLIENT_ID/CLIENT_SECRET/SUBSCRIPTION_KEY/MSN fra bruker
+- 🟡 Apple Sign-In aktivering — venter på APPLE_CLIENT_ID
+- 🟡 APNs .p8-nøkkel + FCM google-services.json for faktisk push-sending (endepunktet lagrer tokens, sender ikke fysisk)
+- 🟢 server.py refactor til `routes/*.py` — skippet i sluttspurt (2999 linjer, høy regresjonsrisiko). Backlog P2.
+
+### Backlog etter iter 18
+- P0: APNs + FCM native push sender (8-16t etter nøkler)
+- P0: Vipps checkout (4-8t etter nøkler)
+- P1: Apple Sign-In finalisering
+- P1: Skatteetaten ARS-godkjenning (2-6 uker saksbehandling, START NÅ)
+- P2: server.py refactor → `/app/backend/routes/{auth,trips,driver,fleet,admin,ai,payments}.py`
+- P2: Rate-limiting på `/ai/translate` og `/ai/transcribe` (nå ubegrenset)
+- P3: Trip receipts via e-post (SendGrid, allerede stubbed)

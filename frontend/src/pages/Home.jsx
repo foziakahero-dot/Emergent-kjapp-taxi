@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PremiumMap from "../components/PremiumMap";
 import { tripsApi, carsApi, placesApi, pricingApi, paymentApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight, Users, Sparkles, Car as CarIcon } from "lucide-react";
+import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight, Users, Sparkles, Car as CarIcon, ChevronDown, ChevronUp, User, History, Settings as SettingsIcon, LogOut, HelpCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Orb } from "../components/UIKit";
 
@@ -39,6 +39,8 @@ export default function Home() {
   const [surge, setSurge] = useState({ active: false, multiplier: 1.0, reasons: [] });
   const [pickupSheetOpen, setPickupSheetOpen] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const verifiedMethods = useMemo(() => paymentMethods.filter((m) => m.verified !== false), [paymentMethods]);
   const hasPaymentMethod = paymentMethods.length > 0;
   const hasVerifiedPaymentMethod = verifiedMethods.length > 0;
@@ -82,12 +84,12 @@ export default function Home() {
     return MapPin;
   };
 
-  // Load available cars nearby
+  // Load available cars nearby — refresh every 6s to match backend cruise cadence
   useEffect(() => {
     carsApi.nearby(pickup.lat, pickup.lng).then((r) => setCars(r.cars || [])).catch(() => {});
     const t = setInterval(() => {
       carsApi.nearby(pickup.lat, pickup.lng).then((r) => setCars(r.cars || [])).catch(() => {});
-    }, 15000);
+    }, 6000);
     return () => clearInterval(t);
   }, [pickup.lat, pickup.lng]);
 
@@ -158,7 +160,7 @@ export default function Home() {
 
   const nearbyCarsForMap = useMemo(() => {
     if (dropoff) return []; // hide nearby when route is drawn
-    return cars.map((c, i) => ({ lat: c.lat, lng: c.lng, bearing: c.bearing || (i * 47) % 360 }));
+    return cars.map((c) => ({ lat: c.lat, lng: c.lng, bearing: c.heading || 0 }));
   }, [cars, dropoff]);
 
   return (
@@ -167,7 +169,7 @@ export default function Home() {
       <div className="absolute inset-x-0 top-0 bottom-0">
         <PremiumMap
           center={[pickup.lng, pickup.lat]}
-          zoom={13.5}
+          zoom={dropoff ? 13.5 : 13}
           pitch={45}
           route={mapRoute}
           pickup={pickup}
@@ -180,8 +182,9 @@ export default function Home() {
       {/* Top header — glass pills, brass accent */}
       <div className="relative z-[1000] px-4 pt-3 flex items-center justify-between">
         <button
-          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl"
+          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl transition-transform active:scale-95"
           data-testid="home-menu"
+          onClick={() => setMenuOpen(true)}
           style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)" }}
         >
           <Menu size={18} style={{ color: "var(--text)" }} />
@@ -193,7 +196,7 @@ export default function Home() {
           KJ<span style={{ color: "var(--accent)" }}>A</span>PP
         </div>
         <button
-          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl"
+          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl transition-transform active:scale-95"
           data-testid="home-orb-btn"
           onClick={() => navigate("/app/ai")}
           style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)" }}
@@ -202,7 +205,12 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Bottom sheet — search / booking */}
+      {/* Customer side menu */}
+      <AnimatePresence>
+        {menuOpen && <CustomerMenu onClose={() => setMenuOpen(false)} navigate={navigate} userName={user?.fullName} />}
+      </AnimatePresence>
+
+      {/* Bottom sheet — search / booking (can be minimized) */}
       <motion.div
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -218,7 +226,31 @@ export default function Home() {
             WebkitBackdropFilter: "blur(28px) saturate(140%)",
           }}
         >
-          <div className="sheet-handle" />
+          {/* Collapse handle + toggle */}
+          <button
+            onClick={() => setSheetCollapsed((v) => !v)}
+            data-testid="sheet-toggle"
+            className="w-full flex flex-col items-center gap-1 pb-1 -mt-1 group"
+            aria-label={sheetCollapsed ? "Åpne søk" : "Minimer søk"}
+          >
+            <div className="sheet-handle" />
+          </button>
+
+          {sheetCollapsed ? (
+            <button
+              onClick={() => setSheetCollapsed(false)}
+              data-testid="sheet-expand"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl transition-colors"
+              style={{ background: "rgba(232,224,208,0.05)", border: "1px solid rgba(232,224,208,0.10)" }}
+            >
+              <Search size={16} style={{ color: "var(--accent)" }} />
+              <span className="flex-1 text-left text-sm" style={{ color: "var(--text)" }}>
+                {cars.length > 0 ? `${cars.length} biler i nærheten · nærmeste ${cars[0]?.eta_min} min` : "Ingen sjåfører på vakt akkurat nå"}
+              </span>
+              <ChevronUp size={16} style={{ color: "var(--text-muted)" }} />
+            </button>
+          ) : (
+            <>
           {/* Pickup line — editable */}
           <button
             onClick={() => setPickupSheetOpen(true)}
@@ -231,7 +263,7 @@ export default function Home() {
           >
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Fra</div>
+              <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Hentes fra</div>
               <div className="text-sm truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
             </div>
             <span className="text-[11px]" style={{ color: "var(--accent)" }}>Endre</span>
@@ -242,30 +274,10 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
                 <span className="text-[12px] font-medium" style={{ color: "var(--accent)" }}>
-                  {cars.length > 0 ? `${cars.length} ledige biler nær deg` : "Ingen sjåfører på vakt akkurat nå"}
+                  {cars.length > 0 ? `${cars.length} biler i nærheten` : "Ingen sjåfører på vakt akkurat nå"}
                 </span>
               </div>
-              {cars.length > 0 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>nærmeste {cars[0]?.eta_min} min</span>}
-            </div>
-          )}
-
-          {/* Surge chip — reason only, no percentage */}
-          {surge.active && !dropoff && (
-            <div
-              className="mb-3 flex items-center gap-2 px-3 py-2.5 rounded-2xl"
-              style={{
-                background: "rgba(215, 106, 90, 0.10)",
-                border: "1px solid rgba(215, 106, 90, 0.25)",
-              }}
-              data-testid="surge-chip"
-            >
-              <Zap size={16} style={{ color: "#e39e5c" }} />
-              <div className="flex-1">
-                <div className="text-[12px] font-medium" style={{ color: "#e8c9b0" }}>
-                  {surge.reasons.join(" + ")}
-                </div>
-                <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Litt høyere pris akkurat nå</div>
-              </div>
+              {cars.length > 0 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Nærmeste bil er {cars[0]?.eta_min} min unna</span>}
             </div>
           )}
           {!dropoff ? (
@@ -322,6 +334,8 @@ export default function Home() {
               onAddCard={() => navigate("/app/payment-methods?required=1")}
             />
           )}
+            </>
+          )}
         </div>
       </motion.div>
 
@@ -356,8 +370,79 @@ export default function Home() {
   );
 }
 
-function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, options, onCancel, onConfirm, requesting, hasPaymentMethod, hasVerifiedPaymentMethod, defaultMethod, defaultMethodVerified, onAddCard }) {
-  const selected = VEHICLES.find((v) => v.id === vehicle) || VEHICLES[0];
+function CustomerMenu({ onClose, navigate, userName }) {
+  const items = [
+    { label: "Turhistorikk", path: "/app/history", Icon: History },
+    { label: "Bankkort", path: "/app/payment-methods", Icon: CreditCard },
+    { label: "Profil", path: "/app/profile", Icon: User },
+    { label: "Innstillinger", path: "/app/settings", Icon: SettingsIcon },
+    { label: "Hjelp og støtte", path: "/app/help", Icon: HelpCircle },
+  ];
+  const go = (p) => { onClose(); navigate(p); };
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1400]"
+      style={{ background: "rgba(4,8,10,0.72)", backdropFilter: "blur(10px)" }}
+      onClick={onClose}
+      data-testid="customer-menu"
+    >
+      <motion.aside
+        initial={{ x: -320 }}
+        animate={{ x: 0 }}
+        exit={{ x: -320 }}
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        className="absolute left-0 top-0 bottom-0 w-[290px] flex flex-col"
+        style={{ background: "rgba(12,18,22,0.98)", borderRight: "1px solid rgba(232,224,208,0.10)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 pt-6 pb-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(232,224,208,0.08)" }}>
+          <div className="w-11 h-11 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.18)", color: "var(--accent)", fontWeight: 600 }}>
+            {(userName || "K").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--accent)" }}>Kunde</div>
+            <div className="text-sm truncate" style={{ color: "var(--text)" }}>{userName || "Gjest"}</div>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-full grid place-items-center" style={{ background: "rgba(232,224,208,0.06)", color: "var(--text-muted)" }} data-testid="menu-close">
+            <X size={16} />
+          </button>
+        </div>
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+          {items.map((it) => (
+            <button
+              key={it.path}
+              onClick={() => go(it.path)}
+              data-testid={`menu-${it.path.replace(/\//g, "-")}`}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-colors"
+              style={{ background: "transparent", color: "var(--text)" }}
+            >
+              <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(232,224,208,0.05)" }}>
+                <it.Icon size={16} style={{ color: "var(--accent)" }} />
+              </div>
+              <span className="text-sm">{it.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="px-5 py-4" style={{ borderTop: "1px solid rgba(232,224,208,0.08)" }}>
+          <button
+            onClick={() => { localStorage.removeItem("kjapp_token"); window.location.href = "/login"; }}
+            data-testid="menu-logout"
+            className="w-full flex items-center gap-2 justify-center py-2.5 rounded-2xl text-sm"
+            style={{ background: "rgba(232,224,208,0.05)", color: "var(--text-muted)" }}
+          >
+            <LogOut size={14} /> Logg ut
+          </button>
+        </div>
+      </motion.aside>
+    </motion.div>
+  );
+}
+
+
+function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, options, onCancel, onConfirm, requesting, hasPaymentMethod, hasVerifiedPaymentMethod, defaultMethod, defaultMethodVerified, onAddCard }) {  const selected = VEHICLES.find((v) => v.id === vehicle) || VEHICLES[0];
   const priceFor = (vid) => (options?.find?.((o) => o.vehicle_type === vid)?.price) || 0;
   return (
     <div>
@@ -368,9 +453,9 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
           <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "var(--text)" }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px]" style={{ color: "var(--text-muted)" }}>Fra</div>
+          <div className="text-[13px]" style={{ color: "var(--text-muted)" }}>Hentes fra</div>
           <div className="text-sm truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
-          <div className="text-[13px] mt-2" style={{ color: "var(--text-muted)" }}>Til</div>
+          <div className="text-[13px] mt-2" style={{ color: "var(--text-muted)" }}>Kjøres til</div>
           <div className="text-sm truncate" style={{ color: "var(--text)" }}>{dropoff.name}</div>
         </div>
         <button onClick={onCancel} className="text-xs hover:opacity-70" style={{ color: "var(--text-muted)" }} data-testid="booking-cancel">Endre</button>
@@ -423,9 +508,9 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
       </div>
 
       <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-sm" style={{ color: "var(--text-muted)" }}>{distanceKm.toFixed(1)} km · ~{selected.eta} min ventetid</span>
+        <span className="text-sm" style={{ color: "var(--text-muted)" }}>{distanceKm.toFixed(1)} km · sjåfør kan hente deg om {selected.eta} min</span>
         <div className="text-right">
-          <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Estimat</div>
+          <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Ca. pris</div>
           <div className="font-display text-[22px] leading-none" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estPrice} kr</div>
         </div>
       </div>
@@ -448,11 +533,11 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         {requesting ? (
           <span className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--accent-on)", borderTopColor: "transparent" }} />
         ) : !hasPaymentMethod ? (
-          <>Legg til kort for å bestille</>
+          <>Legg til bankkort for å bestille</>
         ) : !hasVerifiedPaymentMethod ? (
-          <>Verifiser kortet for å bestille</>
+          <>Fullfør kortverifisering</>
         ) : (
-          <>Bestill nå · {estPrice} kr</>
+          <>Bestill bilen · {estPrice} kr</>
         )}
       </button>
     </div>
@@ -516,43 +601,7 @@ function VehicleGlyph({ id, active }) {
 
 /* Payment row with verification pill */
 function PaymentRow({ hasPaymentMethod, hasVerified, defaultMethod, defaultMethodVerified, onAddCard }) {
-  if (!hasPaymentMethod) {
-    return (
-      <button
-        onClick={onAddCard}
-        data-testid="booking-add-card"
-        className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors text-left"
-        style={{ background: "rgba(215,106,90,0.10)", border: "1px solid rgba(215,106,90,0.30)" }}
-      >
-        <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(215,106,90,0.18)" }}>
-          <AlertTriangle size={16} style={{ color: "#e39e5c" }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium" style={{ color: "#e8c9b0" }}>Legg til betalingskort først</div>
-          <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Vi må ha et gyldig kort før du kan bestille</div>
-        </div>
-      </button>
-    );
-  }
-  if (!hasVerified) {
-    return (
-      <button
-        onClick={onAddCard}
-        data-testid="booking-verify-card"
-        className="w-full mb-3 flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors text-left"
-        style={{ background: "rgba(215,106,90,0.10)", border: "1px solid rgba(215,106,90,0.30)" }}
-      >
-        <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(215,106,90,0.18)" }}>
-          <AlertTriangle size={16} style={{ color: "#e39e5c" }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium" style={{ color: "#e8c9b0" }}>Kortet må verifiseres</div>
-          <div className="text-[10px]" style={{ color: "rgba(232,201,176,0.7)" }}>Fullfør 3D-Secure på kortet før første tur</div>
-        </div>
-        <ChevronRight size={16} style={{ color: "#e39e5c" }} />
-      </button>
-    );
-  }
+  // Compact verified card row — the actual "no card" case is handled by the CTA button label + click routing.
   return (
     <button
       onClick={onAddCard}
@@ -565,14 +614,21 @@ function PaymentRow({ hasPaymentMethod, hasVerified, defaultMethod, defaultMetho
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm flex items-center gap-2 flex-wrap" style={{ color: "var(--text)" }}>
-          <span className="truncate">{defaultMethod?.label || "Kort"}{defaultMethod?.last4 ? ` •• ${defaultMethod.last4}` : ""}</span>
-          {defaultMethodVerified ? (
+          <span className="truncate">
+            {hasPaymentMethod
+              ? `${defaultMethod?.label || "Kort"}${defaultMethod?.last4 ? ` •• ${defaultMethod.last4}` : ""}`
+              : "Ingen kort lagret"}
+          </span>
+          {hasPaymentMethod && defaultMethodVerified && (
             <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(138,196,143,0.14)", color: "#8ac48f" }}>Verifisert</span>
-          ) : (
-            <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(215,106,90,0.14)", color: "#e39e5c" }}>Uverifisert</span>
+          )}
+          {hasPaymentMethod && !defaultMethodVerified && (
+            <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(227,158,92,0.14)", color: "#e39e5c" }}>Verifiseres</span>
           )}
         </div>
-        <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Trykk for å bytte</div>
+        <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+          {hasPaymentMethod ? "Trykk for å endre" : "Trykk her for å legge til"}
+        </div>
       </div>
       <ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
     </button>

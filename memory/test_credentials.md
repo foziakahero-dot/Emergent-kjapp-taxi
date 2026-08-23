@@ -32,6 +32,18 @@
 - Har tilgang til: `/loyver` (søknader), `/loyver/applications/:id`, `/loyver/pending-drivers`, samt alle eksisterende `/admin/*` endepunkter (require_admin aksepterer både `admin` og `superadmin`)
 - I prod: pek `admin.kjapp.no` mot samme app. Route-vakt `superadminOnly` gjør at ingen andre roller kommer inn på `/loyver`.
 
+## Demo-sjåfører (Iter 16 — kart-simulator)
+- Auto-seeded ved backend-oppstart i `lifespan()`
+- Emails: `demo1@kjapp.no` … `demo6@kjapp.no` alle med `demo1234`
+- Role: `driver`, approved: true, online: true, demo: true
+- Cruiser Oslo (background asyncio-task hvert 6. sekund oppdaterer last_lat/last_lng/last_heading)
+- Vises på kunde-kartet via `/api/cars/nearby` som ekte biler
+
+## DevNavigator (Iter 17)
+- Flytende brass-kompass bottom-right på ALLE ruter (offentlige + private)
+- Test-konti-tabell ligger nederst i modalen
+- Kan skjules med `?nav=off` i URL
+
 ## Auth Endpoints
 - POST /api/auth/register (kun kunde)
 - POST /api/auth/login

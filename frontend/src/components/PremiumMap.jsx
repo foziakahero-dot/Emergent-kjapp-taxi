@@ -219,9 +219,9 @@ export default function PremiumMap({
     });
   }, [ready, followActive, activeCar, pitch]);
 
-  // Manage markers
+  // Manage markers — MapLibre markers don't need style-load, they attach to DOM
   useEffect(() => {
-    if (!ready || !mapRef.current) return;
+    if (!mapRef.current) return;
     const map = mapRef.current;
     const wanted = {};
 
@@ -261,13 +261,34 @@ export default function PremiumMap({
         markersRef.current[k] = m;
       }
     });
-  }, [ready, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, cars, activeCar?.lat, activeCar?.lng, activeCar?.bearing]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, cars, activeCar?.lat, activeCar?.lng, activeCar?.bearing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`relative w-full h-full ${className}`} data-testid={testid} style={{ minHeight: 200 }}>
       <div ref={mapContainer} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
       {/* Overlay gradient at the top for chip readability */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-32" style={{ background: "linear-gradient(to bottom, rgba(12,18,22,0.55), transparent)" }} />
+      {/* Zoom controls — brass, top-right */}
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-[10]">
+        <button
+          onClick={() => mapRef.current?.zoomIn()}
+          aria-label="Zoom inn"
+          data-testid="map-zoom-in"
+          className="w-10 h-10 rounded-2xl grid place-items-center backdrop-blur-xl transition-transform active:scale-95"
+          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(201,161,91,0.35)", color: "var(--accent)" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"/></svg>
+        </button>
+        <button
+          onClick={() => mapRef.current?.zoomOut()}
+          aria-label="Zoom ut"
+          data-testid="map-zoom-out"
+          className="w-10 h-10 rounded-2xl grid place-items-center backdrop-blur-xl transition-transform active:scale-95"
+          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(201,161,91,0.35)", color: "var(--accent)" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"/></svg>
+        </button>
+      </div>
     </div>
   );
 }

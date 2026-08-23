@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import "./App.css";
 import { StatusBar } from "./components/UIKit";
 import BottomNav from "./components/BottomNav";
+import { initNativeShell, isNative, registerNativePush, pushListenForeground } from "./lib/native";
 
 import Onboarding from "./pages/Onboarding";
 import Login from "./pages/Login";
@@ -37,6 +38,7 @@ import Terms from "./pages/Terms";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 import CookieConsent from "./components/CookieConsent";
+import DevNavigator from "./components/DevNavigator";
 import ApplyFleet from "./pages/ApplyFleet";
 import SuperadminApplications from "./pages/SuperadminApplications";
 import SuperadminApplicationDetail from "./pages/SuperadminApplicationDetail";
@@ -143,10 +145,24 @@ function AppRoutes() {
 }
 
 export default function App() {
+  React.useEffect(() => {
+    initNativeShell();
+    if (isNative()) {
+      // Register native push once app boots. Backend token registration only happens after auth,
+      // but we can pre-request permission here so the prompt is not tied to a specific action.
+      registerNativePush().catch(() => {});
+      pushListenForeground((n) => {
+        console.log("[push] foreground", n);
+      });
+      // Add native class for possible CSS tweaks (safe-area, no-scroll)
+      document.body.classList.add("is-native");
+    }
+  }, []);
   return (
     <AuthProvider>
       <AppRoutes />
       <CookieConsent />
+      <DevNavigator />
     </AuthProvider>
   );
 }

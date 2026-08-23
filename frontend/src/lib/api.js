@@ -77,6 +77,9 @@ export const settingsApi = {
 export const aiApi = {
   chat: (message, session_id) => api.post("/ai/chat", { message, session_id }).then((r) => r.data),
   history: (session_id) => api.get("/ai/history", { params: { session_id } }).then((r) => r.data),
+  translate: (text, target_lang) => api.post("/ai/translate", { text, target_lang }).then((r) => r.data),
+  transcribe: (audio_base64, mime_type = "audio/webm", language) =>
+    api.post("/ai/transcribe", { audio_base64, mime_type, language }).then((r) => r.data),
 };
 
 export const summaryApi = {
@@ -109,6 +112,8 @@ export const fleetApi = {
   overview: () => api.get("/fleet/overview").then((r) => r.data),
   drivers: () => api.get("/fleet/drivers").then((r) => r.data),
   payouts: () => api.get("/fleet/payouts").then((r) => r.data),
+  exportMonthly: (year, month) =>
+    api.get("/fleet/export/monthly", { params: { year, month }, responseType: "blob" }).then((r) => r),
 };
 
 export const adminFleetsApi = {
@@ -134,6 +139,7 @@ export const gdprApi = {
 export const pushApi = {
   publicKey: () => api.get("/push/vapid-public-key").then((r) => r.data),
   subscribe: (subscription) => api.post("/push/subscribe", { subscription }).then((r) => r.data),
+  nativeSubscribe: (platform, token, device_id) => api.post("/push/native-subscribe", { platform, token, device_id }).then((r) => r.data),
   test: () => api.post("/push/test").then((r) => r.data),
 };
 

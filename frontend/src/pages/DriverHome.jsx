@@ -72,27 +72,28 @@ export default function DriverHome() {
   useEffect(() => {
     localStorage.setItem("kjapp_driver_online", String(online));
     driverApi.online(online).catch(() => {});
-    if (online) {
-      if (!navigator.geolocation) { setGpsError("Nettleseren støtter ikke GPS"); return; }
-      const opts = { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 };
-      let lastSent = 0;
-      watchIdRef.current = navigator.geolocation.watchPosition(
-        (p) => {
-          setGpsError(null);
-          setPos({ lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading || 0 });
-          const now = Date.now();
-          if (now - lastSent < 4500) return;  // throttle to every ~5s
-          lastSent = now;
-          driverApi.location(p.coords.latitude, p.coords.longitude, p.coords.heading, p.coords.speed).catch(() => {});
-        },
-        (err) => { setGpsError("GPS-feil: " + err.message); },
-        opts,
-      );
-    } else {
-      if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
-    }
+    let handle = null;
+    let lastSent = 0;
+    (async () => {
+      if (online) {
+        const { watchLocation } = await import("../lib/native");
+        handle = await watchLocation(
+          (p) => {
+            setGpsError(null);
+            setPos({ lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading || 0 });
+            const now = Date.now();
+            if (now - lastSent < 4500) return;  // throttle ~5s
+            lastSent = now;
+            driverApi.location(p.coords.latitude, p.coords.longitude, p.coords.heading, p.coords.speed).catch(() => {});
+          },
+          (err) => { setGpsError("GPS-feil: " + (err?.message || "ukjent")); },
+        );
+        watchIdRef.current = handle;
+      }
+    })();
     return () => {
-      if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+      if (watchIdRef.current?.clear) watchIdRef.current.clear();
+      watchIdRef.current = null;
     };
   }, [online]);
 
