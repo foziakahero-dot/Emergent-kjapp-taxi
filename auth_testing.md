@@ -21,15 +21,22 @@
 3. You land back at `/auth/callback#session_id=...` → app exchanges it and redirects by role.
 4. Verify `localStorage.kjapp_token` is set and `/api/auth/me` returns the user.
 
-## Automated checks (no real Google needed)
+## Automated checks (no real Google needed) — VERIFIED 2026-08-24
 ```bash
-# 1. Invalid session_id must give 401 (server-side exchange works)
+# 1. Invalid session_id must give 401 (server-side exchange works)  ✓ PASS
 curl -s -X POST {API}/api/auth/google/session -H "Content-Type: application/json" \
   -d '{"session_id":"fake-session-id"}'   # → {"detail":"Ugyldig Google-økt"} (401)
 
-# 2. /auth/callback without session_id redirects to /login (frontend)
-# 3. Any route with #session_id=... renders AuthCallback (router-level detection)
+# 2. /auth/callback without session_id redirects to /login (frontend)  ✓
+# 3. Any route with #session_id=... renders AuthCallback ("Logger deg inn med Google…")  ✓ PASS (verified in /app mode)
+# 4. Google button present on /login (data-testid social-google)  ✓ PASS
+# 5. Failed Google login → /login?err=google shows error banner (data-testid login-error)  ✓ PASS
 ```
+
+## Status
+- All automatable checks PASS. The only unverified step is the actual Google consent
+  screen → real session_id exchange, which requires a real Google account + interactive
+  browser and CANNOT be automated headlessly. Owner must confirm the live button once.
 
 ## Test identities
 - No Google test accounts are pre-linked. Any Google account creates/links a user by e-mail.

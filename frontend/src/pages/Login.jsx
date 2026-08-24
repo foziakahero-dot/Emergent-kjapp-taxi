@@ -23,6 +23,10 @@ export default function Login() {
 
   useEffect(() => {
     api.get("/auth/apple/config").then((r) => setAppleEnabled(!!r.data.enabled)).catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("err") === "google") {
+      setErr("Google-innlogging feilet. Prøv igjen eller bruk e-post.");
+    }
   }, []);
 
   async function loginWithApple() {
