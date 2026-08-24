@@ -23,6 +23,13 @@ const VEHICLES = [
   { id: "premium",   name: "Premium",  desc: "Business · sort bil",     multiplier: 1.8,  capacity: 4, tagline: "Signature", eta: 6 },
 ];
 
+/** 3-tier vehicle preview shown BEFORE destination is picked — brand identity strip. */
+const VEHICLE_TIERS = [
+  { id: "ai-first", name: "KJAPP",   tagline: "Rask & rimelig" },
+  { id: "premium",  name: "KJAPP+",  tagline: "Premium bil" },
+  { id: "trygg",    name: "KJAPP XL", tagline: "Familie · bagasje" },
+];
+
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -223,6 +230,45 @@ export default function Home() {
         {menuOpen && <CustomerMenu onClose={() => setMenuOpen(false)} navigate={navigate} userName={user?.fullName} />}
       </AnimatePresence>
 
+      {/* KJAPP Assist FAB — signaturknapp, alltid tilgjengelig */}
+      {!menuOpen && (
+        <motion.button
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.5, type: "spring", stiffness: 220, damping: 18 }}
+          onClick={() => navigate("/app/ai")}
+          data-testid="home-kjapp-assist"
+          className="absolute right-4 z-[1001] group"
+          style={{ bottom: sheetCollapsed ? 116 : 480 }}
+          aria-label="KJAPP Assist"
+        >
+          <span
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: "radial-gradient(circle, rgba(203,163,101,0.55), transparent 70%)",
+              filter: "blur(10px)",
+              animation: "kjapp-fab-halo 3s ease-in-out infinite",
+            }}
+          />
+          <div
+            className="relative w-14 h-14 rounded-full grid place-items-center transition-transform group-active:scale-95"
+            style={{
+              background: "linear-gradient(135deg, #DDB77A 0%, #CBA365 55%, #8F6E3E 100%)",
+              boxShadow: "0 12px 24px rgba(203,163,101,0.35), inset 0 0 0 1px rgba(255,255,255,0.15)",
+            }}
+          >
+            <Sparkles size={22} style={{ color: "#0B1013" }} strokeWidth={2.4} />
+          </div>
+          <div
+            className="absolute right-[68px] top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[11px] tracking-widest uppercase pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ background: "rgba(11,16,19,0.9)", color: "var(--accent)", border: "1px solid rgba(203,163,101,0.30)" }}
+          >
+            KJAPP Assist
+          </div>
+          <style>{`@keyframes kjapp-fab-halo { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }`}</style>
+        </motion.button>
+      )}
+
       {/* Bottom sheet — search / booking (can be minimized) */}
       <motion.div
         initial={{ y: 40, opacity: 0 }}
@@ -295,31 +341,39 @@ export default function Home() {
           )}
           {!dropoff ? (
             <>
-              {/* Smart greeting — Nordic mobility signature */}
-              <div className="mb-3">
-                <div className="font-display text-[22px] leading-tight" style={{ color: "var(--text)" }} data-testid="home-greeting">
-                  {getGreeting()}{user?.fullName ? `, ${user.fullName.split(" ")[0]}.` : "."}
-                </div>
-                {cars.length > 0 && (
-                  <div className="text-[13px] mt-1" style={{ color: "var(--text-muted)" }} data-testid="home-smart-suggest">
-                    På vei et sted? Nærmeste bil er <span style={{ color: "var(--accent)" }}>{cars[0]?.eta_min} min</span> unna.
-                  </div>
-                )}
-              </div>
-
+              {/* Signature search card — greeting + search + chips i én tappable enhet */}
               <button
                 onClick={() => setShowSheet(true)}
-                className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-colors"
+                className="w-full text-left rounded-2xl transition-colors relative overflow-hidden"
                 style={{
-                  background: "rgba(244,244,240,0.05)",
+                  background: "rgba(244,244,240,0.045)",
                   border: "1px solid rgba(244,244,240,0.10)",
+                  padding: "14px 16px",
                 }}
                 data-testid="home-where-to"
               >
-                <Search size={18} style={{ color: "var(--accent)" }} />
-                <span style={{ color: "var(--text)" }}>Hvor vil du?</span>
+                <div className="text-[10px] tracking-[0.3em] uppercase mb-1" style={{ color: "var(--accent)" }} data-testid="home-greeting">
+                  {getGreeting()}{user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="font-display text-[22px] leading-tight flex-1" style={{ color: "var(--text)" }}>
+                    Hvor vil du?
+                  </div>
+                  <div
+                    className="w-10 h-10 rounded-full grid place-items-center shrink-0"
+                    style={{ background: "var(--accent-soft)", border: "1px solid rgba(203,163,101,0.30)" }}
+                  >
+                    <Search size={16} style={{ color: "var(--accent)" }} />
+                  </div>
+                </div>
+                {cars.length > 0 && (
+                  <div className="text-[12px] mt-1.5" style={{ color: "var(--text-muted)" }} data-testid="home-smart-suggest">
+                    Nærmeste bil er <span style={{ color: "var(--accent)" }}>{cars[0]?.eta_min} min</span> unna
+                  </div>
+                )}
               </button>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+
+              <div className="mt-2 grid grid-cols-3 gap-2">
                 {[
                   { label: "Hjem", target: places.find(p => p.label === "Hjem") },
                   { label: "Jobb", target: places.find(p => p.label === "Jobb") },
@@ -329,20 +383,44 @@ export default function Home() {
                   return (
                     <button
                       key={label}
-                      onClick={() => target && setDropoff({ name: target.name, lat: target.lat, lng: target.lng })}
+                      onClick={(e) => { e.stopPropagation(); target && setDropoff({ name: target.name, lat: target.lat, lng: target.lng }); }}
                       disabled={!target}
-                      className="flex flex-col items-center gap-2 py-3 rounded-2xl transition-colors disabled:opacity-40"
+                      className="flex flex-col items-center gap-1.5 py-2.5 rounded-2xl transition-colors disabled:opacity-40 hover:border-mint"
                       style={{
-                        background: "rgba(244,244,240,0.04)",
+                        background: "rgba(244,244,240,0.035)",
                         border: "1px solid rgba(244,244,240,0.08)",
                       }}
                       data-testid={`quick-${label}`}
                     >
-                      <Ic size={18} style={{ color: "var(--accent)" }} />
+                      <Ic size={16} style={{ color: "var(--accent)" }} />
                       <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</span>
                     </button>
                   );
                 })}
+              </div>
+
+              {/* 3-tier vehicle teaser — vises som preview før destinasjon er valgt */}
+              <div className="mt-3">
+                <div className="text-[10px] uppercase tracking-widest mb-1.5" style={{ color: "var(--text-muted)" }}>Velg klasse</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {VEHICLE_TIERS.map((t) => (
+                    <div
+                      key={t.id}
+                      className="rounded-2xl p-2.5 text-center"
+                      style={{
+                        background: "rgba(244,244,240,0.03)",
+                        border: "1px solid rgba(244,244,240,0.08)",
+                      }}
+                      data-testid={`tier-preview-${t.id}`}
+                    >
+                      <div className="w-full h-10 grid place-items-center">
+                        <VehicleGlyph id={t.id} active={false} />
+                      </div>
+                      <div className="text-[11px] mt-1" style={{ color: "var(--text)" }}>{t.name}</div>
+                      <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>{t.tagline}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           ) : (
@@ -401,12 +479,32 @@ export default function Home() {
 }
 
 function CustomerMenu({ onClose, navigate, userName }) {
-  const items = [
-    { label: "Turhistorikk", path: "/app/history", Icon: History },
-    { label: "Bankkort", path: "/app/payment-methods", Icon: CreditCard },
-    { label: "Profil", path: "/app/profile", Icon: User },
-    { label: "Innstillinger", path: "/app/settings", Icon: SettingsIcon },
-    { label: "Hjelp og støtte", path: "/app/help", Icon: HelpCircle },
+  const groups = [
+    {
+      label: "Din reise",
+      items: [
+        { label: "Profil", path: "/app/profile", Icon: User },
+        { label: "Mine turer", path: "/app/history", Icon: History },
+        { label: "Favoritter", path: "/app/favorites", Icon: Star },
+        { label: "Betaling", path: "/app/payment-methods", Icon: CreditCard },
+      ],
+    },
+    {
+      label: "KJAPP-medlem",
+      items: [
+        { label: "KJAPP Rewards", path: "/app/rewards", Icon: Sparkles, badge: "Ny" },
+        { label: "Sikkerhet", path: "/app/safety", Icon: SettingsIcon },
+        { label: "Tilgjengelighet", path: "/app/accessibility", Icon: Users },
+      ],
+    },
+    {
+      label: "Verktøy",
+      items: [
+        { label: "KJAPP Assist", path: "/app/ai", Icon: Sparkles, tone: "accent" },
+        { label: "Innstillinger", path: "/app/settings", Icon: SettingsIcon },
+        { label: "Hjelp og støtte", path: "/app/help", Icon: HelpCircle },
+      ],
+    },
   ];
   const go = (p) => { onClose(); navigate(p); };
   return (
@@ -420,48 +518,92 @@ function CustomerMenu({ onClose, navigate, userName }) {
       data-testid="customer-menu"
     >
       <motion.aside
-        initial={{ x: -320 }}
+        initial={{ x: -340 }}
         animate={{ x: 0 }}
-        exit={{ x: -320 }}
+        exit={{ x: -340 }}
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
-        className="absolute left-0 top-0 bottom-0 w-[290px] flex flex-col"
-        style={{ background: "rgba(12,18,22,0.98)", borderRight: "1px solid rgba(232,224,208,0.10)" }}
+        className="absolute left-0 top-0 bottom-0 w-[300px] flex flex-col"
+        style={{
+          background: "rgba(11,16,19,0.98)",
+          borderRight: "1px solid rgba(244,244,240,0.10)",
+          boxShadow: "24px 0 48px rgba(0,0,0,0.4)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 pt-6 pb-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(232,224,208,0.08)" }}>
-          <div className="w-11 h-11 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.18)", color: "var(--accent)", fontWeight: 600 }}>
+        <div className="px-5 pt-6 pb-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(244,244,240,0.08)" }}>
+          <div className="w-11 h-11 rounded-full grid place-items-center" style={{ background: "rgba(203,163,101,0.18)", color: "var(--accent)", fontWeight: 600 }}>
             {(userName || "K").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--accent)" }}>Kunde</div>
-            <div className="text-sm truncate" style={{ color: "var(--text)" }}>{userName || "Gjest"}</div>
+            <div className="font-display text-[17px]" style={{ color: "var(--text)" }}>{userName || "Gjest"}</div>
+            <div className="text-[10px] uppercase tracking-[0.28em]" style={{ color: "var(--accent)" }}>KJAPP-medlem</div>
           </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-full grid place-items-center" style={{ background: "rgba(232,224,208,0.06)", color: "var(--text-muted)" }} data-testid="menu-close">
+          <button onClick={onClose} className="w-9 h-9 rounded-full grid place-items-center" style={{ background: "rgba(244,244,240,0.06)", color: "var(--text-muted)" }} data-testid="menu-close">
             <X size={16} />
           </button>
         </div>
-        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
-          {items.map((it) => (
-            <button
-              key={it.path}
-              onClick={() => go(it.path)}
-              data-testid={`menu-${it.path.replace(/\//g, "-")}`}
-              className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-colors"
-              style={{ background: "transparent", color: "var(--text)" }}
-            >
-              <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(232,224,208,0.05)" }}>
-                <it.Icon size={16} style={{ color: "var(--accent)" }} />
+        <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
+          {groups.map((g) => (
+            <div key={g.label}>
+              <div className="px-3 pb-1.5 text-[9px] uppercase tracking-[0.35em]" style={{ color: "var(--text-muted)" }}>{g.label}</div>
+              <div className="space-y-0.5">
+                {g.items.map((it) => (
+                  <button
+                    key={it.path}
+                    onClick={() => go(it.path)}
+                    data-testid={`menu-${it.path.replace(/\//g, "-")}`}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-colors hover:bg-white/[0.03]"
+                    style={{ background: "transparent", color: "var(--text)" }}
+                  >
+                    <div
+                      className="w-9 h-9 rounded-xl grid place-items-center"
+                      style={{
+                        background: it.tone === "accent" ? "rgba(203,163,101,0.15)" : "rgba(244,244,240,0.04)",
+                        border: it.tone === "accent" ? "1px solid rgba(203,163,101,0.25)" : "1px solid transparent",
+                      }}
+                    >
+                      <it.Icon size={16} style={{ color: "var(--accent)" }} />
+                    </div>
+                    <span className="text-sm flex-1">{it.label}</span>
+                    {it.badge && (
+                      <span
+                        className="text-[9px] px-2 py-0.5 rounded-full uppercase tracking-widest"
+                        style={{ background: "rgba(203,163,101,0.15)", color: "var(--accent)" }}
+                      >
+                        {it.badge}
+                      </span>
+                    )}
+                    <ChevronRight size={13} style={{ color: "var(--text-muted)" }} />
+                  </button>
+                ))}
               </div>
-              <span className="text-sm">{it.label}</span>
-            </button>
+            </div>
           ))}
         </nav>
-        <div className="px-5 py-4" style={{ borderTop: "1px solid rgba(232,224,208,0.08)" }}>
+        <div className="px-5 py-4 space-y-2" style={{ borderTop: "1px solid rgba(244,244,240,0.08)" }}>
+          <button
+            onClick={() => go("/driver/login")}
+            data-testid="menu-become-driver"
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-left"
+            style={{ background: "rgba(203,163,101,0.06)", border: "1px solid rgba(203,163,101,0.16)" }}
+          >
+            <span className="text-[13px]" style={{ color: "var(--text)" }}>Bli KJAPP-sjåfør</span>
+            <ChevronRight size={13} style={{ color: "var(--accent)" }} />
+          </button>
+          <button
+            onClick={() => go("/apply/fleet")}
+            data-testid="menu-become-loyver"
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl text-left"
+            style={{ background: "rgba(203,163,101,0.06)", border: "1px solid rgba(203,163,101,0.16)" }}
+          >
+            <span className="text-[13px]" style={{ color: "var(--text)" }}>Bli løyvehaver</span>
+            <ChevronRight size={13} style={{ color: "var(--accent)" }} />
+          </button>
           <button
             onClick={() => { localStorage.removeItem("kjapp_token"); window.location.href = "/login"; }}
             data-testid="menu-logout"
-            className="w-full flex items-center gap-2 justify-center py-2.5 rounded-2xl text-sm"
-            style={{ background: "rgba(232,224,208,0.05)", color: "var(--text-muted)" }}
+            className="w-full flex items-center gap-2 justify-center py-2.5 rounded-2xl text-sm mt-2"
+            style={{ background: "rgba(244,244,240,0.05)", color: "var(--text-muted)" }}
           >
             <LogOut size={14} /> Logg ut
           </button>

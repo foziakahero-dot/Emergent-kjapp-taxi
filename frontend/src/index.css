@@ -33,18 +33,22 @@
   --font-mono:  'JetBrains Mono', ui-monospace, monospace;
 }
 
-/* Driver-modus (HUD-dashbord) — settes på <body class="driver-theme"> via Shell */
+/* Sjåfør-modus — Nordic Mobility HUD.
+   Behold gullpaletten som passasjer, men skarpere kontrast for info-tetthet.
+   Mint brukes bare for "online/aktiv"-status. */
 body.driver-theme {
-  --bg-base:   #050708;       /* rent svart dashbord */
-  --bg-card:   rgba(255, 255, 255, 0.04);
-  --line:      rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --text:      #f2f5f6;       /* skarp hvit — info-tett */
-  --text-muted:#6b7075;
-  --accent:    #2fe08c;       /* skarp mint — HUD-signatur */
-  --accent-soft: rgba(47, 224, 140, 0.12);
-  --accent-glow: rgba(47, 224, 140, 0.35);
-  --accent-on:  #04120a;
+  --bg-base:   #05090B;       /* graphite → nesten svart */
+  --bg-card:   rgba(255, 255, 255, 0.035);
+  --line:      rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text:      #F4F4F0;       /* samme ivory som kunde */
+  --text-muted:#7A8087;
+  --accent:    #CBA365;       /* KJAPP-gull — samme signatur */
+  --accent-soft: rgba(203, 163, 101, 0.14);
+  --accent-glow: rgba(203, 163, 101, 0.35);
+  --accent-on:  #0B1013;
+  --status-online: #2fe08c;   /* mint — kun for "på jobb/aktiv"-status */
+  --status-online-soft: rgba(47, 224, 140, 0.12);
 }
 
 html, body, #root {
@@ -70,8 +74,8 @@ body:not(.driver-theme) {
 
 body.driver-theme {
   background-image:
-    linear-gradient(180deg, #050708 0%, #030405 100%),
-    radial-gradient(circle at 50% 0%, rgba(47, 224, 140, 0.04), transparent 40%);
+    linear-gradient(180deg, #05090B 0%, #030405 100%),
+    radial-gradient(circle at 50% 0%, rgba(203, 163, 101, 0.06), transparent 40%);
   background-attachment: fixed;
 }
 

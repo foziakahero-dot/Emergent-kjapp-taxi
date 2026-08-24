@@ -424,6 +424,21 @@ Design blueprint på `/app/design_guidelines.json` — bygget mot brukers verbat
 
 
 
+## Iter 23 — Full Nordic-utrulling: Assist FAB + 3-tier + Rich Menu + Sjåfør-tema (2026-02-24)
+
+- **Signatur søkekort**: Kompakt kort med "GOD ETTERMIDDAG, OLA" overline i gull + "Hvor vil du?" Fraunces + gull-søk-bubble. Hele kortet er tappable. Erstattet 2 separate elementer (greeting + button) med 1 elegant identity-kort. Løser bruker-feedback "man må klare å nå søkebaren".
+- **3-tier vehicle preview**: KJAPP / KJAPP+ / KJAPP XL vises som horisontale bil-kort i tomstate (før destinasjon) — brand-identitet før man har valgt tur.
+- **KJAPP Assist FAB**: Gull-gradient orb (56×56) med Sparkles-ikon + 3s halo-pulse animasjon, alltid synlig nederst-høyre i kunde-hjem. Navigerer til /app/ai.
+- **Rikt side-panel (CustomerMenu)**: 3 grupper — "Din reise" (Profil, Mine turer, Favoritter, Betaling), "KJAPP-medlem" (Rewards m/ NY-badge, Sikkerhet, Tilgjengelighet), "Verktøy" (KJAPP Assist m/ gull-ramme, Innstillinger, Hjelp). Nederst: "Bli KJAPP-sjåfør →" og "Bli løyvehaver →" gull-CTAer + Logg ut. Fraunces header med "KJAPP-MEDLEM" tracking-widest.
+- **Sjåfør-app Nordic-tema**: Driver-theme CSS oppdatert — samme graphite bakgrunn (#05090B), samme ivory tekst (#F4F4F0), samme KJAPP-gull (#CBA365) som kunde-app. Tailwind `mint` alias mappet til gull for automatisk cascade. Mint (grønn) beholdt via `--status-online` for online-status og GPS-punkt.
+- **Tailwind + fonts oppdatert**: Fraunces (display) + Inter Tight (body) satt som primær. Alle brass-hex (#c9a15b, #f4ecd8, #0c1216) migrert til Nordic-palett.
+
+### Verifisert (screenshots + testids)
+- 9 nye testids på hjem: home-greeting, home-where-to, quick-{Hjem,Jobb,Flyplass}, tier-preview-{ai-first,premium,trygg}, home-kjapp-assist
+- 9 menu-testids: menu--app-{profile,favorites,rewards,safety,accessibility,ai}, menu-become-{driver,loyver}, customer-menu
+- Backend 40/40 regresjon grønn
+
+
 ## Iter 20 — Deploy-klar for 3 separate apper via runtime-detection (2026-02-24)
 
 **Bruker ba om**: Deploy fleet.kjapp.no og admin.kjapp.no som separate apper.

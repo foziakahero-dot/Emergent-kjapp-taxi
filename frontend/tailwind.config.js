@@ -6,38 +6,33 @@ module.exports = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: "#0c1216",
+          DEFAULT: "#0B1013",
           card: "rgba(255,255,255,0.028)",
           soft: "rgba(255,255,255,0.02)",
         },
-        mint: {  /* keep 'mint' as alias for accent so old classes still work */
-          DEFAULT: "#c9a15b",
-          bright: "#d9b170",
-          dim: "#8a6f3f",
+        mint: {  /* Nå: online/status-farge for sjåfør. Kunde-tema mapper til gull-accent via CSS. */
+          DEFAULT: "#CBA365",
+          bright: "#DDB77A",
+          dim: "#8F6E3E",
         },
         accent: {
-          DEFAULT: "#c9a15b",
-          soft: "rgba(201,161,91,0.14)",
+          DEFAULT: "#CBA365",
+          soft: "rgba(203,163,101,0.14)",
         },
         pearl: {
-          DEFAULT: "#e8e0d0",
-          muted: "#7a827a",
+          DEFAULT: "#F4F4F0",
+          muted: "#8A9198",
         },
-        line: "rgba(232,224,208,0.08)",
-        muted: "#7a827a",
+        line: "rgba(244,244,240,0.08)",
+        muted: "#8A9198",
       },
       fontFamily: {
-        display: ["'Instrument Serif'", "Georgia", "serif"],
-        body: ["'Inter'", "system-ui", "sans-serif"],
+        display: ["'Fraunces'", "'Instrument Serif'", "Georgia", "serif"],
+        body: ["'Inter Tight'", "'Inter'", "system-ui", "sans-serif"],
         mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
       },
-      fontFamily: {
-        display: ["'Instrument Sans'", "'DM Sans'", "system-ui", "sans-serif"],
-        body: ["'DM Sans'", "system-ui", "sans-serif"],
-        mono: ["'JetBrains Mono'", "monospace"],
-      },
       boxShadow: {
-        glow: "0 0 40px rgba(47, 224, 140, 0.35)",
+        glow: "0 0 40px rgba(203, 163, 101, 0.35)",
         card: "0 1px 0 rgba(255,255,255,0.03) inset, 0 20px 60px rgba(0,0,0,0.4)",
       },
       keyframes: {
