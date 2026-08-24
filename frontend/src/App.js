@@ -154,6 +154,13 @@ function Shell({ children, withNav = true, driver = false }) {
 function AppRoutes() {
   const location = useLocation();
 
+  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  // Synchronous session_id detection (Emergent Google OAuth) — must run BEFORE any route guards,
+  // and must read from useLocation().hash (reactive), covering all app modes (main/fleet/admin).
+  if (location.hash?.includes("session_id=")) {
+    return <AuthCallback />;
+  }
+
   // FLEET STANDALONE APP (fleet.kjapp.no build)
   if (IS_FLEET_APP) {
     return (

@@ -25,7 +25,13 @@ export default function AuthCallback() {
         const u = await googleSession(session_id);
         // clean hash
         window.history.replaceState({}, document.title, window.location.pathname);
-        navigate(u.role === "driver" ? "/driver" : u.role === "admin" ? "/admin" : "/app", { replace: true });
+        const dest =
+          u.role === "superadmin" ? "/loyver"
+          : u.role === "admin" ? "/admin"
+          : u.role === "driver" ? "/driver"
+          : u.role === "fleet_owner" ? "/fleet"
+          : "/app";
+        navigate(dest, { replace: true });
       } catch (e) {
         navigate("/login?err=google", { replace: true });
       }
