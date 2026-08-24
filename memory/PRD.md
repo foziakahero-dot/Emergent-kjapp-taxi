@@ -397,6 +397,32 @@ REACT_APP_MODE=main|fleet|admin  (default: main)
 REACT_APP_DEV_NAV=true|false     (default: false i prod)
 ```
 
+
+## Iter 20 — Deploy-klar for 3 separate apper via runtime-detection (2026-02-24)
+
+**Bruker ba om**: Deploy fleet.kjapp.no og admin.kjapp.no som separate apper.
+
+### Runtime app-mode detection
+- App.js `detectAppMode()` med 3 kilder: (1) `?mode=fleet|admin|main` URL-param (lagres i localStorage), (2) hostname prefix (`fleet.*` → fleet, `admin.*` → admin), (3) build-time env `REACT_APP_MODE`. Default: main
+- `window.__KJAPP_MODE` eksponert for debug/QA
+- **Én Emergent-deploy kan servere alle 3 domener** via CNAME-records
+
+### Login polerert per modus
+- fleet-modus: "Flåte-eier innlogging" + kun `demo-fleet` + "Søk om løyve"-lenke
+- admin-modus: "Admin innlogging" + kun `demo-admin`
+- main-modus: "Velkommen tilbake" med alle 4 demo-knapper
+- Feil rolle på feil modus → auto-redirect til /login
+
+### Deployment guide (DEPLOYMENT.md oppdatert)
+- **Anbefalt**: Én Emergent-deploy + 3 CNAMEs (kjapp.no, fleet.kjapp.no, admin.kjapp.no → samme app)
+- Alternativ: 3 separate builds med Vercel/Netlify multi-site
+- Cloudflare Access-anbefaling for admin.kjapp.no, deploy-checklist, backend CORS-tuning
+
+### Verifisert
+- `?mode=admin` → MODE=admin, kun demo-admin, /fleet blokkert → /loyver ✅
+- `?mode=fleet` → MODE=fleet, kun demo-fleet, "Søk om løyve" synlig ✅
+- `?mode=main` → alle 4 knapper synlige ✅
+
 ## Backlog / Next
 - P0: Ekte betaling (Stripe/Vipps SDK) ved kvittering — første steg mot inntekt
 - P1: Sett `APPLE_CLIENT_ID` i backend .env for å aktivere Apple Sign In (krever Apple Developer $99/år)

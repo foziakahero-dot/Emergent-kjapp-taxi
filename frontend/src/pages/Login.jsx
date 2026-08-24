@@ -13,6 +13,12 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [appleEnabled, setAppleEnabled] = useState(false);
   const { login } = useAuth();
+
+  // Detect standalone app mode (fleet.kjapp.no / admin.kjapp.no)
+  const APP_MODE = (typeof window !== "undefined" && window.__KJAPP_MODE) || "main";
+  const isFleetMode = APP_MODE === "fleet";
+  const isAdminMode = APP_MODE === "admin";
+  const isStandalone = isFleetMode || isAdminMode;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -95,8 +101,12 @@ export default function Login() {
       </div>
 
       <div className="px-8 pt-4 flex-1">
-        <h1 className="font-display text-[28px] tracking-tight text-white">Velkommen tilbake</h1>
-        <p className="text-[#7a827a] text-sm mt-2">Logg inn for å fortsette reisen</p>
+        <h1 className="font-display text-[28px] tracking-tight text-white">
+          {isFleetMode ? "Flåte-eier innlogging" : isAdminMode ? "Admin innlogging" : "Velkommen tilbake"}
+        </h1>
+        <p className="text-[#7a827a] text-sm mt-2">
+          {isFleetMode ? "Administrer sjåfører, utbetalinger og rapporter" : isAdminMode ? "Løyver, sjåfør-godkjenning og drift" : "Logg inn for å fortsette reisen"}
+        </p>
 
         <form onSubmit={submit} className="mt-10 space-y-4">
           <input
@@ -175,48 +185,68 @@ export default function Login() {
           </Link>
         </p>
 
-        {/* Demo-innlogging for beta — én-klikk for alle 4 roller */}
+        {/* Demo-innlogging for beta — én-klikk. Filtreres etter app-modus. */}
         <div className="mt-5 space-y-2">
-          <div className="text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--accent)" }}>Demo-innlogging</div>
-          <div className="grid grid-cols-2 gap-2">
-            <DemoBtn
-              testid="demo-passenger"
-              label="Kunde"
-              sub="Ola"
-              onClick={() => demoLogin("ola@kjapp.no", "test1234")}
-            />
-            <DemoBtn
-              testid="demo-driver"
-              label="Sjåfør"
-              sub="Ola Sjåfør"
-              onClick={() => demoLogin("sjafor@kjapp.no", "sjafor1234")}
-            />
-            <DemoBtn
-              testid="demo-fleet"
-              label="Flåte-eier"
-              sub="Oslo Nord Taxi"
-              onClick={() => demoLogin("floteier1@kjapp.no", "fleet1234")}
-            />
-            <DemoBtn
-              testid="demo-admin"
-              label="Superadmin"
-              sub="Løyver + drift"
-              onClick={() => demoLogin("admin@kjapp.no", "admin123")}
-            />
+          <div className="text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--accent)" }}>
+            {isStandalone ? "Demo-innlogging" : "Demo-innlogging"}
+          </div>
+          <div className={`grid ${isStandalone ? "grid-cols-1" : "grid-cols-2"} gap-2`}>
+            {!isStandalone && (
+              <DemoBtn
+                testid="demo-passenger"
+                label="Kunde"
+                sub="Ola"
+                onClick={() => demoLogin("ola@kjapp.no", "test1234")}
+              />
+            )}
+            {!isStandalone && (
+              <DemoBtn
+                testid="demo-driver"
+                label="Sjåfør"
+                sub="Ola Sjåfør"
+                onClick={() => demoLogin("sjafor@kjapp.no", "sjafor1234")}
+              />
+            )}
+            {(!isStandalone || isFleetMode) && (
+              <DemoBtn
+                testid="demo-fleet"
+                label="Flåte-eier"
+                sub="Oslo Nord Taxi"
+                onClick={() => demoLogin("floteier1@kjapp.no", "fleet1234")}
+              />
+            )}
+            {(!isStandalone || isAdminMode) && (
+              <DemoBtn
+                testid="demo-admin"
+                label="Superadmin"
+                sub="Løyver + drift"
+                onClick={() => demoLogin("admin@kjapp.no", "admin123")}
+              />
+            )}
           </div>
           <div className="text-[10px] text-[#5f6862] pt-1">Ett trykk logger deg rett inn på riktig panel</div>
         </div>
 
-        <p className="text-[#5f6862] text-xs mt-4">
-          Er du sjåfør?{" "}
-          <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
-            Sjåfør-innlogging
-          </Link>
-          <span className="mx-2 opacity-40">·</span>
-          <Link to="/apply/fleet" className="text-mint" data-testid="link-loyver-apply">
-            Bli løyvehaver
-          </Link>
-        </p>
+        {!isStandalone && (
+          <p className="text-[#5f6862] text-xs mt-4">
+            Er du sjåfør?{" "}
+            <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
+              Sjåfør-innlogging
+            </Link>
+            <span className="mx-2 opacity-40">·</span>
+            <Link to="/apply/fleet" className="text-mint" data-testid="link-loyver-apply">
+              Bli løyvehaver
+            </Link>
+          </p>
+        )}
+        {isFleetMode && (
+          <p className="text-[#5f6862] text-xs mt-4 text-center">
+            Ikke registrert flåte enda?{" "}
+            <Link to="/apply" className="text-mint" data-testid="link-fleet-apply">
+              Søk om løyve
+            </Link>
+          </p>
+        )}
         <p className="text-[#5f6862] text-[11px] mt-4">
           <Link to="/privacy" className="hover:text-mint">Personvern</Link>
           <span className="mx-2">·</span>

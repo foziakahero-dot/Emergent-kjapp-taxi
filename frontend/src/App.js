@@ -44,15 +44,42 @@ import SuperadminApplications from "./pages/SuperadminApplications";
 import SuperadminApplicationDetail from "./pages/SuperadminApplicationDetail";
 import SuperadminPending from "./pages/SuperadminPending";
 
-// APP_MODE — la deg deploye samme kodebase som 3 separate apper:
-//  - "main"  → kunde + sjåfør (kjapp.no)
-//  - "fleet" → kun flåte-eier (fleet.kjapp.no)
-//  - "admin" → kun superadmin (admin.kjapp.no)
-// Sett REACT_APP_MODE i .env for det bygg du lager. Default = "main".
-const APP_MODE = (process.env.REACT_APP_MODE || "main").toLowerCase();
+// APP_MODE — la deg deploye samme kodebase som 3 separate apper.
+// Bestemmes ved (i prioritert rekkefølge):
+//   1) Runtime hostname:  fleet.*  → "fleet",   admin.* → "admin"
+//   2) Build-time env:    REACT_APP_MODE=fleet|admin
+//   3) Default:           "main" (kunde + sjåfør)
+// Dette gjør at ÉN deploy til Emergent kan serveres på 3 domener via CNAME:
+//   kjapp.no        → main
+//   fleet.kjapp.no  → fleet
+//   admin.kjapp.no  → admin
+function detectAppMode() {
+  if (typeof window !== "undefined" && window.location) {
+    // 0) URL param override (for preview/testing): ?mode=fleet | ?mode=admin
+    try {
+      const qm = new URLSearchParams(window.location.search).get("mode");
+      if (qm && ["fleet", "admin", "main"].includes(qm.toLowerCase())) {
+        try { window.localStorage.setItem("kjapp_mode_override", qm.toLowerCase()); } catch { /* ignore */ }
+        return qm.toLowerCase();
+      }
+      const stored = window.localStorage.getItem("kjapp_mode_override");
+      if (stored && ["fleet", "admin", "main"].includes(stored)) return stored;
+    } catch { /* ignore */ }
+    // 1) Runtime hostname
+    const host = (window.location.hostname || "").toLowerCase();
+    if (host.startsWith("fleet.")) return "fleet";
+    if (host.startsWith("admin.")) return "admin";
+  }
+  // 2) Build-time env
+  return (process.env.REACT_APP_MODE || "main").toLowerCase();
+}
+const APP_MODE = detectAppMode();
 const IS_FLEET_APP = APP_MODE === "fleet";
 const IS_ADMIN_APP = APP_MODE === "admin";
 const IS_STANDALONE = IS_FLEET_APP || IS_ADMIN_APP;
+
+// Expose for debugging
+if (typeof window !== "undefined") window.__KJAPP_MODE = APP_MODE;
 
 function redirectAfterLogin(user) {
   if (IS_FLEET_APP) return "/fleet";
