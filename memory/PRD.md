@@ -464,6 +464,50 @@ Design blueprint på `/app/design_guidelines.json` — bygget mot brukers verbat
 - `?mode=fleet` → MODE=fleet, kun demo-fleet, "Søk om løyve" synlig ✅
 - `?mode=main` → alle 4 knapper synlige ✅
 
+## Iter 24 — Full Sjåfør-app Upgrade (14-punkts brief) (2026-02-24)
+
+Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten redesign fra bunn.
+
+### DriverHome — omfattende rebuild
+- **1. Status-kontroll**: "Online / Offline" med Fraunces + pulserende radial-glow rundt Power-ikon (kun online). Grønn toggle-pill 64×36px, `#0B1013`-knopp på grønn bakgrunn.
+- **2. Overview-kort**: "GOD ETTERMIDDAG, OLA" tracking-widest overline (gull) + summaryLine("N turer fullført i dag" | "Ingen turer i dag ennå.") + "Du har 1 aktiv tur" (når current) + kompakt "I DAG · 0 kr" gull høyre.
+- **3. Active trip card**: Prominent gull-border, "AKTIV TUR" badge + status-label ("På vei til kunde"/"Venter på kunde"/"Tur pågår"/"Tur fullført"). "Åpne aktiv tur →" gull-CTA. Kunde-navn og distanse under adresse.
+- **4. Trip request card**: 
+  - Countdown progress-bar 15s → 0s (fargeswap rød ved 5s)
+  - Passasjer-strip: avatar-initialer + navn + ★rating + trip_count + gull ring-knapp
+  - Henting/Destinasjon separert med gull/ivory-punkter og "HENTING/DESTINASJON" tracking overline
+  - 2-kolonne grid "Til henting" og "Selve turen" med km+min hver
+  - **Din inntjening** — 26px Fraunces gull, tabular-nums, `Math.round(price * 0.9)`
+  - Godta = flex-1 gull, "Godta innen X sek" i overline. Avslå = 38% width, muted grå (mindre visuelt vekt).
+- **5. Empty state**: "Vi varsler deg når det kommer en tur." + "Gå online"-knapp hvis offline.
+- **8. Earnings summary**: 4-metric-grid (I dag / Turer / Online / Godta-rate), tappable → /driver/payouts.
+- **9. Bottom-nav**: Hjem · Inntekt · Turer · Konto (data-testid `dnav-{home,earn,trips,account}`). Gull ikon+label ved aktiv, muted grå ellers. Safe-area-inset bottom.
+
+### DriverTrip — 5-state lifecycle
+- **1. driver_on_way**: "På vei til kunde" + "Jeg er fremme" (calls `atPickup`) + "Kunden dukket ikke opp"
+- **2. at_pickup (ny status!)**: "Venter på kunde" + "Start tur" + "Kunden dukket ikke opp"
+- **3. in_trip**: "Tur pågår" + "Fullfør tur"
+- **4. arrived**: "Tur fullført" + `<TripCompletedBreakdown>` (Turpris / KJAPP avgift 10% / Til flåten) + "Ferdig"
+- **10. Safety-menu**: Top-right shield-knapp (kun aktive states), åpner bottom-sheet med 4 alternativer: Ring nødtelefon (rødt, tel:112), Rapporter kunden (mailto: med tur-ID og kundenavn), Del turen (navigator.share eller clipboard), Kontakt KJAPP support (mailto:)
+- Route polyline byttet fra mint til gull (`#CBA365`)
+
+### Backend nye endpoints
+- `POST /api/driver/decline` — logger driver_declines for acceptance-rate
+- `POST /api/driver/trip/{id}/at-pickup` — ny mellomstatus mellom driver_on_way og in_trip
+- `POST /api/driver/trip/{id}/no-show` — cancelled med reason="no_show"
+- `POST /api/driver/online` — nå med `driver_sessions` (started_at/ended_at) for online_minutes-beregning
+- `GET /api/driver/summary/today` — utvidet med `online_minutes` og `acceptance_rate` (accepted / (accepted + declined))
+- Alle `["driver_on_way", "in_trip", "arrived"]` filtre oppdatert til å inkludere `at_pickup`
+
+### Backend regresjon
+40/40 pytest grønn. Nye endpoints verifisert via curl.
+
+### Skjermbilder
+- DriverHome viser: status "Online" med grønn puls, overview "GOD ETTERMIDDAG, OLA", Aktiv tur "TUR PÅGÅR · Bygdøy · 259 kr · Åpne aktiv tur", trip-request Aisha Ali ★4.8 · 73 turer med countdown og "Din inntjening 233 kr", bottom-nav.
+- DriverTrip safety-menu: 4 kort — Ring nødtelefon (rødt), Rapporter Erik Berg, Del turen, Kontakt support.
+
+
+
 ## Backlog / Next
 - P0: Ekte betaling (Stripe/Vipps SDK) ved kvittering — første steg mot inntekt
 - P1: Sett `APPLE_CLIENT_ID` i backend .env for å aktivere Apple Sign In (krever Apple Developer $99/år)

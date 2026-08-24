@@ -924,7 +924,7 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
 @api.get("/trips/active")
 async def active_trip(current=Depends(get_current_user)):
     trip = await db.trips.find_one(
-        {"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "in_trip", "arrived"]}},
+        {"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}},
         sort=[("created_at", -1)],
     )
     if not trip:
@@ -1520,7 +1520,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
 async def driver_current(current=Depends(require_driver)):
     driver_id = current["id"]
     t = await db.trips.find_one(
-        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip", "arrived"]}},
+        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip", "arrived"]}},
         sort=[("created_at", -1)],
     )
     if not t:
@@ -1543,17 +1543,49 @@ async def driver_current(current=Depends(require_driver)):
     return t
 
 
-@api.post("/driver/trip/{trip_id}/start")
-async def driver_start(trip_id: str, current=Depends(require_driver)):
+@api.post("/driver/trip/{trip_id}/at-pickup")
+async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
+    """Driver has arrived at pickup and is waiting for passenger to board."""
     driver_id = current["id"]
     result = await db.trips.update_one(
         {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+        {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
+    t = await db.trips.find_one({"trip_id": trip_id})
+    await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
+    return {"ok": True}
+
+
+@api.post("/driver/trip/{trip_id}/start")
+async def driver_start(trip_id: str, current=Depends(require_driver)):
+    driver_id = current["id"]
+    # Accept both driver_on_way and at_pickup as valid transitions to in_trip
+    result = await db.trips.update_one(
+        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup"]}},
         {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
+    return {"ok": True}
+
+
+@api.post("/driver/trip/{trip_id}/no-show")
+async def driver_no_show(trip_id: str, current=Depends(require_driver)):
+    """Passenger did not show up at pickup — driver cancels + gets small compensation."""
+    driver_id = current["id"]
+    result = await db.trips.update_one(
+        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup"]}},
+        {"$set": {"status": "cancelled", "cancelled_reason": "no_show", "cancelled_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
+    t = await db.trips.find_one({"trip_id": trip_id})
+    if t and t.get("user_id"):
+        await send_push_to_user(t["user_id"], "Turen ble avlyst", "Du dukket ikke opp — kort no-show-avgift kan bli belastet.", "/app")
     return {"ok": True}
 
 
@@ -1584,7 +1616,56 @@ async def driver_summary(current=Depends(require_driver)):
     }):
         trips += 1
         total += t.get("price", 0)
-    return {"income": total, "trips": trips, "satisfaction": 98}
+
+    # Online minutes today — sum of online sessions
+    online_minutes = 0
+    async for s in db.driver_sessions.find({
+        "driver_id": driver_id,
+        "started_at": {"$gte": today},
+    }):
+        start = s.get("started_at")
+        end = s.get("ended_at") or datetime.now(timezone.utc).isoformat()
+        try:
+            dt_s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            dt_e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            online_minutes += int((dt_e - dt_s).total_seconds() / 60)
+        except Exception:
+            pass
+
+    # Acceptance rate — accepted / (accepted + declined) today
+    accepted = await db.trips.count_documents({
+        "driver_id": driver_id,
+        "created_at": {"$gte": today},
+    })
+    declined = await db.driver_declines.count_documents({
+        "driver_id": driver_id,
+        "declined_at": {"$gte": today},
+    })
+    total_offered = accepted + declined
+    acceptance_rate = round((accepted / total_offered) * 100) if total_offered > 0 else 100
+
+    return {
+        "income": total,
+        "trips": trips,
+        "satisfaction": 98,
+        "online_minutes": online_minutes,
+        "acceptance_rate": acceptance_rate,
+    }
+
+
+class DeclineTripRequest(BaseModel):
+    trip_id: str
+
+
+@api.post("/driver/decline")
+async def driver_decline(body: DeclineTripRequest, current=Depends(require_driver)):
+    """Driver declines a pending trip — logged for acceptance-rate calculation."""
+    await db.driver_declines.insert_one({
+        "driver_id": current["id"],
+        "trip_id": body.trip_id,
+        "declined_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True}
 
 
 # ---- Driver GPS + Online status ----
@@ -1628,10 +1709,27 @@ class DriverOnlineRequest(BaseModel):
 
 @api.post("/driver/online")
 async def driver_online(body: DriverOnlineRequest, current=Depends(require_driver)):
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.users.update_one(
         {"_id": ObjectId(current["id"])},
-        {"$set": {"online": body.online, "online_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"online": body.online, "online_at": now_iso}},
     )
+    # Track online sessions for acceptance-rate + online-minutes-today
+    if body.online:
+        # Start a new session (only if no open one already)
+        open_session = await db.driver_sessions.find_one({"driver_id": current["id"], "ended_at": None})
+        if not open_session:
+            await db.driver_sessions.insert_one({
+                "driver_id": current["id"],
+                "started_at": now_iso,
+                "ended_at": None,
+            })
+    else:
+        # Close any open session
+        await db.driver_sessions.update_many(
+            {"driver_id": current["id"], "ended_at": None},
+            {"$set": {"ended_at": now_iso}},
+        )
     return {"online": body.online}
 
 
@@ -2700,7 +2798,7 @@ async def unread_message_count(current=Depends(get_current_user)):
     my_role_in_chat = "driver" if role == "driver" else "passenger"
     other_role = "passenger" if my_role_in_chat == "driver" else "driver"
     q = {"driver_id" if role == "driver" else "user_id": user_id,
-         "status": {"$in": ["driver_on_way", "in_trip", "arrived"]}}
+         "status": {"$in": ["driver_on_way", "at_pickup", "in_trip", "arrived"]}}
     n = 0
     async for t in db.trips.find(q):
         seen_key = f"{my_role_in_chat}_last_seen_msg_at"

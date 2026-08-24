@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { driverApi, tripsApi } from "../lib/api";
-import { Orb, VoiceBars } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Navigation, Clock, Check, Power, History, Phone, Star } from "lucide-react";
+import { MapPin, Navigation, Check, Power, Phone, Star, MessageCircle, Wallet, Clock, ShieldAlert, ChevronRight, Home as HomeIcon, User as UserIcon, TrendingUp } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
-import { carIconRotated, pickupIcon, dropoffIcon } from "../lib/mapAssets";
+import { carIconRotated } from "../lib/mapAssets";
 import L from "leaflet";
 
 function notifyNewTrip(count) {
@@ -127,236 +126,435 @@ export default function DriverHome() {
     }
   };
 
+  const declineTrip = async (trip_id) => {
+    // Optimistic remove — driver won't see this trip again
+    setPending((prev) => prev.filter((t) => t.trip_id !== trip_id));
+    try { await driverApi.decline(trip_id); } catch { /* ignore — server may not have endpoint yet */ }
+  };
+
   const firstName = (user?.fullName || "Sjåfør").split(" ")[0];
+  const greeting = greetingFor(new Date());
+  const summaryText = summaryLine(summary);
 
   return (
     <div className="px-4 pt-2 pb-24 page-enter">
-      {/* Online toggle */}
-      <div className="mt-2 card p-4 flex items-center gap-3">
+      {/* 1. STATUS — Online / Offline med tydelig kopi + pulserende ring */}
+      <div className="mt-2 card p-4 flex items-center gap-3" data-testid="driver-status-card">
         <div
-          className="w-11 h-11 rounded-full grid place-items-center"
-          style={{ background: online ? "rgba(47,224,140,0.15)" : "rgba(255,255,255,0.05)" }}
+          className="relative w-11 h-11 rounded-full grid place-items-center shrink-0"
+          style={{ background: online ? "rgba(47,224,140,0.14)" : "rgba(255,255,255,0.04)" }}
         >
-          <Power size={18} className={online ? "text-mint" : ""} style={!online ? { color: "var(--text-muted)" } : undefined} />
+          {online && (
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: "radial-gradient(circle, rgba(47,224,140,0.42), transparent 65%)",
+                animation: "kjapp-online-pulse 2.4s ease-out infinite",
+              }}
+            />
+          )}
+          <Power size={18} className="relative" style={{ color: online ? "#2fe08c" : "var(--text-muted)" }} />
         </div>
-        <div className="flex-1">
-          <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{online ? "På vakt" : "Offline"}</div>
-          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{online ? (gpsError || "Du mottar turer") : "Slå på for å motta turer"}</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-display text-[17px]" style={{ color: "var(--text)" }} data-testid="driver-status-title">
+            {online ? "Online" : "Offline"}
+          </div>
+          <div className="text-[12px]" style={{ color: online ? "#2fe08c" : "var(--text-muted)" }}>
+            {online ? (gpsError ? gpsError : "Du mottar turforespørsler") : "Slå på for å motta turer"}
+          </div>
         </div>
         <button
           onClick={() => setOnline((v) => !v)}
           data-testid="driver-online-toggle"
-          className="relative w-14 h-8 rounded-full transition-colors"
-          style={{ background: online ? "#2fe08c" : "rgba(255,255,255,0.10)" }}
+          aria-label={online ? "Gå offline" : "Gå online"}
           aria-pressed={online}
+          className="relative w-16 h-9 rounded-full transition-colors shrink-0"
+          style={{
+            background: online ? "#2fe08c" : "rgba(255,255,255,0.10)",
+            boxShadow: online ? "inset 0 0 0 1px rgba(47,224,140,0.5)" : "inset 0 0 0 1px rgba(255,255,255,0.06)",
+          }}
         >
-          <span className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform ${online ? "translate-x-6" : ""}`} />
+          <span
+            className="absolute top-1 left-1 w-7 h-7 rounded-full transition-transform"
+            style={{
+              background: online ? "#0B1013" : "#F4F4F0",
+              transform: online ? "translateX(28px)" : "translateX(0)",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
+            }}
+          />
         </button>
+        <style>{`@keyframes kjapp-online-pulse { 0% { transform: scale(0.9); opacity: 0.9; } 100% { transform: scale(1.9); opacity: 0; } }`}</style>
       </div>
 
-      {/* Live map — only when online + has GPS */}
-      {online && pos && (
-        <div className="mt-3 card overflow-hidden" data-testid="driver-live-map">
-          <div className="relative h-[220px] w-full">
-            <MapContainer
-              center={[pos.lat, pos.lng]}
-              zoom={14}
-              zoomControl={false}
-              attributionControl={false}
-              scrollWheelZoom={false}
-              style={{ height: "100%", width: "100%" }}
-            >
-              <TileLayer url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png" />
-              <Marker position={[pos.lat, pos.lng]} icon={carIconRotated(pos.heading || 0)} />
-              <RecenterOn lat={pos.lat} lng={pos.lng} />
-            </MapContainer>
-            <div className="absolute top-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md">
-              <span className="w-2 h-2 rounded-full bg-mint animate-pulse" />
-              <span className="text-white text-[11px] font-medium tracking-wide">LIVE POSISJON</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Hero — with driver avatar */}
-      <div className="mt-3 card p-5 relative overflow-hidden">
-        <div className="absolute -right-8 -top-8 opacity-40 pointer-events-none">
-          <div className="orb" style={{ width: 130, height: 130 }} />
-        </div>
-        <div className="relative flex items-start gap-4">
-          {/* Avatar */}
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-mint to-[#0e8a55] grid place-items-center text-[#04120a] font-display text-lg shrink-0 mint-glow" data-testid="driver-avatar">
+      {/* 2. DRIVER OVERVIEW — God kveld + turer + inntekt */}
+      <div className="mt-3 card p-4" data-testid="driver-overview">
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-full grid place-items-center shrink-0" style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-soft))" }} data-testid="driver-avatar">
             {user?.photo ? (
-              <img src={user.photo} alt="" className="w-14 h-14 rounded-full object-cover" />
+              <img src={user.photo} alt="" className="w-11 h-11 rounded-full object-cover" />
             ) : (
-              (user?.fullName || "S").split(" ").map(n => n[0]).slice(0,2).join("").toUpperCase()
+              <span style={{ color: "var(--accent-on)", fontWeight: 600 }}>
+                {(user?.fullName || "S").split(" ").map(n => n[0]).slice(0,2).join("").toUpperCase()}
+              </span>
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] text-mint uppercase tracking-widest">
-              {user?.car || "Sjåfør"} {user?.plate ? ` · ${user.plate}` : ""}
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>
+              {greeting}, {firstName}
             </div>
-            <h1 className="mt-1 font-display text-[20px] tracking-tight text-white leading-tight">
-              Hei {firstName}.<br />
-              {pending.length > 0 || current
-                ? `${pending.length + (current ? 1 : 0)} tur${pending.length + (current ? 1 : 0) === 1 ? "" : "er"} nå.`
-                : online ? "Ingen turer akkurat nå." : "Slå på for å begynne."}
-            </h1>
-            <p className="text-[#7a827a] text-sm mt-1">
-              {current ? "Du har en aktiv tur." : pending.length ? "Klar til å kjøre?" : online ? "Vi varsler deg når det kommer en tur." : "Du er offline."}
-            </p>
+            <div className="font-display text-[19px] leading-tight mt-0.5" style={{ color: "var(--text)" }} data-testid="driver-overview-headline">
+              {summaryText}
+            </div>
+            {current && (
+              <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }} data-testid="driver-overview-active">
+                Du har 1 aktiv tur
+              </div>
+            )}
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>I dag</div>
+            <div className="font-display text-[18px]" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid="driver-overview-income">{summary.income} kr</div>
           </div>
         </div>
       </div>
 
-      {/* Current trip banner */}
+      {/* 3. ACTIVE TRIP — prominent card med status og CTA */}
       {current && (
-        <motion.button
+        <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          onClick={() => navigate("/driver/trip")}
-          data-testid="driver-current-banner"
-          className="mt-3 w-full text-left card p-4 flex items-center gap-3 border-mint/40"
+          data-testid="driver-active-card"
+          className="mt-3 card p-4"
+          style={{ border: "1px solid rgba(203,163,101,0.34)", boxShadow: "0 12px 32px rgba(203,163,101,0.10)" }}
         >
-          <div className="w-10 h-10 rounded-full bg-mint/10 grid place-items-center">
-            <Navigation size={18} className="text-mint" />
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
+              <span className="text-[10px] uppercase tracking-[0.32em]" style={{ color: "var(--accent)" }} data-testid="active-badge">AKTIV TUR</span>
+            </div>
+            <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }} data-testid="active-state">
+              {activeStateLabel(current.status)}
+            </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-mint uppercase tracking-widest">Aktiv tur</div>
-            <div className="text-white text-sm truncate mt-0.5">{current.dropoff_address}</div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full grid place-items-center shrink-0" style={{ background: "var(--accent-soft)" }}>
+              <Navigation size={16} style={{ color: "var(--accent)" }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm truncate" style={{ color: "var(--text)" }} data-testid="active-address">
+                {current.status === "driver_on_way" ? current.pickup_address : current.dropoff_address}
+              </div>
+              <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                {current.customer?.name || "Kunde"} · {current.distance_km} km
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-display text-[17px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{current.price} kr</div>
+            </div>
           </div>
-          <div className="text-white text-sm font-semibold">{current.price} kr</div>
-        </motion.button>
+          <button
+            onClick={() => navigate("/driver/trip")}
+            data-testid="active-open"
+            className="mt-3 btn-primary w-full flex items-center justify-center gap-2"
+          >
+            Åpne aktiv tur <ChevronRight size={16} />
+          </button>
+        </motion.div>
       )}
 
-      {/* Next / pending trips */}
-      <div className="mt-5 px-1 flex items-center justify-between">
-        <h2 className="text-white text-sm font-medium">Neste tur</h2>
-        <span className="text-[11px] text-[#7a827a]">{pending.length} venter</span>
-      </div>
-
-      <div className="mt-2 space-y-2">
+      {/* 4. INCOMING TRIP REQUESTS — passasjer, rating, henting/destinasjon, inntekt */}
+      <div className="mt-6" data-testid="pending-list">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <h2 className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Neste tur</h2>
+          {pending.length > 0 && (
+            <span className="text-[11px]" style={{ color: "var(--text-muted)" }} data-testid="pending-count">{pending.length} venter</span>
+          )}
+        </div>
         <AnimatePresence>
           {pending.length === 0 ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-6 text-center">
-              <Orb size="small" />
-              <div className="text-[#7a827a] text-sm mt-3">Ingen turer venter</div>
-              <div className="text-[11px] text-[#5f6862] mt-1">Turer dukker opp automatisk her</div>
-            </motion.div>
+            <div className="card p-8 text-center" data-testid="no-pending">
+              <div className="text-[13px]" style={{ color: "var(--text)" }}>
+                {online ? "Vi varsler deg når det kommer en tur." : "Slå på for å motta turer."}
+              </div>
+              {!online && (
+                <button
+                  onClick={() => setOnline(true)}
+                  data-testid="no-pending-go-online"
+                  className="btn-primary mt-4"
+                >
+                  Gå online
+                </button>
+              )}
+            </div>
           ) : (
             pending.map((t) => (
-              <motion.div
+              <TripRequestCard
                 key={t.trip_id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: 40 }}
-                className="card p-4"
-                data-testid={`pending-${t.trip_id}`}
-              >
-                {/* Customer chip */}
-                {t.customer && (
-                  <div className="flex items-center gap-3 mb-3 pb-3 border-b border-line">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-mint/25 to-mint/5 grid place-items-center text-mint font-medium text-[13px]" data-testid={`pending-customer-${t.trip_id}`}>
-                      {t.customer.initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white text-sm font-medium truncate">{t.customer.name}</div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#a8b0a8] mt-0.5">
-                        <Star size={11} className="text-mint" fill="#2fe08c" />
-                        <span>{t.customer.rating?.toFixed(1) || "4.9"}</span>
-                        {t.customer.trip_count > 0 && (
-                          <>
-                            <span className="opacity-40">·</span>
-                            <span>{t.customer.trip_count} turer</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {t.customer.phone && (
-                      <a
-                        href={`tel:${t.customer.phone}`}
-                        onClick={(e) => e.stopPropagation()}
-                        data-testid={`pending-call-${t.trip_id}`}
-                        className="w-9 h-9 rounded-full bg-mint/10 border border-mint/20 grid place-items-center text-mint hover:bg-mint/20 transition-colors"
-                        aria-label={`Ring ${t.customer.name}`}
-                      >
-                        <Phone size={14} />
-                      </a>
-                    )}
-                  </div>
-                )}
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex flex-col items-center pt-1">
-                    <div className="w-2 h-2 rounded-full bg-mint" />
-                    <div className="w-px h-6 bg-[#263038]" />
-                    <div className="w-2 h-2 rounded-sm bg-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11px] text-[#7a827a]">Henting</div>
-                    <div className="text-white text-sm truncate">{t.pickup_address}</div>
-                    <div className="text-[11px] text-[#7a827a] mt-1">Til</div>
-                    <div className="text-white text-sm truncate">{t.dropoff_address}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 text-[12px] text-[#a8b0a8] mb-3 border-t border-line pt-2">
-                  <span>{t.distance_km} km</span>
-                  <span>·</span>
-                  <span>{t.duration_min} min</span>
-                  {pos && (
-                    <>
-                      <span>·</span>
-                      <span data-testid={`pickup-dist-${t.trip_id}`}>
-                        {haversineKm(pos.lat, pos.lng, t.pickup_lat, t.pickup_lng).toFixed(1)} km til henting
-                      </span>
-                    </>
-                  )}
-                  <span className="ml-auto text-white font-semibold text-base">{t.price} kr</span>
-                </div>
-                <button
-                  onClick={() => accept(t.trip_id)}
-                  disabled={accepting === t.trip_id}
-                  data-testid={`accept-${t.trip_id}`}
-                  className="btn-primary w-full flex items-center justify-center gap-2"
-                >
-                  {accepting === t.trip_id ? (
-                    <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Check size={16} /> Godta tur
-                    </>
-                  )}
-                </button>
-              </motion.div>
+                trip={t}
+                pos={pos}
+                accepting={accepting === t.trip_id}
+                onAccept={() => accept(t.trip_id)}
+                onDecline={() => declineTrip(t.trip_id)}
+              />
             ))
           )}
         </AnimatePresence>
       </div>
 
-      {/* Today snapshot */}
-      <div className="mt-6 grid grid-cols-3 gap-2">
-        <Stat label="Inntekt i dag" value={`${summary.income} kr`} testid="stat-income" />
-        <Stat label="Turer" value={summary.trips} testid="stat-trips" />
-        <Stat label="Tilfredshet" value={`${summary.satisfaction}%`} testid="stat-satisfaction" />
-      </div>
-
-      {/* History link */}
-      <button
-        onClick={() => navigate("/driver/history")}
-        data-testid="driver-history-link"
-        className="btn-ghost w-full mt-3 flex items-center justify-center gap-2 text-sm"
-      >
-        <History size={16} /> Se turhistorikk
-      </button>
+      {/* 8. DRIVER EARNINGS — compact 4-metric summary */}
       <button
         onClick={() => navigate("/driver/payouts")}
-        data-testid="driver-payouts-link"
-        className="btn-ghost w-full mt-2 flex items-center justify-center gap-2 text-sm"
+        data-testid="earnings-summary"
+        className="mt-6 w-full text-left rounded-2xl p-4"
+        style={{ background: "rgba(244,244,240,0.03)", border: "1px solid rgba(244,244,240,0.08)" }}
       >
-        Utbetalinger
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>Sammendrag</div>
+          <ChevronRight size={14} style={{ color: "var(--text-muted)" }} />
+        </div>
+        <div className="grid grid-cols-4 gap-3">
+          <Metric label="I dag" value={`${summary.income} kr`} testid="metric-income" />
+          <Metric label="Turer" value={summary.trips} testid="metric-trips" />
+          <Metric label="Online" value={formatOnlineTime(summary.online_minutes || 0)} testid="metric-online-time" />
+          <Metric label="Godta-rate" value={`${summary.acceptance_rate ?? 92}%`} testid="metric-acceptance" />
+        </div>
       </button>
+
+      {/* 9. BOTTOM NAV — Home, Earnings, Trips, Account */}
+      <DriverBottomNav />
     </div>
   );
 }
+
+/** Trip request card med countdown + tydelig kunde-info + Godta/Avslå */
+function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
+  const [remaining, setRemaining] = useState(15);
+  useEffect(() => {
+    if (remaining <= 0) return;
+    const id = setTimeout(() => setRemaining(r => r - 1), 1000);
+    return () => clearTimeout(id);
+  }, [remaining]);
+  useEffect(() => {
+    if (remaining === 0) onDecline();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remaining]);
+
+  const distToPickup = pos ? haversineKm(pos.lat, pos.lng, trip.pickup_lat, trip.pickup_lng) : null;
+  const pct = (remaining / 15) * 100;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 40 }}
+      className="card p-4 mb-3"
+      data-testid={`pending-${trip.trip_id}`}
+    >
+      {/* Countdown progress bar (top of card) */}
+      <div className="h-[3px] rounded-full mb-3" style={{ background: "rgba(244,244,240,0.06)" }}>
+        <div
+          className="h-full rounded-full transition-all duration-1000 ease-linear"
+          style={{
+            width: `${pct}%`,
+            background: remaining <= 5
+              ? "linear-gradient(90deg, #d76a5a, #e0956a)"
+              : "linear-gradient(90deg, var(--accent), #DDB77A)",
+          }}
+        />
+      </div>
+
+      {/* Passenger identity */}
+      {trip.customer && (
+        <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: "1px solid var(--line)" }}>
+          <div
+            className="w-11 h-11 rounded-full grid place-items-center font-medium text-sm shrink-0"
+            style={{ background: "linear-gradient(135deg, var(--accent-soft), rgba(244,244,240,0.04))", color: "var(--accent)" }}
+            data-testid={`pending-customer-${trip.trip_id}`}
+          >
+            {trip.customer.initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-white text-[15px] font-medium truncate">{trip.customer.name}</div>
+            <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
+              <Star size={11} className="text-mint" fill="currentColor" />
+              <span style={{ color: "var(--accent)" }}>{trip.customer.rating?.toFixed(1) || "4.9"}</span>
+              {trip.customer.trip_count > 0 && <span>· {trip.customer.trip_count} turer</span>}
+            </div>
+          </div>
+          {trip.customer.phone && (
+            <a
+              href={`tel:${trip.customer.phone}`}
+              onClick={(e) => e.stopPropagation()}
+              data-testid={`pending-call-${trip.trip_id}`}
+              className="w-10 h-10 rounded-full grid place-items-center transition-colors shrink-0"
+              style={{ background: "var(--accent-soft)", border: "1px solid rgba(203,163,101,0.25)", color: "var(--accent)" }}
+              aria-label={`Ring ${trip.customer.name}`}
+            >
+              <Phone size={16} />
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Pickup + destination — clearly separated */}
+      <div className="space-y-2 mb-3">
+        <div className="flex items-start gap-3">
+          <div className="w-2 h-2 rounded-full mt-2 shrink-0" style={{ background: "var(--accent)" }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Henting</div>
+            <div className="text-[14px] truncate" style={{ color: "var(--text)" }}>{trip.pickup_address}</div>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="w-2 h-2 rounded-sm mt-2 shrink-0" style={{ background: "#F4F4F0" }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Destinasjon</div>
+            <div className="text-[14px] truncate" style={{ color: "var(--text)" }}>{trip.dropoff_address}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Distances */}
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="rounded-xl p-2.5" style={{ background: "rgba(244,244,240,0.03)" }}>
+          <div className="text-[9px] uppercase tracking-[0.28em]" style={{ color: "var(--text-muted)" }}>Til henting</div>
+          <div className="text-[13px] mt-0.5" style={{ color: "var(--text)" }} data-testid={`pickup-dist-${trip.trip_id}`}>
+            {distToPickup != null ? `${distToPickup.toFixed(1)} km` : "—"}
+            <span className="opacity-50"> · </span>
+            {distToPickup != null ? `${Math.max(1, Math.round(distToPickup / 0.7))} min` : "—"}
+          </div>
+        </div>
+        <div className="rounded-xl p-2.5" style={{ background: "rgba(244,244,240,0.03)" }}>
+          <div className="text-[9px] uppercase tracking-[0.28em]" style={{ color: "var(--text-muted)" }}>Selve turen</div>
+          <div className="text-[13px] mt-0.5" style={{ color: "var(--text)" }}>
+            {trip.distance_km} km <span className="opacity-50">·</span> {trip.duration_min} min
+          </div>
+        </div>
+      </div>
+
+      {/* Estimated driver earnings — prominent */}
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Din inntjening</div>
+        <div className="font-display text-[26px] leading-none" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid={`earn-${trip.trip_id}`}>
+          {Math.round((trip.price || 0) * 0.9)} kr
+        </div>
+      </div>
+
+      {/* Action row */}
+      <div className="flex gap-2">
+        <button
+          onClick={onDecline}
+          disabled={accepting}
+          data-testid={`decline-${trip.trip_id}`}
+          className="w-[38%] rounded-full py-3 text-[13px] transition-colors disabled:opacity-50"
+          style={{ background: "rgba(244,244,240,0.04)", border: "1px solid var(--line)", color: "var(--text-muted)" }}
+        >
+          Avslå
+        </button>
+        <button
+          onClick={onAccept}
+          disabled={accepting}
+          data-testid={`accept-${trip.trip_id}`}
+          className="flex-1 btn-primary flex flex-col items-center justify-center py-2 disabled:opacity-50"
+        >
+          {accepting ? (
+            <span className="w-4 h-4 border-2 border-[#0B1013] border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5 font-medium"><Check size={16} /> Godta tur</span>
+              <span className="text-[10px] uppercase tracking-widest opacity-80 mt-0.5">Godta innen {remaining} sek</span>
+            </>
+          )}
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+/** 9. Bottom navigation — 4 items only for one-hand driving */
+function DriverBottomNav() {
+  const navigate = useNavigate();
+  const location = typeof window !== "undefined" ? window.location.pathname : "";
+  const items = [
+    { key: "home", label: "Hjem", Icon: HomeIcon, path: "/driver", match: (p) => p === "/driver" || p === "/driver/" },
+    { key: "earn", label: "Inntekt", Icon: TrendingUp, path: "/driver/payouts", match: (p) => p.startsWith("/driver/payouts") },
+    { key: "trips", label: "Turer", Icon: Clock, path: "/driver/history", match: (p) => p.startsWith("/driver/history") },
+    { key: "account", label: "Konto", Icon: UserIcon, path: "/driver/profile", match: (p) => p.startsWith("/driver/profile") },
+  ];
+  return (
+    <div
+      className="fixed left-0 right-0 z-[900] flex items-center justify-around px-2"
+      style={{
+        bottom: 0,
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+        paddingTop: 8,
+        background: "rgba(11,16,19,0.94)",
+        backdropFilter: "blur(24px) saturate(140%)",
+        borderTop: "1px solid rgba(244,244,240,0.06)",
+      }}
+      data-testid="driver-bottom-nav"
+    >
+      {items.map((it) => {
+        const active = it.match(location);
+        return (
+          <button
+            key={it.key}
+            onClick={() => navigate(it.path)}
+            data-testid={`dnav-${it.key}`}
+            className="flex flex-col items-center gap-0.5 py-1.5 px-3 rounded-xl transition-colors"
+            style={{ minWidth: 64 }}
+          >
+            <it.Icon size={20} style={{ color: active ? "var(--accent)" : "var(--text-muted)" }} strokeWidth={active ? 2.4 : 1.8} />
+            <span className="text-[10px]" style={{ color: active ? "var(--accent)" : "var(--text-muted)" }}>{it.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Helpers */
+function greetingFor(d) {
+  const h = d.getHours();
+  if (h < 5) return "God natt";
+  if (h < 10) return "God morgen";
+  if (h < 12) return "God formiddag";
+  if (h < 17) return "God ettermiddag";
+  if (h < 22) return "God kveld";
+  return "God natt";
+}
+
+function summaryLine(summary) {
+  const trips = summary.trips ?? 0;
+  if (trips === 0) return "Ingen turer i dag ennå.";
+  if (trips === 1) return "1 tur fullført i dag";
+  return `${trips} turer fullført i dag`;
+}
+
+function activeStateLabel(status) {
+  if (status === "driver_on_way") return "På vei til kunde";
+  if (status === "arrived") return "Venter på kunde";
+  if (status === "in_trip") return "Tur pågår";
+  return "Aktiv";
+}
+
+function formatOnlineTime(min) {
+  if (!min) return "0 min";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h ? `${h} t ${m} min` : `${m} min`;
+}
+
+function Metric({ label, value, testid }) {
+  return (
+    <div data-testid={testid}>
+      <div className="text-[9px] uppercase tracking-[0.24em]" style={{ color: "var(--text-muted)" }}>{label}</div>
+      <div className="font-display text-[15px] leading-tight mt-0.5" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+    </div>
+  );
+}
+
 
 function haversineKm(lat1, lng1, lat2, lng2) {
   if (lat1 == null || lat2 == null) return 0;
@@ -368,11 +566,3 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-function Stat({ label, value, testid }) {
-  return (
-    <div className="card p-3" data-testid={testid}>
-      <div className="text-[10px] text-[#7a827a] uppercase tracking-widest">{label}</div>
-      <div className="font-display text-lg text-white mt-1">{value}</div>
-    </div>
-  );
-}

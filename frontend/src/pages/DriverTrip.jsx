@@ -6,8 +6,8 @@ import L from "leaflet";
 import { pickupIcon, dropoffIcon, openMapsNavigation, carIconRotated } from "../lib/mapAssets";
 import { computeDriverPosition } from "../lib/tripAnimation";
 import ChatModal from "../components/ChatModal";
-import { motion } from "framer-motion";
-import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag, MapPin } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag, MapPin, ShieldAlert, X, AlertTriangle, Share2, HelpCircle } from "lucide-react";
 import { Orb } from "../components/UIKit";
 import { messagesApi } from "../lib/api";
 
@@ -115,6 +115,19 @@ export default function DriverTrip() {
     setBusy(true);
     try { await driverApi.start(trip.trip_id); await load(); } catch (e) { alert("Kunne ikke starte"); } finally { setBusy(false); }
   };
+
+  const atPickup = async () => {
+    setBusy(true);
+    try { await driverApi.atPickup(trip.trip_id); await load(); } catch (e) { alert("Kunne ikke registrere ankomst"); } finally { setBusy(false); }
+  };
+
+  const noShow = async () => {
+    if (!window.confirm("Bekreft: Kunden dukket ikke opp?\n\nDette avlyser turen og logger no-show. Bruk kun hvis du har ventet i minst 5 min.")) return;
+    setBusy(true);
+    try { await driverApi.noShow(trip.trip_id); setTimeout(() => navigate("/driver"), 1200); } catch (e) { alert("Kunne ikke avlyse"); } finally { setBusy(false); }
+  };
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   // Poll unread messages every 3s while trip active
   useEffect(() => {
     if (!trip || (trip.status !== "driver_on_way" && trip.status !== "in_trip")) return;
@@ -172,9 +185,10 @@ export default function DriverTrip() {
   }
 
   const statusLabel = {
-    driver_on_way: "På vei til henting",
-    in_trip: "Turen pågår",
-    arrived: "Ankommet",
+    driver_on_way: "På vei til kunde",
+    at_pickup: "Venter på kunde",
+    in_trip: "Tur pågår",
+    arrived: "Tur fullført",
   }[trip.status] || trip.status;
 
   return (
@@ -192,7 +206,7 @@ export default function DriverTrip() {
           />
           <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={PICKUP_ICON} />
           <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={DROPOFF_ICON} />
-          <Polyline positions={routePoints} pathOptions={{ color: "#2fe08c", weight: 5, opacity: 0.9 }} />
+          <Polyline positions={routePoints} pathOptions={{ color: "#CBA365", weight: 5, opacity: 0.9 }} />
           {carPos && (
             <Marker position={[carPos.lat, carPos.lng]} icon={carIconRotated(carPos.bearing)} />
           )}
@@ -205,10 +219,23 @@ export default function DriverTrip() {
         <button onClick={() => navigate("/driver")} className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border border-line backdrop-blur-md" data-testid="dtrip-back-map">
           <ChevronLeft size={18} className="text-white" />
         </button>
-        <div className="text-sm text-white bg-[#131a1f]/85 border border-line backdrop-blur-md rounded-full px-4 py-2">
+        <div className="text-sm text-white bg-[#131a1f]/85 border border-line backdrop-blur-md rounded-full px-4 py-2" data-testid="dtrip-status-label">
           {statusLabel}
         </div>
-        <div className="w-10 h-10" />
+        {/* 10. SAFETY — unobtrusive shield button, only during active states */}
+        {(trip.status === "driver_on_way" || trip.status === "at_pickup" || trip.status === "in_trip") ? (
+          <button
+            onClick={() => setSafetyOpen(true)}
+            data-testid="dtrip-safety"
+            aria-label="Sikkerhet"
+            className="w-10 h-10 grid place-items-center rounded-full bg-[#131a1f]/85 border backdrop-blur-md"
+            style={{ borderColor: "rgba(203,163,101,0.35)" }}
+          >
+            <ShieldAlert size={16} style={{ color: "var(--accent)" }} />
+          </button>
+        ) : (
+          <div className="w-10 h-10" />
+        )}
       </div>
 
       {/* Bottom sheet */}
@@ -295,35 +322,212 @@ export default function DriverTrip() {
             </>
           )}
 
+          {/* 5-state lifecycle CTAs */}
           {trip.status === "driver_on_way" && (
+            <>
+              <button onClick={atPickup} disabled={busy} data-testid="dtrip-at-pickup" className="btn-primary w-full flex items-center justify-center gap-2">
+                <Flag size={16} /> Jeg er fremme
+              </button>
+              <button onClick={noShow} disabled={busy} data-testid="dtrip-noshow" className="btn-ghost w-full flex items-center justify-center gap-2 text-red-400 border-red-400/20 hover:border-red-400/60 mt-2">
+                Kunden dukket ikke opp
+              </button>
+            </>
+          )}
+          {trip.status === "at_pickup" && (
             <>
               <button onClick={start} disabled={busy} data-testid="dtrip-start" className="btn-primary w-full flex items-center justify-center gap-2">
                 <Play size={16} /> Start tur
               </button>
-              <button onClick={cancel} disabled={busy} data-testid="dtrip-cancel" className="btn-ghost w-full flex items-center justify-center gap-2 text-red-400 border-red-400/20 hover:border-red-400/60 mt-2">
+              <button onClick={noShow} disabled={busy} data-testid="dtrip-noshow" className="btn-ghost w-full flex items-center justify-center gap-2 text-red-400 border-red-400/20 hover:border-red-400/60 mt-2">
                 Kunden dukket ikke opp
               </button>
             </>
           )}
           {trip.status === "in_trip" && (
-            <button onClick={arrive} disabled={busy} data-testid="dtrip-arrive" className="btn-primary w-full flex items-center justify-center gap-2">
-              <Flag size={16} /> Avslutt tur
+            <button onClick={arrive} disabled={busy} data-testid="dtrip-complete" className="btn-primary w-full flex items-center justify-center gap-2">
+              <Flag size={16} /> Fullfør tur
             </button>
           )}
           {trip.status === "arrived" && (
-            <div className="text-center py-3">
-              <div className="w-14 h-14 rounded-full bg-mint grid place-items-center mint-glow mx-auto">
-                <Flag size={22} className="text-[#04120a]" />
-              </div>
-              <div className="text-white text-sm font-medium mt-3">Tur fullført</div>
-              <div className="text-[#7a827a] text-xs">+{trip.price} kr til inntekt</div>
-            </div>
+            <TripCompletedBreakdown trip={trip} onDone={() => navigate("/driver")} />
           )}
         </div>
       </motion.div>
 
+      {/* Safety menu (10) */}
+      <AnimatePresence>
+        {safetyOpen && (
+          <SafetyMenu
+            onClose={() => setSafetyOpen(false)}
+            tripId={trip.trip_id}
+            passengerName={trip.customer?.name}
+          />
+        )}
+      </AnimatePresence>
+
       <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} tripId={trip.trip_id} role="driver" />
     </div>
+  );
+}
+
+/** Trip Completed — show breakdown (Turpris / KJAPP avgift / Til flåten) */
+function TripCompletedBreakdown({ trip, onDone }) {
+  const price = trip.price || 0;
+  const kjappFee = Math.round(price * 0.10);       // 10% platform
+  const toFleet = price - kjappFee;
+  return (
+    <div className="pt-2" data-testid="dtrip-completed">
+      <div className="w-14 h-14 rounded-full grid place-items-center mx-auto mb-3" style={{ background: "var(--accent-soft)", border: "1px solid rgba(203,163,101,0.35)" }}>
+        <Flag size={20} style={{ color: "var(--accent)" }} />
+      </div>
+      <div className="text-center mb-4">
+        <div className="font-display text-[19px]" style={{ color: "var(--text)" }}>Tur fullført</div>
+        <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>Bra jobbet — inntekt registrert</div>
+      </div>
+      <div className="space-y-2 mb-4">
+        <BreakdownRow label="Turpris" value={`${price} kr`} testid="brk-price" />
+        <BreakdownRow label="KJAPP avgift" value={`- ${kjappFee} kr`} testid="brk-fee" muted />
+        <div className="h-px" style={{ background: "var(--line)" }} />
+        <BreakdownRow label="Til flåten" value={`${toFleet} kr`} testid="brk-net" strong />
+      </div>
+      <button onClick={onDone} data-testid="dtrip-done" className="btn-primary w-full">
+        Ferdig
+      </button>
+    </div>
+  );
+}
+
+function BreakdownRow({ label, value, muted, strong, testid }) {
+  return (
+    <div className="flex items-center justify-between" data-testid={testid}>
+      <span className="text-[13px]" style={{ color: muted ? "var(--text-muted)" : "var(--text)" }}>{label}</span>
+      <span
+        className="font-display leading-none"
+        style={{
+          color: strong ? "var(--accent)" : muted ? "var(--text-muted)" : "var(--text)",
+          fontSize: strong ? 18 : 14,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Safety menu — emergency, report, share trip, support */
+function SafetyMenu({ onClose, tripId, passengerName }) {
+  const emergency = () => {
+    if (window.confirm("Ring nødtelefon (112)?\n\nBruk kun i reelle nødsituasjoner. KJAPP vil dele posisjonen din med nødetatene.")) {
+      window.location.href = "tel:112";
+    }
+  };
+  const report = () => {
+    window.location.href = `mailto:support@kjapp.no?subject=Rapportering av kunde&body=Turnummer: ${tripId}%0A%0AProblem:%0A`;
+    onClose();
+  };
+  const shareTrip = async () => {
+    const url = `${window.location.origin}/app/booking/${tripId}?share=1`;
+    if (navigator.share) {
+      try { await navigator.share({ title: "KJAPP — Del turen", url }); } catch { /* cancelled */ }
+    } else {
+      try { await navigator.clipboard.writeText(url); alert("Turen ble kopiert til utklippstavlen"); } catch { /* fail */ }
+    }
+    onClose();
+  };
+  const support = () => {
+    window.location.href = "mailto:support@kjapp.no?subject=Support under aktiv tur";
+    onClose();
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      data-testid="safety-menu"
+      className="fixed inset-0 z-[1500] flex items-end"
+      style={{ background: "rgba(4,8,10,0.72)", backdropFilter: "blur(10px)" }}
+    >
+      <motion.div
+        initial={{ y: 400 }}
+        animate={{ y: 0 }}
+        exit={{ y: 400 }}
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full rounded-t-[24px] p-4 pb-8"
+        style={{ background: "rgba(11,16,19,0.98)", borderTop: "1px solid rgba(203,163,101,0.28)" }}
+      >
+        <div className="w-10 h-1 rounded-full mx-auto mb-4" style={{ background: "rgba(244,244,240,0.14)" }} />
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldAlert size={18} style={{ color: "var(--accent)" }} />
+          <div className="font-display text-[17px] flex-1" style={{ color: "var(--text)" }}>Sikkerhet</div>
+          <button onClick={onClose} data-testid="safety-close" className="w-8 h-8 grid place-items-center rounded-full" style={{ color: "var(--text-muted)" }}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="space-y-2">
+          <SafetyBtn
+            testid="safety-emergency"
+            icon={<AlertTriangle size={16} />}
+            label="Ring nødtelefon"
+            sub="Direkte til 112 — bare for reelle nødsituasjoner"
+            danger
+            onClick={emergency}
+          />
+          <SafetyBtn
+            testid="safety-report"
+            icon={<Flag size={16} />}
+            label="Rapporter kunden"
+            sub={passengerName ? `Send rapport om ${passengerName} til KJAPP` : "Send rapport til KJAPP"}
+            onClick={report}
+          />
+          <SafetyBtn
+            testid="safety-share"
+            icon={<Share2 size={16} />}
+            label="Del turen"
+            sub="Send live turlenke til noen du stoler på"
+            onClick={shareTrip}
+          />
+          <SafetyBtn
+            testid="safety-support"
+            icon={<HelpCircle size={16} />}
+            label="Kontakt KJAPP support"
+            sub="Døgnvakt · svar innen få minutter"
+            onClick={support}
+          />
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function SafetyBtn({ icon, label, sub, danger, onClick, testid }) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={testid}
+      className="w-full flex items-center gap-3 p-4 rounded-2xl text-left transition-colors"
+      style={{
+        background: danger ? "rgba(215,106,90,0.08)" : "rgba(244,244,240,0.03)",
+        border: danger ? "1px solid rgba(215,106,90,0.25)" : "1px solid var(--line)",
+      }}
+    >
+      <div
+        className="w-10 h-10 rounded-full grid place-items-center shrink-0"
+        style={{
+          background: danger ? "rgba(215,106,90,0.14)" : "var(--accent-soft)",
+          color: danger ? "#d76a5a" : "var(--accent)",
+        }}
+      >
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px]" style={{ color: danger ? "#d76a5a" : "var(--text)" }}>{label}</div>
+        {sub && <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{sub}</div>}
+      </div>
+    </button>
   );
 }
 

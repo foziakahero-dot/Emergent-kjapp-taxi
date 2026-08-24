@@ -89,9 +89,12 @@ export const summaryApi = {
 export const driverApi = {
   pending: () => api.get("/driver/pending").then((r) => r.data),
   accept: (trip_id) => api.post("/driver/accept", { trip_id }).then((r) => r.data),
+  decline: (trip_id) => api.post("/driver/decline", { trip_id }).then((r) => r.data),
   current: () => api.get("/driver/current").then((r) => r.data),
+  atPickup: (trip_id) => api.post(`/driver/trip/${trip_id}/at-pickup`).then((r) => r.data),
   start: (trip_id) => api.post(`/driver/trip/${trip_id}/start`).then((r) => r.data),
   arrive: (trip_id) => api.post(`/driver/trip/${trip_id}/arrive`).then((r) => r.data),
+  noShow: (trip_id) => api.post(`/driver/trip/${trip_id}/no-show`).then((r) => r.data),
   cancel: (trip_id) => api.post(`/driver/trip/${trip_id}/cancel`).then((r) => r.data),
   summary: () => api.get("/driver/summary/today").then((r) => r.data),
   history: () => api.get("/driver/history").then((r) => r.data),
