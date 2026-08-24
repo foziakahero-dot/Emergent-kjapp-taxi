@@ -33,6 +33,8 @@ import FleetOverview from "./pages/FleetOverview";
 import FleetDrivers from "./pages/FleetDrivers";
 import FleetPayouts from "./pages/FleetPayouts";
 import AuthCallback from "./pages/AuthCallback";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -157,6 +159,8 @@ function AppRoutes() {
     return (
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+        <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
+        <Route path="/reset-password/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
         <Route path="/apply" element={<ApplyFleet />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
@@ -173,6 +177,8 @@ function AppRoutes() {
     return (
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+        <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
+        <Route path="/reset-password/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/admin" element={<Protected adminOnly><AdminShell><AdminOverview /></AdminShell></Protected>} />
@@ -201,6 +207,8 @@ function AppRoutes() {
     <Routes location={location} key={location.pathname}>
       <Route path="/" element={<Onboarding />} />
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+      <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
+      <Route path="/reset-password/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/voice-signin" element={<PublicOnly><VoiceSignIn /></PublicOnly>} />
       <Route path="/driver/login" element={<PublicOnly><DriverLogin /></PublicOnly>} />

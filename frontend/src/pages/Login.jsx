@@ -141,7 +141,12 @@ export default function Login() {
           </div>
 
           <div className="text-right">
-            <button type="button" className="text-[#7a827a] text-sm hover:text-mint transition-colors">
+            <button
+              type="button"
+              onClick={() => navigate("/forgot-password")}
+              data-testid="login-forgot-password"
+              className="text-[#7a827a] text-sm hover:text-mint transition-colors"
+            >
               Glemt passord?
             </button>
           </div>

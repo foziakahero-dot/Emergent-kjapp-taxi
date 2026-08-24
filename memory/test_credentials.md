@@ -2,6 +2,8 @@
 
 > **Iter 26 (herding)**: Admin-passordet er IKKE lenger hardkodet i koden — det seedes fra `ADMIN_PASSWORD` i `backend/.env` (dev-verdi: `admin123`). I produksjon kreves sterkt passord (≥12 tegn), ellers nekter serveren å starte. Login har brute-force-beskyttelse: 5 feilforsøk per e-post / 15 min → HTTP 429. Demo-kontoene under seedes kun når `ENABLE_DEMO_DATA=true` (aldri i production).
 
+> **Iter 27 (passordreset)**: `/forgot-password` → e-postlenke `/reset-password/{token}` (1t gyldighet, engangsbruk). Uten SENDGRID_API_KEY logges lenken til backend stdout (`grep "EMAIL/no-key" /var/log/supervisor/backend.out.log`). Vellykket reset nullstiller brute-force-låsen for kontoen.
+
 ## Kunde (passasjer)
 - URL: `/login`
 - Email: `ola@kjapp.no`

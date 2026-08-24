@@ -606,3 +606,9 @@ Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten
 - server.py (~3970 linjer) → splitt til routes/-moduler
 - Paginering på drivers-full/trips-full
 - Signert URL i stedet for storage_path i /admin/documents
+
+## Iter 27 — Passordreset via e-postlenke (2026-08-24)
+
+- **Backend**: `POST /auth/forgot-password` (alltid `{ok:true}` — ingen enumeration; maks 3 forespørsler per e-post/15 min; token `secrets.token_urlsafe(32)` i `password_reset_tokens` m/ 1t TTL-index), `GET /auth/reset-password/{token}` (valider), `POST /auth/reset-password` (min 6 tegn, engangsbruk, oppdaterer hash, fjerner `must_reset_password`, **nullstiller brute-force-tellere** så låste kontoer gjenopprettes umiddelbart). E-post via eksisterende SendGrid `send_email()` m/ gull-brandet mal (logger lenke til stdout uten API-nøkkel). Reset-URL bygges fra Origin-header, fallback FRONTEND_URL → kjapp.no.
+- **Frontend**: «Glemt passord?» på /login → `/forgot-password` (ForgotPassword.jsx: e-post → «Sjekk innboksen din»), `/reset-password/:token` (ResetPassword.jsx: 4 tilstander — checking/invalid/form/done, vis/skjul passord, bekreft-felt). Ruter lagt til i alle 3 app-modus (main/fleet/admin).
+- **Testet (faktisk kjørt)**: Full curl-E2E — forgot (kjent+ukjent e-post → identisk svar), token-validering, ugyldig token → 400, **låst konto (429) → reset → login 200**, ny-passord-login 200, token-gjenbruk blokkert, kort passord avvist, rate-limit 3/15min. Frontend: alle 3 sider verifisert via screenshot-automation (forgot-success, reset-success, reset-invalid). Regresjon: test_iter21 + test_iter9_auth → 23/23 grønn.

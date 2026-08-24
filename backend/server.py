@@ -458,6 +458,8 @@ async def lifespan(app: FastAPI):
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
+    await db.password_reset_tokens.create_index("token")
+    await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -978,6 +980,96 @@ async def login(body: LoginRequest, request: Request, response: Response):
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
+    return {"ok": True}
+
+
+# ---- Password reset via e-postlenke ----
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+def email_password_reset_html(reset_url: str) -> str:
+    return f"""
+    <div style="font-family:'Segoe UI',Arial,sans-serif;background:#0B1013;color:#F4F4F0;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
+      <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:#CBA365">A</span>PP</div>
+      <div style="font-size:11px;letter-spacing:4px;color:#CBA365;text-transform:uppercase;margin-top:4px">Tilbakestill passord</div>
+      <h1 style="font-size:22px;color:#fff;margin-top:24px;line-height:1.3">Glemt passordet ditt?</h1>
+      <p style="color:#8A9198;font-size:14px;line-height:1.6">
+        Trykk på knappen under for å velge et nytt passord. Lenken er gyldig i 1 time og kan bare brukes én gang.
+      </p>
+      <a href="{reset_url}" style="display:inline-block;background:#CBA365;color:#0B1013;font-weight:600;padding:14px 28px;border-radius:12px;text-decoration:none;margin:16px 0;">Velg nytt passord</a>
+      <p style="color:#8A9198;font-size:12px;line-height:1.6">
+        Hvis du ikke ba om dette, kan du trygt ignorere e-posten — passordet ditt forblir uendret.
+      </p>
+    </div>
+    """
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest, request: Request):
+    """Always returns ok — never reveals whether the account exists."""
+    email = body.email.strip().lower()
+    if not email:
+        return {"ok": True}
+    now = datetime.now(timezone.utc)
+    # Anti-abuse: max 3 reset requests per email per 15 min
+    cutoff = now - timedelta(minutes=15)
+    recent = await db.password_reset_tokens.count_documents({"email": email, "created_at": {"$gte": cutoff}})
+    if recent >= 3:
+        return {"ok": True}
+    user = await db.users.find_one({"email": email})
+    if user:
+        token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.insert_one({
+            "token": token,
+            "user_id": str(user["_id"]),
+            "email": email,
+            "created_at": now,
+            "expires_at": now + timedelta(hours=1),
+            "used": False,
+        })
+        frontend = (request.headers.get("origin") or "").strip().rstrip("/")
+        if not frontend:
+            fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
+            frontend = fu if fu and fu != "*" else "https://kjapp.no"
+        reset_url = f"{frontend}/reset-password/{token}"
+        send_email(email, "Tilbakestill passordet ditt — KJAPP", email_password_reset_html(reset_url))
+    return {"ok": True}
+
+
+@api.get("/auth/reset-password/{token}")
+async def check_reset_token(token: str):
+    rec = await db.password_reset_tokens.find_one({
+        "token": token, "used": False,
+        "expires_at": {"$gte": datetime.now(timezone.utc)},
+    })
+    if not rec:
+        raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
+    return {"valid": True}
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    rec = await db.password_reset_tokens.find_one({
+        "token": body.token, "used": False,
+        "expires_at": {"$gte": datetime.now(timezone.utc)},
+    })
+    if not rec:
+        raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
+    await db.users.update_one(
+        {"_id": ObjectId(rec["user_id"])},
+        {"$set": {"password_hash": hash_password(body.new_password)}, "$unset": {"must_reset_password": ""}},
+    )
+    await db.password_reset_tokens.update_one({"_id": rec["_id"]}, {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}})
+    # Unlock the account: clear brute-force counters so the user can log in immediately
+    await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
     return {"ok": True}
 
 
