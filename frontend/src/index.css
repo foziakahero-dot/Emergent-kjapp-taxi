@@ -10,24 +10,26 @@
 :root {
   color-scheme: dark;
 
-  /* Customer palette (default) */
-  --bg-base:   #0c1216;       /* fjordsvart */
+  /* KJAPP Nordic Mobility palette — kontrollert gullbruk (CTA-signatur) */
+  --bg-base:   #0B1013;       /* graphite — hovedbakgrunn */
   --bg-card:   rgba(255, 255, 255, 0.028);
   --bg-soft:   rgba(255, 255, 255, 0.02);
-  --line:      rgba(232, 224, 208, 0.08);
-  --line-strong: rgba(232, 224, 208, 0.14);
-  --text:      #e8e0d0;       /* matt kremhvit — som papir */
-  --text-muted:#7a827a;       /* tåkegrå */
-  --accent:    #c9a15b;       /* varm messing — B&O */
-  --accent-soft: rgba(201, 161, 91, 0.14);
-  --accent-glow: rgba(201, 161, 91, 0.32);
-  --accent-on:  #0f0a02;      /* tekst på messing */
+  --line:      rgba(244, 244, 240, 0.08);
+  --line-strong: rgba(244, 244, 240, 0.14);
+  --text:      #F4F4F0;       /* varm off-white (ivory) */
+  --text-muted:#8A9198;       /* Nordic grå */
+  --accent:    #CBA365;       /* champagne gold — kun for handlinger */
+  --accent-soft: rgba(203, 163, 101, 0.14);
+  --accent-glow: rgba(203, 163, 101, 0.32);
+  --accent-on:  #0B1013;
   --accent-2:  #7ba69e;       /* dempet sjøgrønn (sekundær) */
-  --danger:    #d76a5a;       /* varm terrakotta i stedet for skrikende rød */
+  --danger:    #d76a5a;
+  --map-base:  #06090A;       /* map background */
+  --map-roads: #141A1F;       /* map roads */
 
   /* Typografi */
-  --font-serif: 'Instrument Serif', Georgia, serif;
-  --font-body:  'Inter', system-ui, sans-serif;
+  --font-serif: 'Fraunces', 'Instrument Serif', Georgia, serif;
+  --font-body:  'Inter Tight', 'Inter', system-ui, sans-serif;
   --font-mono:  'JetBrains Mono', ui-monospace, monospace;
 }
 
@@ -61,12 +63,9 @@ body {
 
 body:not(.driver-theme) {
   background-image:
-    radial-gradient(ellipse at top left, rgba(201, 161, 91, 0.045), transparent 50%),
-    radial-gradient(ellipse at bottom right, rgba(123, 166, 158, 0.04), transparent 55%),
-    /* Subtil papirtekstur */
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='paper'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09 0 0 0 0 0.07 0 0 0 0 0.05 0 0 0 0.4 0'/></filter><rect width='100%' height='100%' filter='url(%23paper)'/></svg>");
+    radial-gradient(ellipse at top left, rgba(203, 163, 101, 0.035), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(123, 166, 158, 0.025), transparent 55%);
   background-attachment: fixed;
-  background-blend-mode: overlay;
 }
 
 body.driver-theme {

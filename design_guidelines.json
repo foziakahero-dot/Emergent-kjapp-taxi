@@ -1,0 +1,105 @@
+{
+  "project_name": "KJAPP",
+  "app_type": "hybrid_fullstack (mobile-first PWA + Capacitor)",
+  "design_language": "Scandinavian minimalism, premium automotive design, dark graphite surfaces, warm champagne gold accents, ivory typography, subtle glass effects.",
+  "brand_personality": "Trustworthy, premium, Norwegian, intelligent, calm, fast, effortless.",
+  "colors": {
+    "primary_background": "#0B1013",
+    "primary_text": "#F4F4F0",
+    "accent_cta": "#CBA365",
+    "secondary_info": "#8A9198",
+    "map_base": "#06090A",
+    "map_roads": "#141A1F",
+    "surface_glass": "rgba(11, 16, 19, 0.75)"
+  },
+  "typography": {
+    "heading_font": "Fraunces",
+    "ui_font": "Inter Tight",
+    "hierarchy": {
+      "h1": "text-4xl tracking-tight font-light",
+      "h2": "text-2xl tracking-tight font-normal",
+      "h3": "text-xl font-medium",
+      "body": "text-base tracking-normal",
+      "overline": "text-xs tracking-[0.2em] uppercase font-semibold",
+      "tabular": "tabular-nums tracking-tight"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-2xl bg-[#0B1013]/75 border border-[#F4F4F0]/10",
+    "gold_glow": "shadow-[0_0_15px_rgba(203,163,101,0.3)]",
+    "borders": "1px solid rgba(244, 244, 240, 0.08)",
+    "corner_radius": "rounded-2xl for main panels, rounded-full for pills/chips"
+  },
+  "components": {
+    "map": {
+      "style": "MapLibre custom JSON. Dark monochrome base. Land: #090C0F, Water: #06090A, Roads: #141A1F.",
+      "route_line": "Color #CBA365 with line-width 4 and 0.5 opacity outer glow.",
+      "user_marker": "Pulsing ring in #CBA365.",
+      "vehicle_icon": "Custom SVG. Elegant top-down silhouette of a premium sedan, colored #F4F4F0 with a subtle #CBA365 halo/glow underneath to indicate availability."
+    },
+    "smart_booking_panel": {
+      "container": "Bottom-anchored sheet, rounded-t-3xl, glassmorphism surface.",
+      "greeting": "Fraunces text-xl or text-2xl. e.g., 'God kveld, Usman.'",
+      "suggestion": "Inter Tight text-sm text-[#8A9198]. e.g., 'På vei hjem? Tøyen → 8 min'",
+      "search_input": "Large tap target, bg-white/5, subtle inner border. 'Hvor vil du? ⌕'",
+      "quick_chips": "Horizontal scroll. Pills with border-white/10. 'Hjem', 'Jobb', 'Flyplass'."
+    },
+    "vehicle_selector_sheet": {
+      "layout": "Horizontal scrolling cards. 3 tiers: KJAPP, KJAPP+, KJAPP XL.",
+      "card_active": "border-[#CBA365] bg-[#CBA365]/10",
+      "card_inactive": "border-white/10 opacity-70",
+      "content": "Vehicle image/icon, Title (KJAPP+), ETA (4 min), Price (189 kr)."
+    },
+    "driver_card": {
+      "layout": "Floating over map post-booking. High visual prominence.",
+      "avatar": "Left aligned, rounded-full, 56px.",
+      "name_rating": "Fraunces text-xl. 'Ahmed ★★★★★'",
+      "vehicle_info": "Inter Tight monospace/tabular. 'Mercedes E-Class · AB 12345'",
+      "badge": "Subtle gold outline pill. '✓ Verifisert løyvehaver'",
+      "eta_highlight": "Text in #CBA365, text-2xl."
+    },
+    "kjapp_assist": {
+      "trigger": "Floating Action Button or prominent input section with an elegant 'KJAPP Assist' label and subtle AI sparkle icon.",
+      "ui": "Chat interface using Fraunces for AI persona voice, large input area supporting voice dictation. Dark glassmorphism."
+    },
+    "side_menu": {
+      "layout": "Full-height dark panel (#06090A) sliding from left or covering screen.",
+      "links": "Massive typography (text-2xl to 3xl) with ample padding (py-6).",
+      "bottom_action": "Separated by 1px border-white/10. 'Bli KJAPP-sjåfør →'"
+    },
+    "splash_screen": {
+      "background": "#0B1013",
+      "content": "Centered text. 'KJAPP' in Fraunces, 'NORDIC TAXI' tracking-[0.2em] below.",
+      "animation": "Extremely minimalist. The 'A' in KJAPP receives a subtle gold diagonal shimmer/sweep."
+    }
+  },
+  "grids_and_layouts": {
+    "spacing_system": "Use generous padding. p-6 or p-8 for panels. Avoid cramped elements.",
+    "alignment": "Bottom-heavy for mobile reachability (thumb-zone).",
+    "mobile_first": true
+  },
+  "motion": {
+    "booking_choreography": {
+      "0_400ms": "Bottom panel slides down slightly. Map bounds animate to fit pickup and dropoff points (ease-in-out).",
+      "400_1000ms": "Route line dynamically draws from A to B.",
+      "1000_1600ms": "KJAPP vehicle icons rotate and glide towards pickup.",
+      "1600_2000ms": "Vehicle sheet slides up. Prices/ETAs fade in.",
+      "2000ms": "'BESTILL KJAPP' CTA button scales up and pulses."
+    },
+    "general": "Smooth transitions (0.3s ease), avoid bouncy/springy animations. Aim for heavy, premium, automotive momentum."
+  },
+  "accessibility": {
+    "contrast": "Ensure #8A9198 on #0B1013 passes APCA contrast.",
+    "touch_targets": "Minimum 48px height for all interactive elements (chips, inputs, buttons).",
+    "testing": "All interactive elements MUST include data-testid attribute."
+  },
+  "media": {
+    "driver_avatar": "https://images.unsplash.com/photo-1741389265274-fd22f41dd5e3",
+    "premium_vehicle": "https://images.unsplash.com/photo-1592309905620-e5b59f6dcb98"
+  },
+  "driver_app_parity": {
+    "instructions": "Maintain the exact same dark graphite/gold design language. Use large tap zones for 'Accept Ride' (Aksepter tur). Present earnings with elegant typography. The driver app must feel just as luxurious as the passenger app."
+  },
+  "instructions_to_main_agent": "Implement a Next.js/React or pure React + Tailwind architecture. Use MapLibre GL JS for the map with custom dark styling. Build the UI components overriding Shadcn defaults heavily to remove generic SaaS borders/colors. Apply the #0B1013 background globally. NEVER use generic blue or pure white backgrounds. The map is the hero. Use Framer Motion for the choreographies.",
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": "Avoid generic SaaS UI. Do not center layouts by default. Use glassmorphism over map elements (DO NOT use full transparency for text overlays). Add data-testid to everything. Use modern pill-shaped or rounded-2xl buttons. Do not use AI emojis. Respect the Scandinavian minimalist premium automotive aesthetic."
+}

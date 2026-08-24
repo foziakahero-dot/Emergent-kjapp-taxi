@@ -218,6 +218,22 @@ export default function DriverTrip() {
         className="absolute left-0 right-0 bottom-0 z-[1000] p-4"
       >
         <div className="card p-4">
+          {/* Customer strip — vises tydelig så sjåfør vet hvem de henter */}
+          {trip.customer && (
+            <div className="flex items-center gap-3 pb-3 mb-3 border-b border-line" data-testid="dtrip-customer">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-mint/25 to-mint/5 grid place-items-center text-mint font-medium text-sm">
+                {trip.customer.initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-sm font-medium truncate">{trip.customer.name}</div>
+                <div className="text-[11px] text-[#a8b0a8] mt-0.5">
+                  ★ {trip.customer.rating?.toFixed(1) || "4.9"}
+                  {trip.customer.trip_count > 0 && ` · ${trip.customer.trip_count} turer`}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 mb-3">
             <div className="w-11 h-11 rounded-full bg-mint/10 grid place-items-center">
               <Navigation size={18} className="text-mint" />
@@ -237,9 +253,20 @@ export default function DriverTrip() {
           </div>
 
           <div className="grid grid-cols-3 gap-2 mb-3">
-            <ActionBtn icon={<Phone size={16} />} label="Ring" testid="dtrip-call" onClick={() => alert("Ring-funksjon aktiveres i produksjon.")} />
+            {trip.customer?.phone ? (
+              <a
+                href={`tel:${trip.customer.phone}`}
+                data-testid="dtrip-call"
+                className="card p-3 flex flex-col items-center justify-center gap-1 hover:bg-[#17222a] transition-colors border-line"
+              >
+                <Phone size={16} className="text-mint" />
+                <span className="text-[11px] text-white">Ring kunde</span>
+              </a>
+            ) : (
+              <ActionBtn icon={<Phone size={16} />} label="Ring" testid="dtrip-call" onClick={() => alert("Kunde-nummer ikke tilgjengelig.")} />
+            )}
             <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="dtrip-msg" onClick={() => setChatOpen(true)} badge={unread} />
-            <ActionBtn icon={<Flag size={16} />} label="Support" testid="dtrip-support" onClick={() => alert("Kontakt: support@kjapp.no")} />
+            <ActionBtn icon={<Flag size={16} />} label="Support" testid="dtrip-support" onClick={() => window.location.href = "mailto:support@kjapp.no?subject=Support%20under%20aktiv%20tur"} />
           </div>
 
           {/* Prominent open-in-Google-Maps for turn-by-turn */}

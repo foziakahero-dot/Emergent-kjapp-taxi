@@ -398,6 +398,32 @@ REACT_APP_DEV_NAV=true|false     (default: false i prod)
 ```
 
 
+## Iter 21 — Sjåfør-audit + Iter 22 Nordic Mobility Redesign (2026-02-24)
+
+### Iter 21 — Full sjåfør + kunde audit fikset
+- **Test-sjåfør er nå ekte**: `sjafor@kjapp.no` seeder Ola Sjåfør med Tesla Model Y EL12345 AI-FIRST, rating 4.9, approved=True
+- **Oslo-kartet vises**: Byttet fra cartocdn til `cartodb-basemaps-{s}.global.ssl.fastly.net` (fastly-CDN, stabil)
+- **Kunde-info på turer**: Backend `/driver/pending` og `/driver/current` beriket med `customer: {name, phone, rating, initials, trip_count}`. Frontend viser avatar-chip + rating + ring-knapp (`tel:` ekte) på hver pending trip
+- **Signaler ved ny tur**: Trippel piping + vibrasjon + **browser Notification API** ved nye turer. Toggle "Lyd-signal ved ny tur" i DriverProfile
+- **Demo-trip seeder**: Backend background task holder alltid 1-2 demo-pending-trips (fra ekte demo-passasjer-kontoer med rating og trip_count) så sjåfør-flyten aldri er tom under beta-demo
+- **DriverProfile omskrevet**: 6 nye funksjonelle knapper (Utbetalinger, Turhistorikk, Push-varsler, Lyd-signal, Auto-Google Maps, Personvern, Kontakt support). Kjøretøy-seksjonen viser Tesla Model Y · EL12345 · AI-FIRST
+- **DriverTrip customer strip**: Ekstremt synlig kunde med avatar, navn, rating, trip_count. Ring-knapp bruker `tel:` når nummer finnes. Support-knapp bruker `mailto:`
+
+### Iter 22 — Nordic Mobility Redesign (design_agent_full_stack)
+Design blueprint på `/app/design_guidelines.json` — bygget mot brukers verbatim visjon: "Apple + premium bil + nordisk design".
+
+- **Nordic palett**: `#0B1013` graphite bakgrunn, `#F4F4F0` ivory tekst, `#CBA365` champagne gull (kun for CTA — kontrollert). `#8A9198` sekundær grå.
+- **Typografi**: Fraunces (display, italic subtitles) + Inter Tight (UI body)
+- **Mørkt Nordic-kart**: PremiumMap forced til dark raster style — mørk graphite base (#06090A) med desaturert cartodb-fastly kart. Rute-glow #CBA365 opacity 0.22 blur 8px, shimmer i #F4F4F0
+- **Elegant bil-glyph**: Alle biler har subtil gullhalo (identity marker), aktiv bil får sterkere glow
+- **Pulserende bruker-ring**: `userPosEl()` — 3-lags gull-ring (0.28 halo, 0.55 kjerne, ivory core) med `kjapp-pulse-1` 2.6s animasjon. Erstatter pickup-pinnen i "utforsker"-modus
+- **Smart hjem-panel**: "God ettermiddag, Ola." (tid-basert hilsen) + "På vei et sted? Nærmeste bil er 8 min unna." (personalisert)
+- **"Hvor vil du?"** (ikke "Hvor skal du?") + 3 quick-chips: Hjem · Jobb · Flyplass (fly-ikon)
+- **Minimalistisk splash**: "KJAPP" (A får gullshimmer 3.6s loop) + "NORDIC TAXI" tracking-0.42em + "Enklere. Tryggere. Kjappere."
+- **Fjernet papirtekstur**: Ren graphite (design guidelines krevde ren luksus, ikke rustikk)
+
+
+
 ## Iter 20 — Deploy-klar for 3 separate apper via runtime-detection (2026-02-24)
 
 **Bruker ba om**: Deploy fleet.kjapp.no og admin.kjapp.no som separate apper.

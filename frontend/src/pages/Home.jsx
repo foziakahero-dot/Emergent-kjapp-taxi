@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PremiumMap from "../components/PremiumMap";
 import { tripsApi, carsApi, placesApi, pricingApi, paymentApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight, Users, Sparkles, Car as CarIcon, ChevronDown, ChevronUp, User, History, Settings as SettingsIcon, LogOut, HelpCircle, X } from "lucide-react";
+import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight, Users, Sparkles, Car as CarIcon, ChevronDown, ChevronUp, User, History, Settings as SettingsIcon, LogOut, HelpCircle, X, Plane } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Orb } from "../components/UIKit";
 
@@ -81,7 +81,19 @@ export default function Home() {
   const iconFor = (label) => {
     if (label === "Hjem") return HomeIcon;
     if (label === "Jobb") return Briefcase;
+    if (label === "Flyplass") return Plane;
     return MapPin;
+  };
+
+  // Nordic greeting based on time of day
+  const getGreeting = () => {
+    const h = new Date().getHours();
+    if (h < 5) return "God natt";
+    if (h < 10) return "God morgen";
+    if (h < 12) return "God formiddag";
+    if (h < 17) return "God ettermiddag";
+    if (h < 22) return "God kveld";
+    return "God natt";
   };
 
   // Load available cars nearby — refresh every 6s to match backend cruise cadence
@@ -172,8 +184,9 @@ export default function Home() {
           zoom={dropoff ? 13.5 : 13}
           pitch={45}
           route={mapRoute}
-          pickup={pickup}
+          pickup={dropoff ? pickup : null}
           dropoff={dropoff}
+          userPos={dropoff ? null : pickup}
           cars={nearbyCarsForMap}
           testid="home-map"
         />
@@ -282,34 +295,51 @@ export default function Home() {
           )}
           {!dropoff ? (
             <>
+              {/* Smart greeting — Nordic mobility signature */}
+              <div className="mb-3">
+                <div className="font-display text-[22px] leading-tight" style={{ color: "var(--text)" }} data-testid="home-greeting">
+                  {getGreeting()}{user?.fullName ? `, ${user.fullName.split(" ")[0]}.` : "."}
+                </div>
+                {cars.length > 0 && (
+                  <div className="text-[13px] mt-1" style={{ color: "var(--text-muted)" }} data-testid="home-smart-suggest">
+                    På vei et sted? Nærmeste bil er <span style={{ color: "var(--accent)" }}>{cars[0]?.eta_min} min</span> unna.
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={() => setShowSheet(true)}
                 className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl transition-colors"
                 style={{
-                  background: "rgba(232,224,208,0.05)",
-                  border: "1px solid rgba(232,224,208,0.10)",
+                  background: "rgba(244,244,240,0.05)",
+                  border: "1px solid rgba(244,244,240,0.10)",
                 }}
                 data-testid="home-where-to"
               >
                 <Search size={18} style={{ color: "var(--accent)" }} />
-                <span style={{ color: "var(--text)" }}>Hvor skal du?</span>
+                <span style={{ color: "var(--text)" }}>Hvor vil du?</span>
               </button>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                {places.filter(p => ["Hjem", "Jobb", "Sentralstasjon"].includes(p.label)).slice(0, 3).map((p) => {
-                  const Ic = iconFor(p.label);
+                {[
+                  { label: "Hjem", target: places.find(p => p.label === "Hjem") },
+                  { label: "Jobb", target: places.find(p => p.label === "Jobb") },
+                  { label: "Flyplass", target: { name: "Oslo Lufthavn Gardermoen", lat: 60.1976, lng: 11.1004 } },
+                ].map(({ label, target }) => {
+                  const Ic = iconFor(label);
                   return (
                     <button
-                      key={p.name}
-                      onClick={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
-                      className="flex flex-col items-center gap-2 py-3 rounded-2xl transition-colors"
+                      key={label}
+                      onClick={() => target && setDropoff({ name: target.name, lat: target.lat, lng: target.lng })}
+                      disabled={!target}
+                      className="flex flex-col items-center gap-2 py-3 rounded-2xl transition-colors disabled:opacity-40"
                       style={{
-                        background: "rgba(232,224,208,0.04)",
-                        border: "1px solid rgba(232,224,208,0.08)",
+                        background: "rgba(244,244,240,0.04)",
+                        border: "1px solid rgba(244,244,240,0.08)",
                       }}
-                      data-testid={`quick-${p.label}`}
+                      data-testid={`quick-${label}`}
                     >
                       <Ic size={18} style={{ color: "var(--accent)" }} />
-                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{p.label}</span>
+                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</span>
                     </button>
                   );
                 })}

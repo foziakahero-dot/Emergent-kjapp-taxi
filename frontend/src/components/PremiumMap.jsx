@@ -17,28 +17,29 @@ import "maplibre-gl/dist/maplibre-gl.css";
  *  - activeCar: {lat, lng, bearing}         hero car during trip
  *  - onReady, onMoveEnd, followActive
  */
-/* Primary: OpenFreeMap Liberty (vector, has buildings). Fallback: raster OSM. */
+/* Primary: OpenFreeMap Positron (dark-ready base). Fallback: dark raster. */
 const STYLE_URLS = {
-  primary: "https://tiles.openfreemap.org/styles/liberty",
+  primary: "https://tiles.openfreemap.org/styles/positron",
 };
 
-/** Minimal raster fallback style — 100% free, no key */
+/** Dark Nordic raster fallback — mørk graphite base med KJAPP-gull som subtil aksent */
 const FALLBACK_RASTER_STYLE = {
   version: 8,
   sources: {
-    osm: {
+    dark: {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+        "https://cartodb-basemaps-b.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+        "https://cartodb-basemaps-c.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
       ],
       tileSize: 256,
+      attribution: "© OpenStreetMap contributors © CARTO",
     },
   },
   layers: [
-    { id: "bg", type: "background", paint: { "background-color": "#f4ecd8" } },
-    { id: "osm-layer", type: "raster", source: "osm" },
+    { id: "bg", type: "background", paint: { "background-color": "#06090A" } },
+    { id: "dark-layer", type: "raster", source: "dark", paint: { "raster-opacity": 0.95, "raster-brightness-min": 0, "raster-brightness-max": 0.85, "raster-saturation": -0.3 } },
   ],
   glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
 };
@@ -54,6 +55,7 @@ export default function PremiumMap({
   dropoff = null,
   cars = [],
   activeCar = null,
+  userPos = null,      // {lat, lng} — draws pulsing champagne ring
   followActive = false,
   interactive = true,
   className = "",
@@ -68,7 +70,7 @@ export default function PremiumMap({
     if (mapRef.current) return;
     const map = new MapLibreMap({
       container: mapContainer.current,
-      style: STYLE_URLS.primary,
+      style: FALLBACK_RASTER_STYLE,  // always use dark Nordic style — brand identity
       center,
       zoom,
       pitch,
@@ -79,13 +81,8 @@ export default function PremiumMap({
     });
     mapRef.current = map;
 
-    // If the primary vector style fails to load (network / block), swap to raster
-    let fallbackApplied = false;
-    const swapToFallback = () => {
-      if (fallbackApplied) return;
-      fallbackApplied = true;
-      try { map.setStyle(FALLBACK_RASTER_STYLE); } catch { /* ignore */ }
-    };
+    // No fallback needed — we're always on the dark raster style
+    const swapToFallback = () => { /* noop */ };
     map.on("error", (e) => {
       // Only fallback on style/source load errors (network, CORS)
       const msg = (e?.error?.message || "").toLowerCase();
@@ -151,21 +148,21 @@ export default function PremiumMap({
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#c9a15b", "line-width": 10, "line-opacity": 0.18, "line-blur": 6 },
+          paint: { "line-color": "#CBA365", "line-width": 10, "line-opacity": 0.22, "line-blur": 8 },
         });
         map.addLayer({
           id: "route-line",
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#c9a15b", "line-width": 5, "line-opacity": 0.95 },
+          paint: { "line-color": "#CBA365", "line-width": 5, "line-opacity": 0.95 },
         });
         map.addLayer({
           id: "route-shimmer",
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#f4ecd8", "line-width": 1.4, "line-opacity": 0.9, "line-dasharray": [1, 6] },
+          paint: { "line-color": "#F4F4F0", "line-width": 1.4, "line-opacity": 0.9, "line-dasharray": [1, 6] },
         });
       }
     };
@@ -231,6 +228,9 @@ export default function PremiumMap({
     if (dropoff) {
       wanted["dropoff"] = { lng: dropoff.lng, lat: dropoff.lat, el: dropoffEl() };
     }
+    if (userPos) {
+      wanted["user"] = { lng: userPos.lng, lat: userPos.lat, el: userPosEl() };
+    }
     cars.forEach((c, i) => {
       wanted[`nearby-${i}`] = { lng: c.lng, lat: c.lat, el: carEl(c.bearing || 0, false) };
     });
@@ -261,7 +261,7 @@ export default function PremiumMap({
         markersRef.current[k] = m;
       }
     });
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, cars, activeCar?.lat, activeCar?.lng, activeCar?.bearing]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, userPos?.lat, userPos?.lng, cars, activeCar?.lat, activeCar?.lng, activeCar?.bearing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`relative w-full h-full ${className}`} data-testid={testid} style={{ minHeight: 200 }}>
@@ -312,10 +312,22 @@ function pickupEl() {
           </linearGradient>
         </defs>
         <ellipse cx="18" cy="42" rx="6.5" ry="2" fill="#000" opacity="0.35"/>
-        <path d="M 18 2 C 9.7 2 3 8.7 3 17 c 0 10.2 12.5 22.5 14.2 24.1 a 1.1 1.1 0 0 0 1.6 0 C 20.5 39.5 33 27.2 33 17 C 33 8.7 26.3 2 18 2 Z" fill="url(#pinG)" stroke="#f4ecd8" stroke-opacity="0.6" stroke-width="1.5"/>
-        <circle cx="18" cy="17" r="6.2" fill="#0c1216"/>
-        <circle cx="18" cy="17" r="2.6" fill="#f4ecd8"/>
+        <path d="M 18 2 C 9.7 2 3 8.7 3 17 c 0 10.2 12.5 22.5 14.2 24.1 a 1.1 1.1 0 0 0 1.6 0 C 20.5 39.5 33 27.2 33 17 C 33 8.7 26.3 2 18 2 Z" fill="url(#pinG)" stroke="#F4F4F0" stroke-opacity="0.6" stroke-width="1.5"/>
+        <circle cx="18" cy="17" r="6.2" fill="#0B1013"/>
+        <circle cx="18" cy="17" r="2.6" fill="#F4F4F0"/>
       </svg>
+    </div>
+  `);
+}
+
+/** Elegant pulsing user location — champagne ring on graphite */
+function userPosEl() {
+  return el(`
+    <div style="pointer-events:none; position:relative; width:44px; height:44px;">
+      <div style="position:absolute; inset:0; border-radius:50%; background:rgba(203,163,101,0.28); animation: kjapp-pulse-1 2.6s ease-out infinite;"></div>
+      <div style="position:absolute; inset:8px; border-radius:50%; background:rgba(203,163,101,0.55); border:1px solid rgba(203,163,101,0.9);"></div>
+      <div style="position:absolute; inset:16px; border-radius:50%; background:#F4F4F0; box-shadow:0 0 8px rgba(203,163,101,0.9);"></div>
+      <style>@keyframes kjapp-pulse-1 { 0% { transform: scale(0.6); opacity: 0.9; } 100% { transform: scale(2.2); opacity: 0; } }</style>
     </div>
   `);
 }
@@ -325,31 +337,31 @@ function dropoffEl() {
     <div style="pointer-events:none; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.5));">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 46" width="36" height="46">
         <ellipse cx="18" cy="42" rx="6" ry="2" fill="#000" opacity="0.35"/>
-        <path d="M 18 2 C 9.7 2 3 8.7 3 17 c 0 10.2 12.5 22.5 14.2 24.1 a 1.1 1.1 0 0 0 1.6 0 C 20.5 39.5 33 27.2 33 17 C 33 8.7 26.3 2 18 2 Z" fill="#0c1216" stroke="#c9a15b" stroke-width="1.8"/>
+        <path d="M 18 2 C 9.7 2 3 8.7 3 17 c 0 10.2 12.5 22.5 14.2 24.1 a 1.1 1.1 0 0 0 1.6 0 C 20.5 39.5 33 27.2 33 17 C 33 8.7 26.3 2 18 2 Z" fill="#0B1013" stroke="#CBA365" stroke-width="1.8"/>
         <g transform="translate(12 10)">
-          <rect x="0" y="0" width="3" height="3" fill="#f4ecd8"/><rect x="3" y="0" width="3" height="3" fill="#c9a15b"/><rect x="6" y="0" width="3" height="3" fill="#f4ecd8"/><rect x="9" y="0" width="3" height="3" fill="#c9a15b"/>
-          <rect x="0" y="3" width="3" height="3" fill="#c9a15b"/><rect x="3" y="3" width="3" height="3" fill="#f4ecd8"/><rect x="6" y="3" width="3" height="3" fill="#c9a15b"/><rect x="9" y="3" width="3" height="3" fill="#f4ecd8"/>
-          <rect x="0" y="6" width="3" height="3" fill="#f4ecd8"/><rect x="3" y="6" width="3" height="3" fill="#c9a15b"/><rect x="6" y="6" width="3" height="3" fill="#f4ecd8"/><rect x="9" y="6" width="3" height="3" fill="#c9a15b"/>
+          <rect x="0" y="0" width="3" height="3" fill="#F4F4F0"/><rect x="3" y="0" width="3" height="3" fill="#CBA365"/><rect x="6" y="0" width="3" height="3" fill="#F4F4F0"/><rect x="9" y="0" width="3" height="3" fill="#CBA365"/>
+          <rect x="0" y="3" width="3" height="3" fill="#CBA365"/><rect x="3" y="3" width="3" height="3" fill="#F4F4F0"/><rect x="6" y="3" width="3" height="3" fill="#CBA365"/><rect x="9" y="3" width="3" height="3" fill="#F4F4F0"/>
+          <rect x="0" y="6" width="3" height="3" fill="#F4F4F0"/><rect x="3" y="6" width="3" height="3" fill="#CBA365"/><rect x="6" y="6" width="3" height="3" fill="#F4F4F0"/><rect x="9" y="6" width="3" height="3" fill="#CBA365"/>
         </g>
       </svg>
     </div>
   `);
 }
 
-/** Premium 3D-ish car sprite (isometric perspective) */
+/** Premium car sprite — subtle gold halo for all available cars (identity marker) */
 function carEl(bearing = 0, active = false) {
-  const glow = active ? "0 8px 16px rgba(201,161,91,0.55)" : "0 4px 8px rgba(0,0,0,0.35)";
+  const glow = active ? "0 10px 20px rgba(203,163,101,0.65)" : "0 4px 10px rgba(203,163,101,0.28)";
   const scale = active ? 1.15 : 1.0;
-  const halo = active ? `<circle cx="26" cy="26" r="22" fill="url(#carHalo)"/>` : "";
+  const halo = `<circle cx="26" cy="26" r="${active ? 22 : 18}" fill="url(#carHalo)" opacity="${active ? 1 : 0.55}"/>`;
   return el(`
     <div class="premium-car" style="pointer-events:none; width:52px; height:52px;">
       <div class="car-rotate" style="width:100%; height:100%; transform: rotate(${bearing}deg); transition: transform 0.5s ease; filter: drop-shadow(${glow}); transform-origin: 50% 50%;">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" width="52" height="52">
           <defs>
             <radialGradient id="carHalo" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#c9a15b" stop-opacity="0.45"/>
-              <stop offset="70%" stop-color="#c9a15b" stop-opacity="0.05"/>
-              <stop offset="100%" stop-color="#c9a15b" stop-opacity="0"/>
+              <stop offset="0%" stop-color="#CBA365" stop-opacity="0.45"/>
+              <stop offset="70%" stop-color="#CBA365" stop-opacity="0.05"/>
+              <stop offset="100%" stop-color="#CBA365" stop-opacity="0"/>
             </radialGradient>
             <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#2b2f36"/>
@@ -361,8 +373,8 @@ function carEl(bearing = 0, active = false) {
               <stop offset="100%" stop-color="#1c2026"/>
             </linearGradient>
             <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#c9a15b" stop-opacity="0.85"/>
-              <stop offset="100%" stop-color="#c9a15b" stop-opacity="0.5"/>
+              <stop offset="0%" stop-color="#CBA365" stop-opacity="0.85"/>
+              <stop offset="100%" stop-color="#CBA365" stop-opacity="0.5"/>
             </linearGradient>
           </defs>
           ${halo}
@@ -370,7 +382,7 @@ function carEl(bearing = 0, active = false) {
             <!-- ground shadow -->
             <ellipse cx="1" cy="2" rx="8" ry="13" fill="#000" opacity="0.4"/>
             <!-- body silhouette (isometric-lite) -->
-            <path d="M -7 -13 Q -7 -15 -5 -15 L 5 -15 Q 7 -15 7 -13 L 7 13 Q 7 15 5 15 L -5 15 Q -7 15 -7 13 Z" fill="url(#body)" stroke="#c9a15b" stroke-width="1.2"/>
+            <path d="M -7 -13 Q -7 -15 -5 -15 L 5 -15 Q 7 -15 7 -13 L 7 13 Q 7 15 5 15 L -5 15 Q -7 15 -7 13 Z" fill="url(#body)" stroke="#CBA365" stroke-width="1.2"/>
             <!-- roof panel -->
             <rect x="-5.6" y="-8" width="11.2" height="14" rx="1.4" fill="url(#roof)"/>
             <!-- windshield -->

@@ -4,11 +4,26 @@ import { driverApi, tripsApi } from "../lib/api";
 import { Orb, VoiceBars } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Navigation, Clock, Check, Power, History } from "lucide-react";
+import { MapPin, Navigation, Clock, Check, Power, History, Phone, Star } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import { carIconRotated, pickupIcon, dropoffIcon } from "../lib/mapAssets";
 import L from "leaflet";
+
+function notifyNewTrip(count) {
+  // Best-effort browser notification (works in background tab)
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      const n = new Notification(`Ny tur${count > 1 ? "er" : ""} tilgjengelig`, {
+        body: `${count} ny${count > 1 ? "e" : ""} tur${count > 1 ? "er" : ""} venter på deg — trykk for å godta`,
+        icon: "/logo.png",
+        tag: "kjapp-new-trip",
+        renotify: true,
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    }
+  } catch { /* ignore */ }
+}
 
 function RecenterOn({ lat, lng }) {
   const map = useMap();
@@ -43,13 +58,14 @@ export default function DriverHome() {
       const newOnes = [...currentIds].filter((id) => !prev.has(id));
       if (newOnes.length > 0 && online) {
         if (prevPendingIdsRef.current.__initialized) {
-          // Triple ping + vibration for new trips (harder to miss)
+          // Triple ping + vibration + browser notification for new trips (harder to miss)
           try {
             playNewTripPing();
             setTimeout(() => { try { playNewTripPing(); } catch { /* audio blocked */ } }, 700);
             setTimeout(() => { try { playNewTripPing(); } catch { /* audio blocked */ } }, 1400);
           } catch { /* blocked */ }
           try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch { /* vibrate unsupported */ }
+          notifyNewTrip(newOnes.length);
         }
       }
       currentIds.__initialized = true;
@@ -150,7 +166,7 @@ export default function DriverHome() {
               scrollWheelZoom={false}
               style={{ height: "100%", width: "100%" }}
             >
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+              <TileLayer url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png" />
               <Marker position={[pos.lat, pos.lng]} icon={carIconRotated(pos.heading || 0)} />
               <RecenterOn lat={pos.lat} lng={pos.lng} />
             </MapContainer>
@@ -237,6 +253,38 @@ export default function DriverHome() {
                 className="card p-4"
                 data-testid={`pending-${t.trip_id}`}
               >
+                {/* Customer chip */}
+                {t.customer && (
+                  <div className="flex items-center gap-3 mb-3 pb-3 border-b border-line">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-mint/25 to-mint/5 grid place-items-center text-mint font-medium text-[13px]" data-testid={`pending-customer-${t.trip_id}`}>
+                      {t.customer.initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white text-sm font-medium truncate">{t.customer.name}</div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-[#a8b0a8] mt-0.5">
+                        <Star size={11} className="text-mint" fill="#2fe08c" />
+                        <span>{t.customer.rating?.toFixed(1) || "4.9"}</span>
+                        {t.customer.trip_count > 0 && (
+                          <>
+                            <span className="opacity-40">·</span>
+                            <span>{t.customer.trip_count} turer</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {t.customer.phone && (
+                      <a
+                        href={`tel:${t.customer.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid={`pending-call-${t.trip_id}`}
+                        className="w-9 h-9 rounded-full bg-mint/10 border border-mint/20 grid place-items-center text-mint hover:bg-mint/20 transition-colors"
+                        aria-label={`Ring ${t.customer.name}`}
+                      >
+                        <Phone size={14} />
+                      </a>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center gap-3 mb-3">
                   <div className="flex flex-col items-center pt-1">
                     <div className="w-2 h-2 rounded-full bg-mint" />

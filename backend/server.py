@@ -571,8 +571,110 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 print(f"[cruise] error: {e}")
     cruise_task = asyncio.create_task(cruise_demo_drivers())
+
+    # Background task: keep 1-2 pending demo trips waiting for sjåfør (so beta-testing feels alive)
+    async def seed_demo_pending_trips():
+        import random as _r
+        DEMO_ROUTES = [
+            {"pickup": {"lat": 59.9139, "lng": 10.7522, "address": "Oslo S · Jernbanetorget 1"},
+             "dropoff": {"lat": 59.9109, "lng": 10.7343, "address": "Aker Brygge · Stranden 1"},
+             "distance_km": 2.4, "duration_min": 8, "price": 189},
+            {"pickup": {"lat": 59.9163, "lng": 10.7266, "address": "Slottet · Slottsplassen 1"},
+             "dropoff": {"lat": 59.9333, "lng": 10.7189, "address": "Bygdøy · Museumsveien 10"},
+             "distance_km": 4.8, "duration_min": 12, "price": 259},
+            {"pickup": {"lat": 59.9127, "lng": 10.7457, "address": "Grünerløkka · Markveien 35"},
+             "dropoff": {"lat": 59.9491, "lng": 10.7186, "address": "Oslo Lufthavn Torp · Utsikten 1"},
+             "distance_km": 5.6, "duration_min": 15, "price": 319},
+            {"pickup": {"lat": 59.9250, "lng": 10.7580, "address": "Grünerløkka · Thorvald Meyers gate 1"},
+             "dropoff": {"lat": 59.9018, "lng": 10.7770, "address": "Ekeberg · Kongsveien 15"},
+             "distance_km": 5.9, "duration_min": 17, "price": 329},
+            {"pickup": {"lat": 59.9068, "lng": 10.7480, "address": "Barcode · Dronning Eufemias gate 30"},
+             "dropoff": {"lat": 59.9270, "lng": 10.6997, "address": "Skøyen · Karenslyst allé 2"},
+             "distance_km": 6.2, "duration_min": 16, "price": 339},
+        ]
+        DEMO_CUSTOMERS = [
+            {"name": "Kari Nordmann", "phone": "+4790000101", "rating": 4.9},
+            {"name": "Aisha Ali", "phone": "+4790000102", "rating": 4.8},
+            {"name": "Erik Berg", "phone": "+4790000103", "rating": 5.0},
+            {"name": "Sofia Larsen", "phone": "+4790000104", "rating": 4.9},
+        ]
+
+        # Ensure demo passenger users exist
+        for c in DEMO_CUSTOMERS:
+            email = f"demo_p_{c['name'].split()[0].lower()}@kjapp.no"
+            existing = await db.users.find_one({"email": email})
+            if not existing:
+                await db.users.insert_one({
+                    "email": email,
+                    "password_hash": hash_password("demo1234"),
+                    "fullName": c["name"],
+                    "phone": c["phone"],
+                    "role": "user",
+                    "rating": c["rating"],
+                    "trip_count": _r.randint(15, 80),
+                    "demo": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+
+        # Preload their IDs
+        demo_customer_ids = []
+        async for u in db.users.find({"role": "user", "demo": True}, {"_id": 1}):
+            demo_customer_ids.append(str(u["_id"]))
+
+        while True:
+            try:
+                await asyncio.sleep(20)  # check every 20s
+                # Count current pending
+                pending_count = await db.trips.count_documents({
+                    "status": {"$in": ["searching", "booking"]},
+                    "driver_id": None,
+                    "demo": True,
+                })
+                # Keep 2 demo pending trips available
+                to_create = max(0, 2 - pending_count)
+                for _ in range(to_create):
+                    if not demo_customer_ids:
+                        break
+                    route = _r.choice(DEMO_ROUTES)
+                    customer_id = _r.choice(demo_customer_ids)
+                    trip_id = str(uuid.uuid4())
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    await db.trips.insert_one({
+                        "trip_id": trip_id,
+                        "user_id": customer_id,
+                        "driver_id": None,
+                        "status": "searching",
+                        "pickup_address": route["pickup"]["address"],
+                        "pickup_lat": route["pickup"]["lat"],
+                        "pickup_lng": route["pickup"]["lng"],
+                        "dropoff_address": route["dropoff"]["address"],
+                        "dropoff_lat": route["dropoff"]["lat"],
+                        "dropoff_lng": route["dropoff"]["lng"],
+                        "distance_km": route["distance_km"],
+                        "duration_min": route["duration_min"],
+                        "price": route["price"],
+                        "vehicle_type": _r.choice(["ai-first", "enkelt", "premium"]),
+                        "payment_status": "authorized",
+                        "demo": True,
+                        "created_at": now_iso,
+                        "updated_at": now_iso,
+                    })
+                # Cleanup: remove demo pending trips older than 3 min so drivers get fresh ones
+                cutoff = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
+                await db.trips.delete_many({
+                    "demo": True,
+                    "status": "searching",
+                    "driver_id": None,
+                    "created_at": {"$lt": cutoff},
+                })
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[demo-trips] error: {e}")
+    demo_trips_task = asyncio.create_task(seed_demo_pending_trips())
     yield
     cruise_task.cancel()
+    demo_trips_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1340,11 +1442,26 @@ class AcceptTripRequest(BaseModel):
 
 @api.get("/driver/pending")
 async def driver_pending(current=Depends(require_driver)):
-    """Trips waiting to be accepted (status=searching or booking, no driver assigned yet)."""
+    """Trips waiting to be accepted (status=searching or booking, no driver assigned yet).
+    Includes lightweight customer info (name, rating, photo initials) so drivers see who they're picking up."""
     trips = []
     async for t in db.trips.find({"status": {"$in": ["searching", "booking"]}, "driver_id": None}).sort("created_at", 1).limit(10):
         t["id"] = str(t["_id"])
         t.pop("_id", None)
+        # Enrich with customer info
+        try:
+            u = await db.users.find_one({"_id": ObjectId(t.get("user_id"))}, {"password_hash": 0}) if t.get("user_id") else None
+            if u:
+                name = u.get("fullName") or u.get("full_name") or "Kunde"
+                t["customer"] = {
+                    "name": name,
+                    "phone": u.get("phone") or "",
+                    "rating": u.get("rating", 4.9),
+                    "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
+                    "trip_count": u.get("trip_count", 0),
+                }
+        except Exception:
+            t["customer"] = {"name": "Kunde", "phone": "", "rating": 4.9, "initials": "K", "trip_count": 0}
         trips.append(t)
     return {"trips": trips}
 
@@ -1409,6 +1526,20 @@ async def driver_current(current=Depends(require_driver)):
     if not t:
         return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
+    # Enrich with customer info
+    try:
+        u = await db.users.find_one({"_id": ObjectId(t.get("user_id"))}, {"password_hash": 0}) if t.get("user_id") else None
+        if u:
+            name = u.get("fullName") or u.get("full_name") or "Kunde"
+            t["customer"] = {
+                "name": name,
+                "phone": u.get("phone") or "",
+                "rating": u.get("rating", 4.9),
+                "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
+                "trip_count": u.get("trip_count", 0),
+            }
+    except Exception:
+        pass
     return t
 
 
