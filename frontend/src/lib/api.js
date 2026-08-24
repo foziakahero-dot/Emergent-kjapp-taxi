@@ -31,6 +31,30 @@ export const adminApi = {
   createInvite: ({ car, plate, vehicle_type = "ai-first", note = "", email = "" }) =>
     api.post("/admin/driver-invites", { car, plate, vehicle_type, note, email: email || undefined }).then((r) => r.data),
   invites: () => api.get("/admin/driver-invites").then((r) => r.data),
+  // Control Center (Phase 1)
+  fleetsFull: (params) => api.get("/admin/fleets-full", { params }).then((r) => r.data),
+  suspendFleet: (id, reason) => api.post(`/admin/fleets/${id}/suspend`, { reason }).then((r) => r.data),
+  reactivateFleet: (id) => api.post(`/admin/fleets/${id}/reactivate`).then((r) => r.data),
+  updateCommission: (id, rate, reason) => api.post(`/admin/fleets/${id}/commission`, { commission_rate: rate, reason }).then((r) => r.data),
+  auditLog: (entity_type) => api.get("/admin/audit-log", { params: { entity_type, limit: 200 } }).then((r) => r.data),
+  // Control Center (Phase 2)
+  live: () => api.get("/admin/live").then((r) => r.data),
+  driversFull: (params) => api.get("/admin/drivers-full", { params }).then((r) => r.data),
+  setDriverStatus: (id, approved) => api.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
+  vehicles: (params) => api.get("/admin/vehicles", { params }).then((r) => r.data),
+  tripsFull: (params) => api.get("/admin/trips-full", { params }).then((r) => r.data),
+  tripTimeline: (tripId) => api.get(`/admin/trips/${tripId}/timeline`).then((r) => r.data),
+  finance: (days) => api.get("/admin/finance", { params: { days } }).then((r) => r.data),
+  financeExport: (days) => api.get("/admin/finance/export", { params: { days }, responseType: "blob" }).then((r) => r.data),
+  documents: (params) => api.get("/admin/documents", { params }).then((r) => r.data),
+  fileBlob: (path) => api.get(`/files/${path}`, { responseType: "blob" }).then((r) => r.data),
+  tickets: (status) => api.get("/admin/support/tickets", { params: { status } }).then((r) => r.data),
+  createTicket: (data) => api.post("/admin/support/tickets", data).then((r) => r.data),
+  updateTicket: (id, data) => api.patch(`/admin/support/tickets/${id}`, data).then((r) => r.data),
+  analytics: (days) => api.get("/admin/analytics", { params: { days } }).then((r) => r.data),
+  settings: () => api.get("/admin/settings").then((r) => r.data),
+  updateSettings: (data) => api.patch("/admin/settings", data).then((r) => r.data),
+  fleetDetail: (id) => api.get(`/admin/fleets/${id}`).then((r) => r.data),
 };
 
 export const driverInviteApi = {
@@ -118,6 +142,7 @@ export const fleetApi = {
   exportMonthly: (year, month) =>
     api.get("/fleet/export/monthly", { params: { year, month }, responseType: "blob" }).then((r) => r),
 };
+
 
 export const adminFleetsApi = {
   list: () => api.get("/admin/fleets").then((r) => r.data),

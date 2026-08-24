@@ -10,7 +10,8 @@ import { motion, AnimatePresence } from "framer-motion";
 const STATUS_META = {
   searching: { title: "Søker sjåfør", subtitle: "Vi varsler alle ledige sjåfører nær deg", progress: 20 },
   booking: { title: "Bestiller for deg", subtitle: "Vi finner nærmeste sjåfør og bestiller turen for deg.", progress: 40 },
-  driver_on_way: { title: "Sjåfør på vei", subtitle: "kommer om noen minutter", progress: 65 },
+  driver_on_way: { title: "Sjåfør på vei", subtitle: "kommer om noen minutter", progress: 60 },
+  at_pickup: { title: "Sjåføren er fremme", subtitle: "Kom ut når du er klar", progress: 75 },
   in_trip: { title: "Turen din", subtitle: "km igjen", progress: 85 },
   arrived: { title: "Du er fremme!", subtitle: "Takk for turen", progress: 100 },
   cancelled_by_driver: { title: "Sjåføren avbrøt", subtitle: "Vi prøver å finne en annen sjåfør — eller bestill på nytt", progress: 0 },

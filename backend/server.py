@@ -958,10 +958,87 @@ async def complete_trip(trip_id: str, current=Depends(get_current_user)):
 
 @api.post("/trips/{trip_id}/rate")
 async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_current_user)):
+    """Passenger rates the driver + trip (1-5 stars + optional feedback)."""
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(400, "Rating må være mellom 1 og 5")
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Fant ikke turen")
+    if trip.get("passenger_rating"):
+        raise HTTPException(400, "Du har allerede rangert denne turen")
     await db.trips.update_one(
         {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"rating": body.rating, "feedback": body.feedback, "status": "rated"}},
+        {"$set": {
+            "passenger_rating": body.rating,
+            "passenger_feedback": body.feedback,
+            "rating": body.rating,
+            "feedback": body.feedback,
+            "status": "rated",
+            "rated_at": datetime.now(timezone.utc).isoformat(),
+        }},
     )
+    # Update driver's rolling rating (avg of last 50 trip ratings)
+    if trip.get("driver_id"):
+        recent = []
+        async for r in db.trips.find(
+            {"driver_id": trip["driver_id"], "passenger_rating": {"$exists": True, "$ne": None}},
+            {"passenger_rating": 1},
+        ).sort("rated_at", -1).limit(50):
+            recent.append(r.get("passenger_rating"))
+        if recent:
+            avg = round(sum(recent) / len(recent), 2)
+            try:
+                await db.users.update_one({"_id": ObjectId(trip["driver_id"])}, {"$set": {"rating": avg}})
+            except Exception:
+                pass
+    return {"ok": True}
+
+
+def require_driver(current=Depends(get_current_user)):
+    if current.get("role") not in ("driver", "admin"):
+        raise HTTPException(status_code=403, detail="Kun for sjåfører")
+    if current.get("role") == "driver" and current.get("approved") is False:
+        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+    return current
+
+
+class DriverRatePassengerRequest(BaseModel):
+    rating: int
+    feedback: Optional[str] = None
+
+
+@api.post("/driver/trip/{trip_id}/rate-passenger")
+async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, current=Depends(require_driver)):
+    """Driver rates the passenger 1-5 stars after trip completion."""
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(400, "Rating må være mellom 1 og 5")
+    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Fant ikke turen")
+    if trip.get("driver_rating"):
+        raise HTTPException(400, "Du har allerede rangert denne kunden")
+    await db.trips.update_one(
+        {"trip_id": trip_id, "driver_id": current["id"]},
+        {"$set": {
+            "driver_rating": body.rating,
+            "driver_feedback": body.feedback,
+            "driver_rated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    # Update passenger's rolling rating
+    if trip.get("user_id"):
+        recent = []
+        async for r in db.trips.find(
+            {"user_id": trip["user_id"], "driver_rating": {"$exists": True, "$ne": None}},
+            {"driver_rating": 1},
+        ).sort("driver_rated_at", -1).limit(50):
+            recent.append(r.get("driver_rating"))
+        if recent:
+            avg = round(sum(recent) / len(recent), 2)
+            try:
+                await db.users.update_one({"_id": ObjectId(trip["user_id"])}, {"$set": {"rating": avg}})
+            except Exception:
+                pass
     return {"ok": True}
 
 
@@ -1428,14 +1505,6 @@ async def summary_today(current=Depends(get_current_user)):
 
 
 # ---- Driver endpoints ----
-def require_driver(current=Depends(get_current_user)):
-    if current.get("role") not in ("driver", "admin"):
-        raise HTTPException(status_code=403, detail="Kun for sjåfører")
-    if current.get("role") == "driver" and current.get("approved") is False:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
-    return current
-
-
 class AcceptTripRequest(BaseModel):
     trip_id: str
 
@@ -2178,25 +2247,130 @@ async def fleet_export_monthly(
 
 @api.get("/admin/overview")
 async def admin_overview(current=Depends(require_admin)):
-    users_total = await db.users.count_documents({"role": "user"})
-    drivers_total = await db.users.count_documents({"role": "driver"})
-    drivers_pending = await db.users.count_documents({"role": "driver", "approved": False})
-    trips_today = 0
-    revenue_today = 0
+    """KPI dashboard for Operations Control Center."""
     today = datetime.now(timezone.utc).date().isoformat()
-    async for t in db.trips.find({"created_at": {"$gte": today}}):
-        trips_today += 1
-        if t.get("status") in ("arrived", "completed", "rated"):
-            revenue_today += t.get("price", 0)
-    trips_total = await db.trips.count_documents({})
+    yday = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+
+    async def count(col, q): return await col.count_documents(q)
+
+    active_fleets = await count(db.fleets, {"status": {"$ne": "suspended"}})
+    suspended_fleets = await count(db.fleets, {"status": "suspended"})
+    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["submitted", "under_review", "documents_required"]}})
+    approved_drivers = await count(db.users, {"role": "driver", "approved": True})
+    pending_drivers = await count(db.users, {"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
+    drivers_online = await count(db.users, {"role": "driver", "online": True})
+    active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}})
+    trips_today = await count(db.trips, {"created_at": {"$gte": today}})
+    trips_yday = await count(db.trips, {"created_at": {"$gte": yday, "$lt": today}})
+    completed_today = await count(db.trips, {"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}})
+    cancelled_today = await count(db.trips, {"status": "cancelled", "created_at": {"$gte": today}})
+
+    gmv_today = 0
+    kjapp_revenue_today = 0
+    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}, {"price": 1}):
+        price = t.get("price", 0) or 0
+        gmv_today += price
+        kjapp_revenue_today += round(price * 0.10)
+
+    pending_payouts = await count(db.fleet_payouts, {"status": {"$in": ["pending", "processing", "on_hold"]}})
+    open_support = await count(db.support_tickets, {"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
+
     return {
-        "users": users_total,
-        "drivers": drivers_total,
-        "drivers_pending": drivers_pending,
-        "trips_today": trips_today,
-        "revenue_today": revenue_today,
-        "trips_total": trips_total,
+        "fleets": {"active": active_fleets, "suspended": suspended_fleets, "pending_applications": pending_applications},
+        "drivers": {"approved": approved_drivers, "pending": pending_drivers, "online": drivers_online},
+        "trips": {"active": active_trips, "today": trips_today, "yesterday": trips_yday, "completed_today": completed_today, "cancelled_today": cancelled_today},
+        "finance": {"gmv_today": gmv_today, "kjapp_revenue_today": kjapp_revenue_today, "pending_payouts": pending_payouts},
+        "support": {"open": open_support},
+        "as_of": datetime.now(timezone.utc).isoformat(),
     }
+
+
+async def _audit(admin, action, entity_type, entity_id, before=None, after=None, reason=None):
+    await db.audit_events.insert_one({
+        "admin_id": admin["id"], "admin_email": admin.get("email"),
+        "action": action, "entity_type": entity_type, "entity_id": entity_id,
+        "before": before, "after": after, "reason": reason,
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+class FleetSuspendRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+@api.post("/admin/fleets/{fleet_id}/suspend")
+async def admin_suspend_fleet(fleet_id: str, body: FleetSuspendRequest, current=Depends(require_admin)):
+    try: f = await db.fleets.find_one({"_id": ObjectId(fleet_id)})
+    except Exception: raise HTTPException(400, "Ugyldig fleet id")
+    if not f: raise HTTPException(404, "Fant ikke flåte")
+    prev = f.get("status", "active")
+    await db.fleets.update_one({"_id": ObjectId(fleet_id)}, {"$set": {"status": "suspended", "suspended_at": datetime.now(timezone.utc).isoformat()}})
+    await _audit(current, "fleet.suspend", "fleet", fleet_id, {"status": prev}, {"status": "suspended"}, body.reason)
+    return {"ok": True}
+
+
+@api.post("/admin/fleets/{fleet_id}/reactivate")
+async def admin_reactivate_fleet(fleet_id: str, current=Depends(require_admin)):
+    try: f = await db.fleets.find_one({"_id": ObjectId(fleet_id)})
+    except Exception: raise HTTPException(400, "Ugyldig fleet id")
+    if not f: raise HTTPException(404, "Fant ikke flåte")
+    prev = f.get("status")
+    await db.fleets.update_one({"_id": ObjectId(fleet_id)}, {"$set": {"status": "active"}, "$unset": {"suspended_at": ""}})
+    await _audit(current, "fleet.reactivate", "fleet", fleet_id, {"status": prev}, {"status": "active"})
+    return {"ok": True}
+
+
+class CommissionUpdateRequest(BaseModel):
+    commission_rate: float
+    reason: Optional[str] = None
+
+
+@api.post("/admin/fleets/{fleet_id}/commission")
+async def admin_update_commission(fleet_id: str, body: CommissionUpdateRequest, current=Depends(require_admin)):
+    if not 0.0 <= body.commission_rate <= 0.5:
+        raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
+    try: f = await db.fleets.find_one({"_id": ObjectId(fleet_id)})
+    except Exception: raise HTTPException(400, "Ugyldig fleet id")
+    if not f: raise HTTPException(404, "Fant ikke flåte")
+    prev = f.get("commission_rate", 0.10)
+    await db.fleets.update_one({"_id": ObjectId(fleet_id)}, {"$set": {"commission_rate": body.commission_rate}})
+    await db.commission_rules.insert_one({
+        "fleet_id": fleet_id, "commission_rate": body.commission_rate,
+        "effective_from": datetime.now(timezone.utc).isoformat(),
+        "set_by": current["id"], "reason": body.reason,
+    })
+    await _audit(current, "fleet.commission_change", "fleet", fleet_id, {"commission_rate": prev}, {"commission_rate": body.commission_rate}, body.reason)
+    return {"ok": True}
+
+
+@api.get("/admin/audit-log")
+async def admin_audit_log(limit: int = 100, entity_type: Optional[str] = None, current=Depends(require_admin)):
+    q = {}
+    if entity_type: q["entity_type"] = entity_type
+    events = []
+    async for e in db.audit_events.find(q).sort("at", -1).limit(min(limit, 500)):
+        e["id"] = str(e["_id"]); e.pop("_id", None)
+        events.append(e)
+    return {"events": events}
+
+
+@api.get("/admin/fleets-full")
+async def admin_fleets_full(status: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+    filt = {}
+    if status and status != "all": filt["status"] = status
+    if q:
+        filt["$or"] = [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"org_number": {"$regex": q, "$options": "i"}},
+            {"contact_email": {"$regex": q, "$options": "i"}},
+        ]
+    fleets = []
+    async for f in db.fleets.find(filt).sort("created_at", -1).limit(300):
+        fid = str(f["_id"]); f["id"] = fid; f.pop("_id", None)
+        f["driver_count"] = await db.users.count_documents({"role": "driver", "fleet_id": fid})
+        fleets.append(f)
+    return {"fleets": fleets}
+
 
 
 @api.get("/admin/users")
@@ -3223,6 +3397,468 @@ async def admin_list_pending_drivers(current=Depends(require_admin)):
             u["fleet_name"] = (f or {}).get("name")
         out.append(u)
     return {"drivers": out}
+
+
+# ============================================================
+# Operations Control Center — Phase 2
+# ============================================================
+from fastapi.responses import Response as RawResponse
+
+
+async def _users_by_ids(ids):
+    """Batch-lookup users by string ids → {id: {name, email, phone}}."""
+    oids = []
+    for i in set(filter(None, ids)):
+        try: oids.append(ObjectId(i))
+        except Exception: pass
+    out = {}
+    async for u in db.users.find({"_id": {"$in": oids}}, {"fullName": 1, "email": 1, "phone": 1, "rating": 1}):
+        out[str(u["_id"])] = {"name": u.get("fullName"), "email": u.get("email"), "phone": u.get("phone"), "rating": u.get("rating")}
+    return out
+
+
+async def _fleet_names():
+    out = {}
+    async for f in db.fleets.find({}, {"name": 1}):
+        out[str(f["_id"])] = f.get("name")
+    return out
+
+
+@api.get("/admin/live")
+async def admin_live(current=Depends(require_admin)):
+    """Realtime board: online drivers with GPS + active trips."""
+    drivers = []
+    fleet_names = await _fleet_names()
+    async for u in db.users.find({"role": "driver", "online": True}, {"password_hash": 0}):
+        drivers.append({
+            "id": str(u["_id"]),
+            "name": u.get("fullName"),
+            "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
+            "lat": u.get("last_lat"), "lng": u.get("last_lng"), "heading": u.get("last_heading"),
+            "last_location_at": u.get("last_location_at"), "online_at": u.get("online_at"),
+            "fleet_name": fleet_names.get(u.get("fleet_id")),
+            "rating": u.get("rating"),
+        })
+    trips = []
+    user_ids = []
+    raw = []
+    async for t in db.trips.find({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}}).sort("created_at", -1).limit(100):
+        raw.append(t); user_ids.append(t.get("user_id"))
+    users = await _users_by_ids(user_ids)
+    for t in raw:
+        trips.append({
+            "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
+            "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
+            "pickup_lat": t.get("pickup_lat"), "pickup_lng": t.get("pickup_lng"),
+            "dropoff_lat": t.get("dropoff_lat"), "dropoff_lng": t.get("dropoff_lng"),
+            "driver_name": (t.get("driver") or {}).get("name"),
+            "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
+            "created_at": t.get("created_at"),
+        })
+    return {"drivers": drivers, "trips": trips, "as_of": datetime.now(timezone.utc).isoformat()}
+
+
+@api.get("/admin/drivers-full")
+async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+    filt = {"role": "driver"}
+    if status == "approved": filt["approved"] = True
+    elif status == "pending": filt["$or"] = [{"approved": False}, {"approved": {"$exists": False}}]
+    elif status == "online": filt["online"] = True
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt["$and"] = [{"$or": [{"fullName": rx}, {"email": rx}, {"plate": rx}, {"car": rx}]}]
+    fleet_names = await _fleet_names()
+    out = []
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).limit(300):
+        uid = str(u["_id"])
+        completed = await db.trips.count_documents({"driver_id": uid, "status": {"$in": ["arrived", "completed", "rated"]}})
+        out.append({
+            "id": uid, "name": u.get("fullName"), "email": u.get("email"), "phone": u.get("phone"),
+            "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
+            "rating": u.get("rating"), "approved": u.get("approved", False), "online": u.get("online", False),
+            "fleet_name": fleet_names.get(u.get("fleet_id")), "fleet_id": u.get("fleet_id"),
+            "trips_completed": completed, "last_location_at": u.get("last_location_at"),
+            "created_at": u.get("created_at"),
+            "docs": {k: u.get(k) for k in ("drivers_license_path", "taxi_license_path", "profile_photo_path") if u.get(k)},
+        })
+    return {"drivers": out}
+
+
+@api.post("/admin/drivers/{user_id}/set-status")
+async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
+    try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception: raise HTTPException(400, "Ugyldig id")
+    if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    prev = u.get("approved", False)
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"approved": body.approved}})
+    await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
+                 {"approved": prev}, {"approved": body.approved})
+    return {"ok": True}
+
+
+@api.get("/admin/vehicles")
+async def admin_vehicles(q: Optional[str] = None, current=Depends(require_admin)):
+    filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt["$or"] = [{"car": rx}, {"plate": rx}, {"fullName": rx}]
+    fleet_names = await _fleet_names()
+    out = []
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).limit(300):
+        out.append({
+            "id": str(u["_id"]), "car": u.get("car"), "plate": u.get("plate"),
+            "vehicle_type": u.get("vehicle_type"), "driver_name": u.get("fullName"),
+            "fleet_name": fleet_names.get(u.get("fleet_id")),
+            "online": u.get("online", False), "approved": u.get("approved", False),
+        })
+    return {"vehicles": out}
+
+
+@api.get("/admin/trips-full")
+async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, limit: int = 100, current=Depends(require_admin)):
+    filt = {}
+    if status == "active": filt["status"] = {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}
+    elif status == "completed": filt["status"] = {"$in": ["arrived", "completed", "rated"]}
+    elif status == "cancelled": filt["status"] = {"$in": ["cancelled", "cancelled_by_driver"]}
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt["$or"] = [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]
+    raw, user_ids = [], []
+    async for t in db.trips.find(filt).sort("created_at", -1).limit(min(limit, 300)):
+        raw.append(t); user_ids.append(t.get("user_id"))
+    users = await _users_by_ids(user_ids)
+    out = []
+    for t in raw:
+        out.append({
+            "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
+            "distance_km": t.get("distance_km"), "duration_min": t.get("duration_min"),
+            "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
+            "vehicle_type": t.get("vehicle_type"), "created_at": t.get("created_at"),
+            "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
+            "driver_name": (t.get("driver") or {}).get("name"),
+            "passenger_rating": t.get("passenger_rating"),
+        })
+    return {"trips": out}
+
+
+@api.get("/admin/trips/{trip_id}/timeline")
+async def admin_trip_timeline(trip_id: str, current=Depends(require_admin)):
+    t = await db.trips.find_one({"trip_id": trip_id})
+    if not t: raise HTTPException(404, "Fant ikke turen")
+    events = []
+    def ev(label, at):
+        if at: events.append({"label": label, "at": at})
+    ev("Bestilt", t.get("created_at"))
+    ev("Sjåfør aksepterte", t.get("driver_route_started_at"))
+    ev("Fremme hos kunde", t.get("at_pickup_at"))
+    ev("Tur startet", t.get("trip_started_at"))
+    ev("Ankommet", t.get("arrived_at"))
+    ev("Vurdert", t.get("rated_at"))
+    ev("Kansellert", t.get("cancelled_at"))
+    events.sort(key=lambda e: e["at"])
+    return {"trip_id": trip_id, "status": t.get("status"), "events": events}
+
+
+@api.get("/admin/finance")
+async def admin_finance(days: int = 30, current=Depends(require_admin)):
+    days = max(1, min(days, 180))
+    since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
+    daily = {}
+    total_gmv, total_trips = 0, 0
+    fleet_gmv = {}
+    driver_fleet = {}
+    async for u in db.users.find({"role": "driver", "fleet_id": {"$exists": True, "$ne": None}}, {"fleet_id": 1}):
+        driver_fleet[str(u["_id"])] = u["fleet_id"]
+    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": since}}, {"price": 1, "created_at": 1, "driver_id": 1}):
+        price = t.get("price", 0) or 0
+        day = (t.get("created_at") or "")[:10]
+        d = daily.setdefault(day, {"gmv": 0, "trips": 0})
+        d["gmv"] += price; d["trips"] += 1
+        total_gmv += price; total_trips += 1
+        fid = driver_fleet.get(t.get("driver_id"))
+        if fid:
+            fg = fleet_gmv.setdefault(fid, {"gmv": 0, "trips": 0})
+            fg["gmv"] += price; fg["trips"] += 1
+    series = []
+    for i in range(days):
+        day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).date().isoformat()
+        d = daily.get(day, {"gmv": 0, "trips": 0})
+        series.append({"date": day, "gmv": d["gmv"], "trips": d["trips"]})
+    fleets_out = []
+    async for f in db.fleets.find({}):
+        fid = str(f["_id"])
+        fg = fleet_gmv.get(fid, {"gmv": 0, "trips": 0})
+        rate = f.get("commission_rate", 0.10)
+        fleets_out.append({
+            "id": fid, "name": f.get("name"), "status": f.get("status", "active"),
+            "trips": fg["trips"], "gmv": fg["gmv"],
+            "commission_rate": rate, "commission_amount": round(fg["gmv"] * rate),
+        })
+    fleets_out.sort(key=lambda x: -x["gmv"])
+    return {
+        "days": days,
+        "totals": {
+            "gmv": total_gmv, "trips": total_trips,
+            "kjapp_revenue": round(total_gmv * 0.10),
+            "avg_price": round(total_gmv / total_trips) if total_trips else 0,
+        },
+        "series": series,
+        "fleets": fleets_out[:50],
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api.get("/admin/finance/export")
+async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
+    import csv as _csv
+    import io as _io
+    days = max(1, min(days, 180))
+    since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
+    buf = _io.StringIO()
+    w = _csv.writer(buf, delimiter=";")
+    w.writerow(["dato", "trip_id", "status", "pris_kr", "distanse_km", "sjåfør", "passasjer_id", "kjapp_provisjon_kr"])
+    async for t in db.trips.find({"created_at": {"$gte": since}}).sort("created_at", -1).limit(5000):
+        price = t.get("price", 0) or 0
+        w.writerow([
+            (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
+            t.get("distance_km"), (t.get("driver") or {}).get("name") or "", t.get("user_id") or "",
+            round(price * 0.10) if t.get("status") in ("arrived", "completed", "rated") else 0,
+        ])
+    return RawResponse(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="kjapp_finans_{days}d.csv"'},
+    )
+
+
+@api.get("/admin/documents")
+async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+    filt = {"is_deleted": {"$ne": True}}
+    if scope and scope != "all": filt["scope"] = scope
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt["$or"] = [{"original_filename": rx}, {"scope": rx}]
+    raw, owner_ids, app_tokens = [], [], []
+    async for f in db.uploaded_files.find(filt).sort("created_at", -1).limit(300):
+        raw.append(f)
+        owner_ids.append(f.get("owner_user_id"))
+        if f.get("application_token"): app_tokens.append(f["application_token"])
+    owners = await _users_by_ids(owner_ids)
+    app_names = {}
+    if app_tokens:
+        async for a in db.fleet_applications.find({"upload_token": {"$in": list(set(app_tokens))}}, {"company_name": 1, "upload_token": 1}):
+            app_names[a.get("upload_token")] = a.get("company_name")
+    out = []
+    scopes = set()
+    for f in raw:
+        scopes.add(f.get("scope"))
+        o = owners.get(f.get("owner_user_id")) or {}
+        out.append({
+            "id": f.get("id") or str(f["_id"]),
+            "filename": f.get("original_filename"), "content_type": f.get("content_type"),
+            "size": f.get("size"), "scope": f.get("scope"), "created_at": f.get("created_at"),
+            "storage_path": f.get("storage_path"),
+            "owner_name": o.get("name") or app_names.get(f.get("application_token")),
+            "owner_email": o.get("email"),
+        })
+    all_scopes = set()
+    async for s in db.uploaded_files.aggregate([{"$match": {"is_deleted": {"$ne": True}}}, {"$group": {"_id": "$scope"}}]):
+        if s.get("_id"): all_scopes.add(s["_id"])
+    return {"documents": out, "scopes": sorted(all_scopes)}
+
+
+# ---- Support tickets ----
+class TicketCreateRequest(BaseModel):
+    subject: str
+    body: Optional[str] = ""
+    category: Literal["kunde", "sjåfør", "flåte", "betaling", "teknisk", "annet"] = "annet"
+    priority: Literal["lav", "normal", "høy", "kritisk"] = "normal"
+    contact_email: Optional[str] = None
+
+
+class TicketUpdateRequest(BaseModel):
+    status: Optional[Literal["open", "in_progress", "waiting_for_user", "resolved", "closed"]] = None
+    priority: Optional[Literal["lav", "normal", "høy", "kritisk"]] = None
+    note: Optional[str] = None
+
+
+@api.get("/admin/support/tickets")
+async def admin_tickets(status: Optional[str] = None, current=Depends(require_admin)):
+    filt = {}
+    if status == "open": filt["status"] = {"$in": ["open", "in_progress", "waiting_for_user"]}
+    elif status and status != "all": filt["status"] = status
+    out = []
+    async for t in db.support_tickets.find(filt).sort("created_at", -1).limit(200):
+        t["id"] = str(t["_id"]); t.pop("_id", None)
+        out.append(t)
+    return {"tickets": out}
+
+
+@api.post("/admin/support/tickets")
+async def admin_create_ticket(body: TicketCreateRequest, current=Depends(require_admin)):
+    doc = {
+        "subject": body.subject.strip(), "body": (body.body or "").strip(),
+        "category": body.category, "priority": body.priority,
+        "contact_email": (body.contact_email or "").strip() or None,
+        "status": "open",
+        "created_by": current["id"], "created_by_email": current.get("email"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "notes": [],
+    }
+    r = await db.support_tickets.insert_one(doc)
+    doc["id"] = str(r.inserted_id); doc.pop("_id", None)
+    return doc
+
+
+@api.patch("/admin/support/tickets/{ticket_id}")
+async def admin_update_ticket(ticket_id: str, body: TicketUpdateRequest, current=Depends(require_admin)):
+    try: t = await db.support_tickets.find_one({"_id": ObjectId(ticket_id)})
+    except Exception: raise HTTPException(400, "Ugyldig id")
+    if not t: raise HTTPException(404, "Fant ikke sak")
+    sets, pushes = {}, {}
+    if body.status: sets["status"] = body.status
+    if body.priority: sets["priority"] = body.priority
+    if body.note:
+        pushes["notes"] = {"text": body.note.strip(), "by": current.get("email"), "at": datetime.now(timezone.utc).isoformat()}
+    update = {}
+    if sets: update["$set"] = sets
+    if pushes: update["$push"] = pushes
+    if update:
+        await db.support_tickets.update_one({"_id": ObjectId(ticket_id)}, update)
+    if body.status and body.status != t.get("status"):
+        await _audit(current, "support.status_change", "ticket", ticket_id, {"status": t.get("status")}, {"status": body.status})
+    return {"ok": True}
+
+
+@api.get("/admin/analytics")
+async def admin_analytics(days: int = 14, current=Depends(require_admin)):
+    days = max(1, min(days, 90))
+    since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
+    daily = {}
+    total, completed, cancelled = 0, 0, 0
+    price_sum, dist_sum, dur_sum, priced = 0, 0.0, 0.0, 0
+    hours = [0] * 24
+    driver_counts = {}
+    async for t in db.trips.find({"created_at": {"$gte": since}}):
+        total += 1
+        day = (t.get("created_at") or "")[:10]
+        d = daily.setdefault(day, {"trips": 0, "completed": 0, "cancelled": 0})
+        d["trips"] += 1
+        st = t.get("status")
+        if st in ("arrived", "completed", "rated"):
+            completed += 1; d["completed"] += 1
+            price_sum += t.get("price", 0) or 0
+            dist_sum += t.get("distance_km", 0) or 0
+            dur_sum += t.get("duration_min", 0) or 0
+            priced += 1
+            dn = (t.get("driver") or {}).get("name")
+            if dn: driver_counts[dn] = driver_counts.get(dn, 0) + 1
+        elif st in ("cancelled", "cancelled_by_driver"):
+            cancelled += 1; d["cancelled"] += 1
+        try:
+            hours[datetime.fromisoformat((t.get("created_at") or "").replace("Z", "+00:00")).hour] += 1
+        except Exception:
+            pass
+    accepted = await db.trips.count_documents({"created_at": {"$gte": since}, "driver_id": {"$exists": True, "$ne": None}})
+    declined = await db.driver_declines.count_documents({"declined_at": {"$gte": since}})
+    offered = accepted + declined
+    series = []
+    for i in range(days):
+        day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).date().isoformat()
+        d = daily.get(day, {"trips": 0, "completed": 0, "cancelled": 0})
+        series.append({"date": day, **d})
+    top_drivers = sorted(({"name": k, "trips": v} for k, v in driver_counts.items()), key=lambda x: -x["trips"])[:8]
+    return {
+        "days": days,
+        "metrics": {
+            "acceptance_rate": round((accepted / offered) * 100) if offered else 100,
+            "cancellation_rate": round((cancelled / total) * 100) if total else 0,
+            "avg_price": round(price_sum / priced) if priced else 0,
+            "avg_distance_km": round(dist_sum / priced, 1) if priced else 0,
+            "avg_duration_min": round(dur_sum / priced) if priced else 0,
+            "total_trips": total, "completed": completed, "cancelled": cancelled,
+        },
+        "series": series,
+        "hours": hours,
+        "top_drivers": top_drivers,
+    }
+
+
+# ---- Platform settings ----
+DEFAULT_PLATFORM_SETTINGS = {
+    "default_commission": 0.10,
+    "ride_classes": {
+        "ai-first": {"label": "Standard", "multiplier": 1.0, "enabled": True},
+        "enkelt":   {"label": "Sparsom",  "multiplier": 0.85, "enabled": True},
+        "trygg":    {"label": "Komfort",  "multiplier": 1.25, "enabled": True},
+        "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
+    },
+    "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+}
+
+
+class PlatformSettingsUpdate(BaseModel):
+    default_commission: Optional[float] = None
+    ride_classes: Optional[dict] = None
+    features: Optional[dict] = None
+
+
+@api.get("/admin/settings")
+async def admin_get_settings(current=Depends(require_admin)):
+    s = await db.platform_settings.find_one({"_id": "singleton"})
+    if not s:
+        return {**DEFAULT_PLATFORM_SETTINGS, "updated_at": None}
+    s.pop("_id", None)
+    merged = {**DEFAULT_PLATFORM_SETTINGS, **s}
+    return merged
+
+
+@api.patch("/admin/settings")
+async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(require_superadmin)):
+    prev = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    sets = {}
+    if body.default_commission is not None:
+        if not 0.0 <= body.default_commission <= 0.5:
+            raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
+        sets["default_commission"] = body.default_commission
+    if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
+    if body.features is not None: sets["features"] = body.features
+    if not sets: return {"ok": True}
+    sets["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.platform_settings.update_one({"_id": "singleton"}, {"$set": sets}, upsert=True)
+    await _audit(current, "settings.update", "settings", "singleton",
+                 {k: prev.get(k) for k in sets if k != "updated_at"},
+                 {k: v for k, v in sets.items() if k != "updated_at"})
+    return {"ok": True}
+
+
+@api.get("/admin/fleets/{fleet_id}")
+async def admin_fleet_detail(fleet_id: str, current=Depends(require_admin)):
+    try: f = await db.fleets.find_one({"_id": ObjectId(fleet_id)})
+    except Exception: raise HTTPException(400, "Ugyldig fleet id")
+    if not f: raise HTTPException(404, "Fant ikke flåte")
+    f["id"] = str(f["_id"]); f.pop("_id", None)
+    drivers = []
+    async for u in db.users.find({"role": "driver", "fleet_id": fleet_id}, {"password_hash": 0}).sort("created_at", -1):
+        uid = str(u["_id"])
+        drivers.append({
+            "id": uid, "name": u.get("fullName"), "email": u.get("email"),
+            "car": u.get("car"), "plate": u.get("plate"),
+            "rating": u.get("rating"), "approved": u.get("approved", False), "online": u.get("online", False),
+        })
+    commission_history = []
+    async for c in db.commission_rules.find({"fleet_id": fleet_id}).sort("effective_from", -1).limit(20):
+        c.pop("_id", None)
+        commission_history.append(c)
+    audit = []
+    async for e in db.audit_events.find({"entity_type": "fleet", "entity_id": fleet_id}).sort("at", -1).limit(30):
+        e["id"] = str(e["_id"]); e.pop("_id", None)
+        audit.append(e)
+    payouts = []
+    async for p in db.fleet_payouts.find({"fleet_id": fleet_id}).sort("period_end", -1).limit(12):
+        p["id"] = str(p["_id"]); p.pop("_id", None)
+        payouts.append(p)
+    return {"fleet": f, "drivers": drivers, "commission_history": commission_history, "audit": audit, "payouts": payouts}
 
 
 app.include_router(api)

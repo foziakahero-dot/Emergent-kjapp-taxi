@@ -43,6 +43,20 @@ import ApplyFleet from "./pages/ApplyFleet";
 import SuperadminApplications from "./pages/SuperadminApplications";
 import SuperadminApplicationDetail from "./pages/SuperadminApplicationDetail";
 import SuperadminPending from "./pages/SuperadminPending";
+import AdminShell from "./components/AdminShell";
+import AdminOverview from "./pages/AdminOverview";
+import AdminFleets from "./pages/AdminFleets";
+import AdminFleetDetail from "./pages/AdminFleetDetail";
+import AdminAudit from "./pages/AdminAudit";
+import AdminLive from "./pages/AdminLive";
+import AdminDrivers from "./pages/AdminDrivers";
+import AdminVehicles from "./pages/AdminVehicles";
+import AdminTrips from "./pages/AdminTrips";
+import AdminFinance from "./pages/AdminFinance";
+import AdminDocuments from "./pages/AdminDocuments";
+import AdminSupport from "./pages/AdminSupport";
+import AdminAnalytics from "./pages/AdminAnalytics";
+import AdminSettings from "./pages/AdminSettings";
 
 // APP_MODE — la deg deploye samme kodebase som 3 separate apper.
 // Bestemmes ved (i prioritert rekkefølge):
@@ -161,11 +175,23 @@ function AppRoutes() {
         <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
-        <Route path="/admin" element={<Protected adminOnly><AdminDashboard /></Protected>} />
-        <Route path="/loyver" element={<Protected superadminOnly><SuperadminApplications /></Protected>} />
-        <Route path="/loyver/applications/:id" element={<Protected superadminOnly><SuperadminApplicationDetail /></Protected>} />
-        <Route path="/loyver/pending-drivers" element={<Protected superadminOnly><SuperadminPending /></Protected>} />
-        <Route path="*" element={<Navigate to="/loyver" replace />} />
+        <Route path="/admin" element={<Protected adminOnly><AdminShell><AdminOverview /></AdminShell></Protected>} />
+        <Route path="/admin/live" element={<Protected adminOnly><AdminShell><AdminLive /></AdminShell></Protected>} />
+        <Route path="/admin/fleets" element={<Protected adminOnly><AdminShell><AdminFleets /></AdminShell></Protected>} />
+        <Route path="/admin/fleets/:id" element={<Protected adminOnly><AdminShell><AdminFleetDetail /></AdminShell></Protected>} />
+        <Route path="/admin/drivers" element={<Protected adminOnly><AdminShell><AdminDrivers /></AdminShell></Protected>} />
+        <Route path="/admin/vehicles" element={<Protected adminOnly><AdminShell><AdminVehicles /></AdminShell></Protected>} />
+        <Route path="/admin/trips" element={<Protected adminOnly><AdminShell><AdminTrips /></AdminShell></Protected>} />
+        <Route path="/admin/finance" element={<Protected adminOnly><AdminShell><AdminFinance /></AdminShell></Protected>} />
+        <Route path="/admin/documents" element={<Protected adminOnly><AdminShell><AdminDocuments /></AdminShell></Protected>} />
+        <Route path="/admin/support" element={<Protected adminOnly><AdminShell><AdminSupport /></AdminShell></Protected>} />
+        <Route path="/admin/analytics" element={<Protected adminOnly><AdminShell><AdminAnalytics /></AdminShell></Protected>} />
+        <Route path="/admin/audit" element={<Protected adminOnly><AdminShell><AdminAudit /></AdminShell></Protected>} />
+        <Route path="/admin/settings" element={<Protected adminOnly><AdminShell><AdminSettings /></AdminShell></Protected>} />
+        <Route path="/loyver" element={<Protected superadminOnly><AdminShell><SuperadminApplications /></AdminShell></Protected>} />
+        <Route path="/loyver/applications/:id" element={<Protected superadminOnly><AdminShell><SuperadminApplicationDetail /></AdminShell></Protected>} />
+        <Route path="/loyver/pending-drivers" element={<Protected superadminOnly><AdminShell><SuperadminPending /></AdminShell></Protected>} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     );
   }
@@ -209,16 +235,28 @@ function AppRoutes() {
       <Route path="/fleet/drivers" element={<Protected fleetOnly><Shell withNav={false}><FleetDrivers /></Shell></Protected>} />
       <Route path="/fleet/payouts" element={<Protected fleetOnly><Shell withNav={false}><FleetPayouts /></Shell></Protected>} />
 
-      {/* Admin */}
-      <Route path="/admin" element={<Protected adminOnly><AdminDashboard /></Protected>} />
+      {/* Admin — full Operations Control Center */}
+      <Route path="/admin" element={<Protected adminOnly><AdminShell><AdminOverview /></AdminShell></Protected>} />
+      <Route path="/admin/live" element={<Protected adminOnly><AdminShell><AdminLive /></AdminShell></Protected>} />
+      <Route path="/admin/fleets" element={<Protected adminOnly><AdminShell><AdminFleets /></AdminShell></Protected>} />
+      <Route path="/admin/fleets/:id" element={<Protected adminOnly><AdminShell><AdminFleetDetail /></AdminShell></Protected>} />
+      <Route path="/admin/drivers" element={<Protected adminOnly><AdminShell><AdminDrivers /></AdminShell></Protected>} />
+      <Route path="/admin/vehicles" element={<Protected adminOnly><AdminShell><AdminVehicles /></AdminShell></Protected>} />
+      <Route path="/admin/trips" element={<Protected adminOnly><AdminShell><AdminTrips /></AdminShell></Protected>} />
+      <Route path="/admin/finance" element={<Protected adminOnly><AdminShell><AdminFinance /></AdminShell></Protected>} />
+      <Route path="/admin/documents" element={<Protected adminOnly><AdminShell><AdminDocuments /></AdminShell></Protected>} />
+      <Route path="/admin/support" element={<Protected adminOnly><AdminShell><AdminSupport /></AdminShell></Protected>} />
+      <Route path="/admin/analytics" element={<Protected adminOnly><AdminShell><AdminAnalytics /></AdminShell></Protected>} />
+      <Route path="/admin/audit" element={<Protected adminOnly><AdminShell><AdminAudit /></AdminShell></Protected>} />
+      <Route path="/admin/settings" element={<Protected adminOnly><AdminShell><AdminSettings /></AdminShell></Protected>} />
 
       {/* Public løyvehaver application */}
       <Route path="/apply/fleet" element={<ApplyFleet />} />
 
-      {/* Superadmin (kun for eier) */}
-      <Route path="/loyver" element={<Protected superadminOnly><SuperadminApplications /></Protected>} />
-      <Route path="/loyver/applications/:id" element={<Protected superadminOnly><SuperadminApplicationDetail /></Protected>} />
-      <Route path="/loyver/pending-drivers" element={<Protected superadminOnly><SuperadminPending /></Protected>} />
+      {/* Superadmin — nå inne i Control Center */}
+      <Route path="/loyver" element={<Protected superadminOnly><AdminShell><SuperadminApplications /></AdminShell></Protected>} />
+      <Route path="/loyver/applications/:id" element={<Protected superadminOnly><AdminShell><SuperadminApplicationDetail /></AdminShell></Protected>} />
+      <Route path="/loyver/pending-drivers" element={<Protected superadminOnly><AdminShell><SuperadminPending /></AdminShell></Protected>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
