@@ -1,0 +1,42 @@
+{
+  "summary": "Iter 19b retest av AI-chat overlap-fix. RESULTAT: Original fix VIRKER (BottomNav 'Til hjem'-pill er nå borte fra /app/ai fordi ruten bruker <Shell withNav={false}>) — data-testid=nav-home-back finnes IKKE lenger på /app/ai. Men touch-click på chat-send FEILER FORTSATT pga en ANNEN overlay: DevNavigator kompass-knapp (data-testid=dev-nav-open, fixed bottom-4 right-4 z-[1200]) sitter oppå chat-send-knappen på samme koordinat (~x=350,y=810 på 390x844). elementFromPoint bekrefter: topTestId='dev-nav-open', isBtnOrChild=False. Klikk uten force treffer dev-nav-knappen og åpner Beta-Navigator-sheeten i stedet. Force-click gjør ikke reell click på send heller (svg intercepts). Regresjon-flyter: alle 4 demo-login-knapper OK (passenger→/app, driver→/driver, fleet→/fleet, admin→/loyver) etter man også klikker login-submit (demo-knappene fyller kun feltene, form auto-submitter ikke). /app/settings→settings-payment-methods lenker riktig til /app/payment-methods. AI-chat via Enter-tast: 2/2 svar i 2.2s og 1.6s (backend er sunn). AI-chat via touch/click på chat-send: 0/3 – blokkert av dev-nav-open.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AIChat + DevNavigator overlap (NY regresjon av samme klasse)",
+        "issue": "På /app/ai er chat-send-knappen (bottom-right av input-rad) dekket av DevNavigator sin flytende kompass-knapp (data-testid=dev-nav-open) – fixed bottom-4 right-4 z-[1200] – som er aktiv når REACT_APP_DEV_NAV=true (satt i frontend/.env). Playwright elementFromPoint bekrefter at topmost element ved chat-send midtpunkt er <svg> inne i dev-nav-open. Klikk uten force åpner Beta-Navigator-sheet i stedet for å sende meldingen; force-click treffer heller ikke send. Iter19 sin fix (Shell withNav={false}) fjernet BottomNav-overlappen, men denne dev-nav-overlappen står igjen. Merk: samme overlapp gjelder trolig chat-mic i empty-state (samme posisjon).",
+        "selector": "[data-testid=\"chat-send\"] vs [data-testid=\"dev-nav-open\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/app/ai",
+        "issues": [
+          "Chat input-rad har ikke bunn-padding for å klare den flytende dev-nav-knappen (~72px). Fix-alternativer: (a) skjul DevNavigator på /app/ai når location.pathname === '/app/ai', (b) legg til pb-[80px] eller mr-[64px] rundt chat-input-raden, (c) flytt DevNavigator til top-right eller bruk pointer-events: none på en wrapper og pointer-events: auto kun på selve knappen når input er tom."
+        ]
+      }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_19.json", "/app/test_reports/iteration_19b.json"],
+  "action_items": [
+    "HIGH: Skjul DevNavigator (data-testid=dev-nav-open) på /app/ai — bruk useLocation() i DevNavigator.jsx og return null når pathname === '/app/ai'. Alternativt: flytt kompass-knappen til top-right eller når input er fokusert.",
+    "MEDIUM: Bekreft at REACT_APP_DEV_NAV=false i produksjons-build slik at ekte brukere ikke ser dev-nav-knappen. Hvis miljøet skal ha den også i preview, må /app/ai eksplisitt unnta.",
+    "LOW: DemoBtn-knapper på /login (data-testid=demo-*) fyller kun feltene men submitter ikke — man må også klikke login-submit. Vurder å auto-submit i onClick for smidigere demo-flyt (påvirker også ekte QA-scripts som antar én-klikks-login)."
+  ],
+  "critical_code_review_comments": [
+    "DevNavigator.jsx bruker fixed bottom-4 right-4 z-[1200] – dette høye z-index laget kolliderer med enhver bunn-forankret primær CTA (chat-send/chat-mic på /app/ai, potensielt 'Legg til kort' på /app/payment-methods, Profil-lagre-knapp, Bekreft-bestilling på Confirm-flyt osv.). Auditér alle /app/* sider på 390-bredde for lignende kollisjon, gjentar iter19-kommentar men for dev-nav i stedet for nav-home-back.",
+    "AIChat.jsx linje 165-170: nye 401/502/504-feilmeldinger ser riktige ut, men kunne ikke E2E-verifiseres i denne runden fordi jeg ikke klarer å faktisk trigge send-flyten via klikk. Fallback for 504 via ECONNABORTED er også OK. Merk at 401 vil sjelden nå denne feilhåndteringen fordi axios-interceptorer normalt logger ut/omdirigerer først.",
+    "Passord-visning-toggle (login-toggle-pw) og cookie-consent-banner ble observert – ingen problemer."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (ikke retestet, iter19=100%)", "frontend": "80% — original overlap fix bekreftet, men chat-send via touch fortsatt blokkert av dev-nav-overlay. 4/4 login OK, settings→betaling OK, AI-svar via Enter OK (2.2s/1.6s), AI-svar via chat-send-klikk 0/3."},
+  "test_credentials": "ola@kjapp.no/test1234 (passenger) — VIRKER. sjafor@kjapp.no/sjafor1234, floteier1@kjapp.no/fleet1234, admin@kjapp.no/admin123 alle OK. Merk: demo-knapper fyller kun form – login-submit må klikkes i tillegg.",
+  "seed_data_creation": "Ingen ny seed. Session-cookies ryddet mellom logins. Chat-historikk på ola inneholder fortsatt meldinger fra iter19.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Original bug (BottomNav 'Til hjem'-pill overlapp chat-send) er FIKSET av <Shell withNav={false}> på /app/ai (App.js linje 164). Men en identisk klasse bug er nå synlig: DevNavigator (App.js linje 219 <DevNavigator />) rendrer på ALLE ruter når REACT_APP_DEV_NAV=true (frontend/.env), og dens kompass-knapp fixed bottom-4 right-4 z-[1200] dekker chat-send. For å retest etter fiks: page.click('[data-testid=\"chat-send\"]') UTEN force og verifiser at elementFromPoint på knappens midtpunkt returnerer chat-send (ikke dev-nav-open). Bekreft også at /app/ai fortsatt ikke redirecter til /app etter send. Passenger 'ola' har ingen aktiv tur nå (fikset i iter19), /app laster kart-hjem direkte.",
+  "rca of the issue": "RCA — chat-send touch fortsatt blokkert (post-iter19b): DevNavigator.jsx rendrer et 'Beta-Navigator'-flytende button (data-testid=dev-nav-open) på fixed bottom-4 right-4 z-[1200] når REACT_APP_DEV_NAV==='true' ELLER NODE_ENV==='development'. Preview-env har REACT_APP_DEV_NAV=true i frontend/.env → knappen vises på ALLE /app/*-ruter. På /app/ai overlapper den nøyaktig chat-send (som bruker normal document flow, w-12 h-12 nederst til høyre av input-raden). Reproduksjon: (1) login ola, (2) goto /app/ai, (3) fyll chat-input, (4) TAP send – Beta-Navigator-sheet åpnes i stedet, ingen POST /api/ai/chat. Mitigering (rangert): (A) BEST — legg til `if (location.pathname === '/app/ai') return null;` i DevNavigator.jsx rett før return-statement (bruk useLocation fra react-router-dom); (B) flytt DevNavigator til top-right (top-4 right-4) for å unngå bunn-forankret UI generelt; (C) legg til pointer-events: none på DevNavigator sin wrapper når input i AIChat er fokusert; (D) sett REACT_APP_DEV_NAV=false i preview (men da tapes dev-nav for QA)."
+}

@@ -54,11 +54,28 @@ export default function Login() {
   }
 
   const submit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setErr("");
     setLoading(true);
     try {
       const u = await login(email, password);
+      const dest = u.role === "superadmin" ? "/loyver" : u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : u.role === "fleet_owner" ? "/fleet" : "/app";
+      navigate(dest);
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Demo one-click login — fyll inn + submit i samme trykk
+  const demoLogin = async (demoEmail, demoPassword) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setErr("");
+    setLoading(true);
+    try {
+      const u = await login(demoEmail, demoPassword);
       const dest = u.role === "superadmin" ? "/loyver" : u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : u.role === "fleet_owner" ? "/fleet" : "/app";
       navigate(dest);
     } catch (e) {
@@ -157,16 +174,40 @@ export default function Login() {
             Opprett en
           </Link>
         </p>
-        <button
-          type="button"
-          onClick={() => { setEmail("ola@kjapp.no"); setPassword("test1234"); }}
-          className="mt-4 text-[11px] px-4 py-1.5 rounded-full inline-flex items-center gap-2 transition-colors"
-          style={{ background: "rgba(201,161,91,0.10)", border: "1px solid rgba(201,161,91,0.25)", color: "var(--accent)" }}
-          data-testid="login-demo-fill"
-        >
-          Fyll inn demo-konto (Ola)
-        </button>
-        <p className="text-[#5f6862] text-xs mt-3">
+
+        {/* Demo-innlogging for beta — én-klikk for alle 4 roller */}
+        <div className="mt-5 space-y-2">
+          <div className="text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--accent)" }}>Demo-innlogging</div>
+          <div className="grid grid-cols-2 gap-2">
+            <DemoBtn
+              testid="demo-passenger"
+              label="Kunde"
+              sub="Ola"
+              onClick={() => demoLogin("ola@kjapp.no", "test1234")}
+            />
+            <DemoBtn
+              testid="demo-driver"
+              label="Sjåfør"
+              sub="Ola Sjåfør"
+              onClick={() => demoLogin("sjafor@kjapp.no", "sjafor1234")}
+            />
+            <DemoBtn
+              testid="demo-fleet"
+              label="Flåte-eier"
+              sub="Oslo Nord Taxi"
+              onClick={() => demoLogin("floteier1@kjapp.no", "fleet1234")}
+            />
+            <DemoBtn
+              testid="demo-admin"
+              label="Superadmin"
+              sub="Løyver + drift"
+              onClick={() => demoLogin("admin@kjapp.no", "admin123")}
+            />
+          </div>
+          <div className="text-[10px] text-[#5f6862] pt-1">Ett trykk logger deg rett inn på riktig panel</div>
+        </div>
+
+        <p className="text-[#5f6862] text-xs mt-4">
           Er du sjåfør?{" "}
           <Link to="/driver/login" className="text-mint" data-testid="link-driver-login">
             Sjåfør-innlogging
@@ -183,6 +224,21 @@ export default function Login() {
         </p>
       </div>
     </div>
+  );
+}
+
+function DemoBtn({ testid, label, sub, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testid}
+      className="text-left px-3 py-2 rounded-xl transition-colors hover:border-mint"
+      style={{ background: "rgba(201,161,91,0.08)", border: "1px solid rgba(201,161,91,0.20)" }}
+    >
+      <div className="text-[11px] font-medium" style={{ color: "var(--accent)" }}>{label}</div>
+      <div className="text-[10px] text-[#a8b0a8] truncate">{sub}</div>
+    </button>
   );
 }
 

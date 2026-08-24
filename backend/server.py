@@ -1273,11 +1273,6 @@ async def ai_chat(body: ChatRequest, current=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    # fetch history for this session
-    history = []
-    async for m in db.chat_messages.find({"user_id": current["id"], "session_id": session_id}).sort("created_at", 1):
-        history.append(m)
-
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
         session_id=session_id,
@@ -1285,14 +1280,16 @@ async def ai_chat(body: ChatRequest, current=Depends(get_current_user)):
     ).with_model("openai", "gpt-5.6-sol")
 
     try:
-        # replay previous turns except the just-added user message
-        for m in history[:-1]:
-            if m["role"] == "user":
-                await chat.send_message(UserMessage(text=m["content"]))
-                # not ideal but keeps memory consistent
-        reply = await chat.send_message(UserMessage(text=body.message))
+        # session_id gjør at emergentintegrations selv beholder samtalehistorikk mellom kall
+        reply = await asyncio.wait_for(
+            chat.send_message(UserMessage(text=body.message)),
+            timeout=25.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="KJAPP AI bruker lenger tid enn vanlig. Prøv igjen om et øyeblikk.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI feil: {str(e)}")
+        print(f"[ai/chat] error: {e}")
+        raise HTTPException(status_code=502, detail="AI-tjenesten er midlertidig utilgjengelig. Prøv igjen om litt.")
 
     await db.chat_messages.insert_one({
         "user_id": current["id"],

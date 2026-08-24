@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { settingsApi, gdprApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { ChevronLeft, ChevronRight, Mic, Download, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mic, Download, Trash2, CreditCard } from "lucide-react";
 
 const TOGGLES = [
   { key: "notifications", label: "Varslinger" },
@@ -120,6 +120,27 @@ export default function Settings() {
               <ChevronRight size={14} className="text-[#7a827a] ml-1" />
             </div>
           ))}
+        </div>
+
+        {/* Betaling & kort */}
+        <div className="pt-2">
+          <div className="text-[10px] text-[#5f6862] tracking-widest uppercase px-2 mb-2">Betaling</div>
+          <div className="card divide-y divide-line">
+            <button
+              onClick={() => navigate("/app/payment-methods")}
+              data-testid="settings-payment-methods"
+              className="w-full flex items-center px-4 py-3.5 hover:bg-[#17222a] transition-colors"
+            >
+              <div className="w-9 h-9 rounded-full grid place-items-center mr-3" style={{ background: "rgba(201,161,91,0.14)" }}>
+                <CreditCard size={16} style={{ color: "var(--accent)" }} />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="text-white text-sm">Bankkort og betaling</div>
+                <div className="text-[11px] text-[#7a827a] mt-0.5">Legg til, verifiser og administrer kort</div>
+              </div>
+              <ChevronRight size={14} className="text-[#7a827a]" />
+            </button>
+          </div>
         </div>
 
         {/* GDPR */}

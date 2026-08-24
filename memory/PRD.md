@@ -373,6 +373,30 @@ Build a mobile app for a Norwegian AI-driven taxi service ("KJAPP - Smart AI Tax
 - Se `/app/memory/PUBLISHING_AUDIT.md` for komplett 6-ukers roadmap
 - Nøkkelinnsikt: **Skatteetatens ARS-godkjenning** er lengste kritiske vei for norsk drosje-lansering
 
+## Iter 19 — Fjerne login-friksjon + AI-chat fungerer via touch (2026-02-24)
+
+**Bruker rapporterte**: "Går ikke logge seg på verken sjåfør eller kunde, hvor er admin og fleet, AI-chat funker ikke, hvordan laster jeg opp fleet+admin parallelt på nettet — hold disse separate fra selve appen."
+
+### Fikset
+- **4 demo-knapper på /login** (data-testid `demo-passenger/driver/fleet/admin`) med **ett-trykks auto-login** — fyller inn credentials OG sender skjemaet, redirect til riktig panel per rolle
+- **Admin/Fleet-paneler synliggjort**: Route-mappet 4 roller → 4 destinasjoner (`/app`, `/driver`, `/fleet`, `/loyver`), demo-knappen tar deg dit i én klikk
+- **REACT_APP_MODE flagg** i App.js — samme kodebase kan bygges som 3 separate apper: `main` (kjapp.no), `fleet` (fleet.kjapp.no), `admin` (admin.kjapp.no). Standalone-modus skjuler alle irrelevante ruter og redirecter feil rolle tilbake til /login
+- **DEPLOYMENT.md** — komplett guide for hvordan deploye 3 separate builds med DNS, env-vars og Vercel/Netlify multi-site
+- **AI-chat backend fix**: Fjernet history-replay-loop i `/api/ai/chat` som re-sendte hele samtalen til LLM per kall (5-30s → 2-3s per svar). Satt `asyncio.wait_for(25s)` timeout og differensierte 504/502 feilmeldinger
+- **AI-chat frontend fix**: Byttet `/app/ai` fra `Shell` til `Shell withNav={false}` — fjerner BottomNav "Til hjem"-pill som dekket send-knappen (touch-brukere trykket "back" i stedet for "send"). Deretter oppdaget iter19b at DevNavigator kompass også overlappet → skjult på `/app/ai`, `/app/booking`, `/app/receipt`. Nå fungerer chat-send via touch.
+- **Spesifikke feilmeldinger** i AIChat.jsx: status 504/502/401 gir målrettede norske feiltekster i stedet for generisk "hikk"
+- **Bankkort i Innstillinger**: Ny "Bankkort og betaling"-rad (`settings-payment-methods`) i /app/settings som lenker rett til /app/payment-methods
+
+### Iter 19+19b test
+- **Backend**: 15/15 pytest grønn (test_iter19.py) — alle 4 login-flyter, AI-chat responderer i 2.2-2.8s per tur, translate NO→PL cached, alle regresjons-endepunkter grønne
+- **Frontend E2E**: (iter19b) chat-send via touch verifisert, dev-nav-open ikke synlig på /app/ai, alle 4 demo-login-knapper redirect korrekt til `/app | /driver | /fleet | /loyver`
+
+### Nye env-flagg
+```
+REACT_APP_MODE=main|fleet|admin  (default: main)
+REACT_APP_DEV_NAV=true|false     (default: false i prod)
+```
+
 ## Backlog / Next
 - P0: Ekte betaling (Stripe/Vipps SDK) ved kvittering — første steg mot inntekt
 - P1: Sett `APPLE_CLIENT_ID` i backend .env for å aktivere Apple Sign In (krever Apple Developer $99/år)

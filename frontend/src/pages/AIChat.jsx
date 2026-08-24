@@ -159,8 +159,15 @@ export default function AIChat() {
     try {
       const res = await aiApi.chat(msg);
       setMessages([...optimistic, { role: "assistant", content: res.reply }]);
-    } catch {
-      setMessages([...optimistic, { role: "assistant", content: "Beklager, jeg fikk et hikk. Prøv igjen." }]);
+    } catch (e) {
+      const status = e.response?.status;
+      const detail = e.response?.data?.detail;
+      let errText;
+      if (status === 504) errText = "KJAPP AI bruker litt lenger tid akkurat nå. Prøv igjen om et øyeblikk.";
+      else if (status === 502) errText = "AI-tjenesten er midlertidig utilgjengelig. Prøv igjen om litt.";
+      else if (status === 401) errText = "Du må logge inn på nytt.";
+      else errText = detail || (e.code === "ECONNABORTED" ? "AI svarte ikke i tide — prøv igjen." : "Beklager, jeg fikk et hikk. Prøv igjen.");
+      setMessages([...optimistic, { role: "assistant", content: errText }]);
     } finally {
       setSending(false);
     }

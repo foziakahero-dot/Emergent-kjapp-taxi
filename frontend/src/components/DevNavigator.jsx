@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Compass, X, User, Car, Building2, ShieldCheck, MapPin, CreditCard, MessageCircle, History, Bell, Home as HomeIcon, ClipboardList, Wallet, Users } from "lucide-react";
 
 /**
@@ -57,12 +57,17 @@ const SCREENS = [
 export default function DevNavigator() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Prod-gate: env flag REACT_APP_DEV_NAV controls whether the beta-navigator is available.
   // Also hides entirely if user opts out via ?nav=off in URL.
   const enabled = process.env.REACT_APP_DEV_NAV === "true" || process.env.NODE_ENV === "development";
   if (!enabled) return null;
   if (typeof window !== "undefined" && window.location.search.includes("nav=off")) return null;
+
+  // Hide on routes that have their own bottom-right primary action (avoids overlap with chat-send / mic).
+  const hideOnRoutes = ["/app/ai", "/app/booking", "/app/receipt"];
+  if (hideOnRoutes.some((r) => location.pathname.startsWith(r))) return null;
 
   return (
     <>

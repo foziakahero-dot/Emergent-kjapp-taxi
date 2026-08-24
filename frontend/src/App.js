@@ -44,6 +44,26 @@ import SuperadminApplications from "./pages/SuperadminApplications";
 import SuperadminApplicationDetail from "./pages/SuperadminApplicationDetail";
 import SuperadminPending from "./pages/SuperadminPending";
 
+// APP_MODE — la deg deploye samme kodebase som 3 separate apper:
+//  - "main"  → kunde + sjåfør (kjapp.no)
+//  - "fleet" → kun flåte-eier (fleet.kjapp.no)
+//  - "admin" → kun superadmin (admin.kjapp.no)
+// Sett REACT_APP_MODE i .env for det bygg du lager. Default = "main".
+const APP_MODE = (process.env.REACT_APP_MODE || "main").toLowerCase();
+const IS_FLEET_APP = APP_MODE === "fleet";
+const IS_ADMIN_APP = APP_MODE === "admin";
+const IS_STANDALONE = IS_FLEET_APP || IS_ADMIN_APP;
+
+function redirectAfterLogin(user) {
+  if (IS_FLEET_APP) return "/fleet";
+  if (IS_ADMIN_APP) return user.role === "superadmin" ? "/loyver" : "/admin";
+  if (user.role === "superadmin") return "/loyver";
+  if (user.role === "admin") return "/admin";
+  if (user.role === "driver") return "/driver";
+  if (user.role === "fleet_owner") return "/fleet";
+  return "/app";
+}
+
 function Protected({ children, driverOnly = false, adminOnly = false, fleetOnly = false, superadminOnly = false }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
@@ -52,16 +72,16 @@ function Protected({ children, driverOnly = false, adminOnly = false, fleetOnly 
   if (adminOnly && !["admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
   if (fleetOnly && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
   if (driverOnly && !["driver", "admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
+  // In standalone modes (fleet.kjapp.no / admin.kjapp.no) block wrong roles from browsing customer routes
+  if (IS_FLEET_APP && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <Navigate to="/login" replace />;
+  if (IS_ADMIN_APP && !["admin", "superadmin"].includes(user.role)) return <Navigate to="/login" replace />;
   return children;
 }
 
 function PublicOnly({ children }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
-  if (user) {
-    const to = user.role === "superadmin" ? "/loyver" : user.role === "admin" ? "/admin" : user.role === "driver" ? "/driver" : user.role === "fleet_owner" ? "/fleet" : "/app";
-    return <Navigate to={to} replace />;
-  }
+  if (user) return <Navigate to={redirectAfterLogin(user)} replace />;
   return children;
 }
 
@@ -90,6 +110,40 @@ function Shell({ children, withNav = true, driver = false }) {
 
 function AppRoutes() {
   const location = useLocation();
+
+  // FLEET STANDALONE APP (fleet.kjapp.no build)
+  if (IS_FLEET_APP) {
+    return (
+      <Routes location={location} key={location.pathname}>
+        <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+        <Route path="/apply" element={<ApplyFleet />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/fleet" element={<Protected fleetOnly><Shell withNav={false}><FleetOverview /></Shell></Protected>} />
+        <Route path="/fleet/drivers" element={<Protected fleetOnly><Shell withNav={false}><FleetDrivers /></Shell></Protected>} />
+        <Route path="/fleet/payouts" element={<Protected fleetOnly><Shell withNav={false}><FleetPayouts /></Shell></Protected>} />
+        <Route path="*" element={<Navigate to="/fleet" replace />} />
+      </Routes>
+    );
+  }
+
+  // ADMIN STANDALONE APP (admin.kjapp.no build)
+  if (IS_ADMIN_APP) {
+    return (
+      <Routes location={location} key={location.pathname}>
+        <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/admin" element={<Protected adminOnly><AdminDashboard /></Protected>} />
+        <Route path="/loyver" element={<Protected superadminOnly><SuperadminApplications /></Protected>} />
+        <Route path="/loyver/applications/:id" element={<Protected superadminOnly><SuperadminApplicationDetail /></Protected>} />
+        <Route path="/loyver/pending-drivers" element={<Protected superadminOnly><SuperadminPending /></Protected>} />
+        <Route path="*" element={<Navigate to="/loyver" replace />} />
+      </Routes>
+    );
+  }
+
+  // MAIN APP (kunde + sjåfør)
   return (
     <Routes location={location} key={location.pathname}>
       <Route path="/" element={<Onboarding />} />
@@ -107,7 +161,7 @@ function AppRoutes() {
       <Route path="/app" element={<Protected><Shell><Home /></Shell></Protected>} />
       <Route path="/app/booking/:tripId" element={<Protected><Shell withNav={false}><BookingFlow /></Shell></Protected>} />
       <Route path="/app/receipt/:tripId" element={<Protected><Shell withNav={false}><TripReceipt /></Shell></Protected>} />
-      <Route path="/app/ai" element={<Protected><Shell><AIChat /></Shell></Protected>} />
+      <Route path="/app/ai" element={<Protected><Shell withNav={false}><AIChat /></Shell></Protected>} />
       <Route path="/app/history" element={<Protected><Shell><TripHistory /></Shell></Protected>} />
       <Route path="/app/profile" element={<Protected><Shell><Profile /></Shell></Protected>} />
       <Route path="/app/payment" element={<Protected><Shell withNav={false}><PaymentMethods /></Shell></Protected>} />
