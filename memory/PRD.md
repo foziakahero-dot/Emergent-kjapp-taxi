@@ -568,3 +568,41 @@ Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten
 - P2: server.py refactor → `/app/backend/routes/{auth,trips,driver,fleet,admin,ai,payments}.py`
 - P2: Rate-limiting på `/ai/translate` og `/ai/transcribe` (nå ubegrenset)
 - P3: Trip receipts via e-post (SendGrid, allerede stubbed)
+
+---
+
+## Iter 25 — P0-fix + Superadmin Control Center Phase 2 (2026-08-24)
+
+### P0 rotårsak fikset
+- Backend krasjet ved oppstart: `NameError: require_driver` brukt før definisjon (linje ~1003) → alle API-kall ga 502, som så ut som React-renderingsfeil i Admin. Fix: definisjonen flyttet før første bruk.
+
+### Phase 2 — 9 ekte admin-sider + Fleet Detail (erstatter placeholders)
+- **Backend (~15 endepunkter)**: `/admin/live`, `/admin/drivers-full` + `set-status` (audit), `/admin/vehicles`, `/admin/trips-full` + `timeline`, `/admin/finance` + `export` (CSV), `/admin/documents`, `/admin/support/tickets` (CRUD + notater + audit), `/admin/analytics`, `/admin/settings` (GET/PATCH, superadmin, audit), `/admin/fleets/{id}` (detalj)
+- **Frontend (10 sider)**: AdminLive (kart + paneler, 5s polling), AdminDrivers, AdminVehicles, AdminTrips (tidslinje), AdminFinance (KPI + søylediagram + CSV), AdminDocuments, AdminSupport (sakssystem), AdminAnalytics, AdminSettings, AdminFleetDetail (`/admin/fleets/:id`)
+- KJAPP-provisjon i overview/finance/CSV leser `default_commission` fra platform_settings (ikke hardkodet)
+- **Tester (iteration_20.json)**: Backend 35/35 pytest grønn (`test_iter20_admin_phase2.py`), Frontend 100% (36 selektorer + alle interaktive flyter)
+
+## Iter 26 — P0 BETA LOCK: Production hardening (2026-08-24)
+
+**Kun backend/sikkerhet — null UI-endringer.**
+
+1. **Prod/demo-separasjon**: `APP_ENV=development|staging|production` + `ENABLE_DEMO_DATA` i backend/.env. `demo_data_enabled()` returnerer ALLTID False i production. Gatet: ola/sjafor-seed, 6 demo-sjåfører, cruise-task, demo-pending-trips-task. Ved demo av: demo-brukere settes offline + pending demo-trips slettes.
+2. **Superadmin-sikkerhet**: `"admin123"`-fallback FJERNET fra koden. Admin seedes kun fra `ADMIN_PASSWORD`-env. Production-oppstart feiler (`RuntimeError`) ved manglende/svak ADMIN_PASSWORD (<12 tegn eller kjent default). Ingen hemmeligheter logges.
+3. **JWT**: `validate_production_config()` krever ≥32 tegn JWT_SECRET, avviser kjente dev-verdier. 7-dagers token-kompatibilitet bevart.
+4. **CORS**: `compute_cors_origins()` — production = KUN kjapp.no/fleet.kjapp.no/admin.kjapp.no (aldri `*`). Dev: whitelist + localhost + preview-origin fra FRONTEND_URL (fallback `*` når ukjent).
+5. **Brute-force på /auth/login**: MongoDB `login_attempts` (TTL 1t). 5 feil per e-post / 15 per IP innen 15 min → 429. Vellykket login nullstiller. Identisk 401-melding uansett om kontoen finnes (ingen enumeration).
+6. **AuthZ-audit**: Verifisert — alle `/admin/*` bruker require_admin/superadmin, alle `/fleet/*` scopes til egen fleet_id server-side (drivers, payouts, invites, export). Ingen cross-fleet-parametre.
+7. **Trygg logging**: `X-Request-ID` på alle responser; unhandled errors logges med correlation-ID uten headers/credentials, klient får `{detail, request_id}`.
+8. **Tester**: `test_iter21_hardening.py` — **17/17 grønn** (CORS-whitelist, svake secrets avvist, demo-gating, 429-flyt, ingen enumeration, reset ved suksess, alle 4 rolle-logins, RBAC kunde/sjåfør/fleet/superadmin, cross-fleet-isolasjon, request-ID). Production-modus simulert: import med svak config → RuntimeError; sterk config → ENABLE_DEMO_DATA=False + streng CORS.
+- **Full regresjon**: 170 passed (1 kjent test-rekkefølge-artefakt i test_iter13 som passerer isolert og i kombinasjonskjøring 78/78)
+
+### Gjenstående produksjonsblokkere (utenfor scope)
+- Vipps-nøkler + Apple Sign-In (venter på bruker)
+- APNs/FCM push-nøkler
+- Sett `APP_ENV=production` + sterk `ADMIN_PASSWORD` + `ENABLE_DEMO_DATA=false` i prod-deploy-env
+- Skatteetaten ARS-godkjenning
+
+### Backlog fra kodegjennomgang (P2)
+- server.py (~3970 linjer) → splitt til routes/-moduler
+- Paginering på drivers-full/trips-full
+- Signert URL i stedet for storage_path i /admin/documents

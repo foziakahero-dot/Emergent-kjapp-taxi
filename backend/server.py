@@ -8,6 +8,7 @@ import random
 import secrets
 import json
 import base64
+import traceback
 import bcrypt
 import jwt
 import httpx
@@ -40,6 +41,59 @@ DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+
+# ------------------ Environment / security hardening ------------------
+APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
+IS_PRODUCTION = APP_ENV == "production"
+
+PRODUCTION_CORS_ORIGINS = ["https://kjapp.no", "https://fleet.kjapp.no", "https://admin.kjapp.no"]
+WEAK_JWT_SECRETS = {"secret", "changeme", "change-me", "dev", "devsecret", "development", "jwt_secret", "your-secret-key", "supersecret", "kjapp", "test", "password"}
+WEAK_ADMIN_PASSWORDS = {"admin123", "admin", "password", "passord", "kjapp123", "123456", "admin1234", "12345678"}
+
+
+def demo_data_enabled(app_env: str, flag) -> bool:
+    """Demo seeds and demo background jobs are NEVER allowed in production."""
+    if (app_env or "").strip().lower() == "production":
+        return False
+    if flag is None:
+        return True
+    return str(flag).strip().lower() in ("1", "true", "yes", "on")
+
+
+ENABLE_DEMO_DATA = demo_data_enabled(APP_ENV, os.environ.get("ENABLE_DEMO_DATA"))
+
+
+def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
+    """Production: strict whitelist only. Dev/staging: whitelist + localhost + preview origin."""
+    if (app_env or "").strip().lower() == "production":
+        return list(PRODUCTION_CORS_ORIGINS)
+    origins = list(PRODUCTION_CORS_ORIGINS) + ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001"]
+    fu = (frontend_url or "").strip().rstrip("/")
+    if fu and fu != "*" and fu.startswith("http"):
+        origins.append(fu)
+        return origins
+    # Development fallback when preview origin is unknown (auth uses Bearer header, not cookies)
+    return ["*"]
+
+
+def validate_production_config(env=None):
+    """Fail startup in production on missing/weak security config. Never logs secret values."""
+    e = env if env is not None else os.environ
+    errors = []
+    secret = (e.get("JWT_SECRET") or "").strip()
+    if len(secret) < 32 or secret.lower() in WEAK_JWT_SECRETS:
+        errors.append("JWT_SECRET mangler, er kortere enn 32 tegn, eller er en kjent dev-verdi")
+    if not (e.get("ADMIN_EMAIL") or "").strip():
+        errors.append("ADMIN_EMAIL mangler")
+    admin_pw = (e.get("ADMIN_PASSWORD") or "").strip()
+    if len(admin_pw) < 12 or admin_pw.lower() in WEAK_ADMIN_PASSWORDS:
+        errors.append("ADMIN_PASSWORD mangler eller er for svak (minst 12 tegn, ikke default)")
+    if errors:
+        raise RuntimeError("PRODUKSJONS-KONFIGFEIL — oppstart avbrutt: " + " | ".join(errors))
+
+
+if IS_PRODUCTION:
+    validate_production_config()
 
 # ------------------ Object storage (Emergent) ------------------
 _STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
@@ -402,6 +456,8 @@ async def lifespan(app: FastAPI):
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.login_attempts.create_index("identifier")
+    await db.login_attempts.create_index("at", expireAfterSeconds=3600)
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -435,19 +491,22 @@ async def lifespan(app: FastAPI):
             {"slug": "gardermoen", "name": "Gardermoen (OSL)", "lat": 60.1975, "lng": 11.1004, "label": "Flyplass", "icon": "map-pin", "featured": False},
             {"slug": "sandvika", "name": "Sandvika", "lat": 59.8909, "lng": 10.5245, "label": "Kjøpesenter", "icon": "map-pin", "featured": False},
         ])
-    # seed admin (upgrade to superadmin)
+    # seed admin (upgrade to superadmin) — no hardcoded password fallback
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@kjapp.no")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
-        await db.users.insert_one({
-            "email": admin_email,
-            "password_hash": hash_password(admin_password),
-            "fullName": "Superadmin",
-            "phone": "+4700000000",
-            "role": "superadmin",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        if not admin_password:
+            print("[seed] ADMIN_PASSWORD ikke satt — hopper over admin-seeding")
+        else:
+            await db.users.insert_one({
+                "email": admin_email,
+                "password_hash": hash_password(admin_password),
+                "fullName": "Superadmin",
+                "phone": "+4700000000",
+                "role": "superadmin",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
     elif existing.get("role") != "superadmin":
         # Backfill: upgrade legacy admin -> superadmin
         await db.users.update_one({"_id": existing["_id"]}, {"$set": {"role": "superadmin"}})
@@ -457,9 +516,9 @@ async def lifespan(app: FastAPI):
         init_storage()
     except Exception as e:
         print(f"[storage] init on startup failed: {e}")
-    # seed test user
+    # seed test user (demo only)
     test_email = "ola@kjapp.no"
-    if not await db.users.find_one({"email": test_email}):
+    if ENABLE_DEMO_DATA and not await db.users.find_one({"email": test_email}):
         uid = await db.users.insert_one({
             "email": test_email,
             "password_hash": hash_password("test1234"),
@@ -475,9 +534,9 @@ async def lifespan(app: FastAPI):
             {"user_id": str(uid.inserted_id), "type": "mastercard", "label": "Mastercard", "last4": "8888", "is_default": False, "created_at": datetime.now(timezone.utc).isoformat()},
         ])
 
-    # seed driver user — real driver with car info stored on user record (not fake fleet)
+    # seed driver user (demo only) — real driver with car info stored on user record
     driver_email = "sjafor@kjapp.no"
-    if not await db.users.find_one({"email": driver_email}):
+    if ENABLE_DEMO_DATA and not await db.users.find_one({"email": driver_email}):
         await db.users.insert_one({
             "email": driver_email,
             "password_hash": hash_password("sjafor1234"),
@@ -493,11 +552,12 @@ async def lifespan(app: FastAPI):
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     else:
-        # backfill car/plate on existing driver user
-        await db.users.update_one(
-            {"email": driver_email, "role": "driver", "$or": [{"car": {"$exists": False}}, {"car": None}]},
-            {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
-        )
+        # backfill car/plate on existing driver user (demo/dev only)
+        if ENABLE_DEMO_DATA:
+            await db.users.update_one(
+                {"email": driver_email, "role": "driver", "$or": [{"car": {"$exists": False}}, {"car": None}]},
+                {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
+            )
 
     # ---- Seed always-online DEMO DRIVERS with live GPS heartbeats (Oslo) ----
     # These are REAL driver records in the DB — passenger sees them as normal cars.
@@ -510,7 +570,7 @@ async def lifespan(app: FastAPI):
         {"email": "demo5@kjapp.no", "fullName": "Jonas Hansen", "car": "Toyota Sienna", "plate": "TR 55505", "vehicle_type": "trygg", "lat": 59.9145, "lng": 10.7590, "bearing": 135},
         {"email": "demo6@kjapp.no", "fullName": "Sara Solheim", "car": "Kia EV6", "plate": "EL 66606", "vehicle_type": "ai-first", "lat": 59.9245, "lng": 10.7370, "bearing": 210},
     ]
-    for d in demo_drivers:
+    for d in (demo_drivers if ENABLE_DEMO_DATA else []):
         existing = await db.users.find_one({"email": d["email"]})
         base = {
             "email": d["email"],
@@ -570,7 +630,7 @@ async def lifespan(app: FastAPI):
                 break
             except Exception as e:
                 print(f"[cruise] error: {e}")
-    cruise_task = asyncio.create_task(cruise_demo_drivers())
+    cruise_task = asyncio.create_task(cruise_demo_drivers()) if ENABLE_DEMO_DATA else None
 
     # Background task: keep 1-2 pending demo trips waiting for sjåfør (so beta-testing feels alive)
     async def seed_demo_pending_trips():
@@ -671,20 +731,41 @@ async def lifespan(app: FastAPI):
                 break
             except Exception as e:
                 print(f"[demo-trips] error: {e}")
-    demo_trips_task = asyncio.create_task(seed_demo_pending_trips())
+    demo_trips_task = asyncio.create_task(seed_demo_pending_trips()) if ENABLE_DEMO_DATA else None
+
+    # Hardening: when demo data is disabled, force existing demo records offline and purge demo pending trips
+    if not ENABLE_DEMO_DATA:
+        await db.users.update_many({"demo": True}, {"$set": {"online": False}})
+        await db.trips.delete_many({"demo": True, "status": {"$in": ["searching", "booking"]}})
+
     yield
-    cruise_task.cancel()
-    demo_trips_task.cancel()
+    if cruise_task: cruise_task.cancel()
+    if demo_trips_task: demo_trips_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=compute_cors_origins(APP_ENV, os.environ.get("FRONTEND_URL", "")),
     allow_credentials=False,  # using Authorization header, not cookies for cross-origin
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Correlation ID for every request; safe logging on unhandled errors (never logs headers/credentials)."""
+    rid = uuid.uuid4().hex[:12]
+    request.state.request_id = rid
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = rid
+        return response
+    except Exception:
+        print(f"[unhandled-error] request_id={rid} {request.method} {request.url.path}")
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"detail": "Intern serverfeil", "request_id": rid})
 
 api = APIRouter(prefix="/api")
 
@@ -822,6 +903,40 @@ async def trip_estimate(body: EstimateRequest):
 
 
 
+# ---- Login brute-force protection (server-side, MongoDB-backed) ----
+LOGIN_MAX_FAILED_EMAIL = 5
+LOGIN_MAX_FAILED_IP = 15
+LOGIN_WINDOW_MINUTES = 15
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _login_blocked(email: str, ip: str) -> bool:
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=LOGIN_WINDOW_MINUTES)
+    email_fails = await db.login_attempts.count_documents({"identifier": f"email:{email}", "at": {"$gte": cutoff}})
+    if email_fails >= LOGIN_MAX_FAILED_EMAIL:
+        return True
+    ip_fails = await db.login_attempts.count_documents({"identifier": f"ip:{ip}", "at": {"$gte": cutoff}})
+    return ip_fails >= LOGIN_MAX_FAILED_IP
+
+
+async def _record_failed_login(email: str, ip: str):
+    now = datetime.now(timezone.utc)
+    await db.login_attempts.insert_many([
+        {"identifier": f"email:{email}", "at": now},
+        {"identifier": f"ip:{ip}", "at": now},
+    ])
+
+
+async def _clear_failed_logins(email: str, ip: str):
+    await db.login_attempts.delete_many({"identifier": {"$in": [f"email:{email}", f"ip:{ip}"]}})
+
+
 @api.post("/auth/register")
 async def register(body: RegisterRequest, response: Response):
     email = body.email.strip().lower()
@@ -844,11 +959,16 @@ async def register(body: RegisterRequest, response: Response):
 
 
 @api.post("/auth/login")
-async def login(body: LoginRequest, response: Response):
+async def login(body: LoginRequest, request: Request, response: Response):
     email = body.email.strip().lower()
+    ip = _client_ip(request)
+    if await _login_blocked(email, ip):
+        raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
+        await _record_failed_login(email, ip)
         raise HTTPException(status_code=401, detail="Feil e-post eller passord")
+    await _clear_failed_logins(email, ip)
     uid = str(user["_id"])
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
@@ -2245,6 +2365,11 @@ async def fleet_export_monthly(
 # ============================================================
 
 
+async def _platform_commission() -> float:
+    s = await db.platform_settings.find_one({"_id": "singleton"})
+    return (s or {}).get("default_commission", 0.10)
+
+
 @api.get("/admin/overview")
 async def admin_overview(current=Depends(require_admin)):
     """KPI dashboard for Operations Control Center."""
@@ -2267,10 +2392,11 @@ async def admin_overview(current=Depends(require_admin)):
 
     gmv_today = 0
     kjapp_revenue_today = 0
+    _rate = await _platform_commission()
     async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}, {"price": 1}):
         price = t.get("price", 0) or 0
         gmv_today += price
-        kjapp_revenue_today += round(price * 0.10)
+        kjapp_revenue_today += round(price * _rate)
 
     pending_payouts = await count(db.fleet_payouts, {"status": {"$in": ["pending", "processing", "on_hold"]}})
     open_support = await count(db.support_tickets, {"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
@@ -3595,11 +3721,12 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
             "commission_rate": rate, "commission_amount": round(fg["gmv"] * rate),
         })
     fleets_out.sort(key=lambda x: -x["gmv"])
+    _rate = await _platform_commission()
     return {
         "days": days,
         "totals": {
             "gmv": total_gmv, "trips": total_trips,
-            "kjapp_revenue": round(total_gmv * 0.10),
+            "kjapp_revenue": round(total_gmv * _rate),
             "avg_price": round(total_gmv / total_trips) if total_trips else 0,
         },
         "series": series,
@@ -3616,13 +3743,14 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
     since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
     buf = _io.StringIO()
     w = _csv.writer(buf, delimiter=";")
+    _rate = await _platform_commission()
     w.writerow(["dato", "trip_id", "status", "pris_kr", "distanse_km", "sjåfør", "passasjer_id", "kjapp_provisjon_kr"])
     async for t in db.trips.find({"created_at": {"$gte": since}}).sort("created_at", -1).limit(5000):
         price = t.get("price", 0) or 0
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), (t.get("driver") or {}).get("name") or "", t.get("user_id") or "",
-            round(price * 0.10) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * _rate) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
