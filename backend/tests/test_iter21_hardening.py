@@ -36,7 +36,7 @@ def test_cors_production_no_wildcard():
     origins = compute_cors_origins("production", "https://whatever.example.com")
     assert "*" not in origins
     # the three production web hosts must always be allowed
-    web_hosts = {"https://kjapp.no", "https://fleet.kjapp.no", "https://admin.kjapp.no"}
+    web_hosts = {"https://kjappapp.no", "https://fleet.kjappapp.no", "https://admin.kjappapp.no"}
     assert web_hosts.issubset(set(origins))
     # native mobile WebView origins are allowed so the app can reach api.kjapp.no
     assert "capacitor://localhost" in origins

@@ -9,7 +9,7 @@
     "cleartext": false,
     "allowNavigation": [
       "mobile-forge-1487.preview.emergentagent.com",
-      "*.kjapp.no"
+      "*.kjappapp.no"
     ]
   },
   "backgroundColor": "#0a1220",

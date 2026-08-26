@@ -47,9 +47,9 @@ APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 IS_PRODUCTION = APP_ENV == "production"
 
 PRODUCTION_CORS_ORIGINS = [
-    "https://kjapp.no",            # root (reserved for marketing site)
-    "https://fleet.kjapp.no",      # fleet web portal
-    "https://admin.kjapp.no",      # admin/ops control center
+    "https://kjappapp.no",            # root (reserved for marketing site)
+    "https://admin.kjappapp.no",      # admin/ops control center
+    "https://fleet.kjappapp.no",      # fleet web portal
     "capacitor://localhost",       # native iOS WebView origin
     "ionic://localhost",           # native (legacy) WebView origin
     "https://localhost",           # native Android WebView origin (androidScheme=https)
@@ -1114,7 +1114,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         frontend = (request.headers.get("origin") or "").strip().rstrip("/")
         if not frontend:
             fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
-            frontend = fu if fu and fu != "*" else "https://kjapp.no"
+            frontend = fu if fu and fu != "*" else "https://admin.kjappapp.no"
         reset_url = f"{frontend}/reset-password/{token}"
         send_email(email, "Tilbakestill passordet ditt — KJAPP", email_password_reset_html(reset_url))
     return {"ok": True}
