@@ -620,3 +620,27 @@ Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten
 - **Backend `POST /auth/google/session`**: veksler session_id server-side mot `demobackend.emergentagent.com/auth/v1/env/oauth/session-data` (header `X-Session-ID`). 401 ved ugyldig økt. Kobler eksisterende bruker på e-post (rolle bevart — admin forblir admin), ny bruker får rolle `user` + tilfeldig ubrukt passord. Stoler ALDRI på klientpåstander om e-post/rolle — alt hentes fra Emergent-verifisert session-data.
 - **Ny fiks i denne iterasjonen**: Login.jsx leser nå `?err=google` og viser feilbanner («Google-innlogging feilet. Prøv igjen eller bruk e-post.») via `login-error` testid — tidligere ga feilet Google-login ingen feedback.
 - **Testet (faktisk kjørt)**: ugyldig session_id → 401 ✓; `#session_id=…` på /app rendrer «Logger deg inn med Google…» ✓; Google-knapp synlig ✓; `?err=google` viser feilbanner ✓. **IKKE testet (kan ikke automatiseres headless)**: selve Google-samtykkeskjermen → ekte session_id-utveksling → JWT → rolle-redirect. Krever ekte Google-konto + interaktiv nettleser. Eier må bekrefte live-knappen én gang.
+
+
+## Iter 29 — P0.1 sikkerhetskorrigering (2026-08-25)
+
+**Kun backend/sikkerhet + login-UI-gating. Ingen redesign.**
+
+1. **Superadmin-passord (prod)**: Ny `reconcile_superadmin(db, email, pw, is_production)`. Ved oppstart i `APP_ENV=production` roteres eksisterende superadmins `password_hash` til `ADMIN_PASSWORD` (gammelt/legacy-passord slutter å virke), rolle fikses, og kontoen tvinges aldri disabled. Aldri logget/eksponert.
+2. **Legacy demo-kontoer (prod)**: Ny `disable_legacy_demo_users(db, is_production, admin_email)`. I produksjon markeres `ola@`, `sjafor@`, `floteier1@`, `demo1..6@`, `demo_p_*@` + alt med `demo:true` som `disabled:true, is_demo:true`. Ekte prod-brukere og superadmin røres ikke. Kjøres i lifespan når `IS_PRODUCTION`.
+3. **Disabled-innlogging blokkert**: `/auth/login` returnerer samme generiske 401 for disabled brukere som for feil passord (ingen enumeration). Google-session og `get_current_user` avviser også disabled (401) → gammelt gyldig token gir ikke API-tilgang.
+4. **Trusted proxy**: Ny `TRUST_PROXY` (default `false`). `_client_ip()` leser X-Forwarded-For KUN når `true`, ellers socket-peer. E-post-throttling alltid aktiv.
+5. **Demo-UI gating**: Ny `REACT_APP_ENABLE_DEMO_LOGIN` (default av). Demo-innlogging-blokken + hardkodede demo-passord fjernes fra prod-bundlen (dead-code elimination når flagget=false; verifisert: 0 treff i runtime-`.js`). Preview `.env` = true. `.env.production` setter false + `REACT_APP_DEV_NAV=false` + `GENERATE_SOURCEMAP=false`.
+- **Tester**: `test_iter22_p01_security.py` — 13/13 (prod-rotasjon mot temp-DB, dev roterer ikke, demo-deaktivering, dev deaktiverer ikke, disabled login 401 live, TRUST_PROXY default/true, e-post-throttling 429, demo-UI-gate). **Full suite: 228 passed, 0 failed.**
+
+## Iter 30 — Produksjons-arkitektur split (native + fleet + admin, delt backend) (2026-08-25)
+
+**Bevarer all funksjonalitet. Ingen redesign.**
+
+- **3 klienter, én backend**: (A) Native mobil (Capacitor, `no.kjapp.app`/KJAPP) = `main`-modus = passasjer+sjåfør, bruker `https://api.kjapp.no`. (B) `fleet.kjapp.no` = fleet-modus, landing `/fleet`, kun fleet_owner (+admin/superadmin). (C) `admin.kjapp.no` = admin-modus, landing `/admin` (superadmin→`/loyver`), kun admin+superadmin. Delt FastAPI + én MongoDB på `api.kjapp.no`. `kjapp.no` reservert for fremtidig marketing (ikke appen).
+- **Modus-deteksjon**: `detectAppMode()` (hostname `fleet.*`/`admin.*` → modus; `?mode=` override for preview; `REACT_APP_MODE` fallback; default main). Hostname vinner over env, så én web-deploy dekker fleet+admin.
+- **Loop-fiks (rute-isolasjon)**: `Protected()` sender feil rolle i standalone-portal til `/login`; ny `WrongPortal`-komponent (`data-testid=wrong-portal`) i `PublicOnly()` viser «Feil konto for {flåte/admin}portalen» + logg-ut i stedet for redirect-loop. Per-rute-guards bruker nå `redirectAfterLogin(user)` (ingen ikke-eksisterende ruter → ingen loop).
+- **CORS**: `PRODUCTION_CORS_ORIGINS` = kjapp.no, fleet.kjapp.no, admin.kjapp.no + native WebView-origins (`capacitor://localhost`, `ionic://localhost`, `https://localhost`). Ingen `*` i prod.
+- **Deploy-config**: `frontend/.env.production` (api.kjapp.no, mode=main, demo/dev-nav av, sourcemap av), `backend/.env.production.example` (APP_ENV=production, ENABLE_DEMO_DATA=false, TRUST_PROXY=true, sterke secrets). `DEPLOYMENT.md` skrevet om for api/fleet/admin + DNS-plassholdere (ingen oppfunnede verdier — fyll inn eksakte verdier fra hosting).
+- **Verifisert**: `yarn build` OK; demo-passord fjernet fra prod-bundle; testing-agent E2E 16/16 frontend (modus-deteksjon, WrongPortal begge portaler, rute-isolasjon, main-routing) + 10/10 backend RBAC (401/403 uansett modus). Ny testfil `tests/test_iter23_mode_rbac.py`.
+- **IKKE gjort (krever bruker/DNS)**: faktisk DNS/CNAME for api/fleet/admin.kjapp.no må settes hos hosting-plattformen; rapporter eksakte verdier derfra. Produksjons-env (APP_ENV=production etc.) settes ved deploy.

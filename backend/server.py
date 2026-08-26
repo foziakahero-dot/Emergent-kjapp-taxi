@@ -46,9 +46,28 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 IS_PRODUCTION = APP_ENV == "production"
 
-PRODUCTION_CORS_ORIGINS = ["https://kjapp.no", "https://fleet.kjapp.no", "https://admin.kjapp.no"]
+PRODUCTION_CORS_ORIGINS = [
+    "https://kjapp.no",            # root (reserved for marketing site)
+    "https://fleet.kjapp.no",      # fleet web portal
+    "https://admin.kjapp.no",      # admin/ops control center
+    "capacitor://localhost",       # native iOS WebView origin
+    "ionic://localhost",           # native (legacy) WebView origin
+    "https://localhost",           # native Android WebView origin (androidScheme=https)
+]
 WEAK_JWT_SECRETS = {"secret", "changeme", "change-me", "dev", "devsecret", "development", "jwt_secret", "your-secret-key", "supersecret", "kjapp", "test", "password"}
 WEAK_ADMIN_PASSWORDS = {"admin123", "admin", "password", "passord", "kjapp123", "123456", "admin1234", "12345678"}
+
+# Only trust X-Forwarded-For when running behind a known/controlled proxy.
+TRUST_PROXY = str(os.environ.get("TRUST_PROXY", "false")).strip().lower() in ("1", "true", "yes", "on")
+
+# Known legacy seed/demo accounts that must be disabled (cannot authenticate) in production.
+LEGACY_DEMO_EMAILS = {
+    "ola@kjapp.no", "sjafor@kjapp.no", "floteier1@kjapp.no",
+    "demo1@kjapp.no", "demo2@kjapp.no", "demo3@kjapp.no",
+    "demo4@kjapp.no", "demo5@kjapp.no", "demo6@kjapp.no",
+    "demo_p_kari@kjapp.no", "demo_p_aisha@kjapp.no",
+    "demo_p_erik@kjapp.no", "demo_p_sofia@kjapp.no",
+}
 
 
 def demo_data_enabled(app_env: str, flag) -> bool:
@@ -187,6 +206,51 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_production: bool) -> dict:
+    """In production, rotate an existing superadmin's password_hash to match ADMIN_PASSWORD so any
+    old/legacy password stops working. Also fixes role and ensures the account is never disabled.
+    Never logs, returns or exposes the password value."""
+    result = {"exists": False, "password_rotated": False, "role_fixed": False}
+    admin_email = (admin_email or "").strip().lower()
+    if not admin_email or not admin_password:
+        return result
+    existing = await db.users.find_one({"email": admin_email})
+    if not existing:
+        return result
+    result["exists"] = True
+    updates = {}
+    if existing.get("role") != "superadmin":
+        updates["role"] = "superadmin"
+        result["role_fixed"] = True
+    if existing.get("disabled") or existing.get("is_demo"):
+        updates["disabled"] = False
+        updates["is_demo"] = False
+    if is_production and not verify_password(admin_password, existing.get("password_hash", "")):
+        updates["password_hash"] = hash_password(admin_password)
+        result["password_rotated"] = True
+    if updates:
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": updates})
+    return result
+
+
+async def disable_legacy_demo_users(db, is_production: bool, admin_email: str = "") -> int:
+    """In production, disable known seed/demo accounts so they cannot authenticate. Legitimate
+    production users are never touched. Returns the number of accounts disabled."""
+    if not is_production:
+        return 0
+    admin_email = (admin_email or "").strip().lower()
+    query = {
+        "$or": [
+            {"email": {"$in": list(LEGACY_DEMO_EMAILS)}},
+            {"demo": True},
+            {"is_demo": True},
+        ],
+        "email": {"$ne": admin_email},
+    }
+    res = await db.users.update_many(query, {"$set": {"disabled": True, "is_demo": True, "online": False}})
+    return res.modified_count
+
+
 def create_access_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
@@ -210,6 +274,8 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
+        if user.get("disabled"):
+            raise HTTPException(status_code=401, detail="Ikke innlogget")
         user["id"] = str(user["_id"])
         user.pop("_id", None)
         user.pop("password_hash", None)
@@ -494,7 +560,7 @@ async def lifespan(app: FastAPI):
             {"slug": "sandvika", "name": "Sandvika", "lat": 59.8909, "lng": 10.5245, "label": "Kjøpesenter", "icon": "map-pin", "featured": False},
         ])
     # seed admin (upgrade to superadmin) — no hardcoded password fallback
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@kjapp.no")
+    admin_email = (os.environ.get("ADMIN_EMAIL", "admin@kjapp.no") or "").strip().lower()
     admin_password = os.environ.get("ADMIN_PASSWORD")
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
@@ -509,9 +575,10 @@ async def lifespan(app: FastAPI):
                 "role": "superadmin",
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
-    elif existing.get("role") != "superadmin":
-        # Backfill: upgrade legacy admin -> superadmin
-        await db.users.update_one({"_id": existing["_id"]}, {"$set": {"role": "superadmin"}})
+    else:
+        # Existing superadmin: in production, rotate password from ADMIN_PASSWORD (legacy password
+        # stops working), fix role, and ensure it is never disabled/flagged as demo.
+        await reconcile_superadmin(db, admin_email, admin_password, IS_PRODUCTION)
 
     # Initialize object storage
     try:
@@ -740,6 +807,11 @@ async def lifespan(app: FastAPI):
         await db.users.update_many({"demo": True}, {"$set": {"online": False}})
         await db.trips.delete_many({"demo": True, "status": {"$in": ["searching", "booking"]}})
 
+    # P0.1: in production, disable legacy seed/demo accounts so they can no longer authenticate
+    if IS_PRODUCTION:
+        disabled_n = await disable_legacy_demo_users(db, True, admin_email)
+        print(f"[seed] production: disabled {disabled_n} legacy demo account(s)")
+
     yield
     if cruise_task: cruise_task.cancel()
     if demo_trips_task: demo_trips_task.cancel()
@@ -912,9 +984,11 @@ LOGIN_WINDOW_MINUTES = 15
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
+    # Only trust proxy-supplied forwarding headers when explicitly enabled (TRUST_PROXY=true).
+    if TRUST_PROXY:
+        fwd = request.headers.get("x-forwarded-for", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -968,6 +1042,10 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
+        await _record_failed_login(email, ip)
+        raise HTTPException(status_code=401, detail="Feil e-post eller passord")
+    if user.get("disabled"):
+        # Disabled/legacy-demo accounts return the SAME generic 401 as invalid credentials.
         await _record_failed_login(email, ip)
         raise HTTPException(status_code=401, detail="Feil e-post eller passord")
     await _clear_failed_logins(email, ip)
@@ -2120,6 +2198,8 @@ async def google_session(body: GoogleSessionRequest, response: Response):
         driver_id = None
     else:
         uid = str(user["_id"])
+        if user.get("disabled"):
+            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
         role = user.get("role", "user")
         driver_id = user.get("driver_id")
         if not user.get("google_linked"):

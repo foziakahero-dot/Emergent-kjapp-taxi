@@ -32,11 +32,14 @@ def auth_headers(email, password):
 # ---------- 1. Config unit tests (import server module functions) ----------
 
 def test_cors_production_no_wildcard():
-    from server import compute_cors_origins, PRODUCTION_CORS_ORIGINS
+    from server import compute_cors_origins
     origins = compute_cors_origins("production", "https://whatever.example.com")
     assert "*" not in origins
-    assert origins == PRODUCTION_CORS_ORIGINS
-    assert set(origins) == {"https://kjapp.no", "https://fleet.kjapp.no", "https://admin.kjapp.no"}
+    # the three production web hosts must always be allowed
+    web_hosts = {"https://kjapp.no", "https://fleet.kjapp.no", "https://admin.kjapp.no"}
+    assert web_hosts.issubset(set(origins))
+    # native mobile WebView origins are allowed so the app can reach api.kjapp.no
+    assert "capacitor://localhost" in origins
 
 
 def test_cors_development_allows_localhost_and_preview():

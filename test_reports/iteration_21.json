@@ -1,0 +1,22 @@
+{
+  "summary": "Iter 23 KJAPP multi-mode architecture split verified end-to-end. Backend RBAC (10/10 pytest) confirms /api/admin/overview and /api/fleet/overview enforce 401 unauthenticated and 403 for wrong roles regardless of mode — customer/driver JWTs cannot access admin, customer/driver JWTs cannot access fleet, admin JWT reaches admin, fleet_owner JWT reaches fleet. Frontend Playwright (16/16) confirms: (1) mode detection via ?mode= override sets window.__KJAPP_MODE and correct Norwegian header text; (2) demo login buttons filtered per mode (fleet-only in fleet, admin-only in admin, all 4 in main); (3) correct-role logins route to /fleet, /loyver (superadmin lands on /loyver), /app (customer), /driver (driver); (4) WRONG-ROLE LOOP FIX WORKS — customer login on ?mode=fleet renders data-testid='wrong-portal' with 'flåteportalen' text and functional wrong-portal-logout button; same for admin mode with 'administrasjonsportalen'; NO redirect loops observed; (5) route isolation — visiting /app or /admin in fleet mode (unauth) and /fleet or /app in admin mode (unauth) redirects to /login and does not render customer/admin UI. Single REACT_APP_BACKEND_URL confirmed shared across all modes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter23_mode_rbac.py",
+    "/app/test_reports/pytest/iter23.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "detectAppMode() persists ?mode= to localStorage['kjapp_mode_override'] — this is intentional for preview testing but note that switching modes on same host requires clearing localStorage or re-appending ?mode= (test harness handled this correctly).",
+    "Protected() sends wrong-role users in standalone portals to /login where PublicOnly() detects the authenticated wrong-role session and renders WrongPortal — this is the correct loop-breaking pattern.",
+    "test_admin_overview_unauthenticated_401 verified server returns 401 (not 403) for missing token, matching spec."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter23_mode_rbac.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (16/16)"},
+  "test_credentials": "All 4 seeded accounts from /app/memory/test_credentials.md worked as documented.",
+  "seed_data_creation": "None — used existing seeded demo accounts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 23 mode-split fully verified. RBAC regression file: /app/backend/tests/test_iter23_mode_rbac.py (10 tests). Playwright mode/portal flows validated on preview URL with ?mode= override. Loop-fix (WrongPortal component) works correctly for both fleet and admin standalone modes. Full backend suite from prior iters (228) + iter23 (10) should now be 238 passing."
+}

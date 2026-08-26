@@ -111,20 +111,47 @@ function Protected({ children, driverOnly = false, adminOnly = false, fleetOnly 
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
   if (!user) return <Navigate to="/login" replace />;
-  if (superadminOnly && user.role !== "superadmin") return <Navigate to="/app" replace />;
-  if (adminOnly && !["admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
-  if (fleetOnly && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
-  if (driverOnly && !["driver", "admin", "superadmin"].includes(user.role)) return <Navigate to="/app" replace />;
-  // In standalone modes (fleet.kjapp.no / admin.kjapp.no) block wrong roles from browsing customer routes
+  // Standalone portals (fleet.kjapp.no / admin.kjapp.no): only permitted roles may enter.
+  // Everyone else is sent back to /login (server-side RBAC is the real enforcement).
   if (IS_FLEET_APP && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <Navigate to="/login" replace />;
   if (IS_ADMIN_APP && !["admin", "superadmin"].includes(user.role)) return <Navigate to="/login" replace />;
+  // Per-route role guards. Redirect wrong roles to THEIR own landing (never a non-existent route → no loop).
+  if (superadminOnly && user.role !== "superadmin") return <Navigate to={redirectAfterLogin(user)} replace />;
+  if (adminOnly && !["admin", "superadmin"].includes(user.role)) return <Navigate to={redirectAfterLogin(user)} replace />;
+  if (fleetOnly && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <Navigate to={redirectAfterLogin(user)} replace />;
+  if (driverOnly && !["driver", "admin", "superadmin"].includes(user.role)) return <Navigate to={redirectAfterLogin(user)} replace />;
   return children;
+}
+
+function WrongPortal() {
+  const { logout } = useAuth();
+  const label = IS_ADMIN_APP ? "administrasjonsportalen" : "flåteportalen";
+  return (
+    <div className="phone-shell grain flex flex-col items-center justify-center px-8 text-center" data-testid="wrong-portal">
+      <h1 className="font-display text-2xl text-white">Feil konto for {label}</h1>
+      <p className="text-[#8A9198] text-sm mt-3">Denne kontoen har ikke tilgang her. Logg inn med en konto som har tilgang.</p>
+      <button
+        onClick={() => logout()}
+        data-testid="wrong-portal-logout"
+        className="mt-6 px-6 py-3 rounded-xl font-medium"
+        style={{ background: "var(--accent)", color: "#0B1013" }}
+      >
+        Logg ut
+      </button>
+    </div>
+  );
 }
 
 function PublicOnly({ children }) {
   const { user } = useAuth();
   if (user === undefined) return <LoadingSplash />;
-  if (user) return <Navigate to={redirectAfterLogin(user)} replace />;
+  if (user) {
+    // In a standalone portal, an authenticated session with a role that isn't permitted here must
+    // NOT bounce into the portal (would loop). Show a clear wrong-account notice instead.
+    if (IS_FLEET_APP && !["fleet_owner", "admin", "superadmin"].includes(user.role)) return <WrongPortal />;
+    if (IS_ADMIN_APP && !["admin", "superadmin"].includes(user.role)) return <WrongPortal />;
+    return <Navigate to={redirectAfterLogin(user)} replace />;
+  }
   return children;
 }
 

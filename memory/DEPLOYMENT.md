@@ -1,175 +1,177 @@
-# KJAPP — Deployment Guide (3 separate apper fra ÉN deploy)
+# KJAPP — Production Deployment Architecture
 
-**Nyhet iter 20**: Du trenger ikke å bygge 3 separate builds lenger. Én kodebase, én Emergent-deploy — appen registrerer selv hvilket domene den serveres fra og bytter modus automatisk:
+Final production topology. **One** backend, **one** MongoDB, **one** user/auth database.
+The same React codebase runs in three modes; mode is chosen at **runtime by hostname**.
 
-| Hostname | Modus | Ruter tilgjengelig | Roller lovlige |
-|-----------|--------|--------------------|-----------------|
-| `kjapp.no` (eller preview-URL) | **main** | `/`, `/login`, `/app/*`, `/driver/*`, `/apply`, `/loyver`, `/admin`, `/fleet/*` | Alle |
-| `fleet.kjapp.no` | **fleet** | `/login`, `/apply`, `/fleet/*`, `/privacy`, `/terms` | fleet_owner |
-| `admin.kjapp.no` | **admin** | `/login`, `/admin`, `/loyver/*`, `/privacy`, `/terms` | admin, superadmin |
+```
+                         ┌─────────────────────────────┐
+                         │   api.kjapp.no  (FastAPI)    │  ← ONE backend
+                         │   ONE MongoDB / ONE auth DB  │
+                         └──────────────┬──────────────┘
+        ┌───────────────────────────────┼────────────────────────────────┐
+        │                               │                                 │
+┌───────────────┐            ┌───────────────────┐            ┌────────────────────┐
+│ NATIVE MOBILE │            │  fleet.kjapp.no   │            │  admin.kjapp.no    │
+│ (iOS+Android) │            │  FLEET WEB PORTAL │            │  ADMIN / OPS CENTER│
+│ main mode     │            │  fleet mode       │            │  admin mode        │
+│ passenger +   │            │  fleet_owner      │            │  admin + superadmin│
+│ driver        │            │  (+admin/super)   │            │  landing /admin    │
+│ REACT_APP_    │            │  landing /fleet   │            │  superadmin /loyver│
+│ MODE=main     │            └───────────────────┘            └────────────────────┘
+└───────────────┘
 
-Modus velges automatisk basert på (i prioritert rekkefølge):
-1. `?mode=fleet` / `?mode=admin` i URL (for preview-testing) — lagres i localStorage
-2. Hostname prefix (`fleet.*` → fleet, `admin.*` → admin)
-3. Build-time env `REACT_APP_MODE=fleet|admin`
-4. Default: `main`
+kjapp.no (root)  = RESERVED for a future marketing / app-download website. NOT the app.
+```
+
+| Target | Hostname | Mode | Roles allowed | Auth landing |
+|--------|----------|------|---------------|--------------|
+| Native app (iOS/Android) | `localhost` (Capacitor) | **main** | passenger, driver | `/app` or `/driver` |
+| Fleet portal | `fleet.kjapp.no` | **fleet** | fleet_owner (+admin/superadmin) | `/fleet` |
+| Admin / Ops | `admin.kjapp.no` | **admin** | admin, superadmin | `/admin` (superadmin → `/loyver`) |
+| Backend API | `api.kjapp.no` | — | — | — |
+| Marketing (future) | `kjapp.no` | — | — | — |
+
+Mode detection (`frontend/src/App.js › detectAppMode`), in priority order:
+1. `?mode=fleet|admin|main` URL param (preview/testing only; stored in localStorage)
+2. **Hostname prefix**: `fleet.*` → fleet, `admin.*` → admin
+3. Build-time env `REACT_APP_MODE`
+4. Default `main`
+
+Because hostname wins over the env var, ONE web deploy served at both `fleet.kjapp.no`
+and `admin.kjapp.no` automatically renders the correct portal. The native app runs at
+`localhost` → main.
 
 ---
 
-## 1. Anbefalt vei (Emergent + DNS aliaser)
+## 1. Backend — api.kjapp.no (shared)
 
-### Steg 1 — Deploy appen på Emergent
-Trykk "Deploy" i Emergent-plattformen. Du får en produksjons-URL, f.eks. `kjapp-xyz.emergentagent.com`.
+Deploy the FastAPI backend once. Point `api.kjapp.no` at it (see §5 for DNS).
 
-### Steg 2 — Legg til dine egne domener som CNAME
-I DNS-panelet ditt (Cloudflare / Namecheap / Domeneshop):
-
+Production backend environment (see `/app/backend/.env.production.example`):
 ```
-kjapp.no          CNAME  kjapp-xyz.emergentagent.com   (proxied via Cloudflare)
-fleet.kjapp.no    CNAME  kjapp-xyz.emergentagent.com   (proxied via Cloudflare)
-admin.kjapp.no    CNAME  kjapp-xyz.emergentagent.com   (proxied via Cloudflare)
-api.kjapp.no      CNAME  kjapp-xyz.emergentagent.com   (backend routes /api/*)
+APP_ENV=production
+ENABLE_DEMO_DATA=false
+TRUST_PROXY=true            # behind the hosting ingress; needed for correct per-IP throttling
+JWT_SECRET=<64-char random hex, NOT the dev value>
+ADMIN_EMAIL=admin@kjapp.no
+ADMIN_PASSWORD=<strong, >=12 chars, not a known default>
+MONGO_URL=<production mongo>
+DB_NAME=kjapp
+FRONTEND_URL=https://admin.kjapp.no
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+SENDGRID_API_KEY=<optional>
 ```
 
-Alle 3 domener peker til **samme deployment**. Appen ser hostnamet og velger riktig modus.
+Production hardening that runs automatically on startup (P0.1):
+- Startup **fails fast** (RuntimeError) if `JWT_SECRET`/`ADMIN_PASSWORD` are missing/weak.
+- The existing superadmin's password is **rotated** to `ADMIN_PASSWORD` → any old/legacy password stops working.
+- All legacy seed/demo accounts (`ola@`, `sjafor@`, `floteier1@`, `demo1..6@`, `demo_p_*@`, and anything flagged `demo`) are **disabled** and can no longer authenticate (generic 401).
+- CORS is a strict whitelist (no `*`): the three web hosts + native WebView origins.
+- Demo data / demo drivers / demo trips are never seeded.
 
-### Steg 3 — Verifiser
-- `https://fleet.kjapp.no/login` → viser "Flåte-eier innlogging" med kun fleet-demo-knapp synlig
-- `https://admin.kjapp.no/login` → viser "Admin innlogging" med kun superadmin-demo-knapp synlig
-- `https://kjapp.no/login` → viser vanlig login med alle 4 demo-knapper (kunde/sjåfør/flåte/admin)
-- På fleet-domenet: prøv `/app` → auto-redirect til `/fleet` (irrelevante ruter blokkert)
-- På admin-domenet: prøv `/fleet` → auto-redirect til `/loyver`
-
-Om du kjører preview kan du teste modusene med URL-parameter:
-- `https://<preview-url>/?mode=fleet` — bytter til fleet-modus midlertidig (lagres i localStorage)
-- `https://<preview-url>/?mode=main` — tilbake til vanlig
-- `https://<preview-url>/?mode=admin` — admin
+**CORS allowlist in production** (`server.compute_cors_origins`):
+`https://kjapp.no`, `https://fleet.kjapp.no`, `https://admin.kjapp.no`,
+`capacitor://localhost`, `ionic://localhost`, `https://localhost` (native).
 
 ---
 
-## 2. Alternativ: 3 separate builds (Vercel / Netlify)
+## 2. Fleet web portal — fleet.kjapp.no
 
-Om du ønsker HELT adskilte builds (mindre JS-bundle per site), bruk denne varianten:
+Same web build; hostname puts it in **fleet mode**. Only `/login`, `/apply`, `/fleet/*`,
+`/privacy`, `/terms`, password-reset. Customer/driver/admin UI is not routed here; a wrong-role
+session lands on a "Feil konto for flåteportalen" screen with a logout button. Server-side
+RBAC (`require_fleet_owner`, fleet_id scoping) is the real enforcement.
 
-### 2.1 Main (kjapp.no)
+---
+
+## 3. Admin / Ops control center — admin.kjapp.no
+
+Same web build; hostname puts it in **admin mode**. Only `/login`, `/admin/*`, `/loyver/*`,
+`/privacy`, `/terms`, password-reset. admin → `/admin`, superadmin → `/loyver`. Customer, driver
+and fleet users cannot reach admin routes (client routing + `require_admin`/`require_superadmin`
+server-side). Recommended extra hardening: put `admin.kjapp.no` behind Cloudflare Access / IP allowlist.
+
+---
+
+## 4. Native mobile app — KJAPP (iOS + Android)
+
+Capacitor app (`frontend/capacitor.config.json`): `appId=no.kjapp.app`, `appName=KJAPP`.
+Runs the bundled web build at `localhost` → **main mode** (passenger + driver). Talks to
+`https://api.kjapp.no` via `REACT_APP_BACKEND_URL`.
+
+Build:
 ```bash
 cd frontend
-cat > .env.production << EOF
+# .env.production already sets REACT_APP_BACKEND_URL=https://api.kjapp.no, REACT_APP_MODE=main,
+# REACT_APP_ENABLE_DEMO_LOGIN=false, REACT_APP_DEV_NAV=false
+yarn build
+npx cap sync ios      # then open in Xcode → Archive → TestFlight
+npx cap sync android  # then Android Studio → Generate Signed Bundle → Play Console
+```
+Fleet owners and admins use the web portals in a browser — there is no native app for them.
+
+---
+
+## 5. Frontend production env (`frontend/.env.production`)
+
+Loaded automatically by `yarn build` (NOT by `yarn start` preview). Committed values:
+```
 REACT_APP_BACKEND_URL=https://api.kjapp.no
 REACT_APP_MODE=main
+REACT_APP_ENABLE_DEMO_LOGIN=false
 REACT_APP_DEV_NAV=false
-EOF
-yarn build
-# Deploy build/ → kjapp.no
 ```
+- `REACT_APP_ENABLE_DEMO_LOGIN=false` → the one-click demo login section and its credentials are
+  removed from the production bundle.
+- `REACT_APP_DEV_NAV=false` → the dev navigator compass is hidden.
+- Hostname detection overrides `REACT_APP_MODE` on `fleet.*`/`admin.*`, so this single file works
+  for the native build (main) AND the web deploy (fleet/admin by hostname).
 
-### 2.2 Fleet (fleet.kjapp.no)
-```bash
-cd frontend
-cat > .env.production << EOF
-REACT_APP_BACKEND_URL=https://api.kjapp.no
-REACT_APP_MODE=fleet
-REACT_APP_DEV_NAV=false
-EOF
-yarn build
-mv build build-fleet
-# Deploy build-fleet/ → fleet.kjapp.no
-```
+> If your host injects its own `REACT_APP_BACKEND_URL` at build time, that value wins. Ensure the
+> web deploy ultimately reaches `https://api.kjapp.no` (or CNAME `api.kjapp.no` → the backend).
 
-### 2.3 Admin (admin.kjapp.no)
-```bash
-cd frontend
-cat > .env.production << EOF
-REACT_APP_BACKEND_URL=https://api.kjapp.no
-REACT_APP_MODE=admin
-REACT_APP_DEV_NAV=false
-EOF
-yarn build
-mv build build-admin
-# Deploy build-admin/ → admin.kjapp.no
-```
-
-For Vercel: opprett 3 prosjekter med samme repo, ulik `REACT_APP_MODE` per prosjekt.
-For Netlify: 3 sites, samme repo, ulik env per site.
-
-**Merk**: Den anbefalte veien (§1) er enklere, spesielt om du bruker Emergent. Denne varianten er kun for de som vil spare 30-50KB JS per site.
+> **Note on `.env*` being git-ignored:** All `.env*` files are git-ignored. The **Emergent deploy**
+> builds from the workspace on disk, so `/app/frontend/.env.production` IS applied automatically.
+> For a **GitHub-based host (Vercel/Netlify)** the file is not in the repo — set the same four
+> variables (`REACT_APP_BACKEND_URL`, `REACT_APP_MODE`, `REACT_APP_ENABLE_DEMO_LOGIN=false`,
+> `REACT_APP_DEV_NAV=false`) in that platform's build-environment settings, or commit
+> `.env.production` explicitly (`git add -f`). This is critical: without it the production build
+> would fall back to the preview `.env` and ship demo login enabled.
 
 ---
 
-## 3. Ekstra sikkerhet på admin.kjapp.no
+## 6. DNS / CNAME records — DO NOT INVENT VALUES
 
-Anbefalinger (ikke krav):
+The hosting platform (Emergent deploy, or Vercel/Netlify) gives you the exact target host/record
+to point at **after** you deploy. Create these records with the **exact target values the platform
+shows you** — do not guess:
 
-### 3.1 Cloudflare Access
-Legg admin.kjapp.no bak Cloudflare Access → krev at kun spesifikke e-postadresser eller Google-arbeidsgruppe kan nå appen. Selv om admin-siden er offentlig (via CNAME), sees den bare av de du gir tilgang.
-
-### 3.2 IP-hviteliste
-Alternativt: I Cloudflare Firewall Rules, tillat kun IPer fra kontoret ditt for `hostname eq "admin.kjapp.no"`.
-
-### 3.3 Security headers
-Legg til på admin-domenet:
 ```
-Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-X-Frame-Options: DENY
-X-Content-Type-Options: nosniff
-Referrer-Policy: strict-origin
+api.kjapp.no     CNAME (or A)  → <exact backend target from platform>
+fleet.kjapp.no   CNAME         → <exact web target from platform>
+admin.kjapp.no   CNAME         → <exact web target from platform>
+kjapp.no         (reserve for future marketing site — not the app)
 ```
 
-### 3.4 2FA på admin-innlogging (backlog P1)
-Backend støtter foreløpig ikke 2FA. Trinn: Legg til TOTP-verifisering på `/api/auth/login` når `role === "admin" || "superadmin"`. Ta 4 timer å implementere med `pyotp`.
-
----
-
-## 4. Backend (felles)
-
-Backend er **kun én instans** på `api.kjapp.no`. Ingen endringer trengs når du deployer fleet/admin.
-
-Env-variabler backend (`/app/backend/.env`):
+After DNS propagates, record the exact values here for the team:
 ```
-MONGO_URL=mongodb+srv://.../kjapp
-DB_NAME=kjapp
-JWT_SECRET=<sterkt secret her>
-EMERGENT_LLM_KEY=sk-emergent-...
-STRIPE_SECRET_KEY=sk_live_...
-STORAGE_KEY=<Emergent object storage key>
-CORS_ORIGINS=https://kjapp.no,https://fleet.kjapp.no,https://admin.kjapp.no
-```
-
-Alle 3 domener bruker samme backend-API. CORS er allerede satt til `allow_origins=["*"]` for beta, men kan strammes til de 3 domenene i produksjon.
-
----
-
-## 5. Native mobil-apper (Capacitor)
-
-Native iOS/Android er bygget fra **main-appen** (`REACT_APP_MODE=main`). Fleet-eiere og admins bruker web-portalen fra en nettleser — ingen native app for dem.
-
-Se `MOBILE_BUILD.md` for hvordan bygge iOS/Android av main.
-
----
-
-## 6. Rask sanity-sjekk før du deployer
-
-```bash
-# 1. Verifiser at frontend bygger uten feil
-cd frontend && yarn build
-
-# 2. Verifiser at backend har alle env-vars
-cd backend && python -c "import os; from dotenv import load_dotenv; load_dotenv(); print('MONGO_URL:', bool(os.environ.get('MONGO_URL'))); print('JWT_SECRET:', bool(os.environ.get('JWT_SECRET'))); print('EMERGENT_LLM_KEY:', bool(os.environ.get('EMERGENT_LLM_KEY')));"
-
-# 3. Kjør pytest for regresjon
-cd backend && python -m pytest tests/ -x --tb=short -q
+api.kjapp.no     → __________________________   (fill in from platform)
+fleet.kjapp.no   → __________________________
+admin.kjapp.no   → __________________________
 ```
 
 ---
 
-## 7. Deploy-checklist (før du trykker på knappen)
+## 7. Post-deploy verification checklist
 
-- [ ] `REACT_APP_DEV_NAV=false` i .env (skjuler kompass-knappen i prod)
-- [ ] `REACT_APP_BACKEND_URL` peker til produksjons-backend
-- [ ] Backend `.env` har `JWT_SECRET` som er sterkt (32+ tegn), IKKE default
-- [ ] Backend `.env` har ekte `STRIPE_SECRET_KEY` (sk_live_...)
-- [ ] MongoDB Atlas: hviteliste kun backend-serveren, IKKE 0.0.0.0/0
-- [ ] Personvern (`/privacy`) og vilkår (`/terms`) er fylt ut på norsk
-- [ ] Alle 4 test-kontoer er kastet ut / passord byttet før live launch
-- [ ] SendGrid-nøkkel satt om e-post skal fungere
-- [ ] Skatteetaten ARS-godkjenning på plass (kritisk for kommersiell lansering i Norge)
+- [ ] `https://fleet.kjapp.no/login` → fleet mode ("Flåte-eier innlogging"); `/app` and `/driver` not reachable
+- [ ] `https://admin.kjapp.no/login` → admin mode ("Admin innlogging"); admin → `/admin`, superadmin → `/loyver`
+- [ ] Native build stays **main** mode (passenger + driver), talks to `https://api.kjapp.no`
+- [ ] All three clients hit the same `api.kjapp.no` / same MongoDB / same auth DB
+- [ ] Server-side RBAC enforced: customer/driver cannot call `/api/admin/*` or `/api/fleet/*` (403); fleet_owner scoped to own fleet
+- [ ] Old/legacy superadmin password no longer works; new `ADMIN_PASSWORD` works
+- [ ] Demo accounts (ola/sjafor/floteier1/demo*) cannot log in; demo login UI absent from prod bundle
+- [ ] `X-Request-ID` present on responses; no secrets in logs
+
+Preview testing without DNS: use `?mode=fleet` / `?mode=admin` / `?mode=main` on the preview URL.

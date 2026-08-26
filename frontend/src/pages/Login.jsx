@@ -5,6 +5,9 @@ import { useAuth } from "../context/AuthContext";
 import { formatApiErrorDetail, api } from "../lib/api";
 import { ArrowRight, ChevronLeft, Eye, EyeOff, Apple } from "lucide-react";
 
+// Demo one-click login is compiled in ONLY when explicitly enabled (never in production builds).
+const DEMO_LOGIN_ENABLED = process.env.REACT_APP_ENABLE_DEMO_LOGIN === "true";
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -194,7 +197,8 @@ export default function Login() {
           </Link>
         </p>
 
-        {/* Demo-innlogging for beta — én-klikk. Filtreres etter app-modus. */}
+        {/* Demo-innlogging for beta — kun når eksplisitt aktivert (aldri i produksjon). */}
+        {DEMO_LOGIN_ENABLED && (
         <div className="mt-5 space-y-2">
           <div className="text-[10px] tracking-[0.3em] uppercase" style={{ color: "var(--accent)" }}>
             {isStandalone ? "Demo-innlogging" : "Demo-innlogging"}
@@ -235,6 +239,7 @@ export default function Login() {
           </div>
           <div className="text-[10px] text-[#5f6862] pt-1">Ett trykk logger deg rett inn på riktig panel</div>
         </div>
+        )}
 
         {!isStandalone && (
           <p className="text-[#5f6862] text-xs mt-4">
