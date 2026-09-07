@@ -39,6 +39,27 @@ Prosjektene ligger klare i:
 - iOS: `frontend/ios/App/App.xcworkspace`
 - Android: `frontend/android/`
 
+### 2.1 Backend-URL og produksjonsinnstillinger (VIKTIG)
+
+Den native appen kjører i **main-modus** (kunde + sjåfør) og snakker med backend via
+`REACT_APP_BACKEND_URL`. `yarn build` leser `frontend/.env.production`, som er satt til:
+
+```
+REACT_APP_BACKEND_URL=https://api.kjappapp.no   # native app → backend
+REACT_APP_MODE=main
+REACT_APP_ENABLE_DEMO_LOGIN=false               # ingen demo-innlogging i app-bundlen
+REACT_APP_DEV_NAV=false                          # ingen dev-kompass
+GENERATE_SOURCEMAP=false                          # ingen source-maps
+```
+
+- **Sett opp `api.kjappapp.no` (CNAME → Emergent-deployen) FØR du bygger**, ellers peker den
+  ferdige appen på et domene som ikke svarer ennå.
+- Vil du teste mot et annet backend-domene, overstyr ved build:
+  `REACT_APP_BACKEND_URL=https://<annet> yarn build && npx cap sync`
+- Bekreft etter build: `grep -ro "api.kjappapp.no" build/static/js/*.js` skal gi treff, og
+  `grep -o "test1234\|sjafor1234" build/static/js/*.js` skal gi 0 (demo-passord fjernet).
+
+
 ---
 
 ## 3. Bygg iOS-app (App Store / TestFlight)

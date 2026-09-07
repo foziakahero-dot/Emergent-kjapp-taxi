@@ -1,0 +1,27 @@
+{
+  "short_name": "KJAPP",
+  "name": "KJAPP — Smart AI Taxi",
+  "description": "Din premium reise, kun ett pust unna. Smart AI-drevet taxi i Norge.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#050708",
+  "background_color": "#050708",
+  "lang": "no",
+  "categories": ["travel", "transportation", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

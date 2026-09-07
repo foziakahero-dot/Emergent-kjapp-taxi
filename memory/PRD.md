@@ -644,3 +644,14 @@ Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten
 - **Deploy-config**: `frontend/.env.production` (api.kjapp.no, mode=main, demo/dev-nav av, sourcemap av), `backend/.env.production.example` (APP_ENV=production, ENABLE_DEMO_DATA=false, TRUST_PROXY=true, sterke secrets). `DEPLOYMENT.md` skrevet om for api/fleet/admin + DNS-plassholdere (ingen oppfunnede verdier — fyll inn eksakte verdier fra hosting).
 - **Verifisert**: `yarn build` OK; demo-passord fjernet fra prod-bundle; testing-agent E2E 16/16 frontend (modus-deteksjon, WrongPortal begge portaler, rute-isolasjon, main-routing) + 10/10 backend RBAC (401/403 uansett modus). Ny testfil `tests/test_iter23_mode_rbac.py`.
 - **IKKE gjort (krever bruker/DNS)**: faktisk DNS/CNAME for api/fleet/admin.kjapp.no må settes hos hosting-plattformen; rapporter eksakte verdier derfra. Produksjons-env (APP_ENV=production etc.) settes ved deploy.
+
+## Iter 31 — Ekte domene kjappapp.no + native build-prep (2026-08-26)
+
+**Kontekst**: Bruker eier `kjappapp.no` (Uniweb DNS), deployet til prod (`mobile-forge-1487.emergent.host`). Vil bruke domenet KUN til admin-panel; kunde/sjåfør er native APK/iOS.
+
+- **Domene byttet kjapp.no → kjappapp.no** i: `PRODUCTION_CORS_ORIGINS` (admin/fleet/root + native origins), `frontend/.env.production` (`REACT_APP_BACKEND_URL=https://api.kjappapp.no`), `capacitor.config.json` allowNavigation (`*.kjappapp.no`), `backend/.env.production.example` (FRONTEND_URL), `DEPLOYMENT.md`, forgot-password fallback. Konto-e-poster (`admin@kjapp.no` osv.) uendret. Test `test_iter21` CORS-assert oppdatert. **40/40 sikkerhets+RBAC-tester grønne.**
+- **Modus-deteksjon domene-agnostisk**: `admin.kjappapp.no` → admin-modus automatisk (hostname `startsWith("admin.")`), `fleet.kjappapp.no` → fleet, native localhost → main. Ingen kodeendring nødvendig for modus.
+- **Admin-panel bekreftet EKTE** (ikke mock): `/admin/overview` + `/admin/finance` returnerer live DB-aggregater (flåter, sjåfører, turer, GMV/provisjon fra faktiske turer). Bak require_admin/superadmin.
+- **Native build-prep verifisert**: Capacitor v8 komplett (`ios/`+`android/`, appId `no.kjapp.app`, appName KJAPP, alle plugins). `yarn build` OK → `api.kjappapp.no` bakt inn (1), gammel `api.kjapp.no` (0), demo-passord i runtime-JS (0), ingen source-maps. `MOBILE_BUILD.md` fikk §2.1 om backend-URL + prod-gating. Native bygges på brukers Mac/PC (Node ≥22) — container har Node 20.
+- **Bruker-DNS-steg gitt**: Emergent "Link domain"/Entri → kopiér eksakt CNAME/TXT → Uniweb DNS (fjern A-records) for admin/api/fleet.kjappapp.no. Redeploy + sett prod-env (APP_ENV=production, ENABLE_DEMO_DATA=false, TRUST_PROXY=true, sterk JWT_SECRET/ADMIN_PASSWORD) FØR domenekobling.
+
