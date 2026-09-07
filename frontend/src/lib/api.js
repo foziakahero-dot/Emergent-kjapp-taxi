@@ -20,6 +20,11 @@ export const authApi = {
   googleSession: (session_id) => api.post("/auth/google/session", { session_id }).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
   logout: () => api.post("/auth/logout").then((r) => r.data),
+  twofaStatus: () => api.get("/auth/2fa/status").then((r) => r.data),
+  twofaSetup: () => api.post("/auth/2fa/setup").then((r) => r.data),
+  twofaEnable: (code) => api.post("/auth/2fa/enable", { code }).then((r) => r.data),
+  twofaDisable: (password, code) => api.post("/auth/2fa/disable", { password, code }).then((r) => r.data),
+  twofaVerifyLogin: (twofa_token, code) => api.post("/auth/2fa/verify-login", { twofa_token, code }).then((r) => r.data),
 };
 
 export const adminApi = {

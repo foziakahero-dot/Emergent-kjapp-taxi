@@ -42,6 +42,16 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const res = await authApi.login({ email, password });
+    if (res.twofa_required) {
+      return { twofaRequired: true, twofaToken: res.twofa_token };
+    }
+    localStorage.setItem("kjapp_token", res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
+  const verifyTwofaLogin = async (twofaToken, code) => {
+    const res = await authApi.twofaVerifyLogin(twofaToken, code);
     localStorage.setItem("kjapp_token", res.token);
     setUser(res.user);
     return res.user;
@@ -56,11 +66,12 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     localStorage.removeItem("kjapp_token");
+    try { localStorage.removeItem("kjapp_mode_override"); } catch { /* ignore */ }
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, refresh, googleSession }}>
+    <AuthContext.Provider value={{ user, login, register, logout, refresh, googleSession, verifyTwofaLogin }}>
       {children}
     </AuthContext.Provider>
   );

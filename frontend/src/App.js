@@ -71,7 +71,11 @@ import AdminSettings from "./pages/AdminSettings";
 //   admin.kjapp.no  → admin
 function detectAppMode() {
   if (typeof window !== "undefined" && window.location) {
-    // 0) URL param override (for preview/testing): ?mode=fleet | ?mode=admin
+    const host = (window.location.hostname || "").toLowerCase();
+    // 1) Real hostname ALWAYS wins — a shared ?mode= link must never hijack the real domain
+    if (host.startsWith("fleet.")) return "fleet";
+    if (host.startsWith("admin.")) return "admin";
+    // 2) URL param / stored override (preview & testing only, on a neutral host)
     try {
       const qm = new URLSearchParams(window.location.search).get("mode");
       if (qm && ["fleet", "admin", "main"].includes(qm.toLowerCase())) {
@@ -81,12 +85,8 @@ function detectAppMode() {
       const stored = window.localStorage.getItem("kjapp_mode_override");
       if (stored && ["fleet", "admin", "main"].includes(stored)) return stored;
     } catch { /* ignore */ }
-    // 1) Runtime hostname
-    const host = (window.location.hostname || "").toLowerCase();
-    if (host.startsWith("fleet.")) return "fleet";
-    if (host.startsWith("admin.")) return "admin";
   }
-  // 2) Build-time env
+  // 3) Build-time env
   return (process.env.REACT_APP_MODE || "main").toLowerCase();
 }
 const APP_MODE = detectAppMode();

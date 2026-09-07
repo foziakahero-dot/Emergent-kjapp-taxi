@@ -716,57 +716,86 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
   );
 }
 
-/* Premium isometric car glyph per category */
+/* Premium car glyph per category — metallic body, glossy glass, alloy rims, soft shadow */
 function VehicleGlyph({ id, active }) {
-  const stroke = active ? "#c9a15b" : "rgba(232,224,208,0.55)";
-  const fill = active ? "#0c1216" : "#0e1418";
-  const glass = active ? "#c9a15b" : "rgba(232,224,208,0.45)";
+  const uid = `vg-${id}${active ? "-a" : ""}`;
+  const P = active
+    ? { b1: "#f4e4bb", b2: "#c9a15b", b3: "#7c5d28", trim: "#fff4d6", rim: "#eeddb2", glassA: "#243545", glassB: "#0b1116", shadow: "rgba(201,161,91,0.45)", head: "#fff6df", belt: "#fff4d6" }
+    : { b1: "#3c4650", b2: "#232c34", b3: "#12181d", trim: "#5c6772", rim: "#7a8590", glassA: "#1c242b", glassB: "#0b0f13", shadow: "rgba(0,0,0,0.5)", head: "#cdd6de", belt: "#4a545e" };
+
+  const defs = (
+    <defs>
+      <linearGradient id={`${uid}-b`} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor={P.b1} /><stop offset="0.55" stopColor={P.b2} /><stop offset="1" stopColor={P.b3} />
+      </linearGradient>
+      <linearGradient id={`${uid}-g`} x1="0.1" y1="0" x2="0.6" y2="1">
+        <stop offset="0" stopColor={P.glassA} /><stop offset="1" stopColor={P.glassB} />
+      </linearGradient>
+      <radialGradient id={`${uid}-s`} cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0" stopColor={P.shadow} /><stop offset="1" stopColor="rgba(0,0,0,0)" />
+      </radialGradient>
+      <linearGradient id={`${uid}-r`} x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor={P.rim} /><stop offset="1" stopColor={P.b3} />
+      </linearGradient>
+    </defs>
+  );
+
+  const wheel = (cx, r = 5.4) => (
+    <g>
+      <circle cx={cx} cy="35.5" r={r} fill="#05080a" />
+      <circle cx={cx} cy="35.5" r={r - 0.6} fill="none" stroke={P.rim} strokeWidth="0.6" opacity="0.45" />
+      <circle cx={cx} cy="35.5" r={r - 2.6} fill={`url(#${uid}-r)`} />
+      {[0, 60, 120, 180, 240, 300].map((a) => (
+        <rect key={a} x={cx - 0.35} y="35.5" width="0.7" height={r - 2.7} fill={P.b3} opacity="0.7" transform={`rotate(${a} ${cx} 35.5)`} />
+      ))}
+      <circle cx={cx} cy="35.5" r="0.8" fill={P.rim} />
+    </g>
+  );
+
+  let art;
   if (id === "premium") {
-    return (
-      <svg viewBox="0 0 68 40" width="70" height="40" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="34" cy="35" rx="26" ry="3" fill="#000" opacity="0.35"/>
-        <path d="M8 26 Q10 16 24 14 L44 14 Q58 16 60 26 L60 30 Q60 32 58 32 L10 32 Q8 32 8 30 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
-        <path d="M18 18 Q20 12 26 12 L42 12 Q48 12 50 18 L50 22 L18 22 Z" fill={glass} opacity="0.9"/>
-        <circle cx="20" cy="32" r="4" fill="#000"/><circle cx="20" cy="32" r="2" fill={stroke}/>
-        <circle cx="48" cy="32" r="4" fill="#000"/><circle cx="48" cy="32" r="2" fill={stroke}/>
-        <rect x="55" y="24" width="4" height="2" rx="1" fill="#fff9e8"/>
-      </svg>
-    );
+    art = (<>
+      <path d="M5 27 C6 20 12 18 20 17 L30 12 C34 10 44 10 49 13 L56 18 C63 19 67 22 67 27 L67 31 C67 32.5 65.5 33 64 33 L8 33 C6.5 33 5 32.5 5 31 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
+      <path d="M23 17 L31 13 C34 11.5 43 11.5 47 14 L53 18 Z" fill={`url(#${uid}-g)`} />
+      <path d="M8 27 L64 27" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
+      <rect x="63.5" y="24.5" width="3.5" height="2.2" rx="1" fill={P.head} />
+      {wheel(20)}{wheel(52)}
+    </>);
+  } else if (id === "trygg") {
+    art = (<>
+      <path d="M7 30 L7 20 C7 14 12 12 18 12 L52 12 C60 12 65 15 65 22 L65 30 C65 31.5 63.5 32 62 32 L9 32 C7.5 32 7 31.5 7 30 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
+      <rect x="6.5" y="10.6" width="20" height="1.2" rx="0.6" fill={P.trim} opacity="0.7" />
+      <path d="M12 15 L23 15 L23 21 L12 21 Z" fill={`url(#${uid}-g)`} />
+      <path d="M25 15 L37 15 L37 21 L25 21 Z" fill={`url(#${uid}-g)`} />
+      <path d="M39 15 L52 15 C56 15 57 18 57 21 L39 21 Z" fill={`url(#${uid}-g)`} />
+      <path d="M8 26 L64 26" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
+      <rect x="61" y="23.5" width="4" height="2.4" rx="1" fill={P.head} />
+      {wheel(21, 5.8)}{wheel(51, 5.8)}
+    </>);
+  } else if (id === "enkelt") {
+    art = (<>
+      <path d="M11 29 C12 22 17 20 24 19 L33 14 C36 12.5 44 12.5 48 15 L52 19 C58 20 60 23 60 29 L60 31 C60 32 58.5 32 57 32 L13 32 C11.5 32 11 31.5 11 29 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
+      <path d="M26 19 L34 15 C37 13.5 44 13.5 47 16 L50 19 Z" fill={`url(#${uid}-g)`} />
+      <path d="M14 28 L58 28" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
+      <rect x="57" y="25.5" width="3" height="2" rx="1" fill={P.head} />
+      {wheel(23)}{wheel(49)}
+      <path d="M35 21.5 L31.5 27 L34.2 27 L32.5 30.5 L37 24.5 L34.3 24.5 Z" fill="#7ee08a" />
+    </>);
+  } else {
+    art = (<>
+      <path d="M8 28 C9 21 15 19 22 18 L31 13 C35 11 45 11 50 14 L57 19 C63 20 65 23 65 28 L65 31 C65 32.5 63.5 33 62 33 L10 33 C8.5 33 8 32.5 8 31 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
+      <path d="M24 18 L32 14 C35 12.5 44 12.5 48 15 L54 19 Z" fill={`url(#${uid}-g)`} />
+      <path d="M11 27 L63 27" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
+      <rect x="62" y="24.5" width="3.4" height="2.2" rx="1" fill={P.head} />
+      {wheel(22)}{wheel(51)}
+    </>);
   }
-  if (id === "trygg") {
-    return (
-      <svg viewBox="0 0 68 40" width="66" height="40" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="34" cy="35" rx="26" ry="3" fill="#000" opacity="0.35"/>
-        <path d="M8 22 L8 30 Q8 32 10 32 L58 32 Q60 32 60 30 L60 22 Q60 10 46 10 L22 10 Q8 10 8 22 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
-        <path d="M12 14 L26 14 L26 22 L12 22 Z" fill={glass} opacity="0.85"/>
-        <path d="M28 14 L44 14 L44 22 L28 22 Z" fill={glass} opacity="0.85"/>
-        <path d="M46 14 L56 14 Q56 22 56 22 L46 22 Z" fill={glass} opacity="0.85"/>
-        <circle cx="20" cy="32" r="4" fill="#000"/><circle cx="20" cy="32" r="2" fill={stroke}/>
-        <circle cx="48" cy="32" r="4" fill="#000"/><circle cx="48" cy="32" r="2" fill={stroke}/>
-      </svg>
-    );
-  }
-  if (id === "enkelt") {
-    return (
-      <svg viewBox="0 0 68 40" width="64" height="40" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="34" cy="35" rx="24" ry="3" fill="#000" opacity="0.35"/>
-        <path d="M12 24 Q14 18 22 16 L46 16 Q54 18 56 24 L56 30 Q56 32 54 32 L14 32 Q12 32 12 30 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
-        <path d="M22 18 L46 18 L48 22 L20 22 Z" fill={glass} opacity="0.85"/>
-        <circle cx="22" cy="32" r="4" fill="#000"/><circle cx="22" cy="32" r="2" fill={stroke}/>
-        <circle cx="46" cy="32" r="4" fill="#000"/><circle cx="46" cy="32" r="2" fill={stroke}/>
-        {/* leaf motif */}
-        <path d="M54 18 Q58 16 60 20 Q58 22 54 20 Z" fill="#8ac48f"/>
-      </svg>
-    );
-  }
-  // ai-first / Standard — modern sedan
+
   return (
-    <svg viewBox="0 0 68 40" width="66" height="40" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="34" cy="35" rx="25" ry="3" fill="#000" opacity="0.35"/>
-      <path d="M10 25 Q12 18 22 15 L46 15 Q56 18 58 25 L58 30 Q58 32 56 32 L12 32 Q10 32 10 30 Z" fill={fill} stroke={stroke} strokeWidth="1.4"/>
-      <path d="M20 18 L48 18 L50 22 L18 22 Z" fill={glass} opacity="0.9"/>
-      <circle cx="21" cy="32" r="4" fill="#000"/><circle cx="21" cy="32" r="2" fill={stroke}/>
-      <circle cx="47" cy="32" r="4" fill="#000"/><circle cx="47" cy="32" r="2" fill={stroke}/>
+    <svg viewBox="0 0 72 44" width="72" height="42" xmlns="http://www.w3.org/2000/svg">
+      {defs}
+      <ellipse cx="36" cy="40.5" rx="31" ry="3.2" fill={`url(#${uid}-s)`} />
+      {art}
     </svg>
   );
 }

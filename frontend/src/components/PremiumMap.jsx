@@ -17,10 +17,13 @@ import "maplibre-gl/dist/maplibre-gl.css";
  *  - activeCar: {lat, lng, bearing}         hero car during trip
  *  - onReady, onMoveEnd, followActive
  */
-/* Primary: OpenFreeMap Positron (dark-ready base). Fallback: dark raster. */
-const STYLE_URLS = {
-  primary: "https://tiles.openfreemap.org/styles/positron",
-};
+/* Primary map style: MapTiler dark vector when REACT_APP_MAPTILER_API_KEY is set (enables 3D
+   buildings + crisp vector labels). Falls back to a free dark raster when no key or on load error. */
+const MAPTILER_KEY = process.env.REACT_APP_MAPTILER_API_KEY || "";
+const MAPTILER_STYLE_ID = process.env.REACT_APP_MAPTILER_STYLE || "streets-v2-dark";
+const MAPTILER_STYLE_URL = MAPTILER_KEY
+  ? `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID}/style.json?key=${encodeURIComponent(MAPTILER_KEY)}`
+  : null;
 
 /** Dark Nordic raster fallback — mørk graphite base med KJAPP-gull som subtil aksent */
 const FALLBACK_RASTER_STYLE = {
@@ -70,7 +73,7 @@ export default function PremiumMap({
     if (mapRef.current) return;
     const map = new MapLibreMap({
       container: mapContainer.current,
-      style: FALLBACK_RASTER_STYLE,  // always use dark Nordic style — brand identity
+      style: MAPTILER_STYLE_URL || FALLBACK_RASTER_STYLE,  // MapTiler dark vector when keyed, else free dark raster
       center,
       zoom,
       pitch,

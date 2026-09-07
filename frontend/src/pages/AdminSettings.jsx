@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { adminApi } from "../lib/api";
 import { Loader2, Save, CheckCircle2 } from "lucide-react";
+import TwoFactorSettings from "../components/TwoFactorSettings";
 
 const FEATURE_LABEL = {
   surge: "Surge-priser (helg/natt-tillegg)",
@@ -36,11 +37,14 @@ export default function AdminSettings() {
     } finally { setSaving(false); }
   };
 
-  if (err && !settings) return <div className="card p-6 text-center" data-testid="settings-error">{err}</div>;
-  if (!settings) return <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-muted)" }} data-testid="settings-loading"><Loader2 size={16} className="animate-spin" /> Laster…</div>;
-
   return (
     <div className="space-y-5 max-w-2xl" data-testid="admin-settings">
+      {/* 2FA — alltid tilgjengelig */}
+      <TwoFactorSettings />
+
+      {err && !settings && <div className="card p-6 text-center" data-testid="settings-error">{err}</div>}
+      {!settings && !err && <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-muted)" }} data-testid="settings-loading"><Loader2 size={16} className="animate-spin" /> Laster…</div>}
+      {settings && (<>
       {/* Default commission */}
       <div className="rounded-2xl p-5" style={{ background: "rgba(244,244,240,0.03)", border: "1px solid var(--line)" }} data-testid="settings-commission">
         <div className="text-[10px] uppercase tracking-[0.28em] mb-1" style={{ color: "var(--accent)" }}>Økonomi</div>
@@ -124,6 +128,7 @@ export default function AdminSettings() {
       <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
         {settings.updated_at ? `Sist endret ${new Date(settings.updated_at).toLocaleString("no-NO")}` : "Standardverdier — aldri endret"} · Endringer krever superadmin og logges i revisjonen
       </div>
+      </>)}
     </div>
   );
 }

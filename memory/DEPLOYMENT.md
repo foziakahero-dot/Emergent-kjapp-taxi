@@ -53,7 +53,7 @@ APP_ENV=production
 ENABLE_DEMO_DATA=false
 TRUST_PROXY=true            # behind the hosting ingress; needed for correct per-IP throttling
 JWT_SECRET=<64-char random hex, NOT the dev value>
-ADMIN_EMAIL=admin@kjapp.no
+ADMIN_EMAIL=admin@kjappapp.no
 ADMIN_PASSWORD=<strong, >=12 chars, not a known default>
 MONGO_URL=<production mongo>
 DB_NAME=kjapp

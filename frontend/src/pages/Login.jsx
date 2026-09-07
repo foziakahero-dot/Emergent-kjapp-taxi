@@ -15,7 +15,9 @@ export default function Login() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [appleEnabled, setAppleEnabled] = useState(false);
-  const { login } = useAuth();
+  const [twofaToken, setTwofaToken] = useState("");
+  const [twofaCode, setTwofaCode] = useState("");
+  const { login, verifyTwofaLogin } = useAuth();
 
   // Detect standalone app mode (fleet.kjapp.no / admin.kjapp.no)
   const APP_MODE = (typeof window !== "undefined" && window.__KJAPP_MODE) || "main";
@@ -66,16 +68,35 @@ export default function Login() {
     }
   }
 
+  const navigateForRole = (u) => {
+    const dest = u.role === "superadmin" ? "/loyver" : u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : u.role === "fleet_owner" ? "/fleet" : "/app";
+    navigate(dest);
+  };
+
   const submit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setErr("");
     setLoading(true);
     try {
       const u = await login(email, password);
-      const dest = u.role === "superadmin" ? "/loyver" : u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : u.role === "fleet_owner" ? "/fleet" : "/app";
-      navigate(dest);
+      if (u && u.twofaRequired) { setTwofaToken(u.twofaToken); return; }
+      navigateForRole(u);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyTwofa = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      const u = await verifyTwofaLogin(twofaToken, twofaCode.trim());
+      navigateForRole(u);
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || "Feil kode");
     } finally {
       setLoading(false);
     }
@@ -89,8 +110,8 @@ export default function Login() {
     setLoading(true);
     try {
       const u = await login(demoEmail, demoPassword);
-      const dest = u.role === "superadmin" ? "/loyver" : u.role === "admin" ? "/admin" : u.role === "driver" ? "/driver" : u.role === "fleet_owner" ? "/fleet" : "/app";
-      navigate(dest);
+      if (u && u.twofaRequired) { setTwofaToken(u.twofaToken); return; }
+      navigateForRole(u);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || "Innlogging feilet");
     } finally {
@@ -109,12 +130,42 @@ export default function Login() {
 
       <div className="px-8 pt-4 flex-1">
         <h1 className="font-display text-[28px] tracking-tight text-white">
-          {isFleetMode ? "Flåte-eier innlogging" : isAdminMode ? "Admin innlogging" : "Velkommen tilbake"}
+          {twofaToken ? "To-trinns verifisering" : isFleetMode ? "Flåte-eier innlogging" : isAdminMode ? "Admin innlogging" : "Velkommen tilbake"}
         </h1>
         <p className="text-[#7a827a] text-sm mt-2">
-          {isFleetMode ? "Administrer sjåfører, utbetalinger og rapporter" : isAdminMode ? "Løyver, sjåfør-godkjenning og drift" : "Logg inn for å fortsette reisen"}
+          {twofaToken ? "Skriv inn 6-sifret kode fra autentiserings-appen din" : isFleetMode ? "Administrer sjåfører, utbetalinger og rapporter" : isAdminMode ? "Løyver, sjåfør-godkjenning og drift" : "Logg inn for å fortsette reisen"}
         </p>
 
+        {twofaToken ? (
+          <form onSubmit={verifyTwofa} className="mt-10 space-y-4" data-testid="twofa-form">
+            <input
+              className="input tracking-[0.4em] text-center text-lg"
+              placeholder="000000"
+              inputMode="text"
+              autoComplete="one-time-code"
+              value={twofaCode}
+              onChange={(e) => setTwofaCode(e.target.value)}
+              data-testid="twofa-code"
+              autoFocus
+              required
+            />
+            <p className="text-[#7a827a] text-xs text-center">Mistet appen? Bruk en av backup-kodene dine i stedet.</p>
+            {err && (
+              <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3" data-testid="twofa-error">
+                {err}
+              </div>
+            )}
+            <div className="pt-2 flex justify-center">
+              <button type="submit" disabled={loading} data-testid="twofa-submit" className="w-14 h-14 rounded-full bg-mint text-[#04120a] grid place-items-center mint-glow hover:scale-105 active:scale-95 transition-transform disabled:opacity-60">
+                {loading ? <span className="w-4 h-4 border-2 border-[#04120a] border-t-transparent rounded-full animate-spin" /> : <ArrowRight size={22} strokeWidth={2.5} />}
+              </button>
+            </div>
+            <button type="button" onClick={() => { setTwofaToken(""); setTwofaCode(""); setErr(""); }} className="w-full text-center text-[#7a827a] text-sm hover:text-mint transition-colors" data-testid="twofa-cancel">
+              Avbryt
+            </button>
+          </form>
+        ) : (
+        <>
         <form onSubmit={submit} className="mt-10 space-y-4">
           <input
             className="input"
@@ -187,6 +238,8 @@ export default function Login() {
           <SocialButton icon={<GoogleIcon />} testid="social-google" onClick={loginWithGoogle} />
           <SocialButton icon={<PhoneIcon />} testid="social-phone" onClick={() => alert("SMS-logg inn kommer snart.")} />
         </div>
+        </>
+        )}
       </div>
 
       <div className="px-8 pb-10 text-center">

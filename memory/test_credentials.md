@@ -33,8 +33,9 @@
 - Email: `admin@kjapp.no`
 - Password: `admin123`
 - Role: `superadmin` (auto-backfilt fra `admin` ved backend-oppstart, Iter 13)
+- **2FA/TOTP (Iter 32)**: Valgfri per konto. Aktiveres på `/admin/settings` (2FA-kort) → skann QR i autentiserings-app → skriv 6-sifret kode → få 8 backup-koder. Når aktivert returnerer `/auth/login` `{twofa_required:true, twofa_token}` og innlogging krever et ekstra kode-steg (`POST /auth/2fa/verify-login`). Deaktiveres med passord + kode. Backup-koder er engangsbruk. TOTP-koder regnes i test med `pyotp.TOTP(secret).now()`. **Demo-superadmin skal etterlates med 2FA AV** slik at demo-innlogging ikke låses.
 - Har tilgang til: `/loyver` (søknader), `/loyver/applications/:id`, `/loyver/pending-drivers`, samt alle eksisterende `/admin/*` endepunkter (require_admin aksepterer både `admin` og `superadmin`)
-- I prod: pek `admin.kjapp.no` mot samme app. Route-vakt `superadminOnly` gjør at ingen andre roller kommer inn på `/loyver`.
+- I prod: pek `admin.kjappapp.no` mot samme app. Prod-eier-admin: `ADMIN_EMAIL=admin@kjappapp.no` + sterkt `ADMIN_PASSWORD` som deploy-secret.
 
 ## Demo-sjåfører (Iter 16 — kart-simulator)
 - Auto-seeded ved backend-oppstart i `lifespan()`

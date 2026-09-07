@@ -1,4 +1,5 @@
 /* KJAPP service worker — push notifications */
+/* global clients */
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });

@@ -23,6 +23,9 @@ from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
+from bson.errors import InvalidId
+import pyotp
+import qrcode
 import uuid
 
 try:
@@ -261,6 +264,35 @@ def create_access_token(user_id: str, email: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
+def create_twofa_token(user_id: str) -> str:
+    """Short-lived intermediate token issued after password step when 2FA is required.
+    It is NOT a session token — get_current_user rejects type == '2fa'."""
+    payload = {
+        "sub": user_id,
+        "twofa": True,
+        "type": "2fa",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def _verify_totp(secret: str, code: str) -> bool:
+    if not secret or not code:
+        return False
+    try:
+        return pyotp.TOTP(secret).verify(code.strip().replace(" ", ""), valid_window=1)
+    except Exception:
+        return False
+
+
+def _gen_backup_codes(n: int = 8):
+    return [f"{secrets.token_hex(4)[:4]}-{secrets.token_hex(4)[:4]}" for _ in range(n)]
+
+
+def _twofa_required_role(role: str) -> bool:
+    return role in ("admin", "superadmin")
+
+
 async def get_current_user(request: Request) -> dict:
     token = request.cookies.get("access_token")
     if not token:
@@ -271,6 +303,8 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Ikke innlogget")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") == "2fa":
+            raise HTTPException(status_code=401, detail="Ugyldig token")
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
@@ -284,7 +318,7 @@ async def get_current_user(request: Request) -> dict:
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token utløpt")
-    except jwt.InvalidTokenError:
+    except (jwt.InvalidTokenError, InvalidId, KeyError):
         raise HTTPException(status_code=401, detail="Ugyldig token")
 
 
@@ -311,6 +345,20 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class TwoFAEnableRequest(BaseModel):
+    code: str
+
+
+class TwoFADisableRequest(BaseModel):
+    password: str
+    code: str
+
+
+class TwoFAVerifyLoginRequest(BaseModel):
+    twofa_token: str
+    code: str
 
 
 class ChatRequest(BaseModel):
@@ -916,12 +964,42 @@ async def list_places(featured_only: bool = False):
     return {"places": places}
 
 
+MAPTILER_API_KEY = os.environ.get("MAPTILER_API_KEY", "")
+
+
 @api.get("/places/search")
 async def search_places(q: str, limit: int = 8):
-    """Free-text address search via Nominatim (OpenStreetMap). Norway-biased."""
+    """Address search — MapTiler geocoding when MAPTILER_API_KEY is set, else Nominatim (OSM). Norway-biased."""
     q = (q or "").strip()
     if len(q) < 2:
         return {"results": []}
+    # Preferred: MapTiler geocoding (commercial-grade, higher rate limits + autocomplete)
+    if MAPTILER_API_KEY:
+        try:
+            from urllib.parse import quote
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                r = await client.get(
+                    f"https://api.maptiler.com/geocoding/{quote(q)}.json",
+                    params={"key": MAPTILER_API_KEY, "country": "no", "language": "no", "limit": limit, "autocomplete": "true"},
+                )
+            if r.status_code == 200:
+                results = []
+                for f in r.json().get("features", []):
+                    try:
+                        center = f.get("center") or f.get("geometry", {}).get("coordinates")
+                        lng, lat = float(center[0]), float(center[1])
+                        label = f.get("place_name") or f.get("text") or ""
+                        for suf in (", Norway", ", Norge"):
+                            if label.endswith(suf):
+                                label = label[: -len(suf)]
+                        results.append({"name": label, "display_name": f.get("place_name"), "lat": lat, "lng": lng})
+                    except Exception:
+                        continue
+                if results:
+                    return {"results": results}
+        except Exception:
+            pass  # fall through to Nominatim on any MapTiler error
+    # Fallback: Nominatim (OpenStreetMap)
     try:
         async with httpx.AsyncClient(timeout=6.0) as client:
             r = await client.get(
@@ -981,6 +1059,13 @@ async def trip_estimate(body: EstimateRequest):
 LOGIN_MAX_FAILED_EMAIL = 5
 LOGIN_MAX_FAILED_IP = 15
 LOGIN_WINDOW_MINUTES = 15
+
+
+def _csv_safe(value):
+    """Neutralize spreadsheet formula injection in exported cells (CSV/XLSX)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
 
 
 def _client_ip(request: Request) -> str:
@@ -1050,6 +1135,9 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Feil e-post eller passord")
     await _clear_failed_logins(email, ip)
     uid = str(user["_id"])
+    if user.get("totp_enabled"):
+        # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
@@ -1059,6 +1147,100 @@ async def login(body: LoginRequest, request: Request, response: Response):
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     return {"ok": True}
+
+
+# ---- Two-factor authentication (TOTP) ----
+@api.get("/auth/2fa/status")
+async def twofa_status(current=Depends(get_current_user)):
+    return {"enabled": bool(current.get("totp_enabled")), "required": _twofa_required_role(current.get("role", "user"))}
+
+
+@api.post("/auth/2fa/setup")
+async def twofa_setup(current=Depends(get_current_user)):
+    """Generate a fresh (pending) secret + QR. 2FA is not active until verified via /2fa/enable."""
+    import io as _bio
+    secret = pyotp.random_base32()
+    await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"totp_secret_pending": secret}})
+    otpauth = pyotp.TOTP(secret).provisioning_uri(name=current.get("email", "bruker"), issuer_name="KJAPP")
+    img = qrcode.make(otpauth)
+    buf = _bio.BytesIO()
+    img.save(buf, format="PNG")
+    qr_data_uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    return {"secret": secret, "otpauth_url": otpauth, "qr": qr_data_uri}
+
+
+@api.post("/auth/2fa/enable")
+async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_user)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    pending = (user or {}).get("totp_secret_pending")
+    if not pending:
+        raise HTTPException(status_code=400, detail="Start 2FA-oppsett først.")
+    if not _verify_totp(pending, body.code):
+        raise HTTPException(status_code=400, detail="Feil kode. Prøv igjen.")
+    backup = _gen_backup_codes()
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [hash_password(c) for c in backup]},
+            "$unset": {"totp_secret_pending": ""},
+        },
+    )
+    return {"enabled": True, "backup_codes": backup}
+
+
+@api.post("/auth/2fa/disable")
+async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_user)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Feil passord.")
+    if not user.get("totp_enabled") or not _verify_totp(user.get("totp_secret", ""), body.code):
+        raise HTTPException(status_code=400, detail="Feil 2FA-kode.")
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$unset": {"totp_secret": "", "totp_enabled": "", "totp_backup_codes": "", "totp_secret_pending": ""}},
+    )
+    return {"enabled": False}
+
+
+@api.post("/auth/2fa/verify-login")
+async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, response: Response):
+    try:
+        payload = jwt.decode(body.twofa_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="2FA-økt utløpt. Logg inn på nytt.")
+    if payload.get("type") != "2fa" or not payload.get("twofa"):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    try:
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    except InvalidId:
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    if not user or not user.get("totp_enabled") or user.get("disabled"):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    email = user["email"]
+    ip = _client_ip(request)
+    if await _login_blocked(email, ip):
+        raise HTTPException(status_code=429, detail="For mange forsøk. Prøv igjen om 15 minutter.")
+    code = (body.code or "").strip().replace(" ", "")
+    ok = _verify_totp(user.get("totp_secret", ""), code)
+    used_idx = None
+    if not ok:
+        for i, h in enumerate(user.get("totp_backup_codes", [])):
+            if verify_password(code, h):
+                ok = True
+                used_idx = i
+                break
+    if not ok:
+        await _record_failed_login(email, ip)
+        raise HTTPException(status_code=401, detail="Feil kode.")
+    await _clear_failed_logins(email, ip)
+    if used_idx is not None:
+        codes = user.get("totp_backup_codes", [])
+        codes.pop(used_idx)
+        await db.users.update_one({"_id": user["_id"]}, {"$set": {"totp_backup_codes": codes}})
+    uid = str(user["_id"])
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
 
 
 # ---- Password reset via e-postlenke ----
@@ -2487,7 +2669,7 @@ async def fleet_export_monthly(
         c.font = thin_hdr; c.fill = hdr_fill; c.alignment = Alignment(horizontal="center")
     for d in sorted(drivers_map.values(), key=lambda x: -x["gross"]):
         d_com = int(round(d["gross"] * commission))
-        ws2.append([d["name"], d["email"], d["car"], d["plate"], d["trips"], d["gross"], d_com, d["gross"] - d_com])
+        ws2.append([_csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]), d["trips"], d["gross"], d_com, d["gross"] - d_com])
     # Totals row
     ws2.append([])
     ws2.append(["TOTAL", "", "", "", total_trips, total_gross, total_commission, total_net])
@@ -2508,9 +2690,9 @@ async def fleet_export_monthly(
         ws3.append([
             (t.get("created_at") or "")[:10],
             str(t.get("_id", "")),
-            drv.get("name", "—"),
-            (t.get("origin") or {}).get("name", "") or (t.get("pickup") or {}).get("name", ""),
-            (t.get("destination") or {}).get("name", "") or (t.get("dropoff") or {}).get("name", ""),
+            _csv_safe(drv.get("name", "—")),
+            _csv_safe((t.get("origin") or {}).get("name", "") or (t.get("pickup") or {}).get("name", "")),
+            _csv_safe((t.get("destination") or {}).get("name", "") or (t.get("dropoff") or {}).get("name", "")),
             round(float(t.get("distance_km", 0) or 0), 2),
             t.get("price", 0),
             t.get("payment_status", "—"),
@@ -2927,42 +3109,51 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         raise HTTPException(status_code=401, detail=f"Ugyldig Apple-token: {e}")
 
     apple_sub = payload.get("sub")
-    email = (body.email or payload.get("email") or "").strip().lower()
-    if not email:
-        # Apple hides email after first login — need to find user by apple_sub
-        existing = await db.users.find_one({"apple_sub": apple_sub})
-        if not existing:
-            raise HTTPException(status_code=400, detail="Ingen e-post fra Apple ved første innlogging")
+    if not apple_sub:
+        raise HTTPException(status_code=401, detail="Ugyldig Apple-token")
+    # SECURITY: identity comes ONLY from the cryptographically verified token — never from body.email.
+    token_email = (payload.get("email") or "").strip().lower()
+    email_verified = str(payload.get("email_verified", "")).lower() in ("true", "1")
+    verified_email = token_email if (token_email and email_verified) else ""
+
+    # Resolve strictly by the verified Apple subject; link to an existing account only via the
+    # Apple-verified email (mirrors the Google flow). A client-supplied email is ignored.
+    existing = await db.users.find_one({"apple_sub": apple_sub})
+    if not existing and verified_email:
+        existing = await db.users.find_one({"email": verified_email})
+
+    if existing:
+        if existing.get("disabled"):
+            raise HTTPException(status_code=401, detail="Ugyldig Apple-økt")
         uid = str(existing["_id"])
         email = existing["email"]
         role = existing.get("role", "user")
         driver_id = existing.get("driver_id")
+        display_name = existing.get("fullName", "")
+        if not existing.get("apple_sub"):
+            await db.users.update_one({"_id": existing["_id"]}, {"$set": {"apple_sub": apple_sub, "apple_linked": True}})
     else:
-        user = await db.users.find_one({"email": email}) or await db.users.find_one({"apple_sub": apple_sub})
-        if not user:
-            name = body.fullName or email.split("@")[0]
-            result = await db.users.insert_one({
-                "email": email,
-                "password_hash": hash_password(secrets.token_hex(16)),
-                "fullName": name,
-                "phone": "",
-                "apple_sub": apple_sub,
-                "apple_linked": True,
-                "role": "user",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            uid = str(result.inserted_id)
-            role = "user"
-            driver_id = None
-        else:
-            uid = str(user["_id"])
-            role = user.get("role", "user")
-            driver_id = user.get("driver_id")
-            if not user.get("apple_sub"):
-                await db.users.update_one({"_id": user["_id"]}, {"$set": {"apple_sub": apple_sub, "apple_linked": True}})
+        if not verified_email:
+            # Subsequent Apple logins may omit email; without a linked account we cannot proceed.
+            raise HTTPException(status_code=400, detail="Ingen verifisert e-post fra Apple ved første innlogging")
+        display_name = body.fullName or verified_email.split("@")[0]
+        result = await db.users.insert_one({
+            "email": verified_email,
+            "password_hash": hash_password(secrets.token_hex(16)),
+            "fullName": display_name,
+            "phone": "",
+            "apple_sub": apple_sub,
+            "apple_linked": True,
+            "role": "user",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        uid = str(result.inserted_id)
+        email = verified_email
+        role = "user"
+        driver_id = None
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": body.fullName or "", "phone": "", "role": role, "driver_id": driver_id}}
+    return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": "", "role": role, "driver_id": driver_id}}
 
 
 @api.get("/auth/apple/config")
@@ -3921,7 +4112,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         price = t.get("price", 0) or 0
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
-            t.get("distance_km"), (t.get("driver") or {}).get("name") or "", t.get("user_id") or "",
+            t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
             round(price * _rate) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(

@@ -91,6 +91,7 @@ pyflakes==3.4.0
 Pygments==2.20.0
 PyJWT==2.10.1
 pymongo==4.9.2
+PyOTP==2.10.0
 pyparsing==3.3.2
 pytest==9.1.1
 pytest-xdist==3.8.0
@@ -102,6 +103,7 @@ python-multipart==0.0.19
 pytokens==0.4.1
 pywebpush==2.0.1
 PyYAML==6.0.3
+qrcode==8.2
 referencing==0.37.0
 regex==2026.7.19
 requests==2.34.2

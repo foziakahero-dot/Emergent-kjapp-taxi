@@ -5,3 +5,15 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Dependencies & build artifacts (never lint/commit these)
+node_modules/
+frontend/node_modules/
+frontend/build/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

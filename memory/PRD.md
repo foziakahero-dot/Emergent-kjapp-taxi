@@ -655,3 +655,18 @@ Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten
 - **Native build-prep verifisert**: Capacitor v8 komplett (`ios/`+`android/`, appId `no.kjapp.app`, appName KJAPP, alle plugins). `yarn build` OK → `api.kjappapp.no` bakt inn (1), gammel `api.kjapp.no` (0), demo-passord i runtime-JS (0), ingen source-maps. `MOBILE_BUILD.md` fikk §2.1 om backend-URL + prod-gating. Native bygges på brukers Mac/PC (Node ≥22) — container har Node 20.
 - **Bruker-DNS-steg gitt**: Emergent "Link domain"/Entri → kopiér eksakt CNAME/TXT → Uniweb DNS (fjern A-records) for admin/api/fleet.kjappapp.no. Redeploy + sett prod-env (APP_ENV=production, ENABLE_DEMO_DATA=false, TRUST_PROXY=true, sterk JWT_SECRET/ADMIN_PASSWORD) FØR domenekobling.
 
+
+## Iter 32 — Pre-launch: MapTiler-geokoding, admin-2FA (TOTP), premium bil-ikoner, testdata-opprydding (2026-09-07)
+
+**Kontekst**: Eiers pre-launch-forespørsel — kart/nav-API, premium kundeikoner, audit, ekte/ren admin-start, ekstremt sikker eier-admin med 2FA. Eier valgte MapTiler, godkjente 2FA/TOTP, admin-e-post `admin@kjappapp.no`.
+
+- **Admin-2FA (TOTP) — NY, E2E-verifisert**: `pyotp`-basert to-trinns verifisering.
+  - Backend (`server.py`): `POST /auth/2fa/setup` (genererer pending base32-secret + QR-data-URI + otpauth-URL), `POST /auth/2fa/enable` {code} (verifiserer, aktiverer, returnerer 8 engangs backup-koder — bcrypt-hashet), `POST /auth/2fa/disable` {password, code}, `GET /auth/2fa/status`, `POST /auth/2fa/verify-login` {twofa_token, code}.
+  - Login-flyt: `/auth/login` returnerer `{twofa_required:true, twofa_token}` (kort 5-min JWT, `type:"2fa"`) i stedet for session når `totp_enabled`. `get_current_user` AVVISER `type:"2fa"`-token som bearer → mellom-token kan ikke brukes til API-tilgang. `verify-login` er rate-limited (gjenbruker e-post-brute-force), TOTP `valid_window=1` (±30s), backup-koder konsumeres ved bruk.
+  - Frontend: `TwoFactorSettings.jsx` (QR + secret + aktiver/deaktiver + backup-kode-visning) i `/admin/settings` (alltid synlig selv om settings-load feiler). `Login.jsx` 2-stegs kode-UI (twofa-form/twofa-code/twofa-submit). `AuthContext.verifyTwofaLogin`.
+  - **Testet**: backend curl E2E (setup/enable/challenge/verify/backup-konsumering/disable + mellom-token avvist som bearer) + testing-agent frontend E2E 100% (iteration_22.json). Demo-superadmin etterlatt med 2FA AV.
+- **MapTiler-geokoding — nøkkel-valgfri**: `/places/search` bruker MapTiler geocoding når backend `MAPTILER_API_KEY` er satt (kommersiell rate/autocomplete, Norge-bias), ellers Nominatim-fallback (verifisert fungerende uten nøkkel). Kartstil i `PremiumMap.jsx` bruker MapTiler mørk vektor når `REACT_APP_MAPTILER_API_KEY` er satt, ellers gratis mørk raster. OSRM beholdes for ruting (MapTiler routing er beta). Nøkkel legges i env ved deploy — aldri i kode.
+- **Premium bil-ikoner**: `VehicleGlyph` i `Home.jsx` redesignet med custom SVG (metallisk gull aktiv, grafitt inaktiv, ulike silhuetter). Kompilerer.
+- **Testdata ryddet (preview-DB)**: 24 `TEST_`-flåter + 50 `TEST_`-brukere slettet → 1 flåte (Oslo Nord Taxi AS) + 64 brukere igjen. Produksjons-DB må ryddes separat ved deploy.
+- **Env lagt til**: `MAPTILER_API_KEY` (backend .env + .env.production.example), `REACT_APP_MAPTILER_API_KEY` (frontend .env + .env.production). `ADMIN_EMAIL` → `admin@kjappapp.no` i prod-eksempel + DEPLOYMENT.md.
+- **GJENSTÅR (bruker)**: sette MAPTILER-nøkler i deploy-env; sette prod ADMIN_EMAIL=admin@kjappapp.no + sterkt ADMIN_PASSWORD/JWT_SECRET; DNS-kobling; verifisere Apple Sign-In-sikkerhet før den evt. aktiveres i prod.
