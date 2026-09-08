@@ -254,6 +254,27 @@ async def disable_legacy_demo_users(db, is_production: bool, admin_email: str = 
     return res.modified_count
 
 
+# Synthetic records that must never be shown as real data in the app (fabricated demo trips,
+# automated-test artifacts and simulated driver/passenger accounts).
+SYNTHETIC_ADDRESS_RE = r"^\s*TEST[_\s-]"
+SYNTHETIC_EMAIL_RE = r"^(demo\d+@|demo_p_|test_|TEST_)"
+
+
+async def purge_synthetic_data(db) -> dict:
+    """Delete fabricated trips and simulated accounts so the driver/customer apps only ever
+    render real data. Safe to run on every boot — it only matches synthetic markers."""
+    trips = await db.trips.delete_many({"$or": [
+        {"demo": True},
+        {"pickup_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
+        {"dropoff_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    ]})
+    users = await db.users.delete_many({"$or": [
+        {"email": {"$regex": SYNTHETIC_EMAIL_RE}},
+        {"role": "user", "demo": True},
+    ]})
+    return {"trips": trips.deleted_count, "users": users.deleted_count}
+
+
 def create_access_token(user_id: str, email: str) -> str:
     payload = {
         "sub": user_id,
@@ -676,184 +697,20 @@ async def lifespan(app: FastAPI):
                 {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
             )
 
-    # ---- Seed always-online DEMO DRIVERS with live GPS heartbeats (Oslo) ----
-    # These are REAL driver records in the DB — passenger sees them as normal cars.
-    # A background task updates their positions every 6s so /api/cars/nearby returns them.
-    demo_drivers = [
-        {"email": "demo1@kjapp.no", "fullName": "Karl Kjøresen", "car": "Toyota Camry", "plate": "AB 11101", "vehicle_type": "ai-first", "lat": 59.9169, "lng": 10.7383, "bearing": 90},
-        {"email": "demo2@kjapp.no", "fullName": "Anna Andersen", "car": "Skoda Octavia", "plate": "CD 22202", "vehicle_type": "enkelt", "lat": 59.9106, "lng": 10.7285, "bearing": 45},
-        {"email": "demo3@kjapp.no", "fullName": "Erik Eriksen", "car": "VW ID.4", "plate": "EL 33303", "vehicle_type": "ai-first", "lat": 59.9210, "lng": 10.7450, "bearing": 180},
-        {"email": "demo4@kjapp.no", "fullName": "Marte Berg", "car": "Mercedes E-klasse", "plate": "SL 44404", "vehicle_type": "premium", "lat": 59.9055, "lng": 10.7561, "bearing": 270},
-        {"email": "demo5@kjapp.no", "fullName": "Jonas Hansen", "car": "Toyota Sienna", "plate": "TR 55505", "vehicle_type": "trygg", "lat": 59.9145, "lng": 10.7590, "bearing": 135},
-        {"email": "demo6@kjapp.no", "fullName": "Sara Solheim", "car": "Kia EV6", "plate": "EL 66606", "vehicle_type": "ai-first", "lat": 59.9245, "lng": 10.7370, "bearing": 210},
-    ]
-    for d in (demo_drivers if ENABLE_DEMO_DATA else []):
-        existing = await db.users.find_one({"email": d["email"]})
-        base = {
-            "email": d["email"],
-            "password_hash": hash_password("demo1234"),
-            "fullName": d["fullName"],
-            "phone": "+4790000000",
-            "role": "driver",
-            "car": d["car"],
-            "plate": d["plate"],
-            "vehicle_type": d["vehicle_type"],
-            "rating": 4.9,
-            "approved": True,
-            "online": True,
-            "demo": True,
-            "last_lat": d["lat"],
-            "last_lng": d["lng"],
-            "last_heading": d["bearing"],
-            "last_location_at": datetime.now(timezone.utc).isoformat(),
-        }
-        if not existing:
-            base["created_at"] = datetime.now(timezone.utc).isoformat()
-            await db.users.insert_one(base)
-        else:
-            base.pop("password_hash")
-            await db.users.update_one({"_id": existing["_id"]}, {"$set": base})
+    # ---- Simulated "cruising" demo drivers are PERMANENTLY REMOVED ----
+    # The customer map must only ever show real drivers with a live GPS heartbeat.
+    # Any leftover simulated driver records are forced offline so they disappear everywhere.
+    stale_demo = await db.users.update_many(
+        {"role": "driver", "demo": True},
+        {"$set": {"online": False}, "$unset": {"last_lat": "", "last_lng": "", "last_location_at": "", "last_heading": ""}},
+    )
+    if stale_demo.modified_count:
+        print(f"[seed] forced {stale_demo.modified_count} simulated demo driver(s) offline (never shown on customer map)")
 
-    # Background task: keep demo drivers cruising (updates every 6s)
-    async def cruise_demo_drivers():
-        while True:
-            try:
-                await asyncio.sleep(6)
-                async for u in db.users.find({"demo": True, "role": "driver"}):
-                    # Small random-ish forward step + slow bearing drift
-                    import random as _r
-                    heading = (u.get("last_heading", 0) + _r.uniform(-8, 8)) % 360
-                    step = 0.0006  # ~65m
-                    dlat = step * math.cos(math.radians(heading))
-                    dlng = step * math.sin(math.radians(heading)) / max(math.cos(math.radians(u.get("last_lat", 59.9139))), 0.1)
-                    new_lat = u.get("last_lat", 59.9139) + dlat
-                    new_lng = u.get("last_lng", 10.7522) + dlng
-                    # Keep them within Oslo bbox ~5km
-                    if abs(new_lat - 59.914) > 0.05 or abs(new_lng - 10.75) > 0.09:
-                        heading = (heading + 180) % 360
-                        new_lat = u.get("last_lat", 59.9139)
-                        new_lng = u.get("last_lng", 10.7522)
-                    await db.users.update_one(
-                        {"_id": u["_id"]},
-                        {"$set": {
-                            "last_lat": new_lat,
-                            "last_lng": new_lng,
-                            "last_heading": heading,
-                            "last_location_at": datetime.now(timezone.utc).isoformat(),
-                            "online": True,
-                        }},
-                    )
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                print(f"[cruise] error: {e}")
-    cruise_task = asyncio.create_task(cruise_demo_drivers()) if ENABLE_DEMO_DATA else None
-
-    # Background task: keep 1-2 pending demo trips waiting for sjåfør (so beta-testing feels alive)
-    async def seed_demo_pending_trips():
-        import random as _r
-        DEMO_ROUTES = [
-            {"pickup": {"lat": 59.9139, "lng": 10.7522, "address": "Oslo S · Jernbanetorget 1"},
-             "dropoff": {"lat": 59.9109, "lng": 10.7343, "address": "Aker Brygge · Stranden 1"},
-             "distance_km": 2.4, "duration_min": 8, "price": 189},
-            {"pickup": {"lat": 59.9163, "lng": 10.7266, "address": "Slottet · Slottsplassen 1"},
-             "dropoff": {"lat": 59.9333, "lng": 10.7189, "address": "Bygdøy · Museumsveien 10"},
-             "distance_km": 4.8, "duration_min": 12, "price": 259},
-            {"pickup": {"lat": 59.9127, "lng": 10.7457, "address": "Grünerløkka · Markveien 35"},
-             "dropoff": {"lat": 59.9491, "lng": 10.7186, "address": "Oslo Lufthavn Torp · Utsikten 1"},
-             "distance_km": 5.6, "duration_min": 15, "price": 319},
-            {"pickup": {"lat": 59.9250, "lng": 10.7580, "address": "Grünerløkka · Thorvald Meyers gate 1"},
-             "dropoff": {"lat": 59.9018, "lng": 10.7770, "address": "Ekeberg · Kongsveien 15"},
-             "distance_km": 5.9, "duration_min": 17, "price": 329},
-            {"pickup": {"lat": 59.9068, "lng": 10.7480, "address": "Barcode · Dronning Eufemias gate 30"},
-             "dropoff": {"lat": 59.9270, "lng": 10.6997, "address": "Skøyen · Karenslyst allé 2"},
-             "distance_km": 6.2, "duration_min": 16, "price": 339},
-        ]
-        DEMO_CUSTOMERS = [
-            {"name": "Kari Nordmann", "phone": "+4790000101", "rating": 4.9},
-            {"name": "Aisha Ali", "phone": "+4790000102", "rating": 4.8},
-            {"name": "Erik Berg", "phone": "+4790000103", "rating": 5.0},
-            {"name": "Sofia Larsen", "phone": "+4790000104", "rating": 4.9},
-        ]
-
-        # Ensure demo passenger users exist
-        for c in DEMO_CUSTOMERS:
-            email = f"demo_p_{c['name'].split()[0].lower()}@kjapp.no"
-            existing = await db.users.find_one({"email": email})
-            if not existing:
-                await db.users.insert_one({
-                    "email": email,
-                    "password_hash": hash_password("demo1234"),
-                    "fullName": c["name"],
-                    "phone": c["phone"],
-                    "role": "user",
-                    "rating": c["rating"],
-                    "trip_count": _r.randint(15, 80),
-                    "demo": True,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
-
-        # Preload their IDs
-        demo_customer_ids = []
-        async for u in db.users.find({"role": "user", "demo": True}, {"_id": 1}):
-            demo_customer_ids.append(str(u["_id"]))
-
-        while True:
-            try:
-                await asyncio.sleep(20)  # check every 20s
-                # Count current pending
-                pending_count = await db.trips.count_documents({
-                    "status": {"$in": ["searching", "booking"]},
-                    "driver_id": None,
-                    "demo": True,
-                })
-                # Keep 2 demo pending trips available
-                to_create = max(0, 2 - pending_count)
-                for _ in range(to_create):
-                    if not demo_customer_ids:
-                        break
-                    route = _r.choice(DEMO_ROUTES)
-                    customer_id = _r.choice(demo_customer_ids)
-                    trip_id = str(uuid.uuid4())
-                    now_iso = datetime.now(timezone.utc).isoformat()
-                    await db.trips.insert_one({
-                        "trip_id": trip_id,
-                        "user_id": customer_id,
-                        "driver_id": None,
-                        "status": "searching",
-                        "pickup_address": route["pickup"]["address"],
-                        "pickup_lat": route["pickup"]["lat"],
-                        "pickup_lng": route["pickup"]["lng"],
-                        "dropoff_address": route["dropoff"]["address"],
-                        "dropoff_lat": route["dropoff"]["lat"],
-                        "dropoff_lng": route["dropoff"]["lng"],
-                        "distance_km": route["distance_km"],
-                        "duration_min": route["duration_min"],
-                        "price": route["price"],
-                        "vehicle_type": _r.choice(["ai-first", "enkelt", "premium"]),
-                        "payment_status": "authorized",
-                        "demo": True,
-                        "created_at": now_iso,
-                        "updated_at": now_iso,
-                    })
-                # Cleanup: remove demo pending trips older than 3 min so drivers get fresh ones
-                cutoff = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
-                await db.trips.delete_many({
-                    "demo": True,
-                    "status": "searching",
-                    "driver_id": None,
-                    "created_at": {"$lt": cutoff},
-                })
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                print(f"[demo-trips] error: {e}")
-    demo_trips_task = asyncio.create_task(seed_demo_pending_trips()) if ENABLE_DEMO_DATA else None
-
-    # Hardening: when demo data is disabled, force existing demo records offline and purge demo pending trips
-    if not ENABLE_DEMO_DATA:
-        await db.users.update_many({"demo": True}, {"$set": {"online": False}})
-        await db.trips.delete_many({"demo": True, "status": {"$in": ["searching", "booking"]}})
+    # PRODUCTION RULE: no fabricated trips/accounts may ever reach the driver or customer app.
+    purged = await purge_synthetic_data(db)
+    if purged:
+        print(f"[seed] purged synthetic data: {purged}")
 
     # P0.1: in production, disable legacy seed/demo accounts so they can no longer authenticate
     if IS_PRODUCTION:
@@ -861,8 +718,6 @@ async def lifespan(app: FastAPI):
         print(f"[seed] production: disabled {disabled_n} legacy demo account(s)")
 
     yield
-    if cruise_task: cruise_task.cancel()
-    if demo_trips_task: demo_trips_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -917,15 +772,22 @@ async def health():
 # ---- Available cars nearby (real driver fleet from DB) ----
 
 
+GPS_FRESH_SECONDS = 60  # a driver marker disappears when the GPS heartbeat is older than this
+
+
 @api.post("/cars/nearby")
 async def cars_nearby(body: NearbyCarsRequest):
-    """Real online drivers within ~10km. Only shows drivers whose last GPS ping is <60s old."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    """ONLY real, approved, on-duty drivers with a live GPS heartbeat (<60s) within ~10km.
+    Simulated/demo driver records are never returned — an empty list is an honest 'no cars' answer."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
     cars = []
     async for u in db.users.find({
         "role": "driver",
         "approved": True,
         "online": True,
+        "disabled": {"$ne": True},
+        "demo": {"$ne": True},
+        "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
     }):
         lat = u.get("last_lat")
@@ -949,9 +811,16 @@ async def cars_nearby(body: NearbyCarsRequest):
             "heading": u.get("last_heading") or 0,
             "eta_min": eta,
             "distance_km": round(d_km, 2),
+            "updated_at": u.get("last_location_at"),
         })
     cars.sort(key=lambda x: x["eta_min"])
-    return {"cars": cars}
+    return {
+        "cars": cars,
+        "count": len(cars),
+        "live": True,
+        "gps_fresh_seconds": GPS_FRESH_SECONDS,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api.get("/places")
@@ -965,6 +834,81 @@ async def list_places(featured_only: bool = False):
 
 
 MAPTILER_API_KEY = os.environ.get("MAPTILER_API_KEY", "")
+
+
+PHOTON_HEADERS = {"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"}
+
+
+@api.get("/places/reverse")
+async def reverse_geocode(lat: float, lng: float):
+    """Reverse geocoding for the live driver map label (street/area name).
+    MapTiler when MAPTILER_API_KEY is set, else Nominatim. Results are cached per ~110 m grid cell
+    so the label survives intermittent provider rate limits. Returns null fields when unknown —
+    never a made-up place name."""
+    cache_key = f"{round(lat, 3)},{round(lng, 3)}"
+    cached = await db.geocache.find_one({"_id": cache_key})
+    if cached and cached.get("label"):
+        return {"street": cached.get("street"), "area": cached.get("area"), "label": cached["label"]}
+    if MAPTILER_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                r = await client.get(
+                    f"https://api.maptiler.com/geocoding/{lng},{lat}.json",
+                    params={"key": MAPTILER_API_KEY, "language": "no", "limit": 1},
+                )
+            if r.status_code == 200:
+                feats = r.json().get("features") or []
+                if feats:
+                    f = feats[0]
+                    ctx = {c.get("id", "").split(".")[0]: c.get("text") for c in (f.get("context") or [])}
+                    out = {
+                        "street": f.get("text"),
+                        "area": ctx.get("municipality") or ctx.get("place") or ctx.get("region"),
+                        "label": f.get("place_name"),
+                    }
+                    if out["label"]:
+                        await db.geocache.update_one({"_id": cache_key}, {"$set": out}, upsert=True)
+                    return out
+        except Exception:
+            pass
+    # Keyless, high-availability fallback: Photon (komoot, OSM-based)
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(
+                "https://photon.komoot.io/reverse",
+                params={"lat": lat, "lon": lng, "limit": 1, "lang": "default"},
+                headers=PHOTON_HEADERS,
+            )
+        if r.status_code == 200:
+            feats = r.json().get("features") or []
+            if feats:
+                pr = feats[0].get("properties") or {}
+                street = pr.get("street") or pr.get("name") or pr.get("locality")
+                area = pr.get("district") or pr.get("city") or pr.get("county")
+                if street or area:
+                    out = {"street": street, "area": area, "label": ", ".join([p for p in (street, area) if p])}
+                    await db.geocache.update_one({"_id": cache_key}, {"$set": out}, upsert=True)
+                    return out
+    except Exception:
+        pass
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={"lat": lat, "lon": lng, "format": "json", "zoom": 17, "addressdetails": 1, "accept-language": "no"},
+                headers={"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"},
+            )
+            data = r.json() if r.status_code == 200 else {}
+    except Exception:
+        data = {}
+    addr = data.get("address") or {}
+    street = addr.get("road") or addr.get("pedestrian") or addr.get("suburb")
+    area = addr.get("suburb") or addr.get("city_district") or addr.get("city") or addr.get("town") or addr.get("municipality")
+    if not street and not area:
+        return {"street": None, "area": None, "label": None}
+    out = {"street": street, "area": area, "label": ", ".join([p for p in (street, area) if p])}
+    await db.geocache.update_one({"_id": cache_key}, {"$set": out}, upsert=True)
+    return out
 
 
 @api.get("/places/search")
@@ -999,6 +943,35 @@ async def search_places(q: str, limit: int = 8):
                     return {"results": results}
         except Exception:
             pass  # fall through to Nominatim on any MapTiler error
+    # Keyless, high-availability provider: Photon (komoot, OSM-based). Norway-biased.
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.get(
+                "https://photon.komoot.io/api",
+                params={"q": q, "limit": limit, "lang": "default", "lat": 59.9139, "lon": 10.7522},
+                headers=PHOTON_HEADERS,
+            )
+        if r.status_code == 200:
+            results = []
+            for f in r.json().get("features", []):
+                pr = f.get("properties") or {}
+                if (pr.get("countrycode") or "").upper() != "NO":
+                    continue
+                try:
+                    lng, lat = f["geometry"]["coordinates"][:2]
+                except Exception:
+                    continue
+                street = pr.get("street") or pr.get("name") or ""
+                hn = pr.get("housenumber") or ""
+                street_line = (street + (" " + hn if hn else "")).strip()
+                city = pr.get("city") or pr.get("locality") or pr.get("county") or ""
+                label = ", ".join([p for p in (street_line, city) if p]) or pr.get("name") or ""
+                if label:
+                    results.append({"name": label, "display_name": label, "lat": float(lat), "lng": float(lng)})
+            if results:
+                return {"results": results}
+    except Exception:
+        pass
     # Fallback: Nominatim (OpenStreetMap)
     try:
         async with httpx.AsyncClient(timeout=6.0) as client:
@@ -1981,30 +1954,68 @@ class AcceptTripRequest(BaseModel):
     trip_id: str
 
 
+def customer_public(u: dict) -> dict:
+    """Minimal, real customer info a driver is allowed to see. No fabricated values —
+    missing rating stays None so the UI can show a neutral state instead of a fake number."""
+    name = u.get("fullName") or u.get("full_name") or "Kunde"
+    rating = u.get("rating")
+    return {
+        "name": name,
+        "phone": u.get("phone") or "",
+        "rating": round(float(rating), 1) if isinstance(rating, (int, float)) else None,
+        "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
+        "trip_count": int(u.get("trip_count") or 0),
+    }
+
+
+# Never serve fabricated/demo/test trips to a driver
+REAL_TRIPS_ONLY = {
+    "demo": {"$ne": True},
+    "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+}
+
+
 @api.get("/driver/pending")
 async def driver_pending(current=Depends(require_driver)):
-    """Trips waiting to be accepted (status=searching or booking, no driver assigned yet).
-    Includes lightweight customer info (name, rating, photo initials) so drivers see who they're picking up."""
+    """Real ride requests waiting for a driver (status=searching/booking, no driver assigned).
+    Pickup distance + ETA come from real routing (OSRM) based on the driver's live GPS —
+    never from hardcoded values. Fabricated/demo/test trips are filtered out."""
+    commission = await _platform_commission()
+    d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     trips = []
-    async for t in db.trips.find({"status": {"$in": ["searching", "booking"]}, "driver_id": None}).sort("created_at", 1).limit(10):
+    async for t in db.trips.find({
+        "status": {"$in": ["searching", "booking"]},
+        "driver_id": None,
+        **REAL_TRIPS_ONLY,
+    }).sort("created_at", 1).limit(10):
         t["id"] = str(t["_id"])
         t.pop("_id", None)
-        # Enrich with customer info
-        try:
-            u = await db.users.find_one({"_id": ObjectId(t.get("user_id"))}, {"password_hash": 0}) if t.get("user_id") else None
-            if u:
-                name = u.get("fullName") or u.get("full_name") or "Kunde"
-                t["customer"] = {
-                    "name": name,
-                    "phone": u.get("phone") or "",
-                    "rating": u.get("rating", 4.9),
-                    "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
-                    "trip_count": u.get("trip_count", 0),
-                }
-        except Exception:
-            t["customer"] = {"name": "Kunde", "phone": "", "rating": 4.9, "initials": "K", "trip_count": 0}
+        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+        t["pickup_route"] = None
+        u = None
+        if t.get("user_id"):
+            try:
+                u = await db.users.find_one({"_id": ObjectId(t["user_id"])}, {"password_hash": 0})
+            except Exception:
+                u = None
+        t["customer"] = customer_public(u) if u else None
         trips.append(t)
-    return {"trips": trips}
+
+    # Real driver -> pickup routing for the requests actually shown (kept to 3 for latency)
+    if d_lat is not None and d_lng is not None:
+        for t in trips[:3]:
+            r = await osrm_route(d_lat, d_lng, t["pickup_lat"], t["pickup_lng"])
+            if r:
+                t["pickup_route"] = {
+                    "distance_km": r["distance_km"],
+                    "duration_min": r["duration_min"],
+                    "geometry": r["geometry"],
+                }
+    return {
+        "trips": trips,
+        "commission": commission,
+        "driver_gps": {"lat": d_lat, "lng": d_lng, "at": current.get("last_location_at")} if d_lat is not None else None,
+    }
 
 
 @api.post("/driver/accept")
@@ -2014,45 +2025,50 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         "name": current.get("fullName") or "Sjåfør",
         "car": current.get("car") or "",
         "plate": current.get("plate") or "",
-        "rating": current.get("rating") or 4.9,
+        "rating": current.get("rating"),
         "photo": (current.get("fullName") or "S")[:2].upper(),
     }
-    # Pick up trip first so we know pickup coords for a realistic start position
+    # Pick up trip first so we know pickup coords
     trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
-    # Use driver's real current GPS as start position; fallback to a small offset from pickup
+    # Driver's REAL current GPS. If we don't have it we store nothing and report no ETA —
+    # a fabricated start position/ETA would be shown to the customer as if it were real.
     d_lat = current.get("last_lat")
     d_lng = current.get("last_lng")
-    if d_lat is None or d_lng is None:
-        import hashlib
-        h = hashlib.md5(f"{body.trip_id}-{driver_id}".encode()).digest()
-        dx = ((h[0] - 128) / 128) * 0.012 + 0.006
-        dy = ((h[1] - 128) / 128) * 0.012 + 0.006
-        d_lat = trip_pre["pickup_lat"] + dx
-        d_lng = trip_pre["pickup_lng"] + dy
-    # ETA based on distance
-    eta = max(1, int(round(haversine_km(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"]) / 30 * 60)))
-    result = await db.trips.update_one(
-        {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None},
-        {"$set": {
-            "status": "driver_on_way",
-            "driver": driver,
-            "driver_id": driver_id,
-            "driver_user_id": current["id"],
+    eta = None
+    updates = {
+        "status": "driver_on_way",
+        "driver": driver,
+        "driver_id": driver_id,
+        "driver_user_id": current["id"],
+        "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if d_lat is not None and d_lng is not None:
+        route = await osrm_route(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"])
+        eta = route["duration_min"] if route else max(1, int(round(
+            haversine_km(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"]) / 30 * 60)))
+        updates.update({
             "eta_min": eta,
             "driver_start_lat": d_lat,
             "driver_start_lng": d_lng,
             "driver_lat": d_lat,
             "driver_lng": d_lng,
-            "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }},
+            "driver_location_at": datetime.now(timezone.utc).isoformat(),
+        })
+    result = await db.trips.update_one(
+        {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None},
+        {"$set": updates},
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     t = await db.trips.find_one({"trip_id": body.trip_id})
-    await send_push_to_user(t["user_id"], "Sjåfør på vei", f"{driver['name']} kommer om {eta} min.", f"/app/booking/{body.trip_id}")
+    await send_push_to_user(
+        t["user_id"], "Sjåfør på vei",
+        f"{driver['name']} kommer om {eta} min." if eta else f"{driver['name']} er på vei til deg.",
+        f"/app/booking/{body.trip_id}",
+    )
     t["id"] = str(t["_id"]); t.pop("_id", None)
     return t
 
@@ -2066,21 +2082,36 @@ async def driver_current(current=Depends(require_driver)):
     )
     if not t:
         return None
+    # A completed ("arrived") trip is only "active" briefly so the driver can see the summary —
+    # after that it belongs to trip history, not the dashboard.
+    if t.get("status") == "arrived":
+        ts = t.get("arrived_at") or t.get("updated_at")
+        try:
+            done_at = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            if (datetime.now(timezone.utc) - done_at) > timedelta(minutes=15):
+                return None
+        except Exception:
+            return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
-    # Enrich with customer info
-    try:
-        u = await db.users.find_one({"_id": ObjectId(t.get("user_id"))}, {"password_hash": 0}) if t.get("user_id") else None
-        if u:
-            name = u.get("fullName") or u.get("full_name") or "Kunde"
-            t["customer"] = {
-                "name": name,
-                "phone": u.get("phone") or "",
-                "rating": u.get("rating", 4.9),
-                "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
-                "trip_count": u.get("trip_count", 0),
+    commission = await _platform_commission()
+    t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+    u = None
+    if t.get("user_id"):
+        try:
+            u = await db.users.find_one({"_id": ObjectId(t["user_id"])}, {"password_hash": 0})
+        except Exception:
+            u = None
+    t["customer"] = customer_public(u) if u else None
+    # Real routing for the leg the driver is actually on (driver's live GPS -> pickup)
+    t["pickup_route"] = None
+    if t["status"] in ("driver_on_way", "at_pickup") and current.get("last_lat") is not None:
+        r = await osrm_route(current["last_lat"], current["last_lng"], t["pickup_lat"], t["pickup_lng"])
+        if r:
+            t["pickup_route"] = {
+                "distance_km": r["distance_km"],
+                "duration_min": r["duration_min"],
+                "geometry": r["geometry"],
             }
-    except Exception:
-        pass
     return t
 
 
@@ -2183,12 +2214,14 @@ async def driver_summary(current=Depends(require_driver)):
         "declined_at": {"$gte": today},
     })
     total_offered = accepted + declined
-    acceptance_rate = round((accepted / total_offered) * 100) if total_offered > 0 else 100
+    acceptance_rate = round((accepted / total_offered) * 100) if total_offered > 0 else None
 
+    u = await db.users.find_one({"_id": ObjectId(driver_id)}, {"online": 1, "last_location_at": 1}) or {}
     return {
         "income": total,
         "trips": trips,
-        "satisfaction": 98,
+        "online": bool(u.get("online")),
+        "last_location_at": u.get("last_location_at"),
         "online_minutes": online_minutes,
         "acceptance_rate": acceptance_rate,
     }
@@ -2389,6 +2422,140 @@ async def google_session(body: GoogleSessionRequest, response: Response):
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
+
+
+# ============================================================
+# Google Sign-In — KJAPP-owned OAuth 2.0 (Authorization Code + PKCE)
+# The client secret never leaves the backend. Key-optional: with no keys configured the
+# endpoints report "not configured" and the login button stays inactive.
+# ============================================================
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
+GOOGLE_KEYS_CACHE = {"keys": None, "fetched_at": None}
+
+
+def google_oauth_configured() -> bool:
+    return bool(os.environ.get("GOOGLE_CLIENT_ID", "").strip() and os.environ.get("GOOGLE_CLIENT_SECRET", "").strip())
+
+
+async def _get_google_keys(force: bool = False):
+    now = datetime.now(timezone.utc)
+    if not force and GOOGLE_KEYS_CACHE["keys"] and GOOGLE_KEYS_CACHE["fetched_at"] \
+            and (now - GOOGLE_KEYS_CACHE["fetched_at"]).total_seconds() < 3600:
+        return GOOGLE_KEYS_CACHE["keys"]
+    async with httpx.AsyncClient(timeout=8.0) as client:
+        r = await client.get(GOOGLE_JWKS_URL)
+        keys = r.json().get("keys", [])
+    GOOGLE_KEYS_CACHE.update({"keys": keys, "fetched_at": now})
+    return keys
+
+
+class GoogleCodeRequest(BaseModel):
+    code: str
+    code_verifier: str
+    redirect_uri: str
+
+
+@api.get("/auth/google/config")
+async def google_oauth_config():
+    """Public config — only the client ID (never the secret) so the app can start the OAuth flow."""
+    enabled = google_oauth_configured()
+    return {
+        "enabled": enabled,
+        "client_id": os.environ.get("GOOGLE_CLIENT_ID", "").strip() if enabled else "",
+        "message": None if enabled else "Google-innlogging er ikke konfigurert ennå",
+    }
+
+
+async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
+    header = jwt.get_unverified_header(id_token)
+    kid = header.get("kid")
+    keys = await _get_google_keys()
+    key_data = next((k for k in keys if k.get("kid") == kid), None)
+    if not key_data:  # Google rotates keys — refresh once before failing
+        keys = await _get_google_keys(force=True)
+        key_data = next((k for k in keys if k.get("kid") == kid), None)
+    if not key_data:
+        raise HTTPException(status_code=401, detail="Ukjent Google-nøkkel")
+    from jwt.algorithms import RSAAlgorithm
+    public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+    try:
+        claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Ugyldig Google-token: {e}")
+    if claims.get("iss") not in GOOGLE_ISSUERS:
+        raise HTTPException(status_code=401, detail="Ugyldig Google-utsteder")
+    return claims
+
+
+@api.post("/auth/google/code")
+async def google_oauth_code(body: GoogleCodeRequest, response: Response):
+    """Exchange a Google authorization code (PKCE) for a KJAPP session.
+    Identity is taken ONLY from the cryptographically verified id_token — never from the client."""
+    if not google_oauth_configured():
+        raise HTTPException(status_code=503, detail="Google-innlogging er ikke konfigurert ennå")
+    client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
+    client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
+    async with httpx.AsyncClient(timeout=12.0) as client:
+        r = await client.post(GOOGLE_TOKEN_URL, data={
+            "code": body.code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code_verifier": body.code_verifier,
+            "redirect_uri": body.redirect_uri,
+            "grant_type": "authorization_code",
+        })
+    if r.status_code != 200:
+        raise HTTPException(status_code=401, detail="Google avviste innloggingen")
+    id_token = r.json().get("id_token")
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Ingen id_token fra Google")
+
+    claims = await _verify_google_id_token(id_token, client_id)
+    google_sub = claims.get("sub")
+    email = (claims.get("email") or "").strip().lower()
+    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
+    if not google_sub:
+        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
+    if not (email and email_verified):
+        raise HTTPException(status_code=400, detail="Google-kontoen mangler verifisert e-post")
+
+    name = claims.get("name") or email.split("@")[0]
+    user = await db.users.find_one({"google_sub": google_sub}) or await db.users.find_one({"email": email})
+    if user:
+        if user.get("disabled"):
+            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
+        uid = str(user["_id"])
+        role = user.get("role", "user")
+        driver_id = user.get("driver_id")
+        display_name = user.get("fullName") or name
+        await db.users.update_one({"_id": user["_id"]}, {"$set": {
+            "google_sub": google_sub, "google_linked": True, "picture": claims.get("picture"),
+        }})
+        phone = user.get("phone", "")
+        email = user["email"]
+    else:
+        display_name = name
+        result = await db.users.insert_one({
+            "email": email,
+            "password_hash": hash_password(secrets.token_hex(16)),  # unused, login goes through Google
+            "fullName": display_name,
+            "phone": "",
+            "picture": claims.get("picture"),
+            "role": "user",
+            "google_sub": google_sub,
+            "google_linked": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        uid = str(result.inserted_id)
+        role = "user"
+        driver_id = None
+        phone = ""
+
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": phone, "role": role, "driver_id": driver_id}}
 
 
 # ============================================================
@@ -3099,9 +3266,11 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         # Verify token using PyJWT with JWK
         from jwt.algorithms import RSAAlgorithm
         public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+        # Web/Android use the Services ID, native iOS uses the App/bundle ID — both are ours.
+        allowed_aud = [a for a in (apple_client_id, os.environ.get("APPLE_BUNDLE_ID", "").strip()) if a]
         payload = jwt.decode(
             body.identity_token, public_key, algorithms=["RS256"],
-            audience=apple_client_id, issuer="https://appleid.apple.com",
+            audience=allowed_aud, issuer="https://appleid.apple.com",
         )
     except HTTPException:
         raise
@@ -3158,8 +3327,13 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
 
 @api.get("/auth/apple/config")
 async def apple_config():
-    """Expose the Apple Client ID so the frontend can init Apple JS SDK."""
-    return {"client_id": os.environ.get("APPLE_CLIENT_ID", ""), "enabled": bool(os.environ.get("APPLE_CLIENT_ID"))}
+    """Expose only the public Apple client ID (Services ID) so the app can start the Apple flow."""
+    client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
+    return {
+        "client_id": client_id,
+        "enabled": bool(client_id),
+        "message": None if client_id else "Sign in with Apple er ikke konfigurert ennå",
+    }
 
 
 # ============================================================

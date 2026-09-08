@@ -7,7 +7,8 @@ import { LogOut, Bell, Star, Car, ChevronLeft, MapPin, Wallet, History, Shield, 
 
 export default function DriverProfile() {
   const { user, logout } = useAuth();
-  const [summary, setSummary] = useState({ income: 0, trips: 0, satisfaction: 98 });
+  const [summary, setSummary] = useState(null);
+  const [ratings, setRatings] = useState(null);
   const [pushOn, setPushOn] = useState(false);
   const [autoNav, setAutoNav] = useState(() => localStorage.getItem("kjapp_auto_nav") === "true");
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem("kjapp_driver_sound") !== "false");
@@ -16,6 +17,7 @@ export default function DriverProfile() {
 
   useEffect(() => {
     driverApi.summary().then(setSummary).catch(() => {});
+    driverApi.ratings().then(setRatings).catch(() => {});
     if ("Notification" in window) setPushOn(Notification.permission === "granted");
   }, []);
 
@@ -63,16 +65,16 @@ export default function DriverProfile() {
         <div className="flex-1 min-w-0">
           <div className="text-white font-medium" data-testid="dprof-name">{user?.fullName}</div>
           <div className="text-[13px] text-mint flex items-center gap-1">
-            <Star size={12} fill="#2fe08c" /> {user?.rating?.toFixed(1) || "4.9"} · Sjåfør
+            <Star size={12} fill="currentColor" /> {ratings?.count ? `${ratings.average.toFixed(1)} · ${ratings.count} vurderinger` : "Ingen vurderinger ennå"}
           </div>
           <div className="text-[11px] text-[#7a827a] mt-0.5" data-testid="dprof-email">{user?.email}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-5">
-        <div className="card p-3"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">I dag</div><div className="font-display text-lg text-white mt-1">{summary.income} kr</div></div>
-        <div className="card p-3"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Turer</div><div className="font-display text-lg text-white mt-1">{summary.trips}</div></div>
-        <div className="card p-3"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Tilfredshet</div><div className="font-display text-lg text-white mt-1">{summary.satisfaction}%</div></div>
+        <div className="card p-3" data-testid="dprof-income"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">I dag</div><div className="font-display text-lg text-white mt-1">{summary ? `${summary.income} kr` : "—"}</div></div>
+        <div className="card p-3" data-testid="dprof-trips"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Turer</div><div className="font-display text-lg text-white mt-1">{summary ? summary.trips : "—"}</div></div>
+        <div className="card p-3" data-testid="dprof-rating"><div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Vurdering</div><div className="font-display text-lg text-white mt-1">{ratings?.count ? ratings.average.toFixed(1) : "—"}</div></div>
       </div>
 
       {/* Inntjening */}

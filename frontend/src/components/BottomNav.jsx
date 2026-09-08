@@ -28,15 +28,11 @@ export default function BottomNav() {
             onClick={() => setSheet(true)}
             data-testid="nav-menu"
             aria-label="Meny"
-            className="w-12 h-12 rounded-full grid place-items-center backdrop-blur-2xl border shrink-0"
-            style={{
-              background: "rgba(232, 224, 208, 0.06)",
-              borderColor: "rgba(232, 224, 208, 0.12)",
-            }}
+            className="glass-pill w-12 h-12 rounded-full grid place-items-center shrink-0 transition-transform active:scale-95"
           >
             <span className="flex flex-col gap-[3px]">
-              <span className="w-4 h-[1.5px] bg-[#e8e0d0] rounded" />
-              <span className="w-3 h-[1.5px] bg-[#e8e0d0] rounded" />
+              <span className="w-4 h-[1.5px] rounded" style={{ background: "#F4F4F0" }} />
+              <span className="w-3 h-[1.5px] rounded" style={{ background: "#CBA365" }} />
             </span>
           </button>
 

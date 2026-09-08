@@ -1,0 +1,32 @@
+{
+  "summary": "Iter 33 full E2E (backend + frontend): cars/nearby returns only real drivers, Google/Apple OAuth key-optional handling, live driver marker + ETA pill on map, empty-state UI, premium vehicle art, and 4-role demo-login routing. Backend: 17/17 pytest passed. Frontend: all critical selectors verified — social-google/apple with -inactive dots, social-not-configured note in Norwegian, /auth/google?code=fake safely redirects to /login?err=google with login-error banner, empty-state (home-cars-nearby-status + home-cars-empty, 0 .premium-car), live driver flow shows 1 .premium-car + .car-eta pill after driver ping, going offline restores empty state, tier-preview + vehicle selector images all load (naturalWidth=720), demo routing works (kunde→/app, sjåfør→/driver, flåte-eier→/fleet, superadmin→/loyver).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Live car ETA pill", "issue": "Backend /api/cars/nearby returned eta_min=1 (0.12 km) but the map marker .car-eta pill and status bar rendered '14 min'. The status bar text is generated client-side and appears to overwrite/ignore the backend eta_min value. Not blocking (marker + status still show), but backend and UI ETA are inconsistent.", "affected_selectors": [".car-eta", "[data-testid='home-cars-nearby-status']"]}
+    ],
+    "design_issues": [
+      {"screen": "Login (mobile 390x844)", "issues": ["Cookie banner ('Kun nødvendige' / 'Godta alle') overlays the demo-login grid and can hide demo-admin/superadmin button until user chooses. Consider auto-dismissing on any button interaction or a compact banner variant."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter33.py", "/app/test_reports/pytest/iter33.xml"],
+  "action_items": [
+    "Reconcile the client-side ETA rendering with backend eta_min so .car-eta pill and 'nærmeste X min unna' match /api/cars/nearby.eta_min (Home.jsx `nearbyCarsForMap`).",
+    "Consider renaming Login testid `demo-admin` to `demo-superadmin` for consistency with the review request (minor)."
+  ],
+  "critical_code_review_comments": [
+    "Backend enforces GPS_FRESH_SECONDS=60 correctly and only returns real drivers; demo1..demo6@kjapp.no cruise seed is no longer present in responses.",
+    "/api/auth/google/config + /api/auth/apple/config return {enabled:false, client_id:''} with no client_secret leakage — good.",
+    "/api/auth/google/code returns 503 with Norwegian message when unconfigured, /api/auth/apple returns 501 — matches spec.",
+    "Frontend gracefully handles ?code=fake by redirecting to /login?err=google with login-error banner instead of crashing.",
+    "VehicleArt images (/vehicles/*.jpg) all load at naturalWidth=720 in both tier-preview strip and 4-card vehicle selector."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter33.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% critical flows (1 minor ETA-display inconsistency)"},
+  "test_credentials": "ola@kjapp.no/test1234, sjafor@kjapp.no/sjafor1234, floteier1@kjapp.no/fleet1234, admin@kjapp.no/admin123",
+  "seed_data_creation": "None. Sjåfør was toggled online→offline within tests and left offline at the end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login demo-button testid for superadmin is 'demo-admin' (NOT 'demo-superadmin'). Cookie banner blocks buttons on mobile viewport — dismiss with 'Godta alle' before clicking demo buttons. To place a live driver on map: login sjafor@kjapp.no/sjafor1234 → POST /api/driver/online {online:true} → POST /api/driver/location {lat,lng,heading}, and re-ping within 60s or marker disappears. Real-driver flow, key-optional OAuth handling, and 4-role routing all pass; the only observed inconsistency is UI ETA text vs backend eta_min for live cars."
+}

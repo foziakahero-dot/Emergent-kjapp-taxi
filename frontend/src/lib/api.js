@@ -18,6 +18,10 @@ export const authApi = {
   register: (data) => api.post("/auth/register", data).then((r) => r.data),
   login: (data) => api.post("/auth/login", data).then((r) => r.data),
   googleSession: (session_id) => api.post("/auth/google/session", { session_id }).then((r) => r.data),
+  googleConfig: () => api.get("/auth/google/config").then((r) => r.data),
+  googleCode: (data) => api.post("/auth/google/code", data).then((r) => r.data),
+  appleConfig: () => api.get("/auth/apple/config").then((r) => r.data),
+  appleSignIn: (data) => api.post("/auth/apple", data).then((r) => r.data),
   me: () => api.get("/auth/me").then((r) => r.data),
   logout: () => api.post("/auth/logout").then((r) => r.data),
   twofaStatus: () => api.get("/auth/2fa/status").then((r) => r.data),
@@ -87,6 +91,7 @@ export const carsApi = {
 export const placesApi = {
   list: (featuredOnly = false) => api.get("/places", { params: { featured_only: featuredOnly } }).then((r) => r.data),
   search: (q) => api.get("/places/search", { params: { q } }).then((r) => r.data),
+  reverse: (lat, lng) => api.get("/places/reverse", { params: { lat, lng } }).then((r) => r.data),
 };
 
 export const paymentApi = {

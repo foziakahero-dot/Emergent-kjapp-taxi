@@ -76,7 +76,7 @@ export default function DevNavigator() {
         onClick={() => setOpen(true)}
         data-testid="dev-nav-open"
         aria-label="Utvikler-navigator"
-        className="fixed z-[1200] bottom-4 right-4 w-12 h-12 rounded-full grid place-items-center transition-transform active:scale-95"
+        className="fixed z-[1200] bottom-24 right-4 w-12 h-12 rounded-full grid place-items-center transition-transform active:scale-95"
         style={{
           background: "linear-gradient(155deg, rgba(201,161,91,0.85), rgba(168,131,74,0.9))",
           boxShadow: "0 8px 30px rgba(201,161,91,0.35)",

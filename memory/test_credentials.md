@@ -4,6 +4,9 @@
 
 > **Iter 27 (passordreset)**: `/forgot-password` → e-postlenke `/reset-password/{token}` (1t gyldighet, engangsbruk). Uten SENDGRID_API_KEY logges lenken til backend stdout (`grep "EMAIL/no-key" /var/log/supervisor/backend.out.log`). Vellykket reset nullstiller brute-force-låsen for kontoen.
 
+> **Iter 34 (Driver App = 100 % ekte data)**: All demo-/test-data er PURGET fra databasen (149 `TEST_`/demo-turer + 50 test-brukere slettet) og seederne er fjernet fra `server.py`. `ENABLE_DEMO_DATA` seeder nå KUN de 4 kontoene under (kunde/sjåfør/flåte/admin) — ingen turer, ingen cruise-biler. DriverHome/DriverTrip viser utelukkende autentisert sjåførs egne data + ekte GPS + ekte OSRM-ruter, ellers eksplisitt tom-/loading-/feil-state. Sjåførens GPS sendes kun mens «På vakt» er PÅ (throttlet: >25 m eller ≥15 s). Uten posisjonstilgang vises «Posisjon ikke tilgjengelig / Aktiver posisjonstilgang for å bruke KJAPP» (`data-testid="driver-gps-unavailable"`).
+> E2E-regresjonsskript for hele sjåførflyten: `python3 /app/backend/scripts/e2e_driver_flow.py` (kunde bestiller → pending → accept → arrive-at-pickup → passasjer om bord → fullført → inntekt/historikk). Datainspeksjon: `python3 /app/backend/scripts/inspect_data.py`.
+
 ## Kunde (passasjer)
 - URL: `/login`
 - Email: `ola@kjapp.no`
@@ -37,12 +40,23 @@
 - Har tilgang til: `/loyver` (søknader), `/loyver/applications/:id`, `/loyver/pending-drivers`, samt alle eksisterende `/admin/*` endepunkter (require_admin aksepterer både `admin` og `superadmin`)
 - I prod: pek `admin.kjappapp.no` mot samme app. Prod-eier-admin: `ADMIN_EMAIL=admin@kjappapp.no` + sterkt `ADMIN_PASSWORD` som deploy-secret.
 
-## Demo-sjåfører (Iter 16 — kart-simulator)
-- Auto-seeded ved backend-oppstart i `lifespan()`
-- Emails: `demo1@kjapp.no` … `demo6@kjapp.no` alle med `demo1234`
-- Role: `driver`, approved: true, online: true, demo: true
-- Cruiser Oslo (background asyncio-task hvert 6. sekund oppdaterer last_lat/last_lng/last_heading)
-- Vises på kunde-kartet via `/api/cars/nearby` som ekte biler
+## Demo-sjåfører (FJERNET fra kundekartet — Iter 33)
+- De 6 simulerte «cruise»-sjåførene (`demo1@…demo6@kjapp.no`) seedes IKKE lenger, og
+  eventuelle gamle records tvinges `online:false` + GPS-felt slettes ved oppstart.
+- `/api/cars/nearby` filtrerer alltid bort `demo:true`/`is_demo:true`/`disabled:true`.
+- Kundekartet viser KUN ekte, godkjente sjåfører som er på vakt med GPS-ping < 60 s.
+  Ingen sjåfører på vakt ⇒ tom liste + «Ingen biler på vakt akkurat nå» i UI.
+- For å se en bil på kundekartet: logg inn som `sjafor@kjapp.no`, slå på «På vakt»
+  (eller `POST /api/driver/online {"online":true}` + `POST /api/driver/location {lat,lng,heading}`).
+
+## Sosial innlogging (nøkkel-valgfri — Iter 33)
+- **Google (KJAPP-eid OAuth, PKCE)**: `GET /api/auth/google/config` → `{enabled:false}` uten nøkler.
+  Aktiveres ved å sette `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` i backend-miljøet.
+  Callback-rute i appen: `/auth/google` (samme origin — ingen Emergent-hostet login).
+- **Apple**: `GET /api/auth/apple/config` → `{enabled:false}` uten nøkler.
+  Aktiveres med `APPLE_CLIENT_ID` (Services ID) + `APPLE_BUNDLE_ID` (native iOS) + Team/Key/.p8.
+- Uten nøkler viser knappene grå prikk + «ikke konfigurert»-melding (`social-not-configured`).
+- Full oppsettsguide: `/app/memory/OAUTH_SETUP.md`.
 
 ## DevNavigator (Iter 17)
 - Flytende brass-kompass bottom-right på ALLE ruter (offentlige + private)
@@ -63,13 +77,16 @@
 - Kontoen får `approved: false` → kan logge inn, men får 403 på pending trips
 - Admin godkjenner: POST /api/admin/drivers/{user_id}/approve { approved: true }
 
-## Sjåfør-flyt (NY: ekte GPS, ingen simulator)
-- Sjåfør slår på "På vakt" → POST /api/driver/online {online:true}
-- Frontend `navigator.geolocation.watchPosition` sender POST /api/driver/location {lat,lng,heading} ~hvert 5. sekund
-- Turer STÅR i "searching" til en ekte sjåfør trykker "Godta tur" (POST /api/driver/accept)
+## Sjåfør-flyt (ekte GPS, ingen simulator — Iter 34)
+- Sjåfør slår på «På vakt» via ONLINE-pillen oppå kartet (`data-testid="driver-online-toggle"`) → POST /api/driver/online {online:true}
+- `watchPosition` sender POST /api/driver/location {lat,lng,heading,speed,accuracy} kun når online (throttle: >25 m ELLER ≥15 s)
+- Turer STÅR i "searching" til en ekte sjåfør trykker «Godta tur» (POST /api/driver/accept)
 - Turen går videre KUN når sjåfør trykker:
-  - POST /api/driver/trip/{id}/start → status: in_trip
-  - POST /api/driver/trip/{id}/arrive → status: arrived
+  - POST /api/driver/trip/{id}/arrive-at-pickup → status: at_pickup (ankommet hentested)
+  - POST /api/driver/trip/{id}/start → status: in_trip (kunde om bord)
+  - POST /api/driver/trip/{id}/arrive → status: arrived (fullført)
+- `GET /api/driver/current` returnerer «arrived»-tur kun i 15 min etter fullføring (deretter historikk)
+- `GET /api/driver/pending` + `/current` beriker med ekte OSRM `pickup_route` (avstand/tid fra sjåførens live-GPS til henting) og `driver_earnings` (pris minus reell plattformavgift)
 - Passasjer ser bilen live på kartet via trip.driver_lat/driver_lng (oppdateres når sjåfør pinger)
 
 ## Betaling (Stripe)

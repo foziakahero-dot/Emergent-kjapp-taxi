@@ -1,0 +1,38 @@
+{
+  "summary": "Iter 34 review (backend + frontend, mobile 430x900). Backend E2E driver flow (/app/backend/scripts/e2e_driver_flow.py) passed all 26 assertions — no demo/synthetic data anywhere; real OSRM routing, real driver_earnings, at-pickup→in_trip→arrived state machine, offline persistence, and /api/cars/nearby returning 0 when driver goes offline. Extended sweep of /driver/history, /driver/history/weekly, /driver/ratings, /driver/payouts returned 200 with only the authenticated driver's real trips (no 'TEST_' / 'Aisha' / 'Kari Nordmann' / 'Erik Berg' / 'Tilfredshet' strings). Frontend: demo-driver login lands on /driver with the new live-map layout, KJAPP DRIVER overlay + ONLINE pill + real place label ('Storgata, Sentrum' — NOT hardcoded 'Majorstuen'), online toggle flips + persists after reload + drives /api/driver/summary/today.online, active-trip card opens, state machine advances (at_pickup→in_trip→arrived→'Tur fullført'), and income/trip-count on /driver update accordingly (372 kr, 2 turer). Bottom nav has a single bar with 4 tabs that all navigate correctly (with ?nav=off to bypass DevNavigator compass overlap on bottom-right).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DriverBottomNav", "issue": "DevNavigator compass (bottom-right, ~48x48 px) overlaps the 'Konto' nav tab and intercepts clicks on real devices. Clicking [data-testid='dnav-account'] without ?nav=off leaves the user on the previous route. Works with ?nav=off or force=true.", "selector": "[data-testid='dnav-account']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Driver map (mapbox/maplibre)", "issues": ["Console warning: Image 'wood-pattern' could not be loaded (missing sprite). Cosmetic only, map still renders."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/scripts/e2e_driver_flow.py"
+  ],
+  "action_items": [
+    "TESTID MISMATCH vs Iter-34 review spec — rename or add aliases so QA scripts written against the requested names find the elements. Current → requested: `driver-brand` → `driver-map-brand`; `driver-overview-income` → `driver-income-today`; `driver-overview-headline` → `driver-trip-count`; `pending-{id}` → also `driver-request-card`; `accept-{id}` → `driver-accept-btn`; `decline-{id}` → `driver-decline-btn`; `no-pending` → `driver-no-active`; `dtrip-at-pickup` → `dt-arrived-pickup`; `dtrip-start` → `dt-start`; `dtrip-complete` → `dt-complete`. Behaviour is correct; only the testid names diverge from the review request.",
+    "Move or z-index-lower the DevNavigator compass so it doesn't sit on top of the 4th nav item on mobile (or auto-hide it inside /driver routes). Currently only ?nav=off avoids the overlap.",
+    "Add the missing map sprite image 'wood-pattern' (or remove the reference from the style) to silence the console warning."
+  ],
+  "critical_code_review_comments": [
+    "Backend cleanly returns real data only; e2e_driver_flow.py verifies OSRM pickup_route, driver_earnings, at_pickup state, and post-completion income delta with exact fare math.",
+    "DriverHome.jsx correctly gates GPS heartbeat behind `online` state and renders honest [data-testid='driver-gps-unavailable'] fallback + retry when geolocation is denied (verified in code, matches Iter-34 spec).",
+    "Reverse geocode (/api/places/reverse) is wired to the map footer, giving real street/area labels instead of a hardcoded name.",
+    "Only concern is naming divergence between the freshly-written UI testids and the ones requested in the review — this will break any external QA harness that follows the review spec literally."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (26/26 e2e + 4/4 extra endpoints)", "frontend": "95% — all functional flows pass; testid naming mismatches vs review spec"},
+  "test_credentials": "sjafor@kjapp.no / sjafor1234 (driver), ola@kjapp.no / test1234 (customer)",
+  "seed_data_creation": "Two real trips (Jernbanetorget 1 → Stranden 1) were created by the e2e script + one manual completion during UI testing. Driver was left ONLINE and with 2 completed trips today (372 kr).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is clean of demo data and E2E flow passes end-to-end. For UI: (1) always pass ?nav=off in the URL — DevNavigator compass overlaps the bottom-right Konto tab; (2) the actual testids on DriverHome/DriverTrip DO NOT match the review-request names — see action_items for the map. If you need to script UI flows, target the real names: driver-brand, driver-overview-income, driver-overview-headline, pending-{trip_id}, accept-{trip_id}, decline-{trip_id}, no-pending, dtrip-at-pickup, dtrip-start, dtrip-complete, dtrip-completed, dtrip-done. Do NOT create trips with 'TEST_' prefixed addresses — use real Norwegian addresses to avoid polluting real data. To reset the driver's day counters before another run, either wait until midnight UTC or delete today's trips from Mongo for user sjafor@kjapp.no.",
+  "rca of the issue": "N/A — no bugs blocking the acceptance criteria. Only cosmetic overlap of DevNavigator and cosmetic sprite warning; primary review-blocking issue is testid naming that E1 needs to align with the review spec."
+}

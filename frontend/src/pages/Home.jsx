@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import PremiumMap from "../components/PremiumMap";
+import { VehicleArt } from "../components/VehicleArt";
 import { tripsApi, carsApi, placesApi, pricingApi, paymentApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, Zap, CreditCard, AlertTriangle, ChevronRight, Users, Sparkles, Car as CarIcon, ChevronDown, ChevronUp, User, History, Settings as SettingsIcon, LogOut, HelpCircle, X, Plane } from "lucide-react";
+import { Menu, Search, MapPin, Navigation, Home as HomeIcon, Briefcase, Star, CreditCard, ChevronRight, Users, Sparkles, ChevronUp, User, History, Settings as SettingsIcon, LogOut, HelpCircle, X, Plane } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Orb } from "../components/UIKit";
 
 // Oslo defaults
 const DEFAULT_CENTER = [59.9139, 10.7522];
@@ -30,6 +30,8 @@ const VEHICLE_TIERS = [
   { id: "trygg",    name: "KJAPP XL", tagline: "Familie · bagasje" },
 ];
 
+const NAV_CLEARANCE = 84; // floating command bar height incl. margin
+
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -38,7 +40,6 @@ export default function Home() {
   const [showSheet, setShowSheet] = useState(false);
   const [vehicle, setVehicle] = useState("ai-first");
   const [requesting, setRequesting] = useState(false);
-  const [activeTrip, setActiveTrip] = useState(null);
   const [cars, setCars] = useState([]);
   const [places, setPlaces] = useState(PLACES_FALLBACK);
   const [routeGeom, setRouteGeom] = useState(null);
@@ -48,6 +49,8 @@ export default function Home() {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sheetH, setSheetH] = useState(420);
+  const sheetRef = useRef(null);
   const verifiedMethods = useMemo(() => paymentMethods.filter((m) => m.verified !== false), [paymentMethods]);
   const hasPaymentMethod = paymentMethods.length > 0;
   const hasVerifiedPaymentMethod = verifiedMethods.length > 0;
@@ -84,6 +87,15 @@ export default function Home() {
     placesApi.list().then((r) => setPlaces(r.places || PLACES_FALLBACK)).catch(() => {});
   }, []);
 
+  // Keep the Assist FAB floating just above the sheet regardless of its content height
+  useEffect(() => {
+    const node = sheetRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([entry]) => setSheetH(Math.round(entry.contentRect.height)));
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+
   // icon resolver for backend places
   const iconFor = (label) => {
     if (label === "Hjem") return HomeIcon;
@@ -116,7 +128,6 @@ export default function Home() {
   useEffect(() => {
     tripsApi.active().then((t) => {
       if (t && ["searching", "booking", "driver_on_way", "in_trip", "arrived"].includes(t.status)) {
-        setActiveTrip(t);
         navigate(`/app/booking/${t.trip_id}`);
       }
     }).catch(() => {});
@@ -179,17 +190,22 @@ export default function Home() {
 
   const nearbyCarsForMap = useMemo(() => {
     if (dropoff) return []; // hide nearby when route is drawn
-    return cars.map((c) => ({ lat: c.lat, lng: c.lng, bearing: c.heading || 0 }));
+    return cars.map((c) => ({ lat: c.lat, lng: c.lng, bearing: c.heading || 0, eta: c.eta_min }));
   }, [cars, dropoff]);
 
+  const nearestEta = cars[0]?.eta_min;
+  const firstName = user?.fullName ? user.fullName.split(" ")[0] : "";
+  const sheetBottom = `calc(env(safe-area-inset-bottom) + ${NAV_CLEARANCE}px)`;
+
   return (
-    <div className="relative" style={{ height: "calc(100dvh - 80px)" }}>
-      {/* Map — MapLibre GL 3D */}
-      <div className="absolute inset-x-0 top-0 bottom-0">
+    <div className="relative" style={{ height: "100dvh" }} data-testid="home-screen">
+      {/* Map — full bleed, Fjord & Granite vector style */}
+      <div className="absolute inset-0">
         <PremiumMap
           center={[pickup.lng, pickup.lat]}
-          zoom={dropoff ? 13.5 : 13}
-          pitch={45}
+          zoom={dropoff ? 13.5 : 13.2}
+          pitch={50}
+          paddingBottom={sheetH + NAV_CLEARANCE}
           route={mapRoute}
           pickup={dropoff ? pickup : null}
           dropoff={dropoff}
@@ -197,32 +213,38 @@ export default function Home() {
           cars={nearbyCarsForMap}
           testid="home-map"
         />
+        {/* Vignette — lets the crystal sheet and header float on the map */}
+        <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(7,11,14,0.55) 0%, transparent 22%, transparent 55%, rgba(7,11,14,0.65) 100%)" }} />
       </div>
 
-      {/* Top header — glass pills, brass accent */}
-      <div className="relative z-[1000] px-4 pt-3 flex items-center justify-between" style={{ paddingTop: "max(env(safe-area-inset-top), 14px)" }}>
-        <button
-          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl transition-transform active:scale-95"
+      {/* Top floating header — crystal pills */}
+      <div className="relative z-[1000] px-4 flex items-center justify-between" style={{ paddingTop: "max(env(safe-area-inset-top), 14px)" }}>
+        <motion.button
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}
+          className="glass-pill w-11 h-11 grid place-items-center rounded-full transition-transform active:scale-95"
           data-testid="home-menu"
           onClick={() => setMenuOpen(true)}
-          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)" }}
         >
           <Menu size={18} style={{ color: "var(--text)" }} />
-        </button>
-        <div
-          className="font-display text-[19px] tracking-tight backdrop-blur-xl rounded-full px-5 py-2"
-          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)", color: "var(--text)" }}
+        </motion.button>
+        <motion.div
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.05 }}
+          className="glass-pill flex flex-col items-center leading-none rounded-full px-6 py-2"
+          data-testid="home-brand"
         >
-          KJ<span style={{ color: "var(--accent)" }}>A</span>PP
-        </div>
-        <button
-          className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl transition-transform active:scale-95"
+          <span className="font-display text-[21px] tracking-[0.02em]" style={{ color: "var(--text)" }}>
+            KJ<span style={{ color: "var(--accent)" }}>A</span>PP
+          </span>
+          <span className="text-[7.5px] tracking-[0.42em] uppercase mt-1" style={{ color: "rgba(203,163,101,0.85)" }}>Nordic taxi</span>
+        </motion.div>
+        <motion.button
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.1 }}
+          className="glass-pill w-11 h-11 grid place-items-center rounded-full transition-transform active:scale-95"
           data-testid="home-orb-btn"
           onClick={() => navigate("/app/ai")}
-          style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)" }}
         >
-          <div className="orb orb-tiny" style={{ width: 22, height: 22 }} />
-        </button>
+          <div className="orb" style={{ width: 20, height: 20 }} />
+        </motion.button>
       </div>
 
       {/* Customer side menu */}
@@ -230,228 +252,235 @@ export default function Home() {
         {menuOpen && <CustomerMenu onClose={() => setMenuOpen(false)} navigate={navigate} userName={user?.fullName} />}
       </AnimatePresence>
 
-      {/* KJAPP Assist FAB — signaturknapp, alltid tilgjengelig */}
+      {/* KJAPP Assist FAB — brushed brass, floats above the sheet */}
       {!menuOpen && (
         <motion.button
           initial={{ opacity: 0, scale: 0.6 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5, type: "spring", stiffness: 220, damping: 18 }}
+          transition={{ delay: 0.55, type: "spring", stiffness: 220, damping: 18 }}
           onClick={() => navigate("/app/ai")}
           data-testid="home-kjapp-assist"
           className="absolute right-4 z-[1001] group"
-          style={{ bottom: sheetCollapsed ? 116 : 480 }}
+          style={{ bottom: `calc(env(safe-area-inset-bottom) + ${NAV_CLEARANCE + sheetH + 14}px)`, transition: "bottom 0.35s cubic-bezier(0.16,1,0.3,1)" }}
           aria-label="KJAPP Assist"
         >
           <span
             className="absolute inset-0 rounded-full"
-            style={{
-              background: "radial-gradient(circle, rgba(203,163,101,0.55), transparent 70%)",
-              filter: "blur(10px)",
-              animation: "kjapp-fab-halo 3s ease-in-out infinite",
-            }}
+            style={{ background: "radial-gradient(circle, rgba(203,163,101,0.6), transparent 70%)", filter: "blur(12px)", animation: "kjapp-fab-halo 3s ease-in-out infinite" }}
           />
-          <div
-            className="relative w-14 h-14 rounded-full grid place-items-center transition-transform group-active:scale-95"
-            style={{
-              background: "linear-gradient(135deg, #DDB77A 0%, #CBA365 55%, #8F6E3E 100%)",
-              boxShadow: "0 12px 24px rgba(203,163,101,0.35), inset 0 0 0 1px rgba(255,255,255,0.15)",
-            }}
-          >
-            <Sparkles size={22} style={{ color: "#0B1013" }} strokeWidth={2.4} />
+          <div className="brass-orb relative w-14 h-14">
+            <Sparkles size={22} strokeWidth={2.4} />
           </div>
           <div
-            className="absolute right-[68px] top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[11px] tracking-widest uppercase pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ background: "rgba(11,16,19,0.9)", color: "var(--accent)", border: "1px solid rgba(203,163,101,0.30)" }}
+            className="absolute right-[68px] top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[11px] tracking-widest uppercase pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity glass-pill"
+            style={{ color: "var(--accent)" }}
           >
             KJAPP Assist
           </div>
-          <style>{`@keyframes kjapp-fab-halo { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }`}</style>
+          <style>{`@keyframes kjapp-fab-halo { 0%,100% { opacity: 0.65; transform: scale(1); } 50% { opacity: 1; transform: scale(1.18); } }`}</style>
         </motion.button>
       )}
 
-      {/* Bottom sheet — search / booking (can be minimized) */}
+      {/* Crystal bottom sheet — search / booking (collapsible) */}
       <motion.div
-        initial={{ y: 40, opacity: 0 }}
+        initial={{ y: 70, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="absolute left-0 right-0 bottom-6 z-[1000] px-4"
+        transition={{ type: "spring", stiffness: 240, damping: 28, delay: 0.08 }}
+        className="absolute left-0 right-0 z-[1000] px-3"
+        style={{ bottom: sheetBottom }}
       >
         <div
-          className="card p-4 shadow-card"
+          ref={sheetRef}
+          className="relative overflow-hidden rounded-[28px]"
+          data-testid="home-sheet"
           style={{
-            background: "linear-gradient(180deg, rgba(16,23,28,0.94), rgba(9,14,18,0.97))",
-            border: "1px solid rgba(232,224,208,0.12)",
-            borderTop: "1px solid rgba(203,163,101,0.22)",
-            backdropFilter: "blur(32px) saturate(150%)",
-            WebkitBackdropFilter: "blur(32px) saturate(150%)",
-            boxShadow: "0 -8px 40px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.05) inset",
+            background: "linear-gradient(180deg, rgba(14,22,28,0.90) 0%, rgba(8,13,17,0.97) 100%)",
+            border: "1px solid rgba(244,244,240,0.10)",
+            backdropFilter: "blur(28px) saturate(160%)",
+            WebkitBackdropFilter: "blur(28px) saturate(160%)",
+            boxShadow: "0 -14px 50px rgba(0,0,0,0.55), 0 30px 70px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.07)",
+            padding: "10px 14px 12px",
           }}
         >
+          <span className="aurora-line" aria-hidden />
+          {/* ambient fjord glow */}
+          <span className="pointer-events-none absolute -bottom-24 -left-16 w-64 h-64 rounded-full" style={{ background: "radial-gradient(circle, rgba(123,166,158,0.14), transparent 70%)", filter: "blur(10px)" }} />
+
           {/* Collapse handle + toggle */}
           <button
             onClick={() => setSheetCollapsed((v) => !v)}
             data-testid="sheet-toggle"
-            className="w-full flex flex-col items-center gap-1 pb-1 -mt-1 group"
+            className="relative w-full flex flex-col items-center gap-1 pb-1 group"
             aria-label={sheetCollapsed ? "Åpne søk" : "Minimer søk"}
           >
-            <div className="sheet-handle" />
+            <div className="sheet-handle" style={{ margin: "0 auto 8px auto" }} />
           </button>
 
           {sheetCollapsed ? (
             <button
               onClick={() => setSheetCollapsed(false)}
               data-testid="sheet-expand"
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl transition-colors"
-              style={{ background: "rgba(232,224,208,0.05)", border: "1px solid rgba(232,224,208,0.10)" }}
+              className="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-colors"
+              style={{ background: "rgba(244,244,240,0.045)", border: "1px solid rgba(244,244,240,0.10)" }}
             >
-              <Search size={16} style={{ color: "var(--accent)" }} />
-              <span className="flex-1 text-left text-sm" style={{ color: "var(--text)" }}>
-                {cars.length > 0 ? `${cars.length} biler i nærheten · nærmeste ${cars[0]?.eta_min} min` : "Ingen sjåfører på vakt akkurat nå"}
+              <span className="live-dot" />
+              <span className="flex-1 text-left text-[13px]" style={{ color: "var(--text)" }}>
+                {cars.length > 0 ? `${cars.length} ${cars.length === 1 ? "bil" : "biler"} på vakt · nærmeste ${nearestEta} min` : "Ingen biler på vakt akkurat nå"}
               </span>
               <ChevronUp size={16} style={{ color: "var(--text-muted)" }} />
             </button>
           ) : (
-            <>
-          {/* Pickup line — editable */}
-          <button
-            onClick={() => setPickupSheetOpen(true)}
-            data-testid="home-edit-pickup"
-            className="w-full flex items-center gap-3 px-3 py-2.5 mb-2 rounded-2xl text-left transition-colors"
-            style={{
-              background: "rgba(232,224,208,0.04)",
-              border: "1px solid rgba(232,224,208,0.08)",
-            }}
-          >
-            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Hentes fra</div>
-              <div className="text-sm truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
-            </div>
-            <span className="text-[11px]" style={{ color: "var(--accent)" }}>Endre</span>
-          </button>
-
-          {!dropoff && (
-            <div className="mb-3 flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
-                <span className="text-[12px] font-medium" style={{ color: "var(--accent)" }}>
-                  {cars.length > 0 ? `${cars.length} biler i nærheten` : "Ingen sjåfører på vakt akkurat nå"}
-                </span>
-              </div>
-              {cars.length > 0 && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Nærmeste bil er {cars[0]?.eta_min} min unna</span>}
-            </div>
-          )}
-          {!dropoff ? (
-            <>
-              {/* Signature search card — greeting + search + chips i én tappable enhet */}
+            <div className="relative">
+              {/* Pickup line — editable */}
               <button
-                onClick={() => setShowSheet(true)}
-                className="w-full text-left rounded-[22px] transition-transform active:scale-[0.99] relative overflow-hidden"
-                style={{
-                  background: "linear-gradient(135deg, rgba(203,163,101,0.18) 0%, rgba(244,244,240,0.05) 44%, rgba(244,244,240,0.028) 100%)",
-                  border: "1px solid rgba(203,163,101,0.30)",
-                  padding: "18px 18px 16px",
-                  boxShadow: "0 1px 0 rgba(255,255,255,0.06) inset",
-                }}
-                data-testid="home-where-to"
+                onClick={() => setPickupSheetOpen(true)}
+                data-testid="home-edit-pickup"
+                className="reveal w-full flex items-center gap-3 px-2 py-1.5 mb-3 text-left"
+                style={{ animationDelay: "60ms" }}
               >
-                <span className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full" style={{ background: "radial-gradient(circle, rgba(203,163,101,0.38), transparent 70%)", filter: "blur(4px)" }} />
-                <div className="text-[10px] tracking-[0.34em] uppercase mb-1.5 relative" style={{ color: "var(--accent)" }} data-testid="home-greeting">
-                  {getGreeting()}{user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}
-                </div>
-                <div className="flex items-center gap-3 relative">
-                  <div className="font-display text-[30px] leading-[1.04] flex-1" style={{ color: "var(--text)" }}>
-                    Hvor vil du?
-                  </div>
-                  <div
-                    className="w-12 h-12 rounded-full grid place-items-center shrink-0 relative"
-                    style={{ background: "linear-gradient(135deg, #DDB77A, #CBA365 55%, #8F6E3E)", boxShadow: "0 8px 22px rgba(203,163,101,0.42), inset 0 0 0 1px rgba(255,255,255,0.18)" }}
-                  >
-                    <span className="absolute inset-0 rounded-full" style={{ animation: "kjapp-search-ring 2.6s ease-out infinite" }} />
-                    <Search size={18} style={{ color: "#0B1013" }} strokeWidth={2.6} />
-                  </div>
-                </div>
-                {cars.length > 0 && (
-                  <div className="text-[12px] mt-2 relative" style={{ color: "var(--text-secondary)" }} data-testid="home-smart-suggest">
-                    Nærmeste bil er <span className="font-mono" style={{ color: "var(--accent)" }}>{cars[0]?.eta_min} min</span> unna
-                  </div>
-                )}
-                <style>{`@keyframes kjapp-search-ring{0%{box-shadow:0 0 0 0 rgba(203,163,101,0.5);}70%{box-shadow:0 0 0 12px rgba(203,163,101,0);}100%{box-shadow:0 0 0 0 rgba(203,163,101,0);}}`}</style>
+                <span className="relative w-3.5 h-3.5 shrink-0">
+                  <span className="absolute inset-0 rounded-full" style={{ background: "rgba(203,163,101,0.35)", animation: "orbRing 2.2s ease-out infinite" }} />
+                  <span className="absolute inset-[3px] rounded-full" style={{ background: "var(--accent)", boxShadow: "0 0 10px rgba(203,163,101,0.8)" }} />
+                </span>
+                <span className="text-[9.5px] uppercase tracking-[0.3em] shrink-0" style={{ color: "var(--text-muted)" }}>Hentes fra</span>
+                <span className="flex-1 min-w-0 text-[13.5px] truncate" style={{ color: "var(--text)" }}>{pickup.name}</span>
+                <span className="flex items-center gap-0.5 text-[11px] shrink-0" style={{ color: "var(--accent)" }}>Endre <ChevronRight size={12} /></span>
               </button>
 
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {[
-                  { label: "Hjem", target: places.find(p => p.label === "Hjem") },
-                  { label: "Jobb", target: places.find(p => p.label === "Jobb") },
-                  { label: "Flyplass", target: { name: "Oslo Lufthavn Gardermoen", lat: 60.1976, lng: 11.1004 } },
-                ].map(({ label, target }) => {
-                  const Ic = iconFor(label);
-                  return (
-                    <button
-                      key={label}
-                      onClick={(e) => { e.stopPropagation(); target && setDropoff({ name: target.name, lat: target.lat, lng: target.lng }); }}
-                      disabled={!target}
-                      className="flex flex-col items-center gap-1.5 py-2.5 rounded-2xl transition-colors disabled:opacity-40 hover:border-mint"
-                      style={{
-                        background: "rgba(244,244,240,0.035)",
-                        border: "1px solid rgba(244,244,240,0.08)",
-                      }}
-                      data-testid={`quick-${label}`}
-                    >
-                      <Ic size={16} style={{ color: "var(--accent)" }} />
-                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              {!dropoff ? (
+                <>
+                  {/* Signature hero — greeting, editorial title, brass search orb, live radar */}
+                  <button
+                    onClick={() => setShowSheet(true)}
+                    className="reveal w-full text-left relative overflow-hidden rounded-[26px] transition-transform active:scale-[0.99]"
+                    style={{
+                      animationDelay: "120ms",
+                      background: "linear-gradient(135deg, #16232D 0%, #0E1820 52%, #0A1218 100%)",
+                      border: "1px solid rgba(203,163,101,0.32)",
+                      boxShadow: "0 24px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.09)",
+                      padding: "20px 20px 18px",
+                    }}
+                    data-testid="home-where-to"
+                  >
+                    <span className="pointer-events-none absolute -top-16 -right-12 w-48 h-48 rounded-full" style={{ background: "radial-gradient(circle, rgba(203,163,101,0.42), transparent 68%)", filter: "blur(6px)" }} />
+                    <span className="pointer-events-none absolute -bottom-20 -left-10 w-44 h-44 rounded-full" style={{ background: "radial-gradient(circle, rgba(123,166,158,0.22), transparent 70%)", filter: "blur(8px)" }} />
+                    <span className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(244,244,240,0.35), transparent)" }} />
 
-              {/* 3-tier vehicle teaser — vises som preview før destinasjon er valgt */}
-              <div className="mt-3">
-                <div className="text-[10px] uppercase tracking-[0.3em] mb-2" style={{ color: "var(--text-muted)" }}>Velg klasse</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {VEHICLE_TIERS.map((t, i) => (
-                    <div
-                      key={t.id}
-                      className="rounded-[18px] p-3 text-center relative overflow-hidden"
-                      style={{
-                        background: i === 0
-                          ? "linear-gradient(160deg, rgba(203,163,101,0.14), rgba(203,163,101,0.04))"
-                          : "linear-gradient(160deg, rgba(244,244,240,0.055), rgba(244,244,240,0.02))",
-                        border: `1px solid ${i === 0 ? "rgba(203,163,101,0.32)" : "rgba(244,244,240,0.09)"}`,
-                        boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset",
-                      }}
-                      data-testid={`tier-preview-${t.id}`}
-                    >
-                      <div className="w-full h-11 grid place-items-center">
-                        <VehicleGlyph id={t.id} active={i === 0} />
-                      </div>
-                      <div className="text-[12px] mt-1.5 font-medium" style={{ color: "var(--text)" }}>{t.name}</div>
-                      <div className="text-[9.5px] tracking-wide" style={{ color: "var(--text-muted)" }}>{t.tagline}</div>
+                    <div className="relative text-[10px] tracking-[0.36em] uppercase mb-2" style={{ color: "var(--accent)" }} data-testid="home-greeting">
+                      {getGreeting()}{firstName ? `, ${firstName}` : ""}
                     </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          ) : (
-            <BookingReview
-              pickup={pickup}
-              dropoff={dropoff}
-              vehicle={vehicle}
-              onVehicleChange={setVehicle}
-              distanceKm={distanceKm}
-              estPrice={estPrice}
-              options={routeInfo?.options || []}
-              onCancel={() => setDropoff(null)}
-              onConfirm={requestTrip}
-              requesting={requesting}
-              hasPaymentMethod={hasPaymentMethod}
-              hasVerifiedPaymentMethod={hasVerifiedPaymentMethod}
-              defaultMethod={defaultMethod}
-              defaultMethodVerified={defaultMethodVerified}
-              onAddCard={() => navigate("/app/payment-methods?required=1")}
-            />
-          )}
-            </>
+                    <div className="relative flex items-end justify-between gap-4">
+                      <div className="font-display italic text-[40px] leading-[0.96] tracking-[-0.02em]" style={{ color: "var(--text)", fontWeight: 300 }}>
+                        Hvor vil<br />du?
+                      </div>
+                      <div className="brass-orb w-[58px] h-[58px] shrink-0 mb-1">
+                        <Search size={20} strokeWidth={2.6} />
+                      </div>
+                    </div>
+                    <div className="relative mt-4 flex items-start gap-2.5 text-[12.5px]" style={{ color: "var(--text-secondary)" }} data-testid="home-cars-nearby-status">
+                      <span className="live-dot mt-1.5" style={cars.length === 0 ? { background: "#8A9198", boxShadow: "none" } : undefined} />
+                      {cars.length > 0 ? (
+                        <span data-testid="home-smart-suggest">
+                          <span className="font-mono" style={{ color: "var(--text)" }}>{cars.length}</span> {cars.length === 1 ? "bil" : "biler"} på vakt · nærmeste{" "}
+                          <span className="font-mono" style={{ color: "var(--accent)" }}>{nearestEta} min</span> unna
+                        </span>
+                      ) : (
+                        <span data-testid="home-smart-suggest" className="leading-tight">
+                          Ingen biler på vakt akkurat nå
+                          <span className="block text-[10.5px] mt-0.5" style={{ color: "var(--text-muted)" }} data-testid="home-cars-empty">
+                            Kartet viser kun sjåfører med aktiv GPS
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Quick places — pill row */}
+                  <div className="reveal mt-3 flex gap-2" style={{ animationDelay: "180ms" }}>
+                    {[
+                      { label: "Hjem", target: places.find(p => p.label === "Hjem") },
+                      { label: "Jobb", target: places.find(p => p.label === "Jobb") },
+                      { label: "Flyplass", target: { name: "Oslo Lufthavn Gardermoen", lat: 60.1976, lng: 11.1004 } },
+                    ].map(({ label, target }) => {
+                      const Ic = iconFor(label);
+                      return (
+                        <button
+                          key={label}
+                          onClick={(e) => { e.stopPropagation(); target && setDropoff({ name: target.name, lat: target.lat, lng: target.lng }); }}
+                          disabled={!target}
+                          className="flex-1 flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full transition-all disabled:opacity-40 active:scale-[0.97]"
+                          style={{ background: "rgba(244,244,240,0.045)", border: "1px solid rgba(244,244,240,0.10)" }}
+                          data-testid={`quick-${label}`}
+                        >
+                          <span className="w-8 h-8 rounded-full grid place-items-center shrink-0" style={{ background: "rgba(203,163,101,0.12)", border: "1px solid rgba(203,163,101,0.30)" }}>
+                            <Ic size={14} style={{ color: "var(--accent)" }} />
+                          </span>
+                          <span className="text-[12.5px] truncate" style={{ color: "var(--text)" }}>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Showroom — 3-tier vehicle teaser */}
+                  <div className="reveal mt-4" style={{ animationDelay: "240ms" }}>
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <span className="text-[9.5px] uppercase tracking-[0.32em]" style={{ color: "var(--text-muted)" }}>Velg klasse</span>
+                      <span className="text-[9.5px] uppercase tracking-[0.2em]" style={{ color: "rgba(203,163,101,0.75)" }}>Nordisk komfort</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {VEHICLE_TIERS.map((t, i) => {
+                        const hero = i === 0;
+                        return (
+                          <div
+                            key={t.id}
+                            className="relative rounded-[20px] px-2 pt-4 pb-3 text-center overflow-hidden"
+                            style={{
+                              background: hero
+                                ? "linear-gradient(180deg, rgba(203,163,101,0.18) 0%, rgba(203,163,101,0.04) 100%)"
+                                : "linear-gradient(180deg, rgba(244,244,240,0.055) 0%, rgba(244,244,240,0.015) 100%)",
+                              border: `1px solid ${hero ? "rgba(203,163,101,0.45)" : "rgba(244,244,240,0.09)"}`,
+                              boxShadow: hero ? "0 12px 30px rgba(203,163,101,0.16), inset 0 1px 0 rgba(255,255,255,0.10)" : "inset 0 1px 0 rgba(255,255,255,0.04)",
+                            }}
+                            data-testid={`tier-preview-${t.id}`}
+                          >
+                            {hero && (
+                              <span className="absolute top-2 right-2 text-[7.5px] tracking-[0.22em] uppercase px-1.5 py-0.5 rounded-full" style={{ background: "rgba(203,163,101,0.22)", color: "var(--accent)" }}>Populær</span>
+                            )}
+                            <span className="spotlight" style={{ bottom: 44, background: hero ? "radial-gradient(ellipse, rgba(203,163,101,0.45), transparent 70%)" : "radial-gradient(ellipse, rgba(244,244,240,0.14), transparent 70%)" }} />
+                            <VehicleArt id={t.id} active={hero} height={56} className="-mx-2 -mt-4 mb-1 rounded-t-[20px]" />
+                            <div className="font-display text-[15px] mt-1.5 leading-none" style={{ color: "var(--text)" }}>{t.name}</div>
+                            <div className="text-[9px] tracking-[0.06em] uppercase mt-1" style={{ color: "var(--text-muted)" }}>{t.tagline}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-center text-[8.5px] tracking-[0.12em] uppercase" style={{ color: "rgba(138,145,152,0.55)" }}>
+                    Kart © OpenStreetMap · OpenMapTiles · OpenFreeMap
+                  </div>
+                </>
+              ) : (
+                <BookingReview
+                  pickup={pickup}
+                  dropoff={dropoff}
+                  vehicle={vehicle}
+                  onVehicleChange={setVehicle}
+                  distanceKm={distanceKm}
+                  estPrice={estPrice}
+                  options={routeInfo?.options || []}
+                  onCancel={() => setDropoff(null)}
+                  onConfirm={requestTrip}
+                  requesting={requesting}
+                  hasPaymentMethod={hasPaymentMethod}
+                  hasVerifiedPaymentMethod={hasVerifiedPaymentMethod}
+                  defaultMethod={defaultMethod}
+                  defaultMethodVerified={defaultMethodVerified}
+                  onAddCard={() => navigate("/app/payment-methods?required=1")}
+                  surge={surge}
+                />
+              )}
+            </div>
           )}
         </div>
       </motion.div>
@@ -531,20 +560,21 @@ function CustomerMenu({ onClose, navigate, userName }) {
         animate={{ x: 0 }}
         exit={{ x: -340 }}
         transition={{ type: "spring", stiffness: 320, damping: 30 }}
-        className="absolute left-0 top-0 bottom-0 w-[300px] flex flex-col"
+        className="absolute left-0 top-0 bottom-0 w-[300px] flex flex-col overflow-hidden"
         style={{
-          background: "rgba(11,16,19,0.98)",
+          background: "linear-gradient(180deg, rgba(14,22,28,0.98), rgba(7,11,14,0.99))",
           borderRight: "1px solid rgba(244,244,240,0.10)",
-          boxShadow: "24px 0 48px rgba(0,0,0,0.4)",
+          boxShadow: "24px 0 48px rgba(0,0,0,0.45)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        <span className="aurora-line" aria-hidden />
         <div className="px-5 pt-6 pb-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(244,244,240,0.08)" }}>
-          <div className="w-11 h-11 rounded-full grid place-items-center" style={{ background: "rgba(203,163,101,0.18)", color: "var(--accent)", fontWeight: 600 }}>
+          <div className="w-11 h-11 rounded-full grid place-items-center font-display text-[16px]" style={{ background: "linear-gradient(140deg, rgba(203,163,101,0.32), rgba(203,163,101,0.10))", border: "1px solid rgba(203,163,101,0.45)", color: "var(--accent)" }}>
             {(userName || "K").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-display text-[17px]" style={{ color: "var(--text)" }}>{userName || "Gjest"}</div>
+            <div className="font-display text-[18px]" style={{ color: "var(--text)" }}>{userName || "Gjest"}</div>
             <div className="text-[10px] uppercase tracking-[0.28em]" style={{ color: "var(--accent)" }}>KJAPP-medlem</div>
           </div>
           <button onClick={onClose} className="w-9 h-9 rounded-full grid place-items-center" style={{ background: "rgba(244,244,240,0.06)", color: "var(--text-muted)" }} data-testid="menu-close">
@@ -623,26 +653,38 @@ function CustomerMenu({ onClose, navigate, userName }) {
 }
 
 
-function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, options, onCancel, onConfirm, requesting, hasPaymentMethod, hasVerifiedPaymentMethod, defaultMethod, defaultMethodVerified, onAddCard }) {  const selected = VEHICLES.find((v) => v.id === vehicle) || VEHICLES[0];
+function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, estPrice, options, onCancel, onConfirm, requesting, hasPaymentMethod, hasVerifiedPaymentMethod, defaultMethod, defaultMethodVerified, onAddCard, surge }) {
+  const selected = VEHICLES.find((v) => v.id === vehicle) || VEHICLES[0];
   const priceFor = (vid) => (options?.find?.((o) => o.vehicle_type === vid)?.price) || 0;
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-3">
+    <div className="reveal" data-testid="booking-review">
+      {/* Route endpoints */}
+      <div
+        className="flex items-center gap-3 mb-3 px-3 py-3 rounded-[20px]"
+        style={{ background: "linear-gradient(135deg, rgba(22,35,45,0.75), rgba(10,18,24,0.6))", border: "1px solid rgba(244,244,240,0.09)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)" }}
+      >
         <div className="flex flex-col items-center pt-1">
-          <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)" }} />
-          <div className="w-px h-8" style={{ background: "rgba(232,224,208,0.14)" }} />
-          <div className="w-2.5 h-2.5 rounded-sm" style={{ background: "var(--text)" }} />
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--accent)", boxShadow: "0 0 10px rgba(203,163,101,0.8)" }} />
+          <div className="w-px h-8 my-0.5" style={{ background: "linear-gradient(180deg, rgba(203,163,101,0.6), rgba(244,244,240,0.35))" }} />
+          <div className="w-2.5 h-2.5 rounded-[3px]" style={{ background: "var(--text)" }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px]" style={{ color: "var(--text-muted)" }}>Hentes fra</div>
-          <div className="text-sm truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
-          <div className="text-[13px] mt-2" style={{ color: "var(--text-muted)" }}>Kjøres til</div>
-          <div className="text-sm truncate" style={{ color: "var(--text)" }}>{dropoff.name}</div>
+          <div className="text-[9.5px] uppercase tracking-[0.28em]" style={{ color: "var(--text-muted)" }}>Hentes fra</div>
+          <div className="text-[13.5px] truncate" style={{ color: "var(--text)" }}>{pickup.name}</div>
+          <div className="text-[9.5px] uppercase tracking-[0.28em] mt-2" style={{ color: "var(--text-muted)" }}>Kjøres til</div>
+          <div className="text-[13.5px] truncate" style={{ color: "var(--text)" }}>{dropoff.name}</div>
         </div>
-        <button onClick={onCancel} className="text-xs hover:opacity-70" style={{ color: "var(--text-muted)" }} data-testid="booking-cancel">Endre</button>
+        <button
+          onClick={onCancel}
+          className="text-[11px] px-3 py-1.5 rounded-full shrink-0"
+          style={{ color: "var(--accent)", border: "1px solid rgba(203,163,101,0.35)", background: "rgba(203,163,101,0.08)" }}
+          data-testid="booking-cancel"
+        >
+          Endre
+        </button>
       </div>
 
-      {/* Premium horizontal vehicle picker — snap-scroll on mobile */}
+      {/* Showroom vehicle picker — snap-scroll */}
       <div className="-mx-4 px-4 mb-3 flex gap-2.5 overflow-x-auto no-scrollbar scroll-smooth" style={{ scrollSnapType: "x mandatory" }}>
         {VEHICLES.map((v) => {
           const active = vehicle === v.id;
@@ -652,25 +694,26 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
               key={v.id}
               onClick={() => onVehicleChange(v.id)}
               data-testid={`vehicle-${v.id}`}
-              className="shrink-0 rounded-2xl p-3 relative overflow-hidden transition-all"
+              className="shrink-0 rounded-[20px] p-3 pt-4 relative overflow-hidden text-left"
               style={{
-                minWidth: 138,
-                background: active ? "linear-gradient(155deg, rgba(201,161,91,0.16), rgba(201,161,91,0.06))" : "rgba(232,224,208,0.04)",
-                border: `1px solid ${active ? "rgba(201,161,91,0.55)" : "rgba(232,224,208,0.08)"}`,
-                boxShadow: active ? "0 8px 30px var(--accent-glow)" : "none",
+                minWidth: 148,
+                background: active
+                  ? "linear-gradient(180deg, rgba(203,163,101,0.20), rgba(203,163,101,0.05))"
+                  : "linear-gradient(180deg, rgba(244,244,240,0.05), rgba(244,244,240,0.015))",
+                border: `1px solid ${active ? "rgba(203,163,101,0.6)" : "rgba(244,244,240,0.09)"}`,
+                boxShadow: active ? "0 12px 34px rgba(203,163,101,0.22), inset 0 1px 0 rgba(255,255,255,0.10)" : "inset 0 1px 0 rgba(255,255,255,0.04)",
                 scrollSnapAlign: "start",
+                transition: "border-color 0.15s ease, box-shadow 0.25s ease, background 0.25s ease",
               }}
             >
-              {/* car silhouette (SVG isometric) */}
-              <div className="h-11 flex items-center justify-center mb-1.5" aria-hidden>
-                <VehicleGlyph id={v.id} active={active} />
-              </div>
+              <span className="spotlight" style={{ bottom: 62, background: active ? "radial-gradient(ellipse, rgba(203,163,101,0.5), transparent 70%)" : "radial-gradient(ellipse, rgba(244,244,240,0.14), transparent 70%)" }} />
+              <VehicleArt id={v.id} active={active} height={68} className="-mx-3 -mt-4 mb-2 rounded-t-[20px]" />
               <div className="flex items-baseline justify-between mb-0.5">
-                <div className="text-[13px] font-medium" style={{ color: "var(--text)" }}>{v.name}</div>
-                <div className="text-[9px] tracking-widest uppercase" style={{ color: active ? "var(--accent)" : "var(--text-muted)" }}>{v.tagline}</div>
+                <div className="font-display text-[15px]" style={{ color: "var(--text)" }}>{v.name}</div>
+                <div className="text-[8.5px] tracking-[0.2em] uppercase" style={{ color: active ? "var(--accent)" : "var(--text-muted)" }}>{v.tagline}</div>
               </div>
               <div className="text-[10px] leading-tight" style={{ color: "var(--text-muted)" }}>{v.desc}</div>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t" style={{ borderColor: "rgba(232,224,208,0.08)" }}>
+              <div className="flex items-center justify-between mt-2.5 pt-2" style={{ borderTop: "1px solid rgba(244,244,240,0.08)" }}>
                 <div className="flex items-center gap-1 text-[10px]" style={{ color: "var(--text-muted)" }}>
                   <Users size={11} /> {v.capacity}
                 </div>
@@ -679,8 +722,8 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
                 </div>
               </div>
               {active && (
-                <div className="absolute top-2 right-2 w-4 h-4 rounded-full grid place-items-center" style={{ background: "var(--accent)" }}>
-                  <svg viewBox="0 0 24 24" width="10" height="10" fill="none"><path d="M5 12l5 5L20 7" stroke="var(--accent-on)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <div className="absolute top-2 right-2 w-5 h-5 rounded-full grid place-items-center" style={{ background: "linear-gradient(140deg, #EED9A6, #CBA365)", boxShadow: "0 4px 10px rgba(203,163,101,0.5)" }}>
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none"><path d="M5 12l5 5L20 7" stroke="#070B0E" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
               )}
             </button>
@@ -688,11 +731,16 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         })}
       </div>
 
-      <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-sm" style={{ color: "var(--text-muted)" }}><span className="font-mono" style={{ color: "var(--text-secondary)" }}>{distanceKm.toFixed(1)}</span> km · sjåfør kan hente deg om <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{selected.eta}</span> min</span>
+      <div className="flex items-end justify-between mb-3 px-1">
+        <div className="text-[12.5px] leading-snug" style={{ color: "var(--text-muted)" }}>
+          <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{distanceKm.toFixed(1)}</span> km<br />
+          sjåfør kan hente deg om <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{selected.eta}</span> min
+        </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Ca. pris</div>
-          <div className="font-display text-[22px] leading-none" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estPrice} kr</div>
+          <div className="text-[9.5px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Ca. pris</div>
+          <div className="font-display text-[32px] leading-none mt-0.5" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }} data-testid="booking-price">
+            {estPrice} <span className="text-[16px]" style={{ color: "var(--accent)" }}>kr</span>
+          </div>
         </div>
       </div>
 
@@ -709,10 +757,10 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
         onClick={onConfirm}
         disabled={requesting || !hasVerifiedPaymentMethod}
         data-testid="booking-confirm"
-        className="btn-primary w-full flex items-center justify-center gap-2"
+        className="btn-brass flex items-center justify-center gap-2"
       >
         {requesting ? (
-          <span className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--accent-on)", borderTopColor: "transparent" }} />
+          <span className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: "#070B0E", borderTopColor: "transparent" }} />
         ) : !hasPaymentMethod ? (
           <>Legg til bankkort for å bestille</>
         ) : !hasVerifiedPaymentMethod ? (
@@ -725,101 +773,16 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
   );
 }
 
-/* Premium car glyph per category — metallic body, glossy glass, alloy rims, soft shadow */
-function VehicleGlyph({ id, active }) {
-  const uid = `vg-${id}${active ? "-a" : ""}`;
-  const P = active
-    ? { b1: "#f4e4bb", b2: "#c9a15b", b3: "#7c5d28", trim: "#fff4d6", rim: "#eeddb2", glassA: "#243545", glassB: "#0b1116", shadow: "rgba(201,161,91,0.45)", head: "#fff6df", belt: "#fff4d6" }
-    : { b1: "#3c4650", b2: "#232c34", b3: "#12181d", trim: "#5c6772", rim: "#7a8590", glassA: "#1c242b", glassB: "#0b0f13", shadow: "rgba(0,0,0,0.5)", head: "#cdd6de", belt: "#4a545e" };
-
-  const defs = (
-    <defs>
-      <linearGradient id={`${uid}-b`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stopColor={P.b1} /><stop offset="0.55" stopColor={P.b2} /><stop offset="1" stopColor={P.b3} />
-      </linearGradient>
-      <linearGradient id={`${uid}-g`} x1="0.1" y1="0" x2="0.6" y2="1">
-        <stop offset="0" stopColor={P.glassA} /><stop offset="1" stopColor={P.glassB} />
-      </linearGradient>
-      <radialGradient id={`${uid}-s`} cx="0.5" cy="0.5" r="0.5">
-        <stop offset="0" stopColor={P.shadow} /><stop offset="1" stopColor="rgba(0,0,0,0)" />
-      </radialGradient>
-      <linearGradient id={`${uid}-r`} x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor={P.rim} /><stop offset="1" stopColor={P.b3} />
-      </linearGradient>
-    </defs>
-  );
-
-  const wheel = (cx, r = 5.4) => (
-    <g>
-      <circle cx={cx} cy="35.5" r={r} fill="#05080a" />
-      <circle cx={cx} cy="35.5" r={r - 0.6} fill="none" stroke={P.rim} strokeWidth="0.6" opacity="0.45" />
-      <circle cx={cx} cy="35.5" r={r - 2.6} fill={`url(#${uid}-r)`} />
-      {[0, 60, 120, 180, 240, 300].map((a) => (
-        <rect key={a} x={cx - 0.35} y="35.5" width="0.7" height={r - 2.7} fill={P.b3} opacity="0.7" transform={`rotate(${a} ${cx} 35.5)`} />
-      ))}
-      <circle cx={cx} cy="35.5" r="0.8" fill={P.rim} />
-    </g>
-  );
-
-  let art;
-  if (id === "premium") {
-    art = (<>
-      <path d="M5 27 C6 20 12 18 20 17 L30 12 C34 10 44 10 49 13 L56 18 C63 19 67 22 67 27 L67 31 C67 32.5 65.5 33 64 33 L8 33 C6.5 33 5 32.5 5 31 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
-      <path d="M23 17 L31 13 C34 11.5 43 11.5 47 14 L53 18 Z" fill={`url(#${uid}-g)`} />
-      <path d="M8 27 L64 27" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
-      <rect x="63.5" y="24.5" width="3.5" height="2.2" rx="1" fill={P.head} />
-      {wheel(20)}{wheel(52)}
-    </>);
-  } else if (id === "trygg") {
-    art = (<>
-      <path d="M7 30 L7 20 C7 14 12 12 18 12 L52 12 C60 12 65 15 65 22 L65 30 C65 31.5 63.5 32 62 32 L9 32 C7.5 32 7 31.5 7 30 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
-      <rect x="6.5" y="10.6" width="20" height="1.2" rx="0.6" fill={P.trim} opacity="0.7" />
-      <path d="M12 15 L23 15 L23 21 L12 21 Z" fill={`url(#${uid}-g)`} />
-      <path d="M25 15 L37 15 L37 21 L25 21 Z" fill={`url(#${uid}-g)`} />
-      <path d="M39 15 L52 15 C56 15 57 18 57 21 L39 21 Z" fill={`url(#${uid}-g)`} />
-      <path d="M8 26 L64 26" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
-      <rect x="61" y="23.5" width="4" height="2.4" rx="1" fill={P.head} />
-      {wheel(21, 5.8)}{wheel(51, 5.8)}
-    </>);
-  } else if (id === "enkelt") {
-    art = (<>
-      <path d="M11 29 C12 22 17 20 24 19 L33 14 C36 12.5 44 12.5 48 15 L52 19 C58 20 60 23 60 29 L60 31 C60 32 58.5 32 57 32 L13 32 C11.5 32 11 31.5 11 29 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
-      <path d="M26 19 L34 15 C37 13.5 44 13.5 47 16 L50 19 Z" fill={`url(#${uid}-g)`} />
-      <path d="M14 28 L58 28" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
-      <rect x="57" y="25.5" width="3" height="2" rx="1" fill={P.head} />
-      {wheel(23)}{wheel(49)}
-      <path d="M35 21.5 L31.5 27 L34.2 27 L32.5 30.5 L37 24.5 L34.3 24.5 Z" fill="#7ee08a" />
-    </>);
-  } else {
-    art = (<>
-      <path d="M8 28 C9 21 15 19 22 18 L31 13 C35 11 45 11 50 14 L57 19 C63 20 65 23 65 28 L65 31 C65 32.5 63.5 33 62 33 L10 33 C8.5 33 8 32.5 8 31 Z" fill={`url(#${uid}-b)`} stroke={P.trim} strokeWidth="0.6" />
-      <path d="M24 18 L32 14 C35 12.5 44 12.5 48 15 L54 19 Z" fill={`url(#${uid}-g)`} />
-      <path d="M11 27 L63 27" stroke={P.belt} strokeWidth="0.8" opacity="0.85" />
-      <rect x="62" y="24.5" width="3.4" height="2.2" rx="1" fill={P.head} />
-      {wheel(22)}{wheel(51)}
-    </>);
-  }
-
-  return (
-    <svg viewBox="0 0 72 44" width="72" height="42" xmlns="http://www.w3.org/2000/svg">
-      {defs}
-      <ellipse cx="36" cy="40.5" rx="31" ry="3.2" fill={`url(#${uid}-s)`} />
-      {art}
-    </svg>
-  );
-}
-
 /* Payment row with verification pill */
 function PaymentRow({ hasPaymentMethod, hasVerified, defaultMethod, defaultMethodVerified, onAddCard }) {
-  // Compact verified card row — the actual "no card" case is handled by the CTA button label + click routing.
   return (
     <button
       onClick={onAddCard}
       data-testid="booking-payment-row"
       className="w-full mb-3 flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-colors text-left"
-      style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.08)" }}
+      style={{ background: "rgba(244,244,240,0.045)", border: "1px solid rgba(244,244,240,0.09)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
     >
-      <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(201,161,91,0.12)" }}>
+      <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: "rgba(203,163,101,0.14)", border: "1px solid rgba(203,163,101,0.28)" }}>
         <CreditCard size={16} style={{ color: "var(--accent)" }} />
       </div>
       <div className="flex-1 min-w-0">
@@ -830,7 +793,7 @@ function PaymentRow({ hasPaymentMethod, hasVerified, defaultMethod, defaultMetho
               : "Ingen kort lagret"}
           </span>
           {hasPaymentMethod && defaultMethodVerified && (
-            <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(138,196,143,0.14)", color: "#8ac48f" }}>Verifisert</span>
+            <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(123,224,184,0.14)", color: "#7BE0B8" }}>Verifisert</span>
           )}
           {hasPaymentMethod && !defaultMethodVerified && (
             <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-full" style={{ background: "rgba(227,158,92,0.14)", color: "#e39e5c" }}>Verifiseres</span>
@@ -874,8 +837,9 @@ function SearchSheet({ onClose, onPick, places = [] }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="absolute inset-0 z-[1002]"
-      style={{ background: "rgba(12,18,22,0.96)", backdropFilter: "blur(20px)" }}
+      style={{ background: "linear-gradient(180deg, rgba(10,16,21,0.97), rgba(7,11,14,0.99))", backdropFilter: "blur(20px)" }}
     >
+      <span className="aurora-line" aria-hidden style={{ top: "max(env(safe-area-inset-top), 0px)" }} />
       <motion.div
         initial={{ y: 50 }}
         animate={{ y: 0 }}
@@ -883,18 +847,24 @@ function SearchSheet({ onClose, onPick, places = [] }) {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="p-6 pt-14"
       >
+        <div className="text-[10px] tracking-[0.36em] uppercase mb-2 px-1" style={{ color: "var(--accent)" }}>Destinasjon</div>
+        <div className="font-display italic text-[30px] leading-none mb-5 px-1" style={{ color: "var(--text)", fontWeight: 300 }}>Hvor vil du?</div>
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={onClose} className="w-9 h-9 rounded-full grid place-items-center" style={{ background: "rgba(232,224,208,0.06)", color: "var(--text-muted)" }} data-testid="search-close">✕</button>
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="input"
-            placeholder="Skriv en adresse i Norge…"
-            data-testid="search-input"
-          />
+          <button onClick={onClose} className="glass-pill w-11 h-11 rounded-full grid place-items-center shrink-0" style={{ color: "var(--text-muted)" }} data-testid="search-close" aria-label="Lukk"><X size={16} /></button>
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--accent)" }} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="input"
+              style={{ paddingLeft: 42, borderRadius: 999, background: "rgba(244,244,240,0.05)" }}
+              placeholder="Skriv en adresse i Norge…"
+              data-testid="search-input"
+            />
+          </div>
         </div>
-        <div className="space-y-2 max-h-[70vh] overflow-y-auto no-scrollbar">
+        <div className="space-y-2 max-h-[62vh] overflow-y-auto no-scrollbar">
           {local.length > 0 && (
             <div className="text-[10px] uppercase tracking-widest px-2 mt-1" style={{ color: "var(--text-muted)" }}>Favoritter</div>
           )}
@@ -904,9 +874,9 @@ function SearchSheet({ onClose, onPick, places = [] }) {
               onClick={() => onPick(p)}
               data-testid={`search-result-${p.name}`}
               className="w-full flex items-center gap-4 p-4 rounded-2xl transition-colors text-left"
-              style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.08)" }}
+              style={{ background: "rgba(244,244,240,0.045)", border: "1px solid rgba(244,244,240,0.09)" }}
             >
-              <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.14)" }}>
+              <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(203,163,101,0.14)", border: "1px solid rgba(203,163,101,0.3)" }}>
                 <Star size={16} style={{ color: "var(--accent)" }} />
               </div>
               <div className="flex-1 min-w-0">
@@ -927,9 +897,9 @@ function SearchSheet({ onClose, onPick, places = [] }) {
               onClick={() => onPick({ name: p.name, lat: p.lat, lng: p.lng })}
               data-testid={`geo-result-${idx}`}
               className="w-full flex items-center gap-4 p-4 rounded-2xl transition-colors text-left"
-              style={{ background: "rgba(232,224,208,0.04)", border: "1px solid rgba(232,224,208,0.08)" }}
+              style={{ background: "rgba(244,244,240,0.045)", border: "1px solid rgba(244,244,240,0.09)" }}
             >
-              <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(201,161,91,0.14)" }}>
+              <div className="w-10 h-10 rounded-full grid place-items-center" style={{ background: "rgba(203,163,101,0.14)", border: "1px solid rgba(203,163,101,0.3)" }}>
                 <MapPin size={18} style={{ color: "var(--accent)" }} />
               </div>
               <div className="flex-1 min-w-0">

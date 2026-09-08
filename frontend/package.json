@@ -41,6 +41,9 @@
     "tailwindcss": "^3.4.17"
   },
   "scripts": {
+    "sync-map-worker": "mkdir -p public/maplibre && cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs public/maplibre/",
+    "prestart": "yarn sync-map-worker",
+    "prebuild": "yarn sync-map-worker",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test"

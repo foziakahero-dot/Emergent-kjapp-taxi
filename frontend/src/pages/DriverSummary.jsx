@@ -5,7 +5,7 @@ import { ProgressRing, Orb } from "../components/UIKit";
 import { ChevronLeft } from "lucide-react";
 
 export default function DriverSummary() {
-  const [summary, setSummary] = useState({ income: 0, trips: 0, satisfaction: 98 });
+  const [summary, setSummary] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,9 +22,9 @@ export default function DriverSummary() {
       </div>
 
       <div className="card p-6 flex flex-col items-center">
-        <ProgressRing value={Math.min(100, (summary.income / 1500) * 100)} size={160} stroke={8}>
+        <ProgressRing value={Math.min(100, ((summary?.income || 0) / 1500) * 100)} size={160} stroke={8}>
           <div className="text-center">
-            <div className="font-display text-2xl text-white leading-none">{summary.income.toLocaleString("nb-NO")}</div>
+            <div className="font-display text-2xl text-white leading-none">{(summary?.income || 0).toLocaleString("nb-NO")}</div>
             <div className="text-mint text-[11px] mt-1 uppercase tracking-widest">kr i dag</div>
           </div>
         </ProgressRing>
@@ -34,11 +34,11 @@ export default function DriverSummary() {
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="card p-4">
           <div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Turer</div>
-          <div className="font-display text-3xl text-white mt-2">{summary.trips}</div>
+          <div className="font-display text-3xl text-white mt-2">{summary ? summary.trips : "—"}</div>
         </div>
         <div className="card p-4">
-          <div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Tilfredshet</div>
-          <div className="font-display text-3xl text-white mt-2">{summary.satisfaction}%</div>
+          <div className="text-[10px] text-[#7a827a] uppercase tracking-widest">Godta-rate</div>
+          <div className="font-display text-3xl text-white mt-2">{summary?.acceptance_rate != null ? `${summary.acceptance_rate}%` : "—"}</div>
         </div>
       </div>
 

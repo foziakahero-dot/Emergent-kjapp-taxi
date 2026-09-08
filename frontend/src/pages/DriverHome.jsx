@@ -1,16 +1,16 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { driverApi, tripsApi } from "../lib/api";
+import { driverApi, placesApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Navigation, Check, Power, Phone, Star, MessageCircle, Wallet, Clock, ShieldAlert, ChevronRight, Home as HomeIcon, User as UserIcon, TrendingUp } from "lucide-react";
+import PremiumMap from "../components/PremiumMap";
+import { Navigation, Check, Phone, Star, ChevronRight, MapPinOff, RefreshCw } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
-import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
-import { carIconRotated } from "../lib/mapAssets";
-import L from "leaflet";
+
+const GPS_MIN_INTERVAL_MS = 15000; // don't write more often than this …
+const GPS_MIN_MOVE_M = 25;         // … unless the driver actually moved
 
 function notifyNewTrip(count) {
-  // Best-effort browser notification (works in background tab)
   try {
     if ("Notification" in window && Notification.permission === "granted") {
       const n = new Notification(`Ny tur${count > 1 ? "er" : ""} tilgjengelig`, {
@@ -24,315 +24,422 @@ function notifyNewTrip(count) {
   } catch { /* ignore */ }
 }
 
-function RecenterOn({ lat, lng }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat != null && lng != null) map.setView([lat, lng], 14, { animate: true });
-  }, [lat, lng, map]);
-  return null;
-}
-
 export default function DriverHome() {
   const { user } = useAuth();
   const [pending, setPending] = useState([]);
   const [current, setCurrent] = useState(null);
-  const [summary, setSummary] = useState({ income: 0, trips: 0, satisfaction: 98 });
+  const [summary, setSummary] = useState(null);      // null = loading
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [online, setOnline] = useState(null);        // null until backend answers
   const [accepting, setAccepting] = useState(null);
-  const [online, setOnline] = useState(() => localStorage.getItem("kjapp_driver_online") === "true");
-  const [gpsError, setGpsError] = useState(null);
-  const [pos, setPos] = useState(null); // {lat, lng, heading}
-  const watchIdRef = useRef(null);
-  const prevPendingIdsRef = useRef(new Set());
+  const [pos, setPos] = useState(null);              // {lat, lng, heading}
+  const [gpsState, setGpsState] = useState("locating"); // locating | ok | denied
+  const [place, setPlace] = useState(null);          // reverse-geocoded label
+  const watchRef = useRef(null);
+  const lastSentRef = useRef({ at: 0, lat: null, lng: null });
+  const lastGeoRef = useRef({ at: 0, lat: null, lng: null });
+  const prevPendingRef = useRef({ ids: new Set(), initialized: false });
+  const onlineRef = useRef(false);
   const navigate = useNavigate();
 
-  // Prime audio unlock on first user gesture (mobile browsers block autoplay)
   useEffect(() => { primeAudioOnUserGesture(); }, []);
+  useEffect(() => { onlineRef.current = online === true; }, [online]);
 
-  const load = async () => {
+  const load = useCallback(async (isFirst = false) => {
     try {
       const [p, c, s] = await Promise.all([driverApi.pending(), driverApi.current(), driverApi.summary()]);
       const trips = p.trips || [];
-      const currentIds = new Set(trips.map((t) => t.trip_id));
-      const prev = prevPendingIdsRef.current;
-      const newOnes = [...currentIds].filter((id) => !prev.has(id));
-      if (newOnes.length > 0 && online) {
-        if (prevPendingIdsRef.current.__initialized) {
-          // Triple ping + vibration + browser notification for new trips (harder to miss)
-          try {
-            playNewTripPing();
-            setTimeout(() => { try { playNewTripPing(); } catch { /* audio blocked */ } }, 700);
-            setTimeout(() => { try { playNewTripPing(); } catch { /* audio blocked */ } }, 1400);
-          } catch { /* blocked */ }
-          try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch { /* vibrate unsupported */ }
-          notifyNewTrip(newOnes.length);
-        }
+      const ids = new Set(trips.map((t) => t.trip_id));
+      const prev = prevPendingRef.current;
+      const fresh = [...ids].filter((id) => !prev.ids.has(id));
+      if (prev.initialized && fresh.length > 0 && onlineRef.current) {
+        try {
+          playNewTripPing();
+          setTimeout(() => { try { playNewTripPing(); } catch { /* blocked */ } }, 700);
+          setTimeout(() => { try { playNewTripPing(); } catch { /* blocked */ } }, 1400);
+        } catch { /* blocked */ }
+        try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch { /* unsupported */ }
+        notifyNewTrip(fresh.length);
       }
-      currentIds.__initialized = true;
-      prevPendingIdsRef.current = currentIds;
+      prevPendingRef.current = { ids, initialized: true };
       setPending(trips);
       setCurrent(c);
       setSummary(s);
-    } catch (e) {
-      console.warn(e);
+      setLoadFailed(false);
+      if (isFirst || online === null) setOnline(!!s.online);
+    } catch {
+      setLoadFailed(true);
+      if (isFirst) setSummary(undefined); // undefined = failed, not "zero"
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 4000);
+    load(true);
+    const t = setInterval(() => load(false), 4000);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Start / stop GPS heartbeat when online toggled
+  // Live GPS: the map always reflects the driver's real device position. Location is only
+  // written to the backend while the driver is Online (privacy + no needless DB writes).
+  const startWatch = useCallback(async () => {
+    if (watchRef.current) return;
+    setGpsState("locating");
+    const { watchLocation } = await import("../lib/native");
+    watchRef.current = await watchLocation(
+      (p) => {
+        const lat = p.coords.latitude;
+        const lng = p.coords.longitude;
+        setPos({ lat, lng, heading: p.coords.heading || 0 });
+        setGpsState("ok");
+        if (!onlineRef.current) return;
+        const now = Date.now();
+        const last = lastSentRef.current;
+        const moved = last.lat == null ? Infinity : distanceMeters(last.lat, last.lng, lat, lng);
+        if (now - last.at < GPS_MIN_INTERVAL_MS && moved < GPS_MIN_MOVE_M) return;
+        lastSentRef.current = { at: now, lat, lng };
+        driverApi.location(lat, lng, p.coords.heading, p.coords.speed).catch(() => {});
+      },
+      () => { setGpsState("denied"); },
+    );
+  }, []);
+
   useEffect(() => {
-    localStorage.setItem("kjapp_driver_online", String(online));
-    driverApi.online(online).catch(() => {});
-    let handle = null;
-    let lastSent = 0;
-    (async () => {
-      if (online) {
-        const { watchLocation } = await import("../lib/native");
-        handle = await watchLocation(
-          (p) => {
-            setGpsError(null);
-            setPos({ lat: p.coords.latitude, lng: p.coords.longitude, heading: p.coords.heading || 0 });
-            const now = Date.now();
-            if (now - lastSent < 4500) return;  // throttle ~5s
-            lastSent = now;
-            driverApi.location(p.coords.latitude, p.coords.longitude, p.coords.heading, p.coords.speed).catch(() => {});
-          },
-          (err) => { setGpsError("GPS-feil: " + (err?.message || "ukjent")); },
-        );
-        watchIdRef.current = handle;
-      }
-    })();
-    return () => {
-      if (watchIdRef.current?.clear) watchIdRef.current.clear();
-      watchIdRef.current = null;
-    };
-  }, [online]);
+    startWatch();
+    return () => { watchRef.current?.clear?.(); watchRef.current = null; };
+  }, [startWatch]);
+
+  const retryGps = async () => {
+    watchRef.current?.clear?.();
+    watchRef.current = null;
+    await startWatch();
+  };
+
+  // Real street/area name for the map label — throttled, never invented
+  useEffect(() => {
+    if (!pos) return;
+    const last = lastGeoRef.current;
+    const moved = last.lat == null ? Infinity : distanceMeters(last.lat, last.lng, pos.lat, pos.lng);
+    if (Date.now() - last.at < 30000 && moved < 150) return;
+    lastGeoRef.current = { at: Date.now(), lat: pos.lat, lng: pos.lng };
+    const coords = `${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}`;
+    placesApi
+      .reverse(pos.lat, pos.lng)
+      .then((r) => setPlace(r?.label || coords))   // no name from the map provider -> show the real coordinates
+      .catch(() => setPlace(coords));
+  }, [pos]);
+
+  const toggleOnline = async () => {
+    const next = !online;
+    setOnline(next);
+    onlineRef.current = next;
+    try {
+      await driverApi.online(next);
+      if (next) lastSentRef.current = { at: 0, lat: null, lng: null };
+      if (next && pos) driverApi.location(pos.lat, pos.lng, pos.heading, null).catch(() => {});
+      await load(false);
+    } catch {
+      setOnline(!next);          // backend refused — never fake the availability state
+      onlineRef.current = !next;
+    }
+  };
 
   const accept = async (trip_id) => {
     setAccepting(trip_id);
     try {
       await driverApi.accept(trip_id);
-      await load();
+      await load(false);
       navigate("/driver/trip");
-    } catch (e) {
-      alert("Turen ble tatt av en annen sjåfør.");
-      await load();
+    } catch {
+      await load(false);
     } finally {
       setAccepting(null);
     }
   };
 
   const declineTrip = async (trip_id) => {
-    // Optimistic remove — driver won't see this trip again
     setPending((prev) => prev.filter((t) => t.trip_id !== trip_id));
-    try { await driverApi.decline(trip_id); } catch { /* ignore — server may not have endpoint yet */ }
+    try { await driverApi.decline(trip_id); } catch { /* ignore */ }
   };
 
+  const request = pending[0] || null;
+  const mapRoute = useMemo(() => {
+    const geo = current?.pickup_route?.geometry || request?.pickup_route?.geometry;
+    return geo?.coordinates?.length ? geo.coordinates : null;
+  }, [current, request]);
+  const mapPickup = current
+    ? (current.status === "in_trip" ? null : { lat: current.pickup_lat, lng: current.pickup_lng })
+    : request ? { lat: request.pickup_lat, lng: request.pickup_lng } : null;
+
   const firstName = (user?.fullName || "Sjåfør").split(" ")[0];
-  const greeting = greetingFor(new Date());
-  const summaryText = summaryLine(summary);
+  const loading = summary === null;
+  const failed = summary === undefined;
 
   return (
-    <div className="px-4 pt-2 pb-24 page-enter">
-      {/* 1. STATUS — Online / Offline med tydelig kopi + pulserende ring */}
-      <div className="mt-2 card p-4 flex items-center gap-3" data-testid="driver-status-card">
-        <div
-          className="relative w-11 h-11 rounded-full grid place-items-center shrink-0"
-          style={{ background: online ? "rgba(47,224,140,0.14)" : "rgba(255,255,255,0.04)" }}
-        >
-          {online && (
-            <span
-              aria-hidden
-              className="absolute inset-0 rounded-full"
-              style={{
-                background: "radial-gradient(circle, rgba(47,224,140,0.42), transparent 65%)",
-                animation: "kjapp-online-pulse 2.4s ease-out infinite",
-              }}
-            />
-          )}
-          <Power size={18} className="relative" style={{ color: online ? "#2fe08c" : "var(--text-muted)" }} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-display text-[17px]" style={{ color: "var(--text)" }} data-testid="driver-status-title">
-            {online ? "Online" : "Offline"}
-          </div>
-          <div className="text-[12px]" style={{ color: online ? "#2fe08c" : "var(--text-muted)" }}>
-            {online ? (gpsError ? gpsError : "Du mottar turforespørsler") : "Slå på for å motta turer"}
-          </div>
-        </div>
-        <button
-          onClick={() => setOnline((v) => !v)}
-          data-testid="driver-online-toggle"
-          aria-label={online ? "Gå offline" : "Gå online"}
-          aria-pressed={online}
-          className="relative w-16 h-9 rounded-full transition-colors shrink-0"
-          style={{
-            background: online ? "#2fe08c" : "rgba(255,255,255,0.10)",
-            boxShadow: online ? "inset 0 0 0 1px rgba(47,224,140,0.5)" : "inset 0 0 0 1px rgba(255,255,255,0.06)",
-          }}
-        >
-          <span
-            className="absolute top-1 left-1 w-7 h-7 rounded-full transition-transform"
-            style={{
-              background: online ? "#0B1013" : "#F4F4F0",
-              transform: online ? "translateX(28px)" : "translateX(0)",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
-            }}
+    <div className="pb-24 page-enter" data-testid="driver-home">
+      {/* ── LIVE MAP with integrated status ────────────────────────── */}
+      <div className="relative" style={{ height: "38vh", minHeight: 250 }} data-testid="driver-map-shell">
+        {gpsState === "denied" ? (
+          <GpsUnavailable onRetry={retryGps} />
+        ) : pos ? (
+          <PremiumMap
+            center={[pos.lng, pos.lat]}
+            zoom={mapRoute ? 13.6 : 15.2}
+            pitch={45}
+            activeCar={{ lat: pos.lat, lng: pos.lng, bearing: pos.heading || 0 }}
+            followActive={!mapRoute}
+            pickup={mapPickup}
+            dropoff={current?.status === "in_trip" ? { lat: current.dropoff_lat, lng: current.dropoff_lng } : null}
+            route={mapRoute}
+            paddingBottom={40}
+            testid="driver-map"
           />
-        </button>
-        <style>{`@keyframes kjapp-online-pulse { 0% { transform: scale(0.9); opacity: 0.9; } 100% { transform: scale(1.9); opacity: 0; } }`}</style>
+        ) : (
+          <div className="absolute inset-0 grid place-items-center" style={{ background: "#06090A" }} data-testid="driver-map-locating">
+            <div className="text-center">
+              <div className="w-10 h-10 mx-auto rounded-full border-2 animate-spin" style={{ borderColor: "rgba(203,163,101,0.22)", borderTopColor: "var(--accent)" }} />
+              <div className="text-[12px] mt-3" style={{ color: "var(--text-muted)" }}>Finner posisjonen din…</div>
+            </div>
+          </div>
+        )}
+
+        {/* map overlays */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-20" style={{ background: "linear-gradient(180deg, rgba(3,6,7,0.85), transparent)" }} />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24" style={{ background: "linear-gradient(0deg, var(--bg-base) 12%, rgba(3,6,7,0.7) 55%, transparent)" }} />
+
+        <div className="absolute inset-x-0 top-0 px-4 flex items-start justify-between z-[20]" style={{ paddingTop: "max(env(safe-area-inset-top), 10px)" }}>
+          <div
+            className="rounded-full px-3.5 py-1.5 flex flex-col leading-none"
+            style={{ background: "rgba(6,10,13,0.78)", border: "1px solid rgba(244,244,240,0.10)", backdropFilter: "blur(14px)" }}
+            data-testid="driver-map-brand"
+          >
+            <span className="font-display text-[15px] tracking-[0.02em]" style={{ color: "var(--text)" }}>
+              KJ<span style={{ color: "var(--accent)" }}>A</span>PP
+            </span>
+            <span className="text-[7px] tracking-[0.42em] uppercase mt-0.5" style={{ color: "rgba(203,163,101,0.85)" }}>Driver</span>
+          </div>
+
+          <button
+            onClick={toggleOnline}
+            disabled={online === null}
+            data-testid="driver-online-toggle"
+            aria-pressed={online === true}
+            className="rounded-full pl-3 pr-3.5 py-2 flex items-center gap-2 transition-colors active:scale-[0.97] disabled:opacity-50"
+            style={{
+              background: online ? "rgba(47,224,140,0.14)" : "rgba(6,10,13,0.78)",
+              border: `1px solid ${online ? "rgba(47,224,140,0.45)" : "rgba(244,244,240,0.12)"}`,
+              backdropFilter: "blur(14px)",
+            }}
+          >
+            <span className="relative w-2.5 h-2.5 shrink-0">
+              {online && (
+                <span className="absolute inset-0 rounded-full" style={{ background: "rgba(47,224,140,0.5)", animation: "kjapp-online-pulse 2.4s ease-out infinite" }} />
+              )}
+              <span className="absolute inset-0 rounded-full" style={{ background: online ? "#2FE08C" : "#8A9198", boxShadow: online ? "0 0 10px rgba(47,224,140,0.8)" : "none" }} />
+            </span>
+            <span className="text-[10.5px] uppercase tracking-[0.22em]" style={{ color: online ? "#2FE08C" : "var(--text-muted)" }} data-testid="driver-status-title">
+              {online === null ? "…" : online ? "Online" : "Offline"}
+            </span>
+          </button>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-0 px-4 pb-2 z-[20] flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase tracking-[0.3em]" style={{ color: "rgba(203,163,101,0.9)" }}>Din posisjon</div>
+            <div className="text-[13.5px] truncate" style={{ color: "var(--text)" }} data-testid="driver-place">
+              {gpsState === "denied" ? "Posisjon ikke tilgjengelig" : place || (pos ? "Henter gatenavn…" : "Finner posisjon…")}
+            </div>
+          </div>
+          <div className="text-[10.5px] text-right shrink-0" style={{ color: online ? "#2FE08C" : "var(--text-muted)" }} data-testid="driver-status-sub">
+            {online ? "Du mottar turforespørsler" : "Du mottar ikke turforespørsler"}
+          </div>
+        </div>
+        <style>{`@keyframes kjapp-online-pulse { 0% { transform: scale(0.8); opacity: 0.9; } 100% { transform: scale(2.4); opacity: 0; } }`}</style>
       </div>
 
-      {/* 2. DRIVER OVERVIEW — God kveld + turer + inntekt */}
-      <div className="mt-3 card p-4" data-testid="driver-overview">
-        <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-full grid place-items-center shrink-0" style={{ background: "linear-gradient(135deg, var(--accent), var(--accent-soft))" }} data-testid="driver-avatar">
-            {user?.photo ? (
-              <img src={user.photo} alt="" className="w-11 h-11 rounded-full object-cover" />
+      {/* ── CONTENT ───────────────────────────────────────────────── */}
+      <div className="px-4 -mt-2">
+        {/* Greeting + today's real numbers */}
+        <div className="flex items-end justify-between gap-3" data-testid="driver-overview">
+          <div className="min-w-0">
+            <div className="font-display text-[22px] leading-tight" style={{ color: "var(--text)" }} data-testid="driver-greeting">
+              {greetingFor(new Date())}, {firstName}
+            </div>
+            {loading ? (
+              <Skeleton className="mt-2" width={170} height={13} />
             ) : (
-              <span style={{ color: "var(--accent-on)", fontWeight: 600 }}>
-                {(user?.fullName || "S").split(" ").map(n => n[0]).slice(0,2).join("").toUpperCase()}
-              </span>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>
-              {greeting}, {firstName}
-            </div>
-            <div className="font-display text-[19px] leading-tight mt-0.5" style={{ color: "var(--text)" }} data-testid="driver-overview-headline">
-              {summaryText}
-            </div>
-            {current && (
-              <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }} data-testid="driver-overview-active">
-                Du har 1 aktiv tur
+              <div className="text-[13px] mt-1" style={{ color: "var(--text-muted)" }} data-testid="driver-trip-count">
+                {failed ? "Kunne ikke hente dagens tall" : summaryLine(summary)}
               </div>
             )}
           </div>
           <div className="text-right shrink-0">
-            <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>I dag</div>
-            <div className="font-display text-[18px]" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid="driver-overview-income">{summary.income} kr</div>
+            <div className="text-[9px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>I dag</div>
+            {loading ? (
+              <Skeleton className="mt-1.5 ml-auto" width={62} height={20} />
+            ) : (
+              <div className="font-display text-[22px] leading-none mt-1" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid="driver-income-today">
+                {failed ? "—" : `${summary.income} kr`}
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* 3. ACTIVE TRIP — prominent card med status og CTA */}
-      {current && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          data-testid="driver-active-card"
-          className="mt-3 card p-4"
-          style={{ border: "1px solid rgba(203,163,101,0.34)", boxShadow: "0 12px 32px rgba(203,163,101,0.10)" }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
-              <span className="text-[10px] uppercase tracking-[0.32em]" style={{ color: "var(--accent)" }} data-testid="active-badge">AKTIV TUR</span>
-            </div>
-            <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }} data-testid="active-state">
-              {activeStateLabel(current.status)}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full grid place-items-center shrink-0" style={{ background: "var(--accent-soft)" }}>
-              <Navigation size={16} style={{ color: "var(--accent)" }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm truncate" style={{ color: "var(--text)" }} data-testid="active-address">
-                {current.status === "driver_on_way" ? current.pickup_address : current.dropoff_address}
-              </div>
-              <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                {current.customer?.name || "Kunde"} · {current.distance_km} km
-              </div>
-            </div>
-            <div className="text-right shrink-0">
-              <div className="font-display text-[17px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{current.price} kr</div>
-            </div>
-          </div>
-          <button
-            onClick={() => navigate("/driver/trip")}
-            data-testid="active-open"
-            className="mt-3 btn-primary w-full flex items-center justify-center gap-2"
-          >
-            Åpne aktiv tur <ChevronRight size={16} />
+        {loadFailed && !loading && (
+          <button onClick={() => load(true)} data-testid="driver-retry" className="mt-3 w-full rounded-2xl px-4 py-3 flex items-center justify-center gap-2 text-[12.5px]" style={{ background: "rgba(215,106,90,0.10)", border: "1px solid rgba(215,106,90,0.28)", color: "#e08a7a" }}>
+            <RefreshCw size={14} /> Kunne ikke oppdatere — trykk for å prøve igjen
           </button>
-        </motion.div>
-      )}
+        )}
 
-      {/* 4. INCOMING TRIP REQUESTS — passasjer, rating, henting/destinasjon, inntekt */}
-      <div className="mt-6" data-testid="pending-list">
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h2 className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Neste tur</h2>
-          {pending.length > 0 && (
-            <span className="text-[11px]" style={{ color: "var(--text-muted)" }} data-testid="pending-count">{pending.length} venter</span>
-          )}
-        </div>
-        <AnimatePresence>
-          {pending.length === 0 ? (
-            <div className="card p-8 text-center" data-testid="no-pending">
-              <div className="text-[13px]" style={{ color: "var(--text)" }}>
-                {online ? "Vi varsler deg når det kommer en tur." : "Slå på for å motta turer."}
+        {/* Active trip */}
+        {current && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            data-testid="driver-active-card"
+            className="mt-4 card p-4"
+            style={{ border: "1px solid rgba(203,163,101,0.34)", boxShadow: "0 12px 32px rgba(203,163,101,0.10)" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
+                <span className="text-[10px] uppercase tracking-[0.32em]" style={{ color: "var(--accent)" }} data-testid="active-badge">Aktiv tur</span>
               </div>
-              {!online && (
-                <button
-                  onClick={() => setOnline(true)}
-                  data-testid="no-pending-go-online"
-                  className="btn-primary mt-4"
-                >
-                  Gå online
-                </button>
-              )}
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }} data-testid="active-state">
+                {activeStateLabel(current.status)}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full grid place-items-center shrink-0" style={{ background: "var(--accent-soft)" }}>
+                <Navigation size={16} style={{ color: "var(--accent)" }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm truncate" style={{ color: "var(--text)" }} data-testid="active-address">
+                  {current.status === "in_trip" ? current.dropoff_address : current.pickup_address}
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  {[current.customer?.name, current.pickup_route ? `${fmtDistance(current.pickup_route.distance_km)} til henting` : (current.distance_km != null ? `${current.distance_km} km tur` : null)]
+                    .filter(Boolean).join(" · ")}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="font-display text-[17px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                  {current.driver_earnings != null ? `${current.driver_earnings} kr` : "—"}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => navigate("/driver/trip")} data-testid="active-open" className="mt-3 btn-primary w-full flex items-center justify-center gap-2">
+              Åpne aktiv tur <ChevronRight size={16} />
+            </button>
+          </motion.div>
+        )}
+
+        {/* Incoming real ride requests */}
+        <div className="mt-6" data-testid="pending-list">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <h2 className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>
+              {current ? "Kommende turer" : "Neste tur"}
+            </h2>
+            {pending.length > 0 && (
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }} data-testid="pending-count">
+                {pending.length} venter
+              </span>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="card p-4" data-testid="pending-skeleton">
+              <Skeleton width="55%" height={14} />
+              <Skeleton className="mt-3" width="80%" height={12} />
+              <Skeleton className="mt-2" width="70%" height={12} />
+              <Skeleton className="mt-4" width="100%" height={40} />
             </div>
           ) : (
-            pending.map((t) => (
-              <TripRequestCard
-                key={t.trip_id}
-                trip={t}
-                pos={pos}
-                accepting={accepting === t.trip_id}
-                onAccept={() => accept(t.trip_id)}
-                onDecline={() => declineTrip(t.trip_id)}
-              />
-            ))
+            <AnimatePresence>
+              {pending.length === 0 ? (
+                <div className="card p-8 text-center" data-testid="driver-no-active">
+                  <div className="font-display text-[16px]" style={{ color: "var(--text)" }}>
+                    {current ? "Ingen kommende turer" : "Ingen aktiv tur"}
+                  </div>
+                  <div className="text-[12.5px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+                    {online ? "Du er online og klar for nye turforespørsler." : "Du mottar ikke turforespørsler når du er offline."}
+                  </div>
+                  {online === false && (
+                    <button onClick={toggleOnline} data-testid="driver-no-active-go-online" className="btn-primary mt-4">
+                      Gå online
+                    </button>
+                  )}
+                </div>
+              ) : (
+                pending.map((t, i) => (
+                  <TripRequestCard
+                    key={t.trip_id}
+                    primary={i === 0}
+                    trip={t}
+                    accepting={accepting === t.trip_id}
+                    onAccept={() => accept(t.trip_id)}
+                    onDecline={() => declineTrip(t.trip_id)}
+                  />
+                ))
+              )}
+            </AnimatePresence>
           )}
-        </AnimatePresence>
+        </div>
+
+        {/* Real earnings summary */}
+        <button
+          onClick={() => navigate("/driver/payouts")}
+          data-testid="earnings-summary"
+          className="mt-6 w-full text-left rounded-2xl p-4"
+          style={{ background: "rgba(244,244,240,0.03)", border: "1px solid rgba(244,244,240,0.08)" }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>Sammendrag</div>
+            <ChevronRight size={14} style={{ color: "var(--text-muted)" }} />
+          </div>
+          <div className="grid grid-cols-4 gap-3">
+            <Metric label="I dag" value={loading || failed ? "—" : `${summary.income} kr`} testid="metric-income" />
+            <Metric label="Turer" value={loading || failed ? "—" : summary.trips} testid="metric-trips" />
+            <Metric label="Online" value={loading || failed ? "—" : formatOnlineTime(summary.online_minutes)} testid="metric-online-time" />
+            <Metric
+              label="Godta-rate"
+              value={loading || failed || summary.acceptance_rate == null ? "—" : `${summary.acceptance_rate}%`}
+              testid="metric-acceptance"
+            />
+          </div>
+        </button>
       </div>
-
-      {/* 8. DRIVER EARNINGS — compact 4-metric summary */}
-      <button
-        onClick={() => navigate("/driver/payouts")}
-        data-testid="earnings-summary"
-        className="mt-6 w-full text-left rounded-2xl p-4"
-        style={{ background: "rgba(244,244,240,0.03)", border: "1px solid rgba(244,244,240,0.08)" }}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>Sammendrag</div>
-          <ChevronRight size={14} style={{ color: "var(--text-muted)" }} />
-        </div>
-        <div className="grid grid-cols-4 gap-3">
-          <Metric label="I dag" value={`${summary.income} kr`} testid="metric-income" />
-          <Metric label="Turer" value={summary.trips} testid="metric-trips" />
-          <Metric label="Online" value={formatOnlineTime(summary.online_minutes || 0)} testid="metric-online-time" />
-          <Metric label="Godta-rate" value={`${summary.acceptance_rate ?? 92}%`} testid="metric-acceptance" />
-        </div>
-      </button>
-
-      {/* 9. BOTTOM NAV — Home, Earnings, Trips, Account */}
-      <DriverBottomNav />
     </div>
   );
 }
 
-/** Trip request card med countdown + tydelig kunde-info + Godta/Avslå */
-function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
+/** GPS denied/unavailable — never fall back to a fictional city position */
+function GpsUnavailable({ onRetry }) {
+  return (
+    <div className="absolute inset-0 grid place-items-center px-8 text-center" style={{ background: "radial-gradient(120% 80% at 50% 0%, #0D1419, #05080A)" }} data-testid="driver-gps-unavailable">
+      <div>
+        <div className="w-12 h-12 mx-auto rounded-full grid place-items-center" style={{ background: "rgba(244,244,240,0.05)", border: "1px solid rgba(244,244,240,0.10)" }}>
+          <MapPinOff size={20} style={{ color: "var(--text-muted)" }} />
+        </div>
+        <div className="font-display text-[17px] mt-3" style={{ color: "var(--text)" }}>Posisjon ikke tilgjengelig</div>
+        <div className="text-[12.5px] mt-1" style={{ color: "var(--text-muted)" }}>
+          Aktiver posisjonstilgang for å bruke KJAPP.
+        </div>
+        <button onClick={onRetry} data-testid="driver-gps-retry" className="btn-ghost mt-4 inline-flex items-center gap-2 text-[12.5px]">
+          <RefreshCw size={14} /> Prøv igjen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Real ride request — every number comes from the backend (routing/pricing), never invented */
+function TripRequestCard({ trip, accepting, onAccept, onDecline, primary }) {
   const [remaining, setRemaining] = useState(15);
   useEffect(() => {
     if (remaining <= 0) return;
-    const id = setTimeout(() => setRemaining(r => r - 1), 1000);
+    const id = setTimeout(() => setRemaining((r) => r - 1), 1000);
     return () => clearTimeout(id);
   }, [remaining]);
   useEffect(() => {
@@ -340,8 +447,8 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remaining]);
 
-  const distToPickup = pos ? haversineKm(pos.lat, pos.lng, trip.pickup_lat, trip.pickup_lng) : null;
   const pct = (remaining / 15) * 100;
+  const pickupRoute = trip.pickup_route;
 
   return (
     <motion.div
@@ -349,22 +456,18 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 40 }}
       className="card p-4 mb-3"
-      data-testid={`pending-${trip.trip_id}`}
+      data-testid={primary ? "driver-request-card" : `pending-${trip.trip_id}`}
     >
-      {/* Countdown progress bar (top of card) */}
       <div className="h-[3px] rounded-full mb-3" style={{ background: "rgba(244,244,240,0.06)" }}>
         <div
           className="h-full rounded-full transition-all duration-1000 ease-linear"
           style={{
             width: `${pct}%`,
-            background: remaining <= 5
-              ? "linear-gradient(90deg, #d76a5a, #e0956a)"
-              : "linear-gradient(90deg, var(--accent), #DDB77A)",
+            background: remaining <= 5 ? "linear-gradient(90deg, #d76a5a, #e0956a)" : "linear-gradient(90deg, var(--accent), #DDB77A)",
           }}
         />
       </div>
 
-      {/* Passenger identity */}
       {trip.customer && (
         <div className="flex items-center gap-3 mb-3 pb-3" style={{ borderBottom: "1px solid var(--line)" }}>
           <div
@@ -375,10 +478,16 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
             {trip.customer.initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-[15px] font-medium truncate">{trip.customer.name}</div>
+            <div className="text-[15px] font-medium truncate" style={{ color: "var(--text)" }}>{trip.customer.name}</div>
             <div className="flex items-center gap-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
-              <Star size={11} className="text-mint" fill="currentColor" />
-              <span style={{ color: "var(--accent)" }}>{trip.customer.rating?.toFixed(1) || "4.9"}</span>
+              {trip.customer.rating != null ? (
+                <>
+                  <Star size={11} fill="currentColor" style={{ color: "var(--accent)" }} />
+                  <span style={{ color: "var(--accent)" }}>{trip.customer.rating.toFixed(1)}</span>
+                </>
+              ) : (
+                <span>Ny kunde</span>
+              )}
               {trip.customer.trip_count > 0 && <span>· {trip.customer.trip_count} turer</span>}
             </div>
           </div>
@@ -387,7 +496,7 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
               href={`tel:${trip.customer.phone}`}
               onClick={(e) => e.stopPropagation()}
               data-testid={`pending-call-${trip.trip_id}`}
-              className="w-10 h-10 rounded-full grid place-items-center transition-colors shrink-0"
+              className="w-10 h-10 rounded-full grid place-items-center shrink-0"
               style={{ background: "var(--accent-soft)", border: "1px solid rgba(203,163,101,0.25)", color: "var(--accent)" }}
               aria-label={`Ring ${trip.customer.name}`}
             >
@@ -397,7 +506,6 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
         </div>
       )}
 
-      {/* Pickup + destination — clearly separated */}
       <div className="space-y-2 mb-3">
         <div className="flex items-start gap-3">
           <div className="w-2 h-2 rounded-full mt-2 shrink-0" style={{ background: "var(--accent)" }} />
@@ -415,38 +523,34 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
         </div>
       </div>
 
-      {/* Distances */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="rounded-xl p-2.5" style={{ background: "rgba(244,244,240,0.03)" }}>
           <div className="text-[9px] uppercase tracking-[0.28em]" style={{ color: "var(--text-muted)" }}>Til henting</div>
           <div className="text-[13px] mt-0.5" style={{ color: "var(--text)" }} data-testid={`pickup-dist-${trip.trip_id}`}>
-            {distToPickup != null ? `${distToPickup.toFixed(1)} km` : "—"}
-            <span className="opacity-50"> · </span>
-            {distToPickup != null ? `${Math.max(1, Math.round(distToPickup / 0.7))} min` : "—"}
+            {pickupRoute ? `${fmtDistance(pickupRoute.distance_km)} · ${pickupRoute.duration_min} min` : "Krever GPS"}
           </div>
         </div>
         <div className="rounded-xl p-2.5" style={{ background: "rgba(244,244,240,0.03)" }}>
           <div className="text-[9px] uppercase tracking-[0.28em]" style={{ color: "var(--text-muted)" }}>Selve turen</div>
           <div className="text-[13px] mt-0.5" style={{ color: "var(--text)" }}>
-            {trip.distance_km} km <span className="opacity-50">·</span> {trip.duration_min} min
+            {trip.distance_km != null ? `${trip.distance_km} km` : "—"}
+            {trip.duration_min != null && <><span className="opacity-50"> · </span>{trip.duration_min} min</>}
           </div>
         </div>
       </div>
 
-      {/* Estimated driver earnings — prominent */}
       <div className="flex items-baseline justify-between mb-3">
         <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Din inntjening</div>
         <div className="font-display text-[26px] leading-none" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid={`earn-${trip.trip_id}`}>
-          {Math.round((trip.price || 0) * 0.9)} kr
+          {trip.driver_earnings != null ? `${trip.driver_earnings} kr` : "—"}
         </div>
       </div>
 
-      {/* Action row */}
       <div className="flex gap-2">
         <button
           onClick={onDecline}
           disabled={accepting}
-          data-testid={`decline-${trip.trip_id}`}
+          data-testid={primary ? "driver-decline-btn" : `decline-${trip.trip_id}`}
           className="w-[38%] rounded-full py-3 text-[13px] transition-colors disabled:opacity-50"
           style={{ background: "rgba(244,244,240,0.04)", border: "1px solid var(--line)", color: "var(--text-muted)" }}
         >
@@ -455,7 +559,7 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
         <button
           onClick={onAccept}
           disabled={accepting}
-          data-testid={`accept-${trip.trip_id}`}
+          data-testid={primary ? "driver-accept-btn" : `accept-${trip.trip_id}`}
           className="flex-1 btn-primary flex flex-col items-center justify-center py-2 disabled:opacity-50"
         >
           {accepting ? (
@@ -472,49 +576,19 @@ function TripRequestCard({ trip, pos, accepting, onAccept, onDecline }) {
   );
 }
 
-/** 9. Bottom navigation — 4 items only for one-hand driving */
-function DriverBottomNav() {
-  const navigate = useNavigate();
-  const location = typeof window !== "undefined" ? window.location.pathname : "";
-  const items = [
-    { key: "home", label: "Hjem", Icon: HomeIcon, path: "/driver", match: (p) => p === "/driver" || p === "/driver/" },
-    { key: "earn", label: "Inntekt", Icon: TrendingUp, path: "/driver/payouts", match: (p) => p.startsWith("/driver/payouts") },
-    { key: "trips", label: "Turer", Icon: Clock, path: "/driver/history", match: (p) => p.startsWith("/driver/history") },
-    { key: "account", label: "Konto", Icon: UserIcon, path: "/driver/profile", match: (p) => p.startsWith("/driver/profile") },
-  ];
+/** Helpers */
+function Skeleton({ width = "100%", height = 12, className = "" }) {
   return (
     <div
-      className="fixed left-0 right-0 z-[900] flex items-center justify-around px-2"
-      style={{
-        bottom: 0,
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
-        paddingTop: 8,
-        background: "rgba(11,16,19,0.94)",
-        backdropFilter: "blur(24px) saturate(140%)",
-        borderTop: "1px solid rgba(244,244,240,0.06)",
-      }}
-      data-testid="driver-bottom-nav"
+      className={`rounded-full ${className}`}
+      style={{ width, height, background: "linear-gradient(90deg, rgba(244,244,240,0.05), rgba(244,244,240,0.11), rgba(244,244,240,0.05))", backgroundSize: "200% 100%", animation: "kjapp-shimmer 1.4s ease-in-out infinite" }}
+      data-testid="skeleton"
     >
-      {items.map((it) => {
-        const active = it.match(location);
-        return (
-          <button
-            key={it.key}
-            onClick={() => navigate(it.path)}
-            data-testid={`dnav-${it.key}`}
-            className="flex flex-col items-center gap-0.5 py-1.5 px-3 rounded-xl transition-colors"
-            style={{ minWidth: 64 }}
-          >
-            <it.Icon size={20} style={{ color: active ? "var(--accent)" : "var(--text-muted)" }} strokeWidth={active ? 2.4 : 1.8} />
-            <span className="text-[10px]" style={{ color: active ? "var(--accent)" : "var(--text-muted)" }}>{it.label}</span>
-          </button>
-        );
-      })}
+      <style>{`@keyframes kjapp-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
     </div>
   );
 }
 
-/** Helpers */
 function greetingFor(d) {
   const h = d.getHours();
   if (h < 5) return "God natt";
@@ -526,16 +600,17 @@ function greetingFor(d) {
 }
 
 function summaryLine(summary) {
-  const trips = summary.trips ?? 0;
-  if (trips === 0) return "Ingen turer i dag ennå.";
+  const trips = summary?.trips ?? 0;
+  if (trips === 0) return "Ingen turer i dag ennå";
   if (trips === 1) return "1 tur fullført i dag";
   return `${trips} turer fullført i dag`;
 }
 
 function activeStateLabel(status) {
-  if (status === "driver_on_way") return "På vei til kunde";
-  if (status === "arrived") return "Venter på kunde";
-  if (status === "in_trip") return "Tur pågår";
+  if (status === "driver_on_way") return "Kjører til henting";
+  if (status === "at_pickup") return "Ankommet hentested";
+  if (status === "in_trip") return "Kunde om bord";
+  if (status === "arrived") return "Tur fullført";
   return "Aktiv";
 }
 
@@ -555,14 +630,16 @@ function Metric({ label, value, testid }) {
   );
 }
 
+function fmtDistance(km) {
+  if (km == null) return "—";
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km} km`;
+}
 
-function haversineKm(lat1, lng1, lat2, lng2) {
-  if (lat1 == null || lat2 == null) return 0;
-  const R = 6371;
+function distanceMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
   const toRad = (d) => (d * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
-

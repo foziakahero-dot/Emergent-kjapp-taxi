@@ -32,6 +32,12 @@ export function AuthProvider({ children }) {
     ensureServiceWorker();
   }, [refresh]);
 
+  const applySession = (res) => {
+    localStorage.setItem("kjapp_token", res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   const googleSession = async (session_id) => {
     const { authApi } = await import("../lib/api");
     const res = await authApi.googleSession(session_id);
@@ -71,7 +77,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, refresh, googleSession, verifyTwofaLogin }}>
+    <AuthContext.Provider value={{ user, login, register, logout, refresh, googleSession, verifyTwofaLogin, applySession }}>
       {children}
     </AuthContext.Provider>
   );

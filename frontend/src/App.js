@@ -25,7 +25,7 @@ import DriverSummary from "./pages/DriverSummary";
 import DriverHistory from "./pages/DriverHistory";
 import DriverPayouts from "./pages/DriverPayouts";
 import DriverProfile from "./pages/DriverProfile";
-import DriverNav from "./components/DriverNav";
+import DriverBottomNav from "./components/DriverBottomNav";
 import DriverLogin from "./pages/DriverLogin";
 import DriverSignup from "./pages/DriverSignup";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -33,6 +33,7 @@ import FleetOverview from "./pages/FleetOverview";
 import FleetDrivers from "./pages/FleetDrivers";
 import FleetPayouts from "./pages/FleetPayouts";
 import AuthCallback from "./pages/AuthCallback";
+import GoogleCallback from "./pages/GoogleCallback";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Privacy from "./pages/Privacy";
@@ -173,7 +174,7 @@ function Shell({ children, withNav = true, driver = false }) {
   return (
     <div className="phone-shell grain">
       <div style={{ minHeight: "100dvh" }}>{children}</div>
-      {withNav && (driver ? <DriverNav /> : <BottomNav />)}
+      {withNav && (driver ? <DriverBottomNav /> : <BottomNav />)}
     </div>
   );
 }
@@ -195,6 +196,7 @@ function AppRoutes() {
         <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
         <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
         <Route path="/reset-password/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
+        <Route path="/auth/google" element={<GoogleCallback />} />
         <Route path="/apply" element={<ApplyFleet />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
@@ -213,6 +215,7 @@ function AppRoutes() {
         <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
         <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
         <Route path="/reset-password/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
+        <Route path="/auth/google" element={<GoogleCallback />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/admin" element={<Protected adminOnly><AdminShell><AdminOverview /></AdminShell></Protected>} />
@@ -243,6 +246,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
       <Route path="/forgot-password" element={<PublicOnly><ForgotPassword /></PublicOnly>} />
       <Route path="/reset-password/:token" element={<PublicOnly><ResetPassword /></PublicOnly>} />
+      <Route path="/auth/google" element={<GoogleCallback />} />
       <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
       <Route path="/voice-signin" element={<PublicOnly><VoiceSignIn /></PublicOnly>} />
       <Route path="/driver/login" element={<PublicOnly><DriverLogin /></PublicOnly>} />

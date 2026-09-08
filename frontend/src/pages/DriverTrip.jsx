@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { driverApi } from "../lib/api";
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
-import L from "leaflet";
-import { pickupIcon, dropoffIcon, openMapsNavigation, carIconRotated } from "../lib/mapAssets";
+import PremiumMap from "../components/PremiumMap";
+import { openMapsNavigation } from "../lib/mapAssets";
 import { computeDriverPosition } from "../lib/tripAnimation";
 import ChatModal from "../components/ChatModal";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,18 +10,6 @@ import { Navigation, Phone, MessageCircle, ChevronLeft, Play, Flag, MapPin, Shie
 import { Orb } from "../components/UIKit";
 import { messagesApi } from "../lib/api";
 
-const PICKUP_ICON = pickupIcon;
-const DROPOFF_ICON = dropoffIcon;
-
-function FitBounds({ points }) {
-  const map = useMap();
-  useEffect(() => {
-    if (points && points.length >= 2) {
-      map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
-    }
-  }, [points, map]);
-  return null;
-}
 
 export default function DriverTrip() {
   const [trip, setTrip] = useState(null);
@@ -52,7 +39,7 @@ export default function DriverTrip() {
 
   // Push real GPS while trip is active
   useEffect(() => {
-    if (!trip || (trip.status !== "driver_on_way" && trip.status !== "in_trip")) {
+    if (!trip || !["driver_on_way", "at_pickup", "in_trip"].includes(trip.status)) {
       if (watchIdRef.current != null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
       return;
     }
@@ -89,9 +76,9 @@ export default function DriverTrip() {
     const prev = lastStatusRef.current;
     lastStatusRef.current = trip.status;
     if (prev !== trip.status && (trip.status === "driver_on_way" || trip.status === "in_trip")) {
-      const [lat, lng] = trip.status === "driver_on_way"
-        ? [trip.pickup_lat, trip.pickup_lng]
-        : [trip.dropoff_lat, trip.dropoff_lng];
+      const [lat, lng] = trip.status === "in_trip"
+        ? [trip.dropoff_lat, trip.dropoff_lng]
+        : [trip.pickup_lat, trip.pickup_lng];
       // small delay so UI can settle
       setTimeout(() => openMapsNavigation(lat, lng), 500);
     }
@@ -99,9 +86,9 @@ export default function DriverTrip() {
 
   const openNav = () => {
     if (!trip) return;
-    const [lat, lng] = trip.status === "driver_on_way"
-      ? [trip.pickup_lat, trip.pickup_lng]
-      : [trip.dropoff_lat, trip.dropoff_lng];
+    const [lat, lng] = trip.status === "in_trip"
+      ? [trip.dropoff_lat, trip.dropoff_lng]
+      : [trip.pickup_lat, trip.pickup_lng];
     openMapsNavigation(lat, lng);
   };
 
@@ -176,42 +163,38 @@ export default function DriverTrip() {
     );
   }
 
-  // Use OSRM geometry if available
+  // Real route for the leg the driver is on: driver -> pickup, then pickup -> destination
+  const onPickupLeg = trip.status === "driver_on_way" || trip.status === "at_pickup";
   let routePoints = null;
-  if (trip.geometry?.coordinates?.length) {
+  if (onPickupLeg && trip.pickup_route?.geometry?.coordinates?.length) {
+    routePoints = trip.pickup_route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+  } else if (trip.geometry?.coordinates?.length) {
     routePoints = trip.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
   } else {
     routePoints = [[trip.pickup_lat, trip.pickup_lng], [trip.dropoff_lat, trip.dropoff_lng]];
   }
 
   const statusLabel = {
-    driver_on_way: "På vei til kunde",
-    at_pickup: "Venter på kunde",
-    in_trip: "Tur pågår",
+    driver_on_way: "Kjører til henting",
+    at_pickup: "Ankommet hentested",
+    in_trip: "Kunde om bord",
     arrived: "Tur fullført",
   }[trip.status] || trip.status;
 
   return (
     <div className="relative" style={{ height: "calc(100dvh - 80px)" }}>
       <div className="absolute inset-0">
-        <MapContainer
-          center={[(trip.pickup_lat + trip.dropoff_lat) / 2, (trip.pickup_lng + trip.dropoff_lng) / 2]}
+        <PremiumMap
+          center={[(trip.pickup_lng + trip.dropoff_lng) / 2, (trip.pickup_lat + trip.dropoff_lat) / 2]}
           zoom={13}
-          zoomControl={false}
-          className="w-full h-full"
-        >
-          <TileLayer
-            url="https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png"
-            attribution='&copy; OpenStreetMap, &copy; CartoDB'
-          />
-          <Marker position={[trip.pickup_lat, trip.pickup_lng]} icon={PICKUP_ICON} />
-          <Marker position={[trip.dropoff_lat, trip.dropoff_lng]} icon={DROPOFF_ICON} />
-          <Polyline positions={routePoints} pathOptions={{ color: "#CBA365", weight: 5, opacity: 0.9 }} />
-          {carPos && (
-            <Marker position={[carPos.lat, carPos.lng]} icon={carIconRotated(carPos.bearing)} />
-          )}
-          <FitBounds points={routePoints} />
-        </MapContainer>
+          pitch={45}
+          route={routePoints.map(([lat, lng]) => [lng, lat])}
+          pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
+          dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+          activeCar={carPos ? { lat: carPos.lat, lng: carPos.lng, bearing: carPos.bearing } : null}
+          followActive={trip.status === "in_trip" || trip.status === "driver_on_way"}
+          testid="driver-trip-map"
+        />
       </div>
 
       {/* Top */}
@@ -253,8 +236,8 @@ export default function DriverTrip() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-medium truncate">{trip.customer.name}</div>
-                <div className="text-[11px] text-[#a8b0a8] mt-0.5">
-                  ★ {trip.customer.rating?.toFixed(1) || "4.9"}
+                <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  {trip.customer.rating != null ? `★ ${trip.customer.rating.toFixed(1)}` : "Ny kunde"}
                   {trip.customer.trip_count > 0 && ` · ${trip.customer.trip_count} turer`}
                 </div>
               </div>
@@ -267,15 +250,24 @@ export default function DriverTrip() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[11px] text-mint uppercase tracking-widest">
-                {trip.status === "driver_on_way" ? "Henting" : "Destinasjon"}
+                {onPickupLeg ? "Henting" : "Destinasjon"}
               </div>
               <div className="text-white text-sm truncate">
-                {trip.status === "driver_on_way" ? trip.pickup_address : trip.dropoff_address}
+                {onPickupLeg ? trip.pickup_address : trip.dropoff_address}
               </div>
             </div>
             <div className="text-right">
-              <div className="text-white font-semibold">{trip.distance_km} km</div>
-              <div className="text-[11px] text-[#7a827a]">{trip.duration_min} min</div>
+              {onPickupLeg ? (
+                <>
+                  <div className="text-white font-semibold">{trip.pickup_route ? `${trip.pickup_route.distance_km} km` : "—"}</div>
+                  <div className="text-[11px] text-[#7a827a]">{trip.pickup_route ? `${trip.pickup_route.duration_min} min` : "Krever GPS"}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-white font-semibold">{trip.distance_km != null ? `${trip.distance_km} km` : "—"}</div>
+                  <div className="text-[11px] text-[#7a827a]">{trip.duration_min != null ? `${trip.duration_min} min` : "—"}</div>
+                </>
+              )}
             </div>
           </div>
 
@@ -325,7 +317,7 @@ export default function DriverTrip() {
           {/* 5-state lifecycle CTAs */}
           {trip.status === "driver_on_way" && (
             <>
-              <button onClick={atPickup} disabled={busy} data-testid="dtrip-at-pickup" className="btn-primary w-full flex items-center justify-center gap-2">
+              <button onClick={atPickup} disabled={busy} data-testid="dt-arrived-pickup" className="btn-primary w-full flex items-center justify-center gap-2">
                 <Flag size={16} /> Jeg er fremme
               </button>
               <button onClick={noShow} disabled={busy} data-testid="dtrip-noshow" className="btn-ghost w-full flex items-center justify-center gap-2 text-red-400 border-red-400/20 hover:border-red-400/60 mt-2">
@@ -335,8 +327,8 @@ export default function DriverTrip() {
           )}
           {trip.status === "at_pickup" && (
             <>
-              <button onClick={start} disabled={busy} data-testid="dtrip-start" className="btn-primary w-full flex items-center justify-center gap-2">
-                <Play size={16} /> Start tur
+              <button onClick={start} disabled={busy} data-testid="dt-start" className="btn-primary w-full flex items-center justify-center gap-2">
+                <Play size={16} /> Kunde om bord
               </button>
               <button onClick={noShow} disabled={busy} data-testid="dtrip-noshow" className="btn-ghost w-full flex items-center justify-center gap-2 text-red-400 border-red-400/20 hover:border-red-400/60 mt-2">
                 Kunden dukket ikke opp
@@ -344,7 +336,7 @@ export default function DriverTrip() {
             </>
           )}
           {trip.status === "in_trip" && (
-            <button onClick={arrive} disabled={busy} data-testid="dtrip-complete" className="btn-primary w-full flex items-center justify-center gap-2">
+            <button onClick={arrive} disabled={busy} data-testid="dt-complete" className="btn-primary w-full flex items-center justify-center gap-2">
               <Flag size={16} /> Fullfør tur
             </button>
           )}
@@ -370,11 +362,11 @@ export default function DriverTrip() {
   );
 }
 
-/** Trip Completed — show breakdown (Turpris / KJAPP avgift / Til flåten) */
+/** Trip Completed — real breakdown from the platform commission the backend applied */
 function TripCompletedBreakdown({ trip, onDone }) {
   const price = trip.price || 0;
-  const kjappFee = Math.round(price * 0.10);       // 10% platform
-  const toFleet = price - kjappFee;
+  const net = trip.driver_earnings != null ? trip.driver_earnings : null;
+  const fee = net != null ? price - net : null;
   return (
     <div className="pt-2" data-testid="dtrip-completed">
       <div className="w-14 h-14 rounded-full grid place-items-center mx-auto mb-3" style={{ background: "var(--accent-soft)", border: "1px solid rgba(203,163,101,0.35)" }}>
@@ -386,9 +378,9 @@ function TripCompletedBreakdown({ trip, onDone }) {
       </div>
       <div className="space-y-2 mb-4">
         <BreakdownRow label="Turpris" value={`${price} kr`} testid="brk-price" />
-        <BreakdownRow label="KJAPP avgift" value={`- ${kjappFee} kr`} testid="brk-fee" muted />
+        <BreakdownRow label="KJAPP avgift" value={fee != null ? `- ${fee} kr` : "—"} testid="brk-fee" muted />
         <div className="h-px" style={{ background: "var(--line)" }} />
-        <BreakdownRow label="Til flåten" value={`${toFleet} kr`} testid="brk-net" strong />
+        <BreakdownRow label="Til flåten" value={net != null ? `${net} kr` : "—"} testid="brk-net" strong />
       </div>
       <button onClick={onDone} data-testid="dtrip-done" className="btn-primary w-full">
         Ferdig

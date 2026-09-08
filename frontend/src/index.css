@@ -70,8 +70,9 @@ body {
 
 body:not(.driver-theme) {
   background-image:
-    radial-gradient(ellipse at top left, rgba(203, 163, 101, 0.035), transparent 50%),
-    radial-gradient(ellipse at bottom right, rgba(123, 166, 158, 0.025), transparent 55%);
+    radial-gradient(ellipse at top left, rgba(203, 163, 101, 0.05), transparent 48%),
+    radial-gradient(ellipse at bottom right, rgba(123, 166, 158, 0.06), transparent 55%),
+    linear-gradient(180deg, #070B0E 0%, #0A1218 100%);
   background-attachment: fixed;
 }
 
@@ -274,6 +275,136 @@ body.driver-theme .input { border-radius: 8px; }
 @keyframes pageIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Fjord & Granite — signature effects (kunde-app)
+   ============================================================ */
+
+/* Frosted crystal pill (header controls) */
+.glass-pill {
+  background: rgba(10, 16, 21, 0.78);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Aurora hairline — drifting brass → sjøgrønn → ivory (nordlys) */
+.aurora-line {
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, #CBA365 18%, #7BA69E 42%, #F4F4F0 55%, #CBA365 72%, transparent 100%);
+  background-size: 220% 100%;
+  animation: auroraDrift 7s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 8px rgba(203, 163, 101, 0.55));
+}
+@keyframes auroraDrift {
+  from { background-position: 0% 0; opacity: 0.75; }
+  50%  { opacity: 1; }
+  to   { background-position: 100% 0; opacity: 0.8; }
+}
+
+/* Brushed-brass orb (søk / primær-CTA) */
+.brass-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #070B0E;
+  background: linear-gradient(140deg, #EED9A6 0%, #CBA365 48%, #93703B 100%);
+  box-shadow: 0 16px 34px rgba(203, 163, 101, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 6px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+.brass-orb::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(203, 163, 101, 0.75);
+  animation: orbRing 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+.brass-orb:active { transform: scale(0.94); }
+@keyframes orbRing {
+  0%   { transform: scale(1);    opacity: 0.85; }
+  100% { transform: scale(1.65); opacity: 0; }
+}
+
+/* Live radar dot — sjøgrønn puls */
+.live-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #7BE0B8;
+  box-shadow: 0 0 10px rgba(123, 224, 184, 0.9);
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px solid rgba(123, 224, 184, 0.7);
+  animation: orbRing 2s ease-out infinite;
+}
+
+/* Brass gradient CTA with light sweep */
+.btn-brass {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  min-height: 56px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15.5px;
+  letter-spacing: -0.005em;
+  color: #070B0E;
+  background: linear-gradient(120deg, #E9D2A0 0%, #CBA365 45%, #A5804A 100%);
+  box-shadow: 0 14px 36px rgba(203, 163, 101, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.22);
+  transition: transform 0.16s ease, box-shadow 0.25s ease, filter 0.2s ease;
+}
+.btn-brass::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  width: 34%;
+  left: -40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-18deg);
+  animation: brassSweep 3.6s ease-in-out infinite;
+}
+.btn-brass:hover { transform: translateY(-1px); box-shadow: 0 18px 44px rgba(203, 163, 101, 0.42); }
+.btn-brass:active { transform: translateY(0) scale(0.99); }
+.btn-brass:disabled { filter: saturate(0.35) brightness(0.72); box-shadow: none; cursor: not-allowed; }
+.btn-brass:disabled::after { display: none; }
+@keyframes brassSweep {
+  0%, 55% { left: -40%; }
+  100%    { left: 140%; }
+}
+
+/* Showroom spotlight floor under vehicle glyphs */
+.spotlight {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78%;
+  height: 22px;
+  border-radius: 999px;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* Staggered reveal */
+.reveal { animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes revealUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* === Safe padding for bottom nav === */

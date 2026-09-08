@@ -670,3 +670,6 @@ Ekte closed-beta-ready sjåfør-app. Beholdt Nordic identitet, forfinet alt uten
 - **Testdata ryddet (preview-DB)**: 24 `TEST_`-flåter + 50 `TEST_`-brukere slettet → 1 flåte (Oslo Nord Taxi AS) + 64 brukere igjen. Produksjons-DB må ryddes separat ved deploy.
 - **Env lagt til**: `MAPTILER_API_KEY` (backend .env + .env.production.example), `REACT_APP_MAPTILER_API_KEY` (frontend .env + .env.production). `ADMIN_EMAIL` → `admin@kjappapp.no` i prod-eksempel + DEPLOYMENT.md.
 - **GJENSTÅR (bruker)**: sette MAPTILER-nøkler i deploy-env; sette prod ADMIN_EMAIL=admin@kjappapp.no + sterkt ADMIN_PASSWORD/JWT_SECRET; DNS-kobling; verifisere Apple Sign-In-sikkerhet før den evt. aktiveres i prod.
+
+
+> **Videre logg**: Iter 33 og senere er dokumentert i `/app/memory/CHANGELOG.md` (PRD.md holdes til iter 1–32 + statisk problemformulering).

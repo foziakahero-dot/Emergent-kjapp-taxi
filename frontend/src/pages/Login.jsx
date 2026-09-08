@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Orb } from "../components/UIKit";
 import { useAuth } from "../context/AuthContext";
-import { formatApiErrorDetail, api } from "../lib/api";
+import { formatApiErrorDetail, authApi } from "../lib/api";
+import { startGoogleLogin } from "../lib/googleAuth";
 import { ArrowRight, ChevronLeft, Eye, EyeOff, Apple } from "lucide-react";
 
 // Demo one-click login is compiled in ONLY when explicitly enabled (never in production builds).
@@ -15,9 +15,11 @@ export default function Login() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [appleEnabled, setAppleEnabled] = useState(false);
+  const [googleCfg, setGoogleCfg] = useState({ enabled: false, client_id: "" });
+  const [socialNote, setSocialNote] = useState("");
   const [twofaToken, setTwofaToken] = useState("");
   const [twofaCode, setTwofaCode] = useState("");
-  const { login, verifyTwofaLogin } = useAuth();
+  const { login, verifyTwofaLogin, applySession } = useAuth();
 
   // Detect standalone app mode (fleet.kjapp.no / admin.kjapp.no)
   const APP_MODE = (typeof window !== "undefined" && window.__KJAPP_MODE) || "main";
@@ -27,19 +29,31 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get("/auth/apple/config").then((r) => setAppleEnabled(!!r.data.enabled)).catch(() => {});
+    authApi.appleConfig().then((r) => setAppleEnabled(!!r.enabled)).catch(() => {});
+    authApi.googleConfig().then((r) => setGoogleCfg({ enabled: !!r.enabled, client_id: r.client_id || "" })).catch(() => {});
     const params = new URLSearchParams(window.location.search);
     if (params.get("err") === "google") {
       setErr("Google-innlogging feilet. Prøv igjen eller bruk e-post.");
     }
   }, []);
 
-  async function loginWithApple() {
-    if (!appleEnabled) {
-      alert("Apple Sign In krever Apple Developer-konto ($99/år) og at APPLE_CLIENT_ID settes i backend .env. Backend-endepunktet er allerede klart.");
+  // KJAPP-owned Google OAuth — no third-party login host involved.
+  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  async function loginWithGoogle() {
+    if (!googleCfg.enabled) {
+      setSocialNote("Google-innlogging er ikke konfigurert ennå. Legg inn KJAPPs egne Google OAuth-nøkler i backend-miljøet, så aktiveres knappen automatisk.");
       return;
     }
-    // Load Apple JS SDK
+    setSocialNote("");
+    await startGoogleLogin(googleCfg.client_id);
+  }
+
+  async function loginWithApple() {
+    if (!appleEnabled) {
+      setSocialNote("Sign in with Apple er ikke konfigurert ennå. Legg inn KJAPPs Apple Services ID + nøkkel i backend-miljøet, så aktiveres knappen automatisk.");
+      return;
+    }
+    setSocialNote("");
     if (!window.AppleID) {
       await new Promise((resolve) => {
         const s = document.createElement("script");
@@ -49,22 +63,19 @@ export default function Login() {
       });
     }
     try {
-      const { data: cfg } = await api.get("/auth/apple/config");
+      const cfg = await authApi.appleConfig();
       window.AppleID.auth.init({
         clientId: cfg.client_id,
         scope: "name email",
-        redirectURI: window.location.origin + "/auth/callback",
+        redirectURI: window.location.origin + "/auth/apple",
         usePopup: true,
       });
       const res = await window.AppleID.auth.signIn();
-      const idToken = res.authorization?.id_token;
       const fullName = res.user ? `${res.user.name?.firstName || ""} ${res.user.name?.lastName || ""}`.trim() : undefined;
-      const email = res.user?.email;
-      const { data } = await api.post("/auth/apple", { identity_token: idToken, fullName, email });
-      localStorage.setItem("kjapp_token", data.token);
-      navigate(data.user.role === "admin" ? "/admin" : data.user.role === "driver" ? "/driver" : "/app");
+      const data = await authApi.appleSignIn({ identity_token: res.authorization?.id_token, fullName });
+      navigateForRole(applySession(data));
     } catch (e) {
-      alert("Apple-innlogging feilet: " + (e.response?.data?.detail || e.message));
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || "Apple-innlogging feilet");
     }
   }
 
@@ -234,10 +245,15 @@ export default function Login() {
         </div>
 
         <div className="mt-8 flex items-center justify-center gap-4">
-          <SocialButton icon={<Apple size={20} />} testid="social-apple" onClick={loginWithApple} />
-          <SocialButton icon={<GoogleIcon />} testid="social-google" onClick={loginWithGoogle} />
-          <SocialButton icon={<PhoneIcon />} testid="social-phone" onClick={() => alert("SMS-logg inn kommer snart.")} />
+          <SocialButton icon={<Apple size={20} />} testid="social-apple" onClick={loginWithApple} configured={appleEnabled} />
+          <SocialButton icon={<GoogleIcon />} testid="social-google" onClick={loginWithGoogle} configured={googleCfg.enabled} />
+          <SocialButton icon={<PhoneIcon />} testid="social-phone" onClick={() => setSocialNote("SMS-innlogging kommer snart.")} configured={false} />
         </div>
+        {socialNote && (
+          <p className="mt-4 text-[11.5px] leading-snug text-center px-2" style={{ color: "var(--text-muted)" }} data-testid="social-not-configured">
+            {socialNote}
+          </p>
+        )}
         </>
         )}
       </div>
@@ -339,34 +355,25 @@ function DemoBtn({ testid, label, sub, onClick }) {
   );
 }
 
-function SocialButton({ icon, testid, onClick }) {
+function SocialButton({ icon, testid, onClick, configured = true }) {
   return (
     <button
       onClick={onClick}
       data-testid={testid}
-      className="w-14 h-14 rounded-full card grid place-items-center text-white hover:border-mint transition-colors"
+      aria-label={testid}
+      className="relative w-14 h-14 rounded-full card grid place-items-center text-white hover:border-mint transition-colors"
+      style={configured ? undefined : { opacity: 0.55 }}
     >
       {icon}
+      {!configured && (
+        <span
+          className="absolute bottom-1 right-1 w-2 h-2 rounded-full"
+          style={{ background: "#8A9198" }}
+          data-testid={`${testid}-inactive`}
+        />
+      )}
     </button>
   );
-}
-
-// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-function loginWithGoogle() {
-  const redirectUrl = window.location.origin + "/auth/callback";
-  const oauthUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-  // In PWA standalone mode (Safari iOS, some Android), full-page redirect to external
-  // OAuth providers can fail silently. Open in a new tab / external browser instead.
-  const isStandalone =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone === true;
-  if (isStandalone) {
-    const win = window.open(oauthUrl, "_blank", "noopener");
-    // Some PWAs block window.open — fall back to full-page redirect
-    if (!win) window.location.href = oauthUrl;
-    return;
-  }
-  window.location.href = oauthUrl;
 }
 function GoogleIcon() {
   return (
