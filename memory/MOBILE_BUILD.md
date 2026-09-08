@@ -203,7 +203,7 @@ Før du bygger for release:
 
 1. **Endre `REACT_APP_BACKEND_URL`** i `frontend/.env` fra preview-URL til produksjon:
    ```
-   REACT_APP_BACKEND_URL=https://api.kjapp.no
+   REACT_APP_BACKEND_URL=https://api.kjappapp.no
    ```
 
 2. **Slå av DevNavigator** (allerede env-gated fra iter 18):
@@ -219,7 +219,7 @@ Før du bygger for release:
 
 4. **Sett `allowNavigation` i `capacitor.config.json`** til produksjons-domenet ditt:
    ```json
-   "allowNavigation": ["kjapp.no", "*.kjapp.no"]
+   "allowNavigation": ["kjappapp.no", "*.kjappapp.no"]
    ```
 
 ---
