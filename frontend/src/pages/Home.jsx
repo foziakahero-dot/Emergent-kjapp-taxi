@@ -279,10 +279,12 @@ export default function Home() {
         <div
           className="card p-4 shadow-card"
           style={{
-            background: "rgba(12,18,22,0.92)",
-            border: "1px solid rgba(232,224,208,0.10)",
-            backdropFilter: "blur(28px) saturate(140%)",
-            WebkitBackdropFilter: "blur(28px) saturate(140%)",
+            background: "linear-gradient(180deg, rgba(16,23,28,0.94), rgba(9,14,18,0.97))",
+            border: "1px solid rgba(232,224,208,0.12)",
+            borderTop: "1px solid rgba(203,163,101,0.22)",
+            backdropFilter: "blur(32px) saturate(150%)",
+            WebkitBackdropFilter: "blur(32px) saturate(150%)",
+            boxShadow: "0 -8px 40px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.05) inset",
           }}
         >
           {/* Collapse handle + toggle */}
@@ -344,33 +346,37 @@ export default function Home() {
               {/* Signature search card — greeting + search + chips i én tappable enhet */}
               <button
                 onClick={() => setShowSheet(true)}
-                className="w-full text-left rounded-2xl transition-colors relative overflow-hidden"
+                className="w-full text-left rounded-[22px] transition-transform active:scale-[0.99] relative overflow-hidden"
                 style={{
-                  background: "rgba(244,244,240,0.045)",
-                  border: "1px solid rgba(244,244,240,0.10)",
-                  padding: "14px 16px",
+                  background: "linear-gradient(135deg, rgba(203,163,101,0.18) 0%, rgba(244,244,240,0.05) 44%, rgba(244,244,240,0.028) 100%)",
+                  border: "1px solid rgba(203,163,101,0.30)",
+                  padding: "18px 18px 16px",
+                  boxShadow: "0 1px 0 rgba(255,255,255,0.06) inset",
                 }}
                 data-testid="home-where-to"
               >
-                <div className="text-[10px] tracking-[0.3em] uppercase mb-1" style={{ color: "var(--accent)" }} data-testid="home-greeting">
+                <span className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 rounded-full" style={{ background: "radial-gradient(circle, rgba(203,163,101,0.38), transparent 70%)", filter: "blur(4px)" }} />
+                <div className="text-[10px] tracking-[0.34em] uppercase mb-1.5 relative" style={{ color: "var(--accent)" }} data-testid="home-greeting">
                   {getGreeting()}{user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="font-display text-[26px] leading-tight flex-1" style={{ color: "var(--text)" }}>
+                <div className="flex items-center gap-3 relative">
+                  <div className="font-display text-[30px] leading-[1.04] flex-1" style={{ color: "var(--text)" }}>
                     Hvor vil du?
                   </div>
                   <div
-                    className="w-10 h-10 rounded-full grid place-items-center shrink-0"
-                    style={{ background: "var(--accent-soft)", border: "1px solid rgba(203,163,101,0.30)" }}
+                    className="w-12 h-12 rounded-full grid place-items-center shrink-0 relative"
+                    style={{ background: "linear-gradient(135deg, #DDB77A, #CBA365 55%, #8F6E3E)", boxShadow: "0 8px 22px rgba(203,163,101,0.42), inset 0 0 0 1px rgba(255,255,255,0.18)" }}
                   >
-                    <Search size={16} style={{ color: "var(--accent)" }} />
+                    <span className="absolute inset-0 rounded-full" style={{ animation: "kjapp-search-ring 2.6s ease-out infinite" }} />
+                    <Search size={18} style={{ color: "#0B1013" }} strokeWidth={2.6} />
                   </div>
                 </div>
                 {cars.length > 0 && (
-                  <div className="text-[12px] mt-1.5" style={{ color: "var(--text-muted)" }} data-testid="home-smart-suggest">
-                    Nærmeste bil er <span style={{ color: "var(--accent)" }}>{cars[0]?.eta_min} min</span> unna
+                  <div className="text-[12px] mt-2 relative" style={{ color: "var(--text-secondary)" }} data-testid="home-smart-suggest">
+                    Nærmeste bil er <span className="font-mono" style={{ color: "var(--accent)" }}>{cars[0]?.eta_min} min</span> unna
                   </div>
                 )}
+                <style>{`@keyframes kjapp-search-ring{0%{box-shadow:0 0 0 0 rgba(203,163,101,0.5);}70%{box-shadow:0 0 0 12px rgba(203,163,101,0);}100%{box-shadow:0 0 0 0 rgba(203,163,101,0);}}`}</style>
               </button>
 
               <div className="mt-2 grid grid-cols-3 gap-2">
@@ -401,23 +407,26 @@ export default function Home() {
 
               {/* 3-tier vehicle teaser — vises som preview før destinasjon er valgt */}
               <div className="mt-3">
-                <div className="text-[10px] uppercase tracking-widest mb-1.5" style={{ color: "var(--text-muted)" }}>Velg klasse</div>
+                <div className="text-[10px] uppercase tracking-[0.3em] mb-2" style={{ color: "var(--text-muted)" }}>Velg klasse</div>
                 <div className="grid grid-cols-3 gap-2">
-                  {VEHICLE_TIERS.map((t) => (
+                  {VEHICLE_TIERS.map((t, i) => (
                     <div
                       key={t.id}
-                      className="rounded-2xl p-2.5 text-center"
+                      className="rounded-[18px] p-3 text-center relative overflow-hidden"
                       style={{
-                        background: "rgba(244,244,240,0.03)",
-                        border: "1px solid rgba(244,244,240,0.08)",
+                        background: i === 0
+                          ? "linear-gradient(160deg, rgba(203,163,101,0.14), rgba(203,163,101,0.04))"
+                          : "linear-gradient(160deg, rgba(244,244,240,0.055), rgba(244,244,240,0.02))",
+                        border: `1px solid ${i === 0 ? "rgba(203,163,101,0.32)" : "rgba(244,244,240,0.09)"}`,
+                        boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset",
                       }}
                       data-testid={`tier-preview-${t.id}`}
                     >
-                      <div className="w-full h-10 grid place-items-center">
-                        <VehicleGlyph id={t.id} active={false} />
+                      <div className="w-full h-11 grid place-items-center">
+                        <VehicleGlyph id={t.id} active={i === 0} />
                       </div>
-                      <div className="text-[11px] mt-1" style={{ color: "var(--text)" }}>{t.name}</div>
-                      <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>{t.tagline}</div>
+                      <div className="text-[12px] mt-1.5 font-medium" style={{ color: "var(--text)" }}>{t.name}</div>
+                      <div className="text-[9.5px] tracking-wide" style={{ color: "var(--text-muted)" }}>{t.tagline}</div>
                     </div>
                   ))}
                 </div>
