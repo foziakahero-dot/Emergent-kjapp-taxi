@@ -122,9 +122,9 @@ export default function PremiumMap({
               paint: {
                 "fill-extrusion-color": [
                   "interpolate", ["linear"], ["get", "render_height"],
-                  0, "#1a2027",
-                  50, "#232c34",
-                  120, "#2e3841",
+                  0, "#161D24",
+                  60, "#1F2A33",
+                  120, "#24303A",
                 ],
                 "fill-extrusion-height": [
                   "interpolate", ["linear"], ["zoom"],
@@ -132,7 +132,7 @@ export default function PremiumMap({
                   15.5, ["coalesce", ["get", "render_height"], 6],
                 ],
                 "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-                "fill-extrusion-opacity": 0.75,
+                "fill-extrusion-opacity": 0.82,
               },
             },
             labelLayer?.id,
@@ -192,6 +192,28 @@ export default function PremiumMap({
     } else {
       src.setData({ type: "Feature", geometry: { type: "LineString", coordinates: [] } });
     }
+  }, [ready, route]);
+
+  // Animated "energy" flow along the route (ant-path) — premium living brass/ivory shimmer
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    const map = mapRef.current;
+    if (!map.getLayer("route-shimmer")) return;
+    if (!(route && route.length)) return;
+    const seq = [
+      [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5],
+      [3, 4, 0], [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
+    ];
+    let step = 0, raf = 0, last = 0;
+    const tick = (t) => {
+      raf = requestAnimationFrame(tick);
+      if (t - last < 55) return;
+      last = t;
+      step = (step + 1) % seq.length;
+      try { map.setPaintProperty("route-shimmer", "line-dasharray", seq[step]); } catch { /* ignore */ }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [ready, route]);
 
   // Fit bounds when both pickup & dropoff or fitBounds provided

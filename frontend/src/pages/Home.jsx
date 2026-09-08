@@ -200,7 +200,7 @@ export default function Home() {
       </div>
 
       {/* Top header — glass pills, brass accent */}
-      <div className="relative z-[1000] px-4 pt-3 flex items-center justify-between">
+      <div className="relative z-[1000] px-4 pt-3 flex items-center justify-between" style={{ paddingTop: "max(env(safe-area-inset-top), 14px)" }}>
         <button
           className="w-11 h-11 grid place-items-center rounded-full backdrop-blur-xl transition-transform active:scale-95"
           data-testid="home-menu"
@@ -356,7 +356,7 @@ export default function Home() {
                   {getGreeting()}{user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="font-display text-[22px] leading-tight flex-1" style={{ color: "var(--text)" }}>
+                  <div className="font-display text-[26px] leading-tight flex-1" style={{ color: "var(--text)" }}>
                     Hvor vil du?
                   </div>
                   <div
@@ -665,7 +665,7 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
                 <div className="flex items-center gap-1 text-[10px]" style={{ color: "var(--text-muted)" }}>
                   <Users size={11} /> {v.capacity}
                 </div>
-                <div className="font-display text-[15px] leading-none" style={{ color: active ? "var(--accent)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>
+                <div className="font-mono text-[14px] font-semibold leading-none" style={{ color: active ? "var(--accent)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>
                   {price} kr
                 </div>
               </div>
@@ -680,7 +680,7 @@ function BookingReview({ pickup, dropoff, vehicle, onVehicleChange, distanceKm, 
       </div>
 
       <div className="flex items-center justify-between mb-3 px-1">
-        <span className="text-sm" style={{ color: "var(--text-muted)" }}>{distanceKm.toFixed(1)} km · sjåfør kan hente deg om {selected.eta} min</span>
+        <span className="text-sm" style={{ color: "var(--text-muted)" }}><span className="font-mono" style={{ color: "var(--text-secondary)" }}>{distanceKm.toFixed(1)}</span> km · sjåfør kan hente deg om <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{selected.eta}</span> min</span>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Ca. pris</div>
           <div className="font-display text-[22px] leading-none" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estPrice} kr</div>

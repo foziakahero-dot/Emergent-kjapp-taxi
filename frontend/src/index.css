@@ -11,7 +11,8 @@
   color-scheme: dark;
 
   /* KJAPP Nordic Mobility palette — kontrollert gullbruk (CTA-signatur) */
-  --bg-base:   #0B1013;       /* graphite — hovedbakgrunn */
+  --bg-base:   #070B0E;       /* deep fjord granite — hovedbakgrunn */
+  --bg-surface: #0C1216;      /* elevated surface */
   --bg-card:   rgba(255, 255, 255, 0.028);
   --bg-soft:   rgba(255, 255, 255, 0.02);
   --line:      rgba(244, 244, 240, 0.08);
@@ -19,9 +20,11 @@
   --text:      #F4F4F0;       /* varm off-white (ivory) */
   --text-muted:#8A9198;       /* Nordic grå */
   --accent:    #CBA365;       /* champagne gold — kun for handlinger */
+  --accent-hover: #DDB77A;    /* lysere messing — hover/aktiv */
   --accent-soft: rgba(203, 163, 101, 0.14);
   --accent-glow: rgba(203, 163, 101, 0.32);
-  --accent-on:  #0B1013;
+  --accent-on:  #070B0E;
+  --text-secondary: #C8CED4;  /* sekundær ivory */
   --accent-2:  #7ba69e;       /* dempet sjøgrønn (sekundær) */
   --danger:    #d76a5a;
   --map-base:  #06090A;       /* map background */
@@ -168,7 +171,7 @@ body.driver-theme .sheet-handle { background: rgba(255,255,255,0.16); }
   border-radius: 20px;
   backdrop-filter: blur(20px) saturate(130%);
   -webkit-backdrop-filter: blur(20px) saturate(130%);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 20px 48px rgba(0, 0, 0, 0.45);
 }
 body.driver-theme .card {
   border-radius: 12px;         /* stramere kant */
@@ -210,7 +213,7 @@ body.driver-theme .card-soft { border-radius: 10px; backdrop-filter: none; -webk
   box-shadow: 0 8px 30px var(--accent-glow);
   letter-spacing: -0.005em;
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 40px var(--accent-glow); }
+.btn-primary:hover { transform: translateY(-1px); background: var(--accent-hover); box-shadow: 0 12px 40px var(--accent-glow); }
 .btn-primary:active { transform: translateY(0); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 
@@ -274,6 +277,8 @@ body.driver-theme .input { border-radius: 8px; }
 }
 
 /* === Safe padding for bottom nav === */
+.pt-safe { padding-top: max(env(safe-area-inset-top), 12px); }
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
 .pb-nav { padding-bottom: calc(env(safe-area-inset-bottom) + 100px); }
 .tab-bar {
   padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
