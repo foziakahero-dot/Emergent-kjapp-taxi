@@ -117,6 +117,22 @@ export async function registerNativePush() {
     }
     if (perm.receive !== "granted") return { ok: false, reason: "denied" };
 
+    // High-importance channel so ride requests wake the screen and ring on Android 8+
+    if (platform() === "android") {
+      try {
+        await PushNotifications.createChannel({
+          id: "kjapp_trips",
+          name: "Turforespørsler",
+          description: "Nye turer og oppdateringer for sjåfører",
+          importance: 5,
+          visibility: 1,
+          sound: "default",
+          vibration: true,
+          lights: true,
+        });
+      } catch { /* channel already exists */ }
+    }
+
     return await new Promise((resolve) => {
       const onReg = PushNotifications.addListener("registration", async (token) => {
         try {

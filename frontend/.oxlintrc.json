@@ -1,0 +1,13 @@
+{
+  "ignorePatterns": [
+    "public/maplibre/**",
+    "**/maplibre-gl-shared.mjs",
+    "**/maplibre-gl-worker.mjs",
+    "build/**",
+    "**/node_modules/**"
+  ],
+  "globals": {
+    "WorkerGlobalScope": "readonly",
+    "clients": "readonly"
+  }
+}

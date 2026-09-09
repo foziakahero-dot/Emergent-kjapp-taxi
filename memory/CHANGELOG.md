@@ -72,3 +72,31 @@ Kunde `ola@kjapp.no` bestilte via kunde-UI (Aker Brygge, 186 kr) → tur `1e52bd
 - **Tilbudsmodell**: turer broadcastes til alle online sjåfører (først-til-å-godta vinner, atomisk). Sekvensielt tilbud til nærmeste sjåfør med per-sjåfør timeout og videresending er ikke implementert.
 - **Flåte-dashboard** viser aggregater, ikke en tur-for-tur-liste (admin har full turliste).
 - **Statusnavn** (kanonisk backend-kilde): `searching` → `driver_on_way` → `at_pickup` → `in_trip` → `arrived` → (`completed` når kundeappen lukker turen) → `rated`, samt `cancelled` / `cancelled_by_driver`. Dette tilsvarer brukerens requested/accepted/driver_en_route/driver_arrived/passenger_onboard/in_progress/completed.
+
+
+## Iter 36 — Native push (nøkkel-valgfri) + «nærmeste sjåfør først» (2026-09-09)
+
+### Nærmeste sjåfør først (sekvensiell dispatch)
+- Ny dispatch-motor i `server.py`: `_dispatch_candidates()` (godkjent + online + GPS < 90 s + ikke på tur, sortert på FAKTISK avstand til hentestedet), `offer_trip_to_next_driver()` og `dispatch_loop()` (bakgrunnstask, sjekker hvert 3. sekund).
+- Turen tilbys **kun** nærmeste sjåfør i `DISPATCH_OFFER_SECONDS` (20 s, satt i `backend/.env`). Uten svar sendes den automatisk videre til neste nærmeste. Når alle har hatt sjansen åpnes turen for alle (`dispatch_mode: broadcast`) slik at ingen tur blir borte.
+- `POST /driver/decline` sender turen videre umiddelbart. `GET /driver/pending` viser kun turer som er tilbudt deg (eller broadcast) og **ingenting når du er offline**. `POST /driver/accept` avviser forsøk på å ta en tur som er tilbudt en annen (409 «Turen er tilbudt en annen sjåfør akkurat nå») og claim-en er fortsatt atomisk.
+- Sjåfør-UI viser ekte nedtelling fra backend: «Sendes videre om X sek» (`driver-offer-countdown`), eller «Åpen for alle sjåfører» når turen er broadcast. Auto-avslag finnes ikke — backend flytter turen, sjåføren straffes ikke.
+- Aktiv-tur-kortet skiller nå ekte tilstand: «Nylig fullført / Se oppsummering» i 15-minutters-vinduet, «Aktiv tur / Åpne aktiv tur» ellers.
+
+### Native push (låst skjerm) — klar, nøkkel-valgfri
+- `firebase-admin` installert. Ny sender i `server.py`: `_fcm_app()` (lazy init fra `FCM_SERVICE_ACCOUNT_JSON` eller `FCM_SERVICE_ACCOUNT_FILE`), `_fcm_send()` (høy prioritet, kanal `kjapp_trips`, APNs alert-payload, sletter døde tokens) og `send_native_push()`. `send_push_to_user()` sender nå til BÅDE mobilapp (FCM/APNs) og web push.
+- `GET /api/push/native-config` → `{"enabled": false, "message": "Native push er ikke konfigurert ennå …"}` til nøkkelen finnes. Verifisert med en dummy service-account: init OK, sendefeil håndteres uten å krasje.
+- Android: høy-prioritetskanal `kjapp_trips` (lyd + vibrasjon + lys) opprettes i `lib/native.js`; `google-services`-pluginen er allerede betinget aktivert i Gradle. iOS: `App.entitlements` (aps-environment) opprettet, `UIBackgroundModes` inkluderer `remote-notification`.
+- Sjåfør-banner «Få turer på låst skjerm» bruker native registrering i mobilappen (`registerNativePush`) og Web Push i nettleser.
+- **Full guide**: `/app/MOBILE_BUILD.md` (Firebase-prosjekt, `google-services.json`, `GoogleService-Info.plist`, APNs `.p8` → Firebase, `FCM_SERVICE_ACCOUNT_JSON` i backend-miljø, test på ekte telefon, Android/iOS-bygg). `.gitignore` dekker service-account-JSON, `.p8`, keystore.
+- **Publisering**: Emergents direkte APK/iOS-publisering gjelder kun Expo/React Native. KJAPP er Capacitor → APK/IPA bygges lokalt (Node 22+) eller i Xcode Cloud/CI. Alt annet er ferdig konfigurert.
+
+### Testing
+- Nytt regresjonsskript `python3 /app/backend/scripts/e2e_dispatch.py` — **ALLE PASSED** med to ekte sjåførkontoer: nærmeste får tilbudet, fjern sjåfør ser den ikke, kan ikke snike, ubesvart tilbud videresendes etter 20 s, neste sjåfør godtar, state-maskin kjøres, inntekt havner hos den som kjørte, native-config svarer nøkkel-valgfritt.
+- UI verifisert med Playwright: nedtelling/broadcast-tekst, offline gir 0 forespørsler + tomstate, online gir dem tilbake, «Nylig fullført»-merking.
+- Lint-blokkering (`WorkerGlobalScope` i MapLibre-vendorfil) løst via `.oxlintrc.json` i både `/app` og `/app/frontend` (ignorePatterns + globals) — verifisert med `npx oxlint`.
+
+### Gjenstår (krever bruker/eksterne kontoer)
+- Firebase-prosjekt + `google-services.json` + `GoogleService-Info.plist` + APNs `.p8` og `FCM_SERVICE_ACCOUNT_JSON` — se `/app/MOBILE_BUILD.md`.
+- Automatisk kortbelastning ved fullført tur (Stripe off-session) er fortsatt ikke implementert.
+- Når alle sjåfører har avslått, er turen skjult 5 min per sjåfør; kunden får ennå ikke «ingen sjåfør tilgjengelig»-melding.

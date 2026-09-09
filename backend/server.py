@@ -550,8 +550,94 @@ def current_surge_info(when: datetime = None) -> dict:
     return {"multiplier": surge, "reasons": reasons, "active": surge > 1.0}
 
 
+FCM_APP = None
+FCM_INIT_TRIED = False
+
+
+def _fcm_app():
+    """Lazily initialise Firebase Admin for native push (FCM for Android, APNs via FCM for iOS).
+
+    Key-optional: without FCM_SERVICE_ACCOUNT_JSON / FCM_SERVICE_ACCOUNT_FILE the app runs
+    normally and native push is simply reported as "not configured".
+    """
+    global FCM_APP, FCM_INIT_TRIED
+    if FCM_APP is not None or FCM_INIT_TRIED:
+        return FCM_APP
+    FCM_INIT_TRIED = True
+    raw = (os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip()
+    path = (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip()
+    if not raw and not path:
+        return None
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+        cred = credentials.Certificate(json.loads(raw) if raw else path)
+        FCM_APP = firebase_admin.initialize_app(cred, name="kjapp-push")
+        print("FCM native push: initialised")
+    except Exception as e:
+        print(f"FCM init failed: {e}")
+        FCM_APP = None
+    return FCM_APP
+
+
+def _fcm_send(tokens: list, title: str, body: str, data: dict):
+    """Blocking FCM call — run through asyncio.to_thread. Returns tokens that are dead."""
+    from firebase_admin import messaging
+    msg_data = {k: str(v) for k, v in (data or {}).items()}
+    dead = []
+    for tok in tokens:
+        try:
+            messaging.send(
+                messaging.Message(
+                    token=tok,
+                    notification=messaging.Notification(title=title, body=body),
+                    data=msg_data,
+                    android=messaging.AndroidConfig(
+                        priority="high",
+                        notification=messaging.AndroidNotification(
+                            channel_id="kjapp_trips", sound="default", default_vibrate_timings=True,
+                        ),
+                    ),
+                    apns=messaging.APNSConfig(
+                        headers={"apns-priority": "10", "apns-push-type": "alert"},
+                        payload=messaging.APNSPayload(
+                            aps=messaging.Aps(sound="default", badge=1, content_available=True)
+                        ),
+                    ),
+                ),
+                app=FCM_APP,
+            )
+        except Exception as e:
+            name = type(e).__name__
+            if "Unregistered" in name or "InvalidArgument" in name or "SenderId" in name:
+                dead.append(tok)
+            else:
+                print(f"FCM send error: {name}: {e}")
+    return dead
+
+
+async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None):
+    """Push to the user's real mobile devices (locked screen) via FCM/APNs."""
+    if not _fcm_app():
+        return
+    tokens = []
+    async for t in db.native_push_tokens.find({"user_id": user_id}, {"token": 1}):
+        if t.get("token"):
+            tokens.append(t["token"])
+    if not tokens:
+        return
+    try:
+        dead = await asyncio.to_thread(_fcm_send, tokens, title, body, {"url": url, "tag": tag or ""})
+    except Exception as e:
+        print(f"send_native_push failed: {e}")
+        return
+    if dead:
+        await db.native_push_tokens.delete_many({"token": {"$in": dead}})
+
+
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
-    """Send push notifications to all subscriptions of a user."""
+    """Deliver a notification to every channel the user has: real mobile app (FCM/APNs) + web push."""
+    await send_native_push(user_id, title, body, url, tag)
     if not PUSH_AVAILABLE:
         return
     vapid = await db.vapid.find_one({"_id": "keys"})
@@ -722,7 +808,12 @@ async def lifespan(app: FastAPI):
         disabled_n = await disable_legacy_demo_users(db, True, admin_email)
         print(f"[seed] production: disabled {disabled_n} legacy demo account(s)")
 
+    # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
+    dispatch_task = asyncio.create_task(dispatch_loop())
+
     yield
+
+    dispatch_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1361,25 +1452,12 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.trips.insert_one(trip)
-    # Trip stays in "searching" — real driver must accept via /api/driver/accept
-    # Notify every approved + online driver so they get the request on a locked screen too
+    # Trip stays in "searching" — a real driver must accept via /api/driver/accept.
+    # Nearest-driver-first: offer it to the closest available driver, forward automatically on timeout.
     try:
-        commission = await _platform_commission()
-        earnings = int(round(price * (1 - commission)))
-        async for d in db.users.find(
-            {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True}},
-            {"_id": 1},
-        ):
-            await send_push_to_user(
-                str(d["_id"]),
-                f"Ny tur · {earnings} kr til deg",
-                f"{body.pickup_address} → {body.dropoff_address} · {est} km",
-                "/driver",
-                tag="kjapp-new-trip",
-                require_interaction=True,
-            )
-    except Exception:
-        pass
+        await offer_trip_to_next_driver(trip)
+    except Exception as e:
+        print(f"dispatch on request failed: {e}")
     trip.pop("_id", None)
     return trip
 
@@ -1992,12 +2070,101 @@ REAL_TRIPS_ONLY = {
     "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
 }
 
+ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
+DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
+
+
+async def _dispatch_candidates(lat: float, lng: float) -> list:
+    """Real, available drivers sorted by actual distance to the pickup point.
+
+    Eligible = approved + online + GPS ping within 90 s + not already on a trip.
+    """
+    if lat is None or lng is None:
+        return []
+    fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
+    busy = set()
+    async for t in db.trips.find({"status": {"$in": ACTIVE_TRIP_STATUSES}}, {"driver_id": 1}):
+        if t.get("driver_id"):
+            busy.add(t["driver_id"])
+    out = []
+    async for d in db.users.find(
+        {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True},
+         "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
+        {"last_lat": 1, "last_lng": 1, "name": 1},
+    ):
+        did = str(d["_id"])
+        if did in busy or d.get("last_lat") is None:
+            continue
+        out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
+    out.sort(key=lambda x: x["km"])
+    return out
+
+
+async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
+    """Nearest-driver-first dispatch: offer the trip to the closest driver who has not seen it yet.
+
+    The offer expires after DISPATCH_OFFER_SECONDS and is then forwarded automatically. When every
+    eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
+    """
+    tried = set(trip.get("offer_history") or [])
+    cands = await _dispatch_candidates(trip.get("pickup_lat"), trip.get("pickup_lng"))
+    nxt = next((c for c in cands if c["id"] not in tried), None)
+    commission = await _platform_commission()
+    earnings = int(round((trip.get("price") or 0) * (1 - commission)))
+    title = f"Ny tur · {earnings} kr til deg"
+    body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
+
+    if not nxt:
+        await db.trips.update_one(
+            {"trip_id": trip["trip_id"], "driver_id": None},
+            {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
+        )
+        for c in cands:  # everyone gets a last chance
+            await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
+        return None
+
+    expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
+    res = await db.trips.update_one(
+        {"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+        {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
+                  "offer_expires_at": expires.isoformat(), "offer_km": round(nxt["km"], 2)},
+         "$addToSet": {"offer_history": nxt["id"]},
+         "$inc": {"offer_seq": 1}},
+    )
+    if res.modified_count == 0:
+        return None
+    await send_push_to_user(
+        nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
+        "/driver", tag="kjapp-new-trip", require_interaction=True,
+    )
+    return nxt["id"]
+
+
+async def dispatch_loop():
+    """Forwards ride requests whose offer window expired without an answer."""
+    while True:
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            async for t in db.trips.find({
+                "status": {"$in": ["searching", "booking"]},
+                "driver_id": None,
+                "dispatch_mode": "sequential",
+                "offer_expires_at": {"$lt": now_iso},
+            }).limit(20):
+                await offer_trip_to_next_driver(t)
+        except Exception as e:
+            print(f"dispatch_loop error: {e}")
+        await asyncio.sleep(3)
+
 
 @api.get("/driver/pending")
 async def driver_pending(current=Depends(require_driver)):
     """Real ride requests waiting for a driver (status=searching/booking, no driver assigned).
     Pickup distance + ETA come from real routing (OSRM) based on the driver's live GPS —
     never from hardcoded values. Fabricated/demo/test trips are filtered out."""
+    # Only a genuinely on-duty driver receives ride requests.
+    if not current.get("online"):
+        return {"trips": [], "offline": True, "commission": await _platform_commission(), "driver_gps": None}
     commission = await _platform_commission()
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     # A request the driver just declined must not bounce straight back on the next poll.
@@ -2012,6 +2179,13 @@ async def driver_pending(current=Depends(require_driver)):
     async for t in db.trips.find({
         "status": {"$in": ["searching", "booking"]},
         "driver_id": None,
+        # Sequential dispatch: only the driver the trip is currently offered to sees it.
+        # Once every eligible driver has had a turn the trip is broadcast to all of them.
+        "$or": [
+            {"offer_driver_id": current["id"]},
+            {"dispatch_mode": "broadcast"},
+            {"dispatch_mode": {"$exists": False}},
+        ],
         **REAL_TRIPS_ONLY,
     }).sort("created_at", 1).limit(10):
         if t["trip_id"] in declined:
@@ -2027,6 +2201,7 @@ async def driver_pending(current=Depends(require_driver)):
             except Exception:
                 u = None
         t["customer"] = customer_public(u) if u else None
+        t["offer_expires_at"] = t.get("offer_expires_at") if t.get("offer_driver_id") == current["id"] else None
         trips.append(t)
 
     # Real driver -> pickup routing for the requests actually shown (kept to 3 for latency)
@@ -2060,6 +2235,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    if trip_pre.get("dispatch_mode") == "sequential" and trip_pre.get("offer_driver_id") not in (None, driver_id):
+        raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
     # Driver's REAL current GPS. If we don't have it we store nothing and report no ETA —
     # a fabricated start position/ETA would be shown to the customer as if it were real.
     d_lat = current.get("last_lat")
@@ -2085,9 +2262,12 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
             "driver_lng": d_lng,
             "driver_location_at": datetime.now(timezone.utc).isoformat(),
         })
+    claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}
+    if trip_pre.get("dispatch_mode") == "sequential":
+        claim["offer_driver_id"] = trip_pre.get("offer_driver_id")
     result = await db.trips.update_one(
-        {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None},
-        {"$set": updates},
+        claim,
+        {"$set": updates, "$unset": {"offer_driver_id": "", "offer_expires_at": ""}},
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
@@ -2375,12 +2555,15 @@ class DeclineTripRequest(BaseModel):
 
 @api.post("/driver/decline")
 async def driver_decline(body: DeclineTripRequest, current=Depends(require_driver)):
-    """Driver declines a pending trip — logged for acceptance-rate calculation."""
+    """Driver declines a pending trip — logged for acceptance-rate and forwarded immediately."""
     await db.driver_declines.insert_one({
         "driver_id": current["id"],
         "trip_id": body.trip_id,
         "declined_at": datetime.now(timezone.utc).isoformat(),
     })
+    trip = await db.trips.find_one({"trip_id": body.trip_id, "driver_id": None})
+    if trip and trip.get("offer_driver_id") == current["id"]:
+        await offer_trip_to_next_driver(trip)
     return {"ok": True}
 
 
@@ -2490,6 +2673,17 @@ class NativePushSubscribeRequest(BaseModel):
     platform: Literal["ios", "android", "web"]
     token: str
     device_id: Optional[str] = None
+
+
+@api.get("/push/native-config")
+async def push_native_config():
+    """Tells the app whether native (locked-screen) push is configured on this environment."""
+    ready = _fcm_app() is not None
+    return {
+        "enabled": ready,
+        "provider": "fcm",
+        "message": None if ready else "Native push er ikke konfigurert ennå — legg inn FCM_SERVICE_ACCOUNT_JSON i backend-miljøet",
+    }
 
 
 @api.post("/push/native-subscribe")

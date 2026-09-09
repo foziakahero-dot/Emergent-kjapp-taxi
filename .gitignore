@@ -17,3 +17,12 @@ build/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Native push / signing secrets
+*service-account*.json
+**/*.p8
+*.keystore
+*.jks
+frontend/android/app/google-services.json
+frontend/ios/App/App/GoogleService-Info.plist
+backend/secrets/

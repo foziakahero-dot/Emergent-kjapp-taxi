@@ -1,8 +1,15 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
     "frontend/public/maplibre/**",
+    "public/maplibre/**",
+    "**/maplibre-gl-shared.mjs",
+    "**/maplibre-gl-worker.mjs",
     "frontend/build/**",
+    "build/**",
     "**/node_modules/**"
-  ]
+  ],
+  "globals": {
+    "WorkerGlobalScope": "readonly",
+    "clients": "readonly"
+  }
 }

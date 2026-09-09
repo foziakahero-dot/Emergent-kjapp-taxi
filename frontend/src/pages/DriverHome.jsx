@@ -7,6 +7,7 @@ import PremiumMap from "../components/PremiumMap";
 import { Navigation, Check, Phone, Star, ChevronRight, MapPinOff, RefreshCw, Flame, BellRing } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
 import { subscribePush, ensureServiceWorker } from "../lib/push";
+import { isNative, registerNativePush } from "../lib/native";
 import { toast } from "sonner";
 
 const GPS_MIN_INTERVAL_MS = 15000; // don't write more often than this …
@@ -137,7 +138,9 @@ export default function DriverHome() {
 
   const enablePush = async () => {
     setPushBusy(true);
-    const res = await subscribePush();
+    // In the real mobile app we register with APNs/FCM; on web we use Web Push.
+    const res = isNative() ? await registerNativePush() : await subscribePush();
+    if (!res.ok && res.reason === "denied") toast.error("Varsler er avslått i telefoninnstillingene");
     setPushPerm(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
     if (!res.ok && res.reason === "unsupported") setPushPerm("unsupported");
     setPushBusy(false);
@@ -457,8 +460,13 @@ export default function DriverHome() {
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent)" }} />
-                <span className="text-[10px] uppercase tracking-[0.32em]" style={{ color: "var(--accent)" }} data-testid="active-badge">Aktiv tur</span>
+                <span
+                  className={["arrived", "completed", "rated"].includes(current.status) ? "w-2 h-2 rounded-full" : "w-2 h-2 rounded-full animate-pulse"}
+                  style={{ background: "var(--accent)" }}
+                />
+                <span className="text-[10px] uppercase tracking-[0.32em]" style={{ color: "var(--accent)" }} data-testid="active-badge">
+                  {["arrived", "completed", "rated"].includes(current.status) ? "Nylig fullført" : "Aktiv tur"}
+                </span>
               </div>
               <span className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }} data-testid="active-state">
                 {activeStateLabel(current.status)}
@@ -484,7 +492,7 @@ export default function DriverHome() {
               </div>
             </div>
             <button onClick={() => navigate("/driver/trip")} data-testid="active-open" className="mt-3 btn-primary w-full flex items-center justify-center gap-2">
-              Åpne aktiv tur <ChevronRight size={16} />
+              {["arrived", "completed", "rated"].includes(current.status) ? "Se oppsummering" : "Åpne aktiv tur"} <ChevronRight size={16} />
             </button>
           </motion.div>
         )}
@@ -597,14 +605,16 @@ function GpsUnavailable({ onRetry }) {
 
 /** Real ride request — every number comes from the backend (routing/pricing), never invented */
 function TripRequestCard({ trip, accepting, onAccept, onDecline, primary }) {
-  // Freshness bar only — a real request is NEVER auto-declined on the driver's behalf.
-  const [age, setAge] = useState(0);
+  // Real dispatch window from the backend: how long before the trip is offered to the next driver.
+  // Never auto-declines on the driver's behalf — the backend forwards it.
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setAge((a) => a + 1), 1000);
+    const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
   }, []);
-  const remaining = Math.max(0, 30 - age);
-  const pct = (remaining / 30) * 100;
+  const expiresAt = trip.offer_expires_at ? new Date(trip.offer_expires_at).getTime() : null;
+  const remaining = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : null;
+  const pct = remaining != null ? Math.min(100, (remaining / 20) * 100) : 100;
   const pickupRoute = trip.pickup_route;
 
   return (
@@ -724,7 +734,9 @@ function TripRequestCard({ trip, accepting, onAccept, onDecline, primary }) {
           ) : (
             <>
               <span className="flex items-center gap-1.5 font-medium"><Check size={16} /> Godta tur</span>
-              <span className="text-[10px] uppercase tracking-widest opacity-80 mt-0.5">{remaining > 0 ? `Ny forespørsel · ${remaining} sek` : "Venter fortsatt på svar"}</span>
+              <span className="text-[10px] uppercase tracking-widest opacity-80 mt-0.5" data-testid="driver-offer-countdown">
+                {remaining == null ? "Åpen for alle sjåfører" : remaining > 0 ? `Sendes videre om ${remaining} sek` : "Sendes videre nå…"}
+              </span>
             </>
           )}
         </button>
