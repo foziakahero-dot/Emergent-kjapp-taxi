@@ -16,6 +16,7 @@ import stripe
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -2386,7 +2387,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
-    return {"ok": True}
+    bonuses = await award_driver_bonuses(driver_id)
+    return {"ok": True, "bonuses": bonuses}
 
 
 @api.get("/driver/demand")
@@ -2539,8 +2541,11 @@ async def driver_summary(current=Depends(require_driver)):
     acceptance_rate = round((accepted / total_offered) * 100) if total_offered > 0 else None
 
     u = await db.users.find_one({"_id": ObjectId(driver_id)}, {"online": 1, "last_location_at": 1}) or {}
+    bonus = await _bonus_earned_today(driver_id)
     return {
-        "income": total,
+        "income": total + bonus,
+        "trip_income": total,
+        "bonus": bonus,
         "trips": trips,
         "online": bool(u.get("online")),
         "last_location_at": u.get("last_location_at"),
@@ -3225,6 +3230,181 @@ async def fleet_export_monthly(
 async def _platform_commission() -> float:
     s = await db.platform_settings.find_one({"_id": "singleton"})
     return (s or {}).get("default_commission", 0.10)
+
+
+# ============================================================
+# Driver bonus quests ("Oppdrag") — KJAPP pays the bonus out of its own commission,
+# so the passenger price is never touched. Everything is counted from REAL completed trips.
+# ============================================================
+OSLO_TZ = ZoneInfo("Europe/Oslo")
+FINISHED_TRIP_STATUSES = ["arrived", "completed", "rated"]
+
+
+class BonusCampaignIn(BaseModel):
+    name: str
+    trips_required: int = Field(ge=1, le=50)
+    bonus_kr: int = Field(ge=1, le=5000)
+    start_hour: int = Field(default=0, ge=0, le=23)
+    end_hour: int = Field(default=24, ge=1, le=24)
+    active: bool = True
+    max_per_driver_per_day: int = Field(default=1, ge=1, le=10)
+
+
+def _oslo_window(campaign: dict, now: datetime = None):
+    """UTC ISO bounds for today's campaign window, expressed in Oslo local hours."""
+    now = (now or datetime.now(timezone.utc)).astimezone(OSLO_TZ)
+    start = now.replace(hour=int(campaign.get("start_hour", 0)), minute=0, second=0, microsecond=0)
+    end_hour = int(campaign.get("end_hour", 24))
+    end = (start.replace(hour=0) + timedelta(days=1)) if end_hour >= 24 else start.replace(hour=end_hour)
+    return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat(), now.date().isoformat()
+
+
+async def _campaign_progress(driver_id: str, campaign: dict):
+    """Real number of trips this driver finished inside today's window + payouts already earned."""
+    start_iso, end_iso, local_date = _oslo_window(campaign)
+    trips = await db.trips.count_documents({
+        "driver_id": driver_id,
+        "status": {"$in": FINISHED_TRIP_STATUSES},
+        "arrived_at": {"$gte": start_iso, "$lt": end_iso},
+    })
+    paid = await db.bonus_payouts.count_documents({
+        "driver_id": driver_id, "campaign_id": campaign["id"], "local_date": local_date,
+    })
+    required = int(campaign["trips_required"])
+    cap = int(campaign.get("max_per_driver_per_day", 1))
+    now_local = datetime.now(timezone.utc).astimezone(OSLO_TZ)
+    return {
+        "trips": trips,
+        "paid_count": paid,
+        "earned_kr": paid * int(campaign["bonus_kr"]),
+        "progress": min(required, trips - paid * required),
+        "required": required,
+        "cap_reached": paid >= cap,
+        "in_window": start_iso <= now_local.astimezone(timezone.utc).isoformat() < end_iso,
+        "local_date": local_date,
+    }
+
+
+async def award_driver_bonuses(driver_id: str) -> list:
+    """Called right after a trip is completed. Pays out every campaign target the driver just hit."""
+    earned = []
+    async for c in db.bonus_campaigns.find({"active": True}):
+        c["id"] = str(c["_id"])
+        p = await _campaign_progress(driver_id, c)
+        if not p["in_window"] or p["cap_reached"]:
+            continue
+        if p["trips"] - p["paid_count"] * p["required"] >= p["required"]:
+            payout = {
+                "driver_id": driver_id,
+                "campaign_id": c["id"],
+                "campaign_name": c["name"],
+                "amount": int(c["bonus_kr"]),
+                "trips_counted": p["required"],
+                "local_date": p["local_date"],
+                "earned_at": datetime.now(timezone.utc).isoformat(),
+                "paid_out": False,
+            }
+            await db.bonus_payouts.insert_one(dict(payout))
+            payout.pop("_id", None)
+            earned.append({"name": c["name"], "amount": int(c["bonus_kr"]), "trips": p["required"]})
+            await send_push_to_user(
+                driver_id, f"Bonus opptjent · +{c['bonus_kr']} kr",
+                f"{c['name']} — {p['required']} turer fullført", "/driver/payouts", tag="kjapp-bonus",
+            )
+    return earned
+
+
+async def _bonus_earned_today(driver_id: str) -> int:
+    local_date = datetime.now(timezone.utc).astimezone(OSLO_TZ).date().isoformat()
+    total = 0
+    async for p in db.bonus_payouts.find({"driver_id": driver_id, "local_date": local_date}, {"amount": 1}):
+        total += p.get("amount", 0)
+    return total
+
+
+@api.get("/driver/bonus")
+async def driver_bonus(current=Depends(require_driver)):
+    """Live bonus quests for this driver — real progress, no fabricated targets."""
+    out = []
+    async for c in db.bonus_campaigns.find({"active": True}).sort("bonus_kr", -1):
+        c["id"] = str(c["_id"])
+        p = await _campaign_progress(current["id"], c)
+        out.append({
+            "id": c["id"], "name": c["name"], "bonus_kr": int(c["bonus_kr"]),
+            "trips_required": p["required"], "start_hour": c.get("start_hour", 0), "end_hour": c.get("end_hour", 24),
+            "progress": max(0, p["progress"]), "in_window": p["in_window"],
+            "earned_kr": p["earned_kr"], "cap_reached": p["cap_reached"],
+        })
+    return {"campaigns": out, "earned_today": await _bonus_earned_today(current["id"])}
+
+
+@api.get("/admin/bonus-campaigns")
+async def admin_list_bonus_campaigns(current=Depends(require_admin)):
+    out = []
+    async for c in db.bonus_campaigns.find().sort("created_at", -1):
+        c["id"] = str(c["_id"]); c.pop("_id", None)
+        paid = await db.bonus_payouts.count_documents({"campaign_id": c["id"]})
+        spent = 0
+        async for p in db.bonus_payouts.find({"campaign_id": c["id"]}, {"amount": 1}):
+            spent += p.get("amount", 0)
+        c["payouts_count"] = paid
+        c["spent_kr"] = spent
+        out.append(c)
+    return {"campaigns": out}
+
+
+@api.post("/admin/bonus-campaigns")
+async def admin_create_bonus_campaign(body: BonusCampaignIn, current=Depends(require_admin)):
+    if body.end_hour <= body.start_hour and body.end_hour != 24:
+        raise HTTPException(status_code=400, detail="Sluttid må være etter starttid")
+    doc = body.model_dump()
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    doc["created_by"] = current["id"]
+    res = await db.bonus_campaigns.insert_one(doc)
+    doc["id"] = str(res.inserted_id); doc.pop("_id", None)
+    return doc
+
+
+@api.patch("/admin/bonus-campaigns/{campaign_id}")
+async def admin_update_bonus_campaign(campaign_id: str, body: dict, current=Depends(require_admin)):
+    allowed = {k: v for k, v in body.items() if k in
+               {"name", "trips_required", "bonus_kr", "start_hour", "end_hour", "active", "max_per_driver_per_day"}}
+    if not allowed:
+        raise HTTPException(status_code=400, detail="Ingen gyldige felter")
+    try:
+        res = await db.bonus_campaigns.update_one({"_id": ObjectId(campaign_id)}, {"$set": allowed})
+    except InvalidId:
+        raise HTTPException(status_code=404, detail="Fant ikke kampanjen")
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Fant ikke kampanjen")
+    return {"ok": True}
+
+
+@api.delete("/admin/bonus-campaigns/{campaign_id}")
+async def admin_delete_bonus_campaign(campaign_id: str, current=Depends(require_admin)):
+    try:
+        await db.bonus_campaigns.delete_one({"_id": ObjectId(campaign_id)})
+    except InvalidId:
+        raise HTTPException(status_code=404, detail="Fant ikke kampanjen")
+    return {"ok": True}
+
+
+@api.get("/admin/bonus-payouts")
+async def admin_bonus_payouts(limit: int = 50, current=Depends(require_admin)):
+    out = []
+    driver_ids = []
+    raw = []
+    async for p in db.bonus_payouts.find().sort("earned_at", -1).limit(min(limit, 200)):
+        p["id"] = str(p["_id"]); p.pop("_id", None)
+        raw.append(p)
+        driver_ids.append(p.get("driver_id"))
+    users = await _users_by_ids(driver_ids)
+    total = 0
+    for p in raw:
+        p["driver_name"] = (users.get(p.get("driver_id")) or {}).get("fullName") or (users.get(p.get("driver_id")) or {}).get("name")
+        total += p.get("amount", 0)
+        out.append(p)
+    return {"payouts": out, "total_kr": total}
 
 
 @api.get("/admin/overview")
@@ -3951,13 +4131,22 @@ async def driver_payouts(current=Depends(require_driver)):
     now = datetime.now(timezone.utc).date()
     days_ahead = (7 - now.weekday()) % 7 or 7
     next_payout = (now + timedelta(days=days_ahead)).isoformat()
-    commission = 0.20  # KJAPP tar 20%
+    commission = await _platform_commission()
     net = int(round(pending * (1 - commission)))
+    bonuses = []
+    bonus_total = 0
+    async for b in db.bonus_payouts.find({"driver_id": driver_id, "paid_out": {"$ne": True}}).sort("earned_at", -1).limit(20):
+        b["id"] = str(b["_id"]); b.pop("_id", None)
+        bonus_total += b.get("amount", 0)
+        bonuses.append(b)
     return {
         "pending_gross": pending,
         "pending_trips": trips_count,
-        "pending_net": net,
-        "commission_pct": int(commission * 100),
+        "pending_net": net + bonus_total,
+        "pending_trip_net": net,
+        "pending_bonus": bonus_total,
+        "bonuses": bonuses,
+        "commission_pct": int(round(commission * 100)),
         "next_payout_date": next_payout,
         "history": history,
     }

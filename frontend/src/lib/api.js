@@ -32,6 +32,11 @@ export const authApi = {
 };
 
 export const adminApi = {
+  bonusCampaigns: () => api.get("/admin/bonus-campaigns").then((r) => r.data),
+  createBonusCampaign: (payload) => api.post("/admin/bonus-campaigns", payload).then((r) => r.data),
+  updateBonusCampaign: (id, payload) => api.patch(`/admin/bonus-campaigns/${id}`, payload).then((r) => r.data),
+  deleteBonusCampaign: (id) => api.delete(`/admin/bonus-campaigns/${id}`).then((r) => r.data),
+  bonusPayouts: () => api.get("/admin/bonus-payouts").then((r) => r.data),
   overview: () => api.get("/admin/overview").then((r) => r.data),
   users: () => api.get("/admin/users").then((r) => r.data),
   drivers: () => api.get("/admin/drivers").then((r) => r.data),
@@ -138,6 +143,7 @@ export const driverApi = {
   location: (lat, lng, heading, speed) => api.post("/driver/location", { lat, lng, heading, speed }).then((r) => r.data),
   online: (online) => api.post("/driver/online", { online }).then((r) => r.data),
   demand: (lat, lng) => api.get("/driver/demand", { params: lat != null ? { lat, lng } : {} }).then((r) => r.data),
+  bonus: () => api.get("/driver/bonus").then((r) => r.data),
 };
 
 export const messagesApi = {
