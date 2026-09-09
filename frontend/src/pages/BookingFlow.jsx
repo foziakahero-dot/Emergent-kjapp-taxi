@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { tripsApi } from "../lib/api";
 import PremiumMap from "../components/PremiumMap";
-import { computeDriverPosition } from "../lib/tripAnimation";
+
 import ChatModal from "../components/ChatModal";
 import { X, Phone, MessageCircle, ShieldCheck, Star, CreditCard, MapPin, Navigation, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -44,13 +44,13 @@ export default function BookingFlow() {
     return () => { mounted = false; clearInterval(i); };
   }, [tripId, navigate]);
 
+  // The car on the map is the driver's REAL GPS position (pushed by the driver app).
+  // If the position is stale we show no car at all rather than a simulated one.
   useEffect(() => {
-    if (!trip) return;
-    if (trip.status !== "driver_on_way" && trip.status !== "in_trip") { setCarPos(null); return; }
-    const tick = () => setCarPos(computeDriverPosition(trip));
-    tick();
-    const i = setInterval(tick, 1000);
-    return () => clearInterval(i);
+    if (!trip || !["driver_on_way", "at_pickup", "in_trip"].includes(trip.status)) { setCarPos(null); return; }
+    if (trip.driver_lat == null || trip.driver_lng == null) { setCarPos(null); return; }
+    const age = trip.driver_location_at ? Date.now() - new Date(trip.driver_location_at).getTime() : Infinity;
+    setCarPos(age < 90000 ? { lat: trip.driver_lat, lng: trip.driver_lng, bearing: trip.driver_heading || 0 } : null);
   }, [trip]);
 
   const cancel = async () => {
@@ -76,7 +76,8 @@ export default function BookingFlow() {
     routeCoords = [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
   }
   const paymentLabel = trip.payment_method === "vipps" ? "Vipps" : "Kort";
-  const showingActiveCar = (trip.status === "driver_on_way" || trip.status === "in_trip") && carPos;
+  const showingActiveCar = !!carPos;
+  const gpsStale = ["driver_on_way", "at_pickup", "in_trip"].includes(trip.status) && !carPos;
 
   return (
     <div className="relative" style={{ height: "100dvh" }}>
@@ -108,7 +109,7 @@ export default function BookingFlow() {
           className="font-display text-[17px] backdrop-blur-xl rounded-full px-5 py-2.5"
           style={{ background: "rgba(12,18,22,0.72)", border: "1px solid rgba(232,224,208,0.14)", color: "var(--text)" }}
         >
-          {meta.title}
+          <span data-testid="customer-trip-status">{meta.title}</span>
         </div>
         <div className="w-11 h-11" />
       </div>
@@ -160,8 +161,39 @@ export default function BookingFlow() {
                       <div className="font-medium mt-1 truncate" style={{ color: "var(--text)" }}>{trip.driver?.name || "Din sjåfør"}</div>
                       <div className="text-[13px] truncate" style={{ color: "var(--text-muted)" }}>{trip.driver?.car || "Bil"} · {trip.driver?.plate || ""}</div>
                       <div className="text-[12px] flex items-center gap-1 mt-1" style={{ color: "var(--text-muted)" }}>
-                        <Star size={12} fill="currentColor" style={{ color: "var(--accent)" }} /> {trip.driver?.rating || "5.0"}
+                        {trip.driver?.rating != null ? (
+                          <><Star size={12} fill="currentColor" style={{ color: "var(--accent)" }} /> {trip.driver.rating}</>
+                        ) : (
+                          <span>Ny sjåfør</span>
+                        )}
                       </div>
+                      {gpsStale && (
+                        <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }} data-testid="driver-gps-stale">
+                          Venter på GPS-signal fra sjåføren…
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <ActionBtn icon={<Phone size={16} />} label="Ring" testid="action-call" onClick={() => setCallOpen(true)} />
+                    <ActionBtn icon={<MessageCircle size={16} />} label="Melding" testid="action-message" onClick={() => setChatOpen(true)} />
+                    <ActionBtn icon={<ShieldCheck size={16} />} label="Sikkerhet" testid="action-safety" onClick={() => setSafetyOpen(true)} />
+                  </div>
+                </div>
+              ) : trip.status === "at_pickup" ? (
+                <div data-testid="customer-at-pickup">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-[74px] h-[74px] rounded-full grid place-items-center shrink-0"
+                      style={{ background: "rgba(47,224,140,0.12)", border: "1px solid rgba(47,224,140,0.35)" }}
+                    >
+                      <MapPin size={26} style={{ color: "#2FE08C" }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] uppercase tracking-widest" style={{ color: "#2FE08C" }}>Sjåføren er fremme</div>
+                      <div className="font-medium mt-1 truncate" style={{ color: "var(--text)" }}>{trip.driver?.name || "Din sjåfør"}</div>
+                      <div className="text-[13px] truncate" style={{ color: "var(--text-muted)" }}>{trip.driver?.car || "Bil"} · {trip.driver?.plate || ""}</div>
+                      <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>Kom ut når du er klar</div>
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2">

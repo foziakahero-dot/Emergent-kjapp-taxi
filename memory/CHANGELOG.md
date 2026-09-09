@@ -38,3 +38,37 @@
 - **P1**: Sjåfør-tilgjengelighet: pause/kø-styring + skift-oppsummering.
 - **P2**: MapTiler-nøkkel i deploy-env (bedre kartstil/geokoding-rate enn Photon/OpenFreeMap).
 - **P2**: OAuth-nøkler (Google/Apple) i deploy-env — se `/app/memory/OAUTH_SETUP.md`.
+
+
+## Iter 35 — Første komplette EKTE tur: kunde → sjåfør → tur → admin (2026-09-09)
+
+**Brukerkrav**: én komplett KJAPP-tur skal fungere ende-til-ende gjennom de faktiske appene, uten mock eller simulert suksess.
+
+### Ny funksjonalitet
+- **Travle soner (gullfarget varmekart)** — `GET /api/driver/demand`: aggregerer FAKTISKE turer (siste 90 min = live, samme ukedag ±1 time siste 4 uker = normalt) i ~1 km celler, straffer celler der det alt står online sjåfører, og gir topp 3 soner med ekte reverse-geokodet navn + snittinntjening etter plattformavgift. Kartlag `demand-core` + `demand-heat` i `PremiumMap` (ny `heat`-prop), pill `driver-heat-toggle` på kartet, panel `driver-demand-panel` med ærlig tomstate «Ingen etterspørselsdata ennå».
+- **Push ved turforespørsel**: `POST /trips/request` sender nå Web Push til alle godkjente online sjåfører med «Ny tur · X kr til deg» (tag `kjapp-new-trip`, `requireInteraction`, sterk vibrasjon, «Se turen»-action i `sw.js`). DriverHome har banner `driver-push-enable` («Få turer på låst skjerm») og re-abonnerer stille når tillatelse allerede er gitt.
+
+### Kritiske feil funnet og rettet under E2E-verifiseringen
+1. **`/driver/current` maskerte den aktive turen**: en nylig fullført tur (nyere `created_at`) ble returnert i stedet for turen sjåføren nettopp godtok → sjåføren fikk feil tur på skjermen. Nå prioriteres aktive statuser, og fullført tur vises kun 15 min (inkl. `completed`/`rated` slik at oppsummeringen ikke forsvinner når kundeappen lukker turen).
+2. **Auto-avslag ødela godta-raten**: kortet avslo turen automatisk etter 15 s, men turen ble tilbudt på nytt hvert 4. sekund → 52 falske avslag og 3 % godta-rate. Auto-avslag er FJERNET (kun manuelt avslag), avslåtte turer skjules i 5 min per sjåfør (`/driver/pending`), og de 52 feil-genererte avslagene er slettet. Godta-rate er nå 100 % (ekte).
+3. **Feil ble svelget stille**: «Godta tur» viste ingen feilmelding ved 409. Nå `sonner`-toast (Toaster manglet helt i `App.js` — lagt inn).
+4. **Tomtilstand vistes ikke** etter at kort forsvant (AnimatePresence uten keyed motion-element).
+5. **Kundeappen viste SIMULERT bil**: `computeDriverPosition` interpolerte posisjon når GPS manglet. Nå brukes KUN sjåførens ekte GPS (< 90 s), ellers ingen bil + «Venter på GPS-signal fra sjåføren…».
+6. **Kunden manglet `at_pickup`-tilstand** → egen blokk «Sjåføren er fremme / Kom ut når du er klar» (`customer-at-pickup`).
+7. **Sjåfør-GPS ble ikke skrevet til turen i `at_pickup`** → status lagt til i location-oppdateringen.
+8. **Pickup-adressen var «Din posisjon»** (ubrukelig for sjåfør/admin) → kundens GPS reverse-geokodes til ekte gatenavn.
+9. **Admin manglet kjøretøy/betaling/inntjening** på turlisten → `/admin/trips-full` returnerer nå `driver_car`, `driver_plate`, `driver_earnings`, `payment_status`, `accepted_at`, `completed_at`, og `AdminTrips.jsx` viser dem.
+
+### Godkjenningstest — kjørt gjennom de faktiske appene (ikke mock)
+Kunde `ola@kjapp.no` bestilte via kunde-UI (Aker Brygge, 186 kr) → tur `1e52bdb1` opprettet i `db.trips` → sjåfør `sjafor@kjapp.no` fikk forespørselen live uten refresh (ekte kundenavn, OSRM-avstand til henting, 167 kr inntjening) → «Godta tur» → kunde fikk «Sjåfør på vei» + ekte sjåfør/bil + ekte GPS-bil → «Jeg er fremme» → kunde «Sjåføren er fremme» → «Kunde om bord» → kunde «Turen din» → «Fullfør tur» → kunde havnet på kvittering «Venter på betaling 186 kr» → sjåfør: 186 kr / 1 tur / godta-rate 100 % + historikk → admin `/admin/trips` viser SAMME tur med kunde, sjåfør, Tesla Model Y (EL12345), rute, 173/186 kr, «167 kr til flåten», «Ubetalt» og full tidslinje (Bestilt 00:19:48 → Sjåfør aksepterte → Fremme hos kunde → Tur startet → Ankommet 00:21:10).
+- **Atomisk aksept verifisert**: 3 parallelle `POST /driver/accept` på samme tur → nøyaktig 1× 200, 2× 409.
+- `python3 /app/backend/scripts/e2e_driver_flow.py` → ALL PASSED etter alle endringene.
+
+### Dokumenterte mangler (IKKE erstattet med mock)
+- **Ingen Supabase i dette prosjektet** — backend er FastAPI + MongoDB, ett kanonisk tursystem (`db.trips`).
+- **Betaling er ikke live**: turfullføring og betaling er tydelig skilt (`status` vs `payment_status`). Stripe Checkout finnes (testnøkkel), men automatisk trekk av lagret kort ved fullføring (off-session PaymentIntent) er IKKE implementert. Kvittering/admin viser «Venter på betaling»/«Ubetalt».
+- **Realtime = polling** (kunde 2 s, sjåfør 4 s). Ingen WebSocket/SSE ennå — men ingen manuell refresh kreves.
+- **Native push mangler sender**: Web Push (VAPID) fungerer; APNs/FCM-tokens lagres i `db.native_push_tokens`, men ingen native sender er implementert (krever FCM-server-nøkkel/APNs .p8).
+- **Tilbudsmodell**: turer broadcastes til alle online sjåfører (først-til-å-godta vinner, atomisk). Sekvensielt tilbud til nærmeste sjåfør med per-sjåfør timeout og videresending er ikke implementert.
+- **Flåte-dashboard** viser aggregater, ikke en tur-for-tur-liste (admin har full turliste).
+- **Statusnavn** (kanonisk backend-kilde): `searching` → `driver_on_way` → `at_pickup` → `in_trip` → `arrived` → (`completed` når kundeappen lukker turen) → `rated`, samt `cancelled` / `cancelled_by_driver`. Dette tilsvarer brukerens requested/accepted/driver_en_route/driver_arrived/passenger_onboard/in_progress/completed.

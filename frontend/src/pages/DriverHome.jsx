@@ -4,8 +4,10 @@ import { driverApi, placesApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PremiumMap from "../components/PremiumMap";
-import { Navigation, Check, Phone, Star, ChevronRight, MapPinOff, RefreshCw } from "lucide-react";
+import { Navigation, Check, Phone, Star, ChevronRight, MapPinOff, RefreshCw, Flame, BellRing } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
+import { subscribePush, ensureServiceWorker } from "../lib/push";
+import { toast } from "sonner";
 
 const GPS_MIN_INTERVAL_MS = 15000; // don't write more often than this …
 const GPS_MIN_MOVE_M = 25;         // … unless the driver actually moved
@@ -35,6 +37,10 @@ export default function DriverHome() {
   const [pos, setPos] = useState(null);              // {lat, lng, heading}
   const [gpsState, setGpsState] = useState("locating"); // locating | ok | denied
   const [place, setPlace] = useState(null);          // reverse-geocoded label
+  const [heatOn, setHeatOn] = useState(false);
+  const [demand, setDemand] = useState(null);        // null = not loaded yet
+  const [pushPerm, setPushPerm] = useState(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
+  const [pushBusy, setPushBusy] = useState(false);
   const watchRef = useRef(null);
   const lastSentRef = useRef({ at: 0, lat: null, lng: null });
   const lastGeoRef = useRef({ at: 0, lat: null, lng: null });
@@ -42,7 +48,10 @@ export default function DriverHome() {
   const onlineRef = useRef(false);
   const navigate = useNavigate();
 
-  useEffect(() => { primeAudioOnUserGesture(); }, []);
+  useEffect(() => { primeAudioOnUserGesture(); ensureServiceWorker(); }, []);
+  // Already allowed notifications? Make sure the push subscription exists server-side,
+  // otherwise the driver would never receive lock-screen ride requests.
+  useEffect(() => { if (pushPerm === "granted") subscribePush(); }, [pushPerm]);
   useEffect(() => { onlineRef.current = online === true; }, [online]);
 
   const load = useCallback(async (isFirst = false) => {
@@ -110,6 +119,30 @@ export default function DriverHome() {
     return () => { watchRef.current?.clear?.(); watchRef.current = null; };
   }, [startWatch]);
 
+  // Real demand ("travle soner") — only fetched while the driver asks for it
+  useEffect(() => {
+    if (!heatOn) return;
+    let alive = true;
+    const fetchDemand = () => {
+      driverApi
+        .demand(pos?.lat, pos?.lng)
+        .then((d) => { if (alive) setDemand(d); })
+        .catch(() => { if (alive) setDemand(undefined); });
+    };
+    fetchDemand();
+    const t = setInterval(fetchDemand, 120000);
+    return () => { alive = false; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heatOn]);
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    const res = await subscribePush();
+    setPushPerm(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
+    if (!res.ok && res.reason === "unsupported") setPushPerm("unsupported");
+    setPushBusy(false);
+  };
+
   const retryGps = async () => {
     watchRef.current?.clear?.();
     watchRef.current = null;
@@ -151,7 +184,8 @@ export default function DriverHome() {
       await driverApi.accept(trip_id);
       await load(false);
       navigate("/driver/trip");
-    } catch {
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Kunne ikke godta turen — prøv igjen");
       await load(false);
     } finally {
       setAccepting(null);
@@ -160,7 +194,7 @@ export default function DriverHome() {
 
   const declineTrip = async (trip_id) => {
     setPending((prev) => prev.filter((t) => t.trip_id !== trip_id));
-    try { await driverApi.decline(trip_id); } catch { /* ignore */ }
+    try { await driverApi.decline(trip_id); } catch { toast.error("Kunne ikke registrere avslaget"); }
   };
 
   const request = pending[0] || null;
@@ -185,13 +219,14 @@ export default function DriverHome() {
         ) : pos ? (
           <PremiumMap
             center={[pos.lng, pos.lat]}
-            zoom={mapRoute ? 13.6 : 15.2}
+            zoom={heatOn ? 12.2 : mapRoute ? 13.6 : 15.2}
             pitch={45}
             activeCar={{ lat: pos.lat, lng: pos.lng, bearing: pos.heading || 0 }}
             followActive={!mapRoute}
             pickup={mapPickup}
             dropoff={current?.status === "in_trip" ? { lat: current.dropoff_lat, lng: current.dropoff_lng } : null}
             route={mapRoute}
+            heat={heatOn && demand?.cells?.length ? demand.cells : null}
             paddingBottom={40}
             testid="driver-map"
           />
@@ -244,6 +279,26 @@ export default function DriverHome() {
           </button>
         </div>
 
+        {gpsState !== "denied" && (
+          <button
+            onClick={() => setHeatOn((v) => !v)}
+            data-testid="driver-heat-toggle"
+            aria-pressed={heatOn}
+            className="absolute right-4 z-[20] rounded-full pl-2.5 pr-3 py-1.5 flex items-center gap-1.5 active:scale-[0.97] transition-colors"
+            style={{
+              bottom: 52,
+              background: heatOn ? "rgba(203,163,101,0.18)" : "rgba(6,10,13,0.78)",
+              border: `1px solid ${heatOn ? "rgba(203,163,101,0.5)" : "rgba(244,244,240,0.12)"}`,
+              backdropFilter: "blur(14px)",
+            }}
+          >
+            <Flame size={13} style={{ color: heatOn ? "var(--accent)" : "var(--text-muted)" }} />
+            <span className="text-[10px] uppercase tracking-[0.18em]" style={{ color: heatOn ? "var(--accent)" : "var(--text-muted)" }}>
+              Travle soner
+            </span>
+          </button>
+        )}
+
         <div className="absolute inset-x-0 bottom-0 px-4 pb-2 z-[20] flex items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[9px] uppercase tracking-[0.3em]" style={{ color: "rgba(203,163,101,0.9)" }}>Din posisjon</div>
@@ -290,6 +345,105 @@ export default function DriverHome() {
           <button onClick={() => load(true)} data-testid="driver-retry" className="mt-3 w-full rounded-2xl px-4 py-3 flex items-center justify-center gap-2 text-[12.5px]" style={{ background: "rgba(215,106,90,0.10)", border: "1px solid rgba(215,106,90,0.28)", color: "#e08a7a" }}>
             <RefreshCw size={14} /> Kunne ikke oppdatere — trykk for å prøve igjen
           </button>
+        )}
+
+        {/* Real demand zones — only what the database actually shows */}
+        <AnimatePresence>
+          {heatOn && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+              data-testid="driver-demand-panel"
+            >
+              <div className="mt-4 card p-4" style={{ border: "1px solid rgba(203,163,101,0.26)" }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>Travle soner nå</div>
+                  {demand?.zones?.length > 0 && (
+                    <div className="text-[10px]" style={{ color: "var(--text-muted)" }} data-testid="driver-demand-basis">
+                      {demand.total_recent} turer siste 90 min
+                    </div>
+                  )}
+                </div>
+
+                {demand === null ? (
+                  <Skeleton width="100%" height={54} />
+                ) : demand === undefined ? (
+                  <div className="text-[12.5px]" style={{ color: "#e08a7a" }} data-testid="driver-demand-error">
+                    Kunne ikke hente etterspørsel akkurat nå.
+                  </div>
+                ) : demand.zones.length === 0 ? (
+                  <div className="text-center py-4" data-testid="driver-demand-empty">
+                    <div className="font-display text-[15px]" style={{ color: "var(--text)" }}>Ingen etterspørselsdata ennå</div>
+                    <div className="text-[12px] mt-1.5" style={{ color: "var(--text-muted)" }}>
+                      Varmekartet bygges på faktiske turer. Så snart det bestilles turer i området, dukker sonene opp her.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5" data-testid="driver-demand-zones">
+                    {demand.zones.map((z, i) => (
+                      <div key={`${z.lat},${z.lng}`} className="flex items-center gap-3" data-testid={`driver-zone-${i}`}>
+                        <div
+                          className="w-8 h-8 rounded-xl grid place-items-center shrink-0 font-display text-[13px]"
+                          style={{ background: `rgba(203,163,101,${0.1 + z.weight * 0.22})`, border: "1px solid rgba(203,163,101,0.3)", color: "var(--accent)" }}
+                        >
+                          {i + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13.5px] truncate" style={{ color: "var(--text)" }}>
+                            {z.label || `${z.lat.toFixed(3)}, ${z.lng.toFixed(3)}`}
+                          </div>
+                          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                            {[
+                              z.recent > 0 ? `${z.recent} turer siste 90 min` : `${z.typical} turer denne timen normalt`,
+                              z.distance_km != null ? `${fmtDistance(z.distance_km)} unna` : null,
+                              z.drivers > 0 ? `${z.drivers} bil${z.drivers > 1 ? "er" : ""} her nå` : null,
+                            ].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        {z.avg_earnings != null && (
+                          <div className="text-right shrink-0">
+                            <div className="text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--text-muted)" }}>Snitt</div>
+                            <div className="font-display text-[15px]" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }}>
+                              {z.avg_earnings} kr
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Lock-screen alerts for new ride requests */}
+        {pushPerm === "default" && (
+          <button
+            onClick={enablePush}
+            disabled={pushBusy}
+            data-testid="driver-push-enable"
+            className="mt-4 w-full card p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform disabled:opacity-60"
+            style={{ border: "1px solid rgba(47,224,140,0.28)" }}
+          >
+            <div className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: "rgba(47,224,140,0.12)" }}>
+              <BellRing size={16} style={{ color: "#2FE08C" }} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13.5px]" style={{ color: "var(--text)" }}>Få turer på låst skjerm</div>
+              <div className="text-[11.5px]" style={{ color: "var(--text-muted)" }}>
+                {pushBusy ? "Aktiverer…" : "Slå på varsler, så mister du ingen turforespørsler når appen er lukket."}
+              </div>
+            </div>
+            <ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
+          </button>
+        )}
+        {pushPerm === "denied" && (
+          <div className="mt-4 text-[11.5px] px-1" style={{ color: "var(--text-muted)" }} data-testid="driver-push-denied">
+            Varsler er blokkert i telefoninnstillingene — skru dem på for KJAPP for å få turer på låst skjerm.
+          </div>
         )}
 
         {/* Active trip */}
@@ -358,7 +512,14 @@ export default function DriverHome() {
           ) : (
             <AnimatePresence>
               {pending.length === 0 ? (
-                <div className="card p-8 text-center" data-testid="driver-no-active">
+                <motion.div
+                  key="no-pending"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="card p-8 text-center"
+                  data-testid="driver-no-active"
+                >
                   <div className="font-display text-[16px]" style={{ color: "var(--text)" }}>
                     {current ? "Ingen kommende turer" : "Ingen aktiv tur"}
                   </div>
@@ -370,7 +531,7 @@ export default function DriverHome() {
                       Gå online
                     </button>
                   )}
-                </div>
+                </motion.div>
               ) : (
                 pending.map((t, i) => (
                   <TripRequestCard
@@ -436,18 +597,14 @@ function GpsUnavailable({ onRetry }) {
 
 /** Real ride request — every number comes from the backend (routing/pricing), never invented */
 function TripRequestCard({ trip, accepting, onAccept, onDecline, primary }) {
-  const [remaining, setRemaining] = useState(15);
+  // Freshness bar only — a real request is NEVER auto-declined on the driver's behalf.
+  const [age, setAge] = useState(0);
   useEffect(() => {
-    if (remaining <= 0) return;
-    const id = setTimeout(() => setRemaining((r) => r - 1), 1000);
-    return () => clearTimeout(id);
-  }, [remaining]);
-  useEffect(() => {
-    if (remaining === 0) onDecline();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining]);
-
-  const pct = (remaining / 15) * 100;
+    const id = setInterval(() => setAge((a) => a + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const remaining = Math.max(0, 30 - age);
+  const pct = (remaining / 30) * 100;
   const pickupRoute = trip.pickup_route;
 
   return (
@@ -567,7 +724,7 @@ function TripRequestCard({ trip, accepting, onAccept, onDecline, primary }) {
           ) : (
             <>
               <span className="flex items-center gap-1.5 font-medium"><Check size={16} /> Godta tur</span>
-              <span className="text-[10px] uppercase tracking-widest opacity-80 mt-0.5">Godta innen {remaining} sek</span>
+              <span className="text-[10px] uppercase tracking-widest opacity-80 mt-0.5">{remaining > 0 ? `Ny forespørsel · ${remaining} sek` : "Venter fortsatt på svar"}</span>
             </>
           )}
         </button>

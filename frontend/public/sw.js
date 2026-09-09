@@ -15,14 +15,17 @@ self.addEventListener("push", (event) => {
     data = { title: "KJAPP", body: event.data ? event.data.text() : "" };
   }
   const title = data.title || "KJAPP";
+  const isTrip = data.tag === "kjapp-new-trip";
   const options = {
     body: data.body || "",
     icon: "/icon-192.svg",
     badge: "/icon-192.svg",
     data: { url: data.url || "/app" },
-    vibrate: [80, 40, 80],
-    tag: "kjapp-notification",
+    vibrate: isTrip ? [300, 120, 300, 120, 300] : [80, 40, 80],
+    tag: data.tag || "kjapp-notification",
     renotify: true,
+    requireInteraction: !!data.requireInteraction,
+    actions: isTrip ? [{ action: "open", title: "Se turen" }] : [],
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });

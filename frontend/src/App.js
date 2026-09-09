@@ -26,6 +26,7 @@ import DriverHistory from "./pages/DriverHistory";
 import DriverPayouts from "./pages/DriverPayouts";
 import DriverProfile from "./pages/DriverProfile";
 import DriverBottomNav from "./components/DriverBottomNav";
+import { Toaster } from "sonner";
 import DriverLogin from "./pages/DriverLogin";
 import DriverSignup from "./pages/DriverSignup";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -328,6 +329,7 @@ export default function App() {
       <AppRoutes />
       <CookieConsent />
       <DevNavigator />
+      <Toaster position="top-center" theme="dark" />
     </AuthProvider>
   );
 }

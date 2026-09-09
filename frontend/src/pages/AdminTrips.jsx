@@ -85,11 +85,22 @@ export default function AdminTrips() {
                     <div className="text-[13px] truncate" style={{ color: "var(--text)" }}>{t.pickup_address} → {t.dropoff_address}</div>
                     <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
                       {t.passenger_name || "Kunde"}{t.driver_name ? ` · Sjåfør: ${t.driver_name}` : " · Ingen sjåfør"}
+                      {t.driver_plate ? ` · ${t.driver_car || "Bil"} (${t.driver_plate})` : ""}
                       {t.distance_km ? ` · ${t.distance_km} km` : ""}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="font-display text-[16px]" style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{t.price ?? "—"} kr</div>
+                    {t.driver_earnings != null && (
+                      <div className="text-[10px] mt-0.5" style={{ color: "var(--accent)" }} data-testid={`trip-earnings-${t.trip_id}`}>
+                        {t.driver_earnings} kr til flåten
+                      </div>
+                    )}
+                    {t.payment_status && (
+                      <div className="text-[10px] mt-0.5" style={{ color: t.payment_status === "paid" ? "#2fe08c" : "var(--text-muted)" }} data-testid={`trip-payment-${t.trip_id}`}>
+                        {t.payment_status === "paid" ? "Betalt" : "Ubetalt"}
+                      </div>
+                    )}
                   </div>
                   {isOpen ? <ChevronUp size={14} style={{ color: "var(--text-muted)" }} /> : <ChevronDown size={14} style={{ color: "var(--text-muted)" }} />}
                 </button>

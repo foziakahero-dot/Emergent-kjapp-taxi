@@ -137,6 +137,7 @@ export const driverApi = {
   payouts: () => api.get("/driver/payouts").then((r) => r.data),
   location: (lat, lng, heading, speed) => api.post("/driver/location", { lat, lng, heading, speed }).then((r) => r.data),
   online: (online) => api.post("/driver/online", { online }).then((r) => r.data),
+  demand: (lat, lng) => api.get("/driver/demand", { params: lat != null ? { lat, lng } : {} }).then((r) => r.data),
 };
 
 export const messagesApi = {

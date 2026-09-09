@@ -121,6 +121,7 @@ export default function PremiumMap({
   bearing = 0,
   fitBounds = null,
   route = null,
+  heat = null,         // [{lat, lng, weight}] — real demand cells, gold heatmap
   pickup = null,
   dropoff = null,
   cars = [],
@@ -136,6 +137,7 @@ export default function PremiumMap({
   const mapRef = useRef(null);
   const markersRef = useRef({});
   const routeRef = useRef(null);
+  const heatRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [styleGen, setStyleGen] = useState(0);
 
@@ -219,6 +221,50 @@ export default function PremiumMap({
         }
       } catch { /* ignore */ }
 
+      // Demand heatmap (added BEFORE the route so the route always draws on top)
+      if (!map.getSource("demand")) {
+        map.addSource("demand", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: heatRef.current || [] },
+        });
+        map.addLayer({
+          id: "demand-core",
+          type: "circle",
+          source: "demand",
+          paint: {
+            "circle-radius": [
+              "interpolate", ["linear"], ["zoom"],
+              10, ["*", 14, ["+", 0.6, ["get", "w"]]],
+              13, ["*", 30, ["+", 0.6, ["get", "w"]]],
+              16, ["*", 70, ["+", 0.6, ["get", "w"]]],
+            ],
+            "circle-color": "#CBA365",
+            "circle-opacity": ["*", 0.26, ["+", 0.45, ["get", "w"]]],
+            "circle-blur": 1.15,
+          },
+        });
+        map.addLayer({
+          id: "demand-heat",
+          type: "heatmap",
+          source: "demand",
+          paint: {
+            "heatmap-weight": ["interpolate", ["linear"], ["get", "w"], 0, 0.35, 1, 1],
+            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 9, 2.2, 13, 3.6, 16, 5],
+            "heatmap-color": [
+              "interpolate", ["linear"], ["heatmap-density"],
+              0, "rgba(203,163,101,0)",
+              0.06, "rgba(203,163,101,0.26)",
+              0.2, "rgba(219,178,110,0.44)",
+              0.45, "rgba(236,203,140,0.6)",
+              0.75, "rgba(248,223,168,0.72)",
+              1, "rgba(255,240,205,0.85)",
+            ],
+            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 9, 30, 12, 68, 16, 130],
+            "heatmap-opacity": 0.92,
+          },
+        });
+      }
+
       // Route source + 3 layers (glow / line / shimmer) — re-added after every style swap
       if (!map.getSource("route")) {
         map.addSource("route", {
@@ -274,6 +320,28 @@ export default function PremiumMap({
       src.setData({ type: "Feature", geometry: { type: "LineString", coordinates: [] } });
     }
   }, [ready, route, styleGen]);
+
+  // Zoom prop changes (e.g. driver toggles the demand heatmap) — glide, don't snap
+  const lastZoomRef = useRef(zoom);
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    if (Math.abs(lastZoomRef.current - zoom) < 0.05) return;
+    lastZoomRef.current = zoom;
+    mapRef.current.easeTo({ zoom, duration: 900 });
+  }, [ready, zoom]);
+
+  // Update demand heatmap data (real cells only — empty collection clears the layer)
+  useEffect(() => {
+    const features = (heat || []).map((h) => ({
+      type: "Feature",
+      properties: { w: h.weight ?? 1 },
+      geometry: { type: "Point", coordinates: [h.lng, h.lat] },
+    }));
+    heatRef.current = features;
+    if (!ready || !mapRef.current) return;
+    const src = mapRef.current.getSource("demand");
+    if (src) src.setData({ type: "FeatureCollection", features });
+  }, [ready, heat, styleGen]);
 
   // Animated "energy" flow along the route (ant-path) — premium living brass/ivory shimmer
   useEffect(() => {

@@ -550,7 +550,7 @@ def current_surge_info(when: datetime = None) -> dict:
     return {"multiplier": surge, "reasons": reasons, "active": surge > 1.0}
 
 
-async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app"):
+async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
     """Send push notifications to all subscriptions of a user."""
     if not PUSH_AVAILABLE:
         return
@@ -560,11 +560,16 @@ async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/ap
     subs = []
     async for s in db.push_subscriptions.find({"user_id": user_id}):
         subs.append(s)
+    payload = {"title": title, "body": body, "url": url}
+    if tag:
+        payload["tag"] = tag
+    if require_interaction:
+        payload["requireInteraction"] = True
     for s in subs:
         try:
             webpush(
                 subscription_info=s["subscription"],
-                data=json.dumps({"title": title, "body": body, "url": url}),
+                data=json.dumps(payload),
                 vapid_private_key=vapid["private_pem"],
                 vapid_claims={"sub": "mailto:noreply@kjapp.no"},
             )
@@ -840,6 +845,10 @@ PHOTON_HEADERS = {"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"}
 
 
 @api.get("/places/reverse")
+async def reverse_geocode_endpoint(lat: float, lng: float):
+    return await reverse_geocode(lat, lng)
+
+
 async def reverse_geocode(lat: float, lng: float):
     """Reverse geocoding for the live driver map label (street/area name).
     MapTiler when MAPTILER_API_KEY is set, else Nominatim. Results are cached per ~110 m grid cell
@@ -1353,13 +1362,22 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     }
     await db.trips.insert_one(trip)
     # Trip stays in "searching" — real driver must accept via /api/driver/accept
-    # Notify all approved+online drivers via push (best-effort)
+    # Notify every approved + online driver so they get the request on a locked screen too
     try:
-        drivers = []
-        async for d in db.users.find({"role": "driver", "approved": True, "online": True}):
-            drivers.append(str(d["_id"]))
-        for did in drivers:
-            await send_push_to_user(did, "Ny tur ", f"{body.pickup_address} → {body.dropoff_address}", "/driver")
+        commission = await _platform_commission()
+        earnings = int(round(price * (1 - commission)))
+        async for d in db.users.find(
+            {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True}},
+            {"_id": 1},
+        ):
+            await send_push_to_user(
+                str(d["_id"]),
+                f"Ny tur · {earnings} kr til deg",
+                f"{body.pickup_address} → {body.dropoff_address} · {est} km",
+                "/driver",
+                tag="kjapp-new-trip",
+                require_interaction=True,
+            )
     except Exception:
         pass
     trip.pop("_id", None)
@@ -1982,12 +2000,22 @@ async def driver_pending(current=Depends(require_driver)):
     never from hardcoded values. Fabricated/demo/test trips are filtered out."""
     commission = await _platform_commission()
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
+    # A request the driver just declined must not bounce straight back on the next poll.
+    # After 5 minutes it may be offered again (it is still unassigned and the customer is waiting).
+    decline_cut = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    declined = set()
+    async for d in db.driver_declines.find(
+        {"driver_id": current["id"], "declined_at": {"$gte": decline_cut}}, {"trip_id": 1}
+    ):
+        declined.add(d["trip_id"])
     trips = []
     async for t in db.trips.find({
         "status": {"$in": ["searching", "booking"]},
         "driver_id": None,
         **REAL_TRIPS_ONLY,
     }).sort("created_at", 1).limit(10):
+        if t["trip_id"] in declined:
+            continue
         t["id"] = str(t["_id"])
         t.pop("_id", None)
         t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
@@ -2076,15 +2104,21 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
 @api.get("/driver/current")
 async def driver_current(current=Depends(require_driver)):
     driver_id = current["id"]
+    # An ACTIVE trip always wins over a just-finished one. A completed ("arrived") trip is only
+    # returned for 15 minutes so the driver can see the summary — after that it is history.
     t = await db.trips.find_one(
-        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip", "arrived"]}},
+        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
         sort=[("created_at", -1)],
     )
     if not t:
-        return None
-    # A completed ("arrived") trip is only "active" briefly so the driver can see the summary —
-    # after that it belongs to trip history, not the dashboard.
-    if t.get("status") == "arrived":
+        # Just-finished trip: keep the summary visible for 15 minutes. "completed"/"rated" appear
+        # as soon as the passenger's app closes the trip, so they must be included here too.
+        t = await db.trips.find_one(
+            {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated"]}},
+            sort=[("created_at", -1)],
+        )
+        if not t:
+            return None
         ts = t.get("arrived_at") or t.get("updated_at")
         try:
             done_at = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
@@ -2173,6 +2207,114 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
     return {"ok": True}
+
+
+@api.get("/driver/demand")
+async def driver_demand(lat: Optional[float] = None, lng: Optional[float] = None, current=Depends(require_driver)):
+    """Real demand heatmap for drivers — built ONLY from actual trips in the database.
+
+    - `recent`: trips requested in the last 90 minutes (live demand)
+    - `typical`: trips from the last 4 weeks on the same weekday within ±1 hour (what this hour usually looks like)
+    - supply: drivers currently online with a fresh GPS ping, so busy areas already full of cars score lower
+
+    Returns empty lists when there is not enough real data — never invented hotspots.
+    """
+    now = datetime.now(timezone.utc)
+    live_cut = now - timedelta(minutes=90)
+    hist_cut = now - timedelta(days=28)
+    cells: dict = {}
+
+    def cell_key(la, ln):
+        return (round(la, 2), round(ln, 2))
+
+    def bucket(la, ln):
+        k = cell_key(la, ln)
+        c = cells.get(k)
+        if not c:
+            c = {"lat": k[0], "lng": k[1], "recent": 0, "typical": 0, "prices": [], "drivers": 0}
+            cells[k] = c
+        return c
+
+    cursor = db.trips.find(
+        {"created_at": {"$gte": hist_cut.isoformat()}, "pickup_lat": {"$ne": None}},
+        {"pickup_lat": 1, "pickup_lng": 1, "price": 1, "created_at": 1},
+    ).limit(5000)
+    total_recent = 0
+    total_typical = 0
+    async for t in cursor:
+        try:
+            created = datetime.fromisoformat(str(t["created_at"]).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        c = bucket(t["pickup_lat"], t["pickup_lng"])
+        if t.get("price"):
+            c["prices"].append(t["price"])
+        if created >= live_cut:
+            c["recent"] += 1
+            total_recent += 1
+        elif created.weekday() == now.weekday() and abs(created.hour - now.hour) <= 1:
+            c["typical"] += 1
+            total_typical += 1
+
+    # Current real supply per cell (online drivers with a GPS ping in the last 60 s)
+    fresh = (now - timedelta(seconds=60)).isoformat()
+    drivers_online = 0
+    async for d in db.users.find(
+        {"role": "driver", "approved": True, "online": True, "last_location_at": {"$gte": fresh},
+         "demo": {"$ne": True}, "is_demo": {"$ne": True}, "disabled": {"$ne": True}},
+        {"last_lat": 1, "last_lng": 1},
+    ):
+        if d.get("last_lat") is None:
+            continue
+        drivers_online += 1
+        bucket(d["last_lat"], d["last_lng"])["drivers"] += 1
+
+    scored = []
+    for c in cells.values():
+        raw = c["recent"] * 3 + c["typical"]
+        if raw <= 0:
+            continue
+        score = raw / (1 + c["drivers"])
+        scored.append({
+            "lat": c["lat"],
+            "lng": c["lng"],
+            "recent": c["recent"],
+            "typical": c["typical"],
+            "drivers": c["drivers"],
+            "avg_price": int(round(sum(c["prices"]) / len(c["prices"]))) if c["prices"] else None,
+            "score": round(score, 3),
+        })
+    if not scored:
+        return {
+            "generated_at": now.isoformat(), "window_minutes": 90, "cells": [], "zones": [],
+            "total_recent": 0, "total_typical": 0, "drivers_online": drivers_online,
+        }
+
+    top = max(s["score"] for s in scored)
+    for s in scored:
+        s["weight"] = round(min(1.0, s["score"] / top), 3)
+    scored.sort(key=lambda s: s["score"], reverse=True)
+
+    commission = await _platform_commission()
+    zones = []
+    for s in scored[:3]:
+        place = await reverse_geocode(s["lat"], s["lng"])
+        if lat is not None and lng is not None:
+            s = {**s, "distance_km": round(haversine_km(lat, lng, s["lat"], s["lng"]), 1)}
+        zones.append({
+            **s,
+            "label": (place or {}).get("label"),
+            "avg_earnings": int(round(s["avg_price"] * (1 - commission))) if s.get("avg_price") else None,
+        })
+    return {
+        "generated_at": now.isoformat(),
+        "window_minutes": 90,
+        "cells": [{"lat": s["lat"], "lng": s["lng"], "weight": s["weight"]} for s in scored],
+        "zones": zones,
+        "total_recent": total_recent,
+        "total_typical": total_typical,
+        "drivers_online": drivers_online,
+    }
 
 
 @api.get("/driver/summary/today")
@@ -2266,7 +2408,7 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
     )
     # If driver has active trip, also update trip.driver_lat/lng so passenger sees live position
     await db.trips.update_one(
-        {"driver_id": current["id"], "status": {"$in": ["driver_on_way", "in_trip"]}},
+        {"driver_id": current["id"], "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
         {"$set": {
             "driver_lat": body.lat,
             "driver_lng": body.lng,
@@ -4190,8 +4332,10 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
     async for t in db.trips.find(filt).sort("created_at", -1).limit(min(limit, 300)):
         raw.append(t); user_ids.append(t.get("user_id"))
     users = await _users_by_ids(user_ids)
+    commission = await _platform_commission()
     out = []
     for t in raw:
+        finished = t.get("status") in ("arrived", "completed", "rated")
         out.append({
             "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
             "distance_km": t.get("distance_km"), "duration_min": t.get("duration_min"),
@@ -4199,6 +4343,12 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "vehicle_type": t.get("vehicle_type"), "created_at": t.get("created_at"),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
             "driver_name": (t.get("driver") or {}).get("name"),
+            "driver_car": (t.get("driver") or {}).get("car"),
+            "driver_plate": (t.get("driver") or {}).get("plate"),
+            "driver_earnings": int(round((t.get("price") or 0) * (1 - commission))) if finished else None,
+            "payment_status": t.get("payment_status") or ("pending" if finished else None),
+            "accepted_at": t.get("driver_route_started_at"),
+            "completed_at": t.get("arrived_at") or t.get("completed_at"),
             "passenger_rating": t.get("passenger_rating"),
         })
     return {"trips": out}

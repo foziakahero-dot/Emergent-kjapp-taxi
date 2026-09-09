@@ -138,7 +138,12 @@ export default function Home() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPickup({ name: "Din posisjon", lat: pos.coords.latitude, lng: pos.coords.longitude });
+          const { latitude: lat, longitude: lng } = pos.coords;
+          setPickup({ name: "Din posisjon", lat, lng });
+          // Resolve the real street name so the driver (and admin) get a usable pickup address
+          placesApi.reverse(lat, lng)
+            .then((r) => { if (r?.label) setPickup({ name: r.label, lat, lng }); })
+            .catch(() => {});
         },
         () => {}
       );

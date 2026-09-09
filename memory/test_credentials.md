@@ -4,6 +4,8 @@
 
 > **Iter 27 (passordreset)**: `/forgot-password` → e-postlenke `/reset-password/{token}` (1t gyldighet, engangsbruk). Uten SENDGRID_API_KEY logges lenken til backend stdout (`grep "EMAIL/no-key" /var/log/supervisor/backend.out.log`). Vellykket reset nullstiller brute-force-låsen for kontoen.
 
+> **Iter 35 (komplett ekte tur verifisert)**: Hele flyten kunde → sjåfør → tur → admin er kjørt gjennom de faktiske appene: kunde bestiller i kunde-UI, sjåfør får forespørselen live (polling 4 s), godtar (atomisk — 3 parallelle accepts gir 1×200 + 2×409), kjører state-maskinen, fullfører, og admin `/admin/trips` viser samme tur med kunde/sjåfør/bil/pris/inntjening/betalingsstatus + full tidslinje. Auto-avslag av turforespørsler er FJERNET; avslåtte turer skjules 5 min per sjåfør. Kundeappen viser KUN sjåførens ekte GPS (< 90 s), ellers «Venter på GPS-signal fra sjåføren…». Nytt: `GET /api/driver/demand` (gull varmekart «Travle soner») og Web Push ved ny tur. Betaling er IKKE live — `status` (tur) og `payment_status` (betaling) er tydelig skilt.
+
 > **Iter 34 (Driver App = 100 % ekte data)**: All demo-/test-data er PURGET fra databasen (149 `TEST_`/demo-turer + 50 test-brukere slettet) og seederne er fjernet fra `server.py`. `ENABLE_DEMO_DATA` seeder nå KUN de 4 kontoene under (kunde/sjåfør/flåte/admin) — ingen turer, ingen cruise-biler. DriverHome/DriverTrip viser utelukkende autentisert sjåførs egne data + ekte GPS + ekte OSRM-ruter, ellers eksplisitt tom-/loading-/feil-state. Sjåførens GPS sendes kun mens «På vakt» er PÅ (throttlet: >25 m eller ≥15 s). Uten posisjonstilgang vises «Posisjon ikke tilgjengelig / Aktiver posisjonstilgang for å bruke KJAPP» (`data-testid="driver-gps-unavailable"`).
 > E2E-regresjonsskript for hele sjåførflyten: `python3 /app/backend/scripts/e2e_driver_flow.py` (kunde bestiller → pending → accept → arrive-at-pickup → passasjer om bord → fullført → inntekt/historikk). Datainspeksjon: `python3 /app/backend/scripts/inspect_data.py`.
 
@@ -82,7 +84,7 @@
 - `watchPosition` sender POST /api/driver/location {lat,lng,heading,speed,accuracy} kun når online (throttle: >25 m ELLER ≥15 s)
 - Turer STÅR i "searching" til en ekte sjåfør trykker «Godta tur» (POST /api/driver/accept)
 - Turen går videre KUN når sjåfør trykker:
-  - POST /api/driver/trip/{id}/arrive-at-pickup → status: at_pickup (ankommet hentested)
+  - POST /api/driver/trip/{id}/at-pickup → status: at_pickup (ankommet hentested)
   - POST /api/driver/trip/{id}/start → status: in_trip (kunde om bord)
   - POST /api/driver/trip/{id}/arrive → status: arrived (fullført)
 - `GET /api/driver/current` returnerer «arrived»-tur kun i 15 min etter fullføring (deretter historikk)
