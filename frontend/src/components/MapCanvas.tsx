@@ -11,6 +11,8 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { colors } from '@/src/theme';
+import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
 type Car = { lat: number; lng: number; heading?: number };
@@ -40,6 +42,7 @@ export function MapCanvas({
   testID?: string;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const smoothCar = useSmoothPosition(activeCar);
 
   const pts: { lng: number; lat: number }[] = [];
   if (pickup) pts.push({ lng: pickup.lng, lat: pickup.lat });
@@ -114,19 +117,24 @@ export function MapCanvas({
 
           {/* nearby cars */}
           {cars.map((c, i) => (
-            <G key={`car${i}`}>
-              <Circle cx={px(c.lng)} cy={py(c.lat)} r={7} fill={colors.mapBuilding} stroke={colors.accent} strokeWidth={1.5} />
-              <Circle cx={px(c.lng)} cy={py(c.lat)} r={2} fill={colors.accent} />
+            <G
+              key={`car${i}`}
+              transform={`translate(${px(c.lng)}, ${py(c.lat)}) rotate(${c.heading || 0}) scale(${18 / 24}) translate(-12, -12)`}
+            >
+              <CarShape {...CAR_IDLE} />
             </G>
           ))}
 
-          {/* active trip car */}
-          {activeCar ? (
-            <G>
-              <Circle cx={px(activeCar.lng)} cy={py(activeCar.lat)} r={14} fill={colors.accentGlow} />
-              <Circle cx={px(activeCar.lng)} cy={py(activeCar.lat)} r={8} fill={colors.accent} />
-              <Circle cx={px(activeCar.lng)} cy={py(activeCar.lat)} r={3} fill={colors.accentOn} />
-            </G>
+          {/* active trip car (smoothly animated) */}
+          {smoothCar ? (
+            <>
+              <Circle cx={px(smoothCar.lng)} cy={py(smoothCar.lat)} r={20} fill={colors.accentGlow} opacity={0.5} />
+              <G
+                transform={`translate(${px(smoothCar.lng)}, ${py(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${34 / 24}) translate(-12, -12)`}
+              >
+                <CarShape {...CAR_ACTIVE} />
+              </G>
+            </>
           ) : null}
 
           {/* pickup pin */}

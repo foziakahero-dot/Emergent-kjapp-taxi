@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { Platform, StyleProp, View, ViewStyle } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, PROVIDER_DEFAULT } from 'react-native-maps';
 import { colors } from '@/src/theme';
+import { CarSvg, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
 type Car = { lat: number; lng: number; heading?: number };
@@ -39,6 +41,7 @@ export function Map({
   testID?: string;
 }) {
   const ref = useRef<MapView>(null);
+  const smoothCar = useSmoothPosition(activeCar);
 
   const coords: { latitude: number; longitude: number }[] = [];
   if (pickup) coords.push({ latitude: pickup.lat, longitude: pickup.lng });
@@ -102,14 +105,15 @@ export function Map({
 
         {cars.map((c, i) => (
           <Marker key={`car${i}`} coordinate={{ latitude: c.lat, longitude: c.lng }} anchor={{ x: 0.5, y: 0.5 }} flat rotation={c.heading || 0}>
-            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: colors.mapBuilding, borderWidth: 1.5, borderColor: colors.accent }} />
+            <CarSvg size={26} {...CAR_IDLE} />
           </Marker>
         ))}
 
-        {activeCar ? (
-          <Marker coordinate={{ latitude: activeCar.lat, longitude: activeCar.lng }} anchor={{ x: 0.5, y: 0.5 }} flat rotation={activeCar.heading || 0}>
-            <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: colors.accentGlow, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ width: 15, height: 15, borderRadius: 8, backgroundColor: colors.accent }} />
+        {smoothCar ? (
+          <Marker coordinate={{ latitude: smoothCar.lat, longitude: smoothCar.lng }} anchor={{ x: 0.5, y: 0.5 }} flat rotation={smoothCar.heading} zIndex={10}>
+            <View style={{ width: 46, height: 46, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: colors.accentGlow, opacity: 0.5 }} />
+              <CarSvg size={38} {...CAR_ACTIVE} />
             </View>
           </Marker>
         ) : null}

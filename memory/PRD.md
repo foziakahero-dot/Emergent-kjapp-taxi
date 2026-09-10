@@ -36,6 +36,11 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
 ## Update (2026-06) — Saved places
 - **Personal saved places:** new per-user `user_places` collection + CRUD API (`GET/POST/PUT/DELETE /api/me/places`, scoped to the authenticated user). Frontend screen `app/saved-places.tsx` (search address → label as Hjem/Jobb/Annet → save/delete). Home shows the user's saved places as one-tap quick chips (falls back to global featured when empty) plus a dashed "Legg til/Rediger" chip; also linked from Profile ("Lagrede steder"). Verified via curl (CRUD) and full UI flow screenshot.
 
+## Update (2026-06) — Live driver tracking + car icon
+- **Car icon:** map markers are now a top-down car glyph (`src/components/CarMarker.tsx`: body + lighter roof + soft drop-shadow for a 3D read) instead of plain dots. Nearby cars use a graphite preset, the active driver a brass preset. Used in both the native map (`Map.tsx`) and the SVG fallback (`MapCanvas.tsx`).
+- **Smooth movement:** `src/components/useSmoothPosition.ts` tweens the active driver marker toward each polled coordinate (~2.2s easeInOut via requestAnimationFrame) and derives heading from travel direction, so the car glides + rotates instead of teleporting. Trip screen polls `/trips/{id}` every 2.5s; driver streams position via `/driver/location`.
+- Verified end-to-end via a scripted live scenario (driver online → accept → move): the customer trip screen renders the brass car glyph at the live driver position.
+
 
 ## Known limitations
 - Browser preview denies geolocation → driver "go online" needs a device/Expo Go build; customer app falls back to Oslo centre.
