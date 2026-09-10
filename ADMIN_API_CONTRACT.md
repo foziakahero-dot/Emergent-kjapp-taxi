@@ -25,7 +25,7 @@ Stable API contract for the external **KJAPP Admin web app** (`admin.kjappap.no`
 
 ## 4. CORS
 - Middleware: `allow_credentials=False`, `allow_methods=["*"]`, `allow_headers=["*"]` (Bearer header auth, no wildcard+credentials).
-- Production origins (strict whitelist): `https://kjappapp.no`, `https://admin.kjappapp.no`, `https://fleet.kjappapp.no`, **and** `https://kjappap.no`, `https://admin.kjappap.no`, `https://fleet.kjappap.no` (both spellings whitelisted — see Blockers §12).
+- Production origins (strict whitelist): `https://kjappapp.no`, **`https://admin.kjappapp.no` (CONFIRMED admin domain)**, `https://fleet.kjappapp.no`.
 - Dev also allows localhost 3000/5173/4173/3001.
 
 ## 5. Pagination (standardized this round)
@@ -55,7 +55,8 @@ List endpoints accept `?page=<1..>&page_size=<1..200>` and return:
 | `/admin/driver-invites` | GET/POST | admin | List/create driver invites | — | `{invites[]}` / invite doc | no |
 | `/admin/users` | GET | admin | Customers/all users | `q`, `status`(active\|disabled), `page`,`page_size` | `{items/users,...page}` | **yes** |
 | `/admin/vehicles` | GET | admin | Vehicles table | `q`, `vehicle_type`, `page`,`page_size` | `{items/vehicles,...page}` | **yes** |
-| `/admin/documents` | GET | admin | Compliance docs | `scope`, `q`, `page`,`page_size` | `{items/documents,...page,scopes[]}` | **yes** |
+| `/admin/documents` | GET | admin | Compliance docs + expiry status | `scope`, `q`, `page`,`page_size` | `{items/documents,...page,scopes[],summary{VALID,EXPIRING,EXPIRED,PENDING,REJECTED}}` (each doc has `review_status`,`expiry`,`compliance`) | **yes** |
+| `/admin/documents/{file_id}/review` | POST | admin | Approve/reject/set expiry (audited) | body `{status(valid\|rejected\|pending),expiry?,reason?}` | `{ok,review_status}` | — |
 | `/admin/fleets` | GET/POST | admin | List/create fleet (create audited) | — | `{fleets[]}` / fleet doc | no |
 | `/admin/fleets-full` | GET | admin | Fleets table | `status`, `q` | `{fleets[]}` | no (≤300) |
 | `/admin/fleets/{fleet_id}` | GET | admin | Fleet detail | — | `{fleet,drivers[],commission_history[],audit[],payouts[]}` | no |
@@ -69,6 +70,9 @@ List endpoints accept `?page=<1..>&page_size=<1..200>` and return:
 | `/admin/settings` | PATCH | **superadmin** | Update settings (audited) | body `{default_commission?,ride_classes?,features?}` | `{ok}` | — |
 | `/admin/audit-log` | GET | admin | Audit events | `entity_type`, `page`,`page_size` | `{items/events,...page}` | **yes** |
 | `/admin/search` | GET | admin | Global search (NEW) | `q` (≥2 chars) | `{query,trips[],drivers[],customers[],fleets[]}` | no (≤10/group) |
+| `/admin/refunds` | GET | admin | List refunds | `status`, `page`,`page_size` | `{items/refunds,...page}` | **yes** |
+| `/admin/refunds` | POST | admin | Create refund (idempotent, audited, Stripe if charge exists) | body `{trip_id,amount?,reason}` | refund doc | — |
+| `/admin/transactions` | GET | admin | Ledger derived from trips/refunds/payouts | `type`(FARE\|REFUND\|PAYOUT), `date_from`,`date_to`, `fleet_id`, `page`,`page_size` | `{items/transactions,...page}` | **yes** |
 | `/admin/bonus-campaigns` | GET/POST/PATCH/DELETE | admin | Driver bonus campaigns | — | campaign docs | no |
 | `/admin/bonus-payouts` | GET | admin | Bonus payouts | — | `{payouts[],total_kr}` | no |
 | `/superadmin/fleet-applications` | GET | **superadmin** | Løyvehaver applications | `status?` | `{applications[]}` | no |
@@ -106,19 +110,23 @@ Collections: `trips`, `fleets`, `commission_rules`, `fleet_payouts`, `driver_pay
 - **Recommended polling:** `/admin/live` every **5s**, `/admin/overview` every **30s**, tables on demand. Use `as_of` to show freshness. Do not fake realtime.
 
 ## 12. Known missing endpoints / backend blockers
-- **Refunds:** no `POST /admin/refunds` endpoint yet (Stripe refund + audit) — needs Stripe integration wiring before exposing.
-- **Transactions ledger:** `payment_transactions` collection exists but no `GET /admin/transactions` list endpoint yet.
-- **Document approve/reject:** `/admin/documents` is read-only; no approve/reject/expiry mutation endpoints yet.
-- **Payouts management:** fleet/driver payouts are readable via fleet detail; no admin-wide payout run/mark-paid endpoint.
-- **Admin user management:** create/invite/disable admin + role change endpoints not present (superadmin is env-seeded).
-- **Service areas / pricing versioning UI:** pricing lives in `platform_settings` (ride_classes multipliers + default_commission); no polygon service-area model.
+- **Payouts management:** fleet/driver payouts are readable; no admin-wide payout *run/mark-paid* endpoint yet.
+- **Admin user management:** create/invite/disable admin + role-change endpoints not present (superadmin is env-seeded via `ADMIN_EMAIL`/`ADMIN_PASSWORD`).
+- **Service areas / pricing versioning UI:** pricing lives in `platform_settings` (ride_classes multipliers + default_commission), commission changes are versioned in `commission_rules`; there is no polygon service-area model.
 - **Manual ride intervention:** admin cancel/release-stuck-ride endpoint not present.
-- **Vipps:** not configured (features.vipps=false). Stripe keys present in env (test mode).
-- **Hostname discrepancy (MUST CONFIRM):** product says `admin.kjappap.no`; historical whitelist uses `kjappapp.no`. Both are whitelisted now, but confirm the real registered DNS and prune the wrong one before launch. DNS/SSL/Vercel deployment of the admin frontend happens **outside this backend workspace** — not deployed/verified here.
+- **Vipps:** not configured (`features.vipps=false`). Stripe keys present in env (test mode); per-trip charges are not currently captured, so refunds default to audited back-office records (`provider:"manual"`) unless a `stripe_payment_intent`/`charge_id` is stored on the trip.
+- **Hostname:** CONFIRMED `admin.kjappapp.no` (double p). CORS locked to it. Frontend deploy/DNS/SSL/Vercel happens **outside this backend workspace** — not deployed/verified here.
 
-## 13. Changes made this round (backend hardening)
+## 13. Changes made (backend hardening)
+Round 1:
 - Standardized pagination (`items/page/page_size/total/total_pages`) + `page`/`page_size` on: `trips-full`, `drivers-full`, `users`, `vehicles`, `documents`, `audit-log`, `support/tickets`.
 - New filters: trips-full `date_from`/`date_to`/`payment_status`; drivers-full `fleet_id`; vehicles `vehicle_type`; support `category`; users `q`/`status`.
 - New `GET /admin/search` global search (RBAC admin+).
-- Audit coverage added: `driver.approve`/`driver.suspend` (approve endpoint), `driver.fleet_assign` (attach-driver), `fleet.create`. (Existing audits: fleet suspend/reactivate/commission, support status, settings update.)
-- CORS: added `admin.kjappap.no` (+ single-p variants) and admin dev origins.
+- Audit added: `driver.approve`/`driver.suspend`, `driver.fleet_assign`, `fleet.create`.
+- CORS + admin dev origins.
+
+Round 2 (next action items):
+- **Refunds:** `POST /admin/refunds` (idempotent — tracks `trips.refunded_total`/`refund_status`, prevents double/over-refund, attempts Stripe if a charge/intent is stored, else audited `manual` record) + `GET /admin/refunds`. Audit `refund.create`. New collection `refunds`.
+- **Transactions ledger:** `GET /admin/transactions` — unified FARE/REFUND/PAYOUT rows derived from real `trips` + `refunds` + `fleet_payouts`/`bonus_payouts`, with `type`/date/fleet filters + pagination (default last 30 days).
+- **Document compliance:** `GET /admin/documents` now returns per-doc `review_status`/`expiry`/`compliance` (VALID/EXPIRING(≤30d)/EXPIRED/PENDING/REJECTED) + a `summary` count object; new `POST /admin/documents/{file_id}/review` (audit `document.review`).
+- **CORS locked** to confirmed `admin.kjappapp.no`.

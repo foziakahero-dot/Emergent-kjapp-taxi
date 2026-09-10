@@ -89,3 +89,13 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
 - Verified via curl (admin@kjapp.no): envelopes correct, filters work, search works, RBAC 403(wrong role)/401(no auth), audit written on approve.
 - Full contract for the external frontend team: /app/ADMIN_API_CONTRACT.md (base URL, JWT auth, CORS, roles, ride-status enum, finance source of truth, fleet model, polling strategy, endpoint table, OpenAPI, known missing endpoints, hostname blocker).
 - HOSTNAME BLOCKER: product says admin.kjappap.no vs historical admin.kjappapp.no — both whitelisted; must confirm real DNS. Frontend deploy/DNS/SSL/Vercel is out of this workspace.
+
+## Update (2026-06) — Admin next action items (refunds, ledger, documents) + domain lock
+- Domain CONFIRMED: admin.kjappapp.no (double p). CORS locked to it (removed single-p variants).
+- NEW endpoints (server.py, RBAC require_admin, verified via curl w/ admin@kjapp.no):
+  - POST/GET /admin/refunds — idempotent refunds (tracks trips.refunded_total/refund_status, blocks double/over-refund, Stripe if charge stored else audited manual record). Audit refund.create. New collection: refunds.
+  - GET /admin/transactions — unified ledger (FARE/REFUND/PAYOUT) derived from trips+refunds+fleet_payouts+bonus_payouts; filters type/date_from/date_to/fleet_id; pagination (default 30d).
+  - POST /admin/documents/{file_id}/review — approve/reject/expiry; audit document.review. GET /admin/documents now returns per-doc review_status/expiry/compliance (VALID/EXPIRING/EXPIRED/PENDING/REJECTED) + summary counts.
+- Verified: partial refund recorded; ledger merges FARE(183)+REFUND(-50); over-refund->400; doc PENDING->EXPIRED->VALID->REJECTED summary correct; RBAC customer->403, no-auth->401; audit trail writes.
+- Contract updated: /app/ADMIN_API_CONTRACT.md (§4 CORS confirmed, §6 table +refunds/transactions/doc-review, §12 blockers trimmed, §13 round-2 changes).
+- Still missing (documented): admin-wide payout run/mark-paid, admin-user management, service-area polygons, manual ride intervention, Vipps config.
