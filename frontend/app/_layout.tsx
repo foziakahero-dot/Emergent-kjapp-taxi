@@ -4,14 +4,20 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
+import { useFonts } from 'expo-font';
 import { AuthProvider } from '@/src/context/AuthContext';
-import { colors } from '@/src/theme';
+import { colors, FONT_ASSETS } from '@/src/theme';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts(FONT_ASSETS);
+  if (!fontsLoaded) {
+    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  }
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>

@@ -42,9 +42,14 @@ export const colors = {
 export type ThemeColors = typeof colors;
 
 export const font = {
-  display: Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia, serif' }),
+  display: 'Fraunces',
   body: Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }),
-  mono: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+  mono: 'JetBrainsMono',
+};
+
+export const FONT_ASSETS = {
+  Fraunces: require('@/assets/fonts/Fraunces.ttf'),
+  JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
 };
 
 export const radius = { sm: 10, md: 14, lg: 20, xl: 24, pill: 999 };

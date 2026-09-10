@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -45,6 +46,24 @@ export default function PaymentMethods() {
       await paymentApi.remove(id);
       await qc.invalidateQueries({ queryKey: ['payment-methods'] });
     } catch {}
+  };
+
+  const addStripeCard = async () => {
+    setBusy(true);
+    try {
+      const origin = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+      const { checkout_url, session_id } = await paymentApi.cardSetup(origin);
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') window.open(checkout_url, '_blank');
+      } else {
+        await WebBrowser.openBrowserAsync(checkout_url);
+      }
+      try {
+        const r = await paymentApi.cardSetupStatus(session_id);
+        if (r?.ready) await qc.invalidateQueries({ queryKey: ['payment-methods'] });
+      } catch {}
+    } catch {}
+    finally { setBusy(false); }
   };
 
   return (
@@ -108,6 +127,12 @@ export default function PaymentMethods() {
                 <Text style={s.addText}>Legg til betalingsmåte</Text>
               </Pressable>
             )}
+
+            <Pressable style={s.stripeBtn} onPress={addStripeCard} disabled={busy} testID="pm-stripe">
+              <Icon name="lock" size={16} color={colors.accentOn} />
+              <Text style={s.stripeText}>Verifiser kort med Stripe</Text>
+            </Pressable>
+            <Text style={s.note}>Vipps og kort velges ved bestilling. Kort verifiseres trygt via Stripe.</Text>
           </>
         )}
       </View>
@@ -134,4 +159,7 @@ const useStyles = makeStyles((c) => ({
   input: { marginTop: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 12, paddingHorizontal: 16, height: 52, color: c.text, fontSize: 16, fontFamily: font.mono },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed', marginTop: 8 },
   addText: { color: c.accent, fontSize: 15, fontWeight: '600' },
+  stripeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16, backgroundColor: c.accent, marginTop: 12 },
+  stripeText: { color: c.accentOn, fontSize: 15, fontWeight: '700' },
+  note: { color: c.textMuted, fontSize: 12, marginTop: 12, lineHeight: 18, textAlign: 'center' },
 }));

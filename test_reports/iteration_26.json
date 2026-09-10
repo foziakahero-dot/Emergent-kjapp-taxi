@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only regression + new-feature verification for KJAPP. Covered: onboarding->login->home, quick-Jobb route review with new booking-payment-row (shows 'Vipps · Endre'), booking-confirm -> /booking/{tripId}, in-trip chat (component + testIDs verified in code and modal; live send NOT reachable because demo backend never auto-accepts a driver so trip stays in 'searching' where action-message is not rendered), payment-methods (add flow with pm-type-*, pm-last4, pm-save persisted a Mastercard 4242; pm-stripe fires POST /api/payments/card/setup -> 200), Settings GDPR (gdpr-export -> 200 with visible summary '2 turer, 0 betalinger', gdpr-delete-open modal correctly aria-disabled until 'SLETT' typed), full register-then-delete flow on a throwaway account (register 200, gdpr/delete 200, redirected to onboarding), and driver regression (driver-login-demo-fill + submit -> driver home with driver-online-toggle; toggling online shows the expected geolocation-denied text 'Posisjon kreves for å kjøre.'). Demo user ola@kjapp.no was NOT deleted. Deprecated RN style props detected: 'shadow*' warning in console.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "in-trip chat (customer)",
+        "issue": "End-to-end chat send could not be tested from the customer side because the demo backend keeps the freshly-created trip in status 'searching' indefinitely (no auto-accepting driver). The 'action-message' button is only rendered when trip.status is driver_on_way/at_pickup, so the customer cannot open ChatSheet in preview without a real driver accepting. Recommend either seeding an auto-accept behavior for the demo/preview flow, or exposing a way to open chat from the searching state, or having the test pair a driver session to accept the trip. ChatSheet component itself (testIDs chat-input/chat-send/chat-close, POST /api/trips/{id}/messages) looks correct in code.",
+        "affected_testIDs": ["action-message", "chat-input", "chat-send", "chat-close"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "Home confirm button (and possibly others)",
+        "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Reference: /app/frontend/app/(app)/home.tsx around line 415-416 (shadowColor/shadowOpacity/shadowRadius/shadowOffset). Migrate to the new boxShadow API on React Native Web/RN 0.76+."
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Investigate why the demo driver does not auto-accept a passenger trip so the in-trip chat / action-message flow can be exercised end-to-end from the customer session in preview. Alternatively, run a paired driver session that accepts the trip before hitting chat.",
+    "Migrate deprecated 'shadow*' style props to boxShadow (starts at home.tsx confirm button styles).",
+    "Minor: driver home displays first name 'Ola' after logging in with sjafor@kjapp.no — verify the driver profile display name is coming from the driver record and not from a stale customer session (screenshot attached in run logs). Not blocking."
+  ],
+  "critical_code_review_comments": [
+    "ChatSheet uses messagesApi.list every 3s while modal is visible — fine for preview but consider websockets/backoff for production.",
+    "payment-methods.tsx opens Stripe checkout via window.open on web without capturing focus back; cardSetupStatus is polled only once immediately after opening the tab, so if the user completes checkout later the UI won't refresh until the screen is reopened. Consider polling until ready or on window focus."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (not tested)", "frontend": "~95% (all requested flows verified except live chat send which requires a driver acceptance not available in demo)" },
+  "seed_data_creation": "Added one Mastercard •••• 4242 payment method on ola@kjapp.no during add-flow verification (existing verified methods remained). Registered and then GDPR-deleted a throwaway account tmp_<random>@kjapp.no.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To test end-to-end chat, either simulate driver accept via a second Playwright context signed in as sjafor@kjapp.no accepting the offered ride, or add a demo shortcut on the backend that auto-transitions trips from 'searching' to 'driver_on_way' after N seconds. All new testIDs (booking-payment-row, chat-*, pm-*, gdpr-*) are wired up correctly.",
+  "rca_of_issue": "Chat send couldn't be tested because customer UI only shows action-message when a driver has accepted the trip (see /app/frontend/app/booking/[tripId].tsx L152-156). In the preview backend the newly created trip remained in status='searching' (searching-cancel was shown), meaning no driver auto-picked it up during the test window. Not a bug in the chat feature — it's a demo-data limitation for the frontend test."
+}

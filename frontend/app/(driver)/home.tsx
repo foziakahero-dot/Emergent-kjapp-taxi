@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
-import { MapCanvas } from '@/src/components/MapCanvas';
+import { Map } from '@/src/components/Map';
+import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
@@ -21,6 +22,7 @@ export default function DriverHome() {
   const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
 
   const poll = useCallback(async () => {
@@ -142,7 +144,7 @@ export default function DriverHome() {
 
       {current ? (
         <View style={s.tripCard} testID="driver-active-trip">
-          <MapCanvas
+          <Map
             style={s.tripMap}
             pickup={{ lat: current.pickup_lat, lng: current.pickup_lng }}
             dropoff={{ lat: current.dropoff_lat, lng: current.dropoff_lng }}
@@ -153,6 +155,10 @@ export default function DriverHome() {
             <Text style={s.overlineOnline}>AKTIV TUR · {kr(current.price)}</Text>
             <View style={s.epRow}><View style={s.beacon} /><Text style={s.epText} numberOfLines={1}>{current.pickup_address}</Text></View>
             <View style={s.epRow}><View style={s.square} /><Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text></View>
+            <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
+              <Icon name="message" size={16} color={colors.text} />
+              <Text style={s.msgBtnText}>Melding til kunde</Text>
+            </Pressable>
             {actionLabel ? (
               <Pressable style={s.action} onPress={advance} disabled={busy} testID="driver-advance">
                 {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.actionText}>{actionLabel}</Text>}
@@ -192,6 +198,16 @@ export default function DriverHome() {
           <Text style={s.waitSub}>Skru på for å motta turer i nærheten.</Text>
         </View>
       )}
+
+      {current ? (
+        <ChatSheet
+          tripId={current.trip_id}
+          role="driver"
+          visible={chatOpen}
+          onClose={() => setChatOpen(false)}
+          peerName="Kunde"
+        />
+      ) : null}
     </ScrollView>
   );
 }
@@ -220,6 +236,8 @@ const useStyles = makeStyles((c) => ({
   tripCard: { marginHorizontal: 20, marginTop: 20, backgroundColor: c.driverCard, borderRadius: 20, borderWidth: 1, borderColor: c.online, overflow: 'hidden' },
   tripMap: { height: 180, width: '100%' },
   tripBody: { padding: 18, gap: 10 },
+  msgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: c.line },
+  msgBtnText: { color: c.text, fontSize: 14 },
   offer: { marginHorizontal: 20, marginTop: 20, backgroundColor: c.driverCard, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18, gap: 10 },
   overlineOnline: { color: c.online, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
   epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

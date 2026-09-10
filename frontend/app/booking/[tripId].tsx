@@ -4,7 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
-import { MapCanvas } from '@/src/components/MapCanvas';
+import { Map } from '@/src/components/Map';
+import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
 import { tripsApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
@@ -26,6 +27,7 @@ export default function BookingFlow() {
   const s = useStyles();
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const nav = useRef(false);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export default function BookingFlow() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <MapCanvas
+      <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
@@ -149,13 +151,27 @@ export default function BookingFlow() {
             ) : (
               <View style={s.actions}>
                 <Action icon="phone" label="Ring" testID="action-call" onPress={() => Linking.openURL(`tel:${(trip.driver?.phone || '').replace(/\s/g, '') || '112'}`)} />
-                <Action icon="message" label="Melding" testID="action-message" onPress={() => Linking.openURL(`sms:${(trip.driver?.phone || '').replace(/\s/g, '')}`)} />
+                <Action icon="message" label="Melding" testID="action-message" onPress={() => setChatOpen(true)} />
                 <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => Linking.openURL('tel:112')} />
               </View>
             )}
+            {trip.status === 'in_trip' ? (
+              <Pressable style={s.chatBtn} onPress={() => setChatOpen(true)} testID="ontrip-chat">
+                <Icon name="message" size={16} color={colors.text} />
+                <Text style={s.chatBtnText}>Melding til sjåfør</Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
       </View>
+
+      <ChatSheet
+        tripId={tripId!}
+        role="passenger"
+        visible={chatOpen}
+        onClose={() => setChatOpen(false)}
+        peerName={trip.driver?.name || 'Din sjåfør'}
+      />
     </View>
   );
 }
@@ -213,4 +229,6 @@ const useStyles = makeStyles((c) => ({
   divider: { width: 1, height: 28, backgroundColor: c.line },
   metricLabel: { color: c.textMuted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', textAlign: 'center' },
   metricValue: { color: c.text, fontFamily: font.mono, fontSize: 15, textAlign: 'center', marginTop: 4 },
+  chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  chatBtnText: { color: c.text, fontSize: 14 },
 }));

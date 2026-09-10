@@ -22,6 +22,18 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
 - Driver app: online toggle + live GPS streaming, today summary, ride offers (accept/decline), active-trip lifecycle controls, earnings tab, profile.
 - Full E2E tested (13 flows PASS) on the Expo web preview.
 
+## Update (2026-06) — Next-action features + security
+- **Real map:** `react-native-maps` (dark-styled) on native via `src/components/Map.tsx`; web preview uses the SVG `MapCanvas` fallback (`Map.web.tsx`). Wired into home, trip tracking and driver active-trip.
+- **In-trip chat:** `src/components/ChatSheet.tsx` (polls `/trips/{id}/messages`), opened from the customer "Melding" action and the driver active-trip "Melding til kunde" button.
+- **Brand fonts:** Fraunces (display) + JetBrains Mono (numbers) loaded via `expo-font` (assets/fonts), gated in root layout.
+- **Payment selection + Vipps:** booking shows a payment row (`booking-payment-row`); payment-methods screen supports Vipps + a real Stripe card verification button (`/payments/card/setup` via expo-web-browser).
+- **GDPR:** Settings → "Personvern og data": data export (`/gdpr/export`) + permanent account deletion with typed "SLETT" confirmation (`/gdpr/delete`) → logout.
+- **Security audit fixes (verified):**
+  - SEC-001 password-reset link no longer built from attacker Origin header — uses server-side `FRONTEND_URL` allowlist (`server.py` forgot_password).
+  - SEC-002 booking payment-gate bypass closed — manually-added cards stored `verified=false` (only Stripe-verified cards / Vipps count). Verified via curl: fake card → 402, Vipps/verified → 200, demo user still books.
+  - SEC-003 GDPR erasure now blocks privileged roles (admin/superadmin/fleet_owner); regular users + drivers retain erasure rights.
+
+
 ## Known limitations
 - Browser preview denies geolocation → driver "go online" needs a device/Expo Go build; customer app falls back to Oslo centre.
 - Map is a stylised SVG canvas (not tiled vector map) — reliable everywhere; real tiled maps are a future enhancement.

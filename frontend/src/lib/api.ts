@@ -50,6 +50,19 @@ export const paymentApi = {
   list: () => api.get('/payment-methods').then((r) => r.data),
   add: (data: any) => api.post('/payment-methods', data).then((r) => r.data),
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
+  cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
+  cardSetupStatus: (session_id: string) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),
+  vippsConfig: () => api.get('/payments/vipps/config').then((r) => r.data),
+};
+
+export const messagesApi = {
+  list: (tripId: string) => api.get(`/trips/${tripId}/messages`).then((r) => r.data),
+  send: (tripId: string, text: string) => api.post(`/trips/${tripId}/messages`, { text }).then((r) => r.data),
+};
+
+export const gdprApi = {
+  export: () => api.get('/gdpr/export').then((r) => r.data),
+  delete: () => api.delete('/gdpr/delete').then((r) => r.data),
 };
 
 export const settingsApi = {

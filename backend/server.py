@@ -1367,10 +1367,10 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
             "expires_at": now + timedelta(hours=1),
             "used": False,
         })
-        frontend = (request.headers.get("origin") or "").strip().rstrip("/")
-        if not frontend:
-            fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
-            frontend = fu if fu and fu != "*" else "https://admin.kjappapp.no"
+        # SECURITY (SEC-001): never build the reset link from the attacker-controllable
+        # Origin/Host header. Use a trusted server-side domain from config only.
+        fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
+        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
         reset_url = f"{frontend}/reset-password/{token}"
         send_email(email, "Tilbakestill passordet ditt — KJAPP", email_password_reset_html(reset_url))
     return {"ok": True}
@@ -1814,12 +1814,18 @@ async def list_payment_methods(current=Depends(get_current_user)):
 async def add_payment_method(body: PaymentMethodRequest, current=Depends(get_current_user)):
     if body.is_default:
         await db.payment_methods.update_many({"user_id": current["id"]}, {"$set": {"is_default": False}})
+    # SECURITY (SEC-002): cards added through this JSON endpoint are NOT payment-verified —
+    # a chargeable card must be added via Stripe SetupIntent (/payments/card/setup). Vipps is
+    # authenticated by Vipps itself. Storing manual cards as verified=False prevents the booking
+    # payment-gate (/trips/request) from being bypassed with a fabricated card record.
+    verified = body.type == "vipps"
     doc = {
         "user_id": current["id"],
         "type": body.type,
         "label": body.label,
         "last4": body.last4,
-        "is_default": body.is_default,
+        "verified": verified,
+        "is_default": bool(body.is_default) and verified,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.payment_methods.insert_one(doc)
@@ -4007,8 +4013,11 @@ async def gdpr_export(current=Depends(get_current_user)):
 async def gdpr_delete(current=Depends(get_current_user), response: Response = None):
     """Permanent account deletion (GDPR right to erasure)."""
     uid = current["id"]
-    if current.get("role") == "admin":
-        raise HTTPException(status_code=400, detail="Admin-konto kan ikke slettes via denne endepunktet")
+    # SECURITY (SEC-003): privileged/business accounts must not be self-deletable via the GDPR
+    # erasure endpoint — they require a dedicated offboarding path. Regular users and drivers keep
+    # their right to erasure.
+    if current.get("role") in ("admin", "superadmin", "fleet_owner"):
+        raise HTTPException(status_code=400, detail="Denne kontotypen kan ikke slettes her. Kontakt support@kjapp.no.")
     # Anonymize trips (keep for accounting/tax compliance in Norway) — replace user id
     anon_id = f"deleted_{uuid.uuid4().hex[:12]}"
     await db.trips.update_many({"user_id": uid}, {"$set": {"user_id": anon_id, "pickup_address": "[slettet]", "dropoff_address": "[slettet]"}})

@@ -12,9 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { colors, font, makeStyles, radius } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
-import { MapCanvas } from '@/src/components/MapCanvas';
+import { Map } from '@/src/components/Map';
 import { useAuth } from '@/src/context/AuthContext';
-import { carsApi, placesApi, tripsApi } from '@/src/lib/api';
+import { carsApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
@@ -36,11 +36,17 @@ export default function Home() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [methods, setMethods] = useState<any[]>([]);
+
+  const loadMethods = useCallback(() => {
+    paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});
+  }, []);
 
   // redirect to active trip if any
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      loadMethods();
       tripsApi.active().then((t) => {
         if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
       }).catch(() => {});
@@ -65,6 +71,7 @@ export default function Home() {
       }
     })();
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
+    loadMethods();
   }, []);
 
   // poll nearby cars
@@ -87,6 +94,7 @@ export default function Home() {
 
   const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
+  const payMethod = methods.find((m) => m.is_default) || methods[0];
 
   const book = async () => {
     if (!dropoff) return;
@@ -119,7 +127,7 @@ export default function Home() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <MapCanvas
+      <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={loc}
         pickup={dropoff ? loc : null}
@@ -235,6 +243,14 @@ export default function Home() {
               </Text>
               <Text style={s.summaryPrice}>{kr(priceFor(selType))}</Text>
             </View>
+
+            <Pressable style={s.payRow} onPress={() => router.push('/payment-methods')} testID="booking-payment-row">
+              <Icon name={payMethod?.type === 'vipps' ? 'wallet' : 'card'} size={18} color={colors.accent} />
+              <Text style={s.payText}>
+                {payMethod ? (payMethod.type === 'vipps' ? 'Vipps' : `${payMethod.label} •••• ${payMethod.last4}`) : 'Legg til betaling'}
+              </Text>
+              <Text style={s.change}>Endre</Text>
+            </Pressable>
 
             {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
 
@@ -392,6 +408,8 @@ const useStyles = makeStyles((c) => ({
   summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   summaryLeft: { color: c.textMuted, fontSize: 13, flex: 1 },
   summaryPrice: { color: c.text, fontFamily: font.display, fontSize: 24 },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 16, paddingHorizontal: 16, height: 52, marginBottom: 12 },
+  payText: { color: c.text, fontSize: 14, flex: 1, fontFamily: font.mono },
   error: { color: c.danger, fontSize: 13, marginBottom: 10 },
   confirm: {
     height: 56, borderRadius: 999, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
