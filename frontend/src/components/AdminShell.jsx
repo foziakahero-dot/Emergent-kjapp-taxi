@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { LayoutDashboard, Radio, Building2, Users, Car, Route, DollarSign, FileText, LifeBuoy, TrendingUp, ClipboardList, Settings, LogOut, Bell, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Radio, Building2, Users, Car, Route, DollarSign, FileText, LifeBuoy, TrendingUp, ClipboardList, Settings, LogOut, Bell, ChevronRight, Gift } from "lucide-react";
 
 /** Nordic-branded operations shell — sidebar + top bar for admin. */
 export default function AdminShell({ children }) {
@@ -17,6 +17,7 @@ export default function AdminShell({ children }) {
     { path: "/admin/drivers", label: "Sjåfører", Icon: Users, match: (p) => p.startsWith("/admin/drivers") },
     { path: "/admin/vehicles", label: "Kjøretøy", Icon: Car, match: (p) => p.startsWith("/admin/vehicles") },
     { path: "/admin/trips", label: "Turer", Icon: Route, match: (p) => p.startsWith("/admin/trips") },
+    { path: "/admin/bonus", label: "Bonus", Icon: Gift, match: (p) => p.startsWith("/admin/bonus") },
     { path: "/admin/finance", label: "Finans", Icon: DollarSign, match: (p) => p.startsWith("/admin/finance") },
     { path: "/admin/documents", label: "Dokumenter", Icon: FileText, match: (p) => p.startsWith("/admin/documents") },
     { path: "/admin/support", label: "Support", Icon: LifeBuoy, match: (p) => p.startsWith("/admin/support") },

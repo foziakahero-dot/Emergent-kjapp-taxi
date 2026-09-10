@@ -4,7 +4,7 @@ import { driverApi, placesApi } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import PremiumMap from "../components/PremiumMap";
-import { Navigation, Check, Phone, Star, ChevronRight, MapPinOff, RefreshCw, Flame, BellRing } from "lucide-react";
+import { Navigation, Check, Phone, Star, ChevronRight, MapPinOff, RefreshCw, Flame, BellRing, Gift } from "lucide-react";
 import { playNewTripPing, primeAudioOnUserGesture } from "../lib/sound";
 import { subscribePush, ensureServiceWorker } from "../lib/push";
 import { isNative, registerNativePush } from "../lib/native";
@@ -40,6 +40,7 @@ export default function DriverHome() {
   const [place, setPlace] = useState(null);          // reverse-geocoded label
   const [heatOn, setHeatOn] = useState(false);
   const [demand, setDemand] = useState(null);        // null = not loaded yet
+  const [bonus, setBonus] = useState(null);          // real bonus quests from the backend
   const [pushPerm, setPushPerm] = useState(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
   const [pushBusy, setPushBusy] = useState(false);
   const watchRef = useRef(null);
@@ -136,6 +137,17 @@ export default function DriverHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heatOn]);
 
+  // Real bonus quests (admin-configured) — refreshed with the dashboard
+  useEffect(() => {
+    let alive = true;
+    const fetchBonus = () => {
+      driverApi.bonus().then((b) => { if (alive) setBonus(b); }).catch(() => { if (alive) setBonus(undefined); });
+    };
+    fetchBonus();
+    const t = setInterval(fetchBonus, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   const enablePush = async () => {
     setPushBusy(true);
     // In the real mobile app we register with APNs/FCM; on web we use Web Push.
@@ -145,6 +157,8 @@ export default function DriverHome() {
     if (!res.ok && res.reason === "unsupported") setPushPerm("unsupported");
     setPushBusy(false);
   };
+
+  const activeQuests = (bonus?.campaigns || []).filter((q) => q.in_window);
 
   const retryGps = async () => {
     watchRef.current?.clear?.();
@@ -337,9 +351,16 @@ export default function DriverHome() {
             {loading ? (
               <Skeleton className="mt-1.5 ml-auto" width={62} height={20} />
             ) : (
-              <div className="font-display text-[22px] leading-none mt-1" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid="driver-income-today">
-                {failed ? "—" : `${summary.income} kr`}
-              </div>
+              <>
+                <div className="font-display text-[22px] leading-none mt-1" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }} data-testid="driver-income-today">
+                  {failed ? "—" : `${summary.income} kr`}
+                </div>
+                {!failed && summary.bonus > 0 && (
+                  <div className="text-[10.5px] mt-1" style={{ color: "#2FE08C" }} data-testid="driver-income-bonus">
+                    inkl. +{summary.bonus} kr bonus
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -421,6 +442,56 @@ export default function DriverHome() {
             </motion.div>
           )}
         </AnimatePresence>
+
+
+        {/* Real bonus quests — KJAPP pays these from its own commission, so no surcharge for the passenger */}
+        {activeQuests.length > 0 && (
+          <div className="mt-4 card p-4" data-testid="driver-bonus-card" style={{ border: "1px solid rgba(203,163,101,0.26)" }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Gift size={13} style={{ color: "var(--accent)" }} />
+                <span className="text-[10px] uppercase tracking-[0.3em]" style={{ color: "var(--accent)" }}>Bonusoppdrag</span>
+              </div>
+              {bonus?.earned_today > 0 && (
+                <span className="text-[11px]" style={{ color: "#2FE08C" }} data-testid="driver-bonus-earned">
+                  +{bonus.earned_today} kr opptjent i dag
+                </span>
+              )}
+            </div>
+            <div className="space-y-3.5">
+              {activeQuests.map((q) => (
+                <div key={q.id} data-testid={`driver-quest-${q.id}`}>
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[13.5px] truncate" style={{ color: "var(--text)" }}>{q.name}</div>
+                      <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        {q.cap_reached ? `${q.trips_required} av ${q.trips_required} turer` : `${q.progress} av ${q.trips_required} turer`}
+                        {" · kl "}{String(q.start_hour).padStart(2, "0")}–{String(q.end_hour).padStart(2, "0")}
+                      </div>
+                    </div>
+                    <div className="font-display text-[17px] shrink-0" style={{ color: "var(--accent)", fontVariantNumeric: "tabular-nums" }}>
+                      +{q.bonus_kr} kr
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(244,244,240,0.08)" }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: q.cap_reached ? "100%" : `${Math.min(100, (q.progress / q.trips_required) * 100)}%` }}
+                      transition={{ duration: 0.7, ease: "easeOut" }}
+                      className="h-full rounded-full"
+                      style={{ background: "linear-gradient(90deg, rgba(203,163,101,0.7), rgba(240,208,142,1))" }}
+                    />
+                  </div>
+                  <div className="text-[10.5px] mt-1.5" style={{ color: q.cap_reached ? "#2FE08C" : "var(--text-muted)" }}>
+                    {q.cap_reached
+                      ? `Fullført i dag — +${q.earned_kr} kr lagt til utbetalingen`
+                      : `${Math.max(0, q.trips_required - q.progress)} turer igjen til bonusen`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Lock-screen alerts for new ride requests */}
         {pushPerm === "default" && (

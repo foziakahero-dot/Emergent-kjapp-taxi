@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { driverApi } from "../lib/api";
+import { toast } from "sonner";
 import PremiumMap from "../components/PremiumMap";
 import { openMapsNavigation } from "../lib/mapAssets";
 import { computeDriverPosition } from "../lib/tripAnimation";
@@ -133,7 +134,14 @@ export default function DriverTrip() {
 
   const arrive = async () => {
     setBusy(true);
-    try { await driverApi.arrive(trip.trip_id); await load(); setTimeout(() => navigate("/driver"), 1500); } catch (e) { alert("Kunne ikke fullføre"); } finally { setBusy(false); }
+    try {
+      const res = await driverApi.arrive(trip.trip_id);
+      (res?.bonuses || []).forEach((b) => toast.success(`Bonus opptjent · +${b.amount} kr`, { description: `${b.name} — ${b.trips} turer fullført` }));
+      await load();
+      setTimeout(() => navigate("/driver"), res?.bonuses?.length ? 3200 : 1500);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Kunne ikke fullføre turen");
+    } finally { setBusy(false); }
   };
   const cancel = async () => {
     if (!window.confirm("Er du sikker på at du vil avbryte turen?\n\nBruk dette KUN hvis kunden ikke dukker opp eller det oppstår et problem.")) return;

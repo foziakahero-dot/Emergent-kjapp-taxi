@@ -90,28 +90,34 @@ export default function AdminBonus() {
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="Rushtid ettermiddag"
                     data-testid="bonus-name"
-                    className="input-field w-full"
+                    className="w-full px-3 py-2.5 rounded-xl text-[15px] outline-none bg-transparent"
+                    style={{ border: "1px solid var(--line)", color: "var(--text)" }}
                   />
                 </Field>
                 <Field label="Turer">
                   <input type="number" min="1" max="50" value={form.trips_required} data-testid="bonus-trips"
-                    onChange={(e) => setForm({ ...form, trips_required: e.target.value })} className="input-field w-full" />
+                    onChange={(e) => setForm({ ...form, trips_required: e.target.value })} className="w-full px-3 py-2.5 rounded-xl text-[15px] outline-none bg-transparent"
+                    style={{ border: "1px solid var(--line)", color: "var(--text)" }} />
                 </Field>
                 <Field label="Bonus (kr)">
                   <input type="number" min="1" max="5000" value={form.bonus_kr} data-testid="bonus-amount"
-                    onChange={(e) => setForm({ ...form, bonus_kr: e.target.value })} className="input-field w-full" />
+                    onChange={(e) => setForm({ ...form, bonus_kr: e.target.value })} className="w-full px-3 py-2.5 rounded-xl text-[15px] outline-none bg-transparent"
+                    style={{ border: "1px solid var(--line)", color: "var(--text)" }} />
                 </Field>
                 <Field label="Fra (kl)">
                   <input type="number" min="0" max="23" value={form.start_hour} data-testid="bonus-start"
-                    onChange={(e) => setForm({ ...form, start_hour: e.target.value })} className="input-field w-full" />
+                    onChange={(e) => setForm({ ...form, start_hour: e.target.value })} className="w-full px-3 py-2.5 rounded-xl text-[15px] outline-none bg-transparent"
+                    style={{ border: "1px solid var(--line)", color: "var(--text)" }} />
                 </Field>
                 <Field label="Til (kl)">
                   <input type="number" min="1" max="24" value={form.end_hour} data-testid="bonus-end"
-                    onChange={(e) => setForm({ ...form, end_hour: e.target.value })} className="input-field w-full" />
+                    onChange={(e) => setForm({ ...form, end_hour: e.target.value })} className="w-full px-3 py-2.5 rounded-xl text-[15px] outline-none bg-transparent"
+                    style={{ border: "1px solid var(--line)", color: "var(--text)" }} />
                 </Field>
                 <Field label="Maks per sjåfør/dag">
                   <input type="number" min="1" max="10" value={form.max_per_driver_per_day} data-testid="bonus-cap"
-                    onChange={(e) => setForm({ ...form, max_per_driver_per_day: e.target.value })} className="input-field w-full" />
+                    onChange={(e) => setForm({ ...form, max_per_driver_per_day: e.target.value })} className="w-full px-3 py-2.5 rounded-xl text-[15px] outline-none bg-transparent"
+                    style={{ border: "1px solid var(--line)", color: "var(--text)" }} />
                 </Field>
               </div>
               <div className="flex items-center gap-3 mt-4">

@@ -56,6 +56,7 @@ import AdminLive from "./pages/AdminLive";
 import AdminDrivers from "./pages/AdminDrivers";
 import AdminVehicles from "./pages/AdminVehicles";
 import AdminTrips from "./pages/AdminTrips";
+import AdminBonus from "./pages/AdminBonus";
 import AdminFinance from "./pages/AdminFinance";
 import AdminDocuments from "./pages/AdminDocuments";
 import AdminSupport from "./pages/AdminSupport";
@@ -226,7 +227,8 @@ function AppRoutes() {
         <Route path="/admin/drivers" element={<Protected adminOnly><AdminShell><AdminDrivers /></AdminShell></Protected>} />
         <Route path="/admin/vehicles" element={<Protected adminOnly><AdminShell><AdminVehicles /></AdminShell></Protected>} />
         <Route path="/admin/trips" element={<Protected adminOnly><AdminShell><AdminTrips /></AdminShell></Protected>} />
-        <Route path="/admin/finance" element={<Protected adminOnly><AdminShell><AdminFinance /></AdminShell></Protected>} />
+        <Route path="/admin/bonus" element={<Protected adminOnly><AdminShell><AdminBonus /></AdminShell></Protected>} />
+      <Route path="/admin/finance" element={<Protected adminOnly><AdminShell><AdminFinance /></AdminShell></Protected>} />
         <Route path="/admin/documents" element={<Protected adminOnly><AdminShell><AdminDocuments /></AdminShell></Protected>} />
         <Route path="/admin/support" element={<Protected adminOnly><AdminShell><AdminSupport /></AdminShell></Protected>} />
         <Route path="/admin/analytics" element={<Protected adminOnly><AdminShell><AdminAnalytics /></AdminShell></Protected>} />
@@ -290,6 +292,7 @@ function AppRoutes() {
       <Route path="/admin/drivers" element={<Protected adminOnly><AdminShell><AdminDrivers /></AdminShell></Protected>} />
       <Route path="/admin/vehicles" element={<Protected adminOnly><AdminShell><AdminVehicles /></AdminShell></Protected>} />
       <Route path="/admin/trips" element={<Protected adminOnly><AdminShell><AdminTrips /></AdminShell></Protected>} />
+      <Route path="/admin/bonus" element={<Protected adminOnly><AdminShell><AdminBonus /></AdminShell></Protected>} />
       <Route path="/admin/finance" element={<Protected adminOnly><AdminShell><AdminFinance /></AdminShell></Protected>} />
       <Route path="/admin/documents" element={<Protected adminOnly><AdminShell><AdminDocuments /></AdminShell></Protected>} />
       <Route path="/admin/support" element={<Protected adminOnly><AdminShell><AdminSupport /></AdminShell></Protected>} />

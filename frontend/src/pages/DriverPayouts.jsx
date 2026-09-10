@@ -26,6 +26,11 @@ export default function DriverPayouts() {
           <Wallet size={12} /> Neste utbetaling
         </div>
         <div className="mt-1 font-display text-4xl text-white" data-testid="payouts-net">{data.pending_net} kr</div>
+        {data.pending_bonus > 0 && (
+          <div className="text-[12px] mt-1" style={{ color: "#2FE08C" }} data-testid="payouts-bonus">
+            inkl. +{data.pending_bonus} kr bonusoppdrag
+          </div>
+        )}
         <div className="mt-1 text-[13px] text-[#7a827a]">
           <Calendar size={12} className="inline mr-1" />
           {dateFmt(data.next_payout_date)}

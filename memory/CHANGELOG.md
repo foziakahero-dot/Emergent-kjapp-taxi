@@ -100,3 +100,32 @@ Kunde `ola@kjapp.no` bestilte via kunde-UI (Aker Brygge, 186 kr) → tur `1e52bd
 - Firebase-prosjekt + `google-services.json` + `GoogleService-Info.plist` + APNs `.p8` og `FCM_SERVICE_ACCOUNT_JSON` — se `/app/MOBILE_BUILD.md`.
 - Automatisk kortbelastning ved fullført tur (Stripe off-session) er fortsatt ikke implementert.
 - Når alle sjåfører har avslått, er turen skjult 5 min per sjåfør; kunden får ennå ikke «ingen sjåfør tilgjengelig»-melding.
+
+
+## Iter 37 — Sjåførbonus i travle timer: oppdrag styrt fra admin (2026-09-10)
+
+Brukeren valgte mekanikken «fullfør visse turer innen et tidsvindu» og at admin skal styre den.
+**KJAPP betaler bonusen av sin egen provisjon — kundens pris røres ikke** (ingen skjulte påslag).
+
+### Backend (`server.py`)
+- Ny samling `bonus_campaigns`: `name`, `trips_required`, `bonus_kr`, `start_hour`/`end_hour` (Oslo-tid via `zoneinfo`), `max_per_driver_per_day`, `active`.
+- `_campaign_progress()` teller sjåførens FAKTISKE fullførte turer (`arrived_at` innenfor dagens vindu) — ingen fabrikkerte tall. `award_driver_bonuses()` kalles i `POST /driver/trip/{id}/arrive` og utbetaler i det målet nås (én gang per kampanje per dag, styrt av `max_per_driver_per_day`), logger i `bonus_payouts` og sender push «Bonus opptjent · +X kr».
+- `GET /api/driver/bonus` → aktive oppdrag med ekte fremdrift, `earned_today`.
+- `GET /api/driver/summary/today` → `income` = turinntekt + bonus, med `trip_income` og `bonus` separat.
+- `GET /api/driver/payouts` → `pending_bonus`, `bonuses[]` og reell provisjon (`_platform_commission()` i stedet for hardkodet 20 %).
+- Admin: `GET/POST/PATCH/DELETE /api/admin/bonus-campaigns` + `GET /api/admin/bonus-payouts` (med sjåførnavn og totalsum). Kun admin; sjåfør/kunde får 403.
+
+### Frontend
+- Ny admin-side `AdminBonus.jsx` (`/admin/bonus`, «Bonus» i admin-menyen): opprett oppdrag (navn, turer, kr, tidsvindu, maks per sjåfør/dag), skru av/på, slett, se ekte forbruk per kampanje og utbetalingslogg.
+- Sjåfør: bonuskort på Driver Home (`driver-bonus-card`) rett over/ved varmekartet med gull-fremdriftslinje, «X av Y turer · kl 18–22», «+250 kr» og ekte status «Fullført i dag — +250 kr lagt til utbetalingen». «I dag»-inntekten viser «inkl. +X kr bonus», og utbetalingssiden viser bonusandelen.
+- `DriverTrip`: fullført tur viser toast «Bonus opptjent · +X kr» når målet nås (fra `arrive`-responsen).
+
+### Testing
+- Nytt skript `python3 /app/backend/scripts/e2e_bonus.py` — **ALLE 18 PASSED**: admin oppretter oppdrag → sjåfør ser ekte fremdrift → 2 ekte turer kjøres → bonus utbetales nøyaktig én gang → dagsinntekt = turinntekt + bonus → bonus i ventende utbetaling → ingen dobbeltutbetaling (cap) → admin ser utbetaling med sjåførnavn og forbruk → av/på fungerer → 403 for kunde/sjåfør på admin-endepunkter.
+- UI verifisert: oppdrag opprettet gjennom den ekte admin-siden, og sjåførkortet viste «Kveldsoppdrag Oslo · 3 av 3 turer · +250 kr» med «inkl. +400 kr bonus» i dagsinntekten.
+- Regresjon etter endringene: `e2e_driver_flow.py` og `e2e_dispatch.py` fortsatt grønne.
+- Lint: MapLibre-vendorfilen bruker nå `globalThis.WorkerGlobalScope` (identisk oppførsel, ingen `no-undef`) — kartet verifisert `loaded/styleLoaded/tiles = true` etterpå.
+
+### Gjenstår
+- Bonus utbetales som del av ukentlig utbetaling (`bonus_payouts.paid_out` settes når utbetalingen faktisk kjøres — utbetalingsjobben er ikke automatisert ennå).
+- Sonebasert bonus (kun turer i travle soner) er bevisst IKKE bygget: å vurdere gamle turer mot dagens varmekart ville gitt upålitelige tall.
