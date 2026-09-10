@@ -26,3 +26,4 @@ __pycache__/
 frontend/android/app/google-services.json
 frontend/ios/App/App/GoogleService-Info.plist
 backend/secrets/
+keystore.properties

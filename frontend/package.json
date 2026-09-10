@@ -46,7 +46,8 @@
     "prebuild": "yarn sync-map-worker",
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "test": "react-scripts test"
+    "test": "react-scripts test",
+    "sync:mobile": "yarn build && npx cap sync"
   },
   "browserslist": {
     "production": [
