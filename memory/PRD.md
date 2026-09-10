@@ -65,3 +65,15 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
 - Store assets generated from REAL app screens into /app/frontend/store-assets/: Play feature graphic (1024x500), 4 Play phone screenshots (1080x1920), 4 App Store 6.7" screenshots (1290x2796) + README. Generators: /app/gen_store.py (frames) + /app/cap.py (Playwright capture).
 - testing_agent (iteration 27) verified the ENTIRE trip pipeline end-to-end with a real driver: customer books -> POST /trips/request 200 -> "Søker sjåfør" -> driver (API) online+accept+location -> customer sees "Sjåfør på vei" + driver card + live car -> at-pickup/start/arrive -> receipt + rating. Realness confirmed: /cars/nearby returns 0 with driver offline, 1 real driver online. No fake/simulated data.
 - Admin/superadmin (WEB portal, not the mobile app): admin@kjapp.no / admin123 (dev). Production requires a strong ADMIN_PASSWORD (>=12 chars, non-default) or backend refuses to boot.
+
+## Update (2026-06) — Real map + Driver app production completion
+- NEW shared map: /app/frontend/src/components/TileMap.tsx renders REAL dark raster tiles (Esri Dark Gray free/no-key; auto-upgrades to MapTiler if EXPO_PUBLIC_MAPTILER_KEY is set) + SVG overlays (route, pickup/dropoff, cars, live car, user) + pan + zoom/recenter controls. Replaces the old stylized grid (MapCanvas). Map.tsx & Map.web.tsx both re-export TileMap (works on web preview, Expo Go and native builds; no react-native-maps/native module/API key needed).
+- DRIVER app rebuilt to production quality (backend unchanged, all REAL data):
+  - (driver)/home.tsx: map-first full-screen, live GPS car marker, online/offline toggle synced to backend (badge no longer flips on web geo-denial), today summary (turer/inntekt/timer from /driver/summary/today), incoming offer card (accept/decline), active-trip state machine (Jeg er fremme→Start→Fullfør) + chat, restart recovery via /driver/current.
+  - (driver)/earnings.tsx: period tabs (I dag/Uke/Måned), net hero, gross→commission→bonus→net breakdown, 7-day bar chart (/driver/history/weekly), payout card (/driver/payouts, next_payout_date), recent trips, 'Se alle'→/driver-trips.
+  - (driver)/profile.tsx: fetches /auth/me (car/plate/vehicle_type) + /driver/ratings; Kjøretøy + Personlig cards; links to Mine turer + Innstillinger; logout.
+  - NEW app/driver-settings.tsx: notification + driving toggles (persist via /settings), språk, personvern (location/GDPR), hjelp, legal, version, logout, delete-account modal (SLETT).
+  - NEW app/driver-trips.tsx: full history with filters (I dag/Uke/Alle) + detail sheet (gross/commission/net).
+  - api.ts: added driverApi.weekly + driverApi.ratings.
+- Verified via testing_agent iteration 28 (real tiles on all 3 maps; customer booking regression PASS; full driver pipeline PASS; earnings/settings/trips PASS). 2 bugs fixed + verified: driver profile vehicle fields (fetch /auth/me), online badge sync on web. Minors fixed: next_payout_date, pointerEvents→style.
+- Admin (web portal, dev): admin@kjapp.no / admin123 (set strong ADMIN_PASSWORD before production).

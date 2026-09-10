@@ -42,6 +42,8 @@ export default function RootLayout() {
               <Stack.Screen name="payment-methods" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
         </QueryClientProvider>

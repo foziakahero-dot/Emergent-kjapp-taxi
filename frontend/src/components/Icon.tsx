@@ -9,7 +9,8 @@ type IconName =
   | 'chevron-left' | 'arrow-left' | 'plus' | 'check' | 'home' | 'briefcase'
   | 'plane' | 'card' | 'sparkles' | 'power' | 'wallet' | 'log-out' | 'history'
   | 'trending-up' | 'lock' | 'mail' | 'eye' | 'eye-off' | 'circle-dot' | 'flag'
-  | 'help' | 'bell' | 'chevron-up';
+  | 'help' | 'bell' | 'chevron-up' | 'minus' | 'crosshair' | 'file-text'
+  | 'globe' | 'chevron-down';
 
 const P: Record<IconName, React.ReactNode> = {
   menu: (<><Line x1="3" y1="6" x2="21" y2="6" /><Line x1="3" y1="12" x2="21" y2="12" /><Line x1="3" y1="18" x2="21" y2="18" /></>),
@@ -49,6 +50,11 @@ const P: Record<IconName, React.ReactNode> = {
   flag: (<><Path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><Line x1="4" y1="22" x2="4" y2="15" /></>),
   help: (<><Circle cx="12" cy="12" r="10" /><Path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" /><Line x1="12" y1="17" x2="12.01" y2="17" /></>),
   bell: (<><Path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><Path d="M13.73 21a2 2 0 01-3.46 0" /></>),
+  minus: (<Line x1="5" y1="12" x2="19" y2="12" />),
+  crosshair: (<><Circle cx="12" cy="12" r="8" /><Line x1="12" y1="2" x2="12" y2="5" /><Line x1="12" y1="19" x2="12" y2="22" /><Line x1="2" y1="12" x2="5" y2="12" /><Line x1="19" y1="12" x2="22" y2="12" /></>),
+  'file-text': (<><Path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><Polyline points="14 2 14 8 20 8" /><Line x1="8" y1="13" x2="16" y2="13" /><Line x1="8" y1="17" x2="16" y2="17" /></>),
+  globe: (<><Circle cx="12" cy="12" r="10" /><Line x1="2" y1="12" x2="22" y2="12" /><Path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></>),
+  'chevron-down': (<Polyline points="6 9 12 15 18 9" />),
 };
 
 export function Icon({

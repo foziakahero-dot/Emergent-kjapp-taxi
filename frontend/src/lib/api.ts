@@ -95,5 +95,7 @@ export const driverApi = {
     api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
+  weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
+  ratings: () => api.get('/driver/ratings').then((r) => r.data),
   payouts: () => api.get('/driver/payouts').then((r) => r.data),
 };
