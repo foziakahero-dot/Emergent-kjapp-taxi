@@ -44,9 +44,9 @@ def test_cors_production_no_wildcard():
 
 def test_cors_development_allows_localhost_and_preview():
     from server import compute_cors_origins
-    origins = compute_cors_origins("development", "https://mobile-forge-1487.preview.emergentagent.com")
+    origins = compute_cors_origins("development", "https://github-app-builder-28.preview.emergentagent.com")
     assert "http://localhost:3000" in origins
-    assert "https://mobile-forge-1487.preview.emergentagent.com" in origins
+    assert "https://github-app-builder-28.preview.emergentagent.com" in origins
     # wildcard fallback only when no preview origin is known
     assert "*" in compute_cors_origins("development", "*")
 
