@@ -54,3 +54,9 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
 - **P2:** Google/Apple social login, 2FA UI, forgot/reset password screens.
 - **P2:** Stripe card setup + Vipps; scheduled rides; saved places management.
 - **P2:** Push notifications (Emergent-managed) — build-only feature.
+
+## Update (2026-06) — App icons / store assets
+- Branded icon set generated (granite bg + brass Fraunces "K" in a ring) via /app/gen_icons.py:
+  - `icon.png` 1024 opaque (App Store / iOS / general), `adaptive-icon.png` + `android-icon-foreground/background/monochrome` (Google Play adaptive + Android 13 themed), `splash-icon.png` (transparent, dark splash bg), `favicon.png` (web). app.json wired incl. monochromeImage.
+  - Expo/EAS auto-derives every required resolution from these sources at build time.
+  - Remaining store-listing graphics (screenshots, Play feature graphic 1024x500) are separate marketing assets, generated on request.

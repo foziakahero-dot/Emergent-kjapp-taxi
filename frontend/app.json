@@ -25,6 +25,7 @@
       "package": "no.kjapp.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#070B0E"
       },
       "permissions": [
