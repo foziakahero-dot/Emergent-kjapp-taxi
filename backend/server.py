@@ -54,6 +54,12 @@ PRODUCTION_CORS_ORIGINS = [
     "https://kjappapp.no",            # root (reserved for marketing site)
     "https://admin.kjappapp.no",      # admin/ops control center
     "https://fleet.kjappapp.no",      # fleet web portal
+    # NB: exact production hostname MUST be confirmed (see /app/ADMIN_API_CONTRACT.md).
+    # Product spec says "admin.kjappap.no" (single trailing p); the historical whitelist
+    # uses "kjappapp.no" (double p). Both spellings are whitelisted until DNS is verified.
+    "https://kjappap.no",
+    "https://admin.kjappap.no",       # admin web (as specified by product)
+    "https://fleet.kjappap.no",
     "capacitor://localhost",       # native iOS WebView origin
     "ionic://localhost",           # native (legacy) WebView origin
     "https://localhost",           # native Android WebView origin (androidScheme=https)
@@ -90,7 +96,12 @@ def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
     """Production: strict whitelist only. Dev/staging: whitelist + localhost + preview origin."""
     if (app_env or "").strip().lower() == "production":
         return list(PRODUCTION_CORS_ORIGINS)
-    origins = list(PRODUCTION_CORS_ORIGINS) + ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001"]
+    origins = list(PRODUCTION_CORS_ORIGINS) + [
+        "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001",
+        # admin web local dev servers (Vite / Next / CRA)
+        "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173",
+        "http://localhost:3001", "http://127.0.0.1:3001",
+    ]
     fu = (frontend_url or "").strip().rstrip("/")
     if fu and fu != "*" and fu.startswith("http"):
         origins.append(fu)
@@ -3048,6 +3059,7 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
+    await _audit(current, "fleet.create", "fleet", fleet_id, None, {"name": body.name, "owner_email": owner_email, "commission_rate": body.commission_rate})
     return fleet_doc
 
 
@@ -3080,6 +3092,7 @@ async def admin_attach_driver(body: AttachDriverRequest, current=Depends(require
         {"_id": ObjectId(body.driver_user_id), "role": "driver"},
         {"$set": {"fleet_id": body.fleet_id}},
     )
+    await _audit(current, "driver.fleet_assign", "driver", body.driver_user_id, None, {"fleet_id": body.fleet_id})
     return {"ok": True}
 
 
@@ -3535,6 +3548,22 @@ async def _audit(admin, action, entity_type, entity_id, before=None, after=None,
     })
 
 
+def _page_params(page: int, page_size: int, max_size: int = 200):
+    """Normalize pagination inputs. Returns (page, page_size, skip)."""
+    page = max(1, int(page or 1))
+    page_size = max(1, min(int(page_size or 50), max_size))
+    return page, page_size, (page - 1) * page_size
+
+
+def _paged(items, total, page, page_size, legacy_key=None):
+    """Standard admin list envelope. `legacy_key` also exposes items under its original name."""
+    total_pages = (total + page_size - 1) // page_size if page_size else 1
+    out = {"items": items, "page": page, "page_size": page_size, "total": total, "total_pages": total_pages}
+    if legacy_key:
+        out[legacy_key] = items
+    return out
+
+
 class FleetSuspendRequest(BaseModel):
     reason: Optional[str] = None
 
@@ -3585,14 +3614,16 @@ async def admin_update_commission(fleet_id: str, body: CommissionUpdateRequest, 
 
 
 @api.get("/admin/audit-log")
-async def admin_audit_log(limit: int = 100, entity_type: Optional[str] = None, current=Depends(require_admin)):
+async def admin_audit_log(entity_type: Optional[str] = None, page: int = 1, page_size: int = 100, current=Depends(require_admin)):
     q = {}
     if entity_type: q["entity_type"] = entity_type
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.audit_events.count_documents(q)
     events = []
-    async for e in db.audit_events.find(q).sort("at", -1).limit(min(limit, 500)):
+    async for e in db.audit_events.find(q).sort("at", -1).skip(skip).limit(page_size):
         e["id"] = str(e["_id"]); e.pop("_id", None)
         events.append(e)
-    return {"events": events}
+    return _paged(events, total, page, page_size, "events")
 
 
 @api.get("/admin/fleets-full")
@@ -3615,13 +3646,21 @@ async def admin_fleets_full(status: Optional[str] = None, q: Optional[str] = Non
 
 
 @api.get("/admin/users")
-async def admin_users(current=Depends(require_admin)):
+async def admin_users(q: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
+    filt = {}
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt["$or"] = [{"fullName": rx}, {"email": rx}, {"phone": rx}]
+    if status == "disabled": filt["disabled"] = True
+    elif status == "active": filt["disabled"] = {"$ne": True}
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.users.count_documents(filt)
     out = []
-    async for u in db.users.find({}, {"password_hash": 0}).sort("created_at", -1).limit(200):
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         u["id"] = str(u["_id"])
         u.pop("_id", None)
         out.append(u)
-    return {"users": out}
+    return _paged(out, total, page, page_size, "users")
 
 
 @api.get("/admin/drivers")
@@ -3650,7 +3689,13 @@ class ApproveDriverRequest(BaseModel):
 
 @api.post("/admin/drivers/{user_id}/approve")
 async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
+    try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception: raise HTTPException(400, "Ugyldig id")
+    if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
+    await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
+                 {"approved": prev}, {"approved": body.approved})
     return {"ok": True}
 
 
@@ -4728,17 +4773,20 @@ async def admin_live(current=Depends(require_admin)):
 
 
 @api.get("/admin/drivers-full")
-async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = None, fleet_id: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"role": "driver"}
     if status == "approved": filt["approved"] = True
     elif status == "pending": filt["$or"] = [{"approved": False}, {"approved": {"$exists": False}}]
     elif status == "online": filt["online"] = True
+    if fleet_id: filt["fleet_id"] = fleet_id
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$and"] = [{"$or": [{"fullName": rx}, {"email": rx}, {"plate": rx}, {"car": rx}]}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.users.count_documents(filt)
     fleet_names = await _fleet_names()
     out = []
-    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).limit(300):
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         uid = str(u["_id"])
         completed = await db.trips.count_documents({"driver_id": uid, "status": {"$in": ["arrived", "completed", "rated"]}})
         out.append({
@@ -4750,7 +4798,7 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
             "created_at": u.get("created_at"),
             "docs": {k: u.get(k) for k in ("drivers_license_path", "taxi_license_path", "profile_photo_path") if u.get(k)},
         })
-    return {"drivers": out}
+    return _paged(out, total, page, page_size, "drivers")
 
 
 @api.post("/admin/drivers/{user_id}/set-status")
@@ -4766,34 +4814,45 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
 
 
 @api.get("/admin/vehicles")
-async def admin_vehicles(q: Optional[str] = None, current=Depends(require_admin)):
+async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
+    if vehicle_type and vehicle_type != "all": filt["vehicle_type"] = vehicle_type
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"car": rx}, {"plate": rx}, {"fullName": rx}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.users.count_documents(filt)
     fleet_names = await _fleet_names()
     out = []
-    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).limit(300):
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         out.append({
             "id": str(u["_id"]), "car": u.get("car"), "plate": u.get("plate"),
             "vehicle_type": u.get("vehicle_type"), "driver_name": u.get("fullName"),
             "fleet_name": fleet_names.get(u.get("fleet_id")),
             "online": u.get("online", False), "approved": u.get("approved", False),
         })
-    return {"vehicles": out}
+    return _paged(out, total, page, page_size, "vehicles")
 
 
 @api.get("/admin/trips-full")
-async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, limit: int = 100, current=Depends(require_admin)):
+async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, payment_status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
     if status == "active": filt["status"] = {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}
     elif status == "completed": filt["status"] = {"$in": ["arrived", "completed", "rated"]}
     elif status == "cancelled": filt["status"] = {"$in": ["cancelled", "cancelled_by_driver"]}
+    if payment_status: filt["payment_status"] = payment_status
+    if date_from or date_to:
+        cr = {}
+        if date_from: cr["$gte"] = date_from
+        if date_to: cr["$lte"] = date_to + "T23:59:59.999Z"
+        filt["created_at"] = cr
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.trips.count_documents(filt)
     raw, user_ids = [], []
-    async for t in db.trips.find(filt).sort("created_at", -1).limit(min(limit, 300)):
+    async for t in db.trips.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(t); user_ids.append(t.get("user_id"))
     users = await _users_by_ids(user_ids)
     commission = await _platform_commission()
@@ -4815,7 +4874,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
             "passenger_rating": t.get("passenger_rating"),
         })
-    return {"trips": out}
+    return _paged(out, total, page, page_size, "trips")
 
 
 @api.get("/admin/trips/{trip_id}/timeline")
@@ -4911,14 +4970,16 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
 
 
 @api.get("/admin/documents")
-async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"is_deleted": {"$ne": True}}
     if scope and scope != "all": filt["scope"] = scope
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"original_filename": rx}, {"scope": rx}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.uploaded_files.count_documents(filt)
     raw, owner_ids, app_tokens = [], [], []
-    async for f in db.uploaded_files.find(filt).sort("created_at", -1).limit(300):
+    async for f in db.uploaded_files.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(f)
         owner_ids.append(f.get("owner_user_id"))
         if f.get("application_token"): app_tokens.append(f["application_token"])
@@ -4943,7 +5004,7 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
     all_scopes = set()
     async for s in db.uploaded_files.aggregate([{"$match": {"is_deleted": {"$ne": True}}}, {"$group": {"_id": "$scope"}}]):
         if s.get("_id"): all_scopes.add(s["_id"])
-    return {"documents": out, "scopes": sorted(all_scopes)}
+    return {**_paged(out, total, page, page_size, "documents"), "scopes": sorted(all_scopes)}
 
 
 # ---- Support tickets ----
@@ -4962,15 +5023,18 @@ class TicketUpdateRequest(BaseModel):
 
 
 @api.get("/admin/support/tickets")
-async def admin_tickets(status: Optional[str] = None, current=Depends(require_admin)):
+async def admin_tickets(status: Optional[str] = None, category: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
     if status == "open": filt["status"] = {"$in": ["open", "in_progress", "waiting_for_user"]}
     elif status and status != "all": filt["status"] = status
+    if category and category != "all": filt["category"] = category
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.support_tickets.count_documents(filt)
     out = []
-    async for t in db.support_tickets.find(filt).sort("created_at", -1).limit(200):
+    async for t in db.support_tickets.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         t["id"] = str(t["_id"]); t.pop("_id", None)
         out.append(t)
-    return {"tickets": out}
+    return _paged(out, total, page, page_size, "tickets")
 
 
 @api.post("/admin/support/tickets")
@@ -5138,6 +5202,34 @@ async def admin_fleet_detail(fleet_id: str, current=Depends(require_admin)):
         p["id"] = str(p["_id"]); p.pop("_id", None)
         payouts.append(p)
     return {"fleet": f, "drivers": drivers, "commission_history": commission_history, "audit": audit, "payouts": payouts}
+
+
+@api.get("/admin/search")
+async def admin_search(q: str, current=Depends(require_admin)):
+    """Global admin search across trips, drivers, customers and fleets (RBAC: admin+)."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"query": q, "trips": [], "drivers": [], "customers": [], "fleets": []}
+    rx = {"$regex": q, "$options": "i"}
+    trips = []
+    async for t in db.trips.find({"$or": [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]}).sort("created_at", -1).limit(10):
+        trips.append({
+            "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
+            "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
+            "created_at": t.get("created_at"),
+        })
+    drivers, customers = [], []
+    async for u in db.users.find({"$or": [{"fullName": rx}, {"email": rx}, {"phone": rx}, {"plate": rx}]}, {"password_hash": 0}).limit(20):
+        item = {"id": str(u["_id"]), "name": u.get("fullName"), "email": u.get("email"),
+                "phone": u.get("phone"), "role": u.get("role"), "plate": u.get("plate")}
+        if u.get("role") == "driver":
+            drivers.append(item)
+        elif u.get("role") in (None, "user"):
+            customers.append(item)
+    fleets = []
+    async for f in db.fleets.find({"$or": [{"name": rx}, {"org_number": rx}]}).limit(10):
+        fleets.append({"id": str(f["_id"]), "name": f.get("name"), "org_number": f.get("org_number"), "status": f.get("status", "active")})
+    return {"query": q, "trips": trips, "drivers": drivers[:10], "customers": customers[:10], "fleets": fleets}
 
 
 app.include_router(api)
