@@ -20,6 +20,7 @@ export const authApi = {
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
+  googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
 };
 
 export const tripsApi = {

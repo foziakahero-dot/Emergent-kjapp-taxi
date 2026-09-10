@@ -77,3 +77,8 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
   - api.ts: added driverApi.weekly + driverApi.ratings.
 - Verified via testing_agent iteration 28 (real tiles on all 3 maps; customer booking regression PASS; full driver pipeline PASS; earnings/settings/trips PASS). 2 bugs fixed + verified: driver profile vehicle fields (fetch /auth/me), online badge sync on web. Minors fixed: next_payout_date, pointerEvents→style.
 - Admin (web portal, dev): admin@kjapp.no / admin123 (set strong ADMIN_PASSWORD before production).
+
+## Update (2026-06) — Emergent-managed Google sign-in
+- Frontend: src/context/AuthContext.tsx now exposes signInWithGoogle() (web: redirect to auth.emergentagent.com; mobile: WebBrowser.openAuthSessionAsync + deep-link listeners + cold-start getInitialURL), processes returning session_id (hash/query) once, exchanges via backend, stores app JWT, sets user; index.tsx gate routes by role. login.tsx has "Fortsett med Google" button (customer login only). api.ts: authApi.googleSession(session_id) -> POST /api/auth/google/session.
+- Backend (pre-existing, reused): POST /api/auth/google/session calls demobackend session-data with X-Session-ID, upserts user by email (google_linked), mints existing JWT via create_access_token, returns {token, user}. Returns 401 for invalid session_id (verified).
+- Storage stays on the app's existing kjapp_token (AsyncStorage/localStorage) so all downstream auth (get_current_user, /auth/me) is unchanged. No duplicate auth system.
