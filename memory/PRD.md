@@ -60,3 +60,8 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
   - `icon.png` 1024 opaque (App Store / iOS / general), `adaptive-icon.png` + `android-icon-foreground/background/monochrome` (Google Play adaptive + Android 13 themed), `splash-icon.png` (transparent, dark splash bg), `favicon.png` (web). app.json wired incl. monochromeImage.
   - Expo/EAS auto-derives every required resolution from these sources at build time.
   - Remaining store-listing graphics (screenshots, Play feature graphic 1024x500) are separate marketing assets, generated on request.
+
+## Update (2026-06) — Store graphics + full booking verification
+- Store assets generated from REAL app screens into /app/frontend/store-assets/: Play feature graphic (1024x500), 4 Play phone screenshots (1080x1920), 4 App Store 6.7" screenshots (1290x2796) + README. Generators: /app/gen_store.py (frames) + /app/cap.py (Playwright capture).
+- testing_agent (iteration 27) verified the ENTIRE trip pipeline end-to-end with a real driver: customer books -> POST /trips/request 200 -> "Søker sjåfør" -> driver (API) online+accept+location -> customer sees "Sjåfør på vei" + driver card + live car -> at-pickup/start/arrive -> receipt + rating. Realness confirmed: /cars/nearby returns 0 with driver offline, 1 real driver online. No fake/simulated data.
+- Admin/superadmin (WEB portal, not the mobile app): admin@kjapp.no / admin123 (dev). Production requires a strong ADMIN_PASSWORD (>=12 chars, non-default) or backend refuses to boot.
