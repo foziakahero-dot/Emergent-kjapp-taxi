@@ -65,6 +65,13 @@ export const gdprApi = {
   delete: () => api.delete('/gdpr/delete').then((r) => r.data),
 };
 
+export const mePlacesApi = {
+  list: () => api.get('/me/places').then((r) => r.data),
+  add: (data: any) => api.post('/me/places', data).then((r) => r.data),
+  update: (id: string, data: any) => api.put(`/me/places/${id}`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/me/places/${id}`).then((r) => r.data),
+};
+
 export const settingsApi = {
   get: () => api.get('/settings').then((r) => r.data),
   update: (data: any) => api.patch('/settings', data).then((r) => r.data),

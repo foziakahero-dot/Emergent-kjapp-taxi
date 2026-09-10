@@ -14,7 +14,7 @@ import { colors, font, makeStyles, radius } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { useAuth } from '@/src/context/AuthContext';
-import { carsApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
@@ -37,9 +37,14 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [methods, setMethods] = useState<any[]>([]);
+  const [myPlaces, setMyPlaces] = useState<any[]>([]);
 
   const loadMethods = useCallback(() => {
     paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});
+  }, []);
+
+  const loadPlaces = useCallback(() => {
+    mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});
   }, []);
 
   // redirect to active trip if any
@@ -47,6 +52,7 @@ export default function Home() {
     useCallback(() => {
       let active = true;
       loadMethods();
+      loadPlaces();
       tripsApi.active().then((t) => {
         if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
       }).catch(() => {});
@@ -72,6 +78,7 @@ export default function Home() {
     })();
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
+    loadPlaces();
   }, []);
 
   // poll nearby cars
@@ -95,6 +102,7 @@ export default function Home() {
   const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const payMethod = methods.find((m) => m.is_default) || methods[0];
+  const quickPlaces = myPlaces.length ? myPlaces : featured;
 
   const book = async () => {
     if (!dropoff) return;
@@ -177,21 +185,23 @@ export default function Home() {
               </View>
             </Pressable>
 
-            {featured.length ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-                {featured.map((p) => (
-                  <Pressable
-                    key={p.slug}
-                    style={s.chip}
-                    testID={`quick-${p.label}`}
-                    onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
-                  >
-                    <Icon name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'map-pin') as IconName} size={16} color={colors.accent} />
-                    <Text style={s.chipText}>{p.label}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            ) : null}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
+              {quickPlaces.map((p: any) => (
+                <Pressable
+                  key={p.id || p.slug}
+                  style={s.chip}
+                  testID={`quick-${p.label}`}
+                  onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
+                >
+                  <Icon name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'map-pin') as IconName} size={16} color={colors.accent} />
+                  <Text style={s.chipText}>{p.label}</Text>
+                </Pressable>
+              ))}
+              <Pressable style={s.chipEdit} testID="quick-edit-places" onPress={() => router.push('/saved-places')}>
+                <Icon name={myPlaces.length ? 'settings' : 'plus'} size={16} color={colors.textSecondary} />
+                <Text style={s.chipEditText}>{myPlaces.length ? 'Rediger' : 'Legg til'}</Text>
+              </Pressable>
+            </ScrollView>
 
             {locDenied ? (
               <Text style={s.hint}>Slå på posisjon for å se biler rundt deg — vi bruker Oslo sentrum inntil videre.</Text>
@@ -389,6 +399,8 @@ const useStyles = makeStyles((c) => ({
     borderRadius: 999, paddingHorizontal: 16, height: 44,
   },
   chipText: { color: c.text, fontSize: 14 },
+  chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 16, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
+  chipEditText: { color: c.textSecondary, fontSize: 14 },
   hint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 },
   endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 14 },
   epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

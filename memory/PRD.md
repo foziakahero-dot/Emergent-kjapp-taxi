@@ -33,6 +33,9 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
   - SEC-002 booking payment-gate bypass closed — manually-added cards stored `verified=false` (only Stripe-verified cards / Vipps count). Verified via curl: fake card → 402, Vipps/verified → 200, demo user still books.
   - SEC-003 GDPR erasure now blocks privileged roles (admin/superadmin/fleet_owner); regular users + drivers retain erasure rights.
 
+## Update (2026-06) — Saved places
+- **Personal saved places:** new per-user `user_places` collection + CRUD API (`GET/POST/PUT/DELETE /api/me/places`, scoped to the authenticated user). Frontend screen `app/saved-places.tsx` (search address → label as Hjem/Jobb/Annet → save/delete). Home shows the user's saved places as one-tap quick chips (falls back to global featured when empty) plus a dashed "Legg til/Rediger" chip; also linked from Profile ("Lagrede steder"). Verified via curl (CRUD) and full UI flow screenshot.
+
 
 ## Known limitations
 - Browser preview denies geolocation → driver "go online" needs a device/Expo Go build; customer app falls back to Oslo centre.

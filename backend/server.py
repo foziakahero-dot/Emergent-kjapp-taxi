@@ -410,6 +410,14 @@ class PaymentMethodRequest(BaseModel):
     is_default: bool = False
 
 
+class UserPlaceRequest(BaseModel):
+    label: str
+    name: str
+    lat: float
+    lng: float
+    icon: str = "map-pin"
+
+
 class NearbyCarsRequest(BaseModel):
     lat: float
     lng: float
@@ -1842,6 +1850,70 @@ async def delete_payment_method(pm_id: str, current=Depends(get_current_user)):
     except InvalidId:
         raise HTTPException(400, "Ugyldig ID")
     r = await db.payment_methods.delete_one({"_id": oid, "user_id": current["id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Ikke funnet")
+    return {"deleted": True}
+
+
+# ---- Personal saved places (per-user Home/Work/favourites) ----
+@api.get("/me/places")
+async def list_my_places(current=Depends(get_current_user)):
+    cursor = db.user_places.find({"user_id": current["id"]})
+    places = []
+    async for p in cursor:
+        p["id"] = str(p["_id"])
+        p.pop("_id", None)
+        places.append(p)
+    places.sort(key=lambda x: x.get("created_at", ""))
+    return {"places": places}
+
+
+@api.post("/me/places")
+async def add_my_place(body: UserPlaceRequest, current=Depends(get_current_user)):
+    doc = {
+        "user_id": current["id"],
+        "label": body.label.strip()[:40] or "Sted",
+        "name": body.name.strip()[:120],
+        "lat": body.lat,
+        "lng": body.lng,
+        "icon": body.icon,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = await db.user_places.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/me/places/{place_id}")
+async def update_my_place(place_id: str, body: UserPlaceRequest, current=Depends(get_current_user)):
+    from bson.errors import InvalidId
+    try:
+        oid = ObjectId(place_id)
+    except InvalidId:
+        raise HTTPException(400, "Ugyldig ID")
+    update = {
+        "label": body.label.strip()[:40] or "Sted",
+        "name": body.name.strip()[:120],
+        "lat": body.lat,
+        "lng": body.lng,
+        "icon": body.icon,
+    }
+    r = await db.user_places.update_one({"_id": oid, "user_id": current["id"]}, {"$set": update})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Ikke funnet")
+    update["id"] = place_id
+    return update
+
+
+@api.delete("/me/places/{place_id}")
+async def delete_my_place(place_id: str, current=Depends(get_current_user)):
+    from bson.errors import InvalidId
+    try:
+        oid = ObjectId(place_id)
+    except InvalidId:
+        raise HTTPException(400, "Ugyldig ID")
+    r = await db.user_places.delete_one({"_id": oid, "user_id": current["id"]})
     if r.deleted_count == 0:
         raise HTTPException(404, "Ikke funnet")
     return {"deleted": True}

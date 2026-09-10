@@ -16,6 +16,7 @@ export default function Profile() {
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   const rows: { icon: IconName; label: string; onPress: () => void; testID: string }[] = [
+    { icon: 'map-pin', label: 'Lagrede steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
     { icon: 'card', label: 'Betalingsmåter', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
     { icon: 'settings', label: 'Innstillinger', onPress: () => router.push('/settings'), testID: 'profile-settings' },
     { icon: 'help', label: 'Hjelp og support', onPress: () => router.push('/settings'), testID: 'profile-help' },

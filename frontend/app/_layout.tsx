@@ -40,6 +40,7 @@ export default function RootLayout() {
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="payment-methods" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
