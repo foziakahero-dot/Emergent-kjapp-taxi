@@ -1,0 +1,68 @@
+name: KJAPP Expo Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/emergent-production
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/android-build.yml'
+
+concurrency:
+  group: kjapp-expo-android-release
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install app dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Validate Expo project
+        working-directory: frontend
+        run: npx expo config --type public
+
+      - name: Generate native Android project from Expo
+        working-directory: frontend
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build installable Android APK
+        working-directory: frontend/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p artifacts
+          cp frontend/android/app/build/outputs/apk/debug/app-debug.apk artifacts/KJAPP-production-backend.apk
+
+      - name: Upload KJAPP APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KJAPP-Expo-Android-APK
+          path: artifacts/KJAPP-production-backend.apk
+          if-no-files-found: error
+          retention-days: 14

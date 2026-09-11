@@ -129,3 +129,30 @@ Brukeren valgte mekanikken «fullfør visse turer innen et tidsvindu» og at adm
 ### Gjenstår
 - Bonus utbetales som del av ukentlig utbetaling (`bonus_payouts.paid_out` settes når utbetalingen faktisk kjøres — utbetalingsjobben er ikke automatisert ennå).
 - Sonebasert bonus (kun turer i travle soner) er bevisst IKKE bygget: å vurdere gamle turer mot dagens varmekart ville gitt upålitelige tall.
+
+
+## Iter 38 — Appen er klar for APK- og iOS-bygg (2026-09-10)
+
+Målet var å kunne bygge ekte APK/IPA. Emergents direkte publisering gjelder kun Expo-apper, så løsningen er GitHub Actions (bygg i skyen, ingen Mac nødvendig) + lokalt byggeskript.
+
+### Bygg-infrastruktur (nytt)
+- **`.github/workflows/android-build.yml`** — Node 22 + JDK 17 på ubuntu-runner: bygger web-laget med `REACT_APP_BACKEND_URL` fra repo-variabelen `KJAPP_API_URL`, kjører `cap sync`, og bygger **release-APK + Play-bundle (AAB)** som lastes opp som artifacts. Signerer automatisk hvis `ANDROID_KEYSTORE_BASE64` m.fl. er satt, og legger inn `google-services.json` fra secret hvis den finnes.
+- **`.github/workflows/ios-build.yml`** — macOS-runner: `cap sync` + `pod install`, arkiverer usignert som røyktest, eller lager **signert IPA og laster til TestFlight** når sertifikat/profil/App Store Connect API-nøkkel er satt som secrets. Versjon settes via `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`.
+- **`scripts/build-mobile.sh`** — ett skript for lokal bygging: `./scripts/build-mobile.sh <API_URL> [apk|aab|ios|sync]`, med hard sjekk på Node >= 22 (Capacitor 8-krav; containeren har Node 20, derfor bygges native utenfor).
+- **Android-signering**: `app/build.gradle` leser nå `keystore.properties` (git-ignorert) eller `KJAPP_KEYSTORE_*`-miljøvariabler, og bruker signeringen kun når alle verdier finnes. `versionCode`/`versionName` styres av `KJAPP_VERSION_CODE`/`KJAPP_VERSION_NAME`.
+- **`.gitignore`**: `keystore.properties`, `*.jks`, `*.keystore`, `**/*.p8`, `*service-account*.json`, `google-services.json`, `GoogleService-Info.plist`.
+
+### App-identitet
+- Nytt **app-ikon** (champagne-gull «K» på kull-svart) og **splash** (KJAPP-wordmark på #08090B) generert til `frontend/resources/` og bygget ut til alle størrelser med `@capacitor/assets` — **136 Android- + 13 iOS-assets**. Egen `icon-foreground.png` med padding gir korrekt adaptivt Android-ikon (verifisert med sirkelmaske).
+- `capacitor.config.json`: bakgrunns-/splash-/statusbar-farger rettet fra gammel marineblå til dagens palett (#0A0D0F / #08090B), `allowNavigation` oppdatert til `*.kjappapp.no`, `*.emergent.host`, `*.preview.emergentagent.com`. Ingen `server.url` → appen kjører den innebygde bygget (riktig for release).
+- Nytt yarn-script `sync:mobile` (`yarn build && npx cap sync`).
+
+### Verifisert
+- Produksjonsbygg kjørt i container: `REACT_APP_BACKEND_URL=https://api.kjappapp.no yarn build` → OK, API-adressen bakt inn i bundlen, MapLibre-workere og `sw.js` med i `build/`.
+- Begge workflow-filene validert som gyldig YAML; ikoner/splash inspisert visuelt (inkl. adaptiv maske).
+- `MOBILE_BUILD.md` skrevet om til én komplett guide: skyen vs. lokalt, keystore-oppretting, secrets-tabeller, push-nøkler (Firebase/APNs), tillatelser og sikkerhet.
+
+### Gjenstår (krever bruker)
+- Push koden til GitHub (**Save to Github**), sett `KJAPP_API_URL`, og kjør «Android build» → APK.
+- Keystore for Play Store og Apple-sertifikat/API-nøkkel for TestFlight.
+- Firebase-/APNs-nøkler for at native push faktisk skal leveres (`FCM_SERVICE_ACCOUNT_JSON`).

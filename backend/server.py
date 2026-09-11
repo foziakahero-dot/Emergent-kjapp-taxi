@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
@@ -52,7 +53,7 @@ IS_PRODUCTION = APP_ENV == "production"
 
 PRODUCTION_CORS_ORIGINS = [
     "https://kjappapp.no",            # root (reserved for marketing site)
-    "https://admin.kjappapp.no",      # admin/ops control center
+    "https://admin.kjappapp.no",      # admin/ops control center (CONFIRMED domain)
     "https://fleet.kjappapp.no",      # fleet web portal
     "capacitor://localhost",       # native iOS WebView origin
     "ionic://localhost",           # native (legacy) WebView origin
@@ -90,7 +91,12 @@ def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
     """Production: strict whitelist only. Dev/staging: whitelist + localhost + preview origin."""
     if (app_env or "").strip().lower() == "production":
         return list(PRODUCTION_CORS_ORIGINS)
-    origins = list(PRODUCTION_CORS_ORIGINS) + ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001"]
+    origins = list(PRODUCTION_CORS_ORIGINS) + [
+        "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001",
+        # admin web local dev servers (Vite / Next / CRA)
+        "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173",
+        "http://localhost:3001", "http://127.0.0.1:3001",
+    ]
     fu = (frontend_url or "").strip().rstrip("/")
     if fu and fu != "*" and fu.startswith("http"):
         origins.append(fu)
@@ -408,6 +414,14 @@ class PaymentMethodRequest(BaseModel):
     label: str
     last4: str
     is_default: bool = False
+
+
+class UserPlaceRequest(BaseModel):
+    label: str
+    name: str
+    lat: float
+    lng: float
+    icon: str = "map-pin"
 
 
 class NearbyCarsRequest(BaseModel):
@@ -1367,10 +1381,10 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
             "expires_at": now + timedelta(hours=1),
             "used": False,
         })
-        frontend = (request.headers.get("origin") or "").strip().rstrip("/")
-        if not frontend:
-            fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
-            frontend = fu if fu and fu != "*" else "https://admin.kjappapp.no"
+        # SECURITY (SEC-001): never build the reset link from the attacker-controllable
+        # Origin/Host header. Use a trusted server-side domain from config only.
+        fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
+        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
         reset_url = f"{frontend}/reset-password/{token}"
         send_email(email, "Tilbakestill passordet ditt — KJAPP", email_password_reset_html(reset_url))
     return {"ok": True}
@@ -1814,12 +1828,18 @@ async def list_payment_methods(current=Depends(get_current_user)):
 async def add_payment_method(body: PaymentMethodRequest, current=Depends(get_current_user)):
     if body.is_default:
         await db.payment_methods.update_many({"user_id": current["id"]}, {"$set": {"is_default": False}})
+    # SECURITY (SEC-002): cards added through this JSON endpoint are NOT payment-verified —
+    # a chargeable card must be added via Stripe SetupIntent (/payments/card/setup). Vipps is
+    # authenticated by Vipps itself. Storing manual cards as verified=False prevents the booking
+    # payment-gate (/trips/request) from being bypassed with a fabricated card record.
+    verified = body.type == "vipps"
     doc = {
         "user_id": current["id"],
         "type": body.type,
         "label": body.label,
         "last4": body.last4,
-        "is_default": body.is_default,
+        "verified": verified,
+        "is_default": bool(body.is_default) and verified,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.payment_methods.insert_one(doc)
@@ -1836,6 +1856,70 @@ async def delete_payment_method(pm_id: str, current=Depends(get_current_user)):
     except InvalidId:
         raise HTTPException(400, "Ugyldig ID")
     r = await db.payment_methods.delete_one({"_id": oid, "user_id": current["id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Ikke funnet")
+    return {"deleted": True}
+
+
+# ---- Personal saved places (per-user Home/Work/favourites) ----
+@api.get("/me/places")
+async def list_my_places(current=Depends(get_current_user)):
+    cursor = db.user_places.find({"user_id": current["id"]})
+    places = []
+    async for p in cursor:
+        p["id"] = str(p["_id"])
+        p.pop("_id", None)
+        places.append(p)
+    places.sort(key=lambda x: x.get("created_at", ""))
+    return {"places": places}
+
+
+@api.post("/me/places")
+async def add_my_place(body: UserPlaceRequest, current=Depends(get_current_user)):
+    doc = {
+        "user_id": current["id"],
+        "label": body.label.strip()[:40] or "Sted",
+        "name": body.name.strip()[:120],
+        "lat": body.lat,
+        "lng": body.lng,
+        "icon": body.icon,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = await db.user_places.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/me/places/{place_id}")
+async def update_my_place(place_id: str, body: UserPlaceRequest, current=Depends(get_current_user)):
+    from bson.errors import InvalidId
+    try:
+        oid = ObjectId(place_id)
+    except InvalidId:
+        raise HTTPException(400, "Ugyldig ID")
+    update = {
+        "label": body.label.strip()[:40] or "Sted",
+        "name": body.name.strip()[:120],
+        "lat": body.lat,
+        "lng": body.lng,
+        "icon": body.icon,
+    }
+    r = await db.user_places.update_one({"_id": oid, "user_id": current["id"]}, {"$set": update})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Ikke funnet")
+    update["id"] = place_id
+    return update
+
+
+@api.delete("/me/places/{place_id}")
+async def delete_my_place(place_id: str, current=Depends(get_current_user)):
+    from bson.errors import InvalidId
+    try:
+        oid = ObjectId(place_id)
+    except InvalidId:
+        raise HTTPException(400, "Ugyldig ID")
+    r = await db.user_places.delete_one({"_id": oid, "user_id": current["id"]})
     if r.deleted_count == 0:
         raise HTTPException(404, "Ikke funnet")
     return {"deleted": True}
@@ -2970,6 +3054,7 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
+    await _audit(current, "fleet.create", "fleet", fleet_id, None, {"name": body.name, "owner_email": owner_email, "commission_rate": body.commission_rate})
     return fleet_doc
 
 
@@ -3002,6 +3087,7 @@ async def admin_attach_driver(body: AttachDriverRequest, current=Depends(require
         {"_id": ObjectId(body.driver_user_id), "role": "driver"},
         {"$set": {"fleet_id": body.fleet_id}},
     )
+    await _audit(current, "driver.fleet_assign", "driver", body.driver_user_id, None, {"fleet_id": body.fleet_id})
     return {"ok": True}
 
 
@@ -3457,6 +3543,22 @@ async def _audit(admin, action, entity_type, entity_id, before=None, after=None,
     })
 
 
+def _page_params(page: int, page_size: int, max_size: int = 200):
+    """Normalize pagination inputs. Returns (page, page_size, skip)."""
+    page = max(1, int(page or 1))
+    page_size = max(1, min(int(page_size or 50), max_size))
+    return page, page_size, (page - 1) * page_size
+
+
+def _paged(items, total, page, page_size, legacy_key=None):
+    """Standard admin list envelope. `legacy_key` also exposes items under its original name."""
+    total_pages = (total + page_size - 1) // page_size if page_size else 1
+    out = {"items": items, "page": page, "page_size": page_size, "total": total, "total_pages": total_pages}
+    if legacy_key:
+        out[legacy_key] = items
+    return out
+
+
 class FleetSuspendRequest(BaseModel):
     reason: Optional[str] = None
 
@@ -3507,14 +3609,16 @@ async def admin_update_commission(fleet_id: str, body: CommissionUpdateRequest, 
 
 
 @api.get("/admin/audit-log")
-async def admin_audit_log(limit: int = 100, entity_type: Optional[str] = None, current=Depends(require_admin)):
+async def admin_audit_log(entity_type: Optional[str] = None, page: int = 1, page_size: int = 100, current=Depends(require_admin)):
     q = {}
     if entity_type: q["entity_type"] = entity_type
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.audit_events.count_documents(q)
     events = []
-    async for e in db.audit_events.find(q).sort("at", -1).limit(min(limit, 500)):
+    async for e in db.audit_events.find(q).sort("at", -1).skip(skip).limit(page_size):
         e["id"] = str(e["_id"]); e.pop("_id", None)
         events.append(e)
-    return {"events": events}
+    return _paged(events, total, page, page_size, "events")
 
 
 @api.get("/admin/fleets-full")
@@ -3537,13 +3641,21 @@ async def admin_fleets_full(status: Optional[str] = None, q: Optional[str] = Non
 
 
 @api.get("/admin/users")
-async def admin_users(current=Depends(require_admin)):
+async def admin_users(q: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
+    filt = {}
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        filt["$or"] = [{"fullName": rx}, {"email": rx}, {"phone": rx}]
+    if status == "disabled": filt["disabled"] = True
+    elif status == "active": filt["disabled"] = {"$ne": True}
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.users.count_documents(filt)
     out = []
-    async for u in db.users.find({}, {"password_hash": 0}).sort("created_at", -1).limit(200):
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         u["id"] = str(u["_id"])
         u.pop("_id", None)
         out.append(u)
-    return {"users": out}
+    return _paged(out, total, page, page_size, "users")
 
 
 @api.get("/admin/drivers")
@@ -3572,7 +3684,13 @@ class ApproveDriverRequest(BaseModel):
 
 @api.post("/admin/drivers/{user_id}/approve")
 async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
+    try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception: raise HTTPException(400, "Ugyldig id")
+    if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
+    await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
+                 {"approved": prev}, {"approved": body.approved})
     return {"ok": True}
 
 
@@ -4007,8 +4125,11 @@ async def gdpr_export(current=Depends(get_current_user)):
 async def gdpr_delete(current=Depends(get_current_user), response: Response = None):
     """Permanent account deletion (GDPR right to erasure)."""
     uid = current["id"]
-    if current.get("role") == "admin":
-        raise HTTPException(status_code=400, detail="Admin-konto kan ikke slettes via denne endepunktet")
+    # SECURITY (SEC-003): privileged/business accounts must not be self-deletable via the GDPR
+    # erasure endpoint — they require a dedicated offboarding path. Regular users and drivers keep
+    # their right to erasure.
+    if current.get("role") in ("admin", "superadmin", "fleet_owner"):
+        raise HTTPException(status_code=400, detail="Denne kontotypen kan ikke slettes her. Kontakt support@kjapp.no.")
     # Anonymize trips (keep for accounting/tax compliance in Norway) — replace user id
     anon_id = f"deleted_{uuid.uuid4().hex[:12]}"
     await db.trips.update_many({"user_id": uid}, {"$set": {"user_id": anon_id, "pickup_address": "[slettet]", "dropoff_address": "[slettet]"}})
@@ -4647,17 +4768,20 @@ async def admin_live(current=Depends(require_admin)):
 
 
 @api.get("/admin/drivers-full")
-async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = None, fleet_id: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"role": "driver"}
     if status == "approved": filt["approved"] = True
     elif status == "pending": filt["$or"] = [{"approved": False}, {"approved": {"$exists": False}}]
     elif status == "online": filt["online"] = True
+    if fleet_id: filt["fleet_id"] = fleet_id
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$and"] = [{"$or": [{"fullName": rx}, {"email": rx}, {"plate": rx}, {"car": rx}]}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.users.count_documents(filt)
     fleet_names = await _fleet_names()
     out = []
-    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).limit(300):
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         uid = str(u["_id"])
         completed = await db.trips.count_documents({"driver_id": uid, "status": {"$in": ["arrived", "completed", "rated"]}})
         out.append({
@@ -4669,7 +4793,7 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
             "created_at": u.get("created_at"),
             "docs": {k: u.get(k) for k in ("drivers_license_path", "taxi_license_path", "profile_photo_path") if u.get(k)},
         })
-    return {"drivers": out}
+    return _paged(out, total, page, page_size, "drivers")
 
 
 @api.post("/admin/drivers/{user_id}/set-status")
@@ -4685,34 +4809,45 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
 
 
 @api.get("/admin/vehicles")
-async def admin_vehicles(q: Optional[str] = None, current=Depends(require_admin)):
+async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
+    if vehicle_type and vehicle_type != "all": filt["vehicle_type"] = vehicle_type
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"car": rx}, {"plate": rx}, {"fullName": rx}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.users.count_documents(filt)
     fleet_names = await _fleet_names()
     out = []
-    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).limit(300):
+    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         out.append({
             "id": str(u["_id"]), "car": u.get("car"), "plate": u.get("plate"),
             "vehicle_type": u.get("vehicle_type"), "driver_name": u.get("fullName"),
             "fleet_name": fleet_names.get(u.get("fleet_id")),
             "online": u.get("online", False), "approved": u.get("approved", False),
         })
-    return {"vehicles": out}
+    return _paged(out, total, page, page_size, "vehicles")
 
 
 @api.get("/admin/trips-full")
-async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, limit: int = 100, current=Depends(require_admin)):
+async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, payment_status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
     if status == "active": filt["status"] = {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}
     elif status == "completed": filt["status"] = {"$in": ["arrived", "completed", "rated"]}
     elif status == "cancelled": filt["status"] = {"$in": ["cancelled", "cancelled_by_driver"]}
+    if payment_status: filt["payment_status"] = payment_status
+    if date_from or date_to:
+        cr = {}
+        if date_from: cr["$gte"] = date_from
+        if date_to: cr["$lte"] = date_to + "T23:59:59.999Z"
+        filt["created_at"] = cr
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.trips.count_documents(filt)
     raw, user_ids = [], []
-    async for t in db.trips.find(filt).sort("created_at", -1).limit(min(limit, 300)):
+    async for t in db.trips.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(t); user_ids.append(t.get("user_id"))
     users = await _users_by_ids(user_ids)
     commission = await _platform_commission()
@@ -4734,7 +4869,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
             "passenger_rating": t.get("passenger_rating"),
         })
-    return {"trips": out}
+    return _paged(out, total, page, page_size, "trips")
 
 
 @api.get("/admin/trips/{trip_id}/timeline")
@@ -4830,14 +4965,16 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
 
 
 @api.get("/admin/documents")
-async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, current=Depends(require_admin)):
+async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"is_deleted": {"$ne": True}}
     if scope and scope != "all": filt["scope"] = scope
     if q:
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"original_filename": rx}, {"scope": rx}]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.uploaded_files.count_documents(filt)
     raw, owner_ids, app_tokens = [], [], []
-    async for f in db.uploaded_files.find(filt).sort("created_at", -1).limit(300):
+    async for f in db.uploaded_files.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(f)
         owner_ids.append(f.get("owner_user_id"))
         if f.get("application_token"): app_tokens.append(f["application_token"])
@@ -4848,9 +4985,21 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
             app_names[a.get("upload_token")] = a.get("company_name")
     out = []
     scopes = set()
+    today = datetime.now(timezone.utc).date().isoformat()
+    soon = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+
+    def _compliance(rs, exp):
+        if rs == "rejected": return "REJECTED"
+        if rs != "valid": return "PENDING"
+        if exp and exp < today: return "EXPIRED"
+        if exp and exp <= soon: return "EXPIRING"
+        return "VALID"
+
     for f in raw:
         scopes.add(f.get("scope"))
         o = owners.get(f.get("owner_user_id")) or {}
+        rs = f.get("review_status") or "pending"
+        exp = f.get("review_expiry")
         out.append({
             "id": f.get("id") or str(f["_id"]),
             "filename": f.get("original_filename"), "content_type": f.get("content_type"),
@@ -4858,11 +5007,171 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
             "storage_path": f.get("storage_path"),
             "owner_name": o.get("name") or app_names.get(f.get("application_token")),
             "owner_email": o.get("email"),
+            "review_status": rs, "expiry": exp, "compliance": _compliance(rs, exp),
+            "reviewed_by": f.get("reviewed_by"), "reviewed_at": f.get("reviewed_at"),
         })
     all_scopes = set()
     async for s in db.uploaded_files.aggregate([{"$match": {"is_deleted": {"$ne": True}}}, {"$group": {"_id": "$scope"}}]):
         if s.get("_id"): all_scopes.add(s["_id"])
-    return {"documents": out, "scopes": sorted(all_scopes)}
+    summary = {"VALID": 0, "EXPIRING": 0, "EXPIRED": 0, "PENDING": 0, "REJECTED": 0}
+    async for f in db.uploaded_files.find(filt, {"review_status": 1, "review_expiry": 1}).limit(3000):
+        summary[_compliance(f.get("review_status") or "pending", f.get("review_expiry"))] += 1
+    return {**_paged(out, total, page, page_size, "documents"), "scopes": sorted(all_scopes), "summary": summary}
+
+
+class DocumentReviewRequest(BaseModel):
+    status: Literal["valid", "rejected", "pending"]
+    expiry: Optional[str] = None  # YYYY-MM-DD (for VALID docs that expire)
+    reason: Optional[str] = None
+
+
+@api.post("/admin/documents/{file_id}/review")
+async def admin_document_review(file_id: str, body: DocumentReviewRequest, current=Depends(require_admin)):
+    doc = await db.uploaded_files.find_one({"id": file_id})
+    if not doc:
+        try: doc = await db.uploaded_files.find_one({"_id": ObjectId(file_id)})
+        except Exception: doc = None
+    if not doc:
+        raise HTTPException(404, "Fant ikke dokument")
+    prev = {"review_status": doc.get("review_status"), "expiry": doc.get("review_expiry")}
+    await db.uploaded_files.update_one({"_id": doc["_id"]}, {"$set": {
+        "review_status": body.status,
+        "review_expiry": body.expiry,
+        "review_reason": body.reason,
+        "reviewed_by": current.get("email"),
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }})
+    await _audit(current, "document.review", "document", doc.get("id") or str(doc["_id"]),
+                 prev, {"review_status": body.status, "expiry": body.expiry}, body.reason)
+    return {"ok": True, "review_status": body.status}
+
+
+# ---- Refunds (finance, audited, idempotent) ----
+class RefundRequest(BaseModel):
+    trip_id: str
+    amount: Optional[int] = None  # kr; default = full remaining eligible amount
+    reason: str
+
+
+@api.get("/admin/refunds")
+async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
+    filt = {}
+    if status and status != "all": filt["status"] = status
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.refunds.count_documents(filt)
+    out = []
+    async for r in db.refunds.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
+        r["id"] = r.get("id") or str(r["_id"]); r.pop("_id", None)
+        out.append(r)
+    return _paged(out, total, page, page_size, "refunds")
+
+
+@api.post("/admin/refunds")
+async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
+    if not (body.reason or "").strip():
+        raise HTTPException(400, "Begrunnelse kreves")
+    trip = await db.trips.find_one({"trip_id": body.trip_id})
+    if not trip:
+        raise HTTPException(404, "Fant ikke tur")
+    if trip.get("status") not in ("arrived", "completed", "rated"):
+        raise HTTPException(400, "Kan bare refundere fullførte turer")
+    gross = int(trip.get("price") or 0)
+    already = int(trip.get("refunded_total") or 0)
+    eligible = gross - already
+    if eligible <= 0:
+        raise HTTPException(409, "Turen er allerede fullt refundert")
+    amount = int(body.amount) if body.amount is not None else eligible
+    if amount <= 0 or amount > eligible:
+        raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
+    # Attempt a real Stripe refund ONLY if a captured charge/intent is stored on the trip.
+    provider, provider_ref, prov_status = "manual", None, "recorded"
+    pi = trip.get("stripe_payment_intent") or trip.get("payment_intent_id") or trip.get("charge_id")
+    if pi and stripe.api_key:
+        try:
+            kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
+            if str(pi).startswith("ch_"): kwargs["charge"] = pi
+            else: kwargs["payment_intent"] = pi
+            sr = stripe.Refund.create(**kwargs)
+            provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
+        except stripe.error.StripeError as e:
+            raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "trip_id": body.trip_id, "user_id": trip.get("user_id"),
+        "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
+        "provider": provider, "provider_ref": provider_ref, "status": prov_status,
+        "admin_id": current["id"], "admin_email": current.get("email"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.refunds.insert_one(dict(doc))
+    new_total = already + amount
+    await db.trips.update_one({"trip_id": body.trip_id}, {"$set": {
+        "refunded_total": new_total,
+        "refund_status": "full" if new_total >= gross else "partial",
+    }})
+    await _audit(current, "refund.create", "trip", body.trip_id,
+                 {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
+                 body.reason.strip())
+    return doc
+
+
+# ---- Transactions ledger (derived from real records: trips / refunds / payouts) ----
+@api.get("/admin/transactions")
+async def admin_transactions(type: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None,
+                             fleet_id: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
+    page, page_size, skip = _page_params(page, page_size)
+    if not date_from:
+        date_from = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+    lo = date_from
+    hi = (date_to or datetime.now(timezone.utc).date().isoformat()) + "T23:59:59.999Z"
+    commission = await _platform_commission()
+    driver_fleet = {}
+    async for u in db.users.find({"role": "driver", "fleet_id": {"$exists": True, "$ne": None}}, {"fleet_id": 1}):
+        driver_fleet[str(u["_id"])] = u["fleet_id"]
+    want = (type or "").upper()
+    rows = []
+    if want in ("", "FARE"):
+        async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": lo, "$lte": hi}}):
+            fid = driver_fleet.get(t.get("driver_id"))
+            if fleet_id and fid != fleet_id: continue
+            price = int(t.get("price") or 0)
+            rows.append({
+                "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
+                "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
+                "amount": price, "commission": round(price * commission), "driver_net": round(price * (1 - commission)),
+                "provider": t.get("payment_method") or "card", "status": t.get("payment_status") or "captured",
+                "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
+            })
+    if want in ("", "REFUND"):
+        async for r in db.refunds.find({"created_at": {"$gte": lo, "$lte": hi}}):
+            rows.append({
+                "id": f"refund_{r.get('id')}", "type": "REFUND", "ride": r.get("trip_id"),
+                "customer_id": r.get("user_id"), "amount": -int(r.get("amount") or 0),
+                "provider": r.get("provider"), "status": r.get("status"),
+                "fleet_id": None, "timestamp": r.get("created_at"), "reason": r.get("reason"),
+            })
+    if want in ("", "PAYOUT"):
+        async for p in db.fleet_payouts.find({"period_end": {"$gte": lo[:10], "$lte": hi[:10]}}):
+            if fleet_id and p.get("fleet_id") != fleet_id: continue
+            rows.append({"id": f"fpayout_{p.get('_id')}", "type": "PAYOUT", "ride": None,
+                         "recipient": p.get("fleet_id"), "amount": -int(p.get("net") or p.get("amount") or 0),
+                         "provider": "bank", "status": p.get("status") or "pending",
+                         "fleet_id": p.get("fleet_id"), "timestamp": p.get("period_end")})
+        if not fleet_id:
+            async for p in db.bonus_payouts.find({"earned_at": {"$gte": lo, "$lte": hi}}):
+                rows.append({"id": f"bonus_{p.get('_id')}", "type": "PAYOUT", "ride": None,
+                             "recipient": p.get("driver_id"), "amount": int(p.get("amount") or 0),
+                             "provider": "bonus", "status": "paid", "fleet_id": None,
+                             "timestamp": p.get("earned_at")})
+    rows.sort(key=lambda r: r.get("timestamp") or "", reverse=True)
+    total = len(rows)
+    page_rows = rows[skip:skip + page_size]
+    cids = [r.get("customer_id") for r in page_rows if r.get("customer_id")]
+    names = await _users_by_ids(cids)
+    for r in page_rows:
+        if r.get("customer_id"):
+            r["customer_name"] = (names.get(r["customer_id"]) or {}).get("name")
+    return _paged(page_rows, total, page, page_size, "transactions")
 
 
 # ---- Support tickets ----
@@ -4881,15 +5190,18 @@ class TicketUpdateRequest(BaseModel):
 
 
 @api.get("/admin/support/tickets")
-async def admin_tickets(status: Optional[str] = None, current=Depends(require_admin)):
+async def admin_tickets(status: Optional[str] = None, category: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
     if status == "open": filt["status"] = {"$in": ["open", "in_progress", "waiting_for_user"]}
     elif status and status != "all": filt["status"] = status
+    if category and category != "all": filt["category"] = category
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.support_tickets.count_documents(filt)
     out = []
-    async for t in db.support_tickets.find(filt).sort("created_at", -1).limit(200):
+    async for t in db.support_tickets.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         t["id"] = str(t["_id"]); t.pop("_id", None)
         out.append(t)
-    return {"tickets": out}
+    return _paged(out, total, page, page_size, "tickets")
 
 
 @api.post("/admin/support/tickets")
@@ -5059,7 +5371,44 @@ async def admin_fleet_detail(fleet_id: str, current=Depends(require_admin)):
     return {"fleet": f, "drivers": drivers, "commission_history": commission_history, "audit": audit, "payouts": payouts}
 
 
+@api.get("/admin/search")
+async def admin_search(q: str, current=Depends(require_admin)):
+    """Global admin search across trips, drivers, customers and fleets (RBAC: admin+)."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"query": q, "trips": [], "drivers": [], "customers": [], "fleets": []}
+    rx = {"$regex": q, "$options": "i"}
+    trips = []
+    async for t in db.trips.find({"$or": [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]}).sort("created_at", -1).limit(10):
+        trips.append({
+            "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
+            "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
+            "created_at": t.get("created_at"),
+        })
+    drivers, customers = [], []
+    async for u in db.users.find({"$or": [{"fullName": rx}, {"email": rx}, {"phone": rx}, {"plate": rx}]}, {"password_hash": 0}).limit(20):
+        item = {"id": str(u["_id"]), "name": u.get("fullName"), "email": u.get("email"),
+                "phone": u.get("phone"), "role": u.get("role"), "plate": u.get("plate")}
+        if u.get("role") == "driver":
+            drivers.append(item)
+        elif u.get("role") in (None, "user"):
+            customers.append(item)
+    fleets = []
+    async for f in db.fleets.find({"$or": [{"name": rx}, {"org_number": rx}]}).limit(10):
+        fleets.append({"id": str(f["_id"]), "name": f.get("name"), "org_number": f.get("org_number"), "status": f.get("status", "active")})
+    return {"query": q, "trips": trips, "drivers": drivers[:10], "customers": customers[:10], "fleets": fleets}
+
+
 app.include_router(api)
+
+# Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
+# under /api/ops so it is reachable through the preview ingress (which only routes
+# `/` → mobile app and `/api/*` → this backend). In production the same dist/ is
+# deployed to admin.kjappapp.no instead. HashRouter + relative assets → no SPA
+# fallback needed. This does NOT expose any data; every /admin/* API stays guarded.
+_ADMIN_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "admin-web", "dist"))
+if os.path.isdir(_ADMIN_DIST):
+    app.mount("/api/ops", StaticFiles(directory=_ADMIN_DIST, html=True), name="admin-web")
 
 
 if __name__ == "__main__":

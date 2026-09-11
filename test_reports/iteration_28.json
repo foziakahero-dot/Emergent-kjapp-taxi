@@ -1,0 +1,57 @@
+{
+  "summary": "Frontend-only verification of iteration 28 (real-tile TileMap + rebuilt driver UI). REAL DARK MAP TILES render correctly: customer home-map (8 tile images), customer booking-map (10 tile images) and driver-map (12 tile images) — all Esri Dark Gray Canvas tiles, with route polyline, pickup/dropoff markers and map-zoom-in/map-zoom-out/map-recenter controls visible on every map. Customer regression PASSED end-to-end: login ola@kjapp.no -> home map + 'Hvor vil du?' -> destination search Oslo -> route review with vehicle-ai-first + booking-payment-row (Vipps) + booking-confirm -> POST /api/trips/request 200 -> /booking/{tripId} shows customer-trip-status='Søker sjåfør' with the real dark map underneath. Driver pipeline verified via backend curl (sjafor@kjapp.no): /driver/online true, /driver/location near pickup, /driver/pending returned the new trip, /driver/accept 200 -> /driver/current returned the accepted trip with driver.car='Tesla Model Y', plate='EL12345'. Driver UI: driver-online-toggle present, driver-map with real tiles present; driver-active-trip renders with 'AKTIV TUR · 185 kr' + 'Jeg er fremme' action button (driver-advance), 'Melding' opens chat (driver-chat). Earnings tab: earnings-period-today/week/month + earnings-net (165 kr — real 183 gross − 10% KJAPP provisjon) + brutto/provisjon/netto breakdown + 7-day bar chart (only today has a bar — matches real data) + payout card (183 gross / 165 net / 1 trip) + recent trips list + earnings-see-all -> /driver-trips all work. Settings screen: notification toggles (ds-notif_requests / ds-notif_messages / ds-notif_payouts) + Kjøring toggles (ds-req_sound / ds-req_vibrate) + Personvern links + delete-account modal (ds-delete-open -> ds-delete-input + ds-delete-confirm gated on 'SLETT') + ds-logout all present and interactive. Trips screen (driver-trips): trips-filter-today/week/all + trip-row-0 with real net 165 kr + tap opens detail sheet with Bruttopris / Provisjon (10%) / Din inntekt breakdown — all confirmed. Two BUGS found — see below.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Driver Profile — Kjøretøy card",
+        "issue": "Bil and Skilt rows display '—' instead of 'Tesla Model Y' / 'EL12345'. Root cause: /app/frontend/app/(driver)/profile.tsx reads u.car and u.plate from useAuth().user, but /api/auth/login only returns {id,email,fullName,phone,role,driver_id} — the user object never contains car/plate. The vehicle info IS available from /api/driver/current (fields driver.car / driver.plate) or should be exposed via a /api/driver/me endpoint, but the profile screen doesn't fetch it. Additionally 'Klasse' currently renders vehicleMeta('ai-first').name = 'KJAPP' (service tier) which does not match the review's expected 'Tesla Model Y' — consider showing the actual car model instead. Reference: /app/frontend/app/(driver)/profile.tsx L21-L50.",
+        "testID": "profile Kjøretøy card",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "Driver Home — online toggle sync",
+        "issue": "After login the driver has an active accepted trip and /api/driver/summary/today returns {online:true}, yet the top-bar renders 'Avlogget' with the switch OFF. The poll() sets setOnline(r.online) but it never appears to take effect on the initial render (waited 4.5s across two runs). This is a mismatch between backend online state (true) and UI (AV/Avlogget). Reference: /app/frontend/app/(driver)/home.tsx L36-L46 (poll) and L26 (useState default false). Possibly the summary Promise is being fired without an early cancel guard on unmount, or the setOnline is happening but the display is not re-reading it. Also the useEffect on [online] would then start the location watcher which fails on web (denied geolocation) — expected — but a race between toggle setter and effect can revert the UI. Please investigate.",
+        "testID": "driver-online-toggle",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Driver Earnings — next payout date",
+        "issue": "The Utbetaling card reads payouts?.next_payout but the backend field is payouts.next_payout_date, so the 'neste <date>' hint never renders. Small fix in /app/frontend/app/(driver)/earnings.tsx L116 — change next_payout -> next_payout_date.",
+        "affected_testIDs": ["earnings-net"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "shadow* deprecation (carried over)",
+        "issue": "Console still emits: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' — surfaces at least twice on the customer home stack (previously reported iter 26/27). Reference: /app/frontend/app/(app)/home.tsx around L426-428 (shadowColor/shadowOpacity/shadowRadius/shadowOffset)."
+      },
+      {
+        "component": "pointerEvents prop deprecation",
+        "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — new this iteration, triggered by TileMap and vignette View. Reference: /app/frontend/src/components/TileMap.tsx L206, L257 — the two <View pointerEvents=\"none\"> / <Text pointerEvents=\"none\"> attributes should be moved into the style prop ({pointerEvents:'none'}) to silence the RN Web 0.76+ deprecation."
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Populate driver profile Kjøretøy card with real values. Either extend /api/auth/me and useAuth().user to include car/plate/vehicle_type, or have (driver)/profile.tsx call a lightweight endpoint (e.g. /api/driver/me or reuse /api/driver/current) so the bil/skilt/klasse row shows 'Tesla Model Y' / 'EL12345' as required.",
+    "Fix online-toggle initial sync in (driver)/home.tsx — ensure setOnline(r.online) from /driver/summary/today actually reflects on the switch immediately, and remove the race with the location useEffect. Consider seeding the state from summary before rendering (loading gate) or storing it in a ref/AuthContext.",
+    "Rename payouts?.next_payout to payouts?.next_payout_date in (driver)/earnings.tsx L116 so the 'neste <dato>' hint renders.",
+    "Migrate the two remaining deprecated RN Web patterns: shadow* -> boxShadow in home.tsx; pointerEvents prop -> style.pointerEvents in TileMap.tsx (View and Text) to keep the console warning-free."
+  ],
+  "critical_code_review_comments": [
+    "TileMap tile URLs bypass any Expo Image caching layer — on slower networks the visible flash between zoom levels can be pronounced. Consider prefetching neighbouring tiles or using expo-image with memory cache.",
+    "driver home poll() interval is 4000ms — same as the customer booking poll. During an active trip both interval and location watchPositionAsync run concurrently and each fires a POST /api/driver/location; consider gating location POSTs to when trip.status is on-way/in-trip to save mobile-data.",
+    "earnings.tsx computes 'month' from /driver/history slice — that endpoint currently returns only the recent history; for a real monthly figure it should call a dedicated /driver/history/monthly or accept a range param."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (unchanged this round; smoke-checked /driver/* endpoints and all returned 200)", "frontend": "~90% — every requested testID renders and every requested screen works, but Kjøretøy card shows '—' instead of car/plate and online toggle does not sync on first render." },
+  "seed_data_creation": "Created trip d2495acb-457b-4441-b8a1-c2a2fc7bac70 (ola -> Oslo, 185 kr) and drove it to status=driver_on_way via driver curl (accepted, at pickup pending). Declined stale pending 4aab5257-01a6-4dd5-93f5-1ef34139859a. Driver left online=true with an accepted trip; consider closing this trip if it is not needed for the next iteration (POST /api/driver/trip/{id}/at-pickup, /start, /arrive) and setting the driver offline.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Real dark-tile TileMap is verified on all three maps (home-map, booking-map, driver-map) with map-zoom-in / map-zoom-out / map-recenter controls. The only two functional gaps are (a) driver Kjøretøy card missing bil/skilt because /api/auth/login user object lacks those fields, and (b) driver-online-toggle not reflecting backend online state on first render. Web geolocation is denied — as documented in the review, drive the driver side (online, location, accept, at-pickup, start, arrive) with curl. To reproduce the online-toggle bug: /api/driver/online true via curl, then open (driver)/home in the browser — top-bar will read 'Avlogget' even though backend + /driver/summary/today say online:true.",
+  "rca_of_issue": "1) Driver Kjøretøy '—' — profile.tsx binds u.car / u.plate directly from useAuth().user. Backend /api/auth/login (and presumably /api/auth/me) does not include car/plate on the returned user. Fix on either side: extend the login/me payload with car/plate/vehicle_type for role=driver, OR have the profile screen call an existing endpoint that already carries this data (e.g. /api/driver/current.driver.car / /api/driver/ratings if you add it there). 2) Online toggle mismatch — home.tsx starts with useState(false); poll() sets it from summary asynchronously. Between login navigation and the first successful summary response the switch is drawn as AV; a subsequent re-render should flip it to PÅ but visually it stays AV — probably because the useEffect on [online] sees the transition and its early return (`if (!online) { ...remove watch; return; }`) is fine, but if summary resolves BEFORE useFocusEffect wires the interval, and setOnline(true) triggers the geolocation request which then errors and calls setOnline(false), the state ping-pongs back to offline. That matches what we saw. Recommendation: keep the location watcher gated behind an explicit user toggle only, and treat backend online status as source-of-truth for the UI badge (separate visual state from watcher state)."
+}

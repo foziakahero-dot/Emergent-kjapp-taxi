@@ -1,0 +1,416 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   KJAPP Nordic Premium Design System
+   Customer (default) — warm fjordsvart + varm messing + kremhvit + serif headlines
+   Driver (.driver-theme) — kaldt HUD/dashbord-look, skarp mint accent, mono-tall
+   ============================================================ */
+:root {
+  color-scheme: dark;
+
+  /* KJAPP Nordic Mobility palette — kontrollert gullbruk (CTA-signatur) */
+  --bg-base:   #070B0E;       /* deep fjord granite — hovedbakgrunn */
+  --bg-surface: #0C1216;      /* elevated surface */
+  --bg-card:   rgba(255, 255, 255, 0.028);
+  --bg-soft:   rgba(255, 255, 255, 0.02);
+  --line:      rgba(244, 244, 240, 0.08);
+  --line-strong: rgba(244, 244, 240, 0.14);
+  --text:      #F4F4F0;       /* varm off-white (ivory) */
+  --text-muted:#8A9198;       /* Nordic grå */
+  --accent:    #CBA365;       /* champagne gold — kun for handlinger */
+  --accent-hover: #DDB77A;    /* lysere messing — hover/aktiv */
+  --accent-soft: rgba(203, 163, 101, 0.14);
+  --accent-glow: rgba(203, 163, 101, 0.32);
+  --accent-on:  #070B0E;
+  --text-secondary: #C8CED4;  /* sekundær ivory */
+  --accent-2:  #7ba69e;       /* dempet sjøgrønn (sekundær) */
+  --danger:    #d76a5a;
+  --map-base:  #06090A;       /* map background */
+  --map-roads: #141A1F;       /* map roads */
+
+  /* Typografi */
+  --font-serif: 'Fraunces', 'Instrument Serif', Georgia, serif;
+  --font-body:  'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Sjåfør-modus — Nordic Mobility HUD.
+   Behold gullpaletten som passasjer, men skarpere kontrast for info-tetthet.
+   Mint brukes bare for "online/aktiv"-status. */
+body.driver-theme {
+  --bg-base:   #05090B;       /* graphite → nesten svart */
+  --bg-card:   rgba(255, 255, 255, 0.035);
+  --line:      rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text:      #F4F4F0;       /* samme ivory som kunde */
+  --text-muted:#7A8087;
+  --accent:    #CBA365;       /* KJAPP-gull — samme signatur */
+  --accent-soft: rgba(203, 163, 101, 0.14);
+  --accent-glow: rgba(203, 163, 101, 0.35);
+  --accent-on:  #0B1013;
+  --status-online: #2fe08c;   /* mint — kun for "på jobb/aktiv"-status */
+  --status-online-soft: rgba(47, 224, 140, 0.12);
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg-base);
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+body:not(.driver-theme) {
+  background-image:
+    radial-gradient(ellipse at top left, rgba(203, 163, 101, 0.05), transparent 48%),
+    radial-gradient(ellipse at bottom right, rgba(123, 166, 158, 0.06), transparent 55%),
+    linear-gradient(180deg, #070B0E 0%, #0A1218 100%);
+  background-attachment: fixed;
+}
+
+body.driver-theme {
+  background-image:
+    linear-gradient(180deg, #05090B 0%, #030405 100%),
+    radial-gradient(circle at 50% 0%, rgba(203, 163, 101, 0.06), transparent 40%);
+  background-attachment: fixed;
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+::selection { background: var(--accent-soft); color: var(--text); }
+
+/* Font-utility */
+.font-display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.font-mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1; }
+
+/* Phone frame wrapper */
+.phone-shell {
+  max-width: 440px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  position: relative;
+  background: transparent;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media (max-width: 480px) {
+  .phone-shell { max-width: 100%; }
+}
+
+/* Native app tweaks (Capacitor) */
+body.is-native {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+body.is-native .phone-shell {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.status-bar { display: none !important; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Leaflet tweaks */
+.leaflet-container { background: var(--bg-base) !important; outline: none; font-family: var(--font-body) !important; }
+.leaflet-control-attribution { display: none !important; }
+.leaflet-control-zoom { display: none !important; }
+/* Dempet karttegn — labels bleknes, veier beholder farge */
+.leaflet-tile-container { filter: saturate(0.72) brightness(0.99); }
+.leaflet-marker-icon.kjapp-marker { will-change: transform; }
+/* Passenger polyline animation — dashed brass shimmer */
+.polyline-shimmer {
+  stroke-dasharray: 1 12;
+  animation: dashShift 22s linear infinite;
+}
+@keyframes dashShift { to { stroke-dashoffset: -400; } }
+
+/* === Bottom sheet — drag handle bar === */
+.sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(232, 224, 208, 0.22);
+  margin: -2px auto 12px auto;
+}
+body.driver-theme .sheet-handle { background: rgba(255,255,255,0.16); }
+
+/* Grain overlay (subtil, only on cards + hero) */
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+}
+
+/* === Cards === */
+/* Customer: soft glass-paper. Driver: crisp dashboard cell. */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 20px 48px rgba(0, 0, 0, 0.45);
+}
+body.driver-theme .card {
+  border-radius: 12px;         /* stramere kant */
+  backdrop-filter: none;       /* ingen dekor — verktøy */
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.card-soft {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+body.driver-theme .card-soft { border-radius: 10px; backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+.mint-glow {
+  box-shadow: 0 0 40px var(--accent-glow), 0 0 90px rgba(201, 161, 91, 0.12);
+}
+
+/* === Accent utility === */
+.text-mint { color: var(--accent); }        /* legacy class, remaps to accent */
+.bg-mint { background: var(--accent); }
+.text-accent { color: var(--accent); }
+.bg-accent { background: var(--accent); }
+.text-pearl { color: var(--text); }
+.border-mint { border-color: var(--accent); }
+.border-accent { border-color: var(--accent); }
+
+/* === Buttons === */
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-weight: 600;
+  font-family: var(--font-body);
+  border-radius: 999px;
+  padding: 14px 22px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+  box-shadow: 0 8px 30px var(--accent-glow);
+  letter-spacing: -0.005em;
+}
+.btn-primary:hover { transform: translateY(-1px); background: var(--accent-hover); box-shadow: 0 12px 40px var(--accent-glow); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+/* Driver primary — flat rectangle */
+body.driver-theme .btn-primary {
+  border-radius: 10px;
+  padding: 14px 20px;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  background: var(--bg-soft);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 12px 20px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  backdrop-filter: blur(12px);
+}
+.btn-ghost:hover { background: var(--bg-card); border-color: var(--accent); }
+body.driver-theme .btn-ghost { border-radius: 10px; backdrop-filter: none; }
+
+/* === Input === */
+.input {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 14px 16px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 15px;
+  font-family: var(--font-body);
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input::placeholder { color: var(--text-muted); }
+body.driver-theme .input { border-radius: 8px; }
+
+/* === Orb (loading indicator) === */
+.orb {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, var(--accent), var(--accent-glow) 40%, transparent 70%);
+  filter: blur(2px);
+  animation: pulse 4s ease-in-out infinite;
+}
+.orb-small { width: 96px; height: 96px; }
+@keyframes pulse {
+  0%, 100% { transform: scale(0.95); opacity: 0.85; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+/* === Page transitions === */
+.page-enter { animation: pageIn 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Fjord & Granite — signature effects (kunde-app)
+   ============================================================ */
+
+/* Frosted crystal pill (header controls) */
+.glass-pill {
+  background: rgba(10, 16, 21, 0.78);
+  border: 1px solid rgba(244, 244, 240, 0.12);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Aurora hairline — drifting brass → sjøgrønn → ivory (nordlys) */
+.aurora-line {
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, #CBA365 18%, #7BA69E 42%, #F4F4F0 55%, #CBA365 72%, transparent 100%);
+  background-size: 220% 100%;
+  animation: auroraDrift 7s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 8px rgba(203, 163, 101, 0.55));
+}
+@keyframes auroraDrift {
+  from { background-position: 0% 0; opacity: 0.75; }
+  50%  { opacity: 1; }
+  to   { background-position: 100% 0; opacity: 0.8; }
+}
+
+/* Brushed-brass orb (søk / primær-CTA) */
+.brass-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #070B0E;
+  background: linear-gradient(140deg, #EED9A6 0%, #CBA365 48%, #93703B 100%);
+  box-shadow: 0 16px 34px rgba(203, 163, 101, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 6px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+.brass-orb::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(203, 163, 101, 0.75);
+  animation: orbRing 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+.brass-orb:active { transform: scale(0.94); }
+@keyframes orbRing {
+  0%   { transform: scale(1);    opacity: 0.85; }
+  100% { transform: scale(1.65); opacity: 0; }
+}
+
+/* Live radar dot — sjøgrønn puls */
+.live-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #7BE0B8;
+  box-shadow: 0 0 10px rgba(123, 224, 184, 0.9);
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1px solid rgba(123, 224, 184, 0.7);
+  animation: orbRing 2s ease-out infinite;
+}
+
+/* Brass gradient CTA with light sweep */
+.btn-brass {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  min-height: 56px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15.5px;
+  letter-spacing: -0.005em;
+  color: #070B0E;
+  background: linear-gradient(120deg, #E9D2A0 0%, #CBA365 45%, #A5804A 100%);
+  box-shadow: 0 14px 36px rgba(203, 163, 101, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -2px 6px rgba(0, 0, 0, 0.22);
+  transition: transform 0.16s ease, box-shadow 0.25s ease, filter 0.2s ease;
+}
+.btn-brass::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  width: 34%;
+  left: -40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-18deg);
+  animation: brassSweep 3.6s ease-in-out infinite;
+}
+.btn-brass:hover { transform: translateY(-1px); box-shadow: 0 18px 44px rgba(203, 163, 101, 0.42); }
+.btn-brass:active { transform: translateY(0) scale(0.99); }
+.btn-brass:disabled { filter: saturate(0.35) brightness(0.72); box-shadow: none; cursor: not-allowed; }
+.btn-brass:disabled::after { display: none; }
+@keyframes brassSweep {
+  0%, 55% { left: -40%; }
+  100%    { left: 140%; }
+}
+
+/* Showroom spotlight floor under vehicle glyphs */
+.spotlight {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78%;
+  height: 22px;
+  border-radius: 999px;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* Staggered reveal */
+.reveal { animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes revealUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* === Safe padding for bottom nav === */
+.pt-safe { padding-top: max(env(safe-area-inset-top), 12px); }
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
+.pb-nav { padding-bottom: calc(env(safe-area-inset-bottom) + 100px); }
+.tab-bar {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+}

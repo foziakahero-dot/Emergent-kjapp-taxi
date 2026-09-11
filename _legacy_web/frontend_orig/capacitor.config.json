@@ -1,0 +1,54 @@
+{
+  "appId": "no.kjapp.app",
+  "appName": "KJAPP",
+  "webDir": "build",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "cleartext": false,
+    "allowNavigation": [
+      "*.kjappapp.no",
+      "*.emergent.host",
+      "*.preview.emergentagent.com"
+    ]
+  },
+  "backgroundColor": "#0A0D0F",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#0A0D0F",
+    "scheme": "kjapp"
+  },
+  "android": {
+    "backgroundColor": "#0A0D0F",
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#08090B",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
+    },
+    "Geolocation": {
+      "permissions": {
+        "location": "always"
+      }
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0A0D0F",
+      "overlaysWebView": false
+    }
+  }
+}

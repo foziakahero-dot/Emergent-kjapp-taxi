@@ -1,0 +1,29 @@
+name: Admin web build check
+
+on:
+  push:
+    branches:
+      - release/emergent-production
+    paths:
+      - 'admin-web/**'
+      - '.github/workflows/admin-web-check.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Validate Vercel production config
+        run: |
+          node -e "const c=require('./vercel.json'); if(!c.rewrites?.some(r => r.source === '/api/:path*' && r.destination.includes('github-app-builder-28.emergent.host/api/'))) process.exit(1)"
+      - name: Build production admin
+        run: npm run build
