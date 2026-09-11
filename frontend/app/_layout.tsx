@@ -15,9 +15,8 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts(FONT_ASSETS);
-  if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
-  }
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
@@ -34,16 +33,12 @@ export default function RootLayout() {
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
               <Stack.Screen name="register" />
-              <Stack.Screen name="driver-login" />
               <Stack.Screen name="(app)" />
-              <Stack.Screen name="(driver)" />
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="payment-methods" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
         </QueryClientProvider>
