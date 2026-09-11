@@ -2,10 +2,12 @@ import axios from 'axios';
 
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
+const productionBackend = 'https://github-app-builder-28.emergent.host/api';
+const isProductionAdminHost = window.location.hostname === 'admin.kjappapp.no';
 
-// Production defaults to the same-origin Vercel gateway in /api.
-// VITE_API_BASE remains available as an explicit override for local/staging work.
-export const API_BASE = configuredBase || window.location.origin + '/api';
+// Production can call the Emergent backend directly (CORS is allowlisted there).
+// Local/staging can still override VITE_API_BASE; otherwise use the same-origin /api proxy.
+export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : window.location.origin + '/api');
 export const TOKEN_KEY = 'kjapp_admin_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 20000 });
