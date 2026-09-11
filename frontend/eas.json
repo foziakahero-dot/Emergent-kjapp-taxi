@@ -1,0 +1,27 @@
+{
+  "build": {
+    "apk": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+      }
+    },
+    "ios-simulator": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+      },
+      "ios": {
+        "simulator": true
+      }
+    }
+  }
+}
