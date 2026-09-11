@@ -2,7 +2,7 @@ const BACKEND_ORIGIN = 'https://github-app-builder-28.emergent.host';
 
 export default async function handler(req, res) {
   try {
-    const incomingUrl = new URL(req.url || '/', 'https://admin.kjapp.no');
+    const incomingUrl = new URL(req.url || '/', 'https://admin.kjappapp.no');
     const path = incomingUrl.pathname;
 
     // Keep the admin host as a narrow gateway: only auth + admin endpoints.
