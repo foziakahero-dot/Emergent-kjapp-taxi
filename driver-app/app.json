@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "KJAPP",
+    "slug": "kjapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kjapp",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#070B0E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "no.kjapp.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Del posisjon under turen for trygg henting"
+      }
+    },
+    "android": {
+      "package": "no.kjapp.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#070B0E"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Vis biler i nærheten og hent deg der du er"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3631002e-5b25-4847-b5d8-05ec2ef304b5"
+      }
+    },
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
