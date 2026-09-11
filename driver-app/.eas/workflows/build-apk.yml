@@ -1,12 +1,12 @@
-name: KJAPP Android APK
+name: KJAPP Driver Android APK
 
 on:
   push:
     branches: ['main']
 
 jobs:
-  build_android_apk:
-    name: Build KJAPP Android APK
+  build_driver_android_apk:
+    name: Build KJAPP Driver Android APK
     type: build
     params:
       platform: android
