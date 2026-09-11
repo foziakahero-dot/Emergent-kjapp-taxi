@@ -1,11 +1,19 @@
 import axios from 'axios';
 
-// Same-origin `/api` works in the Emergent preview (served under /api/ops).
-// For production (admin.kjappapp.no) set VITE_API_BASE to the prod API, e.g.
-// https://api.kjappapp.no/api  — CORS already whitelists admin.kjappapp.no.
-export const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE || window.location.origin + '/api';
+const env = (import.meta as any).env || {};
+const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 
+// Emergent preview serves admin-web under the backend and can safely use same-origin /api.
+// Production is intentionally strict: admin.kjapp.no MUST be wired to the shared
+// Emergent FastAPI backend explicitly through VITE_API_BASE. This prevents an
+// accidental deploy from silently calling admin.kjapp.no/api or an old backend.
+if (env.PROD && !configuredBase) {
+  throw new Error(
+    'KJAPP Admin deployment error: VITE_API_BASE is required in production and must point to the shared Emergent FastAPI /api base.',
+  );
+}
+
+export const API_BASE = configuredBase || window.location.origin + '/api';
 export const TOKEN_KEY = 'kjapp_admin_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 20000 });
