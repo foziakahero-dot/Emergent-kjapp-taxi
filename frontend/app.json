@@ -49,6 +49,7 @@
       "expo-web-browser"
     ],
     "extra": {
+      "appRole": "customer",
       "eas": {
         "projectId": "3631002e-5b25-4847-b5d8-05ec2ef304b5"
       }
