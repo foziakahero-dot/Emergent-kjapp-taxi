@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
-const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
 
 export const api = axios.create({
