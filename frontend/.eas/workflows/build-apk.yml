@@ -1,12 +1,12 @@
-name: KJAPP Android APK
+name: KJAPP Customer Android APK
 
 on:
   push:
     branches: ['main']
 
 jobs:
-  build_android_apk:
-    name: Build KJAPP Android APK
+  build_customer_android_apk:
+    name: Build KJAPP Customer Android APK
     type: build
     params:
       platform: android
