@@ -99,3 +99,11 @@ Import the existing "KJAPP" app from the connected GitHub repo (`foziakahero-dot
 - Verified: partial refund recorded; ledger merges FARE(183)+REFUND(-50); over-refund->400; doc PENDING->EXPIRED->VALID->REJECTED summary correct; RBAC customer->403, no-auth->401; audit trail writes.
 - Contract updated: /app/ADMIN_API_CONTRACT.md (§4 CORS confirmed, §6 table +refunds/transactions/doc-review, §12 blockers trimmed, §13 round-2 changes).
 - Still missing (documented): admin-wide payout run/mark-paid, admin-user management, service-area polygons, manual ride intervention, Vipps config.
+
+## Update (2026-06) — Separate Admin web app (Kontrollsenter) built
+- NEW app at /app/admin-web (Vite + React + TS) — SEPARATE from Expo mobile app; consumes existing /admin/* API (no new DB).
+- Security: login gated to role superadmin/admin (UI) + server RBAC (401/403) on every endpoint; JWT in sessionStorage (clears on tab close); auto-logout on 401; 2FA login step supported (twofa_required -> /auth/2fa/verify-login); robots noindex. Only admin@kjapp.no is superadmin.
+- Pages: Dashboard (overview KPIs + 30d GMV chart + shortcuts), Live drift (poll 5s), Turer (filters/pagination + detail drawer w/ timeline), Sjåfører (approve/suspend), Kunder, Løyvehavere, Kjøretøy, Dokumenter (review + expiry summary), Økonomi (finance/transactions/refunds w/ refund modal), Support (status change), Audit-logg, Innstillinger (superadmin edits commission). Global search in topbar.
+- Preview in this workspace: backend serves admin-web/dist at /api/ops (StaticFiles mount in server.py; ingress only routes / and /api). URL: https://<preview>/api/ops/#/. Verified via browser: login gate + dashboard real KPIs + Turer table (9 turer) render.
+- Production: deploy /app/admin-web/dist to admin.kjappapp.no with VITE_API_BASE=<prod-api>/api (HashRouter, no rewrites). CORS already whitelists admin.kjappapp.no. Deploy/DNS/SSL is done outside this workspace.
+- Backend change: added `from fastapi.staticfiles import StaticFiles` + mount at /api/ops (guarded by isdir). No API/data changes.

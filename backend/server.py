@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
@@ -5399,6 +5400,15 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 
 app.include_router(api)
+
+# Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
+# under /api/ops so it is reachable through the preview ingress (which only routes
+# `/` → mobile app and `/api/*` → this backend). In production the same dist/ is
+# deployed to admin.kjappapp.no instead. HashRouter + relative assets → no SPA
+# fallback needed. This does NOT expose any data; every /admin/* API stays guarded.
+_ADMIN_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "admin-web", "dist"))
+if os.path.isdir(_ADMIN_DIST):
+    app.mount("/api/ops", StaticFiles(directory=_ADMIN_DIST, html=True), name="admin-web")
 
 
 if __name__ == "__main__":
