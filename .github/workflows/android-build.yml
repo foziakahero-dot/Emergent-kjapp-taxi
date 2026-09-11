@@ -48,16 +48,21 @@ jobs:
         working-directory: frontend
         run: npx expo prebuild --platform android --clean
 
-      - name: Build installable release APK
+      - name: Build installable Android APK
         working-directory: frontend/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p artifacts
+          cp frontend/android/app/build/outputs/apk/debug/app-debug.apk artifacts/KJAPP-production-backend.apk
 
       - name: Upload KJAPP APK
         uses: actions/upload-artifact@v4
         with:
           name: KJAPP-Expo-Android-APK
-          path: frontend/android/app/build/outputs/apk/release/*.apk
+          path: artifacts/KJAPP-production-backend.apk
           if-no-files-found: error
           retention-days: 14
