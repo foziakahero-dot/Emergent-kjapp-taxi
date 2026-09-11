@@ -24,12 +24,11 @@ Path: `driver-app/`
 - Expo slug: `kjapp-driver`
 - Android package: `no.kjapp.driver`
 - iOS bundle identifier: `no.kjapp.driver`
+- Expo project ID: `1dec8949-0423-4fbf-a080-0703f93519d7`
 - EAS build profile: `apk`
 - EAS workflow: `driver-app/.eas/workflows/build-apk.yml`
 - Accepts `driver` role only
 - Customer/admin/fleet roles are rejected from the driver app
-
-The Driver Expo project ID is intentionally not stored yet so the driver app cannot accidentally build under the customer Expo project. Add the Driver EAS project ID to `driver-app/app.json` only after the separate Expo project has been created and connected with base directory `driver-app`.
 
 ## Shared production backend
 
@@ -41,4 +40,4 @@ The backend, MongoDB data model and admin control center remain shared. This spl
 
 ## Release model
 
-Customer and Driver are built and released independently. A Driver update does not require a Customer release, and vice versa.
+Customer and Driver are built and released independently. Both can be installed on the same phone because they use different Android application IDs and iOS bundle identifiers. A Driver update does not require a Customer release, and vice versa.
