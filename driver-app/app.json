@@ -49,7 +49,10 @@
       "expo-web-browser"
     ],
     "extra": {
-      "appRole": "driver"
+      "appRole": "driver",
+      "eas": {
+        "projectId": "1dec8949-0423-4fbf-a080-0703f93519d7"
+      }
     },
     "experiments": {
       "typedRoutes": false
