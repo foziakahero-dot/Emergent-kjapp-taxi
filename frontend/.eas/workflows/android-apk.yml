@@ -1,0 +1,13 @@
+name: KJAPP Android APK
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  build_android_apk:
+    name: Build KJAPP Android APK
+    type: build
+    params:
+      platform: android
+      profile: apk
