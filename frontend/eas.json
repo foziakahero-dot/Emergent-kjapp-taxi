@@ -6,12 +6,19 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "latest"
       }
     },
     "production": {
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+      },
+      "android": {
+        "image": "latest"
+      },
+      "ios": {
+        "image": "latest"
       }
     },
     "ios-simulator": {
@@ -20,7 +27,8 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
       },
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "image": "latest"
       }
     }
   }
