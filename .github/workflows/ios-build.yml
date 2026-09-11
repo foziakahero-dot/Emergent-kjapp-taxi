@@ -1,139 +1,50 @@
-name: iOS build (IPA / TestFlight)
-
-# Bygger KJAPP for iOS på en macOS-runner. Uten signerings-secrets bygges appen usignert
-# (bekrefter at prosjektet kompilerer). Med secrets lages en signert IPA som kan lastes til TestFlight.
-#
-# Repository variable:
-#   KJAPP_API_URL                  t.d. https://api.kjappapp.no
-# Secrets for signert bygg / TestFlight:
-#   IOS_CERTIFICATE_BASE64         base64 av Apple Distribution .p12
-#   IOS_CERTIFICATE_PASSWORD       passord for .p12
-#   IOS_PROVISIONING_PROFILE_BASE64  base64 av App Store provisioning profile (.mobileprovision)
-#   IOS_TEAM_ID                    Apple Team ID (10 tegn)
-#   APPSTORE_ISSUER_ID             App Store Connect API: Issuer ID
-#   APPSTORE_KEY_ID                App Store Connect API: Key ID
-#   APPSTORE_PRIVATE_KEY           innholdet i AuthKey_XXXX.p8
-#   GOOGLE_SERVICE_INFO_PLIST      innholdet i GoogleService-Info.plist (for push)
+name: KJAPP Expo iOS (manual smoke build)
 
 on:
   workflow_dispatch:
-    inputs:
-      version_name:
-        description: "Versjonsnavn (f.eks. 1.0.1)"
-        required: false
-        default: "1.0.0"
-      build_number:
-        description: "Byggnummer (må økes for hver TestFlight-opplasting)"
-        required: false
-        default: "1"
-  push:
-    tags:
-      - "ios-v*"
 
 jobs:
-  ios:
+  ios-smoke:
     runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
 
-      - name: Install dependencies
+      - name: Install app dependencies
         working-directory: frontend
-        run: yarn install --frozen-lockfile
+        run: npm install
 
-      - name: Add GoogleService-Info.plist (push notifications)
-        if: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST != '' }}
+      - name: Validate Expo project
         working-directory: frontend
-        run: printf '%s' "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
+        run: npx expo config --type public
 
-      - name: Build web bundle
+      - name: Generate native iOS project from Expo
         working-directory: frontend
-        env:
-          REACT_APP_BACKEND_URL: ${{ vars.KJAPP_API_URL }}
-          GENERATE_SOURCEMAP: "false"
-          CI: "false"
-        run: |
-          test -n "$REACT_APP_BACKEND_URL" || (echo "Sett repository variable KJAPP_API_URL" && exit 1)
-          yarn build
+        run: npx expo prebuild --platform ios --clean
 
-      - name: Capacitor sync + CocoaPods
-        working-directory: frontend
-        run: |
-          npx cap sync ios
-          cd ios/App && pod install
+      - name: Install CocoaPods
+        working-directory: frontend/ios
+        run: pod install
 
-      - name: Import signing certificate and profile
-        id: signing
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
-        env:
-          CERT_B64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-          CERT_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          PROFILE_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+      - name: Compile unsigned simulator build
+        working-directory: frontend/ios
         run: |
-          echo "$CERT_B64" | base64 -d > "$RUNNER_TEMP/cert.p12"
-          echo "$PROFILE_B64" | base64 -d > "$RUNNER_TEMP/profile.mobileprovision"
-          security create-keychain -p actions "$RUNNER_TEMP/build.keychain"
-          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/build.keychain"
-          security unlock-keychain -p actions "$RUNNER_TEMP/build.keychain"
-          security import "$RUNNER_TEMP/cert.p12" -k "$RUNNER_TEMP/build.keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "$RUNNER_TEMP/build.keychain"
-          security list-keychain -d user -s "$RUNNER_TEMP/build.keychain" login.keychain
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$RUNNER_TEMP/profile.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/
-          echo "signed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Archive (unsigned smoke build)
-        if: ${{ steps.signing.outputs.signed != 'true' }}
-        working-directory: frontend/ios/App
-        run: |
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            MARKETING_VERSION=${{ github.event.inputs.version_name || '1.0.0' }} \
-            CURRENT_PROJECT_VERSION=${{ github.event.inputs.build_number || '1' }} \
-            CODE_SIGNING_ALLOWED=NO archive
-
-      - name: Archive and export signed IPA
-        if: ${{ steps.signing.outputs.signed == 'true' }}
-        working-directory: frontend/ios/App
-        run: |
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>teamID</key><string>${{ secrets.IOS_TEAM_ID }}</string>
-            <key>uploadSymbols</key><true/>
-          </dict></plist>
-          PLIST
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            MARKETING_VERSION=${{ github.event.inputs.version_name || '1.0.0' }} \
-            CURRENT_PROJECT_VERSION=${{ github.event.inputs.build_number || '1' }} \
-            DEVELOPMENT_TEAM=${{ secrets.IOS_TEAM_ID }} archive
-          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export"
-
-      - name: Upload to TestFlight
-        if: ${{ steps.signing.outputs.signed == 'true' && secrets.APPSTORE_PRIVATE_KEY != '' }}
-        env:
-          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
-          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
-          PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          printf '%s' "$PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
-          xcrun altool --upload-app -f "$RUNNER_TEMP/export"/*.ipa -t ios \
-            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
-
-      - name: Upload IPA artifact
-        if: ${{ steps.signing.outputs.signed == 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: kjapp-ios-ipa
-          path: ${{ runner.temp }}/export/*.ipa
+          set -o pipefail
+          xcodebuild \
+            -workspace KJAPP.xcworkspace \
+            -scheme KJAPP \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/KJAPPDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
