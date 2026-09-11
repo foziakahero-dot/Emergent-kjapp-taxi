@@ -1,0 +1,16 @@
+name: Actions health probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/actions-probe.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Actions dispatcher
+        run: echo "github-actions-ok"
