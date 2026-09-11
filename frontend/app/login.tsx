@@ -18,8 +18,10 @@ import { Button } from '@/src/components/ui';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
+const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
+
 export default function Login() {
-  const { login, signInWithGoogle } = useAuth();
+  const { login, logout, signInWithGoogle } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -30,9 +32,15 @@ export default function Login() {
   const [gLoading, setGLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const goByRole = (u: any) => {
-    if (u?.role === 'driver') router.replace('/(driver)/home');
-    else router.replace('/(app)/home');
+  const finishLogin = async (u: any) => {
+    if (!isCustomerRole(u?.role)) {
+      await logout();
+      setError(u?.role === 'driver'
+        ? 'Dette er en sjåførkonto. Bruk KJAPP Driver.'
+        : 'Denne kontotypen kan ikke brukes i kundeappen.');
+      return;
+    }
+    router.replace('/(app)/home');
   };
 
   const submit = async () => {
@@ -44,7 +52,7 @@ export default function Login() {
         setError('Kontoen krever tofaktor — logg inn via web-portalen.');
         return;
       }
-      goByRole(res);
+      await finishLogin(res);
     } catch (e) {
       setError(apiError(e));
     } finally {
@@ -57,7 +65,7 @@ export default function Login() {
     setGLoading(true);
     try {
       const u = await signInWithGoogle();
-      if (u) goByRole(u); // mobile; on web the page redirects away
+      if (u) await finishLogin(u);
     } catch (e) {
       setError(apiError(e));
     } finally {
@@ -109,11 +117,7 @@ export default function Login() {
           </Pressable>
         </View>
 
-        {error ? (
-          <Text style={s.error} testID="login-error">
-            {error}
-          </Text>
-        ) : null}
+        {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
 
         <Button label="Logg inn" onPress={submit} loading={loading} testID="login-submit" style={{ marginTop: 8 }} />
 
@@ -124,31 +128,11 @@ export default function Login() {
         </View>
 
         <Pressable style={s.googleBtn} onPress={googleSignIn} disabled={gLoading} testID="login-google">
-          {gLoading ? (
-            <ActivityIndicator color="#1F1F1F" />
-          ) : (
-            <>
-              <GoogleG size={20} />
-              <Text style={s.googleText}>Fortsett med Google</Text>
-            </>
-          )}
+          {gLoading ? <ActivityIndicator color="#1F1F1F" /> : <><GoogleG size={20} /><Text style={s.googleText}>Fortsett med Google</Text></>}
         </Pressable>
 
         <Pressable onPress={() => router.push('/register')} style={s.footer} testID="login-to-register">
-          <Text style={s.footerText}>
-            Ny hos KJAPP? <Text style={{ color: colors.accent }}>Opprett konto</Text>
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            setEmail('ola@kjapp.no');
-            setPassword('test1234');
-          }}
-          style={s.demo}
-          testID="login-demo-fill"
-        >
-          <Text style={s.demoText}>Fyll inn demo-konto</Text>
+          <Text style={s.footerText}>Ny hos KJAPP? <Text style={{ color: colors.accent }}>Opprett konto</Text></Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -158,7 +142,7 @@ export default function Login() {
 function GoogleG({ size = 20 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 48 48">
-      <Path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
+      <Path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-20c0-1.341-.138-2.65-.389-3.917z" />
       <Path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
       <Path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
       <Path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 01-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
@@ -173,36 +157,13 @@ const useStyles = makeStyles((c) => ({
   divText: { color: c.textMuted, fontSize: 12 },
   googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 999, backgroundColor: '#FFFFFF' },
   googleText: { color: '#1F1F1F', fontSize: 16, fontWeight: '600' },
-  back: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.cardSubtle,
-    borderWidth: 1,
-    borderColor: c.line,
-    marginBottom: 24,
-  },
+  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 24 },
   brand: { fontFamily: font.display, fontSize: 34, color: c.text, letterSpacing: 1 },
   title: { fontFamily: font.display, fontSize: 26, color: c.text, marginTop: 24 },
   sub: { color: c.textMuted, fontSize: 14, marginTop: 6, marginBottom: 24 },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: c.cardSubtle,
-    borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 56,
-    marginBottom: 14,
-  },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 16, height: 56, marginBottom: 14 },
   input: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
   error: { color: c.danger, fontSize: 13, marginBottom: 8 },
   footer: { alignItems: 'center', marginTop: 24 },
   footerText: { color: c.textSecondary, fontSize: 14 },
-  demo: { alignItems: 'center', marginTop: 28 },
-  demoText: { color: c.textMuted, fontSize: 12, textDecorationLine: 'underline' },
 }));

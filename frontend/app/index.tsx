@@ -1,28 +1,50 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 
+const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
+
 export default function Index() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
 
   useEffect(() => {
-    if (!user) return;
-    if (user.role === 'driver') router.replace('/(driver)/home');
-    else router.replace('/(app)/home');
+    if (user && isCustomerRole(user.role)) router.replace('/(app)/home');
   }, [user, router]);
 
-  if (user === undefined || user) {
+  if (user === undefined || (user && isCustomerRole(user.role))) {
     return (
       <View style={s.splash}>
         <BrandMark />
         <ActivityIndicator color={colors.accent} style={{ marginTop: 28 }} />
+      </View>
+    );
+  }
+
+  if (user && !isCustomerRole(user.role)) {
+    return (
+      <View style={[s.splash, { paddingBottom: insets.bottom + 40, paddingTop: insets.top + 24 }]}>
+        <View style={s.center}>
+          <BrandMark />
+          <Text style={s.title}>Denne kontoen bruker en annen KJAPP-app</Text>
+          <Text style={s.subtitle}>
+            Sjåfører logger inn i KJAPP Driver. Admin- og flåtekontoer bruker sine egne portaler.
+          </Text>
+        </View>
+        <Button
+          label="Logg ut"
+          onPress={async () => {
+            await logout();
+            router.replace('/login');
+          }}
+          testID="customer-role-logout"
+        />
       </View>
     );
   }
@@ -34,12 +56,7 @@ export default function Index() {
         <Text style={s.tag} testID="ob-tag">NORDIC TAXI</Text>
         <Text style={s.subtitle}>Enklere. Tryggere. Kjappere.</Text>
       </View>
-      <View style={{ gap: 18 }}>
-        <Button label="Kom i gang" onPress={() => router.push('/login')} testID="onboarding-next" />
-        <Pressable onPress={() => router.push('/driver-login')} testID="onboarding-driver-link" style={s.driverLink}>
-          <Text style={s.driverLinkText}>Er du sjåfør?</Text>
-        </Pressable>
-      </View>
+      <Button label="Kom i gang" onPress={() => router.push('/login')} testID="onboarding-next" />
     </View>
   );
 }
@@ -58,7 +75,6 @@ const useStyles = makeStyles((c) => ({
   splash: { flex: 1, backgroundColor: c.bg, paddingHorizontal: 28, justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tag: { color: c.accent, fontSize: 11, letterSpacing: 6, marginTop: 10 },
-  subtitle: { color: c.textSecondary, fontFamily: font.display, fontSize: 19, marginTop: 40 },
-  driverLink: { alignItems: 'center', paddingVertical: 8 },
-  driverLinkText: { color: c.accent, fontSize: 13 },
+  title: { color: c.text, fontFamily: font.display, fontSize: 24, textAlign: 'center', marginTop: 32 },
+  subtitle: { color: c.textSecondary, fontFamily: font.display, fontSize: 18, lineHeight: 25, marginTop: 24, textAlign: 'center' },
 }));

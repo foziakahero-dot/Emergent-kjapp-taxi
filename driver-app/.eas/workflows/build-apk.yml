@@ -1,0 +1,13 @@
+name: KJAPP Driver Android APK
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  build_driver_android_apk:
+    name: Build KJAPP Driver Android APK
+    type: build
+    params:
+      platform: android
+      profile: apk
