@@ -22,6 +22,7 @@ export function SignatureSheet({
   peekHeight = 164,
   halfRatio = 0.48,
   fullRatio = 0.86,
+  bottomOffset = 76,
   style,
   testID,
 }: {
@@ -31,18 +32,20 @@ export function SignatureSheet({
   peekHeight?: number;
   halfRatio?: number;
   fullRatio?: number;
+  bottomOffset?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
   const { height } = useWindowDimensions();
-  const maxHeight = Math.max(420, Math.round(height * fullRatio));
+  const availableHeight = Math.max(480, height - bottomOffset - 8);
+  const maxHeight = Math.max(420, Math.round(availableHeight * fullRatio));
   const snapOffsets = useMemo(
     () => ({
       full: 0,
-      half: Math.max(0, maxHeight - Math.round(height * halfRatio)),
+      half: Math.max(0, maxHeight - Math.round(availableHeight * halfRatio)),
       peek: Math.max(0, maxHeight - peekHeight),
     }),
-    [height, maxHeight, halfRatio, peekHeight],
+    [availableHeight, maxHeight, halfRatio, peekHeight],
   );
 
   const translateY = useRef(new Animated.Value(snapOffsets[snap])).current;
@@ -70,32 +73,29 @@ export function SignatureSheet({
     }).start();
   }, [snap, snapOffsets.full, snapOffsets.half, snapOffsets.peek, translateY]);
 
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 4,
-      onPanResponderGrant: () => {
-        translateY.stopAnimation((value) => { startY.current = value; });
-      },
-      onPanResponderMove: (_e, g) => {
-        const next = Math.max(snapOffsets.full, Math.min(snapOffsets.peek, startY.current + g.dy));
-        translateY.setValue(next);
-      },
-      onPanResponderRelease: (_e, g) => {
-        const projected = Math.max(
-          snapOffsets.full,
-          Math.min(snapOffsets.peek, startY.current + g.dy + g.vy * 90),
-        );
-        const next = SNAP_ORDER.reduce((best, candidate) =>
-          Math.abs(snapOffsets[candidate] - projected) < Math.abs(snapOffsets[best] - projected)
-            ? candidate
-            : best,
-        'half' as SignatureSheetSnap);
-        animateTo(next, true);
-      },
-      onPanResponderTerminate: () => animateTo(snap),
-    }),
-  ).current;
+  const pan = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 4,
+    onPanResponderGrant: () => {
+      translateY.stopAnimation((value) => { startY.current = value; });
+    },
+    onPanResponderMove: (_e, g) => {
+      const next = Math.max(snapOffsets.full, Math.min(snapOffsets.peek, startY.current + g.dy));
+      translateY.setValue(next);
+    },
+    onPanResponderRelease: (_e, g) => {
+      const projected = Math.max(
+        snapOffsets.full,
+        Math.min(snapOffsets.peek, startY.current + g.dy + g.vy * 90),
+      );
+      const next = SNAP_ORDER.reduce((best, candidate) =>
+        Math.abs(snapOffsets[candidate] - projected) < Math.abs(snapOffsets[best] - projected)
+          ? candidate
+          : best,
+      'half' as SignatureSheetSnap);
+      animateTo(next, true);
+    },
+    onPanResponderTerminate: () => animateTo(snap),
+  }), [snap, snapOffsets.full, snapOffsets.half, snapOffsets.peek, translateY]);
 
   return (
     <Animated.View
@@ -105,7 +105,7 @@ export function SignatureSheet({
           position: 'absolute',
           left: 10,
           right: 10,
-          bottom: 8,
+          bottom: bottomOffset,
           height: maxHeight,
           borderRadius: 30,
           overflow: 'hidden',
@@ -122,10 +122,7 @@ export function SignatureSheet({
         style,
       ]}
     >
-      <View
-        {...pan.panHandlers}
-        style={{ height: 30, alignItems: 'center', justifyContent: 'center' }}
-      >
+      <View {...pan.panHandlers} style={{ height: 30, alignItems: 'center', justifyContent: 'center' }}>
         <Pressable
           accessibilityRole="adjustable"
           onPress={() => animateTo(snap === 'peek' ? 'half' : snap === 'half' ? 'full' : 'peek', true)}
