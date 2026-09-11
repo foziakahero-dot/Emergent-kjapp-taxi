@@ -1,4 +1,7 @@
 {
+  "cli": {
+    "version": ">= 16.0.0"
+  },
   "build": {
     "apk": {
       "distribution": "internal",
@@ -6,19 +9,13 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
       },
       "android": {
-        "buildType": "apk",
-        "image": "latest"
+        "buildType": "apk"
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
-      },
-      "android": {
-        "image": "latest"
-      },
-      "ios": {
-        "image": "latest"
       }
     },
     "ios-simulator": {
@@ -27,8 +24,7 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
       },
       "ios": {
-        "simulator": true,
-        "image": "latest"
+        "simulator": true
       }
     }
   }
