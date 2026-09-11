@@ -17,7 +17,7 @@ import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -33,6 +33,11 @@ export default function DriverLogin() {
       const res = await login(email.trim(), password);
       if (res?.twofa_required) {
         setError('Kontoen krever tofaktor — logg inn via web-portalen.');
+        return;
+      }
+      if (res?.role !== 'driver') {
+        await logout();
+        setError('Denne kontoen er ikke godkjent som KJAPP-sjåfør.');
         return;
       }
       router.replace('/(driver)/home');
@@ -55,10 +60,10 @@ export default function DriverLogin() {
 
         <View style={s.badge}>
           <Icon name="car" size={16} color={colors.online} />
-          <Text style={s.badgeText}>SJÅFØR</Text>
+          <Text style={s.badgeText}>KJAPP DRIVER</Text>
         </View>
         <Text style={s.title}>Klar for skift</Text>
-        <Text style={s.sub}>Logg inn for å motta turer i nærheten.</Text>
+        <Text style={s.sub}>Logg inn med din godkjente sjåførkonto for å motta turer.</Text>
 
         <View style={s.field}>
           <Icon name="mail" size={18} color={colors.textMuted} />
@@ -89,17 +94,6 @@ export default function DriverLogin() {
         {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
 
         <Button label="Logg inn som sjåfør" onPress={submit} loading={loading} testID="driver-login-submit" style={{ marginTop: 8 }} />
-
-        <Pressable
-          onPress={() => {
-            setEmail('sjafor@kjapp.no');
-            setPassword('sjafor1234');
-          }}
-          style={s.demo}
-          testID="driver-login-demo-fill"
-        >
-          <Text style={s.demoText}>Fyll inn demo-sjåfør</Text>
-        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -117,13 +111,11 @@ const useStyles = makeStyles((c) => ({
   },
   badgeText: { color: c.online, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
   title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 20 },
-  sub: { color: c.textMuted, fontSize: 14, marginTop: 6, marginBottom: 24 },
+  sub: { color: c.textMuted, fontSize: 14, marginTop: 6, marginBottom: 24, lineHeight: 20 },
   field: {
     flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.driverCard,
     borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 16, height: 56, marginBottom: 14,
   },
   input: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
   error: { color: c.danger, fontSize: 13, marginBottom: 8 },
-  demo: { alignItems: 'center', marginTop: 28 },
-  demoText: { color: c.textMuted, fontSize: 12, textDecorationLine: 'underline' },
 }));
