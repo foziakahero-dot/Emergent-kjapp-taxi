@@ -16,7 +16,7 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, setProfilePhoto } = useAuth();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -25,6 +25,10 @@ export default function Profile() {
   const [avatarUploading, setAvatarUploading] = useState(false);
 
   const avatarStorageKey = user?.id ? `kjapp_profile_photo_${user.id}` : null;
+
+  useEffect(() => {
+    setAvatarPath((user as any)?.profile_photo_path || (user as any)?.avatar_url || null);
+  }, [(user as any)?.profile_photo_path, (user as any)?.avatar_url]);
 
   useEffect(() => {
     if (!avatarStorageKey) return;
@@ -62,7 +66,7 @@ export default function Profile() {
       const uploaded = await uploadApi.profilePhoto(result.assets[0]);
       if (!uploaded?.storage_path) throw new Error('missing storage path');
       setAvatarPath(uploaded.storage_path);
-      if (avatarStorageKey) await storage.setItem(avatarStorageKey, uploaded.storage_path);
+      await setProfilePhoto(uploaded.storage_path);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch {
       Alert.alert('Kunne ikke laste opp', 'Profilbildet kunne ikke lagres akkurat nå. Prøv igjen.');
@@ -82,7 +86,7 @@ export default function Profile() {
     setDeleteError('');
     try {
       await gdprApi.delete();
-      if (avatarStorageKey) await storage.removeItem(avatarStorageKey);
+      await setProfilePhoto(null);
       await logout();
       router.replace('/login');
     } catch {
