@@ -35,16 +35,13 @@ export const tripsApi = {
 };
 
 export const carsApi = {
-  nearby: (lat: number, lng: number) =>
-    api.post('/cars/nearby', { lat, lng }).then((r) => r.data),
+  nearby: (lat: number, lng: number) => api.post('/cars/nearby', { lat, lng }).then((r) => r.data),
 };
 
 export const placesApi = {
-  list: (featuredOnly = false) =>
-    api.get('/places', { params: { featured_only: featuredOnly } }).then((r) => r.data),
+  list: (featuredOnly = false) => api.get('/places', { params: { featured_only: featuredOnly } }).then((r) => r.data),
   search: (q: string) => api.get('/places/search', { params: { q } }).then((r) => r.data),
-  reverse: (lat: number, lng: number) =>
-    api.get('/places/reverse', { params: { lat, lng } }).then((r) => r.data),
+  reverse: (lat: number, lng: number) => api.get('/places/reverse', { params: { lat, lng } }).then((r) => r.data),
 };
 
 export const paymentApi = {
@@ -64,6 +61,19 @@ export const messagesApi = {
 export const gdprApi = {
   export: () => api.get('/gdpr/export').then((r) => r.data),
   delete: () => api.delete('/gdpr/delete').then((r) => r.data),
+};
+
+export const uploadApi = {
+  profilePhoto: (asset: { uri: string; fileName?: string | null; mimeType?: string | null }) => {
+    const fd = new FormData();
+    fd.append('file', {
+      uri: asset.uri,
+      name: asset.fileName || `profile-${Date.now()}.jpg`,
+      type: asset.mimeType || 'image/jpeg',
+    } as any);
+    fd.append('scope', 'profile');
+    return api.post('/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 };
 
 export const mePlacesApi = {
@@ -92,8 +102,7 @@ export const driverApi = {
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
-  location: (lat: number, lng: number, heading = 0, speed = 0) =>
-    api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
+  location: (lat: number, lng: number, heading = 0, speed = 0) => api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
