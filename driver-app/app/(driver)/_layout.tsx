@@ -1,10 +1,11 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, IconName } from '@/src/components/Icon';
 import { colors } from '@/src/theme';
+import { useAuth } from '@/src/context/AuthContext';
 
 const ICONS: Record<string, IconName> = { home: 'car', earnings: 'trending-up', profile: 'user' };
 
@@ -34,6 +35,10 @@ function DriverDock({ state, navigation }: any) {
 }
 
 export default function DriverTabsLayout() {
+  const { user } = useAuth();
+  if (user === undefined) return <View style={{ flex: 1, backgroundColor: colors.driverBg }} />;
+  if (!user || user.role !== 'driver') return <Redirect href="/driver-login" />;
+
   return (
     <Tabs tabBar={(props) => <DriverDock {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="home" options={{ title: 'Kjør' }} />
