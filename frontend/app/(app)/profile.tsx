@@ -27,6 +27,11 @@ export default function Profile() {
     { icon: 'settings', label: 'Innstillinger', sub: 'Varsler, språk og preferanser', onPress: () => router.push('/settings'), testID: 'profile-settings' },
   ];
 
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
+  };
+
   const deleteAccount = async () => {
     if (confirmText.trim().toUpperCase() !== 'SLETT') return;
     setDeleting(true);
@@ -34,7 +39,7 @@ export default function Profile() {
     try {
       await gdprApi.delete();
       await logout();
-      router.replace('/');
+      router.replace('/login');
     } catch {
       setDeleteError('Kunne ikke slette kontoen akkurat nå. Prøv igjen.');
       setDeleting(false);
@@ -61,7 +66,7 @@ export default function Profile() {
         <View style={s.identityCard} testID="profile-card">
           <Avatar
             name={user?.fullName || user?.email}
-            uri={(user as any)?.avatar_url}
+            uri={(user as any)?.profile_photo_path || (user as any)?.avatar_url}
             size={88}
             testID="profile-avatar"
           />
@@ -98,7 +103,7 @@ export default function Profile() {
           <Icon name="chevron-right" size={18} color={colors.danger} />
         </Pressable>
 
-        <Pressable style={s.logout} onPress={logout} testID="profile-logout">
+        <Pressable style={s.logout} onPress={handleLogout} testID="profile-logout">
           <Icon name="log-out" size={18} color={colors.danger} />
           <Text style={s.logoutText}>Logg ut</Text>
         </Pressable>
