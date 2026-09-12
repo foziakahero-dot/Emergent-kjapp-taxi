@@ -1,6 +1,7 @@
 import React, { ReactNode, useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
+  Keyboard,
   PanResponder,
   Pressable,
   StyleProp,
@@ -53,6 +54,7 @@ export function SignatureSheet({
 
   const animateTo = (next: SignatureSheetSnap, haptic = false) => {
     if (haptic) Haptics.selectionAsync().catch(() => {});
+    if (next === 'peek') Keyboard.dismiss();
     Animated.spring(translateY, {
       toValue: snapOffsets[next],
       useNativeDriver: true,
