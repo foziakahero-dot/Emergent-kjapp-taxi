@@ -17,6 +17,7 @@ export type User = {
   role?: string;
   driver_id?: string;
   profile_photo_path?: string;
+  avatar_url?: string;
 } | null;
 
 type AuthCtx = {
@@ -26,6 +27,7 @@ type AuthCtx = {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   signInWithGoogle: () => Promise<User>;
+  setProfilePhoto: (storagePath: string | null) => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>(null as any);
@@ -34,6 +36,16 @@ function extractSessionId(url?: string | null): string | null {
   if (!url) return null;
   const m = url.match(/[?#&]session_id=([^&#]+)/);
   return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function hydrateLocalProfilePhoto(u: any): Promise<User> {
+  if (!u?.id) return u || null;
+  try {
+    const saved = await storage.getItem(`kjapp_profile_photo_${u.id}`);
+    return saved ? { ...u, profile_photo_path: saved } : u;
+  } catch {
+    return u;
+  }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -49,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const u = await authApi.me();
-      setUser(u);
+      setUser(await hydrateLocalProfilePhoto(u));
     } catch {
       await storage.removeItem(TOKEN_KEY);
       setUser(null);
@@ -62,8 +74,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await authApi.googleSession(sid);
       await storage.setItem(TOKEN_KEY, res.token);
-      setUser(res.user);
-      return res.user;
+      const next = await hydrateLocalProfilePhoto(res.user);
+      setUser(next);
+      return next;
     } catch {
       return null;
     }
@@ -106,15 +119,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await authApi.login({ email, password });
     if (res.twofa_required) return res;
     await storage.setItem(TOKEN_KEY, res.token);
-    setUser(res.user);
-    return res.user;
+    const next = await hydrateLocalProfilePhoto(res.user);
+    setUser(next);
+    return next;
   };
 
   const register = async (data: any) => {
     const res = await authApi.register(data);
     await storage.setItem(TOKEN_KEY, res.token);
-    setUser(res.user);
-    return res.user;
+    const next = await hydrateLocalProfilePhoto(res.user);
+    setUser(next);
+    return next;
   };
 
   const signInWithGoogle = async (): Promise<User> => {
@@ -137,6 +152,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return await handleSessionId(sid);
   };
 
+  const setProfilePhoto = async (storagePath: string | null) => {
+    const id = user?.id;
+    if (!id) return;
+    const key = `kjapp_profile_photo_${id}`;
+    if (storagePath) await storage.setItem(key, storagePath);
+    else await storage.removeItem(key);
+    setUser((prev) => prev ? { ...prev, profile_photo_path: storagePath || undefined } : prev);
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -151,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle }}>
+    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle, setProfilePhoto }}>
       {children}
     </Ctx.Provider>
   );
