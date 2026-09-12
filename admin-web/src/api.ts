@@ -34,6 +34,9 @@ http.interceptors.response.use(
 export const apiError = (e: any) =>
   e?.response?.data?.detail || e?.message || 'Noe gikk galt';
 
+const encodeStoragePath = (path: string) =>
+  String(path || '').split('/').map((part) => encodeURIComponent(part)).join('/');
+
 export const api = {
   login: (email: string, password: string) =>
     http.post('/auth/login', { email, password }).then((r) => r.data),
@@ -56,4 +59,19 @@ export const api = {
     http.patch(`/admin/support/tickets/${id}`, body).then((r) => r.data),
   patchSettings: (body: any) => http.patch('/admin/settings', body).then((r) => r.data),
   search: (q: string) => http.get('/admin/search', { params: { q } }).then((r) => r.data),
+
+  // Superadmin-only løyvehaver onboarding. A fleet_owner account is created only after approval.
+  fleetApplications: (status = 'pending') =>
+    http.get('/superadmin/fleet-applications', { params: status ? { status } : {} }).then((r) => r.data),
+  fleetApplication: (id: string) =>
+    http.get(`/superadmin/fleet-applications/${id}`).then((r) => r.data),
+  approveFleetApplication: (id: string, review_notes = '') =>
+    http.post(`/superadmin/fleet-applications/${id}/approve`, {
+      review_notes,
+      commission_rate: 0.12,
+    }).then((r) => r.data),
+  rejectFleetApplication: (id: string, review_notes = '') =>
+    http.post(`/superadmin/fleet-applications/${id}/reject`, { review_notes }).then((r) => r.data),
+  applicationFile: (path: string) =>
+    http.get(`/files/${encodeStoragePath(path)}`, { responseType: 'blob' }).then((r) => r.data as Blob),
 };

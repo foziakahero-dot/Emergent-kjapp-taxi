@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { api } from './api';
 import { Loader } from './ui';
 import Login from './Login';
+import FleetApplications from './FleetApplications';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Fleets, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
@@ -17,6 +18,7 @@ const NAV = [
     { to: '/trips', label: 'Turer', ic: '⇄' },
     { to: '/drivers', label: 'Sjåfører', ic: '☗' },
     { to: '/customers', label: 'Kunder', ic: '☺' },
+    { to: '/fleet-applications', label: 'Løyvesøknader', ic: '◇', superadminOnly: true },
     { to: '/fleets', label: 'Løyvehavere', ic: '⌂' },
     { to: '/vehicles', label: 'Kjøretøy', ic: '⛚' },
   ]},
@@ -103,11 +105,14 @@ function Shell() {
         {NAV.map((g) => (
           <div className="nav-group" key={g.group}>
             <div className="nav-group-title">{g.group}</div>
-            {g.items.map((it) => (
-              <NavLink key={it.to} to={it.to} end={(it as any).end}
+            {g.items
+              .filter((it: any) => !it.superadminOnly || user?.role === 'superadmin')
+              .map((it: any) => (
+              <NavLink key={it.to} to={it.to} end={it.end}
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <span className="nav-ic">{it.ic}</span>{it.label}
                 {it.to === '/drivers' && counts?.drivers?.pending ? <span className="nav-badge">{counts.drivers.pending}</span> : null}
+                {it.to === '/fleet-applications' && counts?.fleets?.pending_applications ? <span className="nav-badge">{counts.fleets.pending_applications}</span> : null}
                 {it.to === '/support' && counts?.support?.open ? <span className="nav-badge">{counts.support.open}</span> : null}
               </NavLink>
             ))}
@@ -133,6 +138,7 @@ function Shell() {
             <Route path="/trips" element={<Trips />} />
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/customers" element={<Customers />} />
+            <Route path="/fleet-applications" element={<FleetApplications />} />
             <Route path="/fleets" element={<Fleets />} />
             <Route path="/vehicles" element={<Vehicles />} />
             <Route path="/documents" element={<Documents />} />
