@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { Avatar } from '@/src/components/Avatar';
 import { useAuth } from '@/src/context/AuthContext';
-import { gdprApi } from '@/src/lib/api';
+import { gdprApi, uploadApi } from '@/src/lib/api';
+import { storage } from '@/src/utils/storage';
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
@@ -18,6 +21,17 @@ export default function Profile() {
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [avatarPath, setAvatarPath] = useState<string | null>((user as any)?.profile_photo_path || (user as any)?.avatar_url || null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const avatarStorageKey = user?.id ? `kjapp_profile_photo_${user.id}` : null;
+
+  useEffect(() => {
+    if (!avatarStorageKey) return;
+    storage.getItem(avatarStorageKey).then((saved) => {
+      if (saved) setAvatarPath(saved);
+    }).catch(() => {});
+  }, [avatarStorageKey]);
 
   const rows: { icon: IconName; label: string; sub: string; onPress: () => void; testID: string }[] = [
     { icon: 'card', label: 'Betaling', sub: 'Kort og betalingsmåter', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
@@ -26,6 +40,36 @@ export default function Profile() {
     { icon: 'help', label: 'Hjelp og support', sub: 'Få hjelp med KJAPP', onPress: () => router.push('/settings'), testID: 'profile-help' },
     { icon: 'settings', label: 'Innstillinger', sub: 'Varsler, språk og preferanser', onPress: () => router.push('/settings'), testID: 'profile-settings' },
   ];
+
+  const pickProfilePhoto = async () => {
+    if (!user?.id || avatarUploading) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Tilgang til bilder', 'Gi KJAPP tilgang til bilder for å velge profilbilde.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.82,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setAvatarUploading(true);
+    try {
+      const uploaded = await uploadApi.profilePhoto(result.assets[0]);
+      if (!uploaded?.storage_path) throw new Error('missing storage path');
+      setAvatarPath(uploaded.storage_path);
+      if (avatarStorageKey) await storage.setItem(avatarStorageKey, uploaded.storage_path);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      Alert.alert('Kunne ikke laste opp', 'Profilbildet kunne ikke lagres akkurat nå. Prøv igjen.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -38,6 +82,7 @@ export default function Profile() {
     setDeleteError('');
     try {
       await gdprApi.delete();
+      if (avatarStorageKey) await storage.removeItem(avatarStorageKey);
       await logout();
       router.replace('/login');
     } catch {
@@ -66,10 +111,16 @@ export default function Profile() {
         <View style={s.identityCard} testID="profile-card">
           <Avatar
             name={user?.fullName || user?.email}
-            uri={(user as any)?.profile_photo_path || (user as any)?.avatar_url}
-            size={88}
+            uri={avatarPath}
+            size={92}
+            editable
+            onPress={pickProfilePhoto}
             testID="profile-avatar"
           />
+          <View style={s.photoEditRow}>
+            {avatarUploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="camera" size={13} color={colors.accent} />}
+            <Text style={s.photoEditText}>{avatarUploading ? 'Laster opp…' : 'Endre profilbilde'}</Text>
+          </View>
           <Text style={s.name}>{user?.fullName || 'KJAPP-bruker'}</Text>
           <Text style={s.email}>{user?.email}</Text>
           {user?.phone ? <Text style={s.phone}>{user.phone}</Text> : null}
@@ -151,7 +202,9 @@ const useStyles = makeStyles((c) => ({
   logoPill: { backgroundColor: c.cardSubtle, borderRadius: 999, borderWidth: 1, borderColor: c.line, paddingHorizontal: 14, paddingVertical: 8 },
   logo: { color: c.text, fontFamily: font.display, fontSize: 15, letterSpacing: 1 },
   identityCard: { backgroundColor: c.card, borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong, padding: 26, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 8 },
-  name: { color: c.text, fontFamily: font.display, fontSize: 24, marginTop: 15 },
+  photoEditRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, minHeight: 18 },
+  photoEditText: { color: c.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  name: { color: c.text, fontFamily: font.display, fontSize: 24, marginTop: 12 },
   email: { color: c.textSecondary, fontSize: 13, marginTop: 5 },
   phone: { color: c.textMuted, fontSize: 12, marginTop: 3 },
   memberBadge: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 16, backgroundColor: c.accentSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
