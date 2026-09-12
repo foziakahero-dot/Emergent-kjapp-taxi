@@ -10,6 +10,7 @@ import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi } from '@/src/lib/api';
+import { playIncomingTripAlert } from '@/src/lib/notifications';
 import { apiError, kr } from '@/src/lib/format';
 
 type Loc = { lat: number; lng: number; heading?: number };
@@ -41,6 +42,7 @@ export default function DriverHome() {
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
+  const lastAlertedOffer = useRef<string | null>(null);
 
   const poll = useCallback(async () => {
     try {
@@ -92,6 +94,22 @@ export default function DriverHome() {
     return () => { if (watch.current) { watch.current.remove(); watch.current = null; } };
   }, [online]);
 
+  const firstOffer = pending[0];
+
+  // Foreground safety net: poll results still produce a loud local alert once per offer.
+  // When remote FCM is configured, locked/background devices are handled by the backend push sender.
+  useEffect(() => {
+    const id = firstOffer?.trip_id;
+    if (!online || !id || current) return;
+    if (lastAlertedOffer.current === id) return;
+    lastAlertedOffer.current = id;
+    playIncomingTripAlert(firstOffer).catch(() => {});
+  }, [firstOffer?.trip_id, online, current?.trip_id]);
+
+  useEffect(() => {
+    if (!firstOffer?.trip_id) lastAlertedOffer.current = null;
+  }, [firstOffer?.trip_id]);
+
   const toggleOnline = async (v: boolean) => {
     setError('');
     setBusy(true);
@@ -134,7 +152,6 @@ export default function DriverHome() {
     : current?.status === 'in_trip' ? 'Fullfør turen'
     : '';
 
-  const firstOffer = pending[0];
   const stage = tripStage(current?.status);
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
   const mapDropoff = current && current.status === 'in_trip'
@@ -222,7 +239,7 @@ export default function DriverHome() {
           <View testID={`driver-offer-${firstOffer.trip_id}`}>
             <View style={s.contextHeader}>
               <View>
-                <Text style={s.eyebrow}>NY TURFORespørsel</Text>
+                <Text style={s.eyebrow}>NY TURFORESPØRSEL</Text>
                 <Text style={s.contextTitle}>Klar til å hente?</Text>
               </View>
               <Text style={s.price}>{kr(firstOffer.price)}</Text>
@@ -272,7 +289,7 @@ export default function DriverHome() {
                 <View style={s.radar}><Icon name="navigation" size={21} color={colors.online} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.waitTitle}>Søker etter turer i nærheten</Text>
-                  <Text style={s.waitSub}>Hold KJAPP Driver åpen for sanntidsforespørsler.</Text>
+                  <Text style={s.waitSub}>Du får lyd og varsel når en ny tur blir tilbudt.</Text>
                 </View>
               </View>
             ) : (
