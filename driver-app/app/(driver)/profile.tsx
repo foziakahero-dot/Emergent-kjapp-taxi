@@ -39,7 +39,7 @@ export default function DriverProfile() {
       </View>
 
       <View style={s.heroCard} testID="driver-profile-card">
-        <Avatar name={u.fullName || 'Sjåfør'} uri={u.avatar_url} size={92} />
+        <Avatar name={u.fullName || 'Sjåfør'} uri={u.profile_photo_path || u.avatar_url} size={92} />
         <Text style={s.name}>{u.fullName || 'Sjåfør'}</Text>
         <Text style={s.email}>{u.email}</Text>
         <View style={s.metricsRow}>
