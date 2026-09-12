@@ -5,7 +5,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 
-// Complete any pending auth session (mobile). No-op on web.
 WebBrowser.maybeCompleteAuthSession();
 
 const EMERGENT_AUTH = 'https://auth.emergentagent.com/';
@@ -17,10 +16,11 @@ export type User = {
   phone?: string;
   role?: string;
   driver_id?: string;
+  profile_photo_path?: string;
 } | null;
 
 type AuthCtx = {
-  user: User | undefined; // undefined = loading, null = signed out
+  user: User | undefined;
   login: (email: string, password: string) => Promise<any>;
   register: (data: any) => Promise<any>;
   logout: () => Promise<void>;
@@ -56,7 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Exchange an Emergent session_id for our JWT (once per session_id).
   const handleSessionId = useCallback(async (sid: string): Promise<User> => {
     if (processed.current.has(sid)) return null;
     processed.current.add(sid);
@@ -70,7 +69,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Boot: process a returning session_id first, else restore existing session.
   useEffect(() => {
     let sub: { remove: () => void } | undefined;
     (async () => {
@@ -79,7 +77,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const sid = extractSessionId(href);
         if (sid) {
           await handleSessionId(sid);
-          // strip session_id, preserve everything else
           try {
             const clean = href.replace(/([?#&])session_id=[^&#]*/, '$1').replace(/[?#&]$/, '');
             window.history.replaceState(window.history.state, '', clean);
@@ -128,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (Platform.OS === 'web') {
       window.location.href = authUrl;
-      return null; // return handled on next mount
+      return null;
     }
 
     lastUrl.current = null;
@@ -141,8 +138,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await storage.removeItem(TOKEN_KEY);
-    setUser(null);
+    try {
+      await authApi.logout();
+    } catch {
+      // Mobile auth is bearer-token based. Local logout must still succeed if the server is unreachable.
+    } finally {
+      await storage.removeItem(TOKEN_KEY);
+      setUser(null);
+      processed.current.clear();
+      lastUrl.current = null;
+    }
   };
 
   return (
