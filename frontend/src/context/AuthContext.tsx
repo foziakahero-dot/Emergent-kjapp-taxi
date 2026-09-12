@@ -8,6 +8,7 @@ import { authApi, TOKEN_KEY } from '@/src/lib/api';
 WebBrowser.maybeCompleteAuthSession();
 
 const EMERGENT_AUTH = 'https://auth.emergentagent.com/';
+const CURRENT_PROFILE_PHOTO_KEY = 'kjapp_profile_photo_current';
 
 export type User = {
   id: string;
@@ -39,10 +40,18 @@ function extractSessionId(url?: string | null): string | null {
 }
 
 async function hydrateLocalProfilePhoto(u: any): Promise<User> {
-  if (!u?.id) return u || null;
+  if (!u?.id) {
+    await storage.removeItem(CURRENT_PROFILE_PHOTO_KEY).catch(() => {});
+    return u || null;
+  }
   try {
     const saved = await storage.getItem(`kjapp_profile_photo_${u.id}`);
-    return saved ? { ...u, profile_photo_path: saved } : u;
+    if (saved) {
+      await storage.setItem(CURRENT_PROFILE_PHOTO_KEY, saved);
+      return { ...u, profile_photo_path: saved };
+    }
+    await storage.removeItem(CURRENT_PROFILE_PHOTO_KEY);
+    return u;
   } catch {
     return u;
   }
@@ -56,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const token = await storage.getItem(TOKEN_KEY);
     if (!token) {
+      await storage.removeItem(CURRENT_PROFILE_PHOTO_KEY).catch(() => {});
       setUser(null);
       return;
     }
@@ -64,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(await hydrateLocalProfilePhoto(u));
     } catch {
       await storage.removeItem(TOKEN_KEY);
+      await storage.removeItem(CURRENT_PROFILE_PHOTO_KEY).catch(() => {});
       setUser(null);
     }
   }, []);
@@ -156,8 +167,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const id = user?.id;
     if (!id) return;
     const key = `kjapp_profile_photo_${id}`;
-    if (storagePath) await storage.setItem(key, storagePath);
-    else await storage.removeItem(key);
+    if (storagePath) {
+      await storage.setItem(key, storagePath);
+      await storage.setItem(CURRENT_PROFILE_PHOTO_KEY, storagePath);
+    } else {
+      await storage.removeItem(key);
+      await storage.removeItem(CURRENT_PROFILE_PHOTO_KEY);
+    }
     setUser((prev) => prev ? { ...prev, profile_photo_path: storagePath || undefined } : prev);
   };
 
@@ -168,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Mobile auth is bearer-token based. Local logout must still succeed if the server is unreachable.
     } finally {
       await storage.removeItem(TOKEN_KEY);
+      await storage.removeItem(CURRENT_PROFILE_PHOTO_KEY).catch(() => {});
       setUser(null);
       processed.current.clear();
       lastUrl.current = null;
