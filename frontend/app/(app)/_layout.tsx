@@ -1,10 +1,11 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, IconName } from '@/src/components/Icon';
 import { colors } from '@/src/theme';
+import { useAuth } from '@/src/context/AuthContext';
 
 const ICONS: Record<string, IconName> = {
   home: 'navigation',
@@ -96,6 +97,10 @@ function SignatureDock({ state, navigation }: any) {
 }
 
 export default function CustomerTabsLayout() {
+  const { user } = useAuth();
+  if (user === undefined) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!user) return <Redirect href="/login" />;
+
   return (
     <Tabs
       tabBar={(props) => <SignatureDock {...props} />}
