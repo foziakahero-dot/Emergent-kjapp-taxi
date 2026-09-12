@@ -7,6 +7,7 @@ import { storage } from '@/src/utils/storage';
 import { TOKEN_KEY } from '@/src/lib/api';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
+const CURRENT_PROFILE_PHOTO_KEY = 'kjapp_profile_photo_current';
 
 export function Avatar({
   name,
@@ -26,7 +27,13 @@ export function Avatar({
   testID?: string;
 }) {
   const [token, setToken] = useState<string | null>(null);
-  useEffect(() => { storage.getItem(TOKEN_KEY).then(setToken).catch(() => {}); }, []);
+  const [localUri, setLocalUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    storage.getItem(TOKEN_KEY).then(setToken).catch(() => {});
+    if (!uri) storage.getItem(CURRENT_PROFILE_PHOTO_KEY).then(setLocalUri).catch(() => {});
+    else setLocalUri(null);
+  }, [uri]);
 
   const initials = (name || 'KJAPP')
     .split(' ')
@@ -36,8 +43,9 @@ export function Avatar({
     .join('')
     .toUpperCase();
 
-  const isRemote = !!uri && /^https?:\/\//i.test(uri);
-  const imageUri = uri ? (isRemote ? uri : `${BACKEND}/api/files/${uri.replace(/^\//, '')}`) : null;
+  const effectiveUri = uri || localUri;
+  const isRemote = !!effectiveUri && /^https?:\/\//i.test(effectiveUri);
+  const imageUri = effectiveUri ? (isRemote ? effectiveUri : `${BACKEND}/api/files/${effectiveUri.replace(/^\//, '')}`) : null;
 
   const body = (
     <View
