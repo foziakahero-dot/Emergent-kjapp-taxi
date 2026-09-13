@@ -30,7 +30,11 @@
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -43,7 +47,18 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "KJAPP Driver bruker posisjonen din for å finne turer i nærheten."
+          "locationWhenInUsePermission": "KJAPP Driver bruker posisjonen din for å finne turer i nærheten.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "kjapp_trips",
+          "color": "#00E5F5",
+          "enableBackgroundRemoteNotifications": true
         }
       ],
       "expo-web-browser"
