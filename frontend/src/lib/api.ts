@@ -53,7 +53,15 @@ export const paymentApi = {
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
   cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
   cardSetupStatus: (session_id: string) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),
+  checkout: (trip_id: string, origin_url: string) =>
+    api.post('/payments/checkout', { trip_id, origin_url }).then((r) => r.data),
+  checkoutStatus: (session_id: string) => api.get(`/payments/status/${session_id}`).then((r) => r.data),
   vippsConfig: () => api.get('/payments/vipps/config').then((r) => r.data),
+};
+
+export const aiApi = {
+  chat: (message: string, session_id?: string) =>
+    api.post('/ai/chat', { message, session_id }).then((r) => r.data),
 };
 
 export const messagesApi = {
