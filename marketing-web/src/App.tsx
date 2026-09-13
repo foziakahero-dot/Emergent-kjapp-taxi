@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { ApplyPage } from './ApplyPage';
+import PremiumHome from './PremiumHome';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 
@@ -241,10 +242,10 @@ function Process({ no, title, children }: React.PropsWithChildren<{ no: string; 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<PremiumHome />} />
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
-      <Route path="*" element={<HomePage />} />
+      <Route path="*" element={<PremiumHome />} />
     </Routes>
   );
 }
