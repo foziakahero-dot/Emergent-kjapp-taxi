@@ -40,13 +40,18 @@ export default function DriverSettings() {
     try { await settingsApi.update({ [key]: next[key] }); } catch {}
   };
 
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/driver-login');
+  };
+
   const deleteAccount = async () => {
     if (confirmText.trim().toUpperCase() !== 'SLETT') return;
     setDeleting(true);
     try {
       await gdprApi.delete();
       await logout();
-      router.replace('/');
+      router.replace('/driver-login');
     } catch { setDeleting(false); }
   };
 
@@ -106,7 +111,7 @@ export default function DriverSettings() {
             <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjapp.no/vilkar')}>kjapp.no/vilkar</Text></View>
           </View>
 
-          <Pressable style={s.logout} onPress={logout} testID="ds-logout">
+          <Pressable style={s.logout} onPress={handleLogout} testID="ds-logout">
             <Icon name="log-out" size={18} color={colors.text} />
             <Text style={s.logoutText}>Logg ut</Text>
           </Pressable>

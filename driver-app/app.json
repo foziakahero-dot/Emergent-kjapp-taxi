@@ -46,6 +46,13 @@
           "locationWhenInUsePermission": "KJAPP Driver bruker posisjonen din for å finne turer i nærheten."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2FE08C",
+          "defaultChannel": "kjapp_trips"
+        }
+      ],
       "expo-web-browser"
     ],
     "extra": {
