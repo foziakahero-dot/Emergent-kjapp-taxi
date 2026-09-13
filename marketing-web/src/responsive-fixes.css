@@ -1,0 +1,10 @@
+@media (max-width: 900px) {
+  .shell,
+  .apply-shell {
+    width: min(calc(100% - 48px), 680px);
+  }
+
+  .partner-cta {
+    width: min(calc(100% - 48px), 680px);
+  }
+}
