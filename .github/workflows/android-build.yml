@@ -23,7 +23,7 @@ env:
 
 jobs:
   customer-apk:
-    name: KJAPP Customer APK
+    name: KJAPP Customer standalone APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -53,22 +53,22 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
 
-      - name: Build installable Customer APK
+      - name: Build standalone Customer release APK
         working-directory: frontend/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Customer APK
         uses: actions/upload-artifact@v4
         with:
           name: KJAPP-Customer-Android-APK
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
 
   driver-apk:
-    name: KJAPP Driver APK
+    name: KJAPP Driver standalone APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -98,16 +98,16 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --clean
 
-      - name: Build installable Driver APK
+      - name: Build standalone Driver release APK
         working-directory: driver-app/android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Driver APK
         uses: actions/upload-artifact@v4
         with:
           name: KJAPP-Driver-Android-APK
-          path: driver-app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: driver-app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
