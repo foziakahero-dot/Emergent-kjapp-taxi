@@ -131,7 +131,8 @@ export async function startDriverBackgroundLocation() {
   const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
   if (!running) {
     await Location.startLocationUpdatesAsync(DRIVER_LOCATION_TASK, {
-      accuracy: Location.Accuracy.High,
+      accuracy: Location.Accuracy.BestForNavigation,
+      activityType: Location.ActivityType.AutomotiveNavigation,
       distanceInterval: 15,
       timeInterval: 6000,
       deferredUpdatesDistance: 30,
