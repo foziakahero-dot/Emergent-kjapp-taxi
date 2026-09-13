@@ -62,6 +62,8 @@ export const paymentApi = {
 export const aiApi = {
   chat: (message: string, session_id?: string) =>
     api.post('/ai/chat', { message, session_id }).then((r) => r.data),
+  transcribe: (audio_base64: string, mime_type = 'audio/m4a', language = 'no') =>
+    api.post('/ai/transcribe', { audio_base64, mime_type, language }).then((r) => r.data),
 };
 
 export const messagesApi = {
