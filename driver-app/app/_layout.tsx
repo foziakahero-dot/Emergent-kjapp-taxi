@@ -9,7 +9,13 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
-import { normalizeDriverNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
+import { driverApi } from '@/src/lib/api';
+import {
+  normalizeDriverNotificationUrl,
+  registerNativePush,
+  startDriverBackgroundLocation,
+  stopDriverBackgroundLocation,
+} from '@/src/lib/nativeRuntime';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -20,6 +26,32 @@ function NativeRuntimeBridge() {
 
   useEffect(() => {
     if (user?.role === 'driver') registerNativePush().catch(() => {});
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== 'driver') {
+      stopDriverBackgroundLocation().catch(() => {});
+      return;
+    }
+
+    let alive = true;
+    const syncShiftRuntime = async () => {
+      try {
+        const summary = await driverApi.summary();
+        if (!alive) return;
+        if (summary?.online) await startDriverBackgroundLocation();
+        else await stopDriverBackgroundLocation();
+      } catch {
+        // Foreground screens keep polling the backend; retry on the next interval.
+      }
+    };
+
+    syncShiftRuntime();
+    const timer = setInterval(syncShiftRuntime, 5000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
   }, [user?.id, user?.role]);
 
   useEffect(() => {
