@@ -1,0 +1,32 @@
+@media (max-width: 760px) {
+  .page-content:has(.overview-grid) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .page-content:has(.overview-grid) > .page-head { grid-row: 1; }
+  .page-content:has(.overview-grid) > .kpi-grid { grid-row: 2; }
+
+  .page-content:has(.overview-grid) > .overview-grid {
+    display: contents;
+  }
+
+  .page-content:has(.overview-grid) .live-fleet-card {
+    grid-row: 3;
+    margin-top: 20px;
+  }
+
+  .page-content:has(.overview-grid) > .mobile-week {
+    grid-row: 4;
+    margin-top: 40px;
+  }
+
+  .page-content:has(.overview-grid) .recent-card {
+    grid-row: 5;
+    margin-top: 50px;
+  }
+
+  .page-content:has(.overview-grid) > .error-box {
+    grid-row: 6;
+  }
+}
