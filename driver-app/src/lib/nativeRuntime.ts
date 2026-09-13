@@ -3,8 +3,10 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { api } from '@/src/lib/api';
+import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
+const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
 let backgroundPermissionRequestedThisSession = false;
 
 Notifications.setNotificationHandler({
@@ -15,6 +17,40 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+async function notifyPendingTripFromBackground() {
+  try {
+    const response = await api.get('/driver/pending');
+    const payload = response.data;
+    const pending = payload?.trips || payload?.pending || (Array.isArray(payload) ? payload : []);
+    const offer = pending?.[0];
+
+    if (!offer?.trip_id) {
+      await storage.removeItem(LAST_BACKGROUND_OFFER_KEY);
+      return;
+    }
+
+    const previous = await storage.getItem(LAST_BACKGROUND_OFFER_KEY);
+    if (previous === String(offer.trip_id)) return;
+
+    const price = Number.isFinite(Number(offer.price)) ? `${Math.round(Number(offer.price))} kr` : 'Ny tur';
+    const pickup = offer.pickup_address || 'Henting';
+    const dropoff = offer.dropoff_address || 'destinasjon';
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `Ny tur · ${price}`,
+        body: `${pickup} → ${dropoff}`,
+        sound: true,
+        data: { url: '/driver', trip_id: offer.trip_id, source: 'background-poll' },
+      },
+      trigger: null,
+    });
+    await storage.setItem(LAST_BACKGROUND_OFFER_KEY, String(offer.trip_id));
+  } catch {
+    // Native FCM/APNs remains the primary channel. This is an on-shift fallback.
+  }
+}
 
 if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
   TaskManager.defineTask(DRIVER_LOCATION_TASK, async ({ data, error }: any) => {
@@ -30,6 +66,7 @@ if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
     } catch {
       // Foreground polling will recover on the next active session.
     }
+    await notifyPendingTripFromBackground();
   });
 }
 
@@ -53,16 +90,22 @@ export async function registerNativePush() {
   }
   if (status !== 'granted') return false;
 
-  const nativeToken = await Notifications.getDevicePushTokenAsync();
-  const token = typeof nativeToken.data === 'string'
-    ? nativeToken.data
-    : JSON.stringify(nativeToken.data);
+  try {
+    const nativeToken = await Notifications.getDevicePushTokenAsync();
+    const token = typeof nativeToken.data === 'string'
+      ? nativeToken.data
+      : JSON.stringify(nativeToken.data);
 
-  await api.post('/push/native-subscribe', {
-    platform: Platform.OS,
-    token,
-  });
-  return true;
+    await api.post('/push/native-subscribe', {
+      platform: Platform.OS,
+      token,
+    });
+    return true;
+  } catch {
+    // The app remains usable if FCM/APNs credentials are not provisioned yet.
+    // On-shift Driver notifications also have a background-location fallback.
+    return false;
+  }
 }
 
 export async function startDriverBackgroundLocation() {
@@ -111,6 +154,7 @@ export async function stopDriverBackgroundLocation() {
   if (Platform.OS === 'web') return;
   const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
   if (running) await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  await storage.removeItem(LAST_BACKGROUND_OFFER_KEY);
 }
 
 export function normalizeDriverNotificationUrl(url: unknown) {
