@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, apiError, PublicDriverInvite } from './api';
-import { Brand } from './App';
+import './driver-signup.css';
 
 type DocKey = 'drivers_license' | 'taxi_license' | 'profile_photo';
 type Uploaded = { storage_path: string; original_filename?: string };
@@ -11,6 +11,10 @@ const DOCS: Array<{ key: DocKey; label: string; sub: string }> = [
   { key: 'taxi_license', label: 'Kjøreseddel', sub: 'Gyldig kjøreseddel for taxi' },
   { key: 'profile_photo', label: 'Profilbilde', sub: 'Tydelig ansiktsbilde' },
 ];
+
+function InviteBrand() {
+  return <div className="brand" aria-label="KJAPP"><div className="brand-word"><span>KJ</span><span className="brand-a">A</span><span>PP</span></div><div className="brand-sub">DRIVER</div></div>;
+}
 
 function UploadRow({ item, value, busy, onFile, onRemove }: {
   item: typeof DOCS[number]; value?: Uploaded; busy?: boolean; onFile: (f: File) => void; onRemove: () => void;
@@ -74,11 +78,11 @@ export default function DriverSignup() {
   };
 
   if (loading) return <div className="full-loader"><div className="spinner" /></div>;
-  if (!invite) return <div className="driver-signup-screen"><Brand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">SJÅFØRINVITASJON</span><h1>Lenken virker ikke</h1><p>{err || 'Invitasjonen er brukt, utløpt eller ugyldig.'}</p><a className="primary-button" href="https://kjappapp.no">Til KJAPP</a></div></div>;
-  if (done) return <div className="driver-signup-screen"><Brand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">MOTTATT</span><h1>Registreringen er sendt.</h1><p>Dokumentene dine blir kontrollert før sjåførkontoen aktiveres. Når du er godkjent bruker du den separate KJAPP Driver-appen.</p><a className="primary-button" href="https://kjappapp.no/sjafor">Om KJAPP Driver</a></div></div>;
+  if (!invite) return <div className="driver-signup-screen"><InviteBrand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">SJÅFØRINVITASJON</span><h1>Lenken virker ikke</h1><p>{err || 'Invitasjonen er brukt, utløpt eller ugyldig.'}</p><a className="primary-button" href="https://kjappapp.no">Til KJAPP</a></div></div>;
+  if (done) return <div className="driver-signup-screen"><InviteBrand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">MOTTATT</span><h1>Registreringen er sendt.</h1><p>Dokumentene dine blir kontrollert før sjåførkontoen aktiveres. Når du er godkjent bruker du den separate KJAPP Driver-appen.</p><a className="primary-button" href="https://kjappapp.no/sjafor">Om KJAPP Driver</a></div></div>;
 
   return <div className="driver-signup-screen">
-    <Brand />
+    <InviteBrand />
     <div className="driver-signup-card">
       <span className="driver-signup-kicker">SJÅFØRREGISTRERING · STEG {step}/2</span>
       <h1>{step === 1 ? 'Velkommen til KJAPP.' : 'Dokumentasjon.'}</h1>
