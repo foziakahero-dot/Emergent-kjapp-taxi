@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
-import { driverApi } from '@/src/lib/api';
+import { driverApi, KJAPP_DEFAULT_COMMISSION_PCT } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 type Filter = 'all' | 'week' | 'today';
@@ -39,7 +39,8 @@ export default function DriverTrips() {
 
   const { data: hist, isLoading } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
   const { data: payouts } = useQuery({ queryKey: ['driver-payouts'], queryFn: driverApi.payouts });
-  const commission = (payouts?.commission_pct ?? 20) / 100;
+  const commissionPct = payouts?.commission_pct ?? KJAPP_DEFAULT_COMMISSION_PCT;
+  const commission = commissionPct / 100;
   const all = hist?.trips || hist?.history || (Array.isArray(hist) ? hist : []);
 
   const trips = useMemo(() => {
@@ -116,7 +117,7 @@ export default function DriverTrips() {
 
                 <View style={s.breakCard}>
                   <BreakRow label="Bruttopris" value={kr(detail.price)} s={s} />
-                  <BreakRow label={`Provisjon (${payouts?.commission_pct ?? 20}%)`} value={`− ${kr(Math.round((detail.price || 0) * commission))}`} muted s={s} />
+                  <BreakRow label={`Provisjon (${commissionPct}%)`} value={`− ${kr(Math.round((detail.price || 0) * commission))}`} muted s={s} />
                   <View style={s.breakDivider} />
                   <BreakRow label="Din inntekt" value={kr(net(detail.price))} bold s={s} />
                 </View>

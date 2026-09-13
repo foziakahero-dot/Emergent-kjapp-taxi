@@ -3,6 +3,7 @@ import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
+export const KJAPP_DEFAULT_COMMISSION_PCT = 12;
 
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
@@ -82,6 +83,21 @@ export const summaryApi = {
   today: () => api.get('/summary/today').then((r) => r.data),
 };
 
+const safeNumber = (value: any, fallback = 0) => {
+  const n = Number(value);
+  return value != null && Number.isFinite(n) ? n : fallback;
+};
+
+const normalizePayouts = (data: any = {}) => ({
+  ...data,
+  commission_pct: safeNumber(data?.commission_pct, KJAPP_DEFAULT_COMMISSION_PCT),
+  pending_gross: safeNumber(data?.pending_gross),
+  pending_net: safeNumber(data?.pending_net),
+  pending_trips: safeNumber(data?.pending_trips),
+  next_payout_date: data?.next_payout_date || data?.next_payout || null,
+  history: Array.isArray(data?.history) ? data.history : [],
+});
+
 export const driverApi = {
   pending: () => api.get('/driver/pending').then((r) => r.data),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
@@ -98,5 +114,7 @@ export const driverApi = {
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
-  payouts: () => api.get('/driver/payouts').then((r) => r.data),
+  payouts: () => api.get('/driver/payouts')
+    .then((r) => normalizePayouts(r.data))
+    .catch(() => normalizePayouts()),
 };
