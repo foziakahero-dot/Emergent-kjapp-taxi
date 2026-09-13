@@ -102,6 +102,14 @@ export type DriverInvite = {
   expires_at?: string;
 };
 
+export type PublicDriverInvite = {
+  car?: string;
+  plate?: string;
+  vehicle_type?: string;
+  fleet_name?: string;
+  expires_at?: string;
+};
+
 export const api = {
   login: (email: string, password: string) =>
     http.post('/auth/login', { email, password }).then((r) => r.data),
@@ -120,4 +128,24 @@ export const api = {
     http.post('/fleet/driver-invites', body).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
+
+  publicDriverInvite: (token: string): Promise<PublicDriverInvite> =>
+    http.get(`/driver-invites/${token}`).then((r) => r.data),
+  acceptDriverInvite: (body: {
+    token: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    password: string;
+    drivers_license_path: string;
+    taxi_license_path: string;
+    profile_photo_path: string;
+  }) => http.post('/driver-invites/accept', body).then((r) => r.data),
+  uploadDriverDoc: (file: File, inviteToken: string, docType: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('invite_token', inviteToken);
+    form.append('doc_type', docType);
+    return http.post('/upload/driver-doc', form).then((r) => r.data);
+  },
 };
