@@ -83,16 +83,19 @@ export const summaryApi = {
   today: () => api.get('/summary/today').then((r) => r.data),
 };
 
+const safeNumber = (value: any, fallback = 0) => {
+  const n = Number(value);
+  return value != null && Number.isFinite(n) ? n : fallback;
+};
+
 const normalizePayouts = (data: any = {}) => ({
-  commission_pct: Number.isFinite(Number(data?.commission_pct))
-    ? Number(data.commission_pct)
-    : KJAPP_DEFAULT_COMMISSION_PCT,
-  pending_gross: Number(data?.pending_gross || 0),
-  pending_net: Number(data?.pending_net || 0),
-  pending_trips: Number(data?.pending_trips || 0),
+  ...data,
+  commission_pct: safeNumber(data?.commission_pct, KJAPP_DEFAULT_COMMISSION_PCT),
+  pending_gross: safeNumber(data?.pending_gross),
+  pending_net: safeNumber(data?.pending_net),
+  pending_trips: safeNumber(data?.pending_trips),
   next_payout_date: data?.next_payout_date || data?.next_payout || null,
   history: Array.isArray(data?.history) ? data.history : [],
-  ...data,
 });
 
 export const driverApi = {
