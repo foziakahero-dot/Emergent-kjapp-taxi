@@ -10,7 +10,10 @@ const REQUIRED_DOCS = [
   { key: 'bank', label: 'Bankdokumentasjon', detail: 'For utbetalinger' },
 ] as const;
 
-type FormState = Omit<FleetDraft, 'license_count' | 'vehicle_count'> & { license_count: number | ''; vehicle_count: number | '' };
+type FormState = Omit<FleetDraft, 'license_count' | 'vehicle_count'> & {
+  license_count: number | '';
+  vehicle_count: number | '';
+};
 
 const INITIAL: FormState = {
   company_name: '', org_number: '', contact_name: '', contact_email: '', contact_phone: '',
