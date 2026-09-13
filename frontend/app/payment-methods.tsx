@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -139,7 +139,7 @@ export default function PaymentMethods() {
             ) : null}
 
             <Pressable style={[s.stripeBtn, busy && { opacity: 0.65 }]} onPress={addStripeCard} disabled={busy} testID="pm-stripe">
-              {busy ? <Loader /> : <Icon name="lock" size={16} color={colors.accentOn} />}
+              {busy ? <ActivityIndicator color={colors.accentOn} /> : <Icon name="lock" size={16} color={colors.accentOn} />}
               <Text style={s.stripeText}>{busy ? 'Bekrefter…' : 'Legg til og verifiser kort'}</Text>
             </Pressable>
 
