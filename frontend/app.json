@@ -30,7 +30,8 @@
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -44,6 +45,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Vis biler i nærheten og hent deg der du er"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "kjapp_trips",
+          "color": "#00E5F5"
         }
       ],
       "expo-web-browser"
