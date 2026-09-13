@@ -42,9 +42,6 @@ export default function BookingFlow() {
           try { await tripsApi.complete(tripId!); } catch {}
           router.replace(`/receipt/${tripId}`);
         }
-        if ((t.status === 'cancelled' || t.status === 'cancelled_by_driver') && !nav.current) {
-          // stay to show message
-        }
       } catch {}
     };
     fetchTrip();
@@ -65,6 +62,7 @@ export default function BookingFlow() {
   const route = trip.geometry?.coordinates || [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
+  const driverPhone = String(trip.driver?.phone || '').replace(/[^+\d]/g, '');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -150,7 +148,9 @@ export default function BookingFlow() {
               </View>
             ) : (
               <View style={s.actions}>
-                <Action icon="phone" label="Ring" testID="action-call" onPress={() => Linking.openURL(`tel:${(trip.driver?.phone || '').replace(/\s/g, '') || '112'}`)} />
+                {driverPhone ? (
+                  <Action icon="phone" label="Ring" testID="action-call" onPress={() => Linking.openURL(`tel:${driverPhone}`)} />
+                ) : null}
                 <Action icon="message" label="Melding" testID="action-message" onPress={() => setChatOpen(true)} />
                 <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => Linking.openURL('tel:112')} />
               </View>
