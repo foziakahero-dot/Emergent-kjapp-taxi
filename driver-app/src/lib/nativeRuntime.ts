@@ -5,6 +5,7 @@ import * as TaskManager from 'expo-task-manager';
 import { api } from '@/src/lib/api';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
+let backgroundPermissionRequestedThisSession = false;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -27,8 +28,7 @@ if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
         speed: pos.coords.speed || 0,
       });
     } catch {
-      // Background position delivery is best-effort. The foreground poller retries
-      // automatically when the app becomes active again.
+      // Foreground polling will recover on the next active session.
     }
   });
 }
@@ -68,12 +68,19 @@ export async function registerNativePush() {
 export async function startDriverBackgroundLocation() {
   if (Platform.OS === 'web') return { foreground: false, background: false };
 
-  const foreground = await Location.requestForegroundPermissionsAsync();
+  const foregroundCurrent = await Location.getForegroundPermissionsAsync();
+  const foreground = foregroundCurrent.status === 'granted'
+    ? foregroundCurrent
+    : await Location.requestForegroundPermissionsAsync();
   if (foreground.status !== 'granted') {
     return { foreground: false, background: false };
   }
 
-  const background = await Location.requestBackgroundPermissionsAsync();
+  let background = await Location.getBackgroundPermissionsAsync();
+  if (background.status !== 'granted' && !backgroundPermissionRequestedThisSession) {
+    backgroundPermissionRequestedThisSession = true;
+    background = await Location.requestBackgroundPermissionsAsync();
+  }
   if (background.status !== 'granted') {
     return { foreground: true, background: false };
   }
