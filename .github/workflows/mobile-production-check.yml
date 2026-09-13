@@ -1,0 +1,44 @@
+name: Mobile production check
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'driver-app/**'
+      - '.github/workflows/mobile-production-check.yml'
+  workflow_dispatch:
+
+jobs:
+  customer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install customer dependencies
+        run: npm install
+      - name: Validate customer Expo config
+        run: npx expo config --type public
+      - name: Typecheck customer app
+        run: npx tsc --noEmit
+
+  driver:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: driver-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install driver dependencies
+        run: npm install
+      - name: Validate driver Expo config
+        run: npx expo config --type public
+      - name: Typecheck driver app
+        run: npx tsc --noEmit
