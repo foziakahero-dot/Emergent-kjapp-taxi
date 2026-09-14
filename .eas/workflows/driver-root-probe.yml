@@ -1,0 +1,30 @@
+name: KJAPP Driver root-detection probe
+
+on:
+  push:
+    branches: ['codex/kjapp-signature-mainline']
+
+concurrency:
+  cancel_in_progress: true
+  group: ${{ workflow.filename }}-${{ github.ref }}
+
+jobs:
+  validate_driver_from_repo_root:
+    name: Validate Driver from repository root
+    image: sdk-57
+    runs_on: linux-large
+    steps:
+      - uses: eas/checkout
+      - name: Verify Driver app directory
+        run: |
+          pwd
+          ls -la
+          test -f driver-app/package.json
+          test -f driver-app/app.json
+          test -f driver-app/eas.json
+      - name: Install Driver dependencies
+        run: cd driver-app && npm install
+      - name: Validate Driver Expo config
+        run: cd driver-app && npx expo config --type public
+      - name: Type-check Driver app
+        run: cd driver-app && npx tsc --noEmit
