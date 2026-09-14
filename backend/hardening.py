@@ -38,19 +38,88 @@ def _remove_route(path: str, method: str) -> None:
     core.app.router.routes[:] = kept
 
 
+async def _mark_trip_paid(trip_id: str, user_id: str, payment_intent) -> None:
+    """Mark payment fields without ever downgrading a rated trip back to completed."""
+    trip = await core.db.trips.find_one({"trip_id": trip_id, "user_id": user_id}, {"status": 1})
+    if not trip:
+        return
+    update = {
+        "payment_status": "paid",
+        "paid_at": datetime.now(timezone.utc).isoformat(),
+        "stripe_payment_intent": payment_intent,
+    }
+    if trip.get("status") == "arrived":
+        update["status"] = "completed"
+        update["completed_at"] = datetime.now(timezone.utc).isoformat()
+    await core.db.trips.update_one(
+        {"trip_id": trip_id, "user_id": user_id},
+        {"$set": update},
+    )
+
+
+async def _find_open_payment(trip_id: str, user_id: str):
+    """Return/reconcile the newest pending Stripe Checkout session for one passenger trip."""
+    rec = await core.db.payment_transactions.find_one(
+        {
+            "trip_id": trip_id,
+            "user_id": user_id,
+            "payment_status": "pending",
+            "status": {"$in": ["initiated", "pending"]},
+        },
+        sort=[("created_at", -1)],
+    )
+    if not rec:
+        return None
+    try:
+        session = stripe.checkout.Session.retrieve(rec["session_id"])
+    except stripe.error.StripeError:
+        return None
+
+    stripe_payment_status = getattr(session, "payment_status", None)
+    stripe_status = getattr(session, "status", None)
+    if stripe_payment_status == "paid":
+        payment_intent = getattr(session, "payment_intent", None)
+        await core.db.payment_transactions.update_one(
+            {"session_id": rec["session_id"], "user_id": user_id},
+            {"$set": {
+                "status": "completed",
+                "payment_status": "paid",
+                "stripe_payment_intent_id": payment_intent,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        await _mark_trip_paid(trip_id, user_id, payment_intent)
+        return {"paid": True, "session": session}
+
+    if stripe_status == "open" and getattr(session, "url", None):
+        return {"paid": False, "session": session}
+
+    if stripe_status in {"complete", "expired"}:
+        await core.db.payment_transactions.update_one(
+            {"session_id": rec["session_id"], "user_id": user_id},
+            {"$set": {
+                "status": "expired" if stripe_status == "expired" else "completed",
+                "payment_status": stripe_payment_status or ("expired" if stripe_status == "expired" else "unpaid"),
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+    return None
+
+
 def _install_routes() -> None:
-    # Passenger trip state integrity
+    # Passenger/driver trip state integrity.
     _remove_route("/api/trips/{trip_id}/complete", "POST")
     _remove_route("/api/trips/{trip_id}/rate", "POST")
     _remove_route("/api/driver/trip/{trip_id}/rate-passenger", "POST")
     _remove_route("/api/trips/{trip_id}/cancel", "POST")
 
-    # Payment integrity / ownership
+    # Payment integrity / ownership.
+    _remove_route("/api/payments/card/setup/{session_id}", "GET")
     _remove_route("/api/payments/checkout", "POST")
     _remove_route("/api/payments/status/{session_id}", "GET")
     _remove_route("/api/stripe/webhook", "POST")
 
-    # Message read-state ownership
+    # Message read-state ownership.
     _remove_route("/api/messages/mark-seen/{trip_id}", "POST")
 
     @core.app.post("/api/trips/{trip_id}/complete")
@@ -95,7 +164,10 @@ def _install_routes() -> None:
                 "trip_id": trip_id,
                 "user_id": current["id"],
                 "status": {"$in": list(RATABLE_PASSENGER_STATES)},
-                "passenger_rating": {"$exists": False},
+                "$or": [
+                    {"passenger_rating": {"$exists": False}},
+                    {"passenger_rating": None},
+                ],
             },
             {"$set": {
                 "passenger_rating": body.rating,
@@ -146,7 +218,10 @@ def _install_routes() -> None:
                 "trip_id": trip_id,
                 "driver_id": current["id"],
                 "status": {"$in": list(FINISHED_TRIP_STATES)},
-                "driver_rating": {"$exists": False},
+                "$or": [
+                    {"driver_rating": {"$exists": False}},
+                    {"driver_rating": None},
+                ],
             },
             {"$set": {
                 "driver_rating": body.rating,
@@ -206,51 +281,68 @@ def _install_routes() -> None:
             )
         return {"ok": True}
 
-    async def _find_open_payment(trip_id: str, user_id: str):
-        rec = await core.db.payment_transactions.find_one(
-            {
-                "trip_id": trip_id,
-                "user_id": user_id,
-                "payment_status": "pending",
-                "status": {"$in": ["initiated", "pending"]},
-            },
-            sort=[("created_at", -1)],
-        )
-        if not rec:
-            return None
+    @core.app.get("/api/payments/card/setup/{session_id}")
+    async def stripe_card_setup_status_hardened(session_id: str, current=Depends(core.get_current_user)):
         try:
-            session = stripe.checkout.Session.retrieve(rec["session_id"])
-        except stripe.error.StripeError:
-            return None
-        if getattr(session, "payment_status", None) == "paid" or getattr(session, "status", None) == "complete":
-            payment_intent = getattr(session, "payment_intent", None)
-            await core.db.payment_transactions.update_one(
-                {"session_id": rec["session_id"]},
-                {"$set": {
-                    "status": "completed",
-                    "payment_status": "paid",
-                    "stripe_payment_intent_id": payment_intent,
-                    "updated_at": datetime.now(timezone.utc),
-                }},
-            )
-            await core.db.trips.update_one(
-                {"trip_id": trip_id, "user_id": user_id},
-                {"$set": {
-                    "payment_status": "paid",
-                    "status": "completed",
-                    "paid_at": datetime.now(timezone.utc).isoformat(),
-                    "stripe_payment_intent": payment_intent,
-                }},
-            )
-            return {"paid": True, "session": session}
-        if getattr(session, "status", None) == "open" and getattr(session, "url", None):
-            return {"paid": False, "session": session}
-        if getattr(session, "status", None) == "expired":
-            await core.db.payment_transactions.update_one(
-                {"session_id": rec["session_id"]},
-                {"$set": {"status": "expired", "payment_status": "expired", "updated_at": datetime.now(timezone.utc)}},
-            )
-        return None
+            session = stripe.checkout.Session.retrieve(session_id, expand=["setup_intent"])
+        except stripe.error.StripeError as exc:
+            raise HTTPException(status_code=400, detail=f"Kunne ikke hente sesjon: {exc}")
+
+        metadata_user = None
+        try:
+            metadata_user = session.metadata.get("user_id")
+        except Exception:
+            metadata_user = None
+        if session.mode != "setup" or metadata_user != current["id"]:
+            # Same response for wrong mode and another user's session.
+            raise HTTPException(status_code=404, detail="Betalingssesjon ikke funnet")
+        if session.status != "complete":
+            return {"ready": False, "status": session.status}
+
+        setup_intent = session.setup_intent
+        setup_obj = setup_intent if hasattr(setup_intent, "id") else stripe.SetupIntent.retrieve(setup_intent)
+        payment_method_id = setup_obj.payment_method
+        if not payment_method_id:
+            return {"ready": False, "reason": "no payment method attached"}
+        setup_status = getattr(setup_obj, "status", None) or "unknown"
+        verified = setup_status == "succeeded"
+        payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+        card = payment_method.card
+
+        existing = await core.db.payment_methods.find_one(
+            {"user_id": current["id"], "stripe_payment_method_id": payment_method_id}
+        )
+        if not existing:
+            has_any = await core.db.payment_methods.count_documents({"user_id": current["id"]}) > 0
+            doc = {
+                "user_id": current["id"],
+                "type": card.brand,
+                "label": card.brand.capitalize(),
+                "last4": card.last4,
+                "exp_month": card.exp_month,
+                "exp_year": card.exp_year,
+                "stripe_payment_method_id": payment_method_id,
+                "stripe_customer_id": session.customer,
+                "stripe_setup_intent_id": getattr(setup_obj, "id", None),
+                "setup_status": setup_status,
+                "verified": verified,
+                "is_default": (not has_any) and verified,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            result = await core.db.payment_methods.insert_one(doc)
+            doc["id"] = str(result.inserted_id)
+            doc.pop("_id", None)
+            return {"ready": True, "card": doc, "verified": verified}
+
+        await core.db.payment_methods.update_one(
+            {"_id": existing["_id"], "user_id": current["id"]},
+            {"$set": {"setup_status": setup_status, "verified": verified}},
+        )
+        existing["id"] = str(existing["_id"])
+        existing.pop("_id", None)
+        existing["setup_status"] = setup_status
+        existing["verified"] = verified
+        return {"ready": True, "card": existing, "verified": verified}
 
     @core.app.post("/api/payments/checkout")
     async def create_trip_checkout_hardened(
@@ -289,6 +381,7 @@ def _install_routes() -> None:
                 "payment_status": {"$ne": "paid"},
                 "$or": [
                     {"payment_checkout_lock": {"$exists": False}},
+                    {"payment_checkout_lock_at": {"$exists": False}},
                     {"payment_checkout_lock_at": {"$lt": stale_before}},
                 ],
             },
@@ -302,7 +395,6 @@ def _install_routes() -> None:
             raise HTTPException(status_code=409, detail="Betaling opprettes allerede. Prøv igjen om et øyeblikk.")
 
         try:
-            # Recheck after acquiring the lock in case another request completed just before the lock.
             fresh = await core.db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
             if not fresh or fresh.get("payment_status") == "paid":
                 raise HTTPException(status_code=409, detail="Turen er allerede betalt")
@@ -328,7 +420,6 @@ def _install_routes() -> None:
                 success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
                 cancel_url=f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
                 metadata={"trip_id": body.trip_id, "user_id": current["id"]},
-                idempotency_key=f"kjapp-trip-{body.trip_id}-{lock_token}",
             )
             await core.db.payment_transactions.insert_one({
                 "session_id": session.id,
@@ -350,17 +441,23 @@ def _install_routes() -> None:
 
     @core.app.get("/api/payments/status/{session_id}")
     async def get_payment_status_hardened(session_id: str, current=Depends(core.get_current_user)):
-        record = await core.db.payment_transactions.find_one({"session_id": session_id, "user_id": current["id"]})
+        record = await core.db.payment_transactions.find_one(
+            {"session_id": session_id, "user_id": current["id"]}
+        )
         if not record:
             # Deliberately 404 for both nonexistent and somebody else's session.
             raise HTTPException(status_code=404, detail="Betaling ikke funnet")
         if record.get("payment_status") != "paid":
             try:
                 session = stripe.checkout.Session.retrieve(session_id)
-                if session.payment_status == "paid" or session.status == "complete":
+                if session.payment_status == "paid":
                     payment_intent = session.payment_intent
                     await core.db.payment_transactions.update_one(
-                        {"session_id": session_id, "user_id": current["id"], "payment_status": {"$ne": "paid"}},
+                        {
+                            "session_id": session_id,
+                            "user_id": current["id"],
+                            "payment_status": {"$ne": "paid"},
+                        },
                         {"$set": {
                             "status": "completed",
                             "payment_status": "paid",
@@ -369,16 +466,22 @@ def _install_routes() -> None:
                         }},
                     )
                     if record.get("trip_id"):
-                        await core.db.trips.update_one(
-                            {"trip_id": record["trip_id"], "user_id": current["id"]},
-                            {"$set": {
-                                "payment_status": "paid",
-                                "status": "completed",
-                                "paid_at": datetime.now(timezone.utc).isoformat(),
-                                "stripe_payment_intent": payment_intent,
-                            }},
-                        )
-                    record = await core.db.payment_transactions.find_one({"session_id": session_id, "user_id": current["id"]})
+                        await _mark_trip_paid(record["trip_id"], current["id"], payment_intent)
+                    record = await core.db.payment_transactions.find_one(
+                        {"session_id": session_id, "user_id": current["id"]}
+                    )
+                elif session.status == "expired":
+                    await core.db.payment_transactions.update_one(
+                        {"session_id": session_id, "user_id": current["id"]},
+                        {"$set": {
+                            "status": "expired",
+                            "payment_status": "expired",
+                            "updated_at": datetime.now(timezone.utc),
+                        }},
+                    )
+                    record = await core.db.payment_transactions.find_one(
+                        {"session_id": session_id, "user_id": current["id"]}
+                    )
             except stripe.error.StripeError:
                 pass
         return {
@@ -400,29 +503,23 @@ def _install_routes() -> None:
             raise HTTPException(status_code=400, detail="Invalid signature")
         except Exception:
             raise HTTPException(status_code=400, detail="Webhook error")
+
         obj = event["data"]["object"]
         event_type = event["type"]
         if event_type == "checkout.session.completed":
+            payment_status = obj.get("payment_status") or "unpaid"
             payment_intent = obj.get("payment_intent")
             record = await core.db.payment_transactions.find_one_and_update(
                 {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
                 {"$set": {
                     "status": "completed",
-                    "payment_status": obj.get("payment_status", "paid"),
+                    "payment_status": payment_status,
                     "stripe_payment_intent_id": payment_intent,
                     "updated_at": datetime.now(timezone.utc),
                 }},
             )
-            if record and record.get("trip_id"):
-                await core.db.trips.update_one(
-                    {"trip_id": record["trip_id"], "user_id": record.get("user_id")},
-                    {"$set": {
-                        "payment_status": "paid",
-                        "status": "completed",
-                        "paid_at": datetime.now(timezone.utc).isoformat(),
-                        "stripe_payment_intent": payment_intent,
-                    }},
-                )
+            if record and record.get("trip_id") and payment_status == "paid":
+                await _mark_trip_paid(record["trip_id"], record.get("user_id"), payment_intent)
         elif event_type == "checkout.session.expired":
             await core.db.payment_transactions.update_one(
                 {"session_id": obj["id"]},
