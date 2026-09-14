@@ -24,6 +24,8 @@ const STATUS: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Avbrutt', color: colors.danger },
 };
 
+const EARNING_STATUSES = new Set(['arrived', 'completed', 'rated']);
+
 function fmtDate(iso?: string) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -52,6 +54,7 @@ export default function DriverTrips() {
   }, [all, filter]);
 
   const net = (p: number) => Math.round((p || 0) * (1 - commission));
+  const isEarned = (t: any) => EARNING_STATUSES.has(t?.status);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
@@ -61,7 +64,7 @@ export default function DriverTrips() {
         </Pressable>
         <View>
           <Text style={s.title}>Turhistorikk</Text>
-          <Text style={s.subtitle}>Dine gjennomførte KJAPP-turer</Text>
+          <Text style={s.subtitle}>Fullførte og avbrutte KJAPP-turer</Text>
         </View>
       </View>
 
@@ -79,6 +82,7 @@ export default function DriverTrips() {
         ) : trips.length ? (
           trips.map((t: any, i: number) => {
             const st = STATUS[t.status] || { label: t.status, color: colors.textMuted };
+            const earned = isEarned(t);
             return (
               <Pressable key={t.trip_id || i} style={({ pressed }) => [s.card, pressed && { opacity: 0.84 }]} onPress={() => setDetail(t)} testID={`trip-row-${i}`}>
                 <View style={s.statusRow}>
@@ -100,8 +104,8 @@ export default function DriverTrips() {
                     <Text style={[s.address, { marginTop: 7 }]} numberOfLines={1}>{t.dropoff_address}</Text>
                   </View>
                   <View style={s.priceCol}>
-                    <Text style={s.rowPrice}>{kr(net(t.price))}</Text>
-                    <Text style={s.rowGross}>{kr(t.price)} brutto</Text>
+                    <Text style={[s.rowPrice, !earned && { color: colors.textMuted }]}>{earned ? kr(net(t.price)) : kr(0)}</Text>
+                    <Text style={s.rowGross}>{earned ? `${kr(t.price)} brutto` : 'Ingen inntekt'}</Text>
                     <Text style={s.distance}>{t.distance_km} km</Text>
                   </View>
                 </View>
@@ -137,10 +141,11 @@ export default function DriverTrips() {
                 </View>
 
                 <View style={s.breakCard}>
-                  <BreakRow label="Bruttopris" value={kr(detail.price)} s={s} />
-                  <BreakRow label={`Provisjon (${commissionPct}%)`} value={`− ${kr(Math.round((detail.price || 0) * commission))}`} muted s={s} />
+                  <BreakRow label="Bruttopris" value={isEarned(detail) ? kr(detail.price) : kr(0)} s={s} />
+                  <BreakRow label={`Provisjon (${commissionPct}%)`} value={isEarned(detail) ? `− ${kr(Math.round((detail.price || 0) * commission))}` : kr(0)} muted s={s} />
                   <View style={s.breakDivider} />
-                  <BreakRow label="Din inntekt" value={kr(net(detail.price))} bold s={s} />
+                  <BreakRow label="Din inntekt" value={isEarned(detail) ? kr(net(detail.price)) : kr(0)} bold s={s} />
+                  {!isEarned(detail) ? <Text style={s.noIncomeNote}>Avbrutte turer regnes ikke som opptjent inntekt.</Text> : null}
                 </View>
               </>
             ) : null}
@@ -211,4 +216,5 @@ const useStyles = makeStyles((c) => ({
   breakLabel: { color: c.textSecondary, fontSize: 14 },
   breakValue: { color: c.text, fontFamily: font.mono, fontSize: 14 },
   breakDivider: { height: 1, backgroundColor: c.line, marginVertical: 6 },
+  noIncomeNote: { color: c.textMuted, fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 8 },
 }));
