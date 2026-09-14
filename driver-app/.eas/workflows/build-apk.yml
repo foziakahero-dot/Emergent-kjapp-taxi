@@ -2,7 +2,7 @@ name: KJAPP Driver Android APK
 
 on:
   push:
-    branches: ['main', 'codex/kjapp-signature-mainline']
+    branches: ['main']
 
 jobs:
   build_driver_android_apk:
