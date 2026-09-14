@@ -14,7 +14,6 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
-import { Button } from '@/src/components/ui';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
@@ -31,6 +30,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
   const [error, setError] = useState('');
+  const [socialNote, setSocialNote] = useState('');
 
   const finishLogin = async (u: any) => {
     if (!isCustomerRole(u?.role)) {
@@ -44,12 +44,14 @@ export default function Login() {
   };
 
   const submit = async () => {
+    if (!email.trim() || !password) return;
     setError('');
+    setSocialNote('');
     setLoading(true);
     try {
       const res = await login(email.trim(), password);
       if (res?.twofa_required) {
-        setError('Kontoen krever tofaktor — logg inn via web-portalen.');
+        setError('Kontoen krever tofaktor. Fullfør innlogging via web-portalen.');
         return;
       }
       await finishLogin(res);
@@ -62,6 +64,7 @@ export default function Login() {
 
   const googleSignIn = async () => {
     setError('');
+    setSocialNote('');
     setGLoading(true);
     try {
       const u = await signInWithGoogle();
@@ -74,68 +77,121 @@ export default function Login() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={[s.wrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[s.wrap, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 26 }]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Pressable onPress={() => router.back()} style={s.back} testID="login-back">
-          <Icon name="arrow-left" size={20} color={colors.text} />
+          <Icon name="chevron-left" size={22} color={colors.textMuted} />
         </Pressable>
 
-        <Text style={s.brand}>KJ<Text style={{ color: colors.accent }}>A</Text>PP</Text>
-        <Text style={s.title}>Velkommen tilbake</Text>
-        <Text style={s.sub}>Logg inn for å bestille din neste tur.</Text>
+        <View style={s.content}>
+          <Text style={s.title}>Velkommen tilbake</Text>
+          <Text style={s.sub}>Logg inn for å fortsette reisen</Text>
 
-        <View style={s.field}>
-          <Icon name="mail" size={18} color={colors.textMuted} />
-          <TextInput
-            testID="login-email"
-            placeholder="E-post"
-            placeholderTextColor={colors.textMuted}
-            style={s.input}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
+          <View style={s.form}>
+            <TextInput
+              testID="login-email"
+              placeholder="E-post eller telefon"
+              placeholderTextColor={colors.textMuted}
+              style={s.input}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              value={email}
+              onChangeText={setEmail}
+            />
+
+            <View style={s.passwordField}>
+              <TextInput
+                testID="login-password"
+                placeholder="Passord"
+                placeholderTextColor={colors.textMuted}
+                style={s.passwordInput}
+                secureTextEntry={!show}
+                autoComplete="current-password"
+                value={password}
+                onChangeText={setPassword}
+              />
+              <Pressable onPress={() => setShow((v) => !v)} hitSlop={10} testID="login-toggle-password">
+                <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="login-forgot-password">
+              <Text style={s.forgotText}>Glemt passord?</Text>
+            </Pressable>
+
+            {error ? (
+              <View style={s.errorBox} testID="login-error">
+                <Text style={s.error}>{error}</Text>
+              </View>
+            ) : null}
+
+            <View style={s.submitWrap}>
+              <Pressable
+                onPress={submit}
+                disabled={loading || !email.trim() || !password}
+                testID="login-submit"
+                style={({ pressed }) => [
+                  s.submit,
+                  pressed && { transform: [{ scale: 0.96 }] },
+                  (loading || !email.trim() || !password) && { opacity: 0.55 },
+                ]}
+              >
+                {loading ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.arrow}>→</Text>}
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={s.dividerRow}>
+            <View style={s.divLine} />
+            <Text style={s.divText}>ELLER FORTSETT MED</Text>
+            <View style={s.divLine} />
+          </View>
+
+          <View style={s.socialRow}>
+            <SocialButton testID="social-apple" onPress={() => setSocialNote('Sign in with Apple er ikke aktivert i mobilappen ennå.')}>
+              <Text style={s.socialLetter}>A</Text>
+            </SocialButton>
+            <SocialButton testID="login-google" onPress={googleSignIn} disabled={gLoading}>
+              {gLoading ? <ActivityIndicator color={colors.text} size="small" /> : <GoogleG size={20} />}
+            </SocialButton>
+            <SocialButton testID="social-phone" onPress={() => setSocialNote('SMS-innlogging er ikke aktivert ennå.')}>
+              <Icon name="phone" size={19} color={colors.text} />
+            </SocialButton>
+          </View>
+
+          {socialNote ? <Text style={s.socialNote}>{socialNote}</Text> : null}
         </View>
 
-        <View style={s.field}>
-          <Icon name="lock" size={18} color={colors.textMuted} />
-          <TextInput
-            testID="login-password"
-            placeholder="Passord"
-            placeholderTextColor={colors.textMuted}
-            style={s.input}
-            secureTextEntry={!show}
-            value={password}
-            onChangeText={setPassword}
-          />
-          <Pressable onPress={() => setShow((v) => !v)} testID="login-toggle-password">
-            <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
+        <View style={s.footer}>
+          <Text style={s.footerText}>Ingen konto? </Text>
+          <Pressable onPress={() => router.push('/register')} testID="login-to-register">
+            <Text style={s.footerLink}>Opprett en</Text>
           </Pressable>
         </View>
-
-        {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
-
-        <Button label="Logg inn" onPress={submit} loading={loading} testID="login-submit" style={{ marginTop: 8 }} />
-
-        <View style={s.dividerRow}>
-          <View style={s.divLine} />
-          <Text style={s.divText}>eller</Text>
-          <View style={s.divLine} />
-        </View>
-
-        <Pressable style={s.googleBtn} onPress={googleSignIn} disabled={gLoading} testID="login-google">
-          {gLoading ? <ActivityIndicator color="#1F1F1F" /> : <><GoogleG size={20} /><Text style={s.googleText}>Fortsett med Google</Text></>}
-        </Pressable>
-
-        <Pressable onPress={() => router.push('/register')} style={s.footer} testID="login-to-register">
-          <Text style={s.footerText}>Ny hos KJAPP? <Text style={{ color: colors.accent }}>Opprett konto</Text></Text>
+        <Pressable onPress={() => setSocialNote('Sjåfører logger inn i den separate KJAPP Driver-appen.')} style={s.driverHint} testID="login-driver-hint">
+          <Text style={s.driverHintText}>Er du sjåfør? <Text style={{ color: colors.accent }}>Bruk KJAPP Driver</Text></Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+function SocialButton({ children, onPress, disabled, testID }: { children: React.ReactNode; onPress: () => void; disabled?: boolean; testID: string }) {
+  const s = useStyles();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      testID={testID}
+      style={({ pressed }) => [s.socialBtn, pressed && { transform: [{ scale: 0.96 }] }, disabled && { opacity: 0.6 }]}
+    >
+      {children}
+    </Pressable>
   );
 }
 
@@ -151,19 +207,33 @@ function GoogleG({ size = 20 }: { size?: number }) {
 }
 
 const useStyles = makeStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.bg },
   wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.bg },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
+  back: { width: 40, height: 40, marginLeft: -6, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: 8, paddingTop: 18, flex: 1 },
+  title: { fontFamily: font.display, fontSize: 28, color: c.text, letterSpacing: -0.5 },
+  sub: { color: c.textMuted, fontSize: 14, marginTop: 8 },
+  form: { marginTop: 38 },
+  input: { height: 56, borderRadius: 14, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, color: c.text, fontSize: 16, paddingHorizontal: 16, marginBottom: 14 },
+  passwordField: { height: 56, borderRadius: 14, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' },
+  passwordInput: { flex: 1, height: '100%', color: c.text, fontSize: 16, paddingRight: 12 },
+  forgot: { alignSelf: 'flex-end', paddingVertical: 12 },
+  forgotText: { color: c.textMuted, fontSize: 13 },
+  errorBox: { backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: 'rgba(239,68,68,0.22)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 10 },
+  error: { color: c.danger, fontSize: 13 },
+  submitWrap: { alignItems: 'center', paddingTop: 4 },
+  submit: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.38, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 7 },
+  arrow: { color: c.accentOn, fontSize: 25, lineHeight: 28, fontWeight: '700', marginTop: -2 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 38 },
   divLine: { flex: 1, height: 1, backgroundColor: c.line },
-  divText: { color: c.textMuted, fontSize: 12 },
-  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 999, backgroundColor: '#FFFFFF' },
-  googleText: { color: '#1F1F1F', fontSize: 16, fontWeight: '600' },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 24 },
-  brand: { fontFamily: font.display, fontSize: 34, color: c.text, letterSpacing: 1 },
-  title: { fontFamily: font.display, fontSize: 26, color: c.text, marginTop: 24 },
-  sub: { color: c.textMuted, fontSize: 14, marginTop: 6, marginBottom: 24 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 16, height: 56, marginBottom: 14 },
-  input: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
-  error: { color: c.danger, fontSize: 13, marginBottom: 8 },
-  footer: { alignItems: 'center', marginTop: 24 },
-  footerText: { color: c.textSecondary, fontSize: 14 },
+  divText: { color: c.textMuted, fontSize: 9, letterSpacing: 1.5 },
+  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 28 },
+  socialBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
+  socialLetter: { color: c.text, fontFamily: font.display, fontSize: 18 },
+  socialNote: { color: c.textMuted, fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 14, paddingHorizontal: 8 },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 38 },
+  footerText: { color: c.textMuted, fontSize: 14 },
+  footerLink: { color: c.accent, fontSize: 14, fontWeight: '600' },
+  driverHint: { alignItems: 'center', paddingTop: 14, paddingBottom: 4 },
+  driverHintText: { color: c.textMuted, fontSize: 12 },
 }));
