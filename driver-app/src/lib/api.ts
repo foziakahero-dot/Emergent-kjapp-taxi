@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as Location from 'expo-location';
 import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
@@ -98,6 +99,33 @@ const normalizePayouts = (data: any = {}) => ({
   history: Array.isArray(data?.history) ? data.history : [],
 });
 
+async function requireDriverLocationPermission() {
+  let permission = await Location.getForegroundPermissionsAsync();
+  if (permission.status !== 'granted') {
+    permission = await Location.requestForegroundPermissionsAsync();
+  }
+  if (permission.status !== 'granted') {
+    throw new Error('Slå på posisjon før du går online. KJAPP må kunne dele din faktiske posisjon mens du mottar turer.');
+  }
+}
+
+async function normalizeDriverSummary(data: any = {}) {
+  if (!data?.online) return data;
+  try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status === 'granted') return data;
+  } catch {
+    // Treat an unreadable permission state as unavailable for online safety.
+  }
+
+  try {
+    await api.post('/driver/online', { online: false });
+  } catch {
+    // The UI must still stop representing the driver as available locally.
+  }
+  return { ...data, online: false };
+}
+
 export const driverApi = {
   pending: () => api.get('/driver/pending').then((r) => r.data),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
@@ -107,10 +135,13 @@ export const driverApi = {
   start: (id: string) => api.post(`/driver/trip/${id}/start`).then((r) => r.data),
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
-  online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
+  online: async (online: boolean) => {
+    if (online) await requireDriverLocationPermission();
+    return api.post('/driver/online', { online }).then((r) => r.data);
+  },
   location: (lat: number, lng: number, heading = 0, speed = 0) =>
     api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
-  summary: () => api.get('/driver/summary/today').then((r) => r.data),
+  summary: () => api.get('/driver/summary/today').then((r) => normalizeDriverSummary(r.data)),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),

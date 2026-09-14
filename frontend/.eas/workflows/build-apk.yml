@@ -1,4 +1,4 @@
-name: KJAPP Android APKs
+name: KJAPP Customer Android APK
 
 on:
   push:
@@ -11,33 +11,3 @@ jobs:
     params:
       platform: android
       profile: apk
-
-  build_driver_android_apk:
-    name: Build KJAPP Driver Android APK
-    steps:
-      - uses: eas/checkout
-
-      - name: Install Driver dependencies
-        run: npm install
-        working_directory: ../driver-app
-
-      - name: Validate Driver Expo config
-        run: npx expo config --type public
-        working_directory: ../driver-app
-
-      - name: Generate Driver Android project
-        run: npx expo prebuild --platform android --clean
-        working_directory: ../driver-app
-
-      - name: Build standalone Driver release APK
-        run: |
-          export EXPO_PUBLIC_BACKEND_URL=https://github-app-builder-28.emergent.host
-          chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
-        working_directory: ../driver-app/android
-
-      - uses: eas/upload_artifact
-        with:
-          type: other
-          name: KJAPP-Driver-Android-APK
-          path: ../driver-app/android/app/build/outputs/apk/release/app-release.apk

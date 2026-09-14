@@ -141,8 +141,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await storage.removeItem(TOKEN_KEY);
-    setUser(null);
+    try {
+      await authApi.logout();
+    } catch {
+      // Local bearer-session cleanup must still succeed if the server is unreachable.
+    } finally {
+      await storage.removeItem(TOKEN_KEY);
+      setUser(null);
+      processed.current.clear();
+      lastUrl.current = null;
+    }
   };
 
   return (
