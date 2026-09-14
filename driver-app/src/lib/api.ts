@@ -109,6 +109,23 @@ async function requireDriverLocationPermission() {
   }
 }
 
+async function normalizeDriverSummary(data: any = {}) {
+  if (!data?.online) return data;
+  try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status === 'granted') return data;
+  } catch {
+    // Treat an unreadable permission state as unavailable for online safety.
+  }
+
+  try {
+    await api.post('/driver/online', { online: false });
+  } catch {
+    // The UI must still stop representing the driver as available locally.
+  }
+  return { ...data, online: false };
+}
+
 export const driverApi = {
   pending: () => api.get('/driver/pending').then((r) => r.data),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
@@ -124,7 +141,7 @@ export const driverApi = {
   },
   location: (lat: number, lng: number, heading = 0, speed = 0) =>
     api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
-  summary: () => api.get('/driver/summary/today').then((r) => r.data),
+  summary: () => api.get('/driver/summary/today').then((r) => normalizeDriverSummary(r.data)),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
