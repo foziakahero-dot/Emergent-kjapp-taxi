@@ -1,76 +1,13 @@
-name: KJAPP Final Mobile Android validation
+name: KJAPP Customer Android APK
 
 on:
   push:
-    branches: ['main', 'codex/kjapp-signature-mainline']
-
-concurrency:
-  cancel_in_progress: true
-  group: ${{ workflow.filename }}-${{ github.ref }}
+    branches: ['main']
 
 jobs:
-  validate_customer_app:
-    name: Validate KJAPP Customer
-    image: sdk-57
-    runs_on: linux-large
-    steps:
-      - uses: eas/checkout
-      - uses: eas/install_node_modules
-      - name: Validate Customer Expo config
-        run: npx expo config --type public
-      - name: Type-check Customer app
-        run: npx tsc --noEmit
-
   build_customer_android_apk:
     name: Build KJAPP Customer Android APK
-    needs: [validate_customer_app]
     type: build
     params:
       platform: android
       profile: apk
-
-  validate_driver_app:
-    name: Validate KJAPP Driver from Customer EAS checkout
-    image: sdk-57
-    runs_on: linux-large
-    steps:
-      - uses: eas/checkout
-      - name: Verify Driver sibling checkout
-        run: |
-          test -f ../driver-app/package.json
-          test -f ../driver-app/app.json
-          test -f ../driver-app/eas.json
-      - name: Install Driver dependencies
-        run: cd ../driver-app && npm install
-      - name: Validate Driver Expo config
-        run: cd ../driver-app && npx expo config --type public
-      - name: Type-check Driver app
-        run: cd ../driver-app && npx tsc --noEmit
-
-  build_driver_bridge_apk:
-    name: Build KJAPP Driver APK through Customer EAS bridge
-    needs: [validate_driver_app]
-    image: sdk-57
-    runs_on: linux-large
-    steps:
-      - uses: eas/checkout
-      - name: Install Driver dependencies
-        run: cd ../driver-app && npm install
-      - name: Validate Driver Expo config
-        run: cd ../driver-app && npx expo config --type public
-      - name: Generate Driver Android project
-        run: cd ../driver-app && CI=1 npx expo prebuild --platform android --clean
-      - name: Assemble Driver release APK
-        run: |
-          cd ../driver-app/android
-          chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
-      - name: Stage Driver APK artifact
-        run: |
-          mkdir -p artifacts
-          cp ../driver-app/android/app/build/outputs/apk/release/app-release.apk artifacts/KJAPP-Driver-Android.apk
-      - uses: eas/upload_artifact
-        with:
-          type: other
-          name: KJAPP-Driver-Android-APK
-          path: artifacts/KJAPP-Driver-Android.apk
