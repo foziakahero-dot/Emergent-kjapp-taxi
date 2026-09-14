@@ -63,6 +63,7 @@ export default function RootLayout() {
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
               <Stack.Screen name="register" />
+              <Stack.Screen name="forgot-password" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="(app)" />
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />
