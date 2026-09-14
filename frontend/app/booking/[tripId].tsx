@@ -22,6 +22,7 @@ const META: Record<string, { title: string; sub: string }> = {
 };
 
 const LIVE_DRIVER_STATES = ['driver_on_way', 'at_pickup', 'in_trip'];
+const PASSENGER_CANCELLABLE_STATES = new Set(['searching', 'booking', 'driver_on_way', 'at_pickup']);
 
 export default function BookingFlow() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
@@ -52,11 +53,23 @@ export default function BookingFlow() {
   }, [tripId, router]);
 
   const doCancel = async () => {
-    try { await tripsApi.cancel(tripId!); } catch {}
-    router.replace('/(app)/home');
+    if (!PASSENGER_CANCELLABLE_STATES.has(trip?.status)) {
+      Alert.alert('Turen kan ikke avbrytes her', 'Når turen har startet må eventuell hjelp eller avslutning håndteres med sjåføren eller KJAPP support.');
+      return;
+    }
+    try {
+      await tripsApi.cancel(tripId!);
+      router.replace('/(app)/home');
+    } catch {
+      Alert.alert('Kunne ikke avbryte turen', 'Turen kan ha endret status. Oppdater og prøv igjen.');
+    }
   };
 
   const cancel = () => {
+    if (!PASSENGER_CANCELLABLE_STATES.has(trip?.status)) {
+      Alert.alert('Turen er allerede i gang', 'En aktiv tur kan ikke avbrytes fra denne skjermen.');
+      return;
+    }
     Alert.alert('Avbryte turen?', 'Er du sikker på at du vil avbryte?', [
       { text: 'Behold turen', style: 'cancel' },
       { text: 'Avbryt tur', style: 'destructive', onPress: doCancel },
@@ -79,6 +92,7 @@ export default function BookingFlow() {
     ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading || 0 }
     : null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
+  const canCancel = PASSENGER_CANCELLABLE_STATES.has(trip.status);
   const driverPhone = String(trip.driver?.phone || '').replace(/[^+\d]/g, '');
   const paymentLabel = trip.payment_method === 'vipps' ? 'Vipps' : 'Kort';
 
@@ -94,9 +108,11 @@ export default function BookingFlow() {
       />
 
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel">
-          <Icon name="x" size={20} color={colors.text} />
-        </Pressable>
+        {canCancel ? (
+          <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel">
+            <Icon name="x" size={20} color={colors.text} />
+          </Pressable>
+        ) : <View style={{ width: 44, height: 44 }} />}
         <View style={s.statusPill}>
           <Text style={s.statusText} testID="customer-trip-status">{meta.title}</Text>
         </View>
