@@ -2,7 +2,7 @@ name: KJAPP Customer Android APK
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'codex/kjapp-signature-mainline']
 
 jobs:
   build_customer_android_apk:
