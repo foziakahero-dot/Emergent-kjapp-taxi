@@ -18,8 +18,9 @@ export default function Receipt() {
   const s = useStyles();
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
-  const [rating, setRating] = useState(0);
+  const [rating, setRating] = useState(5);
   const [rated, setRated] = useState(false);
+  const [ratingBusy, setRatingBusy] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState('');
 
@@ -50,12 +51,17 @@ export default function Receipt() {
     return () => clearInterval(timer);
   }, [tripId, trip?.payment_status, loadTrip]);
 
-  const submitRating = async (stars: number) => {
-    setRating(stars);
+  const submitRating = async () => {
+    if (rated || ratingBusy || !rating) return;
+    setRatingBusy(true);
     try {
-      await tripsApi.rate(tripId!, { rating: stars, feedback: '' });
+      await tripsApi.rate(tripId!, { rating, feedback: '' });
       setRated(true);
-    } catch {}
+    } catch {
+      // Keep the selected stars so the passenger can retry.
+    } finally {
+      setRatingBusy(false);
+    }
   };
 
   const verifyCheckout = async (sessionId: string) => {
@@ -107,13 +113,14 @@ export default function Receipt() {
   const isPaid = trip.payment_status === 'paid';
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-      <View style={[s.header, { paddingTop: insets.top + 20 }]}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}>
+      <View style={[s.header, { paddingTop: insets.top + 24 }]}>
         <View style={[s.checkCircle, !isPaid && s.pendingCircle]}>
-          <Icon name={isPaid ? 'check' : 'card'} size={34} color={isPaid ? colors.accentOn : colors.accent} />
+          <Icon name={isPaid ? 'check' : 'card'} size={30} color={isPaid ? colors.accentOn : colors.accent} />
         </View>
+        <Text style={s.receiptLabel}>KVITTERING</Text>
         <Text style={s.title}>Takk for turen</Text>
-        <Text style={s.price}>{kr(trip.price)}</Text>
+        <Text style={s.price} testID="receipt-total">{kr(trip.price)}</Text>
         <Text style={[s.paymentStatus, { color: isPaid ? colors.online : colors.warning }]} testID="receipt-payment-status">
           {isPaid ? 'Betalt' : 'Venter på betaling'}
         </Text>
@@ -130,6 +137,12 @@ export default function Receipt() {
           <Row label="Varighet" value={`${trip.duration_min} min`} />
           <View style={s.sep} />
           <Row label="Kjøretøy" value={v.name} />
+          {trip.driver?.name ? (
+            <>
+              <View style={s.sep} />
+              <Row label="Sjåfør" value={`${trip.driver.name}${trip.driver.car ? ` · ${trip.driver.car}` : ''}`} />
+            </>
+          ) : null}
         </View>
 
         {!isPaid ? (
@@ -158,27 +171,26 @@ export default function Receipt() {
           </View>
         )}
 
-        {trip.driver ? (
-          <View style={[s.card, { marginTop: 16 }]}>
-            <Text style={s.overline}>Din sjåfør</Text>
-            <Text style={s.driverName}>{trip.driver.name}</Text>
-            <Text style={s.driverCar}>{trip.driver.car} · {trip.driver.plate}</Text>
-          </View>
-        ) : null}
-
-        <View style={[s.card, { marginTop: 16, alignItems: 'center' }]}>
-          <Text style={s.overline}>{rated ? 'Din vurdering' : 'Vurder turen'}</Text>
+        <View style={[s.card, s.ratingCard]}>
+          <Text style={s.ratingTitle}>{rated ? 'Din vurdering' : 'Vurder turen'}</Text>
+          <Text style={s.ratingSub}>{rated ? 'Takk for tilbakemeldingen' : 'Hvordan var opplevelsen?'}</Text>
           <View style={s.stars}>
             {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`}>
-                <Icon name="star" size={34} color={n <= rating ? colors.accent : colors.line} fill={n <= rating ? colors.accent : 'none'} />
+              <Pressable key={n} onPress={() => !rated && setRating(n)} disabled={rated} testID={`rate-star-${n}`}>
+                <Icon name="star" size={34} color={n <= rating ? colors.accent : colors.textMuted} fill={n <= rating ? colors.accent : 'none'} />
               </Pressable>
             ))}
           </View>
-          {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
+          {!rated ? (
+            <Pressable style={[s.ratingSubmit, ratingBusy && { opacity: 0.6 }]} onPress={submitRating} disabled={ratingBusy} testID="rate-submit">
+              <Text style={s.ratingSubmitText}>{ratingBusy ? 'Sender…' : 'Send vurdering'}</Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
+        <Pressable style={s.doneBtn} onPress={() => router.replace('/(app)/home')} testID="receipt-done">
+          <Text style={s.doneText}>Ferdig</Text>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -196,12 +208,13 @@ function Row({ label, value }: { label: string; value: string }) {
 
 const useStyles = makeStyles((c) => ({
   loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' },
-  header: { alignItems: 'center', paddingBottom: 28 },
-  checkCircle: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
-  title: { color: c.text, fontFamily: font.display, fontSize: 24 },
-  price: { color: c.accent, fontFamily: font.display, fontSize: 40, marginTop: 8 },
-  paymentStatus: { fontSize: 12, fontWeight: '700', marginTop: 4 },
+  header: { alignItems: 'center', paddingBottom: 30 },
+  checkCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 14, shadowColor: c.accent, shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, shadowOpacity: 0 },
+  receiptLabel: { color: c.accent, fontSize: 10, letterSpacing: 2.2, fontWeight: '800' },
+  title: { color: c.text, fontSize: 18, fontWeight: '600', marginTop: 4 },
+  price: { color: c.text, fontFamily: font.display, fontSize: 52, marginTop: 18 },
+  paymentStatus: { fontSize: 12, fontWeight: '700', marginTop: 3 },
   body: { paddingHorizontal: 20 },
   card: { backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
@@ -220,9 +233,12 @@ const useStyles = makeStyles((c) => ({
   paidIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
   paidTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
   paidSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
-  overline: { color: c.accent, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase' },
-  driverName: { color: c.text, fontSize: 16, fontWeight: '600', marginTop: 6 },
-  driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
-  stars: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  thanks: { color: c.textMuted, fontSize: 13, marginTop: 12 },
+  ratingCard: { marginTop: 16, alignItems: 'center' },
+  ratingTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+  ratingSub: { color: c.textMuted, fontSize: 13, marginTop: 4 },
+  stars: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  ratingSubmit: { alignSelf: 'stretch', marginTop: 18, height: 48, borderRadius: 14, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
+  ratingSubmitText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  doneBtn: { marginTop: 20, height: 52, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
+  doneText: { color: c.text, fontSize: 15, fontWeight: '600' },
 }));
