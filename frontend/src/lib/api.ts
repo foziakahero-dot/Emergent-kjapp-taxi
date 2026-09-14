@@ -4,6 +4,18 @@ import { storage } from '@/src/utils/storage';
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
 
+// Home starts on Oslo only as a neutral map viewport while foreground location resolves.
+// These exact coordinates must never be sent to live nearby/estimate/request APIs as if they were the rider's pickup.
+const FALLBACK_PICKUP = { lat: 59.9127, lng: 10.7461 };
+const isUnresolvedPickup = (lat: number, lng: number) =>
+  Math.abs(Number(lat) - FALLBACK_PICKUP.lat) < 1e-7 && Math.abs(Number(lng) - FALLBACK_PICKUP.lng) < 1e-7;
+
+const requireResolvedPickup = (lat: number, lng: number) => {
+  if (isUnresolvedPickup(lat, lng)) {
+    throw new Error('Aktiver posisjon og vent til KJAPP har funnet hentestedet ditt før du bestiller.');
+  }
+};
+
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
   timeout: 30000,
@@ -25,8 +37,14 @@ export const authApi = {
 };
 
 export const tripsApi = {
-  estimate: (data: any) => api.post('/trips/estimate', data).then((r) => r.data),
-  request: (data: any) => api.post('/trips/request', data).then((r) => r.data),
+  estimate: async (data: any) => {
+    requireResolvedPickup(data?.pickup_lat, data?.pickup_lng);
+    return api.post('/trips/estimate', data).then((r) => r.data);
+  },
+  request: async (data: any) => {
+    requireResolvedPickup(data?.pickup_lat, data?.pickup_lng);
+    return api.post('/trips/request', data).then((r) => r.data);
+  },
   active: () => api.get('/trips/active').then((r) => r.data),
   get: (id: string) => api.get(`/trips/${id}`).then((r) => r.data),
   complete: (id: string) => api.post(`/trips/${id}/complete`).then((r) => r.data),
@@ -36,8 +54,10 @@ export const tripsApi = {
 };
 
 export const carsApi = {
-  nearby: (lat: number, lng: number) =>
-    api.post('/cars/nearby', { lat, lng }).then((r) => r.data),
+  nearby: async (lat: number, lng: number) => {
+    if (isUnresolvedPickup(lat, lng)) return { cars: [] };
+    return api.post('/cars/nearby', { lat, lng }).then((r) => r.data);
+  },
 };
 
 export const placesApi = {
