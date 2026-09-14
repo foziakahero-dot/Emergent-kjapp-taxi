@@ -2,19 +2,22 @@ const base = require('./app.json');
 
 module.exports = () => {
   const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-  const plugins = [...(base.expo.plugins || [])].filter((plugin) => {
-    const name = Array.isArray(plugin) ? plugin[0] : plugin;
-    return name !== 'react-native-maps';
-  });
-
-  if (googleMapsKey) {
-    plugins.push(['react-native-maps', { androidGoogleMapsApiKey: googleMapsKey }]);
-  }
+  const android = {
+    ...(base.expo.android || {}),
+    ...(googleMapsKey
+      ? {
+          config: {
+            ...((base.expo.android && base.expo.android.config) || {}),
+            googleMaps: { apiKey: googleMapsKey },
+          },
+        }
+      : {}),
+  };
 
   return {
     expo: {
       ...base.expo,
-      plugins,
+      android,
       extra: {
         ...(base.expo.extra || {}),
         googleMapsNative: Boolean(googleMapsKey),
