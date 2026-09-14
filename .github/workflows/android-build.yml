@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - codex/kjapp-signature-mainline
     paths:
       - 'frontend/**'
       - 'driver-app/**'
