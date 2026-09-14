@@ -6,9 +6,18 @@ Keeping this file tiny makes the release hardening reviewable and avoids risky e
 legacy monolith while preserving the existing runtime contract: ``uvicorn server:app``.
 """
 
+import os
+import sys
+
+# Support both common launch modes: `uvicorn server:app` from backend/ and
+# `uvicorn backend.server:app` from the repository root.
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
 # Re-export the existing module surface for backwards compatibility with scripts/tests that import
 # symbols from ``server`` directly.
-from server_core import *  # noqa: F401,F403
+from server_core import *  # noqa: F401,F403,E402
 from hardening import app  # noqa: E402,F401
 
 
