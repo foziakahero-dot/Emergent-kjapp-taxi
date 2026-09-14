@@ -1,0 +1,20 @@
+name: Signature CI smoke
+
+on:
+  push:
+    branches:
+      - codex/kjapp-signature-mainline
+    paths:
+      - '.github/workflows/signature-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: GitHub Actions runner smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm runner startup
+        run: echo "KJAPP Signature CI runner started successfully"
