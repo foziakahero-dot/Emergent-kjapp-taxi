@@ -13,51 +13,76 @@ jobs:
       profile: apk
 
   build_driver_android_apk:
-    name: Build KJAPP Driver Android APK
+    name: Diagnose and build KJAPP Driver Android APK
     image: sdk-57
     env:
       CI: '1'
       EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+    outputs:
+      result: ${{ steps.driver_pipeline.outputs.result }}
+      stage: ${{ steps.driver_pipeline.outputs.stage }}
+      summary: ${{ steps.driver_pipeline.outputs.summary }}
     steps:
       - uses: eas/checkout
 
-      # The connected EAS project is the Customer app (frontend/). Stage the
-      # Driver source inside that job workspace so every build/output path stays
-      # inside the EAS workspace instead of escaping through ../driver-app.
-      - name: Stage Driver workspace
+      - id: driver_pipeline
+        name: Run Driver pipeline with exact failure capture
         run: |
+          set -u
           rm -rf .driver-build driver-artifacts
-          cp -R ../driver-app .driver-build
           mkdir -p driver-artifacts
 
-      - name: Install Driver dependencies
-        run: npm install --no-audit --no-fund
-        working_directory: .driver-build
+          fail() {
+            stage="$1"
+            logfile="$2"
+            summary=$(grep -E "Unable to resolve module|Cannot find module|Execution failed for task|Could not resolve|Could not determine|A problem occurred|error:|ERROR|Caused by:|FAILURE:" "$logfile" | tail -n 4 | tr '\n' ' ' | sed 's/[^[:alnum:] _.:\/@()+-]/ /g' | sed 's/[[:space:]]\+/ /g' | cut -c1-150)
+            if [ -z "$summary" ]; then
+              summary=$(tail -n 6 "$logfile" | tr '\n' ' ' | sed 's/[^[:alnum:] _.:\/@()+-]/ /g' | sed 's/[[:space:]]\+/ /g' | cut -c1-150)
+            fi
+            set-output result "failure"
+            set-output stage "$stage"
+            set-output summary "$summary"
+            exit 0
+          }
 
-      - name: Validate Driver Expo config
-        run: npx expo config --type public
-        working_directory: .driver-build
+          cp -R ../driver-app .driver-build 2>&1 | tee /tmp/driver-stage.log
+          test ${PIPESTATUS[0]} -eq 0 || fail "stage-workspace" /tmp/driver-stage.log
 
-      - name: Generate Driver Android project
-        run: npx expo prebuild --platform android --clean
-        working_directory: .driver-build
+          cd .driver-build
+          npm install --no-audit --no-fund 2>&1 | tee /tmp/driver-install.log
+          test ${PIPESTATUS[0]} -eq 0 || fail "npm-install" /tmp/driver-install.log
 
-      - name: Build standalone Driver release APK
-        run: |
+          npx expo config --type public 2>&1 | tee /tmp/driver-config.log
+          test ${PIPESTATUS[0]} -eq 0 || fail "expo-config" /tmp/driver-config.log
+
+          npx expo prebuild --platform android --clean 2>&1 | tee /tmp/driver-prebuild.log
+          test ${PIPESTATUS[0]} -eq 0 || fail "expo-prebuild" /tmp/driver-prebuild.log
+
+          cd android
           echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
           java -version
-          test -n "$ANDROID_HOME"
+          test -n "${ANDROID_HOME:-}" || { echo "ANDROID_HOME is unset" > /tmp/driver-gradle.log; fail "android-env" /tmp/driver-gradle.log; }
           chmod +x ./gradlew
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info
-        working_directory: .driver-build/android
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info 2>&1 | tee /tmp/driver-gradle.log
+          test ${PIPESTATUS[0]} -eq 0 || fail "gradle-assembleRelease" /tmp/driver-gradle.log
 
-      - name: Stage Driver APK artifact
-        run: |
-          test -f .driver-build/android/app/build/outputs/apk/release/app-release.apk
+          cd ../..
+          test -f .driver-build/android/app/build/outputs/apk/release/app-release.apk || { echo "APK output missing after successful Gradle build" > /tmp/driver-artifact.log; fail "apk-output" /tmp/driver-artifact.log; }
           cp .driver-build/android/app/build/outputs/apk/release/app-release.apk driver-artifacts/KJAPP-Driver.apk
+          set-output result "success"
+          set-output stage "complete"
+          set-output summary "APK built successfully"
 
       - uses: eas/upload_artifact
+        if: ${{ steps.driver_pipeline.outputs.result == 'success' }}
         with:
           type: other
           name: KJAPP-Driver-Android-APK
           path: driver-artifacts/KJAPP-Driver.apk
+
+  driver_result:
+    name: Driver ${{ needs.build_driver_android_apk.outputs.stage }} - ${{ needs.build_driver_android_apk.outputs.summary }}
+    needs: [build_driver_android_apk]
+    steps:
+      - name: Enforce Driver build result
+        run: test "${{ needs.build_driver_android_apk.outputs.result }}" = "success"
