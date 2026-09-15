@@ -3,6 +3,9 @@ name: KJAPP Driver exact diagnostic
 on:
   pull_request:
     branches: ['main']
+  pull_request_comment:
+    types: ['created']
+    if: ${{ github.event.comment.body == '/diagnose-driver' }}
 
 jobs:
   diagnose_driver:
