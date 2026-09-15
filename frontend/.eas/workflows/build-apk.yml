@@ -14,30 +14,50 @@ jobs:
 
   build_driver_android_apk:
     name: Build KJAPP Driver Android APK
+    image: sdk-57
+    env:
+      CI: '1'
+      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
     steps:
       - uses: eas/checkout
 
+      # The connected EAS project is the Customer app (frontend/). Stage the
+      # Driver source inside that job workspace so every build/output path stays
+      # inside the EAS workspace instead of escaping through ../driver-app.
+      - name: Stage Driver workspace
+        run: |
+          rm -rf .driver-build driver-artifacts
+          cp -R ../driver-app .driver-build
+          mkdir -p driver-artifacts
+
       - name: Install Driver dependencies
-        run: npm install
-        working_directory: ../driver-app
+        run: npm install --no-audit --no-fund
+        working_directory: .driver-build
 
       - name: Validate Driver Expo config
         run: npx expo config --type public
-        working_directory: ../driver-app
+        working_directory: .driver-build
 
       - name: Generate Driver Android project
         run: npx expo prebuild --platform android --clean
-        working_directory: ../driver-app
+        working_directory: .driver-build
 
       - name: Build standalone Driver release APK
         run: |
-          export EXPO_PUBLIC_BACKEND_URL=https://github-app-builder-28.emergent.host
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          java -version
+          test -n "$ANDROID_HOME"
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
-        working_directory: ../driver-app/android
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info
+        working_directory: .driver-build/android
+
+      - name: Stage Driver APK artifact
+        run: |
+          test -f .driver-build/android/app/build/outputs/apk/release/app-release.apk
+          cp .driver-build/android/app/build/outputs/apk/release/app-release.apk driver-artifacts/KJAPP-Driver.apk
 
       - uses: eas/upload_artifact
         with:
           type: other
           name: KJAPP-Driver-Android-APK
-          path: ../driver-app/android/app/build/outputs/apk/release/app-release.apk
+          path: driver-artifacts/KJAPP-Driver.apk
