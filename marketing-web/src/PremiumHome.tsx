@@ -33,7 +33,19 @@ function PhoneScene() {
             <path className="mk-route-path" d="M54 304 C78 260 105 244 130 225 C160 202 186 184 207 151 C226 122 240 93 268 64" />
           </svg>
           <span className="mk-pickup-marker"><i />HENT</span>
-          <span className="mk-car-marker">🚕</span>
+          <span className="mk-car-marker" aria-hidden="true">
+            <svg viewBox="0 0 40 40" width="25" height="25" role="presentation">
+              <rect x="11" y="6" width="18" height="28" rx="7" fill="#f7f9fb" />
+              <rect x="14" y="10" width="12" height="7" rx="3" fill="#11d9e8" />
+              <rect x="14" y="20" width="12" height="8" rx="3" fill="#0b1722" />
+              <rect x="8" y="12" width="4" height="7" rx="2" fill="#11d9e8" />
+              <rect x="28" y="12" width="4" height="7" rx="2" fill="#11d9e8" />
+              <rect x="8" y="23" width="4" height="7" rx="2" fill="#11d9e8" />
+              <rect x="28" y="23" width="4" height="7" rx="2" fill="#11d9e8" />
+              <circle cx="15" cy="32" r="1.5" fill="#11d9e8" />
+              <circle cx="25" cy="32" r="1.5" fill="#11d9e8" />
+            </svg>
+          </span>
         </div>
 
         <div className="mk-trip-status">
