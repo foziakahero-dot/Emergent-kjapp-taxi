@@ -3,9 +3,14 @@
 The existing backend stays intact in server_core.py. This thin wrapper only installs
 P0 SSE routes so beta hardening does not rewrite or fork the established FastAPI API.
 """
-import server_core as _core
-from server_core import *  # noqa: F401,F403
-from sse_runtime import install_sse
+try:
+    import server_core as _core
+    from server_core import *  # noqa: F401,F403
+    from sse_runtime import install_sse
+except ModuleNotFoundError:
+    from . import server_core as _core
+    from .server_core import *  # noqa: F401,F403
+    from .sse_runtime import install_sse
 
 install_sse(
     app,
