@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --kjapp-bg: #050a0f;
+  --kjapp-copy: #b5c0c9;
+  --kjapp-accent: #00e5f5;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; scroll-behavior: smooth; background: var(--kjapp-bg); }
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at 82% 8%, rgba(0, 229, 245, .075), transparent 30rem),
+    radial-gradient(circle at 12% 38%, rgba(30, 61, 78, .12), transparent 32rem),
+    var(--kjapp-bg);
+  color: #f6f8fa;
+  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--kjapp-accent);
+  outline-offset: 3px;
+}
+
+.font-display { font-family: var(--font-display), Georgia, 'Times New Roman', serif; }
+.kjapp-shell { width: min(1240px, calc(100% - 2rem)); margin-inline: auto; }
+.phone-shadow { box-shadow: 0 34px 120px rgba(0,0,0,.56), 0 0 0 1px rgba(0,229,245,.06); }
+.modal-backdrop { overscroll-behavior: contain; }
+
+.voice-wave span:nth-child(1), .voice-wave span:nth-child(16) { height: 9px; }
+.voice-wave span:nth-child(2), .voice-wave span:nth-child(15) { height: 16px; }
+.voice-wave span:nth-child(3), .voice-wave span:nth-child(14) { height: 25px; }
+.voice-wave span:nth-child(4), .voice-wave span:nth-child(13) { height: 35px; }
+.voice-wave span:nth-child(5), .voice-wave span:nth-child(12) { height: 23px; }
+.voice-wave span:nth-child(6), .voice-wave span:nth-child(11) { height: 40px; }
+.voice-wave span:nth-child(7), .voice-wave span:nth-child(10) { height: 30px; }
+.voice-wave span:nth-child(8), .voice-wave span:nth-child(9) { height: 46px; }
+
+@media (min-width: 640px) {
+  .kjapp-shell { width: min(1240px, calc(100% - 3rem)); }
+}
+
+@media (min-width: 1024px) {
+  .kjapp-shell { width: min(1240px, calc(100% - 5rem)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
