@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -7,7 +7,6 @@ import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
-let backgroundPermissionRequestedThisSession = false;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -64,7 +63,7 @@ if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
         speed: pos.coords.speed || 0,
       });
     } catch {
-      // Foreground polling will recover on the next active session.
+      // Foreground/SSE recovery handles the next active session.
     }
     await notifyPendingTripFromBackground();
   });
@@ -102,30 +101,53 @@ export async function registerNativePush() {
     });
     return true;
   } catch {
-    // The app remains usable if FCM/APNs credentials are not provisioned yet.
-    // On-shift Driver notifications also have a background-location fallback.
+    // Appen skal fungere selv om FCM/APNs-credentials ikke er provisionert ennå.
     return false;
   }
 }
 
-export async function startDriverBackgroundLocation() {
+export async function getDriverLocationPermissionState() {
   if (Platform.OS === 'web') return { foreground: false, background: false };
+  const [foreground, background] = await Promise.all([
+    Location.getForegroundPermissionsAsync(),
+    Location.getBackgroundPermissionsAsync(),
+  ]);
+  return {
+    foreground: foreground.status === 'granted',
+    background: background.status === 'granted',
+  };
+}
 
-  const foregroundCurrent = await Location.getForegroundPermissionsAsync();
-  const foreground = foregroundCurrent.status === 'granted'
-    ? foregroundCurrent
-    : await Location.requestForegroundPermissionsAsync();
-  if (foreground.status !== 'granted') {
-    return { foreground: false, background: false };
+export async function requestDriverForegroundLocationPermission() {
+  if (Platform.OS === 'web') return false;
+  const current = await Location.getForegroundPermissionsAsync();
+  if (current.status === 'granted') return true;
+  const result = await Location.requestForegroundPermissionsAsync();
+  return result.status === 'granted';
+}
+
+export async function requestDriverBackgroundLocationPermission() {
+  if (Platform.OS === 'web') return false;
+  const foreground = await Location.getForegroundPermissionsAsync();
+  if (foreground.status !== 'granted') return false;
+  const current = await Location.getBackgroundPermissionsAsync();
+  if (current.status === 'granted') return true;
+  const result = await Location.requestBackgroundPermissionsAsync();
+  return result.status === 'granted';
+}
+
+export async function startDriverBackgroundLocation() {
+  if (Platform.OS === 'web') return { foreground: false, background: false, started: false };
+
+  const permissions = await getDriverLocationPermissionState();
+  if (!permissions.foreground || !permissions.background) {
+    return { ...permissions, started: false };
   }
 
-  let background = await Location.getBackgroundPermissionsAsync();
-  if (background.status !== 'granted' && !backgroundPermissionRequestedThisSession) {
-    backgroundPermissionRequestedThisSession = true;
-    background = await Location.requestBackgroundPermissionsAsync();
-  }
-  if (background.status !== 'granted') {
-    return { foreground: true, background: false };
+  // Android kan kaste fatal SecurityException hvis en location FGS bindes akkurat idet
+  // appen mister foreground eligibility. Start derfor bare fra aktiv app-prosess.
+  if (Platform.OS === 'android' && AppState.currentState !== 'active') {
+    return { ...permissions, started: false };
   }
 
   const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
@@ -148,7 +170,7 @@ export async function startDriverBackgroundLocation() {
     });
   }
 
-  return { foreground: true, background: true };
+  return { ...permissions, started: true };
 }
 
 export async function stopDriverBackgroundLocation() {
