@@ -3,7 +3,8 @@ import { Platform, StyleSheet } from 'react-native';
 
 /**
  * KJAPP Driver — glance-first operational UI.
- * Dark low-distraction canvas with green status/action signals and cyan route data.
+ * Dark low-distraction canvas, cyan for navigation/action hierarchy and
+ * green reserved for online/success state.
  */
 export const colors = {
   bg: '#050A0F',
@@ -16,12 +17,12 @@ export const colors = {
   text: '#F8FAFC',
   textSecondary: '#A7B6C7',
   textMuted: '#73869A',
-  accent: '#39E58C',
-  accentHover: '#72EDA8',
-  accentDim: '#229A60',
-  accentSoft: 'rgba(57,229,140,0.12)',
-  accentGlow: 'rgba(57,229,140,0.22)',
-  accentOn: '#03120A',
+  accent: '#00E5F5',
+  accentHover: '#67F3FC',
+  accentDim: '#009EAA',
+  accentSoft: 'rgba(0,229,245,0.12)',
+  accentGlow: 'rgba(0,229,245,0.22)',
+  accentOn: '#031114',
   success: '#39E58C',
   warning: '#F7C948',
   danger: '#FF6B72',
