@@ -1,417 +1,182 @@
 {
   "brand": {
     "name": "KJAPP",
-    "tagline": "Nordic Mobility Redefined",
-    "market": "Norway (Oslo, Bergen, Trondheim, Stavanger)",
-    "language": "Norwegian (nb-NO / no)",
-    "design_philosophy": {
-      "concept": "Nordisk Presisjon møter Diskré Luksus (Nordic Precision meets Understated Luxury)",
-      "pillars": [
-        "Fjord & Granitt: Dype, rolige mørke flater (#070B0E, #0D1318) uten støyende gradienter",
-        "Børstet Messing (Nordic Brass #CBA365 / #DDB77A): Reservert eksklusivt for handlinger, aktive valg og signatur-markører",
-        "Snø & Frost (Ivory #F4F4F0 & Ice Mist #8A96A0): Krystallklar lesbarhet med APCA-godkjent kontrast",
-        "Funksjonell Taktilitet: Glassmorfisme med ekte optisk dybde (backdrop-blur-2xl + 1px hairline border) på kunde-flater, og skarp 'Aviation HUD'-ergonomi på sjåfør-flaten"
-      ]
-    }
-  },
-  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
-    "anti_ai_slop_rules": [
-      "DO NOT use generic centered layouts or symmetrical card grids.",
-      "DO NOT use full-screen purple/blue SaaS gradient meshes (#7351B7 is forbidden).",
-      "DO NOT use Inter or Roboto for headers. Maintain Fraunces (warm editorial serif) for Display & Headings, Inter Tight for clean compact UI body, and JetBrains Mono for numbers/prices/timers.",
-      "DO NOT use completely transparent backgrounds behind headers, dropdowns, or bottom sheets. Always provide high-opacity backing (min 88% alpha) with backdrop-blur-2xl and 1px hairline border.",
-      "DO NOT add universal CSS transitions like 'transition: all'. Explicitly transition transform, opacity, background-color, or border-color.",
-      "DO NOT center-align the application container or body text. Preserve natural left-aligned editorial scanning flow.",
-      "DO NOT use standard emoji icons (🤖, 🧠, 💡, 🚗) for UI components. Use Lucide icons or custom SVG glyphs.",
-      "Use 2x-3x more deliberate whitespace (p-4 to p-6) inside bounded cards to prevent text colliding with container borders.",
-      "All interactive elements and key informational blocks MUST have unambiguous data-testid attributes for reliable end-to-end testing."
-    ],
-    "platform_constraints": {
-      "stack": "React 18 (.jsx/.js), Tailwind CSS v3, MapLibre GL JS v6 / MapTiler, Lucide React, Framer Motion",
-      "file_type_instruction": "All components must be written as .jsx / .js JavaScript files. Do not generate TypeScript (.tsx) files.",
-      "viewport": "Mobile-first native phone shell (390px-430px wide, max-w-[440px] centered on desktop, 100dvh).",
-      "safe_areas": "Must honor env(safe-area-inset-top) and env(safe-area-inset-bottom) for iPhone dynamic island and Android gesture bar."
-    }
-  },
-  "typography": {
-    "fonts": {
-      "display": {
-        "name": "Fraunces / Instrument Serif",
-        "css_variable": "var(--font-serif)",
-        "tailwind_class": "font-display",
-        "weights": [400, 500, 600],
-        "usage": "H1 hero headlines ('Hvor vil du?', 'Velkommen'), modal titles, brand mark 'KJAPP', price figures and trip status banners."
-      },
-      "body": {
-        "name": "Inter Tight / Inter",
-        "css_variable": "var(--font-body)",
-        "tailwind_class": "font-body",
-        "weights": [400, 500, 600],
-        "usage": "Address labels, descriptions, vehicle names, button copy, body paragraphs."
-      },
-      "mono": {
-        "name": "JetBrains Mono",
-        "css_variable": "var(--font-mono)",
-        "tailwind_class": "font-mono",
-        "weights": [500, 600],
-        "usage": "Phone numbers, license plates, countdown timers, GPS speed, distance/ETA metrics with tabular numbers ('tabular-nums')."
-      }
-    },
-    "scale": {
-      "h1": "text-2xl sm:text-3xl lg:text-4xl font-display tracking-tight leading-tight",
-      "h2": "text-xl sm:text-2xl font-display tracking-tight leading-snug",
-      "h3": "text-lg sm:text-xl font-display tracking-tight",
-      "h4": "text-base sm:text-lg font-medium",
-      "body_lg": "text-base font-normal leading-relaxed",
-      "body_base": "text-sm font-normal leading-normal",
-      "caption": "text-xs font-normal text-muted",
-      "overline": "text-[10px] uppercase tracking-[0.28em] font-medium text-accent"
-    }
-  },
-  "colors": {
-    "customer_theme": {
-      "archetype": "Luxury & Nordic Precision (Dark Granite, Warm Brass & Ivory)",
-      "tokens": {
-        "--bg-base": "#070B0E",
-        "--bg-surface": "#0C1216",
-        "--bg-card": "rgba(14, 21, 26, 0.92)",
-        "--bg-card-subtle": "rgba(244, 244, 240, 0.035)",
-        "--bg-elevated": "#121A20",
-        "--line": "rgba(244, 244, 240, 0.08)",
-        "--line-strong": "rgba(244, 244, 240, 0.16)",
-        "--text": "#F4F4F0",
-        "--text-secondary": "#C8CED4",
-        "--text-muted": "#8A96A0",
-        "--accent": "#CBA365",
-        "--accent-hover": "#DDB77A",
-        "--accent-dim": "#8F6E3E",
-        "--accent-soft": "rgba(203, 163, 101, 0.14)",
-        "--accent-glow": "rgba(203, 163, 101, 0.35)",
-        "--accent-on": "#070B0E",
-        "--status-success": "#34D399",
-        "--status-warning": "#FBBF24",
-        "--status-danger": "#EF4444",
-        "--map-canvas": "#06090A",
-        "--map-road": "#13191E",
-        "--map-building": "#1C242C",
-        "--map-building-highlight": "#28343F"
-      }
-    },
-    "driver_theme": {
-      "archetype": "Tactical HUD & Glanceable Cockpit",
-      "tokens": {
-        "--bg-base": "#030607",
-        "--bg-card": "#0A0F13",
-        "--line": "rgba(255, 255, 255, 0.09)",
-        "--text": "#F4F4F0",
-        "--text-muted": "#7A848D",
-        "--accent": "#CBA365",
-        "--status-online": "#2FE08C",
-        "--status-online-soft": "rgba(47, 224, 140, 0.14)",
-        "--status-online-glow": "rgba(47, 224, 140, 0.45)",
-        "--urgent-red": "#FF453A",
-        "--urgent-amber": "#FF9F0A"
-      }
-    }
-  },
-  "surfaces_and_effects": {
-    "customer_glass": {
-      "style": "Crystal Scandinavian Frosted Glass",
-      "background": "rgba(12, 18, 22, 0.90)",
-      "backdrop_filter": "blur(24px) saturate(140%)",
-      "border": "1px solid rgba(244, 244, 240, 0.10)",
-      "box_shadow": "0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 20px 48px rgba(0, 0, 0, 0.55)",
-      "radius": "rounded-[24px]"
-    },
-    "driver_hud": {
-      "style": "High-Contrast Tactical Cardless Cell",
-      "background": "#0B1014",
-      "backdrop_filter": "none (zero blur for battery & performance while driving)",
-      "border": "1px solid rgba(255, 255, 255, 0.10)",
-      "box_shadow": "0 2px 8px rgba(0, 0, 0, 0.6)",
-      "radius": "rounded-xl"
-    },
-    "halo_effects": {
-      "brass_pulse": "0 0 32px rgba(203, 163, 101, 0.40)",
-      "online_mint_pulse": "0 0 36px rgba(47, 224, 140, 0.50)"
-    }
-  },
-  "map_styling_spec": {
-    "engine": "MapLibre GL JS / MapTiler Dark Vector (streets-v2-dark)",
-    "pitch": 45,
-    "bearing": 0,
-    "layer_rules": {
-      "background": "#06090A",
-      "water": "#080E12",
-      "landcover": "#090D10",
-      "roads_subtle": "#12181D",
-      "roads_major": "#1B232A",
-      "building_3d": {
-        "color_base": "#161D24",
-        "color_tall": "#24303A",
-        "opacity": 0.82,
-        "minzoom": 14,
-        "max_extrusion_height": 120
-      },
-      "route_polyline": {
-        "glow_layer": {
-          "color": "#CBA365",
-          "width": 10,
-          "opacity": 0.28,
-          "blur": 8
-        },
-        "main_line": {
-          "color": "#CBA365",
-          "width": 5,
-          "opacity": 0.96
-        },
-        "shimmer_dash": {
-          "color": "#F4F4F0",
-          "width": 1.5,
-          "dasharray": [1, 5],
-          "opacity": 0.95
-        }
-      }
-    },
-    "markers": {
-      "user_location": "Pulsing concentric ring: outer ripple (rgba(203,163,101,0.25) -> scale 2.4), inner solid brass ring, white core dot (#F4F4F0)",
-      "pickup_pin": "Nordic teardrop pin in Champagne Gold (#CBA365) with dark core and white center dot, subtle black drop-shadow",
-      "dropoff_pin": "Deep Obsidian pin (#0B1013) with Gold outline and 3x3 checkered finish-line flag emblem in Gold/Ivory",
-      "nearby_cars": "Isometric metallic vehicle glyph in deep graphite (#171A1E) with subtle gold edge highlight (#CBA365) and 360-degree heading rotation animation",
-      "active_trip_car": "Hero vehicle with prominent brass halo glow, active headlights cone casting subtle amber beam forward"
-    }
-  },
-  "signature_screen_spec": {
-    "screen_id": "customer-home-booking",
-    "name": "Customer Home & Booking Screen",
-    "route": "/app",
-    "file_path": "/app/frontend/src/pages/Home.jsx",
-    "layout_architecture": [
-      {
-        "zone": "1. Live Map Canvas (Full Bleed)",
-        "z_index": 0,
-        "height": "100dvh",
-        "component": "PremiumMap",
-        "spec": "Interactive 3D MapLibre map centered on user position (default Oslo S / Karl Johan). Shows live nearby cars refreshing every 6s, pulsing user beacon, and smoothly fits bounds with 320px bottom padding when a route is computed."
-      },
-      {
-        "zone": "2. Top Floating Header Bar",
-        "z_index": 1000,
-        "height": "64px",
-        "position": "absolute top-0 inset-x-0 pt-safe px-4",
-        "spec": "Three floating crystal pills: (Left) Hamburger Menu button with haptic tap; (Center) Brand mark 'KJAPP' in serif with gold accent dot; (Right) KJAPP Assist pulse orb button routing to AI concierge. Background: rgba(12,18,22,0.85) with backdrop-blur-xl and 1px hairline border.",
-        "testids": ["home-menu", "home-brand", "home-orb-btn"]
-      },
-      {
-        "zone": "3. Floating Quick Action / Assist FAB",
-        "z_index": 1001,
-        "position": "absolute right-4 bottom-[calc(bottom-sheet-height+16px)]",
-        "spec": "Pulsing Gold Sparkles FAB. Initiates voice/AI trip booking or smart requests. Includes animated breathing halo.",
-        "testids": ["home-kjapp-assist"]
-      },
-      {
-        "zone": "4. Interactive Bottom Sheet (Two States: Idle Search vs Route Review)",
-        "z_index": 1000,
-        "position": "absolute inset-x-0 bottom-4 px-3 sm:px-4",
-        "spec": "Draggable/collapsible crystal container with rounded-[24px]. Contains drag handle bar (44x4px, rgba(232,224,208,0.22))."
-      }
-    ],
-    "bottom_sheet_states": {
-      "state_A_idle_search": {
-        "description": "User has not yet selected a destination",
-        "elements": [
-          {
-            "id": "pickup_selector_chip",
-            "testid": "home-edit-pickup",
-            "ui": "Horizontal pill showing current location (default: 'Din posisjon' or reverse-geocoded street name). Left gold beacon dot, right 'Endre' link in gold. Tapping opens pickup address search sheet."
-          },
-          {
-            "id": "driver_radar_pill",
-            "testid": "home-cars-nearby-status",
-            "ui": "Live status pill: pulsing emerald/brass dot, 'X biler i nærheten · nærmeste Y min'. Updates in real-time."
-          },
-          {
-            "id": "signature_where_to_card",
-            "testid": "home-where-to",
-            "ui": "Hero card inviting destination input. Displays dynamic Nordic time-of-day greeting ('God kveld, Martin'), large serif title 'Hvor vil du?', and a prominent circular search button. Tapping opens full-screen SearchSheet."
-          },
-          {
-            "id": "quick_places_chips",
-            "testids": ["quick-Hjem", "quick-Jobb", "quick-Flyplass"],
-            "ui": "3-column grid of frequent destinations. Hjem (Home icon), Jobb (Briefcase), Flyplass (Plane). One-tap automatically plots route to Oslo Lufthavn Gardermoen or saved addresses."
-          },
-          {
-            "id": "vehicle_tier_preview",
-            "testids": ["tier-preview-ai-first", "tier-preview-premium", "tier-preview-trygg"],
-            "ui": "3-column preview card strip showing KJAPP (Standard), KJAPP+ (Premium), and KJAPP XL with custom metallic vehicle glyphs and micro-taglines before dropoff is picked."
-          }
-        ]
-      },
-      "state_B_route_review": {
-        "description": "Destination chosen; route plotted on map with real distance & ETA",
-        "elements": [
-          {
-            "id": "route_endpoints_card",
-            "testid": "booking-endpoints",
-            "ui": "Vertical timeline spine: Brass dot (Pickup) -> 1px line -> Ivory square (Dropoff). Address names truncated cleanly with an 'Endre' button on the right to revert to search."
-          },
-          {
-            "id": "horizontal_vehicle_picker",
-            "testids": ["vehicle-ai-first", "vehicle-enkelt", "vehicle-trygg", "vehicle-premium"],
-            "ui": "Horizontally scrollable snap carousel with 4 tiers: Standard, Sparsom, Komfort, and Premium. Each card has: SVG vehicle silhouette with metallic gradient and alloy rims, class name, passenger capacity (Users icon), ETA (min), price in bold serif (XXX kr), and a gold checkmark when active."
-          },
-          {
-            "id": "trip_metrics_and_price_summary",
-            "testid": "booking-price-summary",
-            "ui": "Dual-column readout: Left shows 'X.X km · sjåfør kan hente deg om Y min'. Right shows 'Ca. pris' in tiny overline, and large 26px Fraunces price in Norwegian kroner."
-          },
-          {
-            "id": "payment_method_pill",
-            "testid": "booking-payment-row",
-            "ui": "Selectable payment method row showing Credit Card / Vipps / Apple Pay, card brand icon, last 4 digits, and a green 'Verifisert' badge. Tapping allows changing payment or adding card."
-          },
-          {
-            "id": "primary_booking_cta",
-            "testid": "booking-confirm",
-            "ui": "Full-width pill button: 'Bestill bilen · XXX kr'. Glowing brass gradient with shadow-[0_8px_30px_rgba(203,163,101,0.35)]. When clicked, shows animated spinner and transitions seamlessly into the live trip state."
-          }
-        ]
-      }
-    },
-    "search_sheet_modal": {
-      "testid": "search-sheet",
-      "input_testid": "search-input",
-      "close_testid": "search-close",
-      "ui": "Full-screen frosted backdrop with instant auto-focus on input field. Displays user's saved/favorite places with star icon first, followed by live debounced Norwegian address search (geocoding via backend API) with map-pin icons."
-    }
-  },
-  "other_screens_spec": {
-    "booking_flow_live_trip": {
-      "file_path": "/app/frontend/src/pages/BookingFlow.jsx",
-      "route": "/app/booking/:tripId",
-      "states": [
-        {
-          "status": "searching",
-          "ui": "Pulsing radar rings in brass gold, animated dots ('Søker sjåfør...'), trip destination summary, and 'Avbryt søk' link.",
-          "testids": ["searching-cancel"]
-        },
-        {
-          "status": "driver_on_way",
-          "ui": "Circular ETA badge showing arrival minutes, driver avatar with rating, car model and license plate (e.g., 'Tesla Model Y · EK 12345'), and 3 action pills: Ring (Phone), Melding (Chat), Sikkerhet (Safety/Share trip).",
-          "testids": ["action-call", "action-message", "action-safety"]
-        },
-        {
-          "status": "in_trip",
-          "ui": "Map camera follows active car sprite. Bottom card shows destination, live price, trip distance & duration, and quick button to chat with driver.",
-          "testids": ["ontrip-chat"]
-        },
-        {
-          "status": "arrived",
-          "ui": "Automatic celebration checkmark and redirect to receipt.",
-          "testids": ["trip-receipt"]
-        }
-      ]
-    },
-    "customer_menu": {
-      "testid": "customer-menu",
-      "spec": "Slide-over drawer from left with user initials avatar, 'KJAPP-medlem' status badge, categorized navigation (Din reise, KJAPP-medlem, Verktøy), and dedicated driver/løyvehaver onboarding entry points.",
-      "links": [
-        {"label": "Profil", "path": "/app/profile", "testid": "menu-app-profile"},
-        {"label": "Mine turer", "path": "/app/history", "testid": "menu-app-history"},
-        {"label": "Favoritter", "path": "/app/favorites", "testid": "menu-app-favorites"},
-        {"label": "Betaling", "path": "/app/payment-methods", "testid": "menu-app-payment-methods"},
-        {"label": "KJAPP Assist", "path": "/app/ai", "testid": "menu-app-ai"},
-        {"label": "Innstillinger", "path": "/app/settings", "testid": "menu-app-settings"},
-        {"label": "Bli KJAPP-sjåfør", "path": "/driver/login", "testid": "menu-become-driver"}
-      ]
-    },
-    "driver_home": {
-      "file_path": "/app/frontend/src/pages/DriverHome.jsx",
-      "route": "/driver",
-      "theme": "driver-theme",
-      "requirements": [
-        "Glanceable high-contrast HUD design (zero fluff, optimized for in-car phone mount at arm's length)",
-        "Large high-visibility 'Online / Offline' toggle pill with emerald pulse animation when active",
-        "Driver greeting with today's completed trips count and revenue total in Norwegian kroner",
-        "Active trip card with direct navigation link if a trip is currently assigned",
-        "Incoming trip request card with 15-second countdown progress bar (smooth color transition from gold to urgent red in final 5s), passenger rating, pickup/dropoff addresses, driver net payout, and large dual 'Avslå' / 'Godta tur' touch targets (min 56px height)",
-        "Compact 4-cell metric grid: I dag (kr), Turer, Online tid, Godta-rate",
-        "Fixed one-hand driver bottom navigation bar: Hjem, Inntekt, Turer, Konto"
-      ],
-      "testids": [
-        "driver-status-card",
-        "driver-online-toggle",
-        "driver-overview",
-        "driver-active-card",
-        "pending-list",
-        "earnings-summary",
-        "driver-bottom-nav"
-      ]
-    },
-    "driver_trip_navigation": {
-      "file_path": "/app/frontend/src/pages/DriverTrip.jsx",
-      "route": "/driver/trip",
-      "requirements": [
-        "Cockpit turn-by-turn map orientation with high zoom level (zoom 15-16, pitch 55)",
-        "Clear step-by-step state machine: 'Kjører til henting' -> 'Ankommet hentested' -> 'Start tur' -> 'Fullfør tur'",
-        "Slide-to-confirm or large tactile confirmation button to prevent accidental clicks while moving",
-        "Emergency one-tap quick-dial to passenger or dispatch"
-      ]
-    }
-  },
-  "reusable_component_patterns": {
-    "buttons": {
-      "btn-primary": "w-full rounded-full py-3.5 px-6 font-semibold bg-accent text-accent-on transition-all duration-150 active:scale-[0.98] shadow-[0_8px_30px_rgba(203,163,101,0.35)] hover:shadow-[0_12px_40px_rgba(203,163,101,0.45)] hover:bg-[#DDB77A] disabled:opacity-50 disabled:cursor-not-allowed",
-      "btn-ghost": "rounded-full py-3 px-5 border border-line bg-white/[0.03] text-text hover:bg-white/[0.08] hover:border-accent transition-colors active:scale-[0.98]",
-      "btn-driver-accept": "rounded-xl py-4 bg-accent text-accent-on font-semibold flex items-center justify-center gap-2 active:scale-95 shadow-none"
-    },
-    "cards": {
-      "customer_sheet_card": "card p-5 bg-[rgba(12,18,22,0.92)] border border-[rgba(244,244,240,0.10)] rounded-[24px] backdrop-blur-2xl shadow-card",
-      "driver_cell_card": "p-4 bg-[#0B1014] border border-white/[0.09] rounded-xl text-white shadow-sm"
-    },
-    "inputs": {
-      "base_input": "w-full rounded-2xl px-4 py-3.5 bg-[rgba(244,244,240,0.045)] border border-[rgba(244,244,240,0.10)] text-text placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent-soft outline-none text-sm transition-all"
-    },
-    "chips": {
-      "quick_destination_chip": "flex flex-col items-center gap-1.5 py-2.5 px-3 rounded-2xl bg-[rgba(244,244,240,0.035)] border border-[rgba(244,244,240,0.08)] text-text-muted hover:border-accent transition-colors"
-    }
-  },
-  "image_urls": {
-    "editorial_luxury_hero": {
-      "category": "hero_background",
-      "url": "https://images.unsplash.com/photo-1586559012881-0541fcf64f8a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHw0fHxibGFjayUyMGNhciUyMGNpdHklMjBuaWdodHxlbnwwfHx8fDE3ODg4ODM1Njh8MA&ixlib=rb-4.1.0&q=85",
-      "description": "Black luxury sedan wheel and body detail in grayscale nocturnal lighting, used for onboarding and splash."
-    },
-    "city_at_night": {
-      "category": "marketing_backdrop",
-      "url": "https://images.unsplash.com/photo-1611493761903-df1720dcbf8b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwyfHxibGFjayUyMGNhciUyMGNpdHklMjBuaWdodHxlbnwwfHx8fDE3ODg4ODM1Njh8MA&ixlib=rb-4.1.0&q=85",
-      "description": "Black sedan in urban harbor night lighting, showcasing high-end Nordic mobility."
-    },
-    "oslo_opera_night": {
-      "category": "norwegian_destination",
-      "url": "https://images.unsplash.com/photo-1581850006461-54529135ddb3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwyfHxvc2xvJTIwYXJjaGl0ZWN0dXJlJTIwbmlnaHR8ZW58MHx8fHwxNzg4ODgzNTc0fDA&ixlib=rb-4.1.0&q=85",
-      "description": "Oslo waterfront architecture at night, used for curated destination cards."
-    },
-    "barcode_oslo_skyline": {
-      "category": "norwegian_skyline",
-      "url": "https://images.unsplash.com/photo-1733053557558-7f72e9b7d1e0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwxfHxvc2xvJTIwYXJjaGl0ZWN0dXJlJTIwbmlnaHR8ZW58MHx8fHwxNzg4ODgzNTc0fDA&ixlib=rb-4.1.0&q=85",
-      "description": "Barcode district Oslo skyline reflections at night, highlighting business and premium mobility."
-    }
-  },
-  "motion_and_microinteractions": {
-    "principles": [
-      "Physics-based spring curves (stiffness: 300, damping: 28) for bottom sheet expansions and modal slides.",
-      "Subtle pulsing animations (2.4s ease-out) for live GPS indicators and driver status radar.",
-      "Tabular number transitions (tabular-nums) for trip prices, countdowns, and distance meters to avoid layout shift.",
-      "Snappy vehicle selection switch: 150ms border highlight and soft brass ambient glow."
+    "product_definition": "Premium Nordic AI-assisted taxi and fleet platform",
+    "core_principle": "Mobility first. AI invisible until useful.",
+    "tone": ["Nordic", "calm", "exact", "premium", "trustworthy", "operational"],
+    "avoid": [
+      "generic AI startup aesthetics",
+      "large AI orbs as primary identity",
+      "excessive neon glow",
+      "pseudo maps or hand-drawn roads",
+      "glass on every surface",
+      "primitive or identical vehicle icons",
+      "emoji or Unicode symbols as production icons",
+      "fabricated live statistics"
     ]
   },
-  "implementation_checklist_for_home": [
-    "Verify MapLibre container fills 100dvh with responsive bottom padding (padding: { bottom: 320 }) when route is fitted.",
-    "Ensure top floating header bar uses backdrop-blur-2xl with opaque base (rgba(12,18,22,0.85)) so map elements don't clash behind it.",
-    "Ensure the where-to search card features the Nordic time-based greeting, search icon pill, and live vehicle count indicator.",
-    "Verify vehicle category picker supports touch horizontal swipe with scroll-snap-align: start.",
-    "Confirm that all interactive buttons (home-menu, home-where-to, quick-Hjem, vehicle-ai-first, booking-confirm) contain strict data-testid tags.",
-    "Verify payment status badge indicates verification state clearly prior to triggering booking request."
+  "repository_surfaces": {
+    "customer_app": "frontend/ — Expo Router / React Native",
+    "driver_app": "driver-app/ — Expo Router / React Native",
+    "fleet_web": "fleet-web/ — React / Vite",
+    "partner_marketing": "marketing-web/ — React / Vite",
+    "admin_web": "admin-web/",
+    "backend": "backend/"
+  },
+  "visual_system": {
+    "typography": {
+      "target_family": "Geist",
+      "interim_native_fallback": "platform sans-serif",
+      "rule": "Do not use Fraunces, editorial serif, Outfit or decorative display fonts in core product UI.",
+      "scale": {
+        "display": "40/44 650",
+        "h1": "32/36 650",
+        "h2": "24/29 620",
+        "title": "20/25 600",
+        "body": "16/24 450",
+        "body_small": "14/20 450",
+        "label": "13/16 550",
+        "meta": "12/16 450"
+      },
+      "numeric_rule": "Use tabular numerals for prices, ETA, earnings, countdowns and clock times."
+    },
+    "colors": {
+      "canvas": "#050A0F",
+      "surface": "#091119",
+      "surface_elevated": "#12202B",
+      "text_primary": "#F8FAFC",
+      "text_secondary": "#91A3B8",
+      "customer_accent": "#00E5F5",
+      "driver_route_action": "#00E5F5",
+      "driver_online_success": "#39E58C",
+      "danger": "#FF6B72",
+      "warning": "#F7C948"
+    },
+    "spacing": [4, 8, 12, 16, 20, 24, 32, 40, 48, 64],
+    "radius": {
+      "sm": 8,
+      "md": 12,
+      "lg": 18,
+      "xl": 24,
+      "pill": 999
+    },
+    "materials": {
+      "base": "solid dark surfaces",
+      "glass_allowed_on": ["bottom sheets over maps", "floating map controls", "trip status overlays", "navigation overlays"],
+      "glass_rule": "Use controlled translucency and subtle 1px borders. No heavy outer glow."
+    }
+  },
+  "customer": {
+    "accent": "cyan/ice",
+    "experience": "destination-first, one-handed, fast and calm",
+    "primary_flow": [
+      "Home",
+      "Destination search or voice",
+      "Resolve place",
+      "Confirm pickup",
+      "Vehicle + price + ETA",
+      "Payment",
+      "Explicit confirm",
+      "Search driver",
+      "Driver assigned",
+      "Driver on way",
+      "Active trip",
+      "Complete / receipt"
+    ],
+    "voice": {
+      "placement": "inside destination search",
+      "states": ["Idle", "Listening", "Partial", "Resolving", "Clarify", "Ready", "Error"],
+      "rule": "Voice accelerates the standard booking flow; it does not replace the visible booking flow."
+    },
+    "vehicle_classes": [
+      {"name": "KJAPP", "intent": "standard modern sedan"},
+      {"name": "KJAPP XL", "intent": "larger SUV/MPV with obvious space difference"},
+      {"name": "Premium", "intent": "executive sedan/fastback"}
+    ],
+    "commission_rule": "Never show 14%, 86% or partner commission marketing inside Customer."
+  },
+  "driver": {
+    "experience": "glance-first operational cockpit with low distraction",
+    "color_semantics": {
+      "cyan": "route, navigation and action hierarchy",
+      "green": "online and success state"
+    },
+    "safety_rule": "Avoid complex interactions while driving; critical state must be understandable with a short glance.",
+    "required_states": [
+      "GPS weak",
+      "GPS denied",
+      "background location disabled",
+      "network offline",
+      "request expired",
+      "request already assigned",
+      "rider cancelled",
+      "no-show",
+      "wrong pickup",
+      "route changed",
+      "trip start failed",
+      "trip completion pending",
+      "server reconciliation"
+    ],
+    "commission_rule": "Never show 14%, 86% or commission marketing inside Driver. Earnings may show actual gross, KJAPP service fee, net, tips, adjustments and payout."
+  },
+  "maps": {
+    "rule": "Use a real map engine and realistic cartography. Never ship Figma-style pseudo roads.",
+    "customer": "quiet dark map focused on pickup, destination, route and driver",
+    "driver": "higher operational contrast with route, ETA, traffic, heading, demand and GPS uncertainty",
+    "route": "one clear cyan primary route with restrained glow",
+    "provider_strategy": "Keep a provider abstraction; evaluate Google Maps and Mapbox on Norwegian address quality, ETA, navigation, styling, latency and EEA terms."
+  },
+  "ai": {
+    "role": "structured booking intent and natural-language acceleration",
+    "must_not_be_source_of_truth_for": ["price", "ETA", "driver availability", "payment status", "final trip state"],
+    "required_booking_sequence": [
+      "speech/transcript",
+      "structured intent",
+      "place resolution",
+      "backend validation",
+      "real price + ETA + availability",
+      "visual summary",
+      "explicit user confirmation",
+      "trip creation"
+    ]
+  },
+  "fleet": {
+    "brand": "same KJAPP dark/cyan identity as Customer and Driver",
+    "font_rule": "no separate gold/editorial-serif identity",
+    "hero": {
+      "eyebrow": "FOR LØYVEHAVERE",
+      "headline": "Din flåte. Ett system.",
+      "body": "Administrer sjåfører, kjøretøy, dokumenter, turer og oppgjør fra KJAPP Fleet."
+    },
+    "product_first_sections": ["Fleet Overview", "Sjåfører", "Kjøretøy", "Turer", "Økonomi", "Dokumenter"],
+    "marketing_rule": "14% may appear only as partner/marketing information, never as the product identity or inside Customer/Driver."
+  },
+  "components": {
+    "minimum_set": [
+      "Button", "IconButton", "TextField", "SearchField", "VoiceControl", "PlaceResult",
+      "PickupPin", "DestinationPin", "DriverMarker", "VehicleMarker", "VehicleOption",
+      "PaymentMethod", "ETAChip", "StatusChip", "DriverIdentityCard", "TripTimeline",
+      "SafetyAction", "BottomSheet", "MapControl", "BottomNav", "RequestCard",
+      "EarningsMetric", "EmptyState", "ErrorBanner", "PermissionCard", "Skeleton", "Toast"
+    ],
+    "naming_rule": "Use semantic names and variants, not color-based names.",
+    "touch_target": "Prefer minimum 44x44 for interactive controls."
+  },
+  "accessibility": {
+    "target": "WCAG AA",
+    "normal_text_contrast": "4.5:1 minimum",
+    "large_text_contrast": "3:1 minimum",
+    "requirements": ["screen-reader label", "role", "state", "focus order", "reduced motion"],
+    "rule": "Never communicate online/offline, selected/unselected, error/success only through color."
+  },
+  "quality_gate": [
+    "No placeholder map or pseudo roads",
+    "No primitive vehicle artwork",
+    "No placeholder iconography",
+    "No unresolved responsive state",
+    "Loading, empty, error and offline behavior specified",
+    "Customer next action understandable immediately",
+    "Driver critical state understandable with a short glance",
+    "AI reduces steps without removing user control"
   ]
 }

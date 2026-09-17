@@ -24,16 +24,19 @@ export function apiError(e: any): string {
   return String(detail);
 }
 
+/**
+ * Customer-facing ride classes.
+ * Keep backend vehicle_type ids stable while presenting the three clear KJAPP tiers.
+ */
 export const VEHICLES: {
   type: 'enkelt' | 'ai-first' | 'trygg' | 'premium';
   name: string;
   tagline: string;
   seats: number;
 }[] = [
-  { type: 'ai-first', name: 'KJAPP', tagline: 'Standard', seats: 4 },
-  { type: 'enkelt', name: 'Sparsom', tagline: 'Beste pris', seats: 4 },
-  { type: 'trygg', name: 'Komfort XL', tagline: '7 seter', seats: 7 },
-  { type: 'premium', name: 'Premium', tagline: 'Business', seats: 4 },
+  { type: 'ai-first', name: 'KJAPP', tagline: 'Rask og smart', seats: 4 },
+  { type: 'trygg', name: 'KJAPP XL', tagline: 'Mer plass', seats: 7 },
+  { type: 'premium', name: 'Premium', tagline: 'Executive', seats: 4 },
 ];
 
 export function vehicleMeta(type: string) {
