@@ -16,6 +16,7 @@ import { Map } from '@/src/components/Map';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
 import { useAuth } from '@/src/context/AuthContext';
 import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { runSse } from '@/src/lib/sse';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
@@ -46,6 +47,7 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [methods, setMethods] = useState<any[]>([]);
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
+  const sseConnected = useRef(false);
 
   const loadMethods = useCallback(() => {
     paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});
@@ -90,11 +92,35 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true;
-    const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
-    load();
-    const i = setInterval(load, 8000);
-    return () => { mounted = false; clearInterval(i); };
-  }, [loc.lat, loc.lng]);
+    const controller = new AbortController();
+    const loadFallback = () => carsApi.nearby(loc.lat, loc.lng)
+      .then((r) => mounted && setCars(r.cars || []))
+      .catch(() => {});
+
+    loadFallback();
+    void runSse({
+      path: `/events/customer?lat=${encodeURIComponent(String(loc.lat))}&lng=${encodeURIComponent(String(loc.lng))}`,
+      signal: controller.signal,
+      onConnectionChange: (connected) => { sseConnected.current = connected; },
+      onEvent: (event, data) => {
+        if (!mounted || event !== 'customer') return;
+        if (Array.isArray(data?.cars)) setCars(data.cars);
+        const activeTrip = data?.active_trip;
+        if (activeTrip?.trip_id) router.replace(`/booking/${activeTrip.trip_id}`);
+      },
+    });
+
+    const fallback = setInterval(() => {
+      if (!sseConnected.current) loadFallback();
+    }, 8000);
+
+    return () => {
+      mounted = false;
+      sseConnected.current = false;
+      controller.abort();
+      clearInterval(fallback);
+    };
+  }, [loc.lat, loc.lng, router]);
 
   useEffect(() => {
     if (!dropoff) { setEstimate(null); return; }
