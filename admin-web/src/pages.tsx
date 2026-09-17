@@ -76,7 +76,7 @@ export function Live() {
         right={<Btn variant="sm" onClick={reload}>Oppdater</Btn>} />
       <ErrorBanner msg={err} />
       {loading && !data ? <Loader /> : (
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="live-grid">
           <div>
             <div className="section-title" style={{ marginTop: 0 }}>Sjåfører online ({data?.drivers?.length || 0})</div>
             <div className="tablewrap">
