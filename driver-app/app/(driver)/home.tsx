@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -32,6 +32,7 @@ export default function DriverHome() {
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
+  const gpsBlocked = useRef(false);
 
   const poll = useCallback(async () => {
     try {
@@ -42,10 +43,12 @@ export default function DriverHome() {
       const p = await driverApi.pending();
       setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
     } catch { setPending([]); }
-    driverApi.summary().then((r) => { setSummary(r); if (typeof r?.online === 'boolean') setOnline(r.online); }).catch(() => {});
+    driverApi.summary().then((r) => {
+      setSummary(r);
+      if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
+    }).catch(() => {});
   }, []);
 
-  // Restore state (incl. active trip + online status) on focus / restart.
   useFocusEffect(
     useCallback(() => {
       poll();
@@ -54,38 +57,91 @@ export default function DriverHome() {
     }, [poll]),
   );
 
-  // location streaming while online
   useEffect(() => {
-    (async () => {
+    let active = true;
+
+    const stopWatching = () => {
+      if (watch.current) {
+        watch.current.remove();
+        watch.current = null;
+      }
+    };
+
+    const forceOffline = async (message: string) => {
+      gpsBlocked.current = true;
+      let backendOffline = true;
+      try {
+        await driverApi.online(false);
+      } catch {
+        backendOffline = false;
+      }
+      if (!active) return;
+      stopWatching();
+      setLoc(null);
+      setOnline(false);
+      setError(backendOffline
+        ? `${message} Du er satt OFFLINE.`
+        : `${message} KJAPP kunne ikke bekrefte OFFLINE-status mot serveren. Prøv igjen før du tar turer.`);
+    };
+
+    const startTracking = async () => {
       if (!online) {
-        if (watch.current) { watch.current.remove(); watch.current = null; }
+        stopWatching();
+        if (active) setLoc(null);
         return;
       }
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { setError('Slå på posisjon for å dele plasseringen din med kunder.'); return; }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading || 0 };
-      setLoc(p);
-      driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
-      watch.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
-        (u) => {
-          const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
-          setLoc(np);
-          driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
-        },
-      );
-    })();
-    return () => { if (watch.current) { watch.current.remove(); watch.current = null; } };
+
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!active) return;
+        if (status !== 'granted') {
+          await forceOffline('Posisjon må være aktiv for at KJAPP skal kunne sende turer og dele korrekt henteposisjon.');
+          return;
+        }
+
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        if (!active) return;
+        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading || 0 };
+        gpsBlocked.current = false;
+        setLoc(p);
+        setError('');
+        driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
+
+        const subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
+          (u) => {
+            if (!active) return;
+            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
+            setLoc(np);
+            driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
+          },
+        );
+        if (!active) subscription.remove();
+        else {
+          stopWatching();
+          watch.current = subscription;
+        }
+      } catch {
+        await forceOffline('Kunne ikke sikre en gyldig GPS-posisjon. Kontroller posisjonstilgang og prøv igjen.');
+      }
+    };
+
+    void startTracking();
+    return () => {
+      active = false;
+      stopWatching();
+    };
   }, [online]);
 
-  const toggleOnline = async (v: boolean) => {
+  const toggleOnline = async () => {
+    const next = !online;
     setError('');
     setBusy(true);
+    if (next) gpsBlocked.current = false;
     try {
-      await driverApi.online(v);
-      setOnline(v);
-      if (v) poll();
+      await driverApi.online(next);
+      setOnline(next);
+      if (next) poll();
     } catch (e) { setError(apiError(e)); }
     finally { setBusy(false); }
   };
@@ -95,6 +151,7 @@ export default function DriverHome() {
     try { await driverApi.accept(tripId); await poll(); } catch (e) { setError(apiError(e)); }
     finally { setBusy(false); }
   };
+
   const decline = async (tripId: string) => {
     try { await driverApi.decline(tripId); setPending((p) => p.filter((t) => t.trip_id !== tripId)); } catch {}
   };
@@ -118,11 +175,18 @@ export default function DriverHome() {
     : '';
 
   const firstOffer = pending[0];
-
-  // Map framing
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
-  const mapDropoff = current && current.status === 'in_trip' ? { lat: current.dropoff_lat, lng: current.dropoff_lng } : (current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null);
+  const mapDropoff = current && current.status === 'in_trip'
+    ? { lat: current.dropoff_lat, lng: current.dropoff_lng }
+    : (current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null);
   const mapRoute = current?.geometry?.coordinates;
+
+  const gpsLabel = !online ? 'GPS pauset' : loc ? 'GPS aktiv' : 'Finner GPS…';
+  const operationalLabel = current
+    ? 'Aktiv tur'
+    : pending.length > 0
+      ? `${pending.length} ${pending.length === 1 ? 'forespørsel' : 'forespørsler'}`
+      : online ? 'Klar for tur' : 'Ikke på skift';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
@@ -136,91 +200,121 @@ export default function DriverHome() {
         testID="driver-map"
       />
 
-      {/* Top bar */}
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <View style={s.namePill}>
-          <View style={[s.statusDot, { backgroundColor: online ? colors.online : colors.textMuted }]} />
-          <View>
-            <Text style={s.hello}>{user?.fullName?.split(' ')[0] || 'Sjåfør'}</Text>
-            <Text style={s.role}>{online ? 'Pålogget' : 'Avlogget'}</Text>
-          </View>
+        <View style={s.identityPanel}>
+          <Text style={s.productLabel}>KJAPP DRIVER</Text>
+          <Text style={s.driverName} numberOfLines={1}>{user?.fullName?.split(' ')[0] || 'Sjåfør'}</Text>
         </View>
-        <View style={[s.onlineToggle, online && s.onlineToggleOn]}>
-          {busy ? <ActivityIndicator color={colors.online} /> : (
+        <Pressable
+          style={[s.onlineControl, online && s.onlineControlOn]}
+          onPress={toggleOnline}
+          disabled={busy}
+          testID="driver-online-toggle"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: online, disabled: busy }}
+          accessibilityLabel={online ? 'Gå offline' : 'Gå online'}
+        >
+          {busy ? (
+            <ActivityIndicator color={online ? colors.online : colors.text} />
+          ) : (
             <>
-              <Text style={[s.onlineLabel, online && { color: colors.online }]}>{online ? 'PÅ' : 'AV'}</Text>
-              <Switch
-                testID="driver-online-toggle"
-                value={online}
-                onValueChange={toggleOnline}
-                trackColor={{ false: colors.line, true: colors.onlineSoft }}
-                thumbColor={online ? colors.online : colors.textMuted}
-              />
+              <View style={[s.statusDot, { backgroundColor: online ? colors.online : colors.textMuted }]} />
+              <Text style={[s.onlineText, online && { color: colors.online }]}>{online ? 'ONLINE' : 'OFFLINE'}</Text>
             </>
           )}
-        </View>
+        </Pressable>
       </View>
 
-      {/* Bottom sheet */}
+      <View style={[s.mapStatus, { top: insets.top + 66, pointerEvents: 'none' }]}>
+        <View style={s.mapStatusItem}>
+          <Icon name="crosshair" size={14} color={online && loc ? colors.online : colors.textMuted} />
+          <Text style={s.mapStatusText}>{gpsLabel}</Text>
+        </View>
+        <View style={s.mapStatusDivider} />
+        <Text style={s.mapStatusText}>{operationalLabel}</Text>
+      </View>
+
       <View style={[s.sheet, { paddingBottom: insets.bottom + 12 }]}>
         <View style={s.handle} />
         {error ? <Text style={s.error} testID="driver-error">{error}</Text> : null}
 
         {current ? (
           <View testID="driver-active-trip">
-            <Text style={s.overlineOnline}>AKTIV TUR · {kr(current.price)}</Text>
-            <View style={[s.epRow, { marginTop: 12 }]}><View style={s.beacon} /><Text style={s.epText} numberOfLines={1}>{current.pickup_address}</Text></View>
+            <View style={s.sectionHeading}>
+              <Text style={s.overlineOnline}>AKTIV TUR</Text>
+              <Text style={s.tripPrice}>{kr(current.price)}</Text>
+            </View>
+            <View style={[s.epRow, { marginTop: 12 }]}>
+              <View style={s.beacon} />
+              <Text style={s.epText} numberOfLines={1}>{current.pickup_address}</Text>
+            </View>
             <View style={s.epLine} />
-            <View style={s.epRow}><View style={s.square} /><Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text></View>
+            <View style={s.epRow}>
+              <View style={s.square} />
+              <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
+            </View>
             <View style={s.tripActions}>
               <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
-                <Icon name="message" size={16} color={colors.text} />
+                <Icon name="message" size={17} color={colors.text} />
                 <Text style={s.msgBtnText}>Melding</Text>
               </Pressable>
               {actionLabel ? (
                 <Pressable style={s.action} onPress={advance} disabled={busy} testID="driver-advance">
-                  {busy ? <ActivityIndicator color="#04120A" /> : <Text style={s.actionText}>{actionLabel}</Text>}
+                  {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.actionText}>{actionLabel}</Text>}
                 </Pressable>
               ) : null}
             </View>
           </View>
         ) : firstOffer && online ? (
           <View testID={`driver-offer-${firstOffer.trip_id}`}>
-            <Text style={s.overlineOnline}>NY TUR · {kr(firstOffer.price)}</Text>
-            <View style={[s.epRow, { marginTop: 12 }]}><View style={s.beacon} /><Text style={s.epText} numberOfLines={1}>{firstOffer.pickup_address}</Text></View>
+            <View style={s.sectionHeading}>
+              <Text style={s.overlineOnline}>NY TUR</Text>
+              <Text style={s.tripPrice}>{kr(firstOffer.price)}</Text>
+            </View>
+            <View style={[s.epRow, { marginTop: 12 }]}>
+              <View style={s.beacon} />
+              <Text style={s.epText} numberOfLines={1}>{firstOffer.pickup_address}</Text>
+            </View>
             <View style={s.epLine} />
-            <View style={s.epRow}><View style={s.square} /><Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text></View>
-            <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min</Text>
+            <View style={s.epRow}>
+              <View style={s.square} />
+              <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
+            </View>
+            <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min estimert</Text>
             <View style={s.offerBtns}>
               <Pressable style={s.declineBtn} onPress={() => decline(firstOffer.trip_id)} testID={`driver-decline-${firstOffer.trip_id}`}>
                 <Text style={s.declineText}>Avslå</Text>
               </Pressable>
               <Pressable style={s.acceptBtn} onPress={() => accept(firstOffer.trip_id)} disabled={busy} testID={`driver-accept-${firstOffer.trip_id}`}>
-                {busy ? <ActivityIndicator color="#04120A" /> : <Text style={s.acceptText}>Godta tur</Text>}
+                {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.acceptText}>Godta tur</Text>}
               </Pressable>
             </View>
           </View>
         ) : (
           <View>
             <View style={s.summaryRow}>
-              <Stat label="Turer i dag" value={String(summary?.trips ?? 0)} s={s} />
+              <Stat label="Turer" value={String(summary?.trips ?? 0)} s={s} />
               <View style={s.vDivider} />
-              <Stat label="Inntekt" value={kr(summary?.income ?? 0)} s={s} />
+              <Stat label="I dag" value={kr(summary?.trip_income ?? 0)} s={s} />
               <View style={s.vDivider} />
-              <Stat label="Timer" value={hoursLabel(summary?.online_minutes)} s={s} />
+              <Stat label="Online" value={hoursLabel(summary?.online_minutes)} s={s} />
             </View>
             {online ? (
               <View style={s.waiting} testID="driver-waiting">
-                <View style={s.pulse}><Icon name="navigation" size={22} color={colors.online} /></View>
-                <Text style={s.waitTitle}>Venter på turer…</Text>
-                <Text style={s.waitSub}>Du er synlig for kunder i nærheten.</Text>
+                <View style={s.waitIcon}>
+                  <Icon name="navigation" size={21} color={colors.online} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.waitTitle}>Klar for neste tur</Text>
+                  <Text style={s.waitSub}>{loc ? 'Posisjonen din deles med dispatch.' : 'Kobler til posisjon…'}</Text>
+                </View>
               </View>
             ) : (
-              <Pressable style={s.goOnline} onPress={() => toggleOnline(true)} disabled={busy} testID="driver-go-online">
-                {busy ? <ActivityIndicator color="#04120A" /> : (
+              <Pressable style={s.goOnline} onPress={toggleOnline} disabled={busy} testID="driver-go-online">
+                {busy ? <ActivityIndicator color="#03120B" /> : (
                   <>
-                    <Icon name="power" size={18} color="#04120A" />
-                    <Text style={s.goOnlineText}>Gå på skift</Text>
+                    <Icon name="power" size={19} color="#03120B" />
+                    <Text style={s.goOnlineText}>Gå online</Text>
                   </>
                 )}
               </Pressable>
@@ -252,42 +346,79 @@ function Stat({ label, value, s }: any) {
 }
 
 const useStyles = makeStyles((c) => ({
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
-  namePill: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(10,15,19,0.92)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: c.line },
+  topBar: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingBottom: 8,
+  },
+  identityPanel: {
+    minHeight: 48, justifyContent: 'center', backgroundColor: 'rgba(3,6,7,0.91)',
+    borderRadius: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: c.line,
+  },
+  productLabel: { color: c.online, fontSize: 10, lineHeight: 13, letterSpacing: 1.6, fontWeight: '700' },
+  driverName: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any, maxWidth: 140 },
+  onlineControl: {
+    minWidth: 108, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: 'rgba(3,6,7,0.91)', borderRadius: 14, borderWidth: 1, borderColor: c.line,
+  },
+  onlineControlOn: { borderColor: 'rgba(57,229,140,0.46)', backgroundColor: 'rgba(5,24,17,0.92)' },
   statusDot: { width: 9, height: 9, borderRadius: 5 },
-  hello: { color: c.text, fontFamily: font.display, fontSize: 17 },
-  role: { color: c.textMuted, fontSize: 11 },
-  onlineToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(10,15,19,0.92)', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: c.line, minWidth: 88, justifyContent: 'center' },
-  onlineToggleOn: { borderColor: c.online },
-  onlineLabel: { color: c.textMuted, fontSize: 13, fontWeight: '700', letterSpacing: 1 },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: c.driverCard, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: c.line, paddingHorizontal: 20, paddingTop: 10 },
-  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
-  error: { color: c.danger, fontSize: 13, marginBottom: 12 },
-  summaryRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingVertical: 16 },
+  onlineText: { color: c.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.1 },
+  mapStatus: {
+    position: 'absolute', left: 16, zIndex: 9, minHeight: 36,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(3,6,7,0.88)',
+    borderRadius: 12, borderWidth: 1, borderColor: c.line, paddingHorizontal: 11,
+  },
+  mapStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mapStatusDivider: { width: 1, height: 16, backgroundColor: c.line, marginHorizontal: 9 },
+  mapStatusText: { color: c.textSecondary, fontSize: 11, fontWeight: '600' },
+  sheet: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,12,15,0.98)',
+    borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: c.line,
+    paddingHorizontal: 18, paddingTop: 10,
+  },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  summaryRow: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.025)',
+    borderRadius: 14, borderWidth: 1, borderColor: c.line, paddingVertical: 14,
+  },
   vDivider: { width: 1, height: 32, backgroundColor: c.line },
-  statValue: { color: c.text, fontFamily: font.mono, fontSize: 17 },
-  statLabel: { color: c.textMuted, fontSize: 11, marginTop: 4 },
-  overlineOnline: { color: c.online, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
-  epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  epLine: { width: 1, height: 14, backgroundColor: c.lineStrong, marginLeft: 5, marginVertical: 3 },
+  statValue: { color: c.text, fontFamily: font.mono, fontSize: 17, fontWeight: '600' },
+  statLabel: { color: c.textMuted, fontSize: 10.5, marginTop: 4 },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  overlineOnline: { color: c.online, fontSize: 11, letterSpacing: 1.8, fontWeight: '800' },
+  tripPrice: { color: c.text, fontFamily: font.mono, fontSize: 18, fontWeight: '700' },
+  epRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 28 },
+  epLine: { width: 1, height: 14, backgroundColor: c.lineStrong, marginLeft: 5, marginVertical: 2 },
   beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.online },
   square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
   epText: { color: c.text, fontSize: 14, flex: 1 },
-  tripActions: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  msgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 18, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: c.line },
-  msgBtnText: { color: c.text, fontSize: 14 },
-  action: { flex: 1, height: 52, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
-  actionText: { color: '#04120A', fontSize: 16, fontWeight: '700' },
-  offerMeta: { color: c.textMuted, fontSize: 13, marginTop: 10 },
-  offerBtns: { flexDirection: 'row', gap: 12, marginTop: 14 },
-  declineBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: c.line },
-  declineText: { color: c.textSecondary, fontSize: 15 },
-  acceptBtn: { flex: 2, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: c.online },
-  acceptText: { color: '#04120A', fontSize: 15, fontWeight: '700' },
-  waiting: { alignItems: 'center', paddingTop: 22, paddingBottom: 6 },
-  pulse: { width: 60, height: 60, borderRadius: 30, backgroundColor: c.onlineSoft, borderWidth: 1, borderColor: 'rgba(47,224,140,0.3)', alignItems: 'center', justifyContent: 'center' },
-  waitTitle: { color: c.text, fontFamily: font.display, fontSize: 18, marginTop: 14 },
-  waitSub: { color: c.textMuted, fontSize: 13, marginTop: 4, textAlign: 'center' },
-  goOnline: { flexDirection: 'row', gap: 10, marginTop: 16, height: 56, borderRadius: 999, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
-  goOnlineText: { color: '#04120A', fontSize: 16, fontWeight: '700' },
+  tripActions: { flexDirection: 'row', gap: 10, marginTop: 15 },
+  msgBtn: {
+    minWidth: 112, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
+  },
+  msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
+  actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
+  offerBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong },
+  declineText: { color: c.textSecondary, fontSize: 15, fontWeight: '600' },
+  acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: c.online },
+  acceptText: { color: '#03120B', fontSize: 15, fontWeight: '800' },
+  waiting: {
+    flexDirection: 'row', alignItems: 'center', gap: 13, minHeight: 72, marginTop: 12,
+    paddingHorizontal: 14, borderRadius: 14, backgroundColor: 'rgba(57,229,140,0.055)',
+    borderWidth: 1, borderColor: 'rgba(57,229,140,0.16)',
+  },
+  waitIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center' },
+  waitTitle: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any },
+  waitSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
+  goOnline: {
+    flexDirection: 'row', gap: 10, marginTop: 14, height: 56, borderRadius: 14,
+    backgroundColor: c.online, alignItems: 'center', justifyContent: 'center',
+  },
+  goOnlineText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
 }));

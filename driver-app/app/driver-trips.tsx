@@ -117,7 +117,7 @@ export default function DriverTrips() {
 
                 <View style={s.breakCard}>
                   <BreakRow label="Bruttopris" value={kr(detail.price)} s={s} />
-                  <BreakRow label={`Provisjon (${commissionPct}%)`} value={`− ${kr(Math.round((detail.price || 0) * commission))}`} muted s={s} />
+                  <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.round((detail.price || 0) * commission))}`} muted s={s} />
                   <View style={s.breakDivider} />
                   <BreakRow label="Din inntekt" value={kr(net(detail.price))} bold s={s} />
                 </View>
@@ -154,8 +154,8 @@ const useStyles = makeStyles((c) => ({
   segs: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 999, padding: 4, marginHorizontal: 20, marginBottom: 8 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   segOn: { backgroundColor: c.online },
-  segText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
-  segTextOn: { color: '#04120A' },
+  segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
+  segTextOn: { color: c.accentOn },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.line },
   rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
   rowTitle: { color: c.text, fontSize: 14 },
