@@ -2,21 +2,10 @@ name: KJAPP Product Rebase Check
 
 on:
   pull_request:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - 'driver-app/**'
-      - 'fleet-web/**'
-      - 'marketing-web/**'
-      - '.github/workflows/product-rebase-check.yml'
+    branches: [main]
 
 permissions:
   contents: read
-
-concurrency:
-  group: kjapp-product-rebase-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
 
 env:
   CI: '1'
@@ -29,13 +18,18 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install
-      - run: npx tsc --noEmit
-      - run: npx expo config --type public
+          node-version: '22'
+      - name: Install
+        run: npm install
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Validate Expo config
+        run: npx expo config --type public
 
   driver:
     name: Driver Expo typecheck
@@ -44,13 +38,18 @@ jobs:
       run:
         working-directory: driver-app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install
-      - run: npx tsc --noEmit
-      - run: npx expo config --type public
+          node-version: '22'
+      - name: Install
+        run: npm install
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Validate Expo config
+        run: npx expo config --type public
 
   fleet:
     name: Fleet web build
@@ -59,12 +58,16 @@ jobs:
       run:
         working-directory: fleet-web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install
-      - run: npm run build
+          node-version: '22'
+      - name: Install
+        run: npm install
+      - name: Build
+        run: npm run build
 
   marketing:
     name: Marketing web build
@@ -73,9 +76,13 @@ jobs:
       run:
         working-directory: marketing-web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install
-      - run: npm run build
+          node-version: '22'
+      - name: Install
+        run: npm install
+      - name: Build
+        run: npm run build
