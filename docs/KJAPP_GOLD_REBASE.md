@@ -6,7 +6,7 @@ This branch implements the first native product pass from the KJAPP design contr
 
 - Customer core palette rebased to `#050A0F` with cyan `#00E5F5`.
 - Driver core palette rebased to `#050A0F` with operational green `#39E58C`.
-- Legacy Fraunces is no longer used by core product typography; native sans is used until the bundled Geist asset is added.
+- Geist is now the core Customer and Driver product font through `@expo-google-fonts/geist`; JetBrains Mono remains for tabular operational numbers.
 - Semantic spacing, radius and motion tokens added to both native themes.
 - Customer Home is destination-first and voice is embedded in the destination entry/search surface.
 - Vehicle selection now exposes three primary classes: KJAPP, KJAPP XL and Premium.
@@ -23,7 +23,6 @@ This branch implements the first native product pass from the KJAPP design contr
 
 ## Remaining GOLD work
 
-- Bundle Geist and replace the temporary native-sans fallback.
 - Route color separation in Driver map (cyan route vs green driver state).
 - Full state matrix for location/microphone/search/quote/payment/reassignment/offline.
 - Device QA at 320/360/390/430+ widths.
