@@ -32,6 +32,7 @@ export default function DriverHome() {
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
+  const gpsBlocked = useRef(false);
 
   const poll = useCallback(async () => {
     try {
@@ -44,7 +45,7 @@ export default function DriverHome() {
     } catch { setPending([]); }
     driverApi.summary().then((r) => {
       setSummary(r);
-      if (typeof r?.online === 'boolean') setOnline(r.online);
+      if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
     }).catch(() => {});
   }, []);
 
@@ -57,37 +58,86 @@ export default function DriverHome() {
   );
 
   useEffect(() => {
-    (async () => {
+    let active = true;
+
+    const stopWatching = () => {
+      if (watch.current) {
+        watch.current.remove();
+        watch.current = null;
+      }
+    };
+
+    const forceOffline = async (message: string) => {
+      gpsBlocked.current = true;
+      let backendOffline = true;
+      try {
+        await driverApi.online(false);
+      } catch {
+        backendOffline = false;
+      }
+      if (!active) return;
+      stopWatching();
+      setLoc(null);
+      setOnline(false);
+      setError(backendOffline
+        ? `${message} Du er satt OFFLINE.`
+        : `${message} KJAPP kunne ikke bekrefte OFFLINE-status mot serveren. Prøv igjen før du tar turer.`);
+    };
+
+    const startTracking = async () => {
       if (!online) {
-        if (watch.current) { watch.current.remove(); watch.current = null; }
-        setLoc(null);
+        stopWatching();
+        if (active) setLoc(null);
         return;
       }
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setError('Posisjon må være på for at KJAPP skal kunne sende turer og dele korrekt henteposisjon.');
-        return;
+
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!active) return;
+        if (status !== 'granted') {
+          await forceOffline('Posisjon må være aktiv for at KJAPP skal kunne sende turer og dele korrekt henteposisjon.');
+          return;
+        }
+
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        if (!active) return;
+        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading || 0 };
+        gpsBlocked.current = false;
+        setLoc(p);
+        setError('');
+        driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
+
+        const subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
+          (u) => {
+            if (!active) return;
+            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
+            setLoc(np);
+            driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
+          },
+        );
+        if (!active) subscription.remove();
+        else {
+          stopWatching();
+          watch.current = subscription;
+        }
+      } catch {
+        await forceOffline('Kunne ikke sikre en gyldig GPS-posisjon. Kontroller posisjonstilgang og prøv igjen.');
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading || 0 };
-      setLoc(p);
-      driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
-      watch.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
-        (u) => {
-          const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
-          setLoc(np);
-          driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
-        },
-      );
-    })();
-    return () => { if (watch.current) { watch.current.remove(); watch.current = null; } };
+    };
+
+    void startTracking();
+    return () => {
+      active = false;
+      stopWatching();
+    };
   }, [online]);
 
   const toggleOnline = async () => {
     const next = !online;
     setError('');
     setBusy(true);
+    if (next) gpsBlocked.current = false;
     try {
       await driverApi.online(next);
       setOnline(next);
@@ -175,7 +225,7 @@ export default function DriverHome() {
         </Pressable>
       </View>
 
-      <View style={[s.mapStatus, { top: insets.top + 66 }]} pointerEvents="none">
+      <View style={[s.mapStatus, { top: insets.top + 66, pointerEvents: 'none' }]}>
         <View style={s.mapStatusItem}>
           <Icon name="crosshair" size={14} color={online && loc ? colors.online : colors.textMuted} />
           <Text style={s.mapStatusText}>{gpsLabel}</Text>
@@ -245,7 +295,7 @@ export default function DriverHome() {
             <View style={s.summaryRow}>
               <Stat label="Turer" value={String(summary?.trips ?? 0)} s={s} />
               <View style={s.vDivider} />
-              <Stat label="I dag" value={kr(summary?.income ?? 0)} s={s} />
+              <Stat label="I dag" value={kr(summary?.trip_income ?? 0)} s={s} />
               <View style={s.vDivider} />
               <Stat label="Online" value={hoursLabel(summary?.online_minutes)} s={s} />
             </View>
