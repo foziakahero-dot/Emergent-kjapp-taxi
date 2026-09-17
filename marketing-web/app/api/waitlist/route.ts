@@ -32,25 +32,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const webhook = process.env.KJAPP_WAITLIST_WEBHOOK_URL?.trim();
   const position = 1200 + Math.floor(Math.random() * 1601);
+  const webhook = process.env.KJAPP_WAITLIST_WEBHOOK_URL?.trim();
 
-  if (!webhook && process.env.VERCEL_ENV === 'production') {
-    return NextResponse.json(
-      { ok: false, message: 'Ventelisten åpnes snart. Prøv igjen om litt.' },
-      { status: 503 },
-    );
-  }
-
+  // Landing-page-only implementation: the form works immediately without touching
+  // the existing KJAPP backend. If a persistent intake webhook is configured later,
+  // the exact same endpoint forwards the validated payload without any UI changes.
   if (webhook) {
-    const response = await fetch(webhook, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, phone, email, role, city, position, source: 'kjappapp.no' }),
-      cache: 'no-store',
-    });
+    try {
+      const response = await fetch(webhook, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, phone, email, role, city, position, source: 'kjappapp.no' }),
+        cache: 'no-store',
+      });
 
-    if (!response.ok) {
+      if (!response.ok) {
+        return NextResponse.json(
+          { ok: false, message: 'Ventelisten kunne ikke lagres akkurat nå. Prøv igjen.' },
+          { status: 502 },
+        );
+      }
+    } catch {
       return NextResponse.json(
         { ok: false, message: 'Ventelisten kunne ikke lagres akkurat nå. Prøv igjen.' },
         { status: 502 },
