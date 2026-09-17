@@ -26,6 +26,7 @@ export default function DriverSettings() {
   const { logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [batteryGuideOpen, setBatteryGuideOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
 
@@ -77,6 +78,14 @@ export default function DriverSettings() {
             {DRIVE.map((t, i) => (
               <ToggleRow key={t.key} t={t} on={settings[t.key] !== false} onToggle={() => toggle(t.key, true)} border={i > 0} s={s} />
             ))}
+            <LinkRow
+              icon="power"
+              label="Batteri og bakgrunnskjøring"
+              onPress={() => setBatteryGuideOpen(true)}
+              border
+              s={s}
+              testID="ds-battery-guide"
+            />
           </View>
 
           <Text style={s.sectionTitle}>Språk</Text>
@@ -115,6 +124,28 @@ export default function DriverSettings() {
             <Icon name="x" size={18} color={colors.danger} />
             <Text style={s.deleteText}>Slett konto</Text>
           </Pressable>
+
+          <Modal visible={batteryGuideOpen} transparent animationType="fade" onRequestClose={() => setBatteryGuideOpen(false)}>
+            <View style={s.modalBackdrop}>
+              <View style={s.modalCard}>
+                <View style={s.modalIconNeutral}><Icon name="power" size={24} color={colors.accent} /></View>
+                <Text style={s.modalTitle}>La KJAPP kjøre i bakgrunnen</Text>
+                <Text style={s.modalBody}>
+                  På enkelte Android-telefoner, spesielt Samsung og Xiaomi, kan batterisparing stoppe posisjon og turvarsler når skjermen er låst.
+                </Text>
+                <View style={s.guideList}>
+                  <Text style={s.guideStep}>1. Åpne appinnstillinger.</Text>
+                  <Text style={s.guideStep}>2. Finn Batteri eller Batteribruk.</Text>
+                  <Text style={s.guideStep}>3. Velg Ubegrenset / Ikke optimaliser for KJAPP Driver.</Text>
+                  <Text style={s.guideStep}>4. Kontroller at posisjon er tillatt «Hele tiden» mens du er på skift.</Text>
+                </View>
+                <Button label="Åpne appinnstillinger" onPress={() => Linking.openSettings()} testID="ds-battery-open-settings" style={{ marginTop: 16 }} />
+                <Pressable onPress={() => setBatteryGuideOpen(false)} style={{ marginTop: 12, alignItems: 'center' }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 14 }}>Lukk</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
 
           <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => setDeleteOpen(false)}>
             <View style={s.modalBackdrop}>
@@ -187,7 +218,10 @@ const useStyles = makeStyles((c) => ({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(4,8,10,0.75)', alignItems: 'center', justifyContent: 'center', padding: 28 },
   modalCard: { width: '100%', maxWidth: 400, backgroundColor: c.elevated, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  modalIconNeutral: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   modalTitle: { color: c.text, fontFamily: font.display, fontSize: 22, textAlign: 'center' },
   modalBody: { color: c.textMuted, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  guideList: { alignSelf: 'stretch', marginTop: 16, gap: 8 },
+  guideStep: { color: c.textSecondary, fontSize: 13, lineHeight: 19 },
   modalInput: { alignSelf: 'stretch', marginTop: 16, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line, borderRadius: 12, paddingHorizontal: 16, height: 52, color: c.text, fontSize: 16, letterSpacing: 2, textAlign: 'center' },
 }));
