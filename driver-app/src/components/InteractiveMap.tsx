@@ -276,8 +276,8 @@ export function InteractiveMap({
           <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
             {routeLine ? (
               <>
-                <Polyline points={routeLine} fill="none" stroke={colors.accent} strokeOpacity={0.30} strokeWidth={11} strokeLinecap="round" strokeLinejoin="round" />
-                <Polyline points={routeLine} fill="none" stroke={colors.accent} strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" />
+                <Polyline points={routeLine} fill="none" stroke={colors.route} strokeOpacity={0.24} strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />
+                <Polyline points={routeLine} fill="none" stroke={colors.route} strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" />
               </>
             ) : null}
 
@@ -306,7 +306,7 @@ export function InteractiveMap({
 
             {dropoff ? (
               <G>
-                <Rect x={sx(dropoff.lng) - 7} y={sy(dropoff.lat) - 7} width={14} height={14} rx={3} fill={colors.bg} stroke={colors.accent} strokeWidth={2.5} />
+                <Rect x={sx(dropoff.lng) - 7} y={sy(dropoff.lat) - 7} width={14} height={14} rx={3} fill={colors.bg} stroke={colors.route} strokeWidth={2.5} />
                 <Rect x={sx(dropoff.lng) - 2.5} y={sy(dropoff.lat) - 2.5} width={5} height={5} fill={colors.text} />
               </G>
             ) : null}
