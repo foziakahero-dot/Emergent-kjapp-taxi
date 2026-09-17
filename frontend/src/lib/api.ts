@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
+import { realtimeSnapshot } from '@/src/lib/realtime';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
@@ -27,7 +28,11 @@ export const tripsApi = {
   estimate: (data: any) => api.post('/trips/estimate', data).then((r) => r.data),
   request: (data: any) => api.post('/trips/request', data).then((r) => r.data),
   active: () => api.get('/trips/active').then((r) => r.data),
-  get: (id: string) => api.get(`/trips/${id}`).then((r) => r.data),
+  get: (id: string) => realtimeSnapshot(
+    `customer-trip:${id}`,
+    `/sse/customer/trips/${encodeURIComponent(id)}`,
+    () => api.get(`/trips/${id}`).then((r) => r.data),
+  ),
   complete: (id: string) => api.post(`/trips/${id}/complete`).then((r) => r.data),
   cancel: (id: string) => api.post(`/trips/${id}/cancel`).then((r) => r.data),
   rate: (id: string, data: any) => api.post(`/trips/${id}/rate`, data).then((r) => r.data),
@@ -35,8 +40,11 @@ export const tripsApi = {
 };
 
 export const carsApi = {
-  nearby: (lat: number, lng: number) =>
-    api.post('/cars/nearby', { lat, lng }).then((r) => r.data),
+  nearby: (lat: number, lng: number) => realtimeSnapshot(
+    'customer-cars',
+    `/sse/customer/cars?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`,
+    () => api.post('/cars/nearby', { lat, lng }).then((r) => r.data),
+  ),
 };
 
 export const placesApi = {
