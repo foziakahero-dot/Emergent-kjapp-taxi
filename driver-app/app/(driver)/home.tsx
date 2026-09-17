@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -10,6 +10,13 @@ import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
+import {
+  getDriverLocationPermissionState,
+  requestDriverBackgroundLocationPermission,
+  requestDriverForegroundLocationPermission,
+  startDriverBackgroundLocation,
+  stopDriverBackgroundLocation,
+} from '@/src/lib/nativeRuntime';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -31,6 +38,7 @@ export default function DriverHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
+  const [backgroundPermissionOpen, setBackgroundPermissionOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
 
@@ -72,6 +80,7 @@ export default function DriverHome() {
       let backendOffline = true;
       try {
         await driverApi.online(false);
+        await stopDriverBackgroundLocation();
       } catch {
         backendOffline = false;
       }
@@ -92,7 +101,7 @@ export default function DriverHome() {
       }
 
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.getForegroundPermissionsAsync();
         if (!active) return;
         if (status !== 'granted') {
           await forceOffline('Posisjon må være aktiv for at KJAPP skal kunne sende turer og dele korrekt henteposisjon.');
@@ -133,17 +142,63 @@ export default function DriverHome() {
     };
   }, [online]);
 
+  const activateShift = async () => {
+    await driverApi.online(true);
+    setOnline(true);
+    gpsBlocked.current = false;
+    await startDriverBackgroundLocation();
+    await poll();
+  };
+
   const toggleOnline = async () => {
     const next = !online;
     setError('');
     setBusy(true);
-    if (next) gpsBlocked.current = false;
+
     try {
-      await driverApi.online(next);
-      setOnline(next);
-      if (next) poll();
-    } catch (e) { setError(apiError(e)); }
-    finally { setBusy(false); }
+      if (!next) {
+        await driverApi.online(false);
+        await stopDriverBackgroundLocation();
+        setOnline(false);
+        return;
+      }
+
+      const foregroundGranted = await requestDriverForegroundLocationPermission();
+      if (!foregroundGranted) {
+        setError('KJAPP trenger posisjon mens appen er i bruk før du kan gå online.');
+        return;
+      }
+
+      const permissions = await getDriverLocationPermissionState();
+      if (!permissions.background) {
+        setBackgroundPermissionOpen(true);
+        return;
+      }
+
+      await activateShift();
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const grantBackgroundAndGoOnline = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const granted = await requestDriverBackgroundLocationPermission();
+      if (!granted) {
+        setError('Bakgrunnsposisjon er nødvendig når du er på skift, slik at KJAPP kan motta turer og holde posisjonen oppdatert når skjermen er låst.');
+        return;
+      }
+      setBackgroundPermissionOpen(false);
+      await activateShift();
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const accept = async (tripId: string) => {
@@ -332,6 +387,29 @@ export default function DriverHome() {
           peerName="Kunde"
         />
       ) : null}
+
+      <Modal
+        visible={backgroundPermissionOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBackgroundPermissionOpen(false)}
+      >
+        <View style={s.permissionBackdrop}>
+          <View style={s.permissionCard}>
+            <View style={s.permissionIcon}><Icon name="map-pin" size={24} color={colors.online} /></View>
+            <Text style={s.permissionTitle}>Tillat posisjon på skift</Text>
+            <Text style={s.permissionBody}>
+              Når du er ONLINE må KJAPP kunne oppdatere posisjonen din også når skjermen er låst eller du bruker navigasjon. Dette brukes bare for dispatch og aktive turer.
+            </Text>
+            <Pressable style={s.permissionPrimary} onPress={grantBackgroundAndGoOnline} disabled={busy} testID="driver-background-location-confirm">
+              {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.permissionPrimaryText}>Fortsett</Text>}
+            </Pressable>
+            <Pressable style={s.permissionSecondary} onPress={() => setBackgroundPermissionOpen(false)} disabled={busy}>
+              <Text style={s.permissionSecondaryText}>Ikke nå</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -421,4 +499,13 @@ const useStyles = makeStyles((c) => ({
     backgroundColor: c.online, alignItems: 'center', justifyContent: 'center',
   },
   goOnlineText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  permissionBackdrop: { flex: 1, backgroundColor: 'rgba(3,6,7,0.82)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  permissionCard: { width: '100%', maxWidth: 420, borderRadius: 22, borderWidth: 1, borderColor: c.line, backgroundColor: c.driverCard, padding: 22 },
+  permissionIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  permissionTitle: { color: c.text, fontFamily: font.display, fontSize: 22, fontWeight: '650' as any },
+  permissionBody: { color: c.textSecondary, fontSize: 14, lineHeight: 21, marginTop: 9 },
+  permissionPrimary: { height: 54, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
+  permissionPrimaryText: { color: '#03120B', fontSize: 15, fontWeight: '800' },
+  permissionSecondary: { height: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  permissionSecondaryText: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
 }));
