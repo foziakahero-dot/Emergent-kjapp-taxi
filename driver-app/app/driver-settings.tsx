@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -40,6 +40,18 @@ export default function DriverSettings() {
     try { await settingsApi.update({ [key]: next[key] }); } catch {}
   };
 
+  const openBatterySettings = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        await Linking.sendIntent('android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
+      } else {
+        await Linking.openSettings();
+      }
+    } catch {
+      await Linking.openSettings();
+    }
+  };
+
   const deleteAccount = async () => {
     if (confirmText.trim().toUpperCase() !== 'SLETT') return;
     setDeleting(true);
@@ -78,6 +90,26 @@ export default function DriverSettings() {
               <ToggleRow key={t.key} t={t} on={settings[t.key] !== false} onToggle={() => toggle(t.key, true)} border={i > 0} s={s} />
             ))}
           </View>
+
+          {Platform.OS === 'android' ? (
+            <>
+              <Text style={s.sectionTitle}>Batteri og bakgrunn</Text>
+              <View style={s.card}>
+                <View style={s.guideBlock}>
+                  <View style={s.linkIcon}><Icon name="shield" size={18} color={colors.accent} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.guideTitle}>Tillat KJAPP å kjøre på skift</Text>
+                    <Text style={s.guideBody}>
+                      For stabile turvarsler og GPS med låst skjerm bør KJAPP unntas fra batterioptimalisering. På Samsung: Batteri → Bakgrunnsgrenser → Aldri sovende apper. På Xiaomi: Batteri → App-batterisparing → Ingen begrensninger.
+                    </Text>
+                    <Pressable style={s.guideButton} onPress={openBatterySettings} testID="driver-battery-settings">
+                      <Text style={s.guideButtonText}>Åpne batteriinnstillinger</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : null}
 
           <Text style={s.sectionTitle}>Språk</Text>
           <View style={s.card}>
@@ -180,6 +212,11 @@ const useStyles = makeStyles((c) => ({
   linkIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   linkLabel: { color: c.text, fontSize: 15, flex: 1 },
   linkValue: { color: c.textMuted, fontSize: 14 },
+  guideBlock: { flexDirection: 'row', gap: 12, paddingVertical: 16 },
+  guideTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+  guideBody: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  guideButton: { alignSelf: 'flex-start', marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: c.lineStrong, paddingHorizontal: 14, paddingVertical: 10 },
+  guideButtonText: { color: c.accent, fontSize: 12, fontWeight: '700' },
   logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, paddingVertical: 16, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line },
   logoutText: { color: c.text, fontSize: 15, fontWeight: '600' },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12, paddingVertical: 16, borderRadius: 16, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)' },
