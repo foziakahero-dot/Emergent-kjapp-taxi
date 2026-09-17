@@ -7,9 +7,19 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
+import * as Sentry from '@sentry/react-native';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
+
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+Sentry.init({
+  dsn: sentryDsn,
+  enabled: Boolean(sentryDsn),
+  environment: process.env.EXPO_PUBLIC_APP_ENV || 'beta',
+  tracesSampleRate: 0.05,
+  sendDefaultPii: false,
+});
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -22,6 +32,11 @@ function NativeRuntimeBridge() {
     const role = user?.role;
     const isCustomer = !!user && (!role || role === 'user' || role === 'customer');
     if (isCustomer) registerNativePush().catch(() => {});
+  }, [user?.id, user?.role]);
+
+  useEffect(() => {
+    if (user?.id) Sentry.setUser({ id: user.id, role: user.role || 'customer' } as any);
+    else Sentry.setUser(null);
   }, [user?.id, user?.role]);
 
   useEffect(() => {
@@ -42,7 +57,7 @@ function NativeRuntimeBridge() {
   return null;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded] = useFonts(FONT_ASSETS);
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
@@ -76,3 +91,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);
