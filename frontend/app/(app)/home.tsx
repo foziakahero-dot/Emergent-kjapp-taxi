@@ -13,11 +13,19 @@ import * as Location from 'expo-location';
 import { colors, font, makeStyles, radius } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
+import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
 import { useAuth } from '@/src/context/AuthContext';
 import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
+const GOLD_VEHICLE_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
+
+function vehicleCopy(type: string) {
+  if (type === 'trygg') return { name: 'KJAPP XL', tagline: 'Mer plass · 7 seter' };
+  if (type === 'premium') return { name: 'Premium', tagline: 'Executive comfort' };
+  return { name: 'KJAPP', tagline: 'Rask og enkel' };
+}
 
 export default function Home() {
   const router = useRouter();
@@ -47,7 +55,6 @@ export default function Home() {
     mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});
   }, []);
 
-  // redirect to active trip if any
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -57,7 +64,7 @@ export default function Home() {
         if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
       }).catch(() => {});
       return () => { active = false; };
-    }, [router]),
+    }, [loadMethods, loadPlaces, router]),
   );
 
   useEffect(() => {
@@ -79,9 +86,8 @@ export default function Home() {
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
     loadPlaces();
-  }, []);
+  }, [loadMethods, loadPlaces]);
 
-  // poll nearby cars
   useEffect(() => {
     let mounted = true;
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
@@ -90,7 +96,6 @@ export default function Home() {
     return () => { mounted = false; clearInterval(i); };
   }, [loc.lat, loc.lng]);
 
-  // estimate when dropoff chosen
   useEffect(() => {
     if (!dropoff) { setEstimate(null); return; }
     tripsApi.estimate({
@@ -103,6 +108,12 @@ export default function Home() {
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
+  const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
+
+  const openVoice = () => {
+    setSearchOpen(false);
+    router.push('/(app)/assist');
+  };
 
   const book = async () => {
     if (!dropoff) return;
@@ -145,21 +156,24 @@ export default function Home() {
         testID="home-map"
       />
 
-      {/* Top header */}
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <View style={s.pill}>
+        <View style={s.brandPill}>
           <Text style={s.brand}>KJ<Text style={{ color: colors.accent }}>A</Text>PP</Text>
         </View>
-        <Pressable style={s.orb} testID="home-profile-btn" onPress={() => router.push('/(app)/profile')}>
-          <Icon name="user" size={18} color={colors.accent} />
+        <Pressable
+          style={s.iconControl}
+          testID="home-profile-btn"
+          onPress={() => router.push('/(app)/profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Åpne profil"
+        >
+          <Icon name="user" size={20} color={colors.text} />
         </Pressable>
       </View>
 
-      {/* Bottom sheet */}
       <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
         <View style={s.handle} />
 
-        {/* pickup + cars status */}
         <View style={s.pickupRow} testID="home-pickup-row">
           <View style={s.beacon} />
           <Text style={s.pickupText} numberOfLines={1}>{pickupLabel}</Text>
@@ -175,15 +189,39 @@ export default function Home() {
 
         {!dropoff ? (
           <>
-            <Pressable style={s.whereTo} onPress={() => setSearchOpen(true)} testID="home-where-to">
-              <View style={{ flex: 1 }}>
+            <View style={s.destinationCard} testID="home-destination-entry">
+              <Pressable
+                style={s.destinationMain}
+                onPress={() => setSearchOpen(true)}
+                testID="home-where-to"
+                accessibilityRole="button"
+                accessibilityLabel="Søk etter destinasjon"
+              >
                 <Text style={s.greeting}>{greeting(user?.fullName)}</Text>
-                <Text style={s.whereTitle}>Hvor vil du?</Text>
+                <Text style={s.whereTitle}>Hvor skal du?</Text>
+                <Text style={s.whereHint}>Søk adresse, sted eller flyplass</Text>
+              </Pressable>
+              <View style={s.destinationActions}>
+                <Pressable
+                  style={s.voiceBtn}
+                  onPress={openVoice}
+                  testID="home-voice"
+                  accessibilityRole="button"
+                  accessibilityLabel="Bestill med stemmen"
+                >
+                  <Icon name="mic" size={21} color={colors.accent} />
+                </Pressable>
+                <Pressable
+                  style={s.searchBtn}
+                  onPress={() => setSearchOpen(true)}
+                  testID="home-search"
+                  accessibilityRole="button"
+                  accessibilityLabel="Åpne destinasjonssøk"
+                >
+                  <Icon name="search" size={20} color={colors.accentOn} />
+                </Pressable>
               </View>
-              <View style={s.searchBtn}>
-                <Icon name="search" size={20} color={colors.accentOn} />
-              </View>
-            </Pressable>
+            </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
               {quickPlaces.map((p: any) => (
@@ -209,7 +247,6 @@ export default function Home() {
           </>
         ) : (
           <>
-            {/* route review */}
             <View style={s.endpoints} testID="booking-endpoints">
               <View style={s.epRow}>
                 <View style={s.beacon} />
@@ -225,23 +262,38 @@ export default function Home() {
               </View>
             </View>
 
+            <View style={s.sectionHeader}>
+              <Text style={s.sectionTitle}>Velg bil</Text>
+              <Text style={s.sectionMeta}>{estimate ? `ca. ${estimate.duration_min} min` : 'Beregner…'}</Text>
+            </View>
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.vehiclesRow}>
-              {VEHICLES.map((v) => {
+              {goldVehicles.map((v) => {
                 const active = selType === v.type;
                 const price = priceFor(v.type);
+                const copy = vehicleCopy(v.type);
                 return (
                   <Pressable
                     key={v.type}
                     testID={`vehicle-${v.type}`}
                     onPress={() => setSelType(v.type)}
                     style={[s.vehicle, active && s.vehicleActive]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`${copy.name}, ${copy.tagline}, ${price != null ? kr(price) : 'pris beregnes'}`}
                   >
-                    <Icon name="car" size={22} color={active ? colors.accent : colors.textSecondary} />
-                    <Text style={[s.vName, active && { color: colors.text }]}>{v.name}</Text>
-                    <Text style={s.vTag}>{v.tagline}</Text>
-                    <Text style={[s.vPrice, active && { color: colors.accent }]}>
-                      {price != null ? kr(price) : '…'}
-                    </Text>
+                    <View style={s.vehicleArtwork}>
+                      <VehicleAsset kind={v.type as VehicleKind} selected={active} width={126} height={66} />
+                    </View>
+                    <View style={s.vehicleCopyRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.vName, active && { color: colors.text }]}>{copy.name}</Text>
+                        <Text style={s.vTag}>{copy.tagline}</Text>
+                      </View>
+                      <Text style={[s.vPrice, active && { color: colors.accent }]}>
+                        {price != null ? kr(price) : '…'}
+                      </Text>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -249,7 +301,7 @@ export default function Home() {
 
             <View style={s.summary} testID="booking-price-summary">
               <Text style={s.summaryLeft}>
-                {estimate ? `${estimate.distance_km} km · ca. ${estimate.duration_min} min` : 'Beregner rute…'}
+                {estimate ? `${estimate.distance_km} km · estimert kjøretid ${estimate.duration_min} min` : 'Beregner rute…'}
               </Text>
               <Text style={s.summaryPrice}>{kr(priceFor(selType))}</Text>
             </View>
@@ -273,7 +325,7 @@ export default function Home() {
               {booking ? (
                 <ActivityIndicator color={colors.accentOn} />
               ) : (
-                <Text style={s.confirmText}>Bestill bilen · {kr(priceFor(selType))}</Text>
+                <Text style={s.confirmText}>Bekreft KJAPP · {kr(priceFor(selType))}</Text>
               )}
             </Pressable>
           </>
@@ -283,7 +335,8 @@ export default function Home() {
       {searchOpen && (
         <SearchSheet
           onClose={() => setSearchOpen(false)}
-          onSelect={(d) => { setDropoff(d); setSearchOpen(false); }}
+          onVoice={openVoice}
+          onSelect={(d: any) => { setDropoff(d); setSearchOpen(false); }}
           featured={featured}
           insets={insets}
         />
@@ -292,7 +345,7 @@ export default function Home() {
   );
 }
 
-function SearchSheet({ onClose, onSelect, featured, insets }: any) {
+function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -324,18 +377,32 @@ function SearchSheet({ onClose, onSelect, featured, insets }: any) {
           <TextInput
             testID="search-input"
             autoFocus
-            placeholder="Søk adresse eller sted"
+            placeholder="Hvor skal du?"
             placeholderTextColor={colors.textMuted}
             style={s.searchInput}
             value={q}
             onChangeText={setQ}
+            returnKeyType="search"
           />
-          {loading ? <ActivityIndicator color={colors.accent} /> : null}
+          {loading ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <Pressable
+              onPress={onVoice}
+              style={s.searchVoice}
+              testID="search-voice"
+              accessibilityRole="button"
+              accessibilityLabel="Bruk stemmen"
+            >
+              <Icon name="mic" size={19} color={colors.accent} />
+            </Pressable>
+          )}
         </View>
         <Pressable onPress={onClose} testID="search-close" style={s.searchClose}>
           <Text style={{ color: colors.accent, fontSize: 15 }}>Avbryt</Text>
         </Pressable>
       </View>
+      <Text style={s.searchPrompt}>Skriv eller si destinasjonen. Du bekrefter alltid bil og pris før turen opprettes.</Text>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
         {items.map((r: any, i: number) => (
           <Pressable
@@ -364,79 +431,93 @@ const useStyles = makeStyles((c) => ({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingBottom: 8,
   },
-  pill: {
-    backgroundColor: 'rgba(12,18,22,0.88)', borderWidth: 1, borderColor: c.line,
-    borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10,
+  brandPill: {
+    backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line,
+    borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9,
   },
-  brand: { fontFamily: font.display, fontSize: 20, color: c.text, letterSpacing: 1 },
-  orb: {
+  brand: { fontFamily: font.display, fontSize: 19, fontWeight: '700', color: c.text, letterSpacing: 1.1 },
+  iconControl: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(12,18,22,0.88)', borderWidth: 1, borderColor: c.line,
+    backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line,
   },
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: 'rgba(9,17,25,0.97)', borderTopLeftRadius: 24, borderTopRightRadius: 24,
     borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 10,
   },
-  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
-  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  beacon: { width: 12, height: 12, borderRadius: 6, backgroundColor: c.accent },
-  pickupText: { color: c.text, fontSize: 15, flex: 1 },
-  carsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  carsText: { color: c.textMuted, fontSize: 13 },
-  whereTo: {
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
+  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 },
+  beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.accent },
+  pickupText: { color: c.text, fontSize: 14, flex: 1 },
+  carsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 15 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  carsText: { color: c.textMuted, fontSize: 12 },
+  destinationCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
-    borderRadius: radius.xl, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: c.line,
+    borderRadius: radius.lg, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: c.line,
   },
-  greeting: { color: c.accent, fontSize: 12, marginBottom: 4, letterSpacing: 0.5 },
-  whereTitle: { color: c.text, fontFamily: font.display, fontSize: 26 },
-  searchBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  chipsRow: { gap: 10, paddingBottom: 12 },
+  destinationMain: { flex: 1, paddingVertical: 2 },
+  destinationActions: { flexDirection: 'row', gap: 8, alignItems: 'center', marginLeft: 12 },
+  greeting: { color: c.accent, fontSize: 12, marginBottom: 3, letterSpacing: 0.4, fontWeight: '600' },
+  whereTitle: { color: c.text, fontFamily: font.display, fontWeight: '650' as any, fontSize: 24, lineHeight: 29 },
+  whereHint: { color: c.textMuted, fontSize: 12, marginTop: 4 },
+  voiceBtn: {
+    width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft,
+    borderWidth: 1, borderColor: 'rgba(0,229,245,0.22)', alignItems: 'center', justifyContent: 'center',
+  },
+  searchBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  chipsRow: { gap: 10, paddingBottom: 10 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0,
     backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
-    borderRadius: 999, paddingHorizontal: 16, height: 44,
+    borderRadius: 999, paddingHorizontal: 15, height: 44,
   },
   chipText: { color: c.text, fontSize: 14 },
-  chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 16, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
+  chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 15, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
   chipEditText: { color: c.textSecondary, fontSize: 14 },
   hint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 },
-  endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 14 },
+  endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 12 },
   epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   epText: { color: c.text, fontSize: 14, flex: 1 },
-  epLine: { width: 1, height: 16, backgroundColor: c.lineStrong, marginLeft: 5.5, marginVertical: 4 },
-  square: { width: 12, height: 12, borderRadius: 2, backgroundColor: c.text },
-  change: { color: c.accent, fontSize: 13 },
-  vehiclesRow: { gap: 12, paddingBottom: 14 },
+  epLine: { width: 1, height: 16, backgroundColor: c.lineStrong, marginLeft: 5, marginVertical: 4 },
+  square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
+  change: { color: c.accent, fontSize: 13, fontWeight: '600' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9, paddingHorizontal: 2 },
+  sectionTitle: { color: c.text, fontSize: 15, fontWeight: '650' as any },
+  sectionMeta: { color: c.textMuted, fontSize: 12 },
+  vehiclesRow: { gap: 10, paddingBottom: 13 },
   vehicle: {
-    width: 116, flexShrink: 0, backgroundColor: c.cardSubtle, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: c.line, padding: 14, gap: 4,
+    width: 162, minHeight: 132, flexShrink: 0, backgroundColor: c.cardSubtle, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: c.line, paddingHorizontal: 12, paddingTop: 7, paddingBottom: 12,
   },
   vehicleActive: { borderColor: c.accent, backgroundColor: c.accentSoft },
-  vName: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 4 },
-  vTag: { color: c.textMuted, fontSize: 11 },
-  vPrice: { color: c.text, fontFamily: font.mono, fontSize: 16, marginTop: 4 },
-  summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  summaryLeft: { color: c.textMuted, fontSize: 13, flex: 1 },
-  summaryPrice: { color: c.text, fontFamily: font.display, fontSize: 24 },
-  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 16, paddingHorizontal: 16, height: 52, marginBottom: 12 },
-  payText: { color: c.text, fontSize: 14, flex: 1, fontFamily: font.mono },
+  vehicleArtwork: { height: 68, alignItems: 'center', justifyContent: 'center' },
+  vehicleCopyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  vName: { color: c.textSecondary, fontSize: 14, fontWeight: '700', marginTop: 1 },
+  vTag: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
+  vPrice: { color: c.text, fontFamily: font.mono, fontSize: 14, fontWeight: '600' },
+  summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  summaryLeft: { color: c.textMuted, fontSize: 12, flex: 1 },
+  summaryPrice: { color: c.text, fontFamily: font.display, fontWeight: '650' as any, fontSize: 22 },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: radius.md, paddingHorizontal: 15, height: 52, marginBottom: 12 },
+  payText: { color: c.text, fontSize: 14, flex: 1 },
   error: { color: c.danger, fontSize: 13, marginBottom: 10 },
   confirm: {
-    height: 56, borderRadius: 999, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: c.accent, shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6,
+    height: 56, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
+    shadowColor: c.accent, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   },
   confirmText: { color: c.accentOn, fontSize: 16, fontWeight: '700' },
   searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, paddingHorizontal: 16, zIndex: 50 },
-  searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
   searchField: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle,
-    borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, height: 52,
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card,
+    borderWidth: 1, borderColor: c.lineStrong, borderRadius: radius.md, paddingLeft: 14, paddingRight: 6, height: 54,
   },
   searchInput: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
-  searchClose: { paddingHorizontal: 4 },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.line },
+  searchVoice: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  searchClose: { minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  searchPrompt: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12, paddingHorizontal: 2 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, borderBottomWidth: 1, borderBottomColor: c.line },
   resultIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   resultText: { color: c.text, fontSize: 15, flex: 1 },
 }));
