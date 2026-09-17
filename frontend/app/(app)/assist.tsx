@@ -24,7 +24,7 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
 import { aiApi, placesApi, tripsApi } from '@/src/lib/api';
-import { apiError, kr, VEHICLES } from '@/src/lib/format';
+import { apiError, kr } from '@/src/lib/format';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 type Place = { name: string; lat: number; lng: number };
@@ -39,6 +39,26 @@ function vehicleCopy(type: string) {
   return { name: 'KJAPP', tagline: 'Rask og enkel' };
 }
 
+function hasFutureRideTime(text: string) {
+  return /\b(?:kl(?:\.|okken)?\s*\d{1,2}(?:[:.]\d{2})?|i\s+morgen|imorgen|senere|på\s+(?:mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag))\b/i.test(text);
+}
+
+function bookingDestinationFrom(text: string): string | null {
+  if (!/(?:taxi|kjør|kjor|hent|bestill|book|reise)/i.test(text)) return null;
+  const match = text.match(/\b(?:til|mot)\s+(.+)$/i);
+  if (!match?.[1]) return null;
+  const destination = match[1]
+    .replace(/\s+\b(?:kl(?:\.|okken)?\s*\d{1,2}(?:[:.]\d{2})?|i\s+morgen|imorgen|senere)\b.*$/i, '')
+    .trim();
+  return destination.length >= 2 ? destination : null;
+}
+
+function normalizePlaces(raw: any[]): Place[] {
+  return (raw || [])
+    .filter((p: any) => p?.name && Number.isFinite(Number(p?.lat)) && Number.isFinite(Number(p?.lng)))
+    .map((p: any) => ({ name: p.name, lat: Number(p.lat), lng: Number(p.lng) }));
+}
+
 export default function Assist() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -48,7 +68,7 @@ export default function Assist() {
   const recorderState = useAudioRecorderState(recorder);
 
   const [messages, setMessages] = useState<Msg[]>([
-    { role: 'assistant', content: 'Jeg kan hjelpe deg med en tur. Velg «Bestill taxi», eller spør om KJAPP.' },
+    { role: 'assistant', content: 'Si for eksempel «Kjør meg til Gardermoen», eller start en vanlig bestilling.' },
   ]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -79,6 +99,25 @@ export default function Assist() {
     setError('');
   };
 
+  const resolvePickup = async (): Promise<Place | null> => {
+    const perm = await Location.requestForegroundPermissionsAsync();
+    if (perm.status !== 'granted') {
+      add({ role: 'assistant', content: 'Posisjon er nødvendig for å bruke nåværende sted som hentepunkt. Slå på posisjon og prøv igjen.' });
+      return null;
+    }
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    let name = 'Din posisjon';
+    try {
+      const rev = await placesApi.reverse(lat, lng);
+      name = rev?.label || rev?.name || name;
+    } catch {}
+    const place = { name, lat, lng };
+    setPickup(place);
+    return place;
+  };
+
   const startBooking = async () => {
     if (sending) return;
     setError('');
@@ -86,22 +125,47 @@ export default function Assist() {
     setResults([]);
     add({ role: 'user', content: 'Bestill taxi' });
     try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        add({ role: 'assistant', content: 'Posisjon er nødvendig for å bruke nåværende sted som hentepunkt. Slå på posisjon og prøv igjen.' });
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      let name = 'Din posisjon';
-      try {
-        const rev = await placesApi.reverse(lat, lng);
-        name = rev?.label || rev?.name || name;
-      } catch {}
-      setPickup({ name, lat, lng });
+      const pickupPlace = await resolvePickup();
+      if (!pickupPlace) return;
       setStep('destination');
-      add({ role: 'assistant', content: `Hentested: ${name}. Skriv eller si hvor du skal.` });
+      add({ role: 'assistant', content: `Hentested: ${pickupPlace.name}. Skriv eller si hvor du skal.` });
+    } catch (e) {
+      add({ role: 'assistant', content: apiError(e) });
+      resetBooking();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const startBookingTo = async (originalText: string, destinationQuery: string) => {
+    if (sending) return;
+    setError('');
+    setSending(true);
+    setResults([]);
+    add({ role: 'user', content: originalText });
+
+    if (hasFutureRideTime(originalText)) {
+      add({
+        role: 'assistant',
+        content: 'Planlagte turer er ikke aktivert i KJAPP-backenden ennå. Jeg bestiller derfor ikke denne som en tur nå. Du kan fortsatt be om en bil nå.',
+      });
+      setSending(false);
+      return;
+    }
+
+    try {
+      const pickupPlace = await resolvePickup();
+      if (!pickupPlace) return;
+      setStep('destination');
+
+      const r = await placesApi.search(destinationQuery);
+      const places = normalizePlaces(r?.results || []);
+      setResults(places);
+      if (!places.length) {
+        add({ role: 'assistant', content: `Jeg fant ikke et sikkert treff for «${destinationQuery}». Prøv et mer presist sted eller adresse.` });
+      } else {
+        add({ role: 'assistant', content: `Hentested: ${pickupPlace.name}. Velg riktig «${destinationQuery}»-treff, så henter jeg ekte pris og ETA.` });
+      }
     } catch (e) {
       add({ role: 'assistant', content: apiError(e) });
       resetBooking();
@@ -119,10 +183,7 @@ export default function Assist() {
     add({ role: 'user', content: q });
     try {
       const r = await placesApi.search(q);
-      const raw = r?.results || [];
-      const places: Place[] = raw
-        .filter((p: any) => p?.name && Number.isFinite(Number(p?.lat)) && Number.isFinite(Number(p?.lng)))
-        .map((p: any) => ({ name: p.name, lat: Number(p.lat), lng: Number(p.lng) }));
+      const places = normalizePlaces(r?.results || []);
       setResults(places);
       if (!places.length) add({ role: 'assistant', content: 'Ingen sikre treff. Prøv et mer presist gatenavn eller sted.' });
       else add({ role: 'assistant', content: 'Velg riktig sted før jeg henter pris og ETA.' });
@@ -206,9 +267,17 @@ export default function Assist() {
       await searchDestination(text);
       return;
     }
-    if (/bestill|book|taxi|hent meg|reise/i.test(text) && step === 'chat') {
-      await startBooking();
-      return;
+
+    if (step === 'chat') {
+      const destinationIntent = bookingDestinationFrom(text);
+      if (destinationIntent) {
+        await startBookingTo(text, destinationIntent);
+        return;
+      }
+      if (/bestill|book|taxi|hent meg|reise/i.test(text)) {
+        await startBooking();
+        return;
+      }
     }
 
     setSending(true);
@@ -323,8 +392,8 @@ export default function Assist() {
               <Icon name="mic" size={24} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.voiceTitle}>Raskeste vei til en tur</Text>
-              <Text style={s.voiceBody}>Start bestilling, og si destinasjonen. Du velger bil og bekrefter pris før turen opprettes.</Text>
+              <Text style={s.voiceTitle}>Si hvor du skal</Text>
+              <Text style={s.voiceBody}>For eksempel «Kjør meg til Gardermoen». KJAPP bruker posisjonen din som hentested og viser sikre stedstreff før pris og ETA.</Text>
             </View>
           </View>
         ) : null}
@@ -432,7 +501,7 @@ export default function Assist() {
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder={step === 'destination' ? 'Hvor skal du?' : 'Skriv til KJAPP…'}
+          placeholder={step === 'destination' ? 'Hvor skal du?' : 'Kjør meg til…'}
           placeholderTextColor={colors.textMuted}
           style={s.input}
           returnKeyType="send"
