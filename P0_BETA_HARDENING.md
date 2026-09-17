@@ -4,17 +4,20 @@ Scope: only P0 tasks from the beta-preparation document. No P1/P2 product work, 
 
 ## 1. Android runtime stability
 
-Changed:
-- `frontend/app.json`: `newArchEnabled` disabled for beta builds.
-- `driver-app/app.json`: `newArchEnabled` disabled for beta builds.
+Changed/verified:
 - Both Babel configs remain Expo-only; no manually duplicated Worklets Babel plugin is added.
 - Repository search contains no `react-native-worklets-core` dependency.
 - `@sentry/react-native` added to Customer and Driver.
 - `frontend/src/lib/monitoring.ts` and `driver-app/src/lib/monitoring.ts` initialize native crash monitoring before app runtime.
 - Crash telemetry is disabled until `EXPO_PUBLIC_SENTRY_DSN` is configured. No DSN or secret is committed.
 
+New Architecture constraint:
+- The beta-preparation document requested `newArchEnabled: false`, but the existing stack is Expo SDK 57 / React Native 0.86.
+- Expo SDK 55+ and React Native 0.82+ are New-Architecture-only. Disabling it is no longer supported and `false` would be ignored.
+- The existing `newArchEnabled: true` configuration is therefore preserved. We do not downgrade Expo/React Native because that would violate the project's requirement to preserve the existing technology stack and would introduce a much larger regression surface.
+
 Why:
-- Reduce Android JSI/Reanimated risk for the beta while preserving the existing React Native/Expo architecture.
+- Remove the known duplicated Worklets configuration risk without pretending an unsupported architecture opt-out is active.
 - Capture native/runtime crashes during physical-device testing without collecting default PII.
 
 ## 2. Android background location and push
