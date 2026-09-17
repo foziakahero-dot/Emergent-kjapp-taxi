@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -7,6 +7,7 @@ import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
+const BACKGROUND_LOCATION_EXPLAINED_KEY = 'kjapp_background_location_explained';
 let backgroundPermissionRequestedThisSession = false;
 
 Notifications.setNotificationHandler({
@@ -108,6 +109,27 @@ export async function registerNativePush() {
   }
 }
 
+async function explainBackgroundLocationOnce(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  const alreadyExplained = await storage.getItem(BACKGROUND_LOCATION_EXPLAINED_KEY);
+  if (alreadyExplained === '1') return true;
+
+  const accepted = await new Promise<boolean>((resolve) => {
+    Alert.alert(
+      'Tillat posisjon i bakgrunnen',
+      'Når du er ONLINE må KJAPP kunne dele posisjonen din mens skjermen er låst eller appen ligger i bakgrunnen. Dette brukes bare mens du er på skift, slik at du kan motta turer og kunden kan få korrekt henteposisjon.',
+      [
+        { text: 'Ikke nå', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Fortsett', onPress: () => resolve(true) },
+      ],
+      { cancelable: false },
+    );
+  });
+
+  if (accepted) await storage.setItem(BACKGROUND_LOCATION_EXPLAINED_KEY, '1');
+  return accepted;
+}
+
 export async function startDriverBackgroundLocation() {
   if (Platform.OS === 'web') return { foreground: false, background: false };
 
@@ -121,6 +143,8 @@ export async function startDriverBackgroundLocation() {
 
   let background = await Location.getBackgroundPermissionsAsync();
   if (background.status !== 'granted' && !backgroundPermissionRequestedThisSession) {
+    const mayContinue = await explainBackgroundLocationOnce();
+    if (!mayContinue) return { foreground: true, background: false };
     backgroundPermissionRequestedThisSession = true;
     background = await Location.requestBackgroundPermissionsAsync();
   }

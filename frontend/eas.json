@@ -30,6 +30,16 @@
         "simulator": true,
         "image": "latest"
       }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+      },
+      "android": {
+        "buildType": "apk",
+        "image": "latest"
+      }
     }
   }
 }
