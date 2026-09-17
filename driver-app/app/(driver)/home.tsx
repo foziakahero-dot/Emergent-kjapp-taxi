@@ -9,6 +9,7 @@ import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi } from '@/src/lib/api';
+import { runSse } from '@/src/lib/sse';
 import { apiError, kr } from '@/src/lib/format';
 import {
   getDriverLocationPermissionState,
@@ -41,8 +42,16 @@ export default function DriverHome() {
   const [backgroundPermissionOpen, setBackgroundPermissionOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
+  const sseConnected = useRef(false);
 
-  const poll = useCallback(async () => {
+  const loadSummary = useCallback(() => {
+    driverApi.summary().then((r) => {
+      setSummary(r);
+      if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
+    }).catch(() => {});
+  }, []);
+
+  const pollTrips = useCallback(async () => {
     try {
       const cur = await driverApi.current();
       setCurrent(cur?.trip || cur || null);
@@ -51,18 +60,46 @@ export default function DriverHome() {
       const p = await driverApi.pending();
       setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
     } catch { setPending([]); }
-    driverApi.summary().then((r) => {
-      setSummary(r);
-      if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
-    }).catch(() => {});
   }, []);
+
+  const poll = useCallback(async () => {
+    await pollTrips();
+    loadSummary();
+  }, [loadSummary, pollTrips]);
 
   useFocusEffect(
     useCallback(() => {
-      poll();
-      const i = setInterval(poll, 4000);
-      return () => clearInterval(i);
-    }, [poll]),
+      const controller = new AbortController();
+      void poll();
+      void runSse({
+        path: '/events/driver',
+        signal: controller.signal,
+        onConnectionChange: (connected) => { sseConnected.current = connected; },
+        onEvent: (event, data) => {
+          if (event !== 'driver') return;
+          const pendingPayload = data?.pending;
+          setPending(
+            pendingPayload?.trips
+              || pendingPayload?.pending
+              || (Array.isArray(pendingPayload) ? pendingPayload : []),
+          );
+          const currentPayload = data?.current;
+          setCurrent(currentPayload?.trip || currentPayload || null);
+        },
+      });
+
+      const fallback = setInterval(() => {
+        if (!sseConnected.current) void pollTrips();
+      }, 4000);
+      const summaryTimer = setInterval(loadSummary, 30000);
+
+      return () => {
+        sseConnected.current = false;
+        controller.abort();
+        clearInterval(fallback);
+        clearInterval(summaryTimer);
+      };
+    }, [loadSummary, poll, pollTrips]),
   );
 
   useEffect(() => {
@@ -90,7 +127,7 @@ export default function DriverHome() {
       setOnline(false);
       setError(backendOffline
         ? `${message} Du er satt OFFLINE.`
-        : `${message} KJAPP kunne ikke bekrefte OFFLINE-status mot serveren. Prøv igjen før du tar turer.`);
+        : `${message} KJAPP kunne ikke bekreffte OFFLINE-status mot serveren. Prøv igjen før du tar turer.`);
     };
 
     const startTracking = async () => {
