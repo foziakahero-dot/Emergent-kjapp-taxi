@@ -1,0 +1,162 @@
+:root {
+  --bg: #050a0f;
+  --side: #071019;
+  --card: #0d1721;
+  --card-deep: #091119;
+  --input: #0f1b25;
+  --active: #12202b;
+  --line: #20313d;
+  --text: #f8fafc;
+  --soft: #b4c0ce;
+  --muted: #91a3b8;
+  --brass: #00e5f5;
+  --green: #39e58c;
+  --red: #ff6b72;
+  --amber: #f7c948;
+  --serif: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+::selection { background: rgba(0,229,245,.26); }
+
+.brand-word {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.brand-a,
+.brand-sub,
+.eyebrow,
+.kpi-card > span { color: var(--brass); }
+.brand-sub { margin-top: 8px; letter-spacing: .18em; }
+
+.spinner {
+  border-color: rgba(0,229,245,.14);
+  border-top-color: var(--brass);
+}
+
+.login-screen {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(0,229,245,.07), transparent 34%),
+    var(--bg);
+}
+.login-copy-main h1,
+.login-card h2,
+.auth-simple-card h1,
+.page-head h1 {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 650;
+  letter-spacing: -.035em;
+}
+.login-copy-main h1 { max-width: 660px; }
+.login-card {
+  border-radius: 24px;
+  background: rgba(9,17,25,.97);
+  box-shadow: 0 30px 80px rgba(0,0,0,.28);
+}
+.login-card input,
+.auth-simple-card input,
+.modal-card input,
+.modal-card select,
+.modal-card textarea,
+.table-tools input,
+.trip-filter input {
+  border-color: rgba(145,163,184,.18);
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(0,229,245,.72) !important;
+  box-shadow: 0 0 0 3px rgba(0,229,245,.08);
+}
+.primary-button {
+  border-radius: 12px;
+  background: var(--brass);
+  color: #031114;
+}
+.text-link { color: var(--brass); }
+
+.portal-sidebar {
+  background: #071019;
+  border-right: 1px solid rgba(145,163,184,.1);
+}
+.portal-nav-item.active {
+  border-color: rgba(0,229,245,.2);
+  background: rgba(0,229,245,.07);
+}
+.portal-nav-item.active::before {
+  content: '';
+  width: 3px;
+  height: 18px;
+  margin-right: 10px;
+  border-radius: 999px;
+  background: var(--brass);
+}
+
+.page-head,
+.sidebar-rule,
+.week-summary,
+.table-tools,
+.recent-row { border-color: rgba(145,163,184,.13); }
+
+.kpi-card,
+.live-fleet-card,
+.recent-card,
+.table-card,
+.payout-card,
+.report-card,
+.company-card,
+.agreement-card,
+.support-card {
+  border-color: rgba(145,163,184,.14);
+  box-shadow: none;
+}
+.kpi-card { border-radius: 16px; }
+.kpi-card > strong,
+.recent-row b,
+.week-summary b {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The current Fleet data is real, but the old checkerboard is not a map.
+   Keep the data panel restrained until a real map provider is wired in. */
+.map-grid {
+  background-color: #08121a;
+  background-image:
+    linear-gradient(30deg, transparent 48%, rgba(145,163,184,.045) 49%, rgba(145,163,184,.045) 51%, transparent 52%),
+    linear-gradient(-30deg, transparent 48%, rgba(145,163,184,.035) 49%, rgba(145,163,184,.035) 51%, transparent 52%);
+  background-size: 76px 76px;
+  border: 1px solid rgba(145,163,184,.1);
+}
+.map-grid::after {
+  background: radial-gradient(circle at center, transparent 0, rgba(5,10,15,.2) 70%, rgba(5,10,15,.62) 100%);
+}
+.fleet-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 5px rgba(57,229,140,.09), 0 0 16px rgba(57,229,140,.22);
+}
+
+.mobile-menu-button {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+}
+.menu-glyph {
+  width: 20px;
+  display: grid;
+  gap: 4px;
+}
+.menu-glyph i {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text);
+}
+
+@media (max-width: 860px) {
+  .login-screen { background: var(--bg); }
+  .login-card { box-shadow: none; }
+}
