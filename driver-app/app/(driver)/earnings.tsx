@@ -80,7 +80,7 @@ export default function DriverEarnings() {
 
       <View style={s.card}>
         <BreakRow label="Bruttoinntekt" value={kr(period_data.gross)} s={s} />
-        <BreakRow label={`KJAPP provisjon (${commissionPct}%)`} value={`− ${kr(Math.round(period_data.gross * commission))}`} muted s={s} />
+        <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.round(period_data.gross * commission))}`} muted s={s} />
         {period_data.bonus ? <BreakRow label="Bonus" value={`+ ${kr(period_data.bonus)}`} accentGreen s={s} /> : null}
         <View style={s.breakDivider} />
         <BreakRow label="Netto" value={kr(period_data.net)} bold s={s} />
@@ -163,7 +163,7 @@ function ChartBars({ days, max }: { days: any[]; max: number }) {
             const bh = Math.max(3, ((d.income || 0) / max) * (H - 10));
             const isToday = i === days.length - 1;
             return (
-              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : 'rgba(47,224,140,0.32)'} />
+              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : 'rgba(57,229,140,0.30)'} />
             );
           })}
         </Svg>
@@ -177,10 +177,10 @@ const useStyles = makeStyles((c) => ({
   segs: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 999, padding: 4, marginBottom: 18 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   segOn: { backgroundColor: c.online },
-  segText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
-  segTextOn: { color: '#04120A' },
+  segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
+  segTextOn: { color: c.accentOn },
   hero: { backgroundColor: c.driverCard, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
-  heroLabel: { color: c.online, fontSize: 11, letterSpacing: 3, fontWeight: '700' },
+  heroLabel: { color: c.online, fontSize: 11, letterSpacing: 3, fontFamily: font.bold },
   heroValue: { color: c.text, fontFamily: font.display, fontSize: 44, marginTop: 8 },
   heroRow: { flexDirection: 'row', gap: 28, marginTop: 20 },
   heroStat: { alignItems: 'center' },
@@ -191,7 +191,7 @@ const useStyles = makeStyles((c) => ({
   breakLabel: { color: c.textSecondary, fontSize: 14 },
   breakValue: { color: c.text, fontFamily: font.mono, fontSize: 14 },
   breakDivider: { height: 1, backgroundColor: c.line, marginVertical: 6 },
-  section: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 26, marginBottom: 4 },
+  section: { color: c.textSecondary, fontSize: 14, fontFamily: font.semibold, marginTop: 26, marginBottom: 4 },
   chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   chartLabel: { color: c.textMuted, fontSize: 10, flex: 1, textAlign: 'center' },
   payTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
