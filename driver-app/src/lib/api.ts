@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
+import { realtimeSnapshot } from '@/src/lib/realtime';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
@@ -98,11 +99,23 @@ const normalizePayouts = (data: any = {}) => ({
   history: Array.isArray(data?.history) ? data.history : [],
 });
 
+const driverEvents = () => realtimeSnapshot(
+  'driver-events',
+  '/sse/driver/events',
+  async () => {
+    const [current, pending] = await Promise.all([
+      api.get('/driver/current').then((r) => r.data),
+      api.get('/driver/pending').then((r) => r.data),
+    ]);
+    return { current, pending };
+  },
+);
+
 export const driverApi = {
-  pending: () => api.get('/driver/pending').then((r) => r.data),
+  pending: () => driverEvents().then((r: any) => r.pending),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
   decline: (trip_id: string) => api.post('/driver/decline', { trip_id }).then((r) => r.data),
-  current: () => api.get('/driver/current').then((r) => r.data),
+  current: () => driverEvents().then((r: any) => r.current),
   atPickup: (id: string) => api.post(`/driver/trip/${id}/at-pickup`).then((r) => r.data),
   start: (id: string) => api.post(`/driver/trip/${id}/start`).then((r) => r.data),
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
