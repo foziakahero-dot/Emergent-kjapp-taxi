@@ -12,7 +12,6 @@ on:
   push:
     branches:
       - main
-      - p0-beta-hardening-20260918
     paths:
       - 'frontend/**'
       - 'driver-app/**'
