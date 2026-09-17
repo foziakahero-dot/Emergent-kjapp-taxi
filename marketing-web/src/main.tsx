@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import ReactDOM, { createPortal } from 'react-dom';
+import { createPortal } from 'react-dom';
 import ReactDOMClient from 'react-dom/client';
 import { BrowserRouter, Link, useLocation } from 'react-router-dom';
 import App from './App';
