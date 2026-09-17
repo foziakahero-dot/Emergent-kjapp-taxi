@@ -46,10 +46,13 @@ const systemSans = Platform.select({ ios: 'System', android: 'sans-serif', defau
 export const font = {
   display: systemSans,
   body: systemSans,
-  mono: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) as string,
+  mono: 'JetBrainsMono',
 };
 
-export const FONT_ASSETS = {};
+export const FONT_ASSETS = {
+  Fraunces: require('@/assets/fonts/Fraunces.ttf'),
+  JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
+};
 
 export const radius = { sm: 8, md: 12, lg: 18, xl: 24, pill: 999 };
 export const spacing = {
