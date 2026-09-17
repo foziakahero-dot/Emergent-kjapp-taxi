@@ -12,6 +12,7 @@ This branch implements the first native product pass from the KJAPP design contr
 - Vehicle selection now exposes three primary classes: KJAPP, KJAPP XL and Premium.
 - Generic one-size-fits-all car glyphs in vehicle selection were replaced by a dedicated three-vehicle vector asset family.
 - Driver Dashboard is glance-first with explicit online/offline, GPS state and real pending-request count.
+- Driver map semantics now separate operational green (driver/online/pickup) from KJAPP cyan (route/destination).
 - Driver actions use large operational targets and no commission marketing appears in the app.
 
 ## Preserved
@@ -23,7 +24,6 @@ This branch implements the first native product pass from the KJAPP design contr
 
 ## Remaining GOLD work
 
-- Route color separation in Driver map (cyan route vs green driver state).
 - Full state matrix for location/microphone/search/quote/payment/reassignment/offline.
 - Device QA at 320/360/390/430+ widths.
 - Actual Android/iOS build verification. GitHub Actions currently returns `startup_failure` with zero jobs before build execution, so this branch has not yet produced a valid build result.
