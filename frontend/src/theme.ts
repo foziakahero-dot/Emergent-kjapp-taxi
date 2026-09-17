@@ -1,5 +1,11 @@
 import { useMemo } from 'react';
-import { Platform, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import {
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+  Geist_700Bold,
+} from '@expo-google-fonts/geist';
 
 /**
  * KJAPP 2.0 — premium Nordic mobility.
@@ -43,19 +49,20 @@ export const colors = {
 
 export type ThemeColors = typeof colors;
 
-// Geist is the product type target. Until the bundled Geist asset lands, use the
-// native sans stack rather than the legacy editorial Fraunces face in core UI.
-const systemSans = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }) as string;
 export const font = {
-  display: systemSans,
-  body: systemSans,
+  display: 'Geist_600SemiBold',
+  body: 'Geist_400Regular',
+  medium: 'Geist_500Medium',
+  semibold: 'Geist_600SemiBold',
+  bold: 'Geist_700Bold',
   mono: 'JetBrainsMono',
 };
 
-// Keep current bundled font files loadable so the root font loader remains stable.
-// Fraunces is intentionally no longer referenced by core product typography.
 export const FONT_ASSETS = {
-  Fraunces: require('@/assets/fonts/Fraunces.ttf'),
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+  Geist_700Bold,
   JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
 };
 
