@@ -13,6 +13,8 @@ import * as Location from 'expo-location';
 import { colors, font, makeStyles, radius } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
+import { VehicleArtwork } from '@/src/components/VehicleArtwork';
+import { VoiceGlyph } from '@/src/components/VoiceGlyph';
 import { useAuth } from '@/src/context/AuthContext';
 import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
@@ -47,7 +49,6 @@ export default function Home() {
     mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});
   }, []);
 
-  // redirect to active trip if any
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -57,7 +58,7 @@ export default function Home() {
         if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
       }).catch(() => {});
       return () => { active = false; };
-    }, [router]),
+    }, [router, loadMethods, loadPlaces]),
   );
 
   useEffect(() => {
@@ -79,9 +80,8 @@ export default function Home() {
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
     loadPlaces();
-  }, []);
+  }, [loadMethods, loadPlaces]);
 
-  // poll nearby cars
   useEffect(() => {
     let mounted = true;
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
@@ -90,7 +90,6 @@ export default function Home() {
     return () => { mounted = false; clearInterval(i); };
   }, [loc.lat, loc.lng]);
 
-  // estimate when dropoff chosen
   useEffect(() => {
     if (!dropoff) { setEstimate(null); return; }
     tripsApi.estimate({
@@ -131,6 +130,7 @@ export default function Home() {
     }
   };
 
+  const openVoice = () => router.push('/(app)/assist');
   const routeGeom = estimate?.geometry?.coordinates;
 
   return (
@@ -145,21 +145,24 @@ export default function Home() {
         testID="home-map"
       />
 
-      {/* Top header */}
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
         <View style={s.pill}>
           <Text style={s.brand}>KJ<Text style={{ color: colors.accent }}>A</Text>PP</Text>
         </View>
-        <Pressable style={s.orb} testID="home-profile-btn" onPress={() => router.push('/(app)/profile')}>
-          <Icon name="user" size={18} color={colors.accent} />
+        <Pressable
+          style={s.profileButton}
+          testID="home-profile-btn"
+          onPress={() => router.push('/(app)/profile')}
+          accessibilityRole="button"
+          accessibilityLabel="Åpne profil"
+        >
+          <Icon name="user" size={19} color={colors.text} />
         </Pressable>
       </View>
 
-      {/* Bottom sheet */}
       <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
         <View style={s.handle} />
 
-        {/* pickup + cars status */}
         <View style={s.pickupRow} testID="home-pickup-row">
           <View style={s.beacon} />
           <Text style={s.pickupText} numberOfLines={1}>{pickupLabel}</Text>
@@ -175,15 +178,35 @@ export default function Home() {
 
         {!dropoff ? (
           <>
-            <Pressable style={s.whereTo} onPress={() => setSearchOpen(true)} testID="home-where-to">
-              <View style={{ flex: 1 }}>
-                <Text style={s.greeting}>{greeting(user?.fullName)}</Text>
-                <Text style={s.whereTitle}>Hvor vil du?</Text>
-              </View>
-              <View style={s.searchBtn}>
-                <Icon name="search" size={20} color={colors.accentOn} />
-              </View>
-            </Pressable>
+            <Text style={s.greeting}>{greeting(user?.fullName)}</Text>
+            <View style={s.destinationField}>
+              <Pressable
+                style={s.destinationMain}
+                onPress={() => setSearchOpen(true)}
+                testID="home-where-to"
+                accessibilityRole="button"
+                accessibilityLabel="Søk etter destinasjon"
+              >
+                <View style={s.searchGlyph}>
+                  <Icon name="search" size={20} color={colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.whereTitle}>Hvor skal du?</Text>
+                  <Text style={s.whereHint}>Søk adresse eller sted</Text>
+                </View>
+              </Pressable>
+              <View style={s.destinationDivider} />
+              <Pressable
+                style={s.voiceButton}
+                onPress={openVoice}
+                testID="home-voice-destination"
+                accessibilityRole="button"
+                accessibilityLabel="Bestill med stemmen"
+                accessibilityHint="Åpner KJAPP taleassistent for destinasjonsbestilling"
+              >
+                <VoiceGlyph size={22} color={colors.accentOn} />
+              </Pressable>
+            </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
               {quickPlaces.map((p: any) => (
@@ -192,6 +215,8 @@ export default function Home() {
                   style={s.chip}
                   testID={`quick-${p.label}`}
                   onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Kjør til ${p.label || p.name}`}
                 >
                   <Icon name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'map-pin') as IconName} size={16} color={colors.accent} />
                   <Text style={s.chipText}>{p.label}</Text>
@@ -209,7 +234,6 @@ export default function Home() {
           </>
         ) : (
           <>
-            {/* route review */}
             <View style={s.endpoints} testID="booking-endpoints">
               <View style={s.epRow}>
                 <View style={s.beacon} />
@@ -225,6 +249,7 @@ export default function Home() {
               </View>
             </View>
 
+            <Text style={s.sectionLabel}>VELG BIL</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.vehiclesRow}>
               {VEHICLES.map((v) => {
                 const active = selType === v.type;
@@ -235,9 +260,17 @@ export default function Home() {
                     testID={`vehicle-${v.type}`}
                     onPress={() => setSelType(v.type)}
                     style={[s.vehicle, active && s.vehicleActive]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`${v.name}, ${v.tagline}, ${v.seats} seter, ${price != null ? kr(price) : 'pris beregnes'}`}
                   >
-                    <Icon name="car" size={22} color={active ? colors.accent : colors.textSecondary} />
-                    <Text style={[s.vName, active && { color: colors.text }]}>{v.name}</Text>
+                    <View style={s.vehicleArtwork}>
+                      <VehicleArtwork variant={v.type} active={active} width={124} height={64} />
+                    </View>
+                    <View style={s.vehicleTitleRow}>
+                      <Text style={[s.vName, active && { color: colors.text }]}>{v.name}</Text>
+                      <Text style={s.vSeats}>{v.seats} seter</Text>
+                    </View>
                     <Text style={s.vTag}>{v.tagline}</Text>
                     <Text style={[s.vPrice, active && { color: colors.accent }]}>
                       {price != null ? kr(price) : '…'}
@@ -269,11 +302,13 @@ export default function Home() {
               onPress={book}
               disabled={booking}
               testID="booking-confirm"
+              accessibilityRole="button"
+              accessibilityLabel={`Bestill ${VEHICLES.find((v) => v.type === selType)?.name || 'KJAPP'} for ${kr(priceFor(selType))}`}
             >
               {booking ? (
                 <ActivityIndicator color={colors.accentOn} />
               ) : (
-                <Text style={s.confirmText}>Bestill bilen · {kr(priceFor(selType))}</Text>
+                <Text style={s.confirmText}>Bestill {VEHICLES.find((v) => v.type === selType)?.name || 'KJAPP'} · {kr(priceFor(selType))}</Text>
               )}
             </Pressable>
           </>
@@ -283,7 +318,8 @@ export default function Home() {
       {searchOpen && (
         <SearchSheet
           onClose={() => setSearchOpen(false)}
-          onSelect={(d) => { setDropoff(d); setSearchOpen(false); }}
+          onSelect={(d: any) => { setDropoff(d); setSearchOpen(false); }}
+          onVoice={() => { setSearchOpen(false); openVoice(); }}
           featured={featured}
           insets={insets}
         />
@@ -292,7 +328,7 @@ export default function Home() {
   );
 }
 
-function SearchSheet({ onClose, onSelect, featured, insets }: any) {
+function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -324,15 +360,25 @@ function SearchSheet({ onClose, onSelect, featured, insets }: any) {
           <TextInput
             testID="search-input"
             autoFocus
-            placeholder="Søk adresse eller sted"
+            placeholder="Hvor skal du?"
             placeholderTextColor={colors.textMuted}
             style={s.searchInput}
             value={q}
             onChangeText={setQ}
+            returnKeyType="search"
           />
           {loading ? <ActivityIndicator color={colors.accent} /> : null}
+          <Pressable
+            style={s.searchVoice}
+            onPress={onVoice}
+            testID="search-voice"
+            accessibilityRole="button"
+            accessibilityLabel="Bruk stemmen"
+          >
+            <VoiceGlyph size={20} color={colors.accent} />
+          </Pressable>
         </View>
-        <Pressable onPress={onClose} testID="search-close" style={s.searchClose}>
+        <Pressable onPress={onClose} testID="search-close" style={s.searchClose} accessibilityRole="button" accessibilityLabel="Lukk søk">
           <Text style={{ color: colors.accent, fontSize: 15 }}>Avbryt</Text>
         </Pressable>
       </View>
@@ -365,78 +411,87 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: 16, paddingBottom: 8,
   },
   pill: {
-    backgroundColor: 'rgba(12,18,22,0.88)', borderWidth: 1, borderColor: c.line,
-    borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10,
+    backgroundColor: 'rgba(9,17,25,0.92)', borderWidth: 1, borderColor: c.line,
+    borderRadius: radius.pill, paddingHorizontal: 18, paddingVertical: 10,
   },
-  brand: { fontFamily: font.display, fontSize: 20, color: c.text, letterSpacing: 1 },
-  orb: {
+  brand: { fontFamily: font.display, fontSize: 19, fontWeight: '700', color: c.text, letterSpacing: 1.1 },
+  profileButton: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(12,18,22,0.88)', borderWidth: 1, borderColor: c.line,
+    backgroundColor: 'rgba(9,17,25,0.92)', borderWidth: 1, borderColor: c.line,
   },
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 10,
   },
   handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
   pickupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   beacon: { width: 12, height: 12, borderRadius: 6, backgroundColor: c.accent },
   pickupText: { color: c.text, fontSize: 15, flex: 1 },
-  carsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  carsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   carsText: { color: c.textMuted, fontSize: 13 },
-  whereTo: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
-    borderRadius: radius.xl, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: c.line,
+  greeting: { color: c.textSecondary, fontSize: 12, marginBottom: 8, letterSpacing: 0.2 },
+  destinationField: {
+    minHeight: 68, flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface,
+    borderRadius: radius.lg, marginBottom: 16, borderWidth: 1, borderColor: c.lineStrong,
   },
-  greeting: { color: c.accent, fontSize: 12, marginBottom: 4, letterSpacing: 0.5 },
-  whereTitle: { color: c.text, fontFamily: font.display, fontSize: 26 },
-  searchBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  destinationMain: { flex: 1, minHeight: 68, flexDirection: 'row', alignItems: 'center', paddingLeft: 14, paddingRight: 10 },
+  searchGlyph: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  whereTitle: { color: c.text, fontFamily: font.display, fontSize: 20, fontWeight: '650' as any },
+  whereHint: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+  destinationDivider: { width: 1, height: 38, backgroundColor: c.line, marginHorizontal: 2 },
+  voiceButton: { width: 52, height: 52, marginHorizontal: 8, borderRadius: 16, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   chipsRow: { gap: 10, paddingBottom: 12 },
   chip: {
     flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0,
-    backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
-    borderRadius: 999, paddingHorizontal: 16, height: 44,
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
+    borderRadius: radius.pill, paddingHorizontal: 16, height: 44,
   },
   chipText: { color: c.text, fontSize: 14 },
-  chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 16, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
+  chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: radius.pill, paddingHorizontal: 16, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
   chipEditText: { color: c.textSecondary, fontSize: 14 },
   hint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 },
-  endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 14 },
+  endpoints: { backgroundColor: c.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 12 },
   epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   epText: { color: c.text, fontSize: 14, flex: 1 },
   epLine: { width: 1, height: 16, backgroundColor: c.lineStrong, marginLeft: 5.5, marginVertical: 4 },
   square: { width: 12, height: 12, borderRadius: 2, backgroundColor: c.text },
-  change: { color: c.accent, fontSize: 13 },
-  vehiclesRow: { gap: 12, paddingBottom: 14 },
+  change: { color: c.accent, fontSize: 13, fontWeight: '600' },
+  sectionLabel: { color: c.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 1.4, marginBottom: 8 },
+  vehiclesRow: { gap: 10, paddingBottom: 14 },
   vehicle: {
-    width: 116, flexShrink: 0, backgroundColor: c.cardSubtle, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: c.line, padding: 14, gap: 4,
+    width: 154, minHeight: 154, flexShrink: 0, backgroundColor: c.surface, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: c.line, padding: 12,
   },
   vehicleActive: { borderColor: c.accent, backgroundColor: c.accentSoft },
-  vName: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 4 },
-  vTag: { color: c.textMuted, fontSize: 11 },
-  vPrice: { color: c.text, fontFamily: font.mono, fontSize: 16, marginTop: 4 },
+  vehicleArtwork: { height: 68, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  vehicleTitleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
+  vName: { color: c.textSecondary, fontSize: 15, fontWeight: '650' as any, flexShrink: 1 },
+  vSeats: { color: c.textMuted, fontSize: 10 },
+  vTag: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+  vPrice: { color: c.text, fontFamily: font.body, fontVariant: ['tabular-nums'], fontSize: 17, fontWeight: '650' as any, marginTop: 6 },
   summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   summaryLeft: { color: c.textMuted, fontSize: 13, flex: 1 },
-  summaryPrice: { color: c.text, fontFamily: font.display, fontSize: 24 },
-  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 16, paddingHorizontal: 16, height: 52, marginBottom: 12 },
-  payText: { color: c.text, fontSize: 14, flex: 1, fontFamily: font.mono },
+  summaryPrice: { color: c.text, fontFamily: font.display, fontVariant: ['tabular-nums'], fontWeight: '650' as any, fontSize: 24 },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, borderRadius: radius.md, paddingHorizontal: 16, height: 52, marginBottom: 12 },
+  payText: { color: c.text, fontSize: 14, flex: 1 },
   error: { color: c.danger, fontSize: 13, marginBottom: 10 },
   confirm: {
-    height: 56, borderRadius: 999, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: c.accent, shadowOpacity: 0.4, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6,
+    height: 56, borderRadius: radius.md, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
+    shadowColor: c.accent, shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   },
   confirmText: { color: c.accentOn, fontSize: 16, fontWeight: '700' },
   searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, paddingHorizontal: 16, zIndex: 50 },
   searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   searchField: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle,
-    borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, height: 52,
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.surface,
+    borderWidth: 1, borderColor: c.lineStrong, borderRadius: radius.md, paddingLeft: 14, paddingRight: 6, height: 54,
   },
   searchInput: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
-  searchClose: { paddingHorizontal: 4 },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.line },
-  resultIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
+  searchVoice: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  searchClose: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line },
+  resultIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' },
   resultText: { color: c.text, fontSize: 15, flex: 1 },
 }));
