@@ -2,12 +2,14 @@ import asyncio
 import json
 from typing import Optional
 
+from bson import ObjectId
 from fastapi import Depends, Request
 from fastapi.responses import StreamingResponse
 
 
 def install_sse_routes(
     api,
+    db,
     get_current_user,
     require_driver,
     active_trip,
@@ -17,7 +19,20 @@ def install_sse_routes(
     driver_current,
 ):
     def encode_event(event: str, payload: dict) -> str:
-        return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
+        return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'), default=str)}\n\n"
+
+    async def fresh_user(base: dict) -> dict:
+        try:
+            doc = await db.users.find_one({"_id": ObjectId(base["id"])})
+        except Exception:
+            doc = None
+        if not doc:
+            return base
+        doc["id"] = str(doc["_id"])
+        doc.pop("_id", None)
+        doc.pop("password_hash", None)
+        doc.setdefault("role", "user")
+        return doc
 
     @api.get('/events/customer')
     async def customer_events(
@@ -31,7 +46,8 @@ def install_sse_routes(
             idle_ticks = 0
             while not await request.is_disconnected():
                 try:
-                    trip = await active_trip(current)
+                    fresh = await fresh_user(current)
+                    trip = await active_trip(fresh)
                     nearby = {'cars': []}
                     if lat is not None and lng is not None:
                         nearby = await cars_nearby(nearby_request_cls(lat=lat, lng=lng))
@@ -46,7 +62,7 @@ def install_sse_routes(
                         yield encode_event('customer', payload)
                     else:
                         idle_ticks += 1
-                        if idle_ticks >= 15:
+                        if idle_ticks >= 8:
                             idle_ticks = 0
                             yield ': keep-alive\n\n'
                 except asyncio.CancelledError:
@@ -54,7 +70,7 @@ def install_sse_routes(
                 except Exception as exc:
                     yield encode_event('error', {'message': 'Midlertidig realtime-feil', 'code': exc.__class__.__name__})
                     await asyncio.sleep(2)
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
         return StreamingResponse(
             stream(),
@@ -73,8 +89,10 @@ def install_sse_routes(
             idle_ticks = 0
             while not await request.is_disconnected():
                 try:
-                    pending = await driver_pending(current)
-                    current_trip = await driver_current(current)
+                    fresh = await fresh_user(current)
+                    require_driver(fresh)
+                    pending = await driver_pending(fresh)
+                    current_trip = await driver_current(fresh)
                     payload = {
                         'pending': pending,
                         'current': current_trip,
@@ -86,7 +104,7 @@ def install_sse_routes(
                         yield encode_event('driver', payload)
                     else:
                         idle_ticks += 1
-                        if idle_ticks >= 15:
+                        if idle_ticks >= 8:
                             idle_ticks = 0
                             yield ': keep-alive\n\n'
                 except asyncio.CancelledError:
@@ -94,7 +112,7 @@ def install_sse_routes(
                 except Exception as exc:
                     yield encode_event('error', {'message': 'Midlertidig realtime-feil', 'code': exc.__class__.__name__})
                     await asyncio.sleep(2)
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
         return StreamingResponse(
             stream(),
