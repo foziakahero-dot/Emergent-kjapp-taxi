@@ -8,6 +8,7 @@ import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
 import { tripsApi } from '@/src/lib/api';
+import { runSse } from '@/src/lib/sse';
 import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
@@ -31,27 +32,58 @@ export default function BookingFlow() {
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const nav = useRef(false);
+  const sseConnected = useRef(false);
 
   useEffect(() => {
     let mounted = true;
+    const controller = new AbortController();
+
+    const applyTrip = async (nextTrip: any) => {
+      if (!mounted || !nextTrip) return;
+      setTrip(nextTrip);
+      setNetworkIssue(false);
+      if (nextTrip.status === 'arrived' && !nav.current) {
+        nav.current = true;
+        try { await tripsApi.complete(tripId!); } catch {}
+        router.replace(`/receipt/${tripId}`);
+      }
+    };
+
     const fetchTrip = async () => {
       try {
-        const t = await tripsApi.get(tripId!);
-        if (!mounted) return;
-        setTrip(t);
-        setNetworkIssue(false);
-        if (t.status === 'arrived' && !nav.current) {
-          nav.current = true;
-          try { await tripsApi.complete(tripId!); } catch {}
-          router.replace(`/receipt/${tripId}`);
-        }
+        const nextTrip = await tripsApi.get(tripId!);
+        await applyTrip(nextTrip);
       } catch {
         if (mounted) setNetworkIssue(true);
       }
     };
-    fetchTrip();
-    const i = setInterval(fetchTrip, 2500);
-    return () => { mounted = false; clearInterval(i); };
+
+    void fetchTrip();
+    void runSse({
+      path: '/events/customer',
+      signal: controller.signal,
+      onConnectionChange: (connected) => {
+        sseConnected.current = connected;
+        if (connected && mounted) setNetworkIssue(false);
+      },
+      onEvent: (event, data) => {
+        if (!mounted || event !== 'customer') return;
+        const activeTrip = data?.active_trip;
+        if (activeTrip?.trip_id === tripId) void applyTrip(activeTrip);
+        else if (!activeTrip) void fetchTrip();
+      },
+    });
+
+    const fallback = setInterval(() => {
+      if (!sseConnected.current) void fetchTrip();
+    }, 2500);
+
+    return () => {
+      mounted = false;
+      sseConnected.current = false;
+      controller.abort();
+      clearInterval(fallback);
+    };
   }, [tripId, retryKey, router]);
 
   const cancel = async () => {
