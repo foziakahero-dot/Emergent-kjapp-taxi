@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /loyvehaver/soknad
+
+Sitemap: https://kjappapp.no/sitemap.xml
