@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './premium-home.css';
+import './premium-home-v2.css';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -25,33 +26,87 @@ function MicIcon() {
 }
 
 function PhoneScene() {
+  const [expanded, setExpanded] = useState(true);
+
   return (
-    <div className="mk-phone-wrap" aria-label="Forhåndsvisning av KJAPP Customer Home">
+    <div className="mk-phone-wrap mk-phone-wrap-v2" aria-label="Interaktiv forhåndsvisning av KJAPP Customer Home">
       <div className="mk-phone-glow" aria-hidden="true" />
-      <div className="mk-phone">
-        <div className="mk-phone-screen">
+      <div className="mk-phone mk-phone-v2">
+        <div className="mk-phone-screen mk-phone-screen-v2">
           <div className="mk-phone-island" />
-          <div className="mk-home-map" aria-hidden="true">
-            <div className="mk-current-location"><span /><b>DIN POSISJON</b></div>
+
+          <div className="mk-app-topbar" aria-hidden="true">
+            <div className="mk-app-brand">KJ<span>A</span>PP</div>
+            <div className="mk-app-profile">U</div>
           </div>
 
-          <div className="mk-customer-sheet">
-            <div className="mk-product-kicker">KJAPP</div>
-            <h3>Hvor vil du?</h3>
-            <div className="mk-destination-field">
-              <span className="mk-search-dot" />
-              <span>Søk etter destinasjon</span>
-              <button type="button" aria-label="Bestill med stemmen"><MicIcon /></button>
-            </div>
-            <div className="mk-pickup-row"><span className="mk-pickup-dot" /><div><small>HENTESTED</small><strong>Din nåværende posisjon</strong></div></div>
-            <div className="mk-mini-vehicles" aria-label="KJAPP bilkategorier">
-              <span>KJAPP</span><span>KJAPP XL</span><span>Premium</span>
-            </div>
-            <div className="mk-estimate-note">Pris og hentetid vises før du bekrefter.</div>
+          <div className="mk-home-map mk-home-map-v2" aria-hidden="true">
+            <div className="mk-map-car mk-map-car-a"><span /></div>
+            <div className="mk-map-car mk-map-car-b"><span /></div>
+            <div className="mk-current-location mk-current-location-v2"><span /><b>DIN POSISJON</b></div>
+            <div className="mk-map-road-label mk-map-road-label-a">Majorstuen</div>
+            <div className="mk-map-road-label mk-map-road-label-b">Frogner</div>
+          </div>
+
+          <div className={`mk-customer-sheet mk-customer-sheet-v2 ${expanded ? 'is-expanded' : 'is-collapsed'}`}>
+            {expanded ? (
+              <>
+                <button
+                  type="button"
+                  className="mk-sheet-collapse"
+                  onClick={() => setExpanded(false)}
+                  aria-label="Minimer søkefeltet og vis mer av kartet"
+                  aria-expanded="true"
+                >
+                  <span />
+                  <small>MINIMER</small>
+                </button>
+
+                <div className="mk-pickup-row mk-pickup-row-v2">
+                  <span className="mk-pickup-dot" />
+                  <div><small>HENTESTED</small><strong>Din posisjon · Oslo</strong></div>
+                </div>
+                <div className="mk-cars-nearby"><i />4 biler i nærheten · nærmeste 3 min</div>
+
+                <div className="mk-destination-card-v2">
+                  <div className="mk-destination-copy-v2">
+                    <small>KJAPP</small>
+                    <strong>Hvor skal du?</strong>
+                    <span>Søk adresse, sted eller flyplass</span>
+                  </div>
+                  <div className="mk-destination-actions-v2">
+                    <button type="button" className="mk-voice-btn-v2" aria-label="Bestill med stemmen"><MicIcon /></button>
+                    <button type="button" className="mk-search-btn-v2" aria-label="Åpne destinasjonssøk">⌕</button>
+                  </div>
+                </div>
+
+                <div className="mk-quick-places-v2" aria-hidden="true">
+                  <span>⌂ Hjem</span>
+                  <span>▣ Jobb</span>
+                  <span>＋ Legg til</span>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="mk-collapsed-search-v2"
+                onClick={() => setExpanded(true)}
+                aria-label="Åpne KJAPP søk og bestilling"
+                aria-expanded="false"
+              >
+                <span className="mk-collapsed-location"><i />Din posisjon</span>
+                <strong>Hvor vil du?</strong>
+                <span className="mk-collapsed-actions"><b><MicIcon /></b><em>⌃</em></span>
+              </button>
+            )}
           </div>
         </div>
       </div>
-      <span className="mk-phone-caption">CUSTOMER · GOLD</span>
+      <div className="mk-phone-demo-controls">
+        <button type="button" className={expanded ? 'active' : ''} onClick={() => setExpanded(true)}>Åpen</button>
+        <button type="button" className={!expanded ? 'active' : ''} onClick={() => setExpanded(false)}>Minimert</button>
+      </div>
+      <span className="mk-phone-caption">CUSTOMER · GOLD · MAP FIRST</span>
     </div>
   );
 }
@@ -103,7 +158,7 @@ export default function PremiumHome() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <main id="top" className="mk-page">
+    <main id="top" className="mk-page mk-page-v2">
       <header className="mk-header mk-shell">
         <Wordmark />
         <nav className={menuOpen ? 'is-open' : ''} aria-label="Hovedmeny">
@@ -117,11 +172,11 @@ export default function PremiumHome() {
         <button className="mk-menu-button" type="button" aria-expanded={menuOpen} aria-label="Åpne hovedmeny" onClick={() => setMenuOpen((open) => !open)}>Meny</button>
       </header>
 
-      <section className="mk-hero mk-shell">
+      <section className="mk-hero mk-hero-v2 mk-shell">
         <div className="mk-hero-copy">
           <div className="mk-eyebrow">NORSK TAXI — PÅ DINE PREMISSER</div>
           <h1>NORSK TAXI,<br />UTEN OMVEIER.</h1>
-          <p className="mk-hero-lead">Bestill med tekst eller stemme. Velg bilen som passer. Se estimatet før du bekrefter — og følg reisen live.</p>
+          <p className="mk-hero-lead">Kartet først. Bestill med tekst eller stemme. Velg bilen som passer, se estimatet før du bekrefter — og følg reisen live.</p>
           <div className="mk-hero-promise"><span className="mk-pulse" />Si hvor du skal. KJAPP ordner resten.</div>
           <div className="mk-actions">
             <a className="mk-pill mk-pill-primary" href="#download">Få KJAPP</a>
