@@ -65,7 +65,8 @@ export const api = {
     http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
   reviewDoc: (id: string, body: any) =>
     http.post(`/admin/documents/${id}/review`, body).then((r) => r.data),
-  refund: (body: any) => http.post('/admin/refunds', body).then((r) => r.data),
+  refund: (body: any, idempotencyKey: string) =>
+    http.post('/admin/refunds', body, { headers: { 'Idempotency-Key': idempotencyKey } }).then((r) => r.data),
   updateTicket: (id: string, body: any) =>
     http.patch(`/admin/support/tickets/${id}`, body).then((r) => r.data),
   patchSettings: (body: any) => http.patch('/admin/settings', body).then((r) => r.data),
