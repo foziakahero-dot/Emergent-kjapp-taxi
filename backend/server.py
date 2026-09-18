@@ -1380,6 +1380,8 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
     if not pending:
         raise HTTPException(status_code=400, detail="Start 2FA-oppsett først.")
     if not _verify_totp(pending, body.code):
+        if _twofa_required_role(current.get("role", "user")):
+            await _audit(current, "auth.2fa_failed", "user", current["id"], None, {"method": "totp", "flow": "setup"})
         raise HTTPException(status_code=400, detail="Feil kode. Prøv igjen.")
     backup = _gen_backup_codes()
     await db.users.update_one(
@@ -1405,6 +1407,8 @@ async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_u
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
     if not user.get("totp_enabled") or not _verify_totp(user.get("totp_secret", ""), body.code):
+        if _twofa_required_role(current.get("role", "user")):
+            await _audit(current, "auth.2fa_failed", "user", current["id"], None, {"method": "totp", "flow": "disable"})
         raise HTTPException(status_code=400, detail="Feil 2FA-kode.")
     update = {
         "$unset": {"totp_secret": "", "totp_enabled": "", "totp_backup_codes": "", "totp_secret_pending": ""},
@@ -1454,10 +1458,20 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
         raise HTTPException(status_code=401, detail="Feil kode.")
     await _clear_failed_logins(email, ip)
     if used_idx is not None:
-        # Consume exactly one backup code before issuing the access session.
-        codes = user.get("totp_backup_codes", [])
+        # Compare-and-swap the whole code list. A concurrent request using the same backup
+        # code loses this update and never receives a session.
+        original_codes = list(user.get("totp_backup_codes", []))
+        codes = list(original_codes)
         codes.pop(used_idx)
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {"totp_backup_codes": codes}})
+        consumed = await db.users.update_one(
+            {"_id": user["_id"], "totp_backup_codes": original_codes},
+            {"$set": {"totp_backup_codes": codes}},
+        )
+        if consumed.modified_count != 1:
+            await _record_failed_login(email, ip)
+            if _twofa_required_role(user.get("role", "user")):
+                await _audit(audit_user, "auth.2fa_failed", "user", audit_user["id"], None, {"method": "backup", "reason": "already_used"})
+            raise HTTPException(status_code=401, detail="Feil kode.")
         if _twofa_required_role(user.get("role", "user")):
             await _audit(audit_user, "auth.2fa_backup_used", "user", audit_user["id"], None, {"remaining_backup_codes": len(codes)})
     if _twofa_required_role(user.get("role", "user")):
