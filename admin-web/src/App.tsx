@@ -106,6 +106,11 @@ function GlobalSearch() {
 
 function Shell() {
   const { user, logout } = useAuth();
+  const can = (perm: string) => user?.role === 'superadmin' || user?.permissions == null || user.permissions.includes(perm);
+  const gate = (perm: string, node: React.ReactNode, superadminOnly = false) => {
+    const allowed = superadminOnly ? user?.role === 'superadmin' : can(perm);
+    return allowed ? node : <div className="error-banner" role="alert">Du har ikke tilgang til denne delen av administrasjonspanelet.</div>;
+  };
   const [counts, setCounts] = useState<any>({});
   useEffect(() => { api.overview().then(setCounts).catch(() => {}); }, []);
   const initials = (user?.fullName || user?.email || 'A').slice(0, 2).toUpperCase();
@@ -141,7 +146,7 @@ function Shell() {
 
       <div className="main">
         <div className="topbar">
-          <GlobalSearch />
+          {can('operations') ? <GlobalSearch /> : <div />}
           <div className="who">
             <span className="who-email">{user?.email}</span>
             <div className="avatar">{initials}</div>
@@ -150,24 +155,24 @@ function Shell() {
         </div>
         <div className="content">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/live" element={<Live />} />
-            <Route path="/trips" element={<Trips />} />
-            <Route path="/drivers" element={<Drivers />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/fleet-applications" element={<FleetApplications />} />
-            <Route path="/fleets" element={<FleetManagement />} />
-            <Route path="/vehicles" element={<Vehicles />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/finance" element={<Finance />} />
-            <Route path="/payments" element={<PaymentsPayouts />} />
-            <Route path="/communications" element={<Communications />} />
-            <Route path="/actions" element={<ActionCenter />} />
-            <Route path="/integrations" element={<SystemIntegrations />} />
-            <Route path="/admins" element={<AdminRoles />} />
-            <Route path="/support" element={<Support />} />
-            <Route path="/audit" element={<Audit />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/" element={gate('operations', <Dashboard />)} />
+            <Route path="/live" element={gate('operations', <Live />)} />
+            <Route path="/trips" element={gate('operations', <Trips />)} />
+            <Route path="/drivers" element={gate('operations', <Drivers />)} />
+            <Route path="/customers" element={gate('operations', <Customers />)} />
+            <Route path="/fleet-applications" element={gate('operations', <FleetApplications />, true)} />
+            <Route path="/fleets" element={gate('operations', <FleetManagement />)} />
+            <Route path="/vehicles" element={gate('operations', <Vehicles />)} />
+            <Route path="/documents" element={gate('operations', <Documents />)} />
+            <Route path="/finance" element={gate('finance', <Finance />)} />
+            <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
+            <Route path="/communications" element={gate('communications', <Communications />)} />
+            <Route path="/actions" element={gate('operations', <ActionCenter />)} />
+            <Route path="/integrations" element={gate('system', <SystemIntegrations />)} />
+            <Route path="/admins" element={gate('system', <AdminRoles />, true)} />
+            <Route path="/support" element={gate('support', <Support />)} />
+            <Route path="/audit" element={gate('system', <Audit />)} />
+            <Route path="/settings" element={gate('system', <Settings />)} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
         </div>
