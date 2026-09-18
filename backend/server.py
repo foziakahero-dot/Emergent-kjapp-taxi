@@ -3459,21 +3459,21 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
             {"driver_id": {"$in": drivers_ids}},
         ],
     }):
-            snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
-            if snap.get("fleet_id") != fid:
-                continue
-            gross = int(snap["gross_amount"])
-            net = int(snap["fleet_net_amount"])
-            commission_amount = int(snap["commission_amount"])
-            week_gross += gross
-            week_net += net
-            week_commission += commission_amount
-            week_trips += 1
-            if t.get("created_at", "") >= today:
-                today_gross += gross
-                today_net += net
-                today_commission += commission_amount
-                today_trips += 1
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        if snap.get("fleet_id") != fid:
+            continue
+        gross = int(snap["gross_amount"])
+        net = int(snap["fleet_net_amount"])
+        commission_amount = int(snap["commission_amount"])
+        week_gross += gross
+        week_net += net
+        week_commission += commission_amount
+        week_trips += 1
+        if t.get("created_at", "") >= today:
+            today_gross += gross
+            today_net += net
+            today_commission += commission_amount
+            today_trips += 1
 
     online_count = await db.users.count_documents({"role": "driver", "fleet_id": fid, "online": True})
     fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
@@ -3576,29 +3576,29 @@ async def fleet_export_monthly(
             {"driver_id": {"$in": driver_ids}},
         ],
     }):
-            snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
-            if snap.get("fleet_id") != fid:
-                continue
-            t["_commission_snapshot"] = snap
-            trips.append(t)
-            did = t.get("driver_id")
-            if did not in drivers_map:
-                embedded = t.get("driver") or {}
-                drivers_map[did] = {
-                    "id": did or "",
-                    "name": embedded.get("name") or "Tidligere sjåfør",
-                    "email": "",
-                    "plate": embedded.get("plate") or "",
-                    "car": embedded.get("car") or "",
-                    "trips": 0,
-                    "gross": 0,
-                    "commission": 0,
-                    "net": 0,
-                }
-            drivers_map[did]["trips"] += 1
-            drivers_map[did]["gross"] += int(snap["gross_amount"])
-            drivers_map[did]["commission"] += int(snap["commission_amount"])
-            drivers_map[did]["net"] += int(snap["fleet_net_amount"])
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        if snap.get("fleet_id") != fid:
+            continue
+        t["_commission_snapshot"] = snap
+        trips.append(t)
+        did = t.get("driver_id")
+        if did not in drivers_map:
+            embedded = t.get("driver") or {}
+            drivers_map[did] = {
+                "id": did or "",
+                "name": embedded.get("name") or "Tidligere sjåfør",
+                "email": "",
+                "plate": embedded.get("plate") or "",
+                "car": embedded.get("car") or "",
+                "trips": 0,
+                "gross": 0,
+                "commission": 0,
+                "net": 0,
+            }
+        drivers_map[did]["trips"] += 1
+        drivers_map[did]["gross"] += int(snap["gross_amount"])
+        drivers_map[did]["commission"] += int(snap["commission_amount"])
+        drivers_map[did]["net"] += int(snap["fleet_net_amount"])
 
     total_gross = sum(int((t.get("_commission_snapshot") or {}).get("gross_amount", 0)) for t in trips)
     total_trips = len(trips)
