@@ -1392,15 +1392,19 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
             await _audit(current, "auth.2fa_failed", "user", current["id"], None, {"method": "totp", "flow": "setup"})
         raise HTTPException(status_code=400, detail="Feil kode. Prøv igjen.")
     backup = _gen_backup_codes()
+    enabled_at = datetime.now(timezone.utc)
+    enable_set = {
+        "totp_secret": pending,
+        "totp_enabled": True,
+        "totp_backup_codes": [hash_password(c) for c in backup],
+        "totp_enabled_at": enabled_at.isoformat(),
+    }
+    if _twofa_required_role(current.get("role", "user")):
+        enable_set["tokens_valid_after"] = enabled_at.timestamp()
     await db.users.update_one(
         {"_id": user["_id"]},
         {
-            "$set": {
-                "totp_secret": pending,
-                "totp_enabled": True,
-                "totp_backup_codes": [hash_password(c) for c in backup],
-                "totp_enabled_at": datetime.now(timezone.utc).isoformat(),
-            },
+            "$set": enable_set,
             "$unset": {"totp_secret_pending": ""},
         },
     )
@@ -1565,6 +1569,7 @@ async def twofa_enroll_enable(body: TwoFAEnrollEnableRequest, request: Request, 
                 "totp_enabled": True,
                 "totp_backup_codes": [hash_password(c) for c in backup],
                 "totp_enabled_at": enabled_at.isoformat(),
+                "tokens_valid_after": enabled_at.timestamp(),
             },
             "$unset": {"totp_secret_pending": "", "totp_enrollment_started_at": ""},
         },
@@ -4585,6 +4590,13 @@ async def create_trip_checkout(
             }},
         )
         raise HTTPException(status_code=502, detail=getattr(exc, "user_message", None) or "Stripe kunne ikke opprette betalingsøkten")
+    except Exception:
+        # Unknown outcome around the provider call is retried with the exact same Stripe key.
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id, "checkout_idempotency_key": checkout_key},
+            {"$set": {"checkout_state": "creating"}, "$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=503, detail="Betalingsstatus er ikke avklart. Prøv igjen.")
 
     tx_now = datetime.now(timezone.utc)
     await db.payment_transactions.update_one(
@@ -5941,9 +5953,7 @@ async def admin_create_refund(
         raise HTTPException(400, "Begrunnelse kreves")
     key = (idempotency_key or "").strip()
     if not key:
-        # Backwards-compatible for older callers. The admin UI sends a stable key so retries
-        # remain safe; generated keys are returned in the response for other clients.
-        key = str(uuid.uuid4())
+        raise HTTPException(400, "Idempotency-Key kreves for refusjoner")
     if len(key) > 200:
         raise HTTPException(400, "Ugyldig idempotency-nøkkel")
 
@@ -6185,10 +6195,11 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
     if want in ("", "FARE"):
         async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": lo, "$lte": hi}}):
             fid = driver_fleet.get(t.get("driver_id"))
-            if fleet_id and fid != fleet_id: continue
             snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
-            price = int(snap["gross_amount"])
             fid = snap.get("fleet_id") or fid
+            if fleet_id and fid != fleet_id:
+                continue
+            price = int(snap["gross_amount"])
             rows.append({
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
