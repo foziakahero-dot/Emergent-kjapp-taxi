@@ -182,6 +182,18 @@ def install_admin_control_center(
             "$or": [{"payment_status": "failed"}, {"status": "failed"}]
         })
         failed_payouts = await db.fleet_payouts.count_documents({"status": "failed"})
+        today = datetime.now(timezone.utc).date().isoformat()
+        expiry_limit = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+        expired_documents = await db.uploaded_files.count_documents({
+            "is_deleted": {"$ne": True},
+            "review_status": "valid",
+            "review_expiry": {"$ne": None, "$lt": today},
+        })
+        expiring_documents = await db.uploaded_files.count_documents({
+            "is_deleted": {"$ne": True},
+            "review_status": "valid",
+            "review_expiry": {"$gte": today, "$lte": expiry_limit},
+        })
         stripe_pending = await db.fleets.count_documents({
             "active": {"$ne": False},
             "$or": [
@@ -207,6 +219,15 @@ def install_admin_control_center(
         if stripe_pending:
             items.append({"type": "stripe_connect", "severity": "amber", "count": stripe_pending,
                           "title": "Stripe Connect ikke ferdigstilt", "detail": "Løyvehavere uten klar bank/KYC kan ikke motta automatiske oppgjør.", "href": "/fleets"})
+        if expired_documents or expiring_documents:
+            items.append({
+                "type": "documents",
+                "severity": "red" if expired_documents else "amber",
+                "count": expired_documents + expiring_documents,
+                "title": "Dokumenter krever oppfølging",
+                "detail": f"{expired_documents} utløpt · {expiring_documents} utløper innen 30 dager",
+                "href": "/documents",
+            })
         if open_support:
             items.append({"type": "support", "severity": "blue", "count": open_support,
                           "title": "Åpne supportsaker", "detail": "Saker som fortsatt krever behandling.", "href": "/support"})
@@ -217,6 +238,8 @@ def install_admin_control_center(
                 "pending_drivers": pending_drivers,
                 "failed_payments": failed_payments,
                 "failed_payouts": failed_payouts,
+                "expired_documents": expired_documents,
+                "expiring_documents": expiring_documents,
                 "stripe_pending": stripe_pending,
                 "open_support": open_support,
             },
