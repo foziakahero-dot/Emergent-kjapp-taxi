@@ -296,7 +296,7 @@ async def purge_synthetic_data(db) -> dict:
     return {"trips": trips.deleted_count, "users": users.deleted_count}
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, *, twofa_verified: bool = False) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
@@ -305,6 +305,7 @@ def create_access_token(user_id: str, email: str) -> str:
         "type": "access",
         "iat": now.timestamp(),
         "jti": secrets.token_urlsafe(24),
+        "twofa_verified": bool(twofa_verified),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -414,9 +415,14 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ikke innlogget")
-        if _twofa_required_role(user.get("role", "user")) and not user.get("totp_enabled"):
-            # Fail closed for privileged legacy sessions created before mandatory 2FA.
-            raise HTTPException(status_code=401, detail="Totrinnsbekreftelse må fullføres. Logg inn på nytt.")
+        if _twofa_required_role(user.get("role", "user")):
+            if not user.get("totp_enabled"):
+                # Fail closed for privileged legacy sessions created before mandatory 2FA.
+                raise HTTPException(status_code=401, detail="Totrinnsbekreftelse må fullføres. Logg inn på nytt.")
+            if payload.get("twofa_verified") is not True:
+                # Old/admin tokens minted before mandatory MFA (or outside the verified
+                # challenge flow) never become privileged merely because TOTP is enabled.
+                raise HTTPException(status_code=401, detail="Totrinnsbekreftelse må verifiseres. Logg inn på nytt.")
         if not _session_is_current(payload, user):
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
         if await _session_is_revoked(payload):
@@ -1489,7 +1495,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
     if _twofa_required_role(user.get("role", "user")):
         await _audit(audit_user, "auth.2fa_success", "user", audit_user["id"], None, {"method": "backup" if used_idx is not None else "totp", "flow": "login"})
     uid = str(user["_id"])
-    token = create_access_token(uid, email)
+    token = create_access_token(uid, email, twofa_verified=True)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
 
@@ -1578,7 +1584,7 @@ async def twofa_enroll_enable(body: TwoFAEnrollEnableRequest, request: Request, 
         raise HTTPException(status_code=409, detail="2FA-oppsettet ble endret. Logg inn på nytt.")
     await _clear_failed_logins(email, ip)
     await _audit(audit_user, "auth.2fa_success", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
-    token = create_access_token(str(user["_id"]), email)
+    token = create_access_token(str(user["_id"]), email, twofa_verified=True)
     set_auth_cookie(response, token)
     public = user_public({**user, "totp_enabled": True})
     return {"token": token, "user": public, "enabled": True, "backup_codes": backup}
@@ -3118,7 +3124,9 @@ async def google_session(body: GoogleSessionRequest, response: Response):
         if not user.get("google_linked"):
             await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
     if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
@@ -3254,7 +3262,9 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
         phone = ""
 
     if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": phone, "role": role, "driver_id": driver_id}}
@@ -4385,7 +4395,9 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         role = "user"
         driver_id = None
     if existing and existing.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": "", "role": role, "driver_id": driver_id}}
