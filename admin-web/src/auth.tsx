@@ -10,6 +10,7 @@ type Ctx = {
   user: User | undefined; // undefined = loading, null = signed out
   login: (email: string, password: string) => Promise<any>;
   verify2fa: (twofa_token: string, code: string) => Promise<User>;
+  completeLogin: (res: any) => User;
   logout: () => Promise<void>;
 };
 
@@ -54,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const res = await api.login(email, password);
-    if (res?.twofa_required) return res; // caller shows the 2FA code step
+    if (res?.twofa_required || res?.twofa_setup_required) return res; // caller shows verify/enrollment step
     return finish(res);
   };
 
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthCtx.Provider value={{ user, login, verify2fa, logout }}>{children}</AuthCtx.Provider>
+    <AuthCtx.Provider value={{ user, login, verify2fa, completeLogin: finish, logout }}>{children}</AuthCtx.Provider>
   );
 }
 
