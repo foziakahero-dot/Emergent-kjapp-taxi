@@ -2585,11 +2585,18 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     d_lat = current.get("last_lat")
     d_lng = current.get("last_lng")
     eta = None
+    commission_snapshot = await resolve_commission_snapshot(
+        db,
+        {**trip_pre, "driver_id": driver_id, "driver_user_id": current["id"]},
+        await _platform_commission(),
+        persist=False,
+    )
     updates = {
         "status": "driver_on_way",
         "driver": driver,
         "driver_id": driver_id,
         "driver_user_id": current["id"],
+        "commission_snapshot": commission_snapshot,
         "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -2615,10 +2622,6 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     t = await db.trips.find_one({"trip_id": body.trip_id})
-    commission_snapshot = await resolve_commission_snapshot(
-        db, t, await _platform_commission(), persist=True
-    )
-    t["commission_snapshot"] = commission_snapshot
     await send_push_to_user(
         t["user_id"], "Sjåfør på vei",
         f"{driver['name']} kommer om {eta} min." if eta else f"{driver['name']} er på vei til deg.",
@@ -4637,7 +4640,7 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                         "status": "completed",
                         "payment_status": "paid",
                         "stripe_payment_intent_id": s.payment_intent,
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc),
                     }},
                 )
                 # mark trip as paid
@@ -4693,7 +4696,7 @@ async def stripe_webhook(request: Request):
                 "status": "completed",
                 "payment_status": "paid",
                 "stripe_payment_intent_id": obj.get("payment_intent"),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc),
             }},
         )
         if r and r.get("trip_id"):
@@ -5949,8 +5952,6 @@ async def admin_create_refund(
         await _audit(current, "refund.retry", "trip", existing.get("trip_id"), None, {
             "refund_id": existing.get("id"), "status": existing.get("status"), "idempotency_key": key,
         }, reason)
-        if existing.get("status") in REFUND_TERMINAL_STATUSES:
-            return _refund_public(existing)
         refund_doc = existing
     else:
         trip = await db.trips.find_one({"trip_id": body.trip_id})
@@ -6024,6 +6025,8 @@ async def admin_create_refund(
         raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt med et annet beløp")
     if reason != refund_doc.get("reason"):
         raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt med en annen begrunnelse")
+    if refund_doc.get("status") in REFUND_TERMINAL_STATUSES:
+        return _refund_public(refund_doc)
 
     # Reserve the requested amount on the trip exactly once. The operation id on the trip
     # makes crash recovery safe if the process dies after reservation but before the refund row updates.
