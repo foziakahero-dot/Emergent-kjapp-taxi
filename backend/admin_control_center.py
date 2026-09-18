@@ -310,7 +310,7 @@ def install_admin_control_center(
                 "details_submitted": fleet.get("stripe_details_submitted", False),
                 "charges_enabled": fleet.get("stripe_charges_enabled", False),
                 "payouts_enabled": fleet.get("stripe_payouts_enabled", False),
-                "payout_schedule": fleet.get("stripe_payout_schedule", "weekly_friday"),
+                "payout_schedule": fleet.get("stripe_payout_schedule", "stripe_default"),
             })
         return {"fleets": rows}
 
@@ -340,7 +340,7 @@ def install_admin_control_center(
             await db.fleets.update_one({"_id": _oid(fleet_id)}, {"$set": {
                 "stripe_account_id": account_id,
                 "stripe_connect_status": "onboarding",
-                "stripe_payout_schedule": "weekly_friday",
+                "stripe_payout_schedule": "stripe_default",
                 "stripe_connected_at": _now(),
             }})
             try:
@@ -349,8 +349,12 @@ def install_admin_control_center(
                     account_id,
                     settings={"payouts": {"schedule": {"interval": "weekly", "weekly_anchor": "friday"}}},
                 )
+                await db.fleets.update_one(
+                    {"_id": _oid(fleet_id)},
+                    {"$set": {"stripe_payout_schedule": "weekly_friday", "stripe_payout_schedule_updated_at": _now()}},
+                )
             except Exception:
-                # Account onboarding remains valid; schedule can be applied once requirements are complete.
+                # Connected account remains usable; display Stripe's default schedule until confirmed.
                 pass
         public_admin = os.getenv("ADMIN_PUBLIC_URL", "https://admin.kjappapp.no").rstrip("/")
         try:
