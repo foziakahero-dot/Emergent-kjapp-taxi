@@ -13,6 +13,7 @@ import bcrypt
 import jwt
 import httpx
 import stripe
+from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
@@ -342,7 +343,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "id", "email", "fullName", "full_name", "phone", "role", "driver_id", "fleet_id",
     "picture", "photo", "avatar", "car", "plate", "vehicle_type", "rating", "trip_count",
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
-    "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password",
+    "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status",
 })
@@ -3086,9 +3087,30 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
 # ============================================================
 # Fleet owner portal
 # ============================================================
-def require_admin(current=Depends(get_current_user)):
+ADMIN_PERMISSION_PREFIXES = (
+    ("/api/admin/finance", "finance"),
+    ("/api/admin/transactions", "finance"),
+    ("/api/admin/refunds", "finance"),
+    ("/api/admin/control/payouts", "finance"),
+    ("/api/admin/support", "support"),
+    ("/api/admin/control/communications", "communications"),
+    ("/api/admin/settings", "system"),
+    ("/api/admin/audit-log", "system"),
+    ("/api/admin/control/integrations", "system"),
+    ("/api/admin/control/admin-users", "system"),
+    ("/api/admin/", "operations"),
+)
+
+
+def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
+    if current.get("role") == "admin":
+        permissions = current.get("permissions", None)
+        if permissions is not None:
+            required = next((perm for prefix, perm in ADMIN_PERMISSION_PREFIXES if request.url.path.startswith(prefix)), None)
+            if required and required not in permissions:
+                raise HTTPException(status_code=403, detail=f"Mangler admin-tilgang: {required}")
     return current
 
 
@@ -4144,22 +4166,45 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        line_items=[{
+    connect_destination = await stripe_destination_for_trip(db, stripe, trip)
+    metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
+    checkout_kwargs = {
+        "mode": "payment",
+        "line_items": [{
             "price_data": {
                 "currency": "nok",
-                "unit_amount": amount_nok * 100,  # øre
+                "unit_amount": amount_nok * 100,
                 "product_data": {
                     "name": f"KJAPP tur — {trip.get('pickup_address','')[:40]} → {trip.get('dropoff_address','')[:40]}",
                 },
             },
             "quantity": 1,
         }],
-        success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
-        metadata={"trip_id": body.trip_id, "user_id": current["id"]},
-    )
+        "success_url": f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
+        "metadata": metadata,
+    }
+    connect_fields = {}
+    if connect_destination:
+        fee_ore = int(round(amount_nok * 100 * connect_destination["commission_rate"]))
+        checkout_kwargs["payment_intent_data"] = {
+            "application_fee_amount": fee_ore,
+            "transfer_data": {"destination": connect_destination["stripe_account_id"]},
+        }
+        metadata.update({
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": str(connect_destination["commission_rate"]),
+        })
+        connect_fields = {
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": connect_destination["commission_rate"],
+            "platform_fee": fee_ore / 100,
+            "fleet_net": amount_nok - (fee_ore / 100),
+            "settlement_model": "stripe_destination_charge",
+        }
+    session = stripe.checkout.Session.create(**checkout_kwargs)
     await db.payment_transactions.insert_one({
         "session_id": session.id,
         "trip_id": body.trip_id,
@@ -4170,6 +4215,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
+        **connect_fields,
     })
     return {"checkout_url": session.url, "session_id": session.id}
 
@@ -5569,6 +5615,19 @@ async def admin_search(q: str, current=Depends(require_admin)):
         fleets.append({"id": str(f["_id"]), "name": f.get("name"), "org_number": f.get("org_number"), "status": f.get("status", "active")})
     return {"query": q, "trips": trips, "drivers": drivers[:10], "customers": customers[:10], "fleets": fleets}
 
+
+# Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
+install_admin_control_center(
+    api,
+    db,
+    require_admin=require_admin,
+    require_superadmin=require_superadmin,
+    stripe=stripe,
+    send_push_to_user=send_push_to_user,
+    send_email=send_email,
+    hash_password=hash_password,
+    audit=_audit,
+)
 
 app.include_router(api)
 
