@@ -3092,6 +3092,7 @@ ADMIN_PERMISSION_PREFIXES = (
     ("/api/admin/transactions", "finance"),
     ("/api/admin/refunds", "finance"),
     ("/api/admin/control/payouts", "finance"),
+    ("/api/admin/control/stripe-fleets", "finance"),
     ("/api/admin/support", "support"),
     ("/api/admin/control/communications", "communications"),
     ("/api/admin/settings", "system"),
