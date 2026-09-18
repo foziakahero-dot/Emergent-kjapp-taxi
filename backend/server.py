@@ -4637,7 +4637,7 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                         "status": "completed",
                         "payment_status": "paid",
                         "stripe_payment_intent_id": s.payment_intent,
-                        "updated_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
                     }},
                 )
                 # mark trip as paid
@@ -4693,7 +4693,7 @@ async def stripe_webhook(request: Request):
                 "status": "completed",
                 "payment_status": "paid",
                 "stripe_payment_intent_id": obj.get("payment_intent"),
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }},
         )
         if r and r.get("trip_id"):
@@ -5825,8 +5825,8 @@ async def _refund_finalize_success(refund_doc: dict, provider_ref: Optional[str]
             "status": "succeeded",
             "provider_status": provider_status,
             "provider_ref": provider_ref or refund_doc.get("provider_ref"),
-            "succeeded_at": now,
-            "updated_at": now,
+            "succeeded_at": now.isoformat(),
+            "updated_at": now.isoformat(),
         }, "$unset": {"processing_id": "", "processing_until": "", "failure_code": "", "failure_message_safe": ""}},
     )
 
@@ -5841,8 +5841,8 @@ async def _refund_mark_failed(refund_doc: dict, code: str, safe_message: str, pr
             "provider_status": provider_status,
             "failure_code": code,
             "failure_message_safe": safe_message[:500],
-            "failed_at": now,
-            "updated_at": now,
+            "failed_at": now.isoformat(),
+            "updated_at": now.isoformat(),
         }, "$unset": {"processing_id": "", "processing_until": ""}},
     )
 
@@ -5856,8 +5856,8 @@ async def _refund_mark_cancelled(refund_doc: dict, provider_ref: Optional[str], 
             "status": "cancelled",
             "provider_status": provider_status,
             "provider_ref": provider_ref or refund_doc.get("provider_ref"),
-            "cancelled_at": now,
-            "updated_at": now,
+            "cancelled_at": now.isoformat(),
+            "updated_at": now.isoformat(),
         }, "$unset": {"processing_id": "", "processing_until": ""}},
     )
 
@@ -5909,7 +5909,7 @@ async def _apply_refund_provider_state(refund_doc: dict, provider_ref: Optional[
                 "status": "pending",
                 "provider_status": provider_status,
                 "provider_ref": provider_ref or refund_doc.get("provider_ref"),
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }, "$unset": {"processing_id": "", "processing_until": ""}},
         )
 
@@ -5999,8 +5999,8 @@ async def admin_create_refund(
             "commission_snapshot": (payment_tx or {}).get("commission_snapshot") or trip.get("commission_snapshot"),
             "admin_id": current["id"],
             "admin_email": current.get("email"),
-            "created_at": now,
-            "updated_at": now,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
         }
         try:
             await db.refunds.insert_one(dict(refund_doc))
@@ -6064,7 +6064,7 @@ async def admin_create_refund(
                 raise HTTPException(409, "Refusjonsbeløpet overstiger tilgjengelig saldo")
         await db.refunds.update_one(
             {"idempotency_key": key},
-            {"$set": {"status": "pending", "reserved_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}},
+            {"$set": {"status": "pending", "reserved_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}},
         )
 
     # A short database lease prevents two workers from calling Stripe concurrently for the same operation.
@@ -6081,7 +6081,7 @@ async def admin_create_refund(
                 {"processing_until": {"$lte": now}},
             ],
         },
-        {"$set": {"processing_id": lease_id, "processing_until": lease_until, "last_attempt_at": now, "updated_at": now}},
+        {"$set": {"processing_id": lease_id, "processing_until": lease_until, "last_attempt_at": now, "updated_at": now.isoformat()}},
     )
     if leased.modified_count != 1:
         current_doc = await db.refunds.find_one({"idempotency_key": key})
@@ -6118,7 +6118,7 @@ async def admin_create_refund(
                 "provider": "stripe",
                 "provider_ref": provider_ref,
                 "provider_status": provider_status,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }},
         )
         refund_doc = await db.refunds.find_one({"idempotency_key": key})
@@ -6133,7 +6133,7 @@ async def admin_create_refund(
                 "provider": "stripe",
                 "failure_code": "provider_outcome_unknown",
                 "failure_message_safe": "Stripe-status er ikke avklart. Samme operasjon kan trygt prøves igjen.",
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }, "$unset": {"processing_id": "", "processing_until": ""}},
         )
         await _audit(current, "refund.retryable_error", "trip", refund_doc["trip_id"], None, {
@@ -6155,7 +6155,7 @@ async def admin_create_refund(
                 "status": "pending",
                 "failure_code": "provider_outcome_unknown",
                 "failure_message_safe": "Providerstatus er ikke avklart. Samme operasjon kan trygt prøves igjen.",
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }, "$unset": {"processing_id": "", "processing_until": ""}},
         )
         await _audit(current, "refund.retryable_error", "trip", refund_doc["trip_id"], None, {
