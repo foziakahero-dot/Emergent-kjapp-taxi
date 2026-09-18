@@ -615,12 +615,18 @@ function RefundModal({ onClose, onDone }: any) {
   const [tripId, setTripId] = useState('');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+  const [idempotencyKey] = useState(() =>
+    globalThis.crypto?.randomUUID?.() || 'refund-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const save = async () => {
     setBusy(true); setErr('');
     try {
-      await api.refund({ trip_id: tripId.trim(), amount: amount ? Number(amount) : undefined, reason: reason.trim() });
+      await api.refund(
+        { trip_id: tripId.trim(), amount: amount ? Number(amount) : undefined, reason: reason.trim() },
+        idempotencyKey,
+      );
       onDone();
     } catch (e: any) { setErr(e?.response?.data?.detail || 'Feil'); setBusy(false); }
   };
