@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from './api';
+import { api, apiError, download } from './api';
+import { DocumentFile, PersonDetail, Security, LiveMap } from './operations';
 import { useAuth } from './auth';
 import {
   Bars, Btn, Card, Drawer, Empty, ErrorBanner, KV, Kpi, Loader, Modal, PageHead, Pagination,
@@ -18,8 +19,9 @@ const PAGE = 25;
 /* ----------------------------- Dashboard ----------------------------- */
 export function Dashboard() {
   const ov = useAsync(() => api.overview(), []);
+  useEffect(() => { const timer = setInterval(ov.reload, 30000); return () => clearInterval(timer); }, [ov.reload]);
   const fin = useAsync(() => api.finance(30), []);
-  if (ov.loading) return <Loader />;
+  if (ov.loading && !ov.data) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
   const d = ov.data || {};
   const delta = (d.trips?.today ?? 0) - (d.trips?.yesterday ?? 0);
@@ -38,7 +40,7 @@ export function Dashboard() {
 
       <div className="section-title">Siste 30 dager — brutto omsetning</div>
       <Card>
-        {fin.loading ? <Loader /> : <Bars data={fin.data?.series || []} xkey="date" ykey="gmv" />}
+        {fin.err ? <ErrorBanner msg={fin.err} /> : fin.loading ? <Loader /> : <Bars data={fin.data?.series || []} xkey="date" ykey="gmv" />}
       </Card>
 
       <div className="section-title">Krever oppmerksomhet</div>
@@ -60,10 +62,10 @@ export function Dashboard() {
   );
 }
 const Shortcut = ({ ic, n, l, c }: any) => (
-  <div className="card"><div className="shortcut">
+  <a href={l.includes("Sjåfører") ? "#/drivers" : l.includes("turer") ? "#/live" : l.includes("support") ? "#/support" : "#/payouts"} className="card"><div className="shortcut">
     <div className="ic" style={{ color: `var(--${c})` }}>{ic}</div>
     <div><div className="n">{n}</div><div className="l">{l}</div></div>
-  </div></div>
+  </div></a>
 );
 
 /* ----------------------------- Live ----------------------------- */
@@ -75,6 +77,7 @@ export function Live() {
       <PageHead title="Live drift" sub={data ? `Oppdatert ${fmtDate(data.as_of)} · auto hvert 5s` : ''}
         right={<Btn variant="sm" onClick={reload}>Oppdater</Btn>} />
       <ErrorBanner msg={err} />
+      {data && <LiveMap data={data} />}
       {loading && !data ? <Loader /> : (
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div>
@@ -118,6 +121,7 @@ export function Trips() {
   const [sp] = useSearchParams();
   const [status, setStatus] = useState('');
   const [qi, setQi] = useState(sp.get('q') || '');
+  useEffect(() => { setQi(sp.get('q') || ''); }, [sp]);
   const q = useDebounced(qi);
   const [df, setDf] = useState('');
   const [dt, setDt] = useState('');
@@ -187,7 +191,7 @@ function TripDrawer({ trip, onClose }: any) {
       <KV k="Opprettet" v={fmtDate(trip.created_at)} />
 
       <div className="section-title">Hendelsesforløp</div>
-      {tl.loading ? <Loader /> : ev.length ? (
+      {tl.err ? <ErrorBanner msg={tl.err} /> : tl.loading ? <Loader /> : ev.length ? (
         <div className="tl">
           {ev.map((e: any, i: number) => (
             <div className="tl-item" key={i}>
@@ -204,8 +208,10 @@ function TripDrawer({ trip, onClose }: any) {
 /* ----------------------------- Drivers ----------------------------- */
 export function Drivers() {
   const [sp] = useSearchParams();
+  const [person, setPerson] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [qi, setQi] = useState(sp.get('q') || '');
+  useEffect(() => { setQi(sp.get('q') || ''); }, [sp]);
   const q = useDebounced(qi);
   const [page, setPage] = useState(1);
   useEffect(() => { setPage(1); }, [status, q]);
@@ -214,7 +220,7 @@ export function Drivers() {
   const toggle = async (d: any) => {
     const next = !d.approved;
     if (!window.confirm(next ? `Godkjenne ${d.name}?` : `Suspendere ${d.name}?`)) return;
-    try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(e?.response?.data?.detail || 'Feil'); }
+    try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(apiError(e)); }
   };
 
   return (
@@ -234,10 +240,10 @@ export function Drivers() {
           <tbody>
             {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
-                <td><div className="strong">{d.name}</div><div className="cell-sub">{d.email}</div></td>
+                <td><button className="text-link" onClick={() => setPerson(d.id)}>{d.name}</button><div className="cell-sub">{d.email}</div></td>
                 <td>{d.car || '—'} <span className="dim mono">{d.plate}</span></td>
                 <td className="dim">{d.fleet_name || '—'}</td>
-                <td className="mono">{d.completed ?? 0}</td>
+                <td className="mono">{d.trips_completed ?? 0}</td>
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
                 <td>{d.online ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent" /> : <Pill status="pending" label="Venter" />}</td>
                 <td className="right">
@@ -251,6 +257,7 @@ export function Drivers() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
+      {person && <PersonDetail id={person} onClose={() => setPerson(null)} />}
     </>
   );
 }
@@ -258,7 +265,9 @@ export function Drivers() {
 /* ----------------------------- Customers ----------------------------- */
 export function Customers() {
   const [sp] = useSearchParams();
+  const [person, setPerson] = useState<string | null>(null);
   const [qi, setQi] = useState(sp.get('q') || '');
+  useEffect(() => { setQi(sp.get('q') || ''); }, [sp]);
   const q = useDebounced(qi);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -280,7 +289,7 @@ export function Customers() {
           <tbody>
             {loading ? <tr><td colSpan={5}><Loader /></td></tr> : rows.length ? rows.map((u: any) => (
               <tr key={u.id}>
-                <td className="strong">{u.fullName || '—'}</td>
+                <td><button className="text-link" onClick={() => setPerson(u.id)}>{u.fullName || u.email}</button></td>
                 <td className="dim">{u.email}</td>
                 <td className="mono">{u.phone || '—'}</td>
                 <td><Pill status="gray" label={u.role || 'kunde'} /></td>
@@ -291,6 +300,7 @@ export function Customers() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
+      {person && <PersonDetail id={person} onClose={() => setPerson(null)} />}
     </>
   );
 }
@@ -328,6 +338,7 @@ export function Fleets() {
 export function Vehicles() {
   const [sp] = useSearchParams();
   const [qi, setQi] = useState(sp.get('q') || '');
+  useEffect(() => { setQi(sp.get('q') || ''); }, [sp]);
   const q = useDebounced(qi);
   const [vt, setVt] = useState('');
   const [page, setPage] = useState(1);
@@ -417,7 +428,8 @@ export function Documents() {
 }
 
 function ReviewModal({ doc, onClose, onDone }: any) {
-  const [status, setStatus] = useState(doc.review_status === 'valid' ? 'valid' : 'valid');
+  const [status, setStatus] = useState(doc.review_status || 'pending');
+  const [viewed, setViewed] = useState(false);
   const [expiry, setExpiry] = useState(doc.expiry || '');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -425,10 +437,12 @@ function ReviewModal({ doc, onClose, onDone }: any) {
   const save = async () => {
     setBusy(true); setErr('');
     try { await api.reviewDoc(doc.id, { status, expiry: expiry || null, reason: reason || null }); onDone(); }
-    catch (e: any) { setErr(e?.response?.data?.detail || 'Feil'); setBusy(false); }
+    catch (e: any) { setErr(apiError(e)); setBusy(false); }
   };
   return (
-    <Modal title="Vurder dokument" sub={doc.filename} onClose={onClose}>
+    <Modal title="Vurder dokument" sub={doc.filename} onClose={busy ? () => {} : onClose}>
+      <DocumentFile path={doc.storage_path} filename={doc.filename} onViewed={() => setViewed(true)} />
+      <KV k="Tidligere vurdering" v={doc.review_reason || "Ingen begrunnelse"} />
       {err && <div className="error-banner">{err}</div>}
       <div className="field"><label className="label">Status</label>
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -445,7 +459,7 @@ function ReviewModal({ doc, onClose, onDone }: any) {
         <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="F.eks. uleselig / utløpt" /></div>
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
         <Btn className="full" onClick={onClose}>Avbryt</Btn>
-        <Btn variant="primary" className="full" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
+        <Btn variant="primary" className="full" onClick={save} disabled={busy || (status === "valid" && !viewed) || (status === "rejected" && !reason.trim())}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
       </div>
     </Modal>
   );
@@ -580,6 +594,9 @@ function Refunds() {
 
 function RefundModal({ onClose, onDone }: any) {
   const [tripId, setTripId] = useState('');
+  const [operationId] = useState(() => crypto.randomUUID());
+  const [mode, setMode] = useState('manual');
+  const [attempted, setAttempted] = useState(false);
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -587,22 +604,25 @@ function RefundModal({ onClose, onDone }: any) {
   const save = async () => {
     setBusy(true); setErr('');
     try {
-      await api.refund({ trip_id: tripId.trim(), amount: amount ? Number(amount) : undefined, reason: reason.trim() });
+      setAttempted(true);
+      await api.refund({ trip_id: tripId.trim(), amount: amount ? Number(amount) : undefined, reason: reason.trim(), operation_id: operationId, mode });
       onDone();
-    } catch (e: any) { setErr(e?.response?.data?.detail || 'Feil'); setBusy(false); }
+    } catch (e: any) { setErr(apiError(e)); setBusy(false); }
   };
   return (
-    <Modal title="Ny refusjon" sub="Refusjonen logges og er idempotent (ingen dobbel refusjon)." onClose={onClose}>
+    <Modal title="Ny refusjon" sub="Stripe sender penger tilbake. Manuell registrering sender ingen penger og må avstemmes separat." onClose={busy ? () => {} : onClose}>
+      <label className="field">Behandling<select className="select" value={mode} disabled={attempted} onChange={e => setMode(e.target.value)}><option value="manual">Registrer manuelt – ingen pengeoverføring</option><option value="stripe">Refunder bekreftet Stripe-betaling</option></select></label>
+      {attempted && <p className="dim">Ved feil: prøv igjen med samme operasjon. Verdiene er låst for å hindre dobbeltbehandling.</p>}
       {err && <div className="error-banner">{err}</div>}
       <div className="field"><label className="label">Tur-ID</label>
-        <input className="input mono" value={tripId} onChange={(e) => setTripId(e.target.value)} placeholder="fullstendig trip_id" /></div>
+        <input className="input mono" disabled={attempted} value={tripId} onChange={(e) => setTripId(e.target.value)} placeholder="fullstendig trip_id" /></div>
       <div className="field"><label className="label">Beløp (kr, tomt = full refusjon)</label>
-        <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="f.eks. 50" /></div>
+        <input className="input" type="number" min="1" step="1" disabled={attempted} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="f.eks. 50" /></div>
       <div className="field"><label className="label">Begrunnelse</label>
-        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Årsak til refusjon" /></div>
+        <input className="input" disabled={attempted} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Årsak til refusjon" /></div>
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
         <Btn className="full" onClick={onClose}>Avbryt</Btn>
-        <Btn variant="primary" className="full" onClick={save} disabled={busy || !tripId || !reason}>{busy ? 'Behandler…' : 'Refunder'}</Btn>
+        <Btn variant="primary" className="full" onClick={save} disabled={busy || !tripId.trim() || !reason.trim() || (!!amount && (!Number.isInteger(Number(amount)) || Number(amount) <= 0))}>{busy ? 'Behandler…' : mode === 'stripe' ? 'Refunder med Stripe' : 'Registrer manuelt'}</Btn>
       </div>
     </Modal>
   );
@@ -692,7 +712,7 @@ export function Settings() {
   const save = async () => {
     setBusy(true); setMsg('');
     try { await api.patchSettings({ default_commission: Number(comm) / 100 }); setMsg('Lagret'); reload(); }
-    catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    catch (e: any) { setMsg(apiError(e)); }
     finally { setBusy(false); }
   };
   if (loading) return <Loader />;
@@ -704,8 +724,8 @@ export function Settings() {
         <Card>
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
           <div className="field"><label className="label">Standard KJAPP-provisjon (%)</label>
-            <input className="input" type="number" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
-          {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
+            <input className="input" type="number" min="0" max="50" step="0.1" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
+          {isSuper ? <Btn variant="primary" onClick={save} disabled={busy || (status === "valid" && !viewed) || (status === "rejected" && !reason.trim())}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
             : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre.</div>}
           {msg && <div style={{ marginTop: 10, color: 'var(--green)', fontSize: 13 }}>{msg}</div>}
         </Card>
@@ -720,11 +740,11 @@ export function Settings() {
       <div className="section-title">Kjøretøyklasser</div>
       <Card>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-          {(data?.ride_classes || []).map((r: any, i: number) => (
-            <div key={i}><div className="strong">{r.name || r.type}</div>
+          {Object.entries(data?.ride_classes || {}).map(([type, r]: [string, any]) => (
+            <div key={type}><div className="strong">{r.label || r.name || type}</div>
               <div className="dim" style={{ fontSize: 12 }}>×{r.multiplier ?? r.price_multiplier ?? 1}</div></div>
           ))}
-          {!data?.ride_classes?.length && <div className="dim">Ingen klasser definert.</div>}
+          {!Object.keys(data?.ride_classes || {}).length && <div className="dim">Ingen klasser definert.</div>}
         </div>
       </Card>
     </>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef, useId } from 'react';
 import { http, apiError } from './api';
 
 export const fmtMoney = (v: any) =>
@@ -34,6 +34,8 @@ const STATUS_MAP: Record<string, { c: string; t?: string }> = {
   cancelled: { c: 'red', t: 'Avbrutt' }, cancelled_by_driver: { c: 'red', t: 'Avbrutt (sjåfør)' },
   captured: { c: 'green', t: 'Betalt' }, paid: { c: 'green', t: 'Betalt' },
   pending: { c: 'amber', t: 'Venter' }, failed: { c: 'red', t: 'Feilet' }, recorded: { c: 'gold', t: 'Registrert' },
+  unknown: { c: 'gray', t: 'Ikke bekreftet' }, processing: { c: 'amber', t: 'Behandles' },
+  reconciliation_required: { c: 'red', t: 'Må avstemmes' }, succeeded: { c: 'green', t: 'Gjennomført' },
   refunded: { c: 'gold', t: 'Refundert' }, authorized: { c: 'blue', t: 'Autorisert' },
   open: { c: 'amber', t: 'Åpen' }, in_progress: { c: 'blue', t: 'Under arbeid' },
   waiting_for_user: { c: 'gray', t: 'Venter bruker' }, resolved: { c: 'green', t: 'Løst' }, closed: { c: 'gray', t: 'Lukket' },
@@ -45,8 +47,8 @@ export const Pill = ({ status, label }: { status?: string; label?: string }) => 
   return <span className={`pill ${m.c}`}><span className="dot" />{label || m.t || status || '—'}</span>;
 };
 
-export const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`card ${className}`}>{children}</div>
+export const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, className = '', ...props }) => (
+  <div className={`card ${className}`} {...props}>{children}</div>
 );
 
 export const Kpi = ({ label, value, foot, accent }: any) => (
@@ -68,13 +70,37 @@ export const PageHead = ({ title, sub, right }: any) => (
   </div>
 );
 
+function useDialog(onClose: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement;
+    const root = ref.current!;
+    const focusables = () => Array.from(root.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]'));
+    (focusables()[0] || root).focus();
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); close.current(); }
+      if (e.key === 'Tab') {
+        const nodes = focusables(), first = nodes[0], last = nodes[nodes.length - 1];
+        if (!first) { e.preventDefault(); return; }
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    root.addEventListener('keydown', key);
+    return () => { root.removeEventListener('keydown', key); previous?.focus(); };
+  }, []);
+  return ref;
+}
+
 export function Drawer({ title, onClose, children }: any) {
+  const ref = useDialog(onClose), id = useId();
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+      <div className="drawer" role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1} ref={ref} onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{title}</div>
-          <button className="x" onClick={onClose}>✕</button>
+          <div id={id} style={{ fontWeight: 700, fontSize: 16 }}>{title}</div>
+          <button className="x" aria-label="Lukk" onClick={onClose}>✕</button>
         </div>
         <div className="drawer-body">{children}</div>
       </div>
@@ -83,10 +109,11 @@ export function Drawer({ title, onClose, children }: any) {
 }
 
 export function Modal({ title, sub, onClose, children }: any) {
+  const ref = useDialog(onClose), id = useId();
   return (
     <div className="modal-wrap" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{title}</h3>{sub && <div className="sub">{sub}</div>}{children}
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={id} tabIndex={-1} ref={ref} onClick={(e) => e.stopPropagation()}>
+        <h3 id={id}>{title}</h3>{sub && <div className="sub">{sub}</div>}{children}
       </div>
     </div>
   );
@@ -143,31 +170,26 @@ export function Pagination({ page, totalPages, total, onPage }: any) {
   );
 }
 
-// ---- data hooks ----
+// ---- data hooks: only the latest request may update the view ----
 export function useAsync<T = any>(fn: () => Promise<T>, deps: any[] = []) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const version = useRef(0);
   const reload = useCallback(() => {
+    const current = ++version.current;
     setLoading(true); setErr('');
-    fn().then((d) => setData(d)).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fn().then(d => { if (current === version.current) setData(d); })
+      .catch(e => { if (current === version.current) setErr(apiError(e)); })
+      .finally(() => { if (current === version.current) setLoading(false); });
   }, deps);
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); return () => { ++version.current; }; }, [reload]);
   return { data, loading, err, reload, setData };
 }
 
 export function usePaged(path: string, params: any) {
-  const [state, setState] = useState<any>({ rows: [], total: 0, page: 1, pageSize: params.page_size || 50, totalPages: 1, loading: true, err: '', extra: {} });
   const key = JSON.stringify({ path, params });
-  const reload = useCallback(() => {
-    setState((s: any) => ({ ...s, loading: true, err: '' }));
-    http.get(path, { params }).then((r) => {
-      const d = r.data;
-      setState({ rows: d.items || [], total: d.total || 0, page: d.page || 1, pageSize: d.page_size || (params.page_size || 50), totalPages: d.total_pages || 1, loading: false, err: '', extra: d });
-    }).catch((e) => setState((s: any) => ({ ...s, loading: false, err: apiError(e) })));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  useEffect(() => { reload(); }, [reload]);
-  return { ...state, reload };
+  const { data, loading, err, reload } = useAsync(() => http.get(path, { params }).then(r => r.data), [key]);
+  return { rows: data?.items || [], total: data?.total || 0, totalPages: Math.max(1, data?.total_pages || 1),
+    page: data?.page || 1, extra: data || {}, loading, err, reload };
 }

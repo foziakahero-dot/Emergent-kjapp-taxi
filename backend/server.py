@@ -29,6 +29,8 @@ from bson.errors import InvalidId
 import pyotp
 import qrcode
 import uuid
+import re
+from admin_safety import public_user, payment_status, bonus_transaction, process_refund, PublicJSONResponse
 
 try:
     from pywebpush import webpush, WebPushException
@@ -831,7 +833,7 @@ async def lifespan(app: FastAPI):
     dispatch_task.cancel()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, default_response_class=PublicJSONResponse)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=compute_cors_origins(APP_ENV, os.environ.get("FRONTEND_URL", "")),
@@ -1423,7 +1425,7 @@ async def reset_password(body: ResetPasswordRequest):
 
 @api.get("/auth/me")
 async def me(current=Depends(get_current_user)):
-    return current
+    return public_user(current)
 
 
 # ---- Trips ----
@@ -2334,6 +2336,19 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         "driver_user_id": current["id"],
         "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    fleet_id = current.get("fleet_id")
+    fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id)}) if fleet_id else None
+    if fleet and fleet.get("status") == "suspended":
+        raise HTTPException(403, "Løyvehaveren er suspendert")
+    rate = await _platform_commission()
+    price = int(trip_pre.get("price") or 0)
+    updates["accounting"] = {
+        "platform_rate": rate, "platform_revenue": round(price * rate),
+        "driver_net": price - round(price * rate), "fleet_id": fleet_id,
+        "fleet_rate": (fleet or {}).get("commission_rate"),
+        "fleet_commission": round(price * fleet["commission_rate"]) if fleet and fleet.get("commission_rate") is not None else None,
+        "captured_at": datetime.now(timezone.utc).isoformat(),
     }
     if d_lat is not None and d_lng is not None:
         route = await osrm_route(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"])
@@ -3496,14 +3511,15 @@ async def admin_bonus_payouts(limit: int = 50, current=Depends(require_admin)):
 @api.get("/admin/overview")
 async def admin_overview(current=Depends(require_admin)):
     """KPI dashboard for Operations Control Center."""
-    today = datetime.now(timezone.utc).date().isoformat()
-    yday = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+    local_today = datetime.now(OSLO_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = local_today.astimezone(timezone.utc).isoformat()
+    yday = (local_today - timedelta(days=1)).astimezone(timezone.utc).isoformat()
 
     async def count(col, q): return await col.count_documents(q)
 
     active_fleets = await count(db.fleets, {"status": {"$ne": "suspended"}})
     suspended_fleets = await count(db.fleets, {"status": "suspended"})
-    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["submitted", "under_review", "documents_required"]}})
+    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["pending", "submitted", "under_review", "documents_required"]}})
     approved_drivers = await count(db.users, {"role": "driver", "approved": True})
     pending_drivers = await count(db.users, {"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
     drivers_online = await count(db.users, {"role": "driver", "online": True})
@@ -3511,7 +3527,7 @@ async def admin_overview(current=Depends(require_admin)):
     trips_today = await count(db.trips, {"created_at": {"$gte": today}})
     trips_yday = await count(db.trips, {"created_at": {"$gte": yday, "$lt": today}})
     completed_today = await count(db.trips, {"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}})
-    cancelled_today = await count(db.trips, {"status": "cancelled", "created_at": {"$gte": today}})
+    cancelled_today = await count(db.trips, {"status": {"$in": ["cancelled", "cancelled_by_driver"]}, "created_at": {"$gte": today}})
 
     gmv_today = 0
     kjapp_revenue_today = 0
@@ -3627,9 +3643,9 @@ async def admin_fleets_full(status: Optional[str] = None, q: Optional[str] = Non
     if status and status != "all": filt["status"] = status
     if q:
         filt["$or"] = [
-            {"name": {"$regex": q, "$options": "i"}},
-            {"org_number": {"$regex": q, "$options": "i"}},
-            {"contact_email": {"$regex": q, "$options": "i"}},
+            {"name": {"$regex": re.escape(q[:200]), "$options": "i"}},
+            {"org_number": {"$regex": re.escape(q[:200]), "$options": "i"}},
+            {"contact_email": {"$regex": re.escape(q[:200]), "$options": "i"}},
         ]
     fleets = []
     async for f in db.fleets.find(filt).sort("created_at", -1).limit(300):
@@ -3644,7 +3660,7 @@ async def admin_fleets_full(status: Optional[str] = None, q: Optional[str] = Non
 async def admin_users(q: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
     if q:
-        rx = {"$regex": q, "$options": "i"}
+        rx = {"$regex": re.escape(q[:200]), "$options": "i"}
         filt["$or"] = [{"fullName": rx}, {"email": rx}, {"phone": rx}]
     if status == "disabled": filt["disabled"] = True
     elif status == "active": filt["disabled"] = {"$ne": True}
@@ -3655,7 +3671,7 @@ async def admin_users(q: Optional[str] = None, status: Optional[str] = None, pag
         u["id"] = str(u["_id"])
         u.pop("_id", None)
         out.append(u)
-    return _paged(out, total, page, page_size, "users")
+    return _paged([public_user(u) for u in out], total, page, page_size, "users")
 
 
 @api.get("/admin/drivers")
@@ -4032,7 +4048,7 @@ async def get_payment_status(session_id: str):
     if record.get("payment_status") != "paid":
         try:
             s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
+            if s.payment_status == "paid":
                 await db.payment_transactions.update_one(
                     {"session_id": session_id, "payment_status": {"$ne": "paid"}},
                     {"$set": {
@@ -4046,7 +4062,7 @@ async def get_payment_status(session_id: str):
                 if record.get("trip_id"):
                     await db.trips.update_one(
                         {"trip_id": record["trip_id"]},
-                        {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                        {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat(), "stripe_payment_intent": s.payment_intent}},
                     )
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
@@ -4070,7 +4086,7 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(400, "Webhook error")
     obj, t = event["data"]["object"], event["type"]
-    if t == "checkout.session.completed":
+    if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded") and obj.get("payment_status") == "paid":
         r = await db.payment_transactions.find_one_and_update(
             {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {
@@ -4083,7 +4099,7 @@ async def stripe_webhook(request: Request):
         if r and r.get("trip_id"):
             await db.trips.update_one(
                 {"trip_id": r["trip_id"]},
-                {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat(), "stripe_payment_intent": obj.get("payment_intent")}},
             )
     elif t == "checkout.session.expired":
         await db.payment_transactions.update_one(
@@ -4775,7 +4791,7 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
     elif status == "online": filt["online"] = True
     if fleet_id: filt["fleet_id"] = fleet_id
     if q:
-        rx = {"$regex": q, "$options": "i"}
+        rx = {"$regex": re.escape(q[:200]), "$options": "i"}
         filt["$and"] = [{"$or": [{"fullName": rx}, {"email": rx}, {"plate": rx}, {"car": rx}]}]
     page, page_size, skip = _page_params(page, page_size)
     total = await db.users.count_documents(filt)
@@ -4813,7 +4829,7 @@ async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = 
     filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
     if vehicle_type and vehicle_type != "all": filt["vehicle_type"] = vehicle_type
     if q:
-        rx = {"$regex": q, "$options": "i"}
+        rx = {"$regex": re.escape(q[:200]), "$options": "i"}
         filt["$or"] = [{"car": rx}, {"plate": rx}, {"fullName": rx}]
     page, page_size, skip = _page_params(page, page_size)
     total = await db.users.count_documents(filt)
@@ -4842,7 +4858,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
         if date_to: cr["$lte"] = date_to + "T23:59:59.999Z"
         filt["created_at"] = cr
     if q:
-        rx = {"$regex": q, "$options": "i"}
+        rx = {"$regex": re.escape(q[:200]), "$options": "i"}
         filt["$or"] = [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]
     page, page_size, skip = _page_params(page, page_size)
     total = await db.trips.count_documents(filt)
@@ -4863,8 +4879,9 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
-            "driver_earnings": int(round((t.get("price") or 0) * (1 - commission))) if finished else None,
-            "payment_status": t.get("payment_status") or ("pending" if finished else None),
+            "driver_earnings": (t.get("accounting") or {}).get("driver_net") if finished else None,
+            "accounting_status": "verified" if t.get("accounting") else "legacy_unverified",
+            "payment_status": payment_status(t),
             "accepted_at": t.get("driver_route_started_at"),
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
             "passenger_rating": t.get("passenger_rating"),
@@ -4969,7 +4986,7 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
     filt = {"is_deleted": {"$ne": True}}
     if scope and scope != "all": filt["scope"] = scope
     if q:
-        rx = {"$regex": q, "$options": "i"}
+        rx = {"$regex": re.escape(q[:200]), "$options": "i"}
         filt["$or"] = [{"original_filename": rx}, {"scope": rx}]
     page, page_size, skip = _page_params(page, page_size)
     total = await db.uploaded_files.count_documents(filt)
@@ -5008,20 +5025,20 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
             "owner_name": o.get("name") or app_names.get(f.get("application_token")),
             "owner_email": o.get("email"),
             "review_status": rs, "expiry": exp, "compliance": _compliance(rs, exp),
-            "reviewed_by": f.get("reviewed_by"), "reviewed_at": f.get("reviewed_at"),
+            "reviewed_by": f.get("reviewed_by"), "reviewed_at": f.get("reviewed_at"), "review_reason": f.get("review_reason"),
         })
     all_scopes = set()
     async for s in db.uploaded_files.aggregate([{"$match": {"is_deleted": {"$ne": True}}}, {"$group": {"_id": "$scope"}}]):
         if s.get("_id"): all_scopes.add(s["_id"])
     summary = {"VALID": 0, "EXPIRING": 0, "EXPIRED": 0, "PENDING": 0, "REJECTED": 0}
-    async for f in db.uploaded_files.find(filt, {"review_status": 1, "review_expiry": 1}).limit(3000):
+    async for f in db.uploaded_files.find(filt, {"review_status": 1, "review_expiry": 1}):
         summary[_compliance(f.get("review_status") or "pending", f.get("review_expiry"))] += 1
     return {**_paged(out, total, page, page_size, "documents"), "scopes": sorted(all_scopes), "summary": summary}
 
 
 class DocumentReviewRequest(BaseModel):
     status: Literal["valid", "rejected", "pending"]
-    expiry: Optional[str] = None  # YYYY-MM-DD (for VALID docs that expire)
+    expiry: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")  # YYYY-MM-DD (for VALID docs that expire)
     reason: Optional[str] = None
 
 
@@ -5033,6 +5050,11 @@ async def admin_document_review(file_id: str, body: DocumentReviewRequest, curre
         except Exception: doc = None
     if not doc:
         raise HTTPException(404, "Fant ikke dokument")
+    if body.expiry:
+        try: datetime.strptime(body.expiry, "%Y-%m-%d")
+        except ValueError: raise HTTPException(400, "Ugyldig utløpsdato")
+    if body.status == "rejected" and not (body.reason or "").strip():
+        raise HTTPException(400, "Begrunnelse kreves ved avvisning")
     prev = {"review_status": doc.get("review_status"), "expiry": doc.get("review_expiry")}
     await db.uploaded_files.update_one({"_id": doc["_id"]}, {"$set": {
         "review_status": body.status,
@@ -5048,9 +5070,11 @@ async def admin_document_review(file_id: str, body: DocumentReviewRequest, curre
 
 # ---- Refunds (finance, audited, idempotent) ----
 class RefundRequest(BaseModel):
-    trip_id: str
-    amount: Optional[int] = None  # kr; default = full remaining eligible amount
-    reason: str
+    trip_id: str = Field(min_length=1, max_length=100)
+    amount: Optional[int] = Field(default=None, gt=0, strict=True)
+    reason: str = Field(min_length=1, max_length=1000)
+    operation_id: uuid.UUID
+    mode: Literal["manual", "stripe"]
 
 
 @api.get("/admin/refunds")
@@ -5068,51 +5092,9 @@ async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: 
 
 @api.post("/admin/refunds")
 async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
-    if not (body.reason or "").strip():
+    if not body.reason.strip():
         raise HTTPException(400, "Begrunnelse kreves")
-    trip = await db.trips.find_one({"trip_id": body.trip_id})
-    if not trip:
-        raise HTTPException(404, "Fant ikke tur")
-    if trip.get("status") not in ("arrived", "completed", "rated"):
-        raise HTTPException(400, "Kan bare refundere fullførte turer")
-    gross = int(trip.get("price") or 0)
-    already = int(trip.get("refunded_total") or 0)
-    eligible = gross - already
-    if eligible <= 0:
-        raise HTTPException(409, "Turen er allerede fullt refundert")
-    amount = int(body.amount) if body.amount is not None else eligible
-    if amount <= 0 or amount > eligible:
-        raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Attempt a real Stripe refund ONLY if a captured charge/intent is stored on the trip.
-    provider, provider_ref, prov_status = "manual", None, "recorded"
-    pi = trip.get("stripe_payment_intent") or trip.get("payment_intent_id") or trip.get("charge_id")
-    if pi and stripe.api_key:
-        try:
-            kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"): kwargs["charge"] = pi
-            else: kwargs["payment_intent"] = pi
-            sr = stripe.Refund.create(**kwargs)
-            provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
-        except stripe.error.StripeError as e:
-            raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "trip_id": body.trip_id, "user_id": trip.get("user_id"),
-        "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
-        "provider": provider, "provider_ref": provider_ref, "status": prov_status,
-        "admin_id": current["id"], "admin_email": current.get("email"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.refunds.insert_one(dict(doc))
-    new_total = already + amount
-    await db.trips.update_one({"trip_id": body.trip_id}, {"$set": {
-        "refunded_total": new_total,
-        "refund_status": "full" if new_total >= gross else "partial",
-    }})
-    await _audit(current, "refund.create", "trip", body.trip_id,
-                 {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
-                 body.reason.strip())
-    return doc
+    return await process_refund(db, stripe, body, current)
 
 
 # ---- Transactions ledger (derived from real records: trips / refunds / payouts) ----
@@ -5139,16 +5121,18 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price, "commission": round(price * commission), "driver_net": round(price * (1 - commission)),
-                "provider": t.get("payment_method") or "card", "status": t.get("payment_status") or "captured",
+                "provider": t.get("payment_method") or "card", "status": payment_status(t),
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
     if want in ("", "REFUND"):
         async for r in db.refunds.find({"created_at": {"$gte": lo, "$lte": hi}}):
+            if fleet_id and r.get("fleet_id") != fleet_id: continue
+            if r.get("status") in ("failed", "canceled"): continue
             rows.append({
                 "id": f"refund_{r.get('id')}", "type": "REFUND", "ride": r.get("trip_id"),
                 "customer_id": r.get("user_id"), "amount": -int(r.get("amount") or 0),
                 "provider": r.get("provider"), "status": r.get("status"),
-                "fleet_id": None, "timestamp": r.get("created_at"), "reason": r.get("reason"),
+                "fleet_id": r.get("fleet_id"), "timestamp": r.get("created_at"), "reason": r.get("reason"),
             })
     if want in ("", "PAYOUT"):
         async for p in db.fleet_payouts.find({"period_end": {"$gte": lo[:10], "$lte": hi[:10]}}):
@@ -5159,10 +5143,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                          "fleet_id": p.get("fleet_id"), "timestamp": p.get("period_end")})
         if not fleet_id:
             async for p in db.bonus_payouts.find({"earned_at": {"$gte": lo, "$lte": hi}}):
-                rows.append({"id": f"bonus_{p.get('_id')}", "type": "PAYOUT", "ride": None,
-                             "recipient": p.get("driver_id"), "amount": int(p.get("amount") or 0),
-                             "provider": "bonus", "status": "paid", "fleet_id": None,
-                             "timestamp": p.get("earned_at")})
+                rows.append(bonus_transaction(p))
     rows.sort(key=lambda r: r.get("timestamp") or "", reverse=True)
     total = len(rows)
     page_rows = rows[skip:skip + page_size]
@@ -5377,7 +5358,7 @@ async def admin_search(q: str, current=Depends(require_admin)):
     q = (q or "").strip()
     if len(q) < 2:
         return {"query": q, "trips": [], "drivers": [], "customers": [], "fleets": []}
-    rx = {"$regex": q, "$options": "i"}
+    rx = {"$regex": re.escape(q[:200]), "$options": "i"}
     trips = []
     async for t in db.trips.find({"$or": [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]}).sort("created_at", -1).limit(10):
         trips.append({

@@ -30,7 +30,23 @@ http.interceptors.response.use(
 );
 
 export const apiError = (e: any) =>
-  e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+  formatError(e?.response?.data?.detail || e?.message || 'Noe gikk galt');
+
+export function formatError(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((d) => d?.msg || 'Ugyldig verdi').join('. ');
+  return 'Forespørselen kunne ikke behandles. Prøv igjen.';
+}
+
+export async function download(path: string, filename: string, params?: any) {
+  const r = await http.get(path, { params, responseType: 'blob' });
+  const url = URL.createObjectURL(r.data);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export const post = (path: string, body: any = {}) => http.post(path, body).then(r => r.data);
+export const patch = (path: string, body: any) => http.patch(path, body).then(r => r.data);
 
 export const api = {
   login: (email: string, password: string) =>
