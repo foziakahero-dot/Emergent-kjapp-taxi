@@ -31,8 +31,10 @@ http.interceptors.response.use(
   },
 );
 
-export const apiError = (e: any) =>
-  e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+export const apiError = (e: any) => {
+  if (e?.response?.status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
+  return e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+};
 
 const encodeStoragePath = (path: string) =>
   String(path || '').split('/').map((part) => encodeURIComponent(part)).join('/');
@@ -43,6 +45,11 @@ export const api = {
   verify2fa: (twofa_token: string, code: string) =>
     http.post('/auth/2fa/verify-login', { twofa_token, code }).then((r) => r.data),
   me: () => http.get('/auth/me').then((r) => r.data),
+  logout: () => http.post('/auth/logout').then((r) => r.data),
+  twofaStatus: () => http.get('/auth/2fa/status').then((r) => r.data),
+  twofaSetup: () => http.post('/auth/2fa/setup').then((r) => r.data),
+  twofaEnable: (code: string) => http.post('/auth/2fa/enable', { code }).then((r) => r.data),
+  twofaDisable: (password: string, code: string) => http.post('/auth/2fa/disable', { password, code }).then((r) => r.data),
 
   overview: () => http.get('/admin/overview').then((r) => r.data),
   live: () => http.get('/admin/live').then((r) => r.data),

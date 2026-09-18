@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from './api';
+import { api, apiError } from './api';
 import { useAuth } from './auth';
+import LiveMap from './LiveMap';
 import {
   Bars, Btn, Card, Drawer, Empty, ErrorBanner, KV, Kpi, Loader, Modal, PageHead, Pagination,
   Pill, Route as RouteView, fmtDate, fmtDay, fmtMoney, useAsync, usePaged,
@@ -15,20 +16,42 @@ function useDebounced<T>(value: T, ms = 300) {
 
 const PAGE = 25;
 
+function hasFreshGps(driver: any) {
+  const seen = Date.parse(driver.last_location_at || '');
+  const age = Date.now() - seen;
+  return Number.isFinite(seen) && age >= 0 && age <= 2 * 60_000 &&
+    driver.lat != null && driver.lng != null &&
+    Number.isFinite(Number(driver.lat)) && Math.abs(Number(driver.lat)) <= 90 &&
+    Number.isFinite(Number(driver.lng)) && Math.abs(Number(driver.lng)) <= 180;
+}
+
+function hasRecentSignal(value: any) {
+  const seen = Date.parse(value || '');
+  const age = Date.now() - seen;
+  return Number.isFinite(seen) && age >= 0 && age <= 2 * 60_000;
+}
+
 /* ----------------------------- Dashboard ----------------------------- */
 export function Dashboard() {
   const ov = useAsync(() => api.overview(), []);
   const fin = useAsync(() => api.finance(30), []);
+  const live = useAsync(() => api.live(), []);
+  const twofa = useAsync(() => api.twofaStatus(), []);
   if (ov.loading) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
   const d = ov.data || {};
   const delta = (d.trips?.today ?? 0) - (d.trips?.yesterday ?? 0);
+  const freshCount = (live.data?.drivers || []).filter(hasFreshGps).length;
+  const staleOpen = live.data?.trips?.filter((t: any) => t.created_at && Date.now() - Date.parse(t.created_at) > 2 * 60 * 60_000).length ?? d.trips?.stale_active ?? 0;
   return (
     <>
       <PageHead title="Dashbord" sub={`Oppdatert ${fmtDate(d.as_of)}`} />
+      {twofa.data?.required && !twofa.data?.enabled && <div className="error-banner" role="alert">
+        Administratorkontoen mangler totrinnsbekreftelse. <a href="#/settings" style={{ textDecoration: 'underline' }}>Aktiver 2FA i Innstillinger.</a>
+      </div>}
       <div className="grid cards">
-        <Kpi label="Aktive turer nå" value={d.trips?.active ?? 0} accent
-          foot={<span className="dim">{d.drivers?.online ?? 0} sjåfører online</span>} />
+        <Kpi label="Åpne turer" value={d.trips?.active ?? 0} accent
+          foot={<span className="dim">{live.loading ? 'Kontrollerer GPS…' : live.err ? 'GPS-status utilgjengelig' : `${freshCount} sjåfører med fersk GPS`}{staleOpen ? ` · ${staleOpen} turer eldre enn 2t` : ''}</span>} />
         <Kpi label="Turer i dag" value={d.trips?.today ?? 0}
           foot={<span className={`delta ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs i går</span>} />
         <Kpi label="Brutto i dag (GMV)" value={fmtMoney(d.finance?.gmv_today)}
@@ -44,7 +67,7 @@ export function Dashboard() {
       <div className="section-title">Krever oppmerksomhet</div>
       <div className="grid cards">
         <Shortcut ic="☗" n={d.drivers?.pending ?? 0} l="Sjåfører til godkjenning" c="amber" />
-        <Shortcut ic="◉" n={d.trips?.active ?? 0} l="Aktive turer" c="blue" />
+        <Shortcut ic="◉" n={d.trips?.active ?? 0} l="Åpne turer" c="blue" />
         <Shortcut ic="✆" n={d.support?.open ?? 0} l="Åpne supportsaker" c="red" />
         <Shortcut ic="≣" n={d.finance?.pending_payouts ?? 0} l="Utbetalinger i kø" c="gold" />
       </div>
@@ -70,35 +93,41 @@ const Shortcut = ({ ic, n, l, c }: any) => (
 export function Live() {
   const { data, loading, err, reload } = useAsync(() => api.live(), []);
   useEffect(() => { const i = setInterval(reload, 5000); return () => clearInterval(i); }, [reload]);
+  const freshDrivers = (data?.drivers || []).filter(hasFreshGps);
+  const staleDrivers = [...(data?.stale_drivers || []), ...(data?.drivers || []).filter((d: any) => !freshDrivers.includes(d))];
   return (
     <>
       <PageHead title="Live drift" sub={data ? `Oppdatert ${fmtDate(data.as_of)} · auto hvert 5s` : ''}
         right={<Btn variant="sm" onClick={reload}>Oppdater</Btn>} />
       <ErrorBanner msg={err} />
       {loading && !data ? <Loader /> : (
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <>
+        <LiveMap drivers={freshDrivers.map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }))} />
+        <div className="grid live-columns">
           <div>
-            <div className="section-title" style={{ marginTop: 0 }}>Sjåfører online ({data?.drivers?.length || 0})</div>
+            <div className="section-title" style={{ marginTop: 0 }}>Sjåfører med fersk GPS ({freshDrivers.length})</div>
             <div className="tablewrap">
               <table><thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Sist sett</th></tr></thead>
                 <tbody>
-                  {(data?.drivers || []).map((x: any) => (
+                  {freshDrivers.map((x: any) => (
                     <tr key={x.id}><td className="strong">{x.name}</td>
                       <td>{x.car} <span className="dim mono">{x.plate}</span></td>
                       <td className="dim">{x.fleet_name || '—'}</td>
                       <td className="dim nowrap">{fmtDate(x.last_location_at)}</td></tr>
                   ))}
-                  {!data?.drivers?.length && <tr><td colSpan={4}><Empty title="Ingen sjåfører online" /></td></tr>}
+                  {!freshDrivers.length && <tr><td colSpan={4}><Empty title="Ingen sjåfører med fersk posisjon" /></td></tr>}
                 </tbody></table>
             </div>
           </div>
           <div>
-            <div className="section-title" style={{ marginTop: 0 }}>Aktive turer ({data?.trips?.length || 0})</div>
+            <div className="section-title" style={{ marginTop: 0 }}>Åpne turer ({data?.trips?.length || 0})</div>
             <div className="tablewrap">
               <table><thead><tr><th>Status</th><th>Rute</th><th>Sjåfør</th><th className="right">Pris</th></tr></thead>
                 <tbody>
                   {(data?.trips || []).map((x: any) => (
-                    <tr key={x.trip_id}><td><Pill status={x.status} /></td>
+                    <tr key={x.trip_id}><td><Pill status={x.status} />
+                      {x.created_at && Date.now() - Date.parse(x.created_at) > 2 * 60 * 60_000 &&
+                        <div className="cell-sub" style={{ color: 'var(--amber)' }}>Åpen over 2 timer · undersøk</div>}</td>
                       <td><div>{x.pickup_address}</div><div className="cell-sub">→ {x.dropoff_address}</div></td>
                       <td>{x.driver_name || <span className="dim">—</span>}</td>
                       <td className="right mono">{fmtMoney(x.price)}</td></tr>
@@ -108,6 +137,10 @@ export function Live() {
             </div>
           </div>
         </div>
+        {staleDrivers.length > 0 && <div className="live-stale-note">
+          {staleDrivers.length} sjåfør{staleDrivers.length === 1 ? '' : 'er'} har utdatert eller manglende GPS og telles ikke som online.
+        </div>}
+        </>
       )}
     </>
   );
@@ -237,9 +270,9 @@ export function Drivers() {
                 <td><div className="strong">{d.name}</div><div className="cell-sub">{d.email}</div></td>
                 <td>{d.car || '—'} <span className="dim mono">{d.plate}</span></td>
                 <td className="dim">{d.fleet_name || '—'}</td>
-                <td className="mono">{d.completed ?? 0}</td>
+                <td className="mono">{d.trips_completed ?? d.completed ?? 0}</td>
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
-                <td>{d.online ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent" /> : <Pill status="pending" label="Venter" />}</td>
+                <td>{d.online && hasRecentSignal(d.last_location_at) ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent · offline" /> : <Pill status="pending" label="Venter" />}</td>
                 <td className="right">
                   <Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>
                     {d.approved ? 'Suspender' : 'Godkjenn'}
@@ -355,7 +388,7 @@ export function Vehicles() {
                 <td className="dim">{v.vehicle_type || '—'}</td>
                 <td>{v.driver_name || '—'}</td>
                 <td className="dim">{v.fleet_name || '—'}</td>
-                <td>{v.online ? <Pill status="in_trip" label="Online" /> : <Pill status={v.approved ? 'completed' : 'pending'} label={v.approved ? 'Aktiv' : 'Venter'} />}</td>
+                <td>{v.online && hasRecentSignal(v.last_location_at) ? <Pill status="in_trip" label="Online" /> : <Pill status={v.approved ? 'completed' : 'pending'} label={v.approved ? 'Godkjent · offline' : 'Venter'} />}</td>
               </tr>
             )) : <tr><td colSpan={6}><Empty title="Ingen kjøretøy" /></td></tr>}
           </tbody>
@@ -681,6 +714,81 @@ export function Audit() {
 }
 
 /* ----------------------------- Settings ----------------------------- */
+function TwoFactorCard() {
+  const status = useAsync(() => api.twofaStatus(), []);
+  const [setup, setSetup] = useState<any>(null);
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const begin = async () => {
+    setBusy(true); setMsg(''); setBackupCodes([]);
+    try { setSetup(await api.twofaSetup()); }
+    catch (e) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  const enable = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const result = await api.twofaEnable(code.trim());
+      setBackupCodes(result.backup_codes || []);
+      setSetup(null); setCode(''); setMsg('Totrinnsbekreftelse er aktivert. Lagre reservekodene trygt.');
+      status.reload();
+    } catch (e) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  const disable = async () => {
+    setBusy(true); setMsg('');
+    try {
+      await api.twofaDisable(password, code.trim());
+      setPassword(''); setCode(''); setMsg('Totrinnsbekreftelse er deaktivert.');
+      status.reload();
+    } catch (e) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Card style={{ gridColumn: '1 / -1' }}>
+      <div className="section-title" style={{ marginTop: 0 }}>Kontosikkerhet</div>
+      {status.loading ? <Loader /> : status.data?.enabled ? (
+        <>
+          <Pill status="completed" label="Totrinnsbekreftelse aktiv" />
+          <div className="dim" style={{ margin: '12px 0' }}>Passord, autentiseringskode og engangskoder beskytter administratorkontoen.</div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 620 }}>
+            <div className="field"><label className="label">Nåværende passord</label>
+              <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <div className="field"><label className="label">Kode fra autentiseringsappen</label>
+              <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
+          </div>
+          <Btn onClick={disable} disabled={busy || !password || !code}>{busy ? 'Arbeider…' : 'Deaktiver 2FA'}</Btn>
+        </>
+      ) : setup ? (
+        <>
+          <div className="dim" style={{ marginBottom: 12 }}>Skann QR-koden i en autentiseringsapp og skriv inn den seks-sifrede koden.</div>
+          <img src={setup.qr} alt="QR-kode for totrinnsbekreftelse" width={180} height={180} style={{ background: '#fff', padding: 8, borderRadius: 12 }} />
+          <div className="mono" style={{ margin: '10px 0 14px', wordBreak: 'break-all' }}>{setup.secret}</div>
+          <div className="field" style={{ maxWidth: 320 }}><label className="label">Bekreftelseskode</label>
+            <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
+          <Btn variant="primary" onClick={enable} disabled={busy || !code}>{busy ? 'Aktiverer…' : 'Aktiver 2FA'}</Btn>
+        </>
+      ) : (
+        <>
+          <Pill status="pending" label="Totrinnsbekreftelse er ikke aktiv" />
+          <div className="dim" style={{ margin: '12px 0' }}>Aktiver 2FA før panelet brukes med produksjonsdata.</div>
+          <Btn variant="primary" onClick={begin} disabled={busy}>{busy ? 'Klargjør…' : 'Sett opp 2FA'}</Btn>
+        </>
+      )}
+      {backupCodes.length > 0 && <div style={{ marginTop: 18 }}>
+        <div className="strong">Reservekoder – vises bare nå</div>
+        <div className="mono" style={{ marginTop: 8, lineHeight: 1.8 }}>{backupCodes.join('  ·  ')}</div>
+      </div>}
+      {msg && <div className={msg.includes('aktivert') || msg.includes('deaktivert') ? 'dim' : 'error-banner'} style={{ marginTop: 12 }}>{msg}</div>}
+    </Card>
+  );
+}
+
 export function Settings() {
   const { user } = useAuth();
   const { data, loading, err, reload } = useAsync(() => api.list('/admin/settings', {}), []);
@@ -689,6 +797,9 @@ export function Settings() {
   const [msg, setMsg] = useState('');
   useEffect(() => { if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100))); }, [data]);
   const isSuper = user?.role === 'superadmin';
+  const rideClasses = Array.isArray(data?.ride_classes)
+    ? data.ride_classes
+    : Object.entries(data?.ride_classes || {}).map(([type, value]: [string, any]) => ({ type, ...(value || {}) }));
   const save = async () => {
     setBusy(true); setMsg('');
     try { await api.patchSettings({ default_commission: Number(comm) / 100 }); setMsg('Lagret'); reload(); }
@@ -701,6 +812,7 @@ export function Settings() {
       <PageHead title="Innstillinger" sub={`Sist oppdatert ${fmtDate(data?.updated_at)}`} />
       <ErrorBanner msg={err} />
       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 820 }}>
+        <TwoFactorCard />
         <Card>
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
           <div className="field"><label className="label">Standard KJAPP-provisjon (%)</label>
@@ -720,11 +832,11 @@ export function Settings() {
       <div className="section-title">Kjøretøyklasser</div>
       <Card>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-          {(data?.ride_classes || []).map((r: any, i: number) => (
-            <div key={i}><div className="strong">{r.name || r.type}</div>
+          {rideClasses.map((r: any, i: number) => (
+            <div key={r.type || i}><div className="strong">{r.label || r.name || r.type}</div>
               <div className="dim" style={{ fontSize: 12 }}>×{r.multiplier ?? r.price_multiplier ?? 1}</div></div>
           ))}
-          {!data?.ride_classes?.length && <div className="dim">Ingen klasser definert.</div>}
+          {!rideClasses.length && <div className="dim">Ingen klasser definert.</div>}
         </div>
       </Card>
     </>
