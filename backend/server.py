@@ -3150,7 +3150,9 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     """Admin creates a fleet, links an existing (or new) user as fleet_owner."""
     owner_email = body.owner_email.strip().lower()
     owner = await db.users.find_one({"email": owner_email})
+    new_owner = False
     if not owner:
+        new_owner = True
         # Auto-create fleet_owner user with random password (they log in via password reset later)
         temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
@@ -3180,7 +3182,36 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
-    await _audit(current, "fleet.create", "fleet", fleet_id, None, {"name": body.name, "owner_email": owner_email, "commission_rate": body.commission_rate})
+    onboarding_email_sent = False
+    if new_owner:
+        # Complete manual onboarding by sending the new fleet owner directly into the
+        # existing secure password-reset flow. The admin never needs to handle/share
+        # the randomly generated temporary password.
+        now = datetime.now(timezone.utc)
+        reset_token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.insert_one({
+            "token": reset_token,
+            "user_id": owner_id,
+            "email": owner_email,
+            "created_at": now,
+            "expires_at": now + timedelta(hours=24),
+            "used": False,
+        })
+        fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
+        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
+        reset_url = f"{frontend}/reset-password/{reset_token}"
+        onboarding_email_sent = bool(send_email(
+            owner_email,
+            "Velkommen som løyvehaver i KJAPP",
+            email_password_reset_html(reset_url),
+        ))
+    fleet_doc["onboarding_email_sent"] = onboarding_email_sent
+    await _audit(current, "fleet.create", "fleet", fleet_id, None, {
+        "name": body.name,
+        "owner_email": owner_email,
+        "commission_rate": body.commission_rate,
+        "onboarding_email_sent": onboarding_email_sent,
+    })
     return fleet_doc
 
 
