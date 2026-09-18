@@ -4455,6 +4455,12 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(400, "Webhook error")
     obj, t = event["data"]["object"], event["type"]
+    if t in ("refund.created", "refund.updated", "refund.failed"):
+        refund_doc = await db.refunds.find_one({"provider_ref": obj.get("id")})
+        if refund_doc:
+            provider_status = obj.get("status") or ("failed" if t == "refund.failed" else "pending")
+            await _apply_refund_provider_state(refund_doc, obj.get("id"), provider_status)
+        return {"status": "ok"}
     if t == "checkout.session.completed" and obj.get("payment_status") == "paid":
         existing = await db.payment_transactions.find_one({"session_id": obj["id"]})
         metadata = obj.get("metadata") or {}
