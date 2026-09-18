@@ -14,6 +14,7 @@ import jwt
 import httpx
 import stripe
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from financial_integrity import resolve_commission_snapshot, commission_rate_for_driver
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
@@ -788,6 +789,7 @@ async def lifespan(app: FastAPI):
     await db.refunds.create_index("idempotency_key", unique=True, sparse=True)
     await db.refunds.create_index("trip_id")
     await db.refunds.create_index("provider_ref", sparse=True)
+    await db.commission_rules.create_index([("fleet_id", 1), ("effective_from", -1)])
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.password_reset_tokens.create_index("token")
@@ -2499,9 +2501,10 @@ async def driver_pending(current=Depends(require_driver)):
     Pickup distance + ETA come from real routing (OSRM) based on the driver's live GPS —
     never from hardcoded values. Fabricated/demo/test trips are filtered out."""
     # Only a genuinely on-duty driver receives ride requests.
+    default_commission = await _platform_commission()
+    commission = await commission_rate_for_driver(db, current["id"], default_commission)
     if not current.get("online"):
-        return {"trips": [], "offline": True, "commission": await _platform_commission(), "driver_gps": None}
-    commission = await _platform_commission()
+        return {"trips": [], "offline": True, "commission": commission, "driver_gps": None}
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     # A request the driver just declined must not bounce straight back on the next poll.
     # After 5 minutes it may be offered again (it is still unassigned and the customer is waiting).
@@ -2608,6 +2611,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     t = await db.trips.find_one({"trip_id": body.trip_id})
+    commission_snapshot = await resolve_commission_snapshot(
+        db, t, await _platform_commission(), persist=True
+    )
+    t["commission_snapshot"] = commission_snapshot
     await send_push_to_user(
         t["user_id"], "Sjåfør på vei",
         f"{driver['name']} kommer om {eta} min." if eta else f"{driver['name']} er på vei til deg.",
@@ -2643,8 +2650,11 @@ async def driver_current(current=Depends(require_driver)):
         except Exception:
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
-    commission = await _platform_commission()
-    t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+    commission_snapshot = await resolve_commission_snapshot(
+        db, t, await _platform_commission(), persist=False
+    )
+    t["driver_earnings"] = int(commission_snapshot["driver_amount"])
+    t["commission_snapshot"] = commission_snapshot
     u = None
     if t.get("user_id"):
         try:
@@ -4461,6 +4471,16 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         )
         raise HTTPException(status_code=400, detail="Turen er allerede betalt")
 
+    commission_snapshot = await resolve_commission_snapshot(
+        db, trip, await _platform_commission(), persist=True
+    )
+    if int(commission_snapshot.get("gross_amount") or 0) != amount_nok:
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id},
+            {"$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=409, detail="Provisjonsgrunnlaget stemmer ikke med turprisen")
+    trip["commission_snapshot"] = commission_snapshot
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
     checkout_kwargs = {
@@ -4494,10 +4514,11 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         connect_fields = {
             "fleet_id": connect_destination["fleet_id"],
             "stripe_account_id": connect_destination["stripe_account_id"],
-            "commission_rate": connect_destination["commission_rate"],
-            "platform_fee": fee_ore / 100,
-            "fleet_net": amount_nok - (fee_ore / 100),
+            "commission_rate": commission_snapshot["commission_rate"],
+            "platform_fee": commission_snapshot["commission_amount"],
+            "fleet_net": commission_snapshot["fleet_net_amount"],
             "settlement_model": "stripe_destination_charge",
+            "commission_snapshot": commission_snapshot,
         }
 
     try:
@@ -4531,6 +4552,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
                 "user_id": current["id"],
                 "amount": amount_nok,
                 "currency": currency,
+                "commission_snapshot": commission_snapshot,
                 "created_at": tx_now,
             },
             "$set": {
@@ -4818,14 +4840,20 @@ async def driver_payouts(current=Depends(require_driver)):
     driver_id = current["id"]
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
+    pending_trip_net = 0
+    pending_commission = 0
     trips_count = 0
+    default_commission = await _platform_commission()
     async for t in db.trips.find({
         "driver_id": driver_id,
         "status": {"$in": ["arrived", "completed", "rated"]},
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
     }):
-        pending += t.get("price", 0)
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        pending += int(snap["gross_amount"])
+        pending_trip_net += int(snap["driver_amount"])
+        pending_commission += int(snap["commission_amount"])
         trips_count += 1
     # Read historic payouts if any
     history = []
@@ -4836,8 +4864,7 @@ async def driver_payouts(current=Depends(require_driver)):
     now = datetime.now(timezone.utc).date()
     days_ahead = (7 - now.weekday()) % 7 or 7
     next_payout = (now + timedelta(days=days_ahead)).isoformat()
-    commission = await _platform_commission()
-    net = int(round(pending * (1 - commission)))
+    effective_commission = (pending_commission / pending) if pending else default_commission
     bonuses = []
     bonus_total = 0
     async for b in db.bonus_payouts.find({"driver_id": driver_id, "paid_out": {"$ne": True}}).sort("earned_at", -1).limit(20):
@@ -4847,11 +4874,11 @@ async def driver_payouts(current=Depends(require_driver)):
     return {
         "pending_gross": pending,
         "pending_trips": trips_count,
-        "pending_net": net + bonus_total,
-        "pending_trip_net": net,
+        "pending_net": pending_trip_net + bonus_total,
+        "pending_trip_net": pending_trip_net,
         "pending_bonus": bonus_total,
         "bonuses": bonuses,
-        "commission_pct": int(round(commission * 100)),
+        "commission_pct": int(round(effective_commission * 100)),
         "next_payout_date": next_payout,
         "history": history,
     }
@@ -5905,6 +5932,7 @@ async def admin_create_refund(
             "status": "requested",
             "fleet_id": (payment_tx or {}).get("fleet_id"),
             "settlement_model": (payment_tx or {}).get("settlement_model"),
+            "commission_snapshot": (payment_tx or {}).get("commission_snapshot") or trip.get("commission_snapshot"),
             "admin_id": current["id"],
             "admin_email": current.get("email"),
             "created_at": now,
