@@ -44,6 +44,10 @@ export const api = {
     http.post('/auth/login', { email, password }).then((r) => r.data),
   verify2fa: (twofa_token: string, code: string) =>
     http.post('/auth/2fa/verify-login', { twofa_token, code }).then((r) => r.data),
+  twofaEnrollSetup: (twofa_token: string) =>
+    http.post('/auth/2fa/enroll/setup', { twofa_token }).then((r) => r.data),
+  twofaEnrollEnable: (twofa_token: string, code: string) =>
+    http.post('/auth/2fa/enroll/enable', { twofa_token, code }).then((r) => r.data),
   me: () => http.get('/auth/me').then((r) => r.data),
   logout: () => http.post('/auth/logout').then((r) => r.data),
   twofaStatus: () => http.get('/auth/2fa/status').then((r) => r.data),
