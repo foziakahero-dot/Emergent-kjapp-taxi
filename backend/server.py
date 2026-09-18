@@ -3527,7 +3527,7 @@ async def fleet_export_monthly(
     if not fid: raise HTTPException(404, "Ingen flåte")
 
     fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = float(fleet_doc.get("commission_rate", 0.20))
+    default_commission = await _platform_commission()
     fleet_name = fleet_doc.get("name", "Flåte")
 
     # Date range
@@ -3549,6 +3549,8 @@ async def fleet_export_monthly(
             "car": d.get("car", ""),
             "trips": 0,
             "gross": 0,
+            "commission": 0,
+            "net": 0,
         }
     driver_ids = list(drivers_map.keys())
 
@@ -3560,16 +3562,25 @@ async def fleet_export_monthly(
             "status": {"$in": ["arrived", "completed", "rated"]},
             "created_at": {"$gte": start_iso, "$lt": end_iso},
         }):
+            snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+            t["_commission_snapshot"] = snap
             trips.append(t)
             did = t.get("driver_id")
             if did in drivers_map:
                 drivers_map[did]["trips"] += 1
-                drivers_map[did]["gross"] += t.get("price", 0)
+                drivers_map[did]["gross"] += int(snap["gross_amount"])
+                drivers_map[did]["commission"] += int(snap["commission_amount"])
+                drivers_map[did]["net"] += int(snap["fleet_net_amount"])
 
-    total_gross = sum(t.get("price", 0) for t in trips)
+    total_gross = sum(int((t.get("_commission_snapshot") or {}).get("gross_amount", 0)) for t in trips)
     total_trips = len(trips)
-    total_commission = int(round(total_gross * commission))
+    total_commission = sum(int((t.get("_commission_snapshot") or {}).get("commission_amount", 0)) for t in trips)
     total_net = total_gross - total_commission
+    effective_commission = (
+        total_commission / total_gross
+        if total_gross
+        else float(fleet_doc.get("commission_rate", default_commission) or default_commission)
+    )
 
     # Build workbook
     wb = Workbook()
@@ -3587,7 +3598,7 @@ async def fleet_export_monthly(
     for k, v in [
         ("Antall turer", total_trips),
         ("Brutto omsetning (NOK)", total_gross),
-        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
+        (f"Provisjon (effektiv {round(effective_commission * 100, 2)}%) (NOK)", total_commission),
         ("Netto til flåte (NOK)", total_net),
         ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
     ]:
@@ -3604,8 +3615,10 @@ async def fleet_export_monthly(
     for c in ws2[1]:
         c.font = thin_hdr; c.fill = hdr_fill; c.alignment = Alignment(horizontal="center")
     for d in sorted(drivers_map.values(), key=lambda x: -x["gross"]):
-        d_com = int(round(d["gross"] * commission))
-        ws2.append([_csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]), d["trips"], d["gross"], d_com, d["gross"] - d_com])
+        ws2.append([
+            _csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]),
+            d["trips"], d["gross"], d["commission"], d["net"],
+        ])
     # Totals row
     ws2.append([])
     ws2.append(["TOTAL", "", "", "", total_trips, total_gross, total_commission, total_net])
@@ -4522,7 +4535,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
     }
     connect_fields = {}
     if connect_destination:
-        fee_ore = int(round(amount_nok * 100 * connect_destination["commission_rate"]))
+        fee_ore = int(commission_snapshot["commission_amount"]) * 100
         checkout_kwargs["payment_intent_data"] = {
             "application_fee_amount": fee_ore,
             "transfer_data": {"destination": connect_destination["stripe_account_id"]},
