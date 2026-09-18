@@ -46,3 +46,25 @@ This app deploys **independently** of the backend (e.g. Vercel / Netlify / any s
 Dashbord, Live drift, Turer (+detalj/tidslinje), Sjåfører (godkjenn/suspender), Kunder,
 Løyvehavere, Kjøretøy, Dokumenter (vurder + utløp), Økonomi (oversikt/transaksjoner/refusjoner),
 Support, Audit-logg, Innstillinger. Global søk i topplinjen.
+
+
+## Mandatory admin 2FA
+
+The control center uses mandatory two-factor authentication for both `admin` and
+`superadmin` roles.
+
+- Password login never creates a normal admin session until 2FA has completed.
+- Existing admins without TOTP receive a short-lived, purpose-bound enrollment
+  token. It can only call the dedicated enrollment endpoints and is rejected by
+  `/auth/me` and every normal admin endpoint.
+- Existing admins with TOTP receive the normal short-lived verification challenge.
+- A normal 7-day access token is issued only after a valid TOTP code or one-time
+  backup code has been verified.
+- Backup codes are stored only as password hashes and are consumed atomically.
+- Disabling 2FA on a privileged account invalidates its existing sessions and the
+  next login requires enrollment again.
+- Customer, driver and fleet-owner login behavior is unchanged.
+
+Admin login responses may therefore contain either
+`twofa_required + twofa_token` or
+`twofa_setup_required + twofa_token` instead of a normal `token`.
