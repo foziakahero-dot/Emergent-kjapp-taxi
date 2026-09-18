@@ -230,6 +230,41 @@ def test_legacy_admin_access_token_without_totp_is_rejected():
     _run(_with_temp_db(body))
 
 
+def test_pre_enrollment_admin_session_stays_revoked_after_2fa_enable():
+    async def body(tdb):
+        uid, _ = await _seed_admin(tdb)
+        legacy = server.create_access_token(uid, "owner@example.no")
+
+        login = await server.login(
+            server.LoginRequest(email="owner@example.no", password="Strong-Pass-123!"),
+            _request(),
+            Response(),
+        )
+        setup = await server.twofa_enroll_setup(
+            server.TwoFAEnrollSetupRequest(twofa_token=login["twofa_token"])
+        )
+        enabled = await server.twofa_enroll_enable(
+            server.TwoFAEnrollEnableRequest(
+                twofa_token=login["twofa_token"],
+                code=pyotp.TOTP(setup["secret"]).now(),
+            ),
+            _request(),
+            Response(),
+        )
+        assert enabled.get("token")
+
+        # A token minted before mandatory enrollment must never become privileged
+        # merely because the account now has TOTP enabled.
+        with pytest.raises(HTTPException) as exc:
+            await server.get_current_user(_request(legacy, "/api/admin/overview"))
+        assert exc.value.status_code == 401
+
+        fresh = await server.get_current_user(_request(enabled["token"], "/api/admin/overview"))
+        assert fresh["role"] == "superadmin"
+
+    _run(_with_temp_db(body))
+
+
 def test_customer_login_remains_single_factor():
     async def body(tdb):
         await tdb.users.insert_one({
