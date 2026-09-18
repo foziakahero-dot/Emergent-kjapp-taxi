@@ -4581,7 +4581,13 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                 if record.get("trip_id"):
                     await db.trips.update_one(
                         {"trip_id": record["trip_id"], "user_id": current["id"]},
-                        {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                        {"$set": {
+                            "payment_status": "paid",
+                            "status": "completed",
+                            "paid_at": datetime.now(timezone.utc).isoformat(),
+                            "checkout_state": "paid",
+                            "checkout_session_id": session_id,
+                        }},
                     )
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
@@ -4630,18 +4636,44 @@ async def stripe_webhook(request: Request):
         if r and r.get("trip_id"):
             await db.trips.update_one(
                 {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
-                {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                {"$set": {
+                    "payment_status": "paid",
+                    "status": "completed",
+                    "paid_at": datetime.now(timezone.utc).isoformat(),
+                    "checkout_state": "paid",
+                    "checkout_session_id": obj["id"],
+                }},
             )
     elif t == "checkout.session.completed":
-        await db.payment_transactions.update_one(
+        awaiting_tx = await db.payment_transactions.find_one_and_update(
             {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {"status": "awaiting_payment", "updated_at": datetime.now(timezone.utc)}},
         )
+        if awaiting_tx and awaiting_tx.get("trip_id"):
+            await db.trips.update_one(
+                {"trip_id": awaiting_tx["trip_id"], "checkout_session_id": obj["id"], "payment_status": {"$ne": "paid"}},
+                {"$set": {"checkout_state": "awaiting_payment"}},
+            )
     elif t == "checkout.session.expired":
-        await db.payment_transactions.update_one(
-            {"session_id": obj["id"]},
+        expired_tx = await db.payment_transactions.find_one_and_update(
+            {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {"status": "expired", "payment_status": "expired", "updated_at": datetime.now(timezone.utc)}},
         )
+        if expired_tx and expired_tx.get("trip_id"):
+            await db.trips.update_one(
+                {
+                    "trip_id": expired_tx["trip_id"],
+                    "user_id": expired_tx.get("user_id"),
+                    "checkout_session_id": obj["id"],
+                    "payment_status": {"$ne": "paid"},
+                },
+                {"$unset": {
+                    "checkout_idempotency_key": "", "checkout_amount": "", "checkout_currency": "",
+                    "checkout_origin_url": "", "checkout_state": "", "checkout_created_at": "",
+                    "checkout_updated_at": "", "checkout_session_id": "",
+                    "checkout_processing_id": "", "checkout_processing_until": "",
+                }},
+            )
     return {"status": "ok"}
 
 
