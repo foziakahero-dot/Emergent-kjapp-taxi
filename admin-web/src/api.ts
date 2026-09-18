@@ -44,6 +44,10 @@ export const api = {
     http.post('/auth/login', { email, password }).then((r) => r.data),
   verify2fa: (twofa_token: string, code: string) =>
     http.post('/auth/2fa/verify-login', { twofa_token, code }).then((r) => r.data),
+  twofaEnrollSetup: (twofa_token: string) =>
+    http.post('/auth/2fa/enroll/setup', { twofa_token }).then((r) => r.data),
+  twofaEnrollEnable: (twofa_token: string, code: string) =>
+    http.post('/auth/2fa/enroll/enable', { twofa_token, code }).then((r) => r.data),
   me: () => http.get('/auth/me').then((r) => r.data),
   logout: () => http.post('/auth/logout').then((r) => r.data),
   twofaStatus: () => http.get('/auth/2fa/status').then((r) => r.data),
@@ -61,7 +65,8 @@ export const api = {
     http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
   reviewDoc: (id: string, body: any) =>
     http.post(`/admin/documents/${id}/review`, body).then((r) => r.data),
-  refund: (body: any) => http.post('/admin/refunds', body).then((r) => r.data),
+  refund: (body: any, idempotencyKey: string) =>
+    http.post('/admin/refunds', body, { headers: { 'Idempotency-Key': idempotencyKey } }).then((r) => r.data),
   updateTicket: (id: string, body: any) =>
     http.patch(`/admin/support/tickets/${id}`, body).then((r) => r.data),
   patchSettings: (body: any) => http.patch('/admin/settings', body).then((r) => r.data),

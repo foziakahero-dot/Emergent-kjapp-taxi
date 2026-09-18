@@ -53,19 +53,23 @@ def _stripe_snapshot(account: Any) -> dict:
 
 
 async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
-    """Resolve a safe destination-charge target.
+    """Resolve the connected account from the trip's frozen settlement fleet when available."""
+    if not stripe.api_key:
+        return None
 
-    Failure to resolve Connect never blocks the customer's payment. The checkout
-    falls back to the platform account and Action Center will flag the fleet.
-    """
-    driver_id = trip.get("driver_user_id") or trip.get("driver_id")
-    if not driver_id or not stripe.api_key:
-        return None
-    try:
-        driver = await db.users.find_one({"_id": ObjectId(str(driver_id)), "role": "driver"})
-    except Exception:
-        return None
-    fleet_id = (driver or {}).get("fleet_id")
+    commission_snapshot = trip.get("commission_snapshot") or {}
+    fleet_id = commission_snapshot.get("fleet_id")
+
+    if not fleet_id:
+        driver_id = trip.get("driver_user_id") or trip.get("driver_id")
+        if not driver_id:
+            return None
+        try:
+            driver = await db.users.find_one({"_id": ObjectId(str(driver_id)), "role": "driver"})
+        except Exception:
+            return None
+        fleet_id = (driver or {}).get("fleet_id")
+
     if not fleet_id:
         return None
     try:
@@ -92,14 +96,14 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     )
     if not snap["ready"]:
         return None
-    rate = float((fleet or {}).get("commission_rate", 0.12) or 0.12)
+
+    rate = float(commission_snapshot.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
         "stripe_account_id": account_id,
         "commission_rate": rate,
     }
-
 
 def install_admin_control_center(
     api,

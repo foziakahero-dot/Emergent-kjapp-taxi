@@ -14,6 +14,7 @@ import jwt
 import httpx
 import stripe
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from financial_integrity import resolve_commission_snapshot, commission_rate_for_driver
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
@@ -25,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from bson.errors import InvalidId
 import pyotp
@@ -294,7 +296,7 @@ async def purge_synthetic_data(db) -> dict:
     return {"trips": trips.deleted_count, "users": users.deleted_count}
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, *, twofa_verified: bool = False) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
@@ -303,17 +305,24 @@ def create_access_token(user_id: str, email: str) -> str:
         "type": "access",
         "iat": now.timestamp(),
         "jti": secrets.token_urlsafe(24),
+        "twofa_verified": bool(twofa_verified),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def create_twofa_token(user_id: str) -> str:
-    """Short-lived intermediate token issued after password step when 2FA is required.
-    It is NOT a session token — get_current_user rejects type == '2fa'."""
+def create_twofa_token(user_id: str, purpose: str = "verify") -> str:
+    """Short-lived pre-auth token for either TOTP verification or first-time enrollment.
+
+    This token is never a normal session. get_current_user rejects type == "2fa".
+    Purpose binding prevents an enrollment token from being reused as a verification token.
+    """
+    if purpose not in ("verify", "enroll"):
+        raise ValueError("Ugyldig 2FA-formål")
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "twofa": True,
+        "twofa_purpose": purpose,
         "type": "2fa",
         "iat": now.timestamp(),
         "exp": now + timedelta(minutes=5),
@@ -406,6 +415,14 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ikke innlogget")
+        if _twofa_required_role(user.get("role", "user")):
+            if not user.get("totp_enabled"):
+                # Fail closed for privileged legacy sessions created before mandatory 2FA.
+                raise HTTPException(status_code=401, detail="Totrinnsbekreftelse må fullføres. Logg inn på nytt.")
+            if payload.get("twofa_verified") is not True:
+                # Old/admin tokens minted before mandatory MFA (or outside the verified
+                # challenge flow) never become privileged merely because TOTP is enabled.
+                raise HTTPException(status_code=401, detail="Totrinnsbekreftelse må verifiseres. Logg inn på nytt.")
         if not _session_is_current(payload, user):
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
         if await _session_is_revoked(payload):
@@ -452,6 +469,15 @@ class TwoFADisableRequest(BaseModel):
 
 
 class TwoFAVerifyLoginRequest(BaseModel):
+    twofa_token: str
+    code: str
+
+
+class TwoFAEnrollSetupRequest(BaseModel):
+    twofa_token: str
+
+
+class TwoFAEnrollEnableRequest(BaseModel):
     twofa_token: str
     code: str
 
@@ -764,6 +790,12 @@ async def lifespan(app: FastAPI):
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.payment_transactions.create_index("checkout_idempotency_key", unique=True, sparse=True)
+    await db.payment_transactions.create_index("trip_id")
+    await db.refunds.create_index("idempotency_key", unique=True, sparse=True)
+    await db.refunds.create_index("trip_id")
+    await db.refunds.create_index("provider_ref", sparse=True)
+    await db.commission_rules.create_index([("fleet_id", 1), ("effective_from", -1)])
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.password_reset_tokens.create_index("token")
@@ -1292,9 +1324,13 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Feil e-post eller passord")
     await _clear_failed_logins(email, ip)
     uid = str(user["_id"])
+    role = user.get("role", "user")
     if user.get("totp_enabled"):
         # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        # Privileged accounts must enroll before any normal access token is issued.
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
@@ -1341,6 +1377,8 @@ async def twofa_setup(current=Depends(get_current_user)):
     import io as _bio
     secret = pyotp.random_base32()
     await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"totp_secret_pending": secret}})
+    if _twofa_required_role(current.get("role", "user")):
+        await _audit(current, "auth.2fa_setup", "user", current["id"], None, {"method": "totp"})
     otpauth = pyotp.TOTP(secret).provisioning_uri(name=current.get("email", "bruker"), issuer_name="KJAPP")
     img = qrcode.make(otpauth)
     buf = _bio.BytesIO()
@@ -1356,15 +1394,28 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
     if not pending:
         raise HTTPException(status_code=400, detail="Start 2FA-oppsett først.")
     if not _verify_totp(pending, body.code):
+        if _twofa_required_role(current.get("role", "user")):
+            await _audit(current, "auth.2fa_failed", "user", current["id"], None, {"method": "totp", "flow": "setup"})
         raise HTTPException(status_code=400, detail="Feil kode. Prøv igjen.")
     backup = _gen_backup_codes()
+    enabled_at = datetime.now(timezone.utc)
+    enable_set = {
+        "totp_secret": pending,
+        "totp_enabled": True,
+        "totp_backup_codes": [hash_password(c) for c in backup],
+        "totp_enabled_at": enabled_at.isoformat(),
+    }
+    if _twofa_required_role(current.get("role", "user")):
+        enable_set["tokens_valid_after"] = enabled_at.timestamp()
     await db.users.update_one(
         {"_id": user["_id"]},
         {
-            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [hash_password(c) for c in backup]},
+            "$set": enable_set,
             "$unset": {"totp_secret_pending": ""},
         },
     )
+    if _twofa_required_role(current.get("role", "user")):
+        await _audit(current, "auth.2fa_success", "user", current["id"], None, {"method": "totp", "flow": "setup"})
     return {"enabled": True, "backup_codes": backup}
 
 
@@ -1374,12 +1425,20 @@ async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_u
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
     if not user.get("totp_enabled") or not _verify_totp(user.get("totp_secret", ""), body.code):
+        if _twofa_required_role(current.get("role", "user")):
+            await _audit(current, "auth.2fa_failed", "user", current["id"], None, {"method": "totp", "flow": "disable"})
         raise HTTPException(status_code=400, detail="Feil 2FA-kode.")
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$unset": {"totp_secret": "", "totp_enabled": "", "totp_backup_codes": "", "totp_secret_pending": ""}},
-    )
-    return {"enabled": False}
+    update = {
+        "$unset": {"totp_secret": "", "totp_enabled": "", "totp_backup_codes": "", "totp_secret_pending": ""},
+        "$set": {"totp_disabled_at": datetime.now(timezone.utc).isoformat()},
+    }
+    if _twofa_required_role(user.get("role", "user")):
+        # Mandatory-2FA roles must not keep a privileged session after disabling TOTP.
+        update["$set"]["tokens_valid_after"] = datetime.now(timezone.utc).timestamp()
+    await db.users.update_one({"_id": user["_id"]}, update)
+    if _twofa_required_role(current.get("role", "user")):
+        await _audit(current, "auth.2fa_disabled", "user", current["id"], {"totp_enabled": True}, {"totp_enabled": False})
+    return {"enabled": False, "reauth_required": _twofa_required_role(user.get("role", "user"))}
 
 
 @api.post("/auth/2fa/verify-login")
@@ -1388,7 +1447,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
         payload = jwt.decode(body.twofa_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="2FA-økt utløpt. Logg inn på nytt.")
-    if payload.get("type") != "2fa" or not payload.get("twofa"):
+    if payload.get("type") != "2fa" or not payload.get("twofa") or payload.get("twofa_purpose", "verify") != "verify":
         raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
     try:
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
@@ -1409,18 +1468,126 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
                 ok = True
                 used_idx = i
                 break
+    audit_user = {"id": str(user["_id"]), "email": email}
     if not ok:
         await _record_failed_login(email, ip)
+        if _twofa_required_role(user.get("role", "user")):
+            await _audit(audit_user, "auth.2fa_failed", "user", audit_user["id"], None, {"method": "totp_or_backup"})
         raise HTTPException(status_code=401, detail="Feil kode.")
     await _clear_failed_logins(email, ip)
     if used_idx is not None:
-        codes = user.get("totp_backup_codes", [])
+        # Compare-and-swap the whole code list. A concurrent request using the same backup
+        # code loses this update and never receives a session.
+        original_codes = list(user.get("totp_backup_codes", []))
+        codes = list(original_codes)
         codes.pop(used_idx)
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {"totp_backup_codes": codes}})
+        consumed = await db.users.update_one(
+            {"_id": user["_id"], "totp_backup_codes": original_codes},
+            {"$set": {"totp_backup_codes": codes}},
+        )
+        if consumed.modified_count != 1:
+            await _record_failed_login(email, ip)
+            if _twofa_required_role(user.get("role", "user")):
+                await _audit(audit_user, "auth.2fa_failed", "user", audit_user["id"], None, {"method": "backup", "reason": "already_used"})
+            raise HTTPException(status_code=401, detail="Feil kode.")
+        if _twofa_required_role(user.get("role", "user")):
+            await _audit(audit_user, "auth.2fa_backup_used", "user", audit_user["id"], None, {"remaining_backup_codes": len(codes)})
+    if _twofa_required_role(user.get("role", "user")):
+        await _audit(audit_user, "auth.2fa_success", "user", audit_user["id"], None, {"method": "backup" if used_idx is not None else "totp", "flow": "login"})
     uid = str(user["_id"])
-    token = create_access_token(uid, email)
+    token = create_access_token(uid, email, twofa_verified=True)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
+
+
+# ---- Mandatory admin 2FA enrollment (pre-auth only) ----
+async def _twofa_enrollment_user(twofa_token: str) -> dict:
+    try:
+        payload = jwt.decode(twofa_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="2FA-økt utløpt. Logg inn på nytt.")
+    if (
+        payload.get("type") != "2fa"
+        or not payload.get("twofa")
+        or payload.get("twofa_purpose") != "enroll"
+    ):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    try:
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    except (InvalidId, KeyError):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    if (
+        not user
+        or user.get("disabled")
+        or not _twofa_required_role(user.get("role", "user"))
+        or user.get("totp_enabled")
+        or not _session_is_current(payload, user)
+    ):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    return user
+
+
+@api.post("/auth/2fa/enroll/setup")
+async def twofa_enroll_setup(body: TwoFAEnrollSetupRequest):
+    """Create a pending TOTP secret using only a purpose-bound enrollment token."""
+    import io as _bio
+    user = await _twofa_enrollment_user(body.twofa_token)
+    secret = pyotp.random_base32()
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"_id": user["_id"], "totp_enabled": {"$ne": True}},
+        {"$set": {"totp_secret_pending": secret, "totp_enrollment_started_at": now.isoformat()}},
+    )
+    audit_user = {"id": str(user["_id"]), "email": user.get("email")}
+    await _audit(audit_user, "auth.2fa_setup", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
+    otpauth = pyotp.TOTP(secret).provisioning_uri(name=user.get("email", "admin"), issuer_name="KJAPP")
+    img = qrcode.make(otpauth)
+    buf = _bio.BytesIO()
+    img.save(buf, format="PNG")
+    return {
+        "secret": secret,
+        "otpauth_url": otpauth,
+        "qr": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode(),
+    }
+
+
+@api.post("/auth/2fa/enroll/enable")
+async def twofa_enroll_enable(body: TwoFAEnrollEnableRequest, request: Request, response: Response):
+    """Verify first TOTP, activate mandatory 2FA, then and only then issue an admin session."""
+    user = await _twofa_enrollment_user(body.twofa_token)
+    email = user.get("email", "")
+    ip = _client_ip(request)
+    if await _login_blocked(email, ip):
+        raise HTTPException(status_code=429, detail="For mange forsøk. Prøv igjen om 15 minutter.")
+    pending = user.get("totp_secret_pending")
+    audit_user = {"id": str(user["_id"]), "email": email}
+    if not pending or not _verify_totp(pending, body.code):
+        await _record_failed_login(email, ip)
+        await _audit(audit_user, "auth.2fa_failed", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
+        raise HTTPException(status_code=401, detail="Feil kode.")
+    backup = _gen_backup_codes()
+    enabled_at = datetime.now(timezone.utc)
+    result = await db.users.update_one(
+        {"_id": user["_id"], "totp_enabled": {"$ne": True}, "totp_secret_pending": pending},
+        {
+            "$set": {
+                "totp_secret": pending,
+                "totp_enabled": True,
+                "totp_backup_codes": [hash_password(c) for c in backup],
+                "totp_enabled_at": enabled_at.isoformat(),
+                "tokens_valid_after": enabled_at.timestamp(),
+            },
+            "$unset": {"totp_secret_pending": "", "totp_enrollment_started_at": ""},
+        },
+    )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="2FA-oppsettet ble endret. Logg inn på nytt.")
+    await _clear_failed_logins(email, ip)
+    await _audit(audit_user, "auth.2fa_success", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
+    token = create_access_token(str(user["_id"]), email, twofa_verified=True)
+    set_auth_cookie(response, token)
+    public = user_public({**user, "totp_enabled": True})
+    return {"token": token, "user": public, "enabled": True, "backup_codes": backup}
 
 
 # ---- Password reset via e-postlenke ----
@@ -2291,9 +2458,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(trip.get("pickup_lat"), trip.get("pickup_lng"))
     nxt = next((c for c in cands if c["id"] not in tried), None)
-    commission = await _platform_commission()
-    earnings = int(round((trip.get("price") or 0) * (1 - commission)))
-    title = f"Ny tur · {earnings} kr til deg"
+    default_commission = await _platform_commission()
     body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
 
     if not nxt:
@@ -2302,9 +2467,15 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
             {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
         )
         for c in cands:  # everyone gets a last chance
+            rate = await commission_rate_for_driver(db, c["id"], default_commission)
+            earnings = int(round((trip.get("price") or 0) * (1 - rate)))
+            title = f"Ny tur · {earnings} kr til deg"
             await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
         return None
 
+    rate = await commission_rate_for_driver(db, nxt["id"], default_commission)
+    earnings = int(round((trip.get("price") or 0) * (1 - rate)))
+    title = f"Ny tur · {earnings} kr til deg"
     expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
     res = await db.trips.update_one(
         {"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
@@ -2345,9 +2516,10 @@ async def driver_pending(current=Depends(require_driver)):
     Pickup distance + ETA come from real routing (OSRM) based on the driver's live GPS —
     never from hardcoded values. Fabricated/demo/test trips are filtered out."""
     # Only a genuinely on-duty driver receives ride requests.
+    default_commission = await _platform_commission()
+    commission = await commission_rate_for_driver(db, current["id"], default_commission)
     if not current.get("online"):
-        return {"trips": [], "offline": True, "commission": await _platform_commission(), "driver_gps": None}
-    commission = await _platform_commission()
+        return {"trips": [], "offline": True, "commission": commission, "driver_gps": None}
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     # A request the driver just declined must not bounce straight back on the next poll.
     # After 5 minutes it may be offered again (it is still unassigned and the customer is waiting).
@@ -2424,11 +2596,18 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     d_lat = current.get("last_lat")
     d_lng = current.get("last_lng")
     eta = None
+    commission_snapshot = await resolve_commission_snapshot(
+        db,
+        {**trip_pre, "driver_id": driver_id, "driver_user_id": current["id"]},
+        await _platform_commission(),
+        persist=False,
+    )
     updates = {
         "status": "driver_on_way",
         "driver": driver,
         "driver_id": driver_id,
         "driver_user_id": current["id"],
+        "commission_snapshot": commission_snapshot,
         "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -2489,8 +2668,11 @@ async def driver_current(current=Depends(require_driver)):
         except Exception:
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
-    commission = await _platform_commission()
-    t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+    commission_snapshot = await resolve_commission_snapshot(
+        db, t, await _platform_commission(), persist=False
+    )
+    t["driver_earnings"] = int(commission_snapshot["driver_amount"])
+    t["commission_snapshot"] = commission_snapshot
     u = None
     if t.get("user_id"):
         try:
@@ -2658,7 +2840,7 @@ async def driver_demand(lat: Optional[float] = None, lng: Optional[float] = None
         s["weight"] = round(min(1.0, s["score"] / top), 3)
     scored.sort(key=lambda s: s["score"], reverse=True)
 
-    commission = await _platform_commission()
+    commission = await commission_rate_for_driver(db, current["id"], await _platform_commission())
     zones = []
     for s in scored[:3]:
         place = await reverse_geocode(s["lat"], s["lng"])
@@ -2942,7 +3124,9 @@ async def google_session(body: GoogleSessionRequest, response: Response):
         if not user.get("google_linked"):
             await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
     if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
@@ -3078,7 +3262,9 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
         phone = ""
 
     if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": phone, "role": role, "driver_id": driver_id}}
@@ -3262,35 +3448,56 @@ async def fleet_me(current=Depends(require_fleet_owner)):
 @api.get("/fleet/overview")
 async def fleet_overview(current=Depends(require_fleet_owner)):
     fid = await get_fleet_id_for(current)
-    if not fid: raise HTTPException(404, "Ingen flåte")
-    # Drivers in this fleet
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+
     drivers_ids = []
     async for d in db.users.find({"role": "driver", "fleet_id": fid}, {"_id": 1}):
         drivers_ids.append(str(d["_id"]))
-    # Today/Week income
+
     today = datetime.now(timezone.utc).date().isoformat()
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
-    today_gross = 0; today_trips = 0
-    week_gross = 0; week_trips = 0
-    if drivers_ids:
-        async for t in db.trips.find({
-            "driver_id": {"$in": drivers_ids},
-            "status": {"$in": ["arrived", "completed", "rated"]},
-            "created_at": {"$gte": week_start},
-        }):
-            price = t.get("price", 0)
-            week_gross += price; week_trips += 1
-            if t.get("created_at", "") >= today:
-                today_gross += price; today_trips += 1
+    today_gross = today_net = today_commission = today_trips = 0
+    week_gross = week_net = week_commission = week_trips = 0
+    default_commission = await _platform_commission()
+
+    async for t in db.trips.find({
+        "status": {"$in": ["arrived", "completed", "rated"]},
+        "created_at": {"$gte": week_start},
+        "$or": [
+            {"commission_snapshot.fleet_id": fid},
+            {"driver_id": {"$in": drivers_ids}},
+        ],
+    }):
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        if snap.get("fleet_id") != fid:
+            continue
+        gross = int(snap["gross_amount"])
+        net = int(snap["fleet_net_amount"])
+        commission_amount = int(snap["commission_amount"])
+        week_gross += gross
+        week_net += net
+        week_commission += commission_amount
+        week_trips += 1
+        if t.get("created_at", "") >= today:
+            today_gross += gross
+            today_net += net
+            today_commission += commission_amount
+            today_trips += 1
+
     online_count = await db.users.count_documents({"role": "driver", "fleet_id": fid, "online": True})
     fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = float(fleet.get("commission_rate", 0.20))
+    effective_rate = (
+        week_commission / week_gross
+        if week_gross
+        else float(fleet.get("commission_rate", default_commission) or default_commission)
+    )
     return {
         "drivers_total": len(drivers_ids),
         "drivers_online": online_count,
-        "today": {"gross": today_gross, "trips": today_trips, "net": int(round(today_gross * (1 - commission)))},
-        "week": {"gross": week_gross, "trips": week_trips, "net": int(round(week_gross * (1 - commission)))},
-        "commission_pct": int(commission * 100),
+        "today": {"gross": today_gross, "trips": today_trips, "net": today_net, "commission": today_commission},
+        "week": {"gross": week_gross, "trips": week_trips, "net": week_net, "commission": week_commission},
+        "commission_pct": int(round(effective_rate * 100)),
     }
 
 
@@ -3342,7 +3549,7 @@ async def fleet_export_monthly(
     if not fid: raise HTTPException(404, "Ingen flåte")
 
     fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = float(fleet_doc.get("commission_rate", 0.20))
+    default_commission = await _platform_commission()
     fleet_name = fleet_doc.get("name", "Flåte")
 
     # Date range
@@ -3364,27 +3571,54 @@ async def fleet_export_monthly(
             "car": d.get("car", ""),
             "trips": 0,
             "gross": 0,
+            "commission": 0,
+            "net": 0,
         }
     driver_ids = list(drivers_map.keys())
 
     # Trips in month
     trips = []
-    if driver_ids:
-        async for t in db.trips.find({
-            "driver_id": {"$in": driver_ids},
-            "status": {"$in": ["arrived", "completed", "rated"]},
-            "created_at": {"$gte": start_iso, "$lt": end_iso},
-        }):
-            trips.append(t)
-            did = t.get("driver_id")
-            if did in drivers_map:
-                drivers_map[did]["trips"] += 1
-                drivers_map[did]["gross"] += t.get("price", 0)
+    async for t in db.trips.find({
+        "status": {"$in": ["arrived", "completed", "rated"]},
+        "created_at": {"$gte": start_iso, "$lt": end_iso},
+        "$or": [
+            {"commission_snapshot.fleet_id": fid},
+            {"driver_id": {"$in": driver_ids}},
+        ],
+    }):
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        if snap.get("fleet_id") != fid:
+            continue
+        t["_commission_snapshot"] = snap
+        trips.append(t)
+        did = t.get("driver_id")
+        if did not in drivers_map:
+            embedded = t.get("driver") or {}
+            drivers_map[did] = {
+                "id": did or "",
+                "name": embedded.get("name") or "Tidligere sjåfør",
+                "email": "",
+                "plate": embedded.get("plate") or "",
+                "car": embedded.get("car") or "",
+                "trips": 0,
+                "gross": 0,
+                "commission": 0,
+                "net": 0,
+            }
+        drivers_map[did]["trips"] += 1
+        drivers_map[did]["gross"] += int(snap["gross_amount"])
+        drivers_map[did]["commission"] += int(snap["commission_amount"])
+        drivers_map[did]["net"] += int(snap["fleet_net_amount"])
 
-    total_gross = sum(t.get("price", 0) for t in trips)
+    total_gross = sum(int((t.get("_commission_snapshot") or {}).get("gross_amount", 0)) for t in trips)
     total_trips = len(trips)
-    total_commission = int(round(total_gross * commission))
+    total_commission = sum(int((t.get("_commission_snapshot") or {}).get("commission_amount", 0)) for t in trips)
     total_net = total_gross - total_commission
+    effective_commission = (
+        total_commission / total_gross
+        if total_gross
+        else float(fleet_doc.get("commission_rate", default_commission) or default_commission)
+    )
 
     # Build workbook
     wb = Workbook()
@@ -3402,7 +3636,7 @@ async def fleet_export_monthly(
     for k, v in [
         ("Antall turer", total_trips),
         ("Brutto omsetning (NOK)", total_gross),
-        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
+        (f"Provisjon (effektiv {round(effective_commission * 100, 2)}%) (NOK)", total_commission),
         ("Netto til flåte (NOK)", total_net),
         ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
     ]:
@@ -3419,8 +3653,10 @@ async def fleet_export_monthly(
     for c in ws2[1]:
         c.font = thin_hdr; c.fill = hdr_fill; c.alignment = Alignment(horizontal="center")
     for d in sorted(drivers_map.values(), key=lambda x: -x["gross"]):
-        d_com = int(round(d["gross"] * commission))
-        ws2.append([_csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]), d["trips"], d["gross"], d_com, d["gross"] - d_com])
+        ws2.append([
+            _csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]),
+            d["trips"], d["gross"], d["commission"], d["net"],
+        ])
     # Totals row
     ws2.append([])
     ws2.append(["TOTAL", "", "", "", total_trips, total_gross, total_commission, total_net])
@@ -3690,11 +3926,11 @@ async def admin_overview(current=Depends(require_admin)):
 
     gmv_today = 0
     kjapp_revenue_today = 0
-    _rate = await _platform_commission()
-    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}, {"price": 1}):
-        price = t.get("price", 0) or 0
-        gmv_today += price
-        kjapp_revenue_today += round(price * _rate)
+    default_commission = await _platform_commission()
+    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}):
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        gmv_today += int(snap["gross_amount"])
+        kjapp_revenue_today += int(snap["commission_amount"])
 
     pending_payouts = await count(db.fleet_payouts, {"status": {"$in": ["pending", "processing", "on_hold"]}})
     open_support = await count(db.support_tickets, {"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
@@ -4159,7 +4395,9 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         role = "user"
         driver_id = None
     if existing and existing.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": "", "role": role, "driver_id": driver_id}}
@@ -4184,9 +4422,34 @@ class TripCheckoutRequest(BaseModel):
     origin_url: str
 
 
+async def _existing_checkout_response(checkout_key: str, user_id: str) -> Optional[dict]:
+    rec = await db.payment_transactions.find_one({
+        "checkout_idempotency_key": checkout_key,
+        "user_id": user_id,
+    })
+    if not rec:
+        return None
+    if rec.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="Turen er allerede betalt")
+    if rec.get("status") == "expired":
+        return None
+    if rec.get("session_id"):
+        return {
+            "checkout_url": rec.get("checkout_url"),
+            "session_id": rec.get("session_id"),
+            "status": rec.get("status") or "initiated",
+            "pending": False,
+        }
+    return None
+
+
 @api.post("/payments/checkout")
-async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
-    """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
+async def create_trip_checkout(
+    body: TripCheckoutRequest,
+    current=Depends(get_current_user),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    """Create exactly one logical Stripe Checkout session per active trip checkout attempt."""
     trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
@@ -4194,18 +4457,118 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         raise HTTPException(status_code=400, detail="Turen er ikke ferdig ennå")
     if trip.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Turen er allerede betalt")
+
     amount_nok = int(trip.get("price") or 0)
+    currency = "nok"
     if amount_nok <= 0:
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
+
+    # First request atomically assigns the logical checkout key and freezes the amount/origin
+    # for this attempt. Concurrent requests then reuse those exact values.
+    supplied_key = (idempotency_key or "").strip()
+    if len(supplied_key) > 160:
+        raise HTTPException(status_code=400, detail="Ugyldig idempotency-nøkkel")
+    candidate_key = "checkout:" + body.trip_id + ":" + (supplied_key or str(uuid.uuid4()))
+    now = datetime.now(timezone.utc)
+    await db.trips.update_one(
+        {
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "payment_status": {"$ne": "paid"},
+            "$or": [
+                {"checkout_idempotency_key": {"$exists": False}},
+                {"checkout_idempotency_key": None},
+            ],
+        },
+        {"$set": {
+            "checkout_idempotency_key": candidate_key,
+            "checkout_amount": amount_nok,
+            "checkout_currency": currency,
+            "checkout_origin_url": body.origin_url,
+            "checkout_state": "creating",
+            "checkout_created_at": now,
+        }},
+    )
+    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    checkout_key = trip.get("checkout_idempotency_key")
+    if not checkout_key:
+        raise HTTPException(status_code=409, detail="Kunne ikke reservere betalingsøkt")
+
+    # Never reuse an existing session after the trip amount/currency changed.
+    if int(trip.get("checkout_amount") or 0) != amount_nok or trip.get("checkout_currency") != currency:
+        raise HTTPException(status_code=409, detail="Turprisen er endret etter at betalingsøkten ble opprettet")
+    origin_url = trip.get("checkout_origin_url") or body.origin_url
+
+    existing = await _existing_checkout_response(checkout_key, current["id"])
+    if existing:
+        return existing
+
+    # One worker owns the provider call at a time. If it crashes, another retry can take over
+    # after the short lease and reuse the same Stripe idempotency key.
+    lease_id = str(uuid.uuid4())
+    lease_now = datetime.now(timezone.utc)
+    lease_until = lease_now + timedelta(seconds=30)
+    lease = await db.trips.update_one(
+        {
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "checkout_idempotency_key": checkout_key,
+            "payment_status": {"$ne": "paid"},
+            "$or": [
+                {"checkout_processing_until": {"$exists": False}},
+                {"checkout_processing_until": None},
+                {"checkout_processing_until": {"$lte": lease_now}},
+            ],
+        },
+        {"$set": {
+            "checkout_processing_id": lease_id,
+            "checkout_processing_until": lease_until,
+            "checkout_state": "creating",
+        }},
+    )
+    if lease.modified_count != 1:
+        # A concurrent request is creating the same logical session. Give it a short window
+        # to persist the provider response, then return an explicit pending state.
+        for _ in range(10):
+            await asyncio.sleep(0.2)
+            existing = await _existing_checkout_response(checkout_key, current["id"])
+            if existing:
+                return existing
+        return {
+            "checkout_url": None,
+            "session_id": None,
+            "status": "creating",
+            "pending": True,
+        }
+
+    # Re-check after acquiring the lease so a webhook/payment transition that raced us wins.
+    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    if not trip or trip.get("payment_status") == "paid":
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id},
+            {"$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=400, detail="Turen er allerede betalt")
+
+    commission_snapshot = await resolve_commission_snapshot(
+        db, trip, await _platform_commission(), persist=True
+    )
+    if int(commission_snapshot.get("gross_amount") or 0) != amount_nok:
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id},
+            {"$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=409, detail="Provisjonsgrunnlaget stemmer ikke med turprisen")
+    trip["commission_snapshot"] = commission_snapshot
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
     checkout_kwargs = {
         "mode": "payment",
         "line_items": [{
             "price_data": {
-                "currency": "nok",
+                "currency": currency,
                 "unit_amount": amount_nok * 100,
                 "product_data": {
                     "name": f"KJAPP tur — {trip.get('pickup_address','')[:40]} → {trip.get('dropoff_address','')[:40]}",
@@ -4213,13 +4576,13 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
             },
             "quantity": 1,
         }],
-        "success_url": f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        "cancel_url": f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
+        "success_url": f"{origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{origin_url}/payment/cancel?trip_id={body.trip_id}",
         "metadata": metadata,
     }
     connect_fields = {}
     if connect_destination:
-        fee_ore = int(round(amount_nok * 100 * connect_destination["commission_rate"]))
+        fee_ore = int(commission_snapshot["commission_amount"]) * 100
         checkout_kwargs["payment_intent_data"] = {
             "application_fee_amount": fee_ore,
             "transfer_data": {"destination": connect_destination["stripe_account_id"]},
@@ -4232,25 +4595,74 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         connect_fields = {
             "fleet_id": connect_destination["fleet_id"],
             "stripe_account_id": connect_destination["stripe_account_id"],
-            "commission_rate": connect_destination["commission_rate"],
-            "platform_fee": fee_ore / 100,
-            "fleet_net": amount_nok - (fee_ore / 100),
+            "commission_rate": commission_snapshot["commission_rate"],
+            "platform_fee": commission_snapshot["commission_amount"],
+            "fleet_net": commission_snapshot["fleet_net_amount"],
             "settlement_model": "stripe_destination_charge",
+            "commission_snapshot": commission_snapshot,
         }
-    session = stripe.checkout.Session.create(**checkout_kwargs)
-    await db.payment_transactions.insert_one({
-        "session_id": session.id,
-        "trip_id": body.trip_id,
-        "user_id": current["id"],
-        "amount": amount_nok,
-        "currency": "nok",
-        "status": "initiated",
-        "payment_status": "pending",
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        **connect_fields,
-    })
-    return {"checkout_url": session.url, "session_id": session.id}
+
+    try:
+        session = stripe.checkout.Session.create(**checkout_kwargs, idempotency_key=checkout_key)
+    except (stripe.error.APIConnectionError, stripe.error.RateLimitError, stripe.error.APIError):
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id},
+            {"$set": {"checkout_state": "creating"}, "$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=503, detail="Betalingsstatus er ikke avklart. Prøv igjen.")
+    except stripe.error.StripeError as exc:
+        # Definitive creation failure: no provider session should be reused. Release this
+        # logical checkout attempt so a corrected request can create a new key.
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id, "checkout_idempotency_key": checkout_key},
+            {"$unset": {
+                "checkout_idempotency_key": "", "checkout_amount": "", "checkout_currency": "",
+                "checkout_origin_url": "", "checkout_state": "", "checkout_created_at": "",
+                "checkout_processing_id": "", "checkout_processing_until": "",
+            }},
+        )
+        raise HTTPException(status_code=502, detail=getattr(exc, "user_message", None) or "Stripe kunne ikke opprette betalingsøkten")
+    except Exception:
+        # Unknown outcome around the provider call is retried with the exact same Stripe key.
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id, "checkout_idempotency_key": checkout_key},
+            {"$set": {"checkout_state": "creating"}, "$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=503, detail="Betalingsstatus er ikke avklart. Prøv igjen.")
+
+    tx_now = datetime.now(timezone.utc)
+    await db.payment_transactions.update_one(
+        {"checkout_idempotency_key": checkout_key},
+        {
+            "$setOnInsert": {
+                "checkout_idempotency_key": checkout_key,
+                "trip_id": body.trip_id,
+                "user_id": current["id"],
+                "amount": amount_nok,
+                "currency": currency,
+                "commission_snapshot": commission_snapshot,
+                "created_at": tx_now,
+            },
+            "$set": {
+                "session_id": session.id,
+                "checkout_url": session.url,
+                "status": "initiated",
+                "payment_status": "pending",
+                "updated_at": tx_now,
+                **connect_fields,
+            },
+        },
+        upsert=True,
+    )
+    await db.trips.update_one(
+        {"trip_id": body.trip_id, "checkout_idempotency_key": checkout_key, "checkout_processing_id": lease_id},
+        {"$set": {
+            "checkout_session_id": session.id,
+            "checkout_state": "pending",
+            "checkout_updated_at": tx_now,
+        }, "$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+    )
+    return {"checkout_url": session.url, "session_id": session.id, "status": "initiated", "pending": False}
 
 
 @api.get("/payments/status/{session_id}")
@@ -4279,7 +4691,13 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                 if record.get("trip_id"):
                     await db.trips.update_one(
                         {"trip_id": record["trip_id"], "user_id": current["id"]},
-                        {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                        {"$set": {
+                            "payment_status": "paid",
+                            "status": "completed",
+                            "paid_at": datetime.now(timezone.utc).isoformat(),
+                            "checkout_state": "paid",
+                            "checkout_session_id": session_id,
+                        }},
                     )
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
@@ -4303,6 +4721,12 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(400, "Webhook error")
     obj, t = event["data"]["object"], event["type"]
+    if t in ("refund.created", "refund.updated", "refund.failed"):
+        refund_doc = await db.refunds.find_one({"provider_ref": obj.get("id")})
+        if refund_doc:
+            provider_status = obj.get("status") or ("failed" if t == "refund.failed" else "pending")
+            await _apply_refund_provider_state(refund_doc, obj.get("id"), provider_status)
+        return {"status": "ok"}
     if t == "checkout.session.completed" and obj.get("payment_status") == "paid":
         existing = await db.payment_transactions.find_one({"session_id": obj["id"]})
         metadata = obj.get("metadata") or {}
@@ -4322,18 +4746,44 @@ async def stripe_webhook(request: Request):
         if r and r.get("trip_id"):
             await db.trips.update_one(
                 {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
-                {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                {"$set": {
+                    "payment_status": "paid",
+                    "status": "completed",
+                    "paid_at": datetime.now(timezone.utc).isoformat(),
+                    "checkout_state": "paid",
+                    "checkout_session_id": obj["id"],
+                }},
             )
     elif t == "checkout.session.completed":
-        await db.payment_transactions.update_one(
+        awaiting_tx = await db.payment_transactions.find_one_and_update(
             {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {"status": "awaiting_payment", "updated_at": datetime.now(timezone.utc)}},
         )
+        if awaiting_tx and awaiting_tx.get("trip_id"):
+            await db.trips.update_one(
+                {"trip_id": awaiting_tx["trip_id"], "checkout_session_id": obj["id"], "payment_status": {"$ne": "paid"}},
+                {"$set": {"checkout_state": "awaiting_payment"}},
+            )
     elif t == "checkout.session.expired":
-        await db.payment_transactions.update_one(
-            {"session_id": obj["id"]},
+        expired_tx = await db.payment_transactions.find_one_and_update(
+            {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {"status": "expired", "payment_status": "expired", "updated_at": datetime.now(timezone.utc)}},
         )
+        if expired_tx and expired_tx.get("trip_id"):
+            await db.trips.update_one(
+                {
+                    "trip_id": expired_tx["trip_id"],
+                    "user_id": expired_tx.get("user_id"),
+                    "checkout_session_id": obj["id"],
+                    "payment_status": {"$ne": "paid"},
+                },
+                {"$unset": {
+                    "checkout_idempotency_key": "", "checkout_amount": "", "checkout_currency": "",
+                    "checkout_origin_url": "", "checkout_state": "", "checkout_created_at": "",
+                    "checkout_updated_at": "", "checkout_session_id": "",
+                    "checkout_processing_id": "", "checkout_processing_until": "",
+                }},
+            )
     return {"status": "ok"}
 
 
@@ -4478,14 +4928,20 @@ async def driver_payouts(current=Depends(require_driver)):
     driver_id = current["id"]
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
+    pending_trip_net = 0
+    pending_commission = 0
     trips_count = 0
+    default_commission = await _platform_commission()
     async for t in db.trips.find({
         "driver_id": driver_id,
         "status": {"$in": ["arrived", "completed", "rated"]},
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
     }):
-        pending += t.get("price", 0)
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        pending += int(snap["gross_amount"])
+        pending_trip_net += int(snap["driver_amount"])
+        pending_commission += int(snap["commission_amount"])
         trips_count += 1
     # Read historic payouts if any
     history = []
@@ -4496,8 +4952,7 @@ async def driver_payouts(current=Depends(require_driver)):
     now = datetime.now(timezone.utc).date()
     days_ahead = (7 - now.weekday()) % 7 or 7
     next_payout = (now + timedelta(days=days_ahead)).isoformat()
-    commission = await _platform_commission()
-    net = int(round(pending * (1 - commission)))
+    effective_commission = (pending_commission / pending) if pending else default_commission
     bonuses = []
     bonus_total = 0
     async for b in db.bonus_payouts.find({"driver_id": driver_id, "paid_out": {"$ne": True}}).sort("earned_at", -1).limit(20):
@@ -4507,11 +4962,11 @@ async def driver_payouts(current=Depends(require_driver)):
     return {
         "pending_gross": pending,
         "pending_trips": trips_count,
-        "pending_net": net + bonus_total,
-        "pending_trip_net": net,
+        "pending_net": pending_trip_net + bonus_total,
+        "pending_trip_net": pending_trip_net,
         "pending_bonus": bonus_total,
         "bonuses": bonuses,
-        "commission_pct": int(round(commission * 100)),
+        "commission_pct": int(round(effective_commission * 100)),
         "next_payout_date": next_payout,
         "history": history,
     }
@@ -5100,10 +5555,11 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
     async for t in db.trips.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(t); user_ids.append(t.get("user_id"))
     users = await _users_by_ids(user_ids)
-    commission = await _platform_commission()
+    default_commission = await _platform_commission()
     out = []
     for t in raw:
         finished = t.get("status") in ("arrived", "completed", "rated")
+        commission_snapshot = await resolve_commission_snapshot(db, t, default_commission, persist=False) if finished else None
         out.append({
             "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
             "distance_km": t.get("distance_km"), "duration_min": t.get("duration_min"),
@@ -5113,7 +5569,8 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
-            "driver_earnings": int(round((t.get("price") or 0) * (1 - commission))) if finished else None,
+            "driver_earnings": int(commission_snapshot["driver_amount"]) if commission_snapshot else None,
+            "commission_rate": commission_snapshot.get("commission_rate") if commission_snapshot else None,
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
             "accepted_at": t.get("driver_route_started_at"),
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
@@ -5145,43 +5602,63 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
     days = max(1, min(days, 180))
     since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
     daily = {}
-    total_gmv, total_trips = 0, 0
-    fleet_gmv = {}
-    driver_fleet = {}
-    async for u in db.users.find({"role": "driver", "fleet_id": {"$exists": True, "$ne": None}}, {"fleet_id": 1}):
-        driver_fleet[str(u["_id"])] = u["fleet_id"]
-    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": since}}, {"price": 1, "created_at": 1, "driver_id": 1}):
-        price = t.get("price", 0) or 0
+    total_gmv, total_trips, total_commission = 0, 0, 0
+    fleet_finance = {}
+    default_commission = await _platform_commission()
+
+    async for t in db.trips.find({
+        "status": {"$in": ["arrived", "completed", "rated"]},
+        "created_at": {"$gte": since},
+    }):
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+        price = int(snap["gross_amount"])
+        commission_amount = int(snap["commission_amount"])
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
-        d["gmv"] += price; d["trips"] += 1
-        total_gmv += price; total_trips += 1
-        fid = driver_fleet.get(t.get("driver_id"))
+        d["gmv"] += price
+        d["trips"] += 1
+        total_gmv += price
+        total_trips += 1
+        total_commission += commission_amount
+
+        fid = snap.get("fleet_id")
         if fid:
-            fg = fleet_gmv.setdefault(fid, {"gmv": 0, "trips": 0})
-            fg["gmv"] += price; fg["trips"] += 1
+            fg = fleet_finance.setdefault(fid, {"gmv": 0, "trips": 0, "commission": 0})
+            fg["gmv"] += price
+            fg["trips"] += 1
+            fg["commission"] += commission_amount
+
     series = []
     for i in range(days):
         day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).date().isoformat()
         d = daily.get(day, {"gmv": 0, "trips": 0})
         series.append({"date": day, "gmv": d["gmv"], "trips": d["trips"]})
+
     fleets_out = []
-    async for f in db.fleets.find({}):
-        fid = str(f["_id"])
-        fg = fleet_gmv.get(fid, {"gmv": 0, "trips": 0})
-        rate = f.get("commission_rate", 0.10)
+    async for fleet in db.fleets.find({}):
+        fid = str(fleet["_id"])
+        fg = fleet_finance.get(fid, {"gmv": 0, "trips": 0, "commission": 0})
+        effective_rate = (
+            fg["commission"] / fg["gmv"]
+            if fg["gmv"]
+            else float(fleet.get("commission_rate", default_commission) or default_commission)
+        )
         fleets_out.append({
-            "id": fid, "name": f.get("name"), "status": f.get("status", "active"),
-            "trips": fg["trips"], "gmv": fg["gmv"],
-            "commission_rate": rate, "commission_amount": round(fg["gmv"] * rate),
+            "id": fid,
+            "name": fleet.get("name"),
+            "status": fleet.get("status", "active"),
+            "trips": fg["trips"],
+            "gmv": fg["gmv"],
+            "commission_rate": effective_rate,
+            "commission_amount": fg["commission"],
         })
     fleets_out.sort(key=lambda x: -x["gmv"])
-    _rate = await _platform_commission()
     return {
         "days": days,
         "totals": {
-            "gmv": total_gmv, "trips": total_trips,
-            "kjapp_revenue": round(total_gmv * _rate),
+            "gmv": total_gmv,
+            "trips": total_trips,
+            "kjapp_revenue": total_commission,
             "avg_price": round(total_gmv / total_trips) if total_trips else 0,
         },
         "series": series,
@@ -5198,14 +5675,15 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
     since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
     buf = _io.StringIO()
     w = _csv.writer(buf, delimiter=";")
-    _rate = await _platform_commission()
+    default_commission = await _platform_commission()
     w.writerow(["dato", "trip_id", "status", "pris_kr", "distanse_km", "sjåfør", "passasjer_id", "kjapp_provisjon_kr"])
     async for t in db.trips.find({"created_at": {"$gte": since}}).sort("created_at", -1).limit(5000):
         price = t.get("price", 0) or 0
+        snap = await resolve_commission_snapshot(db, t, default_commission, persist=False) if t.get("status") in ("arrived", "completed", "rated") else None
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * _rate) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            int(snap["commission_amount"]) if snap else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -5303,85 +5781,432 @@ class RefundRequest(BaseModel):
     reason: str
 
 
+REFUND_TERMINAL_STATUSES = {"succeeded", "failed", "cancelled"}
+
+
+def _refund_public(doc: dict) -> dict:
+    out = dict(doc or {})
+    if out.get("_id") is not None:
+        out["id"] = out.get("id") or str(out["_id"])
+        out.pop("_id", None)
+    return out
+
+
+def _refund_provider_status(value: Optional[str]) -> str:
+    v = (value or "pending").strip().lower()
+    if v in ("succeeded", "success"):
+        return "succeeded"
+    if v in ("failed",):
+        return "failed"
+    if v in ("canceled", "cancelled"):
+        return "cancelled"
+    return "pending"
+
+
+async def _refund_release_reservation(refund_doc: dict):
+    """Release a local refund reservation exactly once."""
+    op_id = refund_doc.get("operation_id")
+    amount = int(refund_doc.get("amount") or 0)
+    if not op_id or amount <= 0:
+        return
+    await db.trips.update_one(
+        {"trip_id": refund_doc["trip_id"], "refund_operation_ids": op_id},
+        [
+            {"$set": {
+                "refund_pending_total": {
+                    "$max": [0, {"$subtract": [{"$ifNull": ["$refund_pending_total", 0]}, amount]}]
+                },
+                "refund_operation_ids": {
+                    "$setDifference": [{"$ifNull": ["$refund_operation_ids", []]}, [op_id]]
+                },
+            }},
+            {"$set": {
+                "refund_status": {
+                    "$cond": [
+                        {"$gt": ["$refund_pending_total", 0]},
+                        "pending",
+                        {"$cond": [
+                            {"$gte": [{"$ifNull": ["$refunded_total", 0]}, {"$ifNull": ["$price", 0]}]},
+                            "full",
+                            {"$cond": [{"$gt": [{"$ifNull": ["$refunded_total", 0]}, 0]}, "partial", None]},
+                        ]},
+                    ]
+                }
+            }},
+        ],
+    )
+
+
+async def _refund_finalize_success(refund_doc: dict, provider_ref: Optional[str], provider_status: str = "succeeded"):
+    """Move reserved amount to refunded_total exactly once, then mark refund succeeded."""
+    op_id = refund_doc.get("operation_id")
+    amount = int(refund_doc.get("amount") or 0)
+    if op_id and amount > 0:
+        await db.trips.update_one(
+            {"trip_id": refund_doc["trip_id"], "refund_operation_ids": op_id},
+            [
+                {"$set": {
+                    "refunded_total": {"$add": [{"$ifNull": ["$refunded_total", 0]}, amount]},
+                    "refund_pending_total": {
+                        "$max": [0, {"$subtract": [{"$ifNull": ["$refund_pending_total", 0]}, amount]}]
+                    },
+                    "refund_operation_ids": {
+                        "$setDifference": [{"$ifNull": ["$refund_operation_ids", []]}, [op_id]]
+                    },
+                }},
+                {"$set": {
+                    "refund_status": {
+                        "$cond": [
+                            {"$gte": ["$refunded_total", {"$ifNull": ["$price", 0]}]},
+                            "full",
+                            {"$cond": [{"$gt": ["$refund_pending_total", 0]}, "pending", "partial"]},
+                        ]
+                    }
+                }},
+            ],
+        )
+    now = datetime.now(timezone.utc)
+    await db.refunds.update_one(
+        {"idempotency_key": refund_doc["idempotency_key"]},
+        {"$set": {
+            "status": "succeeded",
+            "provider_status": provider_status,
+            "provider_ref": provider_ref or refund_doc.get("provider_ref"),
+            "succeeded_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }, "$unset": {"processing_id": "", "processing_until": "", "failure_code": "", "failure_message_safe": ""}},
+    )
+
+
+async def _refund_mark_failed(refund_doc: dict, code: str, safe_message: str, provider_status: str = "failed"):
+    await _refund_release_reservation(refund_doc)
+    now = datetime.now(timezone.utc)
+    await db.refunds.update_one(
+        {"idempotency_key": refund_doc["idempotency_key"]},
+        {"$set": {
+            "status": "failed",
+            "provider_status": provider_status,
+            "failure_code": code,
+            "failure_message_safe": safe_message[:500],
+            "failed_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }, "$unset": {"processing_id": "", "processing_until": ""}},
+    )
+
+
+async def _refund_mark_cancelled(refund_doc: dict, provider_ref: Optional[str], provider_status: str):
+    await _refund_release_reservation(refund_doc)
+    now = datetime.now(timezone.utc)
+    await db.refunds.update_one(
+        {"idempotency_key": refund_doc["idempotency_key"]},
+        {"$set": {
+            "status": "cancelled",
+            "provider_status": provider_status,
+            "provider_ref": provider_ref or refund_doc.get("provider_ref"),
+            "cancelled_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }, "$unset": {"processing_id": "", "processing_until": ""}},
+    )
+
+
+async def _refund_audit_from_record(refund_doc: dict, action: str, after: dict):
+    """Webhook-safe audit using the admin identity captured on the original request."""
+    await db.audit_events.insert_one({
+        "admin_id": refund_doc.get("admin_id"),
+        "admin_email": refund_doc.get("admin_email"),
+        "action": action,
+        "entity_type": "trip",
+        "entity_id": refund_doc.get("trip_id"),
+        "before": None,
+        "after": after,
+        "reason": refund_doc.get("reason"),
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _apply_refund_provider_state(refund_doc: dict, provider_ref: Optional[str], provider_status: str):
+    """Idempotently reconcile a provider refund result into MongoDB."""
+    local_status = _refund_provider_status(provider_status)
+    if local_status == "succeeded":
+        was_terminal = refund_doc.get("status") == "succeeded"
+        await _refund_finalize_success(refund_doc, provider_ref, provider_status)
+        if not was_terminal:
+            await _refund_audit_from_record(refund_doc, "refund.succeeded", {
+                "refund_id": refund_doc.get("id"),
+                "amount": refund_doc.get("amount"),
+                "provider": refund_doc.get("provider"),
+                "provider_ref": provider_ref,
+            })
+    elif local_status == "failed":
+        if refund_doc.get("status") != "failed":
+            await _refund_mark_failed(refund_doc, "provider_failed", "Betalingsleverandøren avviste refusjonen.", provider_status)
+            await _refund_audit_from_record(refund_doc, "refund.failed", {
+                "refund_id": refund_doc.get("id"), "provider_ref": provider_ref,
+            })
+    elif local_status == "cancelled":
+        if refund_doc.get("status") != "cancelled":
+            await _refund_mark_cancelled(refund_doc, provider_ref, provider_status)
+            await _refund_audit_from_record(refund_doc, "refund.cancelled", {
+                "refund_id": refund_doc.get("id"), "provider_ref": provider_ref,
+            })
+    else:
+        await db.refunds.update_one(
+            {"idempotency_key": refund_doc["idempotency_key"]},
+            {"$set": {
+                "status": "pending",
+                "provider_status": provider_status,
+                "provider_ref": provider_ref or refund_doc.get("provider_ref"),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }, "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+
+
 @api.get("/admin/refunds")
 async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
-    if status and status != "all": filt["status"] = status
+    if status and status != "all":
+        filt["status"] = status
     page, page_size, skip = _page_params(page, page_size)
     total = await db.refunds.count_documents(filt)
     out = []
     async for r in db.refunds.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
-        r["id"] = r.get("id") or str(r["_id"]); r.pop("_id", None)
-        out.append(r)
+        out.append(_refund_public(r))
     return _paged(out, total, page, page_size, "refunds")
 
 
 @api.post("/admin/refunds")
-async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
-    if not (body.reason or "").strip():
+async def admin_create_refund(
+    body: RefundRequest,
+    current=Depends(require_admin),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    reason = (body.reason or "").strip()
+    if not reason:
         raise HTTPException(400, "Begrunnelse kreves")
-    trip = await db.trips.find_one({"trip_id": body.trip_id})
-    if not trip:
-        raise HTTPException(404, "Fant ikke tur")
-    if trip.get("status") not in ("arrived", "completed", "rated"):
-        raise HTTPException(400, "Kan bare refundere fullførte turer")
-    gross = int(trip.get("price") or 0)
-    already = int(trip.get("refunded_total") or 0)
-    eligible = gross - already
-    if eligible <= 0:
-        raise HTTPException(409, "Turen er allerede fullt refundert")
-    amount = int(body.amount) if body.amount is not None else eligible
-    if amount <= 0 or amount > eligible:
-        raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Resolve the actual captured Stripe payment from the transaction ledger first.
-    # This is the canonical location for Checkout PaymentIntent IDs.
-    provider, provider_ref, prov_status = "manual", None, "recorded"
-    payment_tx = await db.payment_transactions.find_one(
-        {"trip_id": body.trip_id, "payment_status": "paid"},
-        sort=[("updated_at", -1)],
-    )
-    pi = (
-        trip.get("stripe_payment_intent")
-        or trip.get("payment_intent_id")
-        or trip.get("charge_id")
-        or (payment_tx or {}).get("stripe_payment_intent_id")
-    )
-    if pi and stripe.api_key:
+    key = (idempotency_key or "").strip()
+    if not key:
+        raise HTTPException(400, "Idempotency-Key kreves for refusjoner")
+    if len(key) > 200:
+        raise HTTPException(400, "Ugyldig idempotency-nøkkel")
+
+    existing = await db.refunds.find_one({"idempotency_key": key})
+    if existing:
+        await _audit(current, "refund.retry", "trip", existing.get("trip_id"), None, {
+            "refund_id": existing.get("id"), "status": existing.get("status"), "idempotency_key": key,
+        }, reason)
+        refund_doc = existing
+    else:
+        trip = await db.trips.find_one({"trip_id": body.trip_id})
+        if not trip:
+            raise HTTPException(404, "Fant ikke tur")
+        if trip.get("status") not in ("arrived", "completed", "rated"):
+            raise HTTPException(400, "Kan bare refundere fullførte turer")
+        gross = int(trip.get("price") or 0)
+        already = int(trip.get("refunded_total") or 0)
+        pending = int(trip.get("refund_pending_total") or 0)
+        eligible = gross - already - pending
+        if eligible <= 0:
+            raise HTTPException(409, "Turen har ingen tilgjengelig refunderbar saldo")
+        amount = int(body.amount) if body.amount is not None else eligible
+        if amount <= 0 or amount > eligible:
+            raise HTTPException(400, f"Ugyldig beløp. Maks tilgjengelig akkurat nå: {eligible} kr")
+
+        payment_tx = await db.payment_transactions.find_one(
+            {"trip_id": body.trip_id, "payment_status": "paid"},
+            sort=[("updated_at", -1)],
+        )
+        pi = (
+            trip.get("stripe_payment_intent")
+            or trip.get("payment_intent_id")
+            or trip.get("charge_id")
+            or (payment_tx or {}).get("stripe_payment_intent_id")
+        )
+        now = datetime.now(timezone.utc)
+        refund_doc = {
+            "id": str(uuid.uuid4()),
+            "operation_id": str(uuid.uuid4()),
+            "idempotency_key": key,
+            "trip_id": body.trip_id,
+            "user_id": trip.get("user_id"),
+            "payment_id": (payment_tx or {}).get("session_id"),
+            "payment_intent_id": pi,
+            "amount": amount,
+            "currency": str((payment_tx or {}).get("currency") or "nok").upper(),
+            "reason": reason,
+            "provider": "stripe" if pi and stripe.api_key else "manual",
+            "provider_ref": None,
+            "provider_status": None,
+            "status": "requested",
+            "fleet_id": (payment_tx or {}).get("fleet_id"),
+            "settlement_model": (payment_tx or {}).get("settlement_model"),
+            "commission_snapshot": (payment_tx or {}).get("commission_snapshot") or trip.get("commission_snapshot"),
+            "admin_id": current["id"],
+            "admin_email": current.get("email"),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
         try:
-            kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"):
-                kwargs["charge"] = pi
-            else:
-                kwargs["payment_intent"] = pi
-            if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
-                # Reverse the fleet transfer and refund the proportional platform fee,
-                # otherwise the platform would carry the refund while the fleet kept funds.
-                kwargs["reverse_transfer"] = True
-                kwargs["refund_application_fee"] = True
-            sr = stripe.Refund.create(**kwargs)
-            provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
-        except stripe.error.StripeError as e:
-            raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "trip_id": body.trip_id, "user_id": trip.get("user_id"),
-        "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
-        "provider": provider, "provider_ref": provider_ref, "status": prov_status,
-        "fleet_id": (payment_tx or {}).get("fleet_id"),
-        "settlement_model": (payment_tx or {}).get("settlement_model"),
-        "admin_id": current["id"], "admin_email": current.get("email"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.refunds.insert_one(dict(doc))
-    new_total = already + amount
-    await db.trips.update_one({"trip_id": body.trip_id}, {"$set": {
-        "refunded_total": new_total,
-        "refund_status": "full" if new_total >= gross else "partial",
-    }})
-    await _audit(current, "refund.create", "trip", body.trip_id,
-                 {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
-                 body.reason.strip())
-    return doc
+            await db.refunds.insert_one(dict(refund_doc))
+        except DuplicateKeyError:
+            refund_doc = await db.refunds.find_one({"idempotency_key": key})
+            if not refund_doc:
+                raise HTTPException(409, "Refusjonsoperasjonen finnes allerede")
+            if refund_doc.get("trip_id") != body.trip_id:
+                raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt")
+        await _audit(current, "refund.requested", "trip", body.trip_id, None, {
+            "refund_id": refund_doc.get("id"),
+            "amount": refund_doc.get("amount"),
+            "currency": refund_doc.get("currency"),
+            "idempotency_key": key,
+        }, reason)
+
+    # Idempotency keys may never be reused for a different logical refund.
+    if refund_doc.get("trip_id") != body.trip_id:
+        raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt på en annen tur")
+    if body.amount is not None and int(body.amount) != int(refund_doc.get("amount") or 0):
+        raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt med et annet beløp")
+    if reason != refund_doc.get("reason"):
+        raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt med en annen begrunnelse")
+    if refund_doc.get("status") in REFUND_TERMINAL_STATUSES:
+        return _refund_public(refund_doc)
+
+    # Reserve the requested amount on the trip exactly once. The operation id on the trip
+    # makes crash recovery safe if the process dies after reservation but before the refund row updates.
+    op_id = refund_doc["operation_id"]
+    trip_now = await db.trips.find_one({"trip_id": refund_doc["trip_id"]})
+    already_reserved = bool(trip_now and op_id in (trip_now.get("refund_operation_ids") or []))
+    if not already_reserved:
+        amount = int(refund_doc["amount"])
+        reserved = await db.trips.update_one(
+            {
+                "trip_id": refund_doc["trip_id"],
+                "status": {"$in": ["arrived", "completed", "rated"]},
+                "refund_operation_ids": {"$ne": op_id},
+                "$expr": {
+                    "$lte": [
+                        {"$add": [
+                            {"$ifNull": ["$refunded_total", 0]},
+                            {"$ifNull": ["$refund_pending_total", 0]},
+                            amount,
+                        ]},
+                        {"$ifNull": ["$price", 0]},
+                    ]
+                },
+            },
+            {
+                "$inc": {"refund_pending_total": amount},
+                "$addToSet": {"refund_operation_ids": op_id},
+                "$set": {"refund_status": "pending"},
+            },
+        )
+        if reserved.modified_count != 1:
+            latest = await db.trips.find_one({"trip_id": refund_doc["trip_id"]})
+            if not latest or op_id not in (latest.get("refund_operation_ids") or []):
+                await _refund_mark_failed(refund_doc, "insufficient_refundable_balance", "Refusjonsbeløpet overstiger tilgjengelig saldo.")
+                await _audit(current, "refund.failed", "trip", refund_doc["trip_id"], None, {
+                    "refund_id": refund_doc.get("id"), "code": "insufficient_refundable_balance",
+                }, reason)
+                raise HTTPException(409, "Refusjonsbeløpet overstiger tilgjengelig saldo")
+        await db.refunds.update_one(
+            {"idempotency_key": key},
+            {"$set": {"status": "pending", "reserved_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    # A short database lease prevents two workers from calling Stripe concurrently for the same operation.
+    now = datetime.now(timezone.utc)
+    lease_id = str(uuid.uuid4())
+    lease_until = now + timedelta(seconds=60)
+    leased = await db.refunds.update_one(
+        {
+            "idempotency_key": key,
+            "status": {"$in": ["requested", "pending"]},
+            "$or": [
+                {"processing_until": {"$exists": False}},
+                {"processing_until": None},
+                {"processing_until": {"$lte": now}},
+            ],
+        },
+        {"$set": {"processing_id": lease_id, "processing_until": lease_until, "last_attempt_at": now, "updated_at": now.isoformat()}},
+    )
+    if leased.modified_count != 1:
+        current_doc = await db.refunds.find_one({"idempotency_key": key})
+        return _refund_public(current_doc)
+
+    refund_doc = await db.refunds.find_one({"idempotency_key": key})
+    pi = refund_doc.get("payment_intent_id")
+    if not pi or not stripe.api_key:
+        # No external provider confirmation exists. Keep the reservation pending rather than
+        # falsely claiming money was returned.
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {"status": "pending", "provider": "manual", "provider_status": "awaiting_manual_confirmation", "updated_at": datetime.now(timezone.utc)},
+             "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+        return _refund_public(await db.refunds.find_one({"idempotency_key": key}))
+
+    kwargs = {"amount": int(refund_doc["amount"]) * 100, "reason": "requested_by_customer"}
+    if str(pi).startswith("ch_"):
+        kwargs["charge"] = pi
+    else:
+        kwargs["payment_intent"] = pi
+    if refund_doc.get("settlement_model") == "stripe_destination_charge":
+        kwargs["reverse_transfer"] = True
+        kwargs["refund_application_fee"] = True
+
+    try:
+        sr = stripe.Refund.create(**kwargs, idempotency_key=key)
+        provider_ref = sr.get("id")
+        provider_status = sr.get("status") or "pending"
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {
+                "provider": "stripe",
+                "provider_ref": provider_ref,
+                "provider_status": provider_status,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        refund_doc = await db.refunds.find_one({"idempotency_key": key})
+        await _apply_refund_provider_state(refund_doc, provider_ref, provider_status)
+        return _refund_public(await db.refunds.find_one({"idempotency_key": key}))
+    except (stripe.error.APIConnectionError, stripe.error.RateLimitError, stripe.error.APIError):
+        # Provider outcome may be unknown. Keep the local reservation and retry with the SAME key.
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {
+                "status": "pending",
+                "provider": "stripe",
+                "failure_code": "provider_outcome_unknown",
+                "failure_message_safe": "Stripe-status er ikke avklart. Samme operasjon kan trygt prøves igjen.",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }, "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+        await _audit(current, "refund.retryable_error", "trip", refund_doc["trip_id"], None, {
+            "refund_id": refund_doc.get("id"), "idempotency_key": key,
+        }, reason)
+        raise HTTPException(503, "Stripe-status er ikke avklart. Prøv samme refusjon på nytt.")
+    except stripe.error.StripeError as exc:
+        safe = getattr(exc, "user_message", None) or "Stripe avviste refusjonen."
+        await _refund_mark_failed(refund_doc, "stripe_error", safe)
+        await _audit(current, "refund.failed", "trip", refund_doc["trip_id"], None, {
+            "refund_id": refund_doc.get("id"), "code": "stripe_error",
+        }, reason)
+        raise HTTPException(502, safe)
+    except Exception:
+        # Unknown exceptions around a provider call are treated as unknown outcome, not failed.
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {
+                "status": "pending",
+                "failure_code": "provider_outcome_unknown",
+                "failure_message_safe": "Providerstatus er ikke avklart. Samme operasjon kan trygt prøves igjen.",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }, "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+        await _audit(current, "refund.retryable_error", "trip", refund_doc["trip_id"], None, {
+            "refund_id": refund_doc.get("id"), "idempotency_key": key,
+        }, reason)
+        raise HTTPException(503, "Providerstatus er ikke avklart. Prøv samme refusjon på nytt.")
 
 
 # ---- Transactions ledger (derived from real records: trips / refunds / payouts) ----
@@ -5393,7 +6218,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
         date_from = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
     lo = date_from
     hi = (date_to or datetime.now(timezone.utc).date().isoformat()) + "T23:59:59.999Z"
-    commission = await _platform_commission()
+    default_commission = await _platform_commission()
     driver_fleet = {}
     async for u in db.users.find({"role": "driver", "fleet_id": {"$exists": True, "$ne": None}}, {"fleet_id": 1}):
         driver_fleet[str(u["_id"])] = u["fleet_id"]
@@ -5402,12 +6227,16 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
     if want in ("", "FARE"):
         async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": lo, "$lte": hi}}):
             fid = driver_fleet.get(t.get("driver_id"))
-            if fleet_id and fid != fleet_id: continue
-            price = int(t.get("price") or 0)
+            snap = await resolve_commission_snapshot(db, t, default_commission, persist=False)
+            fid = snap.get("fleet_id") or fid
+            if fleet_id and fid != fleet_id:
+                continue
+            price = int(snap["gross_amount"])
             rows.append({
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
-                "amount": price, "commission": round(price * commission), "driver_net": round(price * (1 - commission)),
+                "amount": price, "commission": int(snap["commission_amount"]), "driver_net": int(snap["driver_amount"]),
+                "commission_rate": snap.get("commission_rate"),
                 "provider": t.get("payment_method") or "card", "status": t.get("payment_status") or "captured",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })

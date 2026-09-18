@@ -78,3 +78,39 @@ def test_stale_driver_presence_does_not_count_as_live():
     assert not server._fresh_driver_location((now - timedelta(days=7)).isoformat(), now)
     assert not server._fresh_driver_location(None, now)
     assert not server._fresh_driver_location("broken timestamp", now)
+
+
+def test_admin_twofa_tokens_are_purpose_bound_and_short_lived():
+    now = datetime.now(timezone.utc)
+    verify = jwt.decode(
+        server.create_twofa_token("admin-1", "verify"),
+        server.JWT_SECRET,
+        algorithms=[server.JWT_ALGORITHM],
+    )
+    enroll = jwt.decode(
+        server.create_twofa_token("admin-1", "enroll"),
+        server.JWT_SECRET,
+        algorithms=[server.JWT_ALGORITHM],
+    )
+    assert verify["type"] == enroll["type"] == "2fa"
+    assert verify["twofa"] is True and enroll["twofa"] is True
+    assert verify["twofa_purpose"] == "verify"
+    assert enroll["twofa_purpose"] == "enroll"
+    assert verify["jti"] != enroll["jti"]
+    assert verify["exp"] - now.timestamp() <= 5 * 60 + 5
+    assert enroll["exp"] - now.timestamp() <= 5 * 60 + 5
+
+
+def test_twofa_is_mandatory_only_for_privileged_admin_roles():
+    assert server._twofa_required_role("admin") is True
+    assert server._twofa_required_role("superadmin") is True
+    for role in ("user", "driver", "fleet_owner", ""):
+        assert server._twofa_required_role(role) is False
+
+
+def test_invalid_twofa_token_purpose_is_rejected_at_creation():
+    try:
+        server.create_twofa_token("admin-1", "anything-else")
+        assert False, "invalid purpose must fail closed"
+    except ValueError:
+        pass
