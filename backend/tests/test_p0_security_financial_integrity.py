@@ -147,6 +147,35 @@ def test_admin_enrollment_then_totp_session_and_audit():
     _run(_with_temp_db(body))
 
 
+def test_pre_enrollment_admin_token_stays_revoked_after_enrollment():
+    async def body(tdb):
+        uid, _ = await _seed_admin(tdb)
+        legacy_token = server.create_access_token(uid, "owner@example.no")
+        login = await server.login(
+            server.LoginRequest(email="owner@example.no", password="Strong-Pass-123!"),
+            _request(),
+            Response(),
+        )
+        setup = await server.twofa_enroll_setup(
+            server.TwoFAEnrollSetupRequest(twofa_token=login["twofa_token"])
+        )
+        enabled = await server.twofa_enroll_enable(
+            server.TwoFAEnrollEnableRequest(
+                twofa_token=login["twofa_token"],
+                code=pyotp.TOTP(setup["secret"]).now(),
+            ),
+            _request(),
+            Response(),
+        )
+        assert enabled.get("token")
+        with pytest.raises(HTTPException) as exc:
+            await server.get_current_user(_request(legacy_token, "/api/admin/overview"))
+        assert exc.value.status_code == 401
+        fresh = await server.get_current_user(_request(enabled["token"], "/api/admin/overview"))
+        assert fresh["role"] == "superadmin"
+    _run(_with_temp_db(body))
+
+
 def test_admin_with_totp_wrong_code_fails_correct_code_succeeds():
     async def body(tdb):
         _, secret = await _seed_admin(tdb, totp=True)
@@ -326,6 +355,22 @@ def _fake_refund_success(calls):
         calls.append(kwargs)
         return {"id": "re_test_1", "status": "succeeded"}
     return create
+
+
+def test_refund_requires_idempotency_key(monkeypatch):
+    async def body(tdb):
+        await _seed_refundable_trip(tdb)
+        monkeypatch.setattr(server.stripe, "api_key", "sk_test_p0")
+        admin = {"id": "admin-1", "email": "admin@example.no", "role": "superadmin"}
+        with pytest.raises(HTTPException) as exc:
+            await server.admin_create_refund(
+                server.RefundRequest(trip_id="trip-refund", amount=10, reason="Missing key"),
+                admin,
+                None,
+            )
+        assert exc.value.status_code == 400
+        assert await tdb.refunds.count_documents({}) == 0
+    _run(_with_temp_db(body))
 
 
 def test_refund_same_key_is_exactly_once(monkeypatch):
@@ -699,6 +744,57 @@ def test_commission_fallback_and_historical_payment_basis():
         assert historical["commission_amount"] == 12
         assert historical["driver_amount"] == 88
         assert historical["source"] == "payment_transaction"
+    _run(_with_temp_db(body))
+
+
+def test_stripe_uses_frozen_fleet_after_driver_moves(monkeypatch):
+    async def body(tdb):
+        old_fleet = await tdb.fleets.insert_one({
+            "name": "Old Fleet",
+            "commission_rate": 0.12,
+            "stripe_account_id": "acct_old",
+        })
+        new_fleet = await tdb.fleets.insert_one({
+            "name": "New Fleet",
+            "commission_rate": 0.10,
+            "stripe_account_id": "acct_new",
+        })
+        old_fid, new_fid = str(old_fleet.inserted_id), str(new_fleet.inserted_id)
+        driver = await tdb.users.insert_one({
+            "email": "moved@example.no",
+            "role": "driver",
+            "fleet_id": new_fid,
+        })
+        did = str(driver.inserted_id)
+        snap = build_commission_snapshot(100, 0.12, fleet_id=old_fid, source="fleet")
+        trip = {
+            "trip_id": "trip-moved-driver",
+            "driver_id": did,
+            "driver_user_id": did,
+            "price": 100,
+            "commission_snapshot": snap,
+        }
+        monkeypatch.setattr(server.stripe, "api_key", "sk_test_p0")
+        seen = []
+        monkeypatch.setattr(
+            server.stripe.Account,
+            "retrieve",
+            staticmethod(lambda account_id: (
+                seen.append(account_id)
+                or {
+                    "id": account_id,
+                    "details_submitted": True,
+                    "charges_enabled": True,
+                    "payouts_enabled": True,
+                    "requirements": {},
+                }
+            )),
+        )
+        destination = await server.stripe_destination_for_trip(tdb, server.stripe, trip)
+        assert destination["fleet_id"] == old_fid
+        assert destination["stripe_account_id"] == "acct_old"
+        assert destination["commission_rate"] == pytest.approx(0.12)
+        assert seen == ["acct_old"]
     _run(_with_temp_db(body))
 
 
