@@ -92,7 +92,12 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     )
     if not snap["ready"]:
         return None
-    rate = float((fleet or {}).get("commission_rate", 0.12) or 0.12)
+    commission_snapshot = trip.get("commission_snapshot") or {}
+    snapshot_fleet_id = commission_snapshot.get("fleet_id")
+    if snapshot_fleet_id and str(snapshot_fleet_id) != str(fleet_id):
+        # Never settle a trip against a different fleet than its frozen economic basis.
+        return None
+    rate = float(commission_snapshot.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
