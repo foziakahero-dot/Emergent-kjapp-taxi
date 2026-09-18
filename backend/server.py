@@ -307,13 +307,19 @@ def create_access_token(user_id: str, email: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def create_twofa_token(user_id: str) -> str:
-    """Short-lived intermediate token issued after password step when 2FA is required.
-    It is NOT a session token — get_current_user rejects type == '2fa'."""
+def create_twofa_token(user_id: str, purpose: str = "verify") -> str:
+    """Short-lived pre-auth token for either TOTP verification or first-time enrollment.
+
+    This token is never a normal session. get_current_user rejects type == "2fa".
+    Purpose binding prevents an enrollment token from being reused as a verification token.
+    """
+    if purpose not in ("verify", "enroll"):
+        raise ValueError("Ugyldig 2FA-formål")
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "twofa": True,
+        "twofa_purpose": purpose,
         "type": "2fa",
         "iat": now.timestamp(),
         "exp": now + timedelta(minutes=5),
@@ -406,6 +412,9 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ikke innlogget")
+        if _twofa_required_role(user.get("role", "user")) and not user.get("totp_enabled"):
+            # Fail closed for privileged legacy sessions created before mandatory 2FA.
+            raise HTTPException(status_code=401, detail="Totrinnsbekreftelse må fullføres. Logg inn på nytt.")
         if not _session_is_current(payload, user):
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
         if await _session_is_revoked(payload):
@@ -452,6 +461,15 @@ class TwoFADisableRequest(BaseModel):
 
 
 class TwoFAVerifyLoginRequest(BaseModel):
+    twofa_token: str
+    code: str
+
+
+class TwoFAEnrollSetupRequest(BaseModel):
+    twofa_token: str
+
+
+class TwoFAEnrollEnableRequest(BaseModel):
     twofa_token: str
     code: str
 
@@ -1292,9 +1310,13 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Feil e-post eller passord")
     await _clear_failed_logins(email, ip)
     uid = str(user["_id"])
+    role = user.get("role", "user")
     if user.get("totp_enabled"):
         # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid, "verify")}
+    if _twofa_required_role(role):
+        # Privileged accounts must enroll before any normal access token is issued.
+        return {"twofa_setup_required": True, "twofa_token": create_twofa_token(uid, "enroll")}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
@@ -1341,6 +1363,8 @@ async def twofa_setup(current=Depends(get_current_user)):
     import io as _bio
     secret = pyotp.random_base32()
     await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"totp_secret_pending": secret}})
+    if _twofa_required_role(current.get("role", "user")):
+        await _audit(current, "auth.2fa_setup", "user", current["id"], None, {"method": "totp"})
     otpauth = pyotp.TOTP(secret).provisioning_uri(name=current.get("email", "bruker"), issuer_name="KJAPP")
     img = qrcode.make(otpauth)
     buf = _bio.BytesIO()
@@ -1361,10 +1385,17 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
     await db.users.update_one(
         {"_id": user["_id"]},
         {
-            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [hash_password(c) for c in backup]},
+            "$set": {
+                "totp_secret": pending,
+                "totp_enabled": True,
+                "totp_backup_codes": [hash_password(c) for c in backup],
+                "totp_enabled_at": datetime.now(timezone.utc).isoformat(),
+            },
             "$unset": {"totp_secret_pending": ""},
         },
     )
+    if _twofa_required_role(current.get("role", "user")):
+        await _audit(current, "auth.2fa_success", "user", current["id"], None, {"method": "totp", "flow": "setup"})
     return {"enabled": True, "backup_codes": backup}
 
 
@@ -1375,11 +1406,17 @@ async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_u
         raise HTTPException(status_code=401, detail="Feil passord.")
     if not user.get("totp_enabled") or not _verify_totp(user.get("totp_secret", ""), body.code):
         raise HTTPException(status_code=400, detail="Feil 2FA-kode.")
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$unset": {"totp_secret": "", "totp_enabled": "", "totp_backup_codes": "", "totp_secret_pending": ""}},
-    )
-    return {"enabled": False}
+    update = {
+        "$unset": {"totp_secret": "", "totp_enabled": "", "totp_backup_codes": "", "totp_secret_pending": ""},
+        "$set": {"totp_disabled_at": datetime.now(timezone.utc).isoformat()},
+    }
+    if _twofa_required_role(user.get("role", "user")):
+        # Mandatory-2FA roles must not keep a privileged session after disabling TOTP.
+        update["$set"]["tokens_valid_after"] = datetime.now(timezone.utc).timestamp()
+    await db.users.update_one({"_id": user["_id"]}, update)
+    if _twofa_required_role(current.get("role", "user")):
+        await _audit(current, "auth.2fa_disabled", "user", current["id"], {"totp_enabled": True}, {"totp_enabled": False})
+    return {"enabled": False, "reauth_required": _twofa_required_role(user.get("role", "user"))}
 
 
 @api.post("/auth/2fa/verify-login")
@@ -1388,7 +1425,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
         payload = jwt.decode(body.twofa_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="2FA-økt utløpt. Logg inn på nytt.")
-    if payload.get("type") != "2fa" or not payload.get("twofa"):
+    if payload.get("type") != "2fa" or not payload.get("twofa") or payload.get("twofa_purpose", "verify") != "verify":
         raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
     try:
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
@@ -1409,18 +1446,115 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
                 ok = True
                 used_idx = i
                 break
+    audit_user = {"id": str(user["_id"]), "email": email}
     if not ok:
         await _record_failed_login(email, ip)
+        if _twofa_required_role(user.get("role", "user")):
+            await _audit(audit_user, "auth.2fa_failed", "user", audit_user["id"], None, {"method": "totp_or_backup"})
         raise HTTPException(status_code=401, detail="Feil kode.")
     await _clear_failed_logins(email, ip)
     if used_idx is not None:
+        # Consume exactly one backup code before issuing the access session.
         codes = user.get("totp_backup_codes", [])
         codes.pop(used_idx)
         await db.users.update_one({"_id": user["_id"]}, {"$set": {"totp_backup_codes": codes}})
+        if _twofa_required_role(user.get("role", "user")):
+            await _audit(audit_user, "auth.2fa_backup_used", "user", audit_user["id"], None, {"remaining_backup_codes": len(codes)})
+    if _twofa_required_role(user.get("role", "user")):
+        await _audit(audit_user, "auth.2fa_success", "user", audit_user["id"], None, {"method": "backup" if used_idx is not None else "totp", "flow": "login"})
     uid = str(user["_id"])
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
+
+
+# ---- Mandatory admin 2FA enrollment (pre-auth only) ----
+async def _twofa_enrollment_user(twofa_token: str) -> dict:
+    try:
+        payload = jwt.decode(twofa_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="2FA-økt utløpt. Logg inn på nytt.")
+    if (
+        payload.get("type") != "2fa"
+        or not payload.get("twofa")
+        or payload.get("twofa_purpose") != "enroll"
+    ):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    try:
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    except (InvalidId, KeyError):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    if (
+        not user
+        or user.get("disabled")
+        or not _twofa_required_role(user.get("role", "user"))
+        or user.get("totp_enabled")
+        or not _session_is_current(payload, user)
+    ):
+        raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
+    return user
+
+
+@api.post("/auth/2fa/enroll/setup")
+async def twofa_enroll_setup(body: TwoFAEnrollSetupRequest):
+    """Create a pending TOTP secret using only a purpose-bound enrollment token."""
+    import io as _bio
+    user = await _twofa_enrollment_user(body.twofa_token)
+    secret = pyotp.random_base32()
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"_id": user["_id"], "totp_enabled": {"$ne": True}},
+        {"$set": {"totp_secret_pending": secret, "totp_enrollment_started_at": now.isoformat()}},
+    )
+    audit_user = {"id": str(user["_id"]), "email": user.get("email")}
+    await _audit(audit_user, "auth.2fa_setup", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
+    otpauth = pyotp.TOTP(secret).provisioning_uri(name=user.get("email", "admin"), issuer_name="KJAPP")
+    img = qrcode.make(otpauth)
+    buf = _bio.BytesIO()
+    img.save(buf, format="PNG")
+    return {
+        "secret": secret,
+        "otpauth_url": otpauth,
+        "qr": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode(),
+    }
+
+
+@api.post("/auth/2fa/enroll/enable")
+async def twofa_enroll_enable(body: TwoFAEnrollEnableRequest, request: Request, response: Response):
+    """Verify first TOTP, activate mandatory 2FA, then and only then issue an admin session."""
+    user = await _twofa_enrollment_user(body.twofa_token)
+    email = user.get("email", "")
+    ip = _client_ip(request)
+    if await _login_blocked(email, ip):
+        raise HTTPException(status_code=429, detail="For mange forsøk. Prøv igjen om 15 minutter.")
+    pending = user.get("totp_secret_pending")
+    audit_user = {"id": str(user["_id"]), "email": email}
+    if not pending or not _verify_totp(pending, body.code):
+        await _record_failed_login(email, ip)
+        await _audit(audit_user, "auth.2fa_failed", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
+        raise HTTPException(status_code=401, detail="Feil kode.")
+    backup = _gen_backup_codes()
+    enabled_at = datetime.now(timezone.utc)
+    result = await db.users.update_one(
+        {"_id": user["_id"], "totp_enabled": {"$ne": True}, "totp_secret_pending": pending},
+        {
+            "$set": {
+                "totp_secret": pending,
+                "totp_enabled": True,
+                "totp_backup_codes": [hash_password(c) for c in backup],
+                "totp_enabled_at": enabled_at.isoformat(),
+            },
+            "$unset": {"totp_secret_pending": "", "totp_enrollment_started_at": ""},
+        },
+    )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="2FA-oppsettet ble endret. Logg inn på nytt.")
+    await _clear_failed_logins(email, ip)
+    await _audit(audit_user, "auth.2fa_success", "user", audit_user["id"], None, {"method": "totp", "flow": "mandatory_enrollment"})
+    token = create_access_token(str(user["_id"]), email)
+    set_auth_cookie(response, token)
+    public = user_public({**user, "totp_enabled": True})
+    return {"token": token, "user": public, "enabled": True, "backup_codes": backup}
 
 
 # ---- Password reset via e-postlenke ----
