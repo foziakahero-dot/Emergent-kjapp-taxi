@@ -434,7 +434,11 @@ def test_refund_cannot_exceed_remaining_balance(monkeypatch):
 # ---------------------------------------------------------------------------
 
 async def _seed_checkout_trip(tdb, trip_id="trip-checkout", price=100):
-    await tdb.platform_settings.insert_one({"_id": "singleton", "default_commission": 0.10})
+    await tdb.platform_settings.update_one(
+        {"_id": "singleton"},
+        {"$set": {"default_commission": 0.10}},
+        upsert=True,
+    )
     await tdb.trips.insert_one({
         "trip_id": trip_id,
         "user_id": "customer-1",
