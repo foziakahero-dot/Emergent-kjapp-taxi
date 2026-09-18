@@ -783,6 +783,8 @@ async def lifespan(app: FastAPI):
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.payment_transactions.create_index("checkout_idempotency_key", unique=True, sparse=True)
+    await db.payment_transactions.create_index("trip_id")
     await db.refunds.create_index("idempotency_key", unique=True, sparse=True)
     await db.refunds.create_index("trip_id")
     await db.refunds.create_index("provider_ref", sparse=True)
@@ -4336,9 +4338,30 @@ class TripCheckoutRequest(BaseModel):
     origin_url: str
 
 
+async def _existing_checkout_response(checkout_key: str, user_id: str) -> Optional[dict]:
+    rec = await db.payment_transactions.find_one({
+        "checkout_idempotency_key": checkout_key,
+        "user_id": user_id,
+    })
+    if not rec:
+        return None
+    if rec.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="Turen er allerede betalt")
+    if rec.get("status") == "expired":
+        return None
+    if rec.get("session_id"):
+        return {
+            "checkout_url": rec.get("checkout_url"),
+            "session_id": rec.get("session_id"),
+            "status": rec.get("status") or "initiated",
+            "pending": False,
+        }
+    return None
+
+
 @api.post("/payments/checkout")
 async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
-    """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
+    """Create exactly one logical Stripe Checkout session per active trip checkout attempt."""
     trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
@@ -4346,18 +4369,105 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         raise HTTPException(status_code=400, detail="Turen er ikke ferdig ennå")
     if trip.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Turen er allerede betalt")
+
     amount_nok = int(trip.get("price") or 0)
+    currency = "nok"
     if amount_nok <= 0:
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
+
+    # First request atomically assigns the logical checkout key and freezes the amount/origin
+    # for this attempt. Concurrent requests then reuse those exact values.
+    candidate_key = "checkout:" + body.trip_id + ":" + str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    await db.trips.update_one(
+        {
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "payment_status": {"$ne": "paid"},
+            "$or": [
+                {"checkout_idempotency_key": {"$exists": False}},
+                {"checkout_idempotency_key": None},
+            ],
+        },
+        {"$set": {
+            "checkout_idempotency_key": candidate_key,
+            "checkout_amount": amount_nok,
+            "checkout_currency": currency,
+            "checkout_origin_url": body.origin_url,
+            "checkout_state": "creating",
+            "checkout_created_at": now,
+        }},
+    )
+    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    checkout_key = trip.get("checkout_idempotency_key")
+    if not checkout_key:
+        raise HTTPException(status_code=409, detail="Kunne ikke reservere betalingsøkt")
+
+    # Never reuse an existing session after the trip amount/currency changed.
+    if int(trip.get("checkout_amount") or 0) != amount_nok or trip.get("checkout_currency") != currency:
+        raise HTTPException(status_code=409, detail="Turprisen er endret etter at betalingsøkten ble opprettet")
+    origin_url = trip.get("checkout_origin_url") or body.origin_url
+
+    existing = await _existing_checkout_response(checkout_key, current["id"])
+    if existing:
+        return existing
+
+    # One worker owns the provider call at a time. If it crashes, another retry can take over
+    # after the short lease and reuse the same Stripe idempotency key.
+    lease_id = str(uuid.uuid4())
+    lease_now = datetime.now(timezone.utc)
+    lease_until = lease_now + timedelta(seconds=30)
+    lease = await db.trips.update_one(
+        {
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "checkout_idempotency_key": checkout_key,
+            "payment_status": {"$ne": "paid"},
+            "$or": [
+                {"checkout_processing_until": {"$exists": False}},
+                {"checkout_processing_until": None},
+                {"checkout_processing_until": {"$lte": lease_now}},
+            ],
+        },
+        {"$set": {
+            "checkout_processing_id": lease_id,
+            "checkout_processing_until": lease_until,
+            "checkout_state": "creating",
+        }},
+    )
+    if lease.modified_count != 1:
+        # A concurrent request is creating the same logical session. Give it a short window
+        # to persist the provider response, then return an explicit pending state.
+        for _ in range(10):
+            await asyncio.sleep(0.2)
+            existing = await _existing_checkout_response(checkout_key, current["id"])
+            if existing:
+                return existing
+        return {
+            "checkout_url": None,
+            "session_id": None,
+            "status": "creating",
+            "pending": True,
+        }
+
+    # Re-check after acquiring the lease so a webhook/payment transition that raced us wins.
+    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    if not trip or trip.get("payment_status") == "paid":
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id},
+            {"$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=400, detail="Turen er allerede betalt")
+
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
     checkout_kwargs = {
         "mode": "payment",
         "line_items": [{
             "price_data": {
-                "currency": "nok",
+                "currency": currency,
                 "unit_amount": amount_nok * 100,
                 "product_data": {
                     "name": f"KJAPP tur — {trip.get('pickup_address','')[:40]} → {trip.get('dropoff_address','')[:40]}",
@@ -4365,8 +4475,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
             },
             "quantity": 1,
         }],
-        "success_url": f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        "cancel_url": f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
+        "success_url": f"{origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{origin_url}/payment/cancel?trip_id={body.trip_id}",
         "metadata": metadata,
     }
     connect_fields = {}
@@ -4389,20 +4499,60 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
             "fleet_net": amount_nok - (fee_ore / 100),
             "settlement_model": "stripe_destination_charge",
         }
-    session = stripe.checkout.Session.create(**checkout_kwargs)
-    await db.payment_transactions.insert_one({
-        "session_id": session.id,
-        "trip_id": body.trip_id,
-        "user_id": current["id"],
-        "amount": amount_nok,
-        "currency": "nok",
-        "status": "initiated",
-        "payment_status": "pending",
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        **connect_fields,
-    })
-    return {"checkout_url": session.url, "session_id": session.id}
+
+    try:
+        session = stripe.checkout.Session.create(**checkout_kwargs, idempotency_key=checkout_key)
+    except (stripe.error.APIConnectionError, stripe.error.RateLimitError, stripe.error.APIError):
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id},
+            {"$set": {"checkout_state": "creating"}, "$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+        )
+        raise HTTPException(status_code=503, detail="Betalingsstatus er ikke avklart. Prøv igjen.")
+    except stripe.error.StripeError as exc:
+        # Definitive creation failure: no provider session should be reused. Release this
+        # logical checkout attempt so a corrected request can create a new key.
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "checkout_processing_id": lease_id, "checkout_idempotency_key": checkout_key},
+            {"$unset": {
+                "checkout_idempotency_key": "", "checkout_amount": "", "checkout_currency": "",
+                "checkout_origin_url": "", "checkout_state": "", "checkout_created_at": "",
+                "checkout_processing_id": "", "checkout_processing_until": "",
+            }},
+        )
+        raise HTTPException(status_code=502, detail=getattr(exc, "user_message", None) or "Stripe kunne ikke opprette betalingsøkten")
+
+    tx_now = datetime.now(timezone.utc)
+    await db.payment_transactions.update_one(
+        {"checkout_idempotency_key": checkout_key},
+        {
+            "$setOnInsert": {
+                "checkout_idempotency_key": checkout_key,
+                "trip_id": body.trip_id,
+                "user_id": current["id"],
+                "amount": amount_nok,
+                "currency": currency,
+                "created_at": tx_now,
+            },
+            "$set": {
+                "session_id": session.id,
+                "checkout_url": session.url,
+                "status": "initiated",
+                "payment_status": "pending",
+                "updated_at": tx_now,
+                **connect_fields,
+            },
+        },
+        upsert=True,
+    )
+    await db.trips.update_one(
+        {"trip_id": body.trip_id, "checkout_idempotency_key": checkout_key, "checkout_processing_id": lease_id},
+        {"$set": {
+            "checkout_session_id": session.id,
+            "checkout_state": "pending",
+            "checkout_updated_at": tx_now,
+        }, "$unset": {"checkout_processing_id": "", "checkout_processing_until": ""}},
+    )
+    return {"checkout_url": session.url, "session_id": session.id, "status": "initiated", "pending": False}
 
 
 @api.get("/payments/status/{session_id}")
