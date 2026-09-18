@@ -13,6 +13,7 @@ import bcrypt
 import jwt
 import httpx
 import stripe
+from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
@@ -342,7 +343,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "id", "email", "fullName", "full_name", "phone", "role", "driver_id", "fleet_id",
     "picture", "photo", "avatar", "car", "plate", "vehicle_type", "rating", "trip_count",
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
-    "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password",
+    "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status",
 })
@@ -3086,9 +3087,32 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
 # ============================================================
 # Fleet owner portal
 # ============================================================
-def require_admin(current=Depends(get_current_user)):
+ADMIN_PERMISSION_PREFIXES = (
+    ("/api/admin/finance", "finance"),
+    ("/api/admin/transactions", "finance"),
+    ("/api/admin/refunds", "finance"),
+    ("/api/admin/control/payouts", "finance"),
+    ("/api/admin/control/stripe-fleets", "finance"),
+    ("/api/admin/support", "support"),
+    ("/api/admin/control/communication-fleets", "communications"),
+    ("/api/admin/control/communications", "communications"),
+    ("/api/admin/settings", "system"),
+    ("/api/admin/audit-log", "system"),
+    ("/api/admin/control/integrations", "system"),
+    ("/api/admin/control/admin-users", "system"),
+    ("/api/admin/", "operations"),
+)
+
+
+def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
+    if current.get("role") == "admin":
+        permissions = current.get("permissions", None)
+        if permissions is not None:
+            required = next((perm for prefix, perm in ADMIN_PERMISSION_PREFIXES if request.url.path.startswith(prefix)), None)
+            if required and required not in permissions:
+                raise HTTPException(status_code=403, detail=f"Mangler admin-tilgang: {required}")
     return current
 
 
@@ -3126,7 +3150,9 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     """Admin creates a fleet, links an existing (or new) user as fleet_owner."""
     owner_email = body.owner_email.strip().lower()
     owner = await db.users.find_one({"email": owner_email})
+    new_owner = False
     if not owner:
+        new_owner = True
         # Auto-create fleet_owner user with random password (they log in via password reset later)
         temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
@@ -3156,7 +3182,36 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
-    await _audit(current, "fleet.create", "fleet", fleet_id, None, {"name": body.name, "owner_email": owner_email, "commission_rate": body.commission_rate})
+    onboarding_email_sent = False
+    if new_owner:
+        # Complete manual onboarding by sending the new fleet owner directly into the
+        # existing secure password-reset flow. The admin never needs to handle/share
+        # the randomly generated temporary password.
+        now = datetime.now(timezone.utc)
+        reset_token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.insert_one({
+            "token": reset_token,
+            "user_id": owner_id,
+            "email": owner_email,
+            "created_at": now,
+            "expires_at": now + timedelta(hours=24),
+            "used": False,
+        })
+        fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
+        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
+        reset_url = f"{frontend}/reset-password/{reset_token}"
+        onboarding_email_sent = bool(send_email(
+            owner_email,
+            "Velkommen som løyvehaver i KJAPP",
+            email_password_reset_html(reset_url),
+        ))
+    fleet_doc["onboarding_email_sent"] = onboarding_email_sent
+    await _audit(current, "fleet.create", "fleet", fleet_id, None, {
+        "name": body.name,
+        "owner_email": owner_email,
+        "commission_rate": body.commission_rate,
+        "onboarding_email_sent": onboarding_email_sent,
+    })
     return fleet_doc
 
 
@@ -4144,22 +4199,45 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        line_items=[{
+    connect_destination = await stripe_destination_for_trip(db, stripe, trip)
+    metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
+    checkout_kwargs = {
+        "mode": "payment",
+        "line_items": [{
             "price_data": {
                 "currency": "nok",
-                "unit_amount": amount_nok * 100,  # øre
+                "unit_amount": amount_nok * 100,
                 "product_data": {
                     "name": f"KJAPP tur — {trip.get('pickup_address','')[:40]} → {trip.get('dropoff_address','')[:40]}",
                 },
             },
             "quantity": 1,
         }],
-        success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
-        metadata={"trip_id": body.trip_id, "user_id": current["id"]},
-    )
+        "success_url": f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
+        "metadata": metadata,
+    }
+    connect_fields = {}
+    if connect_destination:
+        fee_ore = int(round(amount_nok * 100 * connect_destination["commission_rate"]))
+        checkout_kwargs["payment_intent_data"] = {
+            "application_fee_amount": fee_ore,
+            "transfer_data": {"destination": connect_destination["stripe_account_id"]},
+        }
+        metadata.update({
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": str(connect_destination["commission_rate"]),
+        })
+        connect_fields = {
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": connect_destination["commission_rate"],
+            "platform_fee": fee_ore / 100,
+            "fleet_net": amount_nok - (fee_ore / 100),
+            "settlement_model": "stripe_destination_charge",
+        }
+    session = stripe.checkout.Session.create(**checkout_kwargs)
     await db.payment_transactions.insert_one({
         "session_id": session.id,
         "trip_id": body.trip_id,
@@ -4170,6 +4248,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
+        **connect_fields,
     })
     return {"checkout_url": session.url, "session_id": session.id}
 
@@ -5254,14 +5333,31 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     amount = int(body.amount) if body.amount is not None else eligible
     if amount <= 0 or amount > eligible:
         raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Attempt a real Stripe refund ONLY if a captured charge/intent is stored on the trip.
+    # Resolve the actual captured Stripe payment from the transaction ledger first.
+    # This is the canonical location for Checkout PaymentIntent IDs.
     provider, provider_ref, prov_status = "manual", None, "recorded"
-    pi = trip.get("stripe_payment_intent") or trip.get("payment_intent_id") or trip.get("charge_id")
+    payment_tx = await db.payment_transactions.find_one(
+        {"trip_id": body.trip_id, "payment_status": "paid"},
+        sort=[("updated_at", -1)],
+    )
+    pi = (
+        trip.get("stripe_payment_intent")
+        or trip.get("payment_intent_id")
+        or trip.get("charge_id")
+        or (payment_tx or {}).get("stripe_payment_intent_id")
+    )
     if pi and stripe.api_key:
         try:
             kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"): kwargs["charge"] = pi
-            else: kwargs["payment_intent"] = pi
+            if str(pi).startswith("ch_"):
+                kwargs["charge"] = pi
+            else:
+                kwargs["payment_intent"] = pi
+            if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
+                # Reverse the fleet transfer and refund the proportional platform fee,
+                # otherwise the platform would carry the refund while the fleet kept funds.
+                kwargs["reverse_transfer"] = True
+                kwargs["refund_application_fee"] = True
             sr = stripe.Refund.create(**kwargs)
             provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
         except stripe.error.StripeError as e:
@@ -5271,6 +5367,8 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
         "trip_id": body.trip_id, "user_id": trip.get("user_id"),
         "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
         "provider": provider, "provider_ref": provider_ref, "status": prov_status,
+        "fleet_id": (payment_tx or {}).get("fleet_id"),
+        "settlement_model": (payment_tx or {}).get("settlement_model"),
         "admin_id": current["id"], "admin_email": current.get("email"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -5319,7 +5417,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"refund_{r.get('id')}", "type": "REFUND", "ride": r.get("trip_id"),
                 "customer_id": r.get("user_id"), "amount": -int(r.get("amount") or 0),
                 "provider": r.get("provider"), "status": r.get("status"),
-                "fleet_id": None, "timestamp": r.get("created_at"), "reason": r.get("reason"),
+                "fleet_id": r.get("fleet_id"), "timestamp": r.get("created_at"), "reason": r.get("reason"),
             })
     if want in ("", "PAYOUT"):
         async for p in db.fleet_payouts.find({"period_end": {"$gte": lo[:10], "$lte": hi[:10]}}):
@@ -5569,6 +5667,19 @@ async def admin_search(q: str, current=Depends(require_admin)):
         fleets.append({"id": str(f["_id"]), "name": f.get("name"), "org_number": f.get("org_number"), "status": f.get("status", "active")})
     return {"query": q, "trips": trips, "drivers": drivers[:10], "customers": customers[:10], "fleets": fleets}
 
+
+# Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
+install_admin_control_center(
+    api,
+    db,
+    require_admin=require_admin,
+    require_superadmin=require_superadmin,
+    stripe=stripe,
+    send_push_to_user=send_push_to_user,
+    send_email=send_email,
+    hash_password=hash_password,
+    audit=_audit,
+)
 
 app.include_router(api)
 
