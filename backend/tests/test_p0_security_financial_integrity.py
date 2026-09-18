@@ -294,6 +294,43 @@ def test_pre_enrollment_admin_session_stays_revoked_after_2fa_enable():
     _run(_with_temp_db(body))
 
 
+def test_old_admin_token_is_rejected_even_when_account_already_has_totp():
+    async def body(tdb):
+        uid, secret = await _seed_admin(tdb, totp=True)
+
+        # Simulates a privileged JWT minted before mandatory session-level MFA.
+        old = server.create_access_token(uid, "owner@example.no")
+        decoded_old = server.jwt.decode(old, server.JWT_SECRET, algorithms=[server.JWT_ALGORITHM])
+        assert decoded_old.get("twofa_verified") is not True
+        with pytest.raises(HTTPException) as exc:
+            await server.get_current_user(_request(old, "/api/admin/overview"))
+        assert exc.value.status_code == 401
+
+        login = await server.login(
+            server.LoginRequest(email="owner@example.no", password="Strong-Pass-123!"),
+            _request(),
+            Response(),
+        )
+        verified = await server.twofa_verify_login(
+            server.TwoFAVerifyLoginRequest(
+                twofa_token=login["twofa_token"],
+                code=pyotp.TOTP(secret).now(),
+            ),
+            _request(),
+            Response(),
+        )
+        decoded_new = server.jwt.decode(
+            verified["token"], server.JWT_SECRET, algorithms=[server.JWT_ALGORITHM]
+        )
+        assert decoded_new["twofa_verified"] is True
+        current = await server.get_current_user(
+            _request(verified["token"], "/api/admin/overview")
+        )
+        assert current["role"] == "superadmin"
+
+    _run(_with_temp_db(body))
+
+
 def test_customer_login_remains_single_factor():
     async def body(tdb):
         await tdb.users.insert_one({
