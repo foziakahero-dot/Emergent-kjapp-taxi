@@ -71,6 +71,7 @@ function CreateFleetModal({ onClose, onDone }: any) {
 }
 
 function FleetDrawer({ id, onClose, onChanged }: any) {
+  const { user } = useAuth();
   const state = useAsync(() => api.fleetDetail(id), [id]);
   const [mode, setMode] = useState('none');
   const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false);
@@ -97,7 +98,7 @@ function FleetDrawer({ id, onClose, onChanged }: any) {
         <Btn variant="primary" onClick={() => setMode('driver')}>+ Legg til sjåfør</Btn>
         <Btn onClick={() => setMode('vehicle')}>+ Legg til kjøretøy</Btn>
         <Btn onClick={() => setMode('commission')}>Endre provisjon</Btn>
-        <Btn onClick={connectStripe} disabled={busy}>{f.stripe_account_id ? 'Fortsett Stripe' : 'Koble Stripe'}</Btn>
+        {user?.role === 'superadmin' && <Btn onClick={connectStripe} disabled={busy}>{f.stripe_account_id ? 'Fortsett Stripe' : 'Koble Stripe'}</Btn>}
         {f.stripe_account_id && <Btn onClick={refreshStripe} disabled={busy}>Oppdater Stripe-status</Btn>}
         <Btn variant="danger" onClick={toggleFleet} disabled={busy}>{f.status === 'suspended' || f.active === false ? 'Reaktiver' : 'Suspender'}</Btn>
       </div>
@@ -170,7 +171,7 @@ export function PaymentsPayouts() {
 }
 
 export function Communications() {
-  const history = useAsync(() => api.communications(), []); const fleetsState = useAsync(() => api.controlFleets(), []);
+  const history = useAsync(() => api.communications(), []); const fleetsState = useAsync(() => api.communicationFleets(), []);
   const [form, setForm] = useState<any>({ title: '', body: '', audience: 'drivers', fleet_id: '', channels: ['push'] });
   const [busy, setBusy] = useState(false); const [msg, setMsg] = useState(''); const [err, setErr] = useState('');
   const toggle = (c: string) => setForm({ ...form, channels: form.channels.includes(c) ? form.channels.filter((x: string) => x !== c) : [...form.channels, c] });
