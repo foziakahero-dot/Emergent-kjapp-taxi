@@ -1,14 +1,6 @@
 name: Admin web build check
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - 'admin-web/**'
-      - 'backend/admin_control_center.py'
-      - 'backend/server.py'
-      - '.github/workflows/admin-web-check.yml'
   push:
     branches:
       - release/emergent-production
