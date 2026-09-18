@@ -45,8 +45,8 @@ export const Pill = ({ status, label }: { status?: string; label?: string }) => 
   return <span className={`pill ${m.c}`}><span className="dot" />{label || m.t || status || '—'}</span>;
 };
 
-export const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`card ${className}`}>{children}</div>
+export const Card: React.FC<{ children: React.ReactNode; className?: string; style?: React.CSSProperties }> = ({ children, className = '', style }) => (
+  <div className={`card ${className}`} style={style}>{children}</div>
 );
 
 export const Kpi = ({ label, value, foot, accent }: any) => (
@@ -114,18 +114,19 @@ export function Route({ from, to }: { from?: string; to?: string }) {
 }
 
 export function Bars({ data, xkey, ykey }: { data: any[]; xkey: string; ykey: string }) {
-  const max = Math.max(1, ...data.map((d) => d[ykey] || 0));
+  const rows = Array.isArray(data) ? data : [];
+  const max = Math.max(1, ...rows.map((d) => d[ykey] || 0));
   return (
     <div>
       <div className="bars">
-        {data.map((d, i) => (
-          <div key={i} className={`bar ${i === data.length - 1 ? 'hot' : ''}`}
+        {rows.map((d, i) => (
+          <div key={i} className={`bar ${i === rows.length - 1 ? 'hot' : ''}`}
             style={{ height: `${Math.max(3, ((d[ykey] || 0) / max) * 100)}%` }} title={`${d[xkey]}: ${d[ykey]}`} />
         ))}
       </div>
       <div className="bars-x">
-        {data.map((d, i) => (
-          <span key={i}>{(i % Math.ceil(data.length / 7) === 0) ? String(d[xkey]).slice(5) : ''}</span>
+        {rows.map((d, i) => (
+          <span key={i}>{(i % Math.max(1, Math.ceil(rows.length / 7)) === 0) ? String(d[xkey]).slice(5) : ''}</span>
         ))}
       </div>
     </div>
@@ -164,7 +165,24 @@ export function usePaged(path: string, params: any) {
     setState((s: any) => ({ ...s, loading: true, err: '' }));
     http.get(path, { params }).then((r) => {
       const d = r.data;
-      setState({ rows: d.items || [], total: d.total || 0, page: d.page || 1, pageSize: d.page_size || (params.page_size || 50), totalPages: d.total_pages || 1, loading: false, err: '', extra: d });
+      // The current production backend returns legacy, endpoint-specific keys
+      // (for example `trips` and `drivers`). Newer deployments also expose
+      // `items`. Supporting both keeps every admin screen usable during a
+      // rolling frontend/backend deployment.
+      const legacyKeys = ['trips', 'drivers', 'users', 'fleets', 'vehicles', 'documents', 'transactions', 'refunds', 'tickets', 'events', 'payouts'];
+      const legacyRows = legacyKeys.map((k) => d?.[k]).find(Array.isArray);
+      const rows = Array.isArray(d?.items) ? d.items : (legacyRows || []);
+      const total = Number.isFinite(d?.total) ? d.total : rows.length;
+      setState({
+        rows,
+        total,
+        page: d?.page || 1,
+        pageSize: d?.page_size || (params.page_size || 50),
+        totalPages: d?.total_pages || Math.max(1, Math.ceil(total / (d?.page_size || params.page_size || 50))),
+        loading: false,
+        err: '',
+        extra: d || {},
+      });
     }).catch((e) => setState((s: any) => ({ ...s, loading: false, err: apiError(e) })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);

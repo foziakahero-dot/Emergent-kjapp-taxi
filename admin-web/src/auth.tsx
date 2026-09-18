@@ -10,7 +10,7 @@ type Ctx = {
   user: User | undefined; // undefined = loading, null = signed out
   login: (email: string, password: string) => Promise<any>;
   verify2fa: (twofa_token: string, code: string) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthCtx = createContext<Ctx>(null as any);
@@ -61,9 +61,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const verify2fa = async (twofa_token: string, code: string) =>
     finish(await api.verify2fa(twofa_token, code));
 
-  const logout = () => {
-    sessionStorage.removeItem(TOKEN_KEY);
-    setUser(null);
+  const logout = async () => {
+    try { await api.logout(); }
+    finally {
+      sessionStorage.removeItem(TOKEN_KEY);
+      setUser(null);
+    }
   };
 
   return (

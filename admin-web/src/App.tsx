@@ -38,16 +38,19 @@ const NAV = [
 function GlobalSearch() {
   const [q, setQ] = useState('');
   const [res, setRes] = useState<any>(null);
+  const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const t = useRef<any>(null);
 
   useEffect(() => {
     if (t.current) clearTimeout(t.current);
-    if (q.trim().length < 2) { setRes(null); return; }
+    if (q.trim().length < 2) { setRes(null); setError(''); setOpen(false); return; }
     t.current = setTimeout(() => {
-      api.search(q.trim()).then((d) => { setRes(d); setOpen(true); }).catch(() => setRes(null));
+      api.search(q.trim()).then((d) => { setRes(d); setError(''); setOpen(true); })
+        .catch(() => { setRes(null); setError('Søket er midlertidig utilgjengelig. Bruk listene i menyen.'); setOpen(true); });
     }, 250);
+    return () => clearTimeout(t.current);
   }, [q]);
 
   const go = (path: string) => { setOpen(false); setQ(''); nav(path); };
@@ -55,10 +58,11 @@ function GlobalSearch() {
   return (
     <div className="search" onBlur={() => setTimeout(() => setOpen(false), 150)}>
       <input placeholder="Søk turer, sjåfører, kunder, løyvehavere…" value={q}
-        onFocus={() => res && setOpen(true)} onChange={(e) => setQ(e.target.value)} />
-      {open && res && (
+        onFocus={() => (res || error) && setOpen(true)} onChange={(e) => setQ(e.target.value)} />
+      {open && (res || error) && (
         <div className="search-pop">
-          {(res.trips?.length || res.drivers?.length || res.customers?.length || res.fleets?.length) ? (
+          {error ? <div className="search-res dim" role="alert">{error}</div> :
+          (res?.trips?.length || res?.drivers?.length || res?.customers?.length || res?.fleets?.length) ? (
             <>
               {res.trips?.length ? <div className="search-cat">Turer</div> : null}
               {res.trips?.map((x: any) => (
