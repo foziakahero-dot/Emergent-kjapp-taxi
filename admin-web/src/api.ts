@@ -99,6 +99,7 @@ export const api = {
   stripeConnect: (id: string) => http.post(`/admin/control/fleets/${id}/stripe-connect`).then((r) => r.data),
   stripeStatus: (id: string) => http.get(`/admin/control/fleets/${id}/stripe-status`).then((r) => r.data),
   stripePayouts: () => http.get('/admin/control/payouts').then((r) => r.data),
+  communicationFleets: () => http.get('/admin/control/communication-fleets').then((r) => r.data),
   communications: () => http.get('/admin/control/communications').then((r) => r.data),
   sendCommunication: (body: any) => http.post('/admin/control/communications', body).then((r) => r.data),
   adminUsers: () => http.get('/admin/control/admin-users').then((r) => r.data),
