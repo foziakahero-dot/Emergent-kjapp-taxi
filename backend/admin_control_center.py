@@ -255,6 +255,18 @@ def install_admin_control_center(
                     "id": "sendgrid", "name": "SendGrid e-post", "status": "operational" if os.getenv("SENDGRID_API_KEY") else "warning",
                     "detail": "E-post til sjåfører, løyvehavere og brukere", "configured": bool(os.getenv("SENDGRID_API_KEY")),
                 },
+                {
+                    "id": "maps_routing", "name": "Kart & routing",
+                    "status": "operational",
+                    "detail": ("OSRM routing aktiv · MapTiler konfigurert" if os.getenv("MAPTILER_API_KEY") else "OSRM routing aktiv · kart bruker nøkkelfri/fallback der MapTiler ikke er satt"),
+                    "configured": True,
+                },
+                {
+                    "id": "ai", "name": "KJAPP Assist / AI",
+                    "status": "operational" if os.getenv("EMERGENT_LLM_KEY") else "warning",
+                    "detail": "Emergent LLM-integrasjon konfigurert" if os.getenv("EMERGENT_LLM_KEY") else "EMERGENT_LLM_KEY mangler",
+                    "configured": bool(os.getenv("EMERGENT_LLM_KEY")),
+                },
             ],
         }
 
@@ -460,6 +472,14 @@ def install_admin_control_center(
         else:
             query["role"] = {"$in": [None, "user", "customer", "driver", "fleet_owner"]}
         return await db.users.find(query, {"email": 1, "role": 1, "fleet_id": 1}).limit(5000).to_list(length=5000)
+
+    @api.get("/admin/control/communication-fleets")
+    async def communication_fleets(current=Depends(require_admin)):
+        """Minimal fleet directory for staff who only have communications access."""
+        fleets = []
+        async for fleet in db.fleets.find({}, {"name": 1}).sort("name", 1).limit(500):
+            fleets.append({"id": str(fleet["_id"]), "name": fleet.get("name") or "Uten navn"})
+        return {"fleets": fleets}
 
     @api.get("/admin/control/communications")
     async def communication_history(limit: int = 50, current=Depends(require_admin)):
