@@ -141,9 +141,19 @@ def test_admin_enrollment_then_totp_session_and_audit():
         assert me["role"] == "superadmin"
         assert me["totp_enabled"] is True
 
-        actions = [x["action"] async for x in tdb.audit_events.find({})]
+        audit_events = [x async for x in tdb.audit_events.find({})]
+        actions = [x["action"] for x in audit_events]
         assert "auth.2fa_setup" in actions
         assert "auth.2fa_success" in actions
+
+        # Authentication material may be returned once to the enrolling admin, but
+        # it must never be copied into the persistent audit trail.
+        audit_text = repr(audit_events)
+        assert setup["secret"] not in audit_text
+        for backup_code in enabled.get("backup_codes") or []:
+            assert backup_code not in audit_text
+        assert "otpauth://" not in audit_text
+        assert "data:image/png;base64" not in audit_text
     _run(_with_temp_db(body))
 
 
