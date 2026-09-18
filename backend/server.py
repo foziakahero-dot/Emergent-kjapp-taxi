@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 from bson import ObjectId
 from bson.errors import InvalidId
 import pyotp
@@ -782,6 +783,9 @@ async def lifespan(app: FastAPI):
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.refunds.create_index("idempotency_key", unique=True, sparse=True)
+    await db.refunds.create_index("trip_id")
+    await db.refunds.create_index("provider_ref", sparse=True)
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.password_reset_tokens.create_index("token")
@@ -5451,85 +5455,433 @@ class RefundRequest(BaseModel):
     reason: str
 
 
+REFUND_TERMINAL_STATUSES = {"succeeded", "failed", "cancelled"}
+
+
+def _refund_public(doc: dict) -> dict:
+    out = dict(doc or {})
+    if out.get("_id") is not None:
+        out["id"] = out.get("id") or str(out["_id"])
+        out.pop("_id", None)
+    return out
+
+
+def _refund_provider_status(value: Optional[str]) -> str:
+    v = (value or "pending").strip().lower()
+    if v in ("succeeded", "success"):
+        return "succeeded"
+    if v in ("failed",):
+        return "failed"
+    if v in ("canceled", "cancelled"):
+        return "cancelled"
+    return "pending"
+
+
+async def _refund_release_reservation(refund_doc: dict):
+    """Release a local refund reservation exactly once."""
+    op_id = refund_doc.get("operation_id")
+    amount = int(refund_doc.get("amount") or 0)
+    if not op_id or amount <= 0:
+        return
+    await db.trips.update_one(
+        {"trip_id": refund_doc["trip_id"], "refund_operation_ids": op_id},
+        [
+            {"$set": {
+                "refund_pending_total": {
+                    "$max": [0, {"$subtract": [{"$ifNull": ["$refund_pending_total", 0]}, amount]}]
+                },
+                "refund_operation_ids": {
+                    "$setDifference": [{"$ifNull": ["$refund_operation_ids", []]}, [op_id]]
+                },
+            }},
+            {"$set": {
+                "refund_status": {
+                    "$cond": [
+                        {"$gt": ["$refund_pending_total", 0]},
+                        "pending",
+                        {"$cond": [
+                            {"$gte": [{"$ifNull": ["$refunded_total", 0]}, {"$ifNull": ["$price", 0]}]},
+                            "full",
+                            {"$cond": [{"$gt": [{"$ifNull": ["$refunded_total", 0]}, 0]}, "partial", None]},
+                        ]},
+                    ]
+                }
+            }},
+        ],
+    )
+
+
+async def _refund_finalize_success(refund_doc: dict, provider_ref: Optional[str], provider_status: str = "succeeded"):
+    """Move reserved amount to refunded_total exactly once, then mark refund succeeded."""
+    op_id = refund_doc.get("operation_id")
+    amount = int(refund_doc.get("amount") or 0)
+    if op_id and amount > 0:
+        await db.trips.update_one(
+            {"trip_id": refund_doc["trip_id"], "refund_operation_ids": op_id},
+            [
+                {"$set": {
+                    "refunded_total": {"$add": [{"$ifNull": ["$refunded_total", 0]}, amount]},
+                    "refund_pending_total": {
+                        "$max": [0, {"$subtract": [{"$ifNull": ["$refund_pending_total", 0]}, amount]}]
+                    },
+                    "refund_operation_ids": {
+                        "$setDifference": [{"$ifNull": ["$refund_operation_ids", []]}, [op_id]]
+                    },
+                }},
+                {"$set": {
+                    "refund_status": {
+                        "$cond": [
+                            {"$gte": ["$refunded_total", {"$ifNull": ["$price", 0]}]},
+                            "full",
+                            {"$cond": [{"$gt": ["$refund_pending_total", 0]}, "pending", "partial"]},
+                        ]
+                    }
+                }},
+            ],
+        )
+    now = datetime.now(timezone.utc)
+    await db.refunds.update_one(
+        {"idempotency_key": refund_doc["idempotency_key"]},
+        {"$set": {
+            "status": "succeeded",
+            "provider_status": provider_status,
+            "provider_ref": provider_ref or refund_doc.get("provider_ref"),
+            "succeeded_at": now,
+            "updated_at": now,
+        }, "$unset": {"processing_id": "", "processing_until": "", "failure_code": "", "failure_message_safe": ""}},
+    )
+
+
+async def _refund_mark_failed(refund_doc: dict, code: str, safe_message: str, provider_status: str = "failed"):
+    await _refund_release_reservation(refund_doc)
+    now = datetime.now(timezone.utc)
+    await db.refunds.update_one(
+        {"idempotency_key": refund_doc["idempotency_key"]},
+        {"$set": {
+            "status": "failed",
+            "provider_status": provider_status,
+            "failure_code": code,
+            "failure_message_safe": safe_message[:500],
+            "failed_at": now,
+            "updated_at": now,
+        }, "$unset": {"processing_id": "", "processing_until": ""}},
+    )
+
+
+async def _refund_mark_cancelled(refund_doc: dict, provider_ref: Optional[str], provider_status: str):
+    await _refund_release_reservation(refund_doc)
+    now = datetime.now(timezone.utc)
+    await db.refunds.update_one(
+        {"idempotency_key": refund_doc["idempotency_key"]},
+        {"$set": {
+            "status": "cancelled",
+            "provider_status": provider_status,
+            "provider_ref": provider_ref or refund_doc.get("provider_ref"),
+            "cancelled_at": now,
+            "updated_at": now,
+        }, "$unset": {"processing_id": "", "processing_until": ""}},
+    )
+
+
+async def _refund_audit_from_record(refund_doc: dict, action: str, after: dict):
+    """Webhook-safe audit using the admin identity captured on the original request."""
+    await db.audit_events.insert_one({
+        "admin_id": refund_doc.get("admin_id"),
+        "admin_email": refund_doc.get("admin_email"),
+        "action": action,
+        "entity_type": "trip",
+        "entity_id": refund_doc.get("trip_id"),
+        "before": None,
+        "after": after,
+        "reason": refund_doc.get("reason"),
+        "at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _apply_refund_provider_state(refund_doc: dict, provider_ref: Optional[str], provider_status: str):
+    """Idempotently reconcile a provider refund result into MongoDB."""
+    local_status = _refund_provider_status(provider_status)
+    if local_status == "succeeded":
+        was_terminal = refund_doc.get("status") == "succeeded"
+        await _refund_finalize_success(refund_doc, provider_ref, provider_status)
+        if not was_terminal:
+            await _refund_audit_from_record(refund_doc, "refund.succeeded", {
+                "refund_id": refund_doc.get("id"),
+                "amount": refund_doc.get("amount"),
+                "provider": refund_doc.get("provider"),
+                "provider_ref": provider_ref,
+            })
+    elif local_status == "failed":
+        if refund_doc.get("status") != "failed":
+            await _refund_mark_failed(refund_doc, "provider_failed", "Betalingsleverandøren avviste refusjonen.", provider_status)
+            await _refund_audit_from_record(refund_doc, "refund.failed", {
+                "refund_id": refund_doc.get("id"), "provider_ref": provider_ref,
+            })
+    elif local_status == "cancelled":
+        if refund_doc.get("status") != "cancelled":
+            await _refund_mark_cancelled(refund_doc, provider_ref, provider_status)
+            await _refund_audit_from_record(refund_doc, "refund.cancelled", {
+                "refund_id": refund_doc.get("id"), "provider_ref": provider_ref,
+            })
+    else:
+        await db.refunds.update_one(
+            {"idempotency_key": refund_doc["idempotency_key"]},
+            {"$set": {
+                "status": "pending",
+                "provider_status": provider_status,
+                "provider_ref": provider_ref or refund_doc.get("provider_ref"),
+                "updated_at": datetime.now(timezone.utc),
+            }, "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+
+
 @api.get("/admin/refunds")
 async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {}
-    if status and status != "all": filt["status"] = status
+    if status and status != "all":
+        filt["status"] = status
     page, page_size, skip = _page_params(page, page_size)
     total = await db.refunds.count_documents(filt)
     out = []
     async for r in db.refunds.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
-        r["id"] = r.get("id") or str(r["_id"]); r.pop("_id", None)
-        out.append(r)
+        out.append(_refund_public(r))
     return _paged(out, total, page, page_size, "refunds")
 
 
 @api.post("/admin/refunds")
-async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
-    if not (body.reason or "").strip():
+async def admin_create_refund(
+    body: RefundRequest,
+    current=Depends(require_admin),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
+    reason = (body.reason or "").strip()
+    if not reason:
         raise HTTPException(400, "Begrunnelse kreves")
-    trip = await db.trips.find_one({"trip_id": body.trip_id})
-    if not trip:
-        raise HTTPException(404, "Fant ikke tur")
-    if trip.get("status") not in ("arrived", "completed", "rated"):
-        raise HTTPException(400, "Kan bare refundere fullførte turer")
-    gross = int(trip.get("price") or 0)
-    already = int(trip.get("refunded_total") or 0)
-    eligible = gross - already
-    if eligible <= 0:
-        raise HTTPException(409, "Turen er allerede fullt refundert")
-    amount = int(body.amount) if body.amount is not None else eligible
-    if amount <= 0 or amount > eligible:
-        raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Resolve the actual captured Stripe payment from the transaction ledger first.
-    # This is the canonical location for Checkout PaymentIntent IDs.
-    provider, provider_ref, prov_status = "manual", None, "recorded"
-    payment_tx = await db.payment_transactions.find_one(
-        {"trip_id": body.trip_id, "payment_status": "paid"},
-        sort=[("updated_at", -1)],
-    )
-    pi = (
-        trip.get("stripe_payment_intent")
-        or trip.get("payment_intent_id")
-        or trip.get("charge_id")
-        or (payment_tx or {}).get("stripe_payment_intent_id")
-    )
-    if pi and stripe.api_key:
+    key = (idempotency_key or "").strip()
+    if not key:
+        # Backwards-compatible for older callers. The admin UI sends a stable key so retries
+        # remain safe; generated keys are returned in the response for other clients.
+        key = str(uuid.uuid4())
+    if len(key) > 200:
+        raise HTTPException(400, "Ugyldig idempotency-nøkkel")
+
+    existing = await db.refunds.find_one({"idempotency_key": key})
+    if existing:
+        await _audit(current, "refund.retry", "trip", existing.get("trip_id"), None, {
+            "refund_id": existing.get("id"), "status": existing.get("status"), "idempotency_key": key,
+        }, reason)
+        if existing.get("status") in REFUND_TERMINAL_STATUSES:
+            return _refund_public(existing)
+        refund_doc = existing
+    else:
+        trip = await db.trips.find_one({"trip_id": body.trip_id})
+        if not trip:
+            raise HTTPException(404, "Fant ikke tur")
+        if trip.get("status") not in ("arrived", "completed", "rated"):
+            raise HTTPException(400, "Kan bare refundere fullførte turer")
+        gross = int(trip.get("price") or 0)
+        already = int(trip.get("refunded_total") or 0)
+        pending = int(trip.get("refund_pending_total") or 0)
+        eligible = gross - already - pending
+        if eligible <= 0:
+            raise HTTPException(409, "Turen har ingen tilgjengelig refunderbar saldo")
+        amount = int(body.amount) if body.amount is not None else eligible
+        if amount <= 0 or amount > eligible:
+            raise HTTPException(400, f"Ugyldig beløp. Maks tilgjengelig akkurat nå: {eligible} kr")
+
+        payment_tx = await db.payment_transactions.find_one(
+            {"trip_id": body.trip_id, "payment_status": "paid"},
+            sort=[("updated_at", -1)],
+        )
+        pi = (
+            trip.get("stripe_payment_intent")
+            or trip.get("payment_intent_id")
+            or trip.get("charge_id")
+            or (payment_tx or {}).get("stripe_payment_intent_id")
+        )
+        now = datetime.now(timezone.utc)
+        refund_doc = {
+            "id": str(uuid.uuid4()),
+            "operation_id": str(uuid.uuid4()),
+            "idempotency_key": key,
+            "trip_id": body.trip_id,
+            "user_id": trip.get("user_id"),
+            "payment_id": (payment_tx or {}).get("session_id"),
+            "payment_intent_id": pi,
+            "amount": amount,
+            "currency": str((payment_tx or {}).get("currency") or "nok").upper(),
+            "reason": reason,
+            "provider": "stripe" if pi and stripe.api_key else "manual",
+            "provider_ref": None,
+            "provider_status": None,
+            "status": "requested",
+            "fleet_id": (payment_tx or {}).get("fleet_id"),
+            "settlement_model": (payment_tx or {}).get("settlement_model"),
+            "admin_id": current["id"],
+            "admin_email": current.get("email"),
+            "created_at": now,
+            "updated_at": now,
+        }
         try:
-            kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"):
-                kwargs["charge"] = pi
-            else:
-                kwargs["payment_intent"] = pi
-            if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
-                # Reverse the fleet transfer and refund the proportional platform fee,
-                # otherwise the platform would carry the refund while the fleet kept funds.
-                kwargs["reverse_transfer"] = True
-                kwargs["refund_application_fee"] = True
-            sr = stripe.Refund.create(**kwargs)
-            provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
-        except stripe.error.StripeError as e:
-            raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "trip_id": body.trip_id, "user_id": trip.get("user_id"),
-        "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
-        "provider": provider, "provider_ref": provider_ref, "status": prov_status,
-        "fleet_id": (payment_tx or {}).get("fleet_id"),
-        "settlement_model": (payment_tx or {}).get("settlement_model"),
-        "admin_id": current["id"], "admin_email": current.get("email"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.refunds.insert_one(dict(doc))
-    new_total = already + amount
-    await db.trips.update_one({"trip_id": body.trip_id}, {"$set": {
-        "refunded_total": new_total,
-        "refund_status": "full" if new_total >= gross else "partial",
-    }})
-    await _audit(current, "refund.create", "trip", body.trip_id,
-                 {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
-                 body.reason.strip())
-    return doc
+            await db.refunds.insert_one(dict(refund_doc))
+        except DuplicateKeyError:
+            refund_doc = await db.refunds.find_one({"idempotency_key": key})
+            if not refund_doc:
+                raise HTTPException(409, "Refusjonsoperasjonen finnes allerede")
+            if refund_doc.get("trip_id") != body.trip_id:
+                raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt")
+        await _audit(current, "refund.requested", "trip", body.trip_id, None, {
+            "refund_id": refund_doc.get("id"),
+            "amount": refund_doc.get("amount"),
+            "currency": refund_doc.get("currency"),
+            "idempotency_key": key,
+        }, reason)
+
+    # Idempotency keys may never be reused for a different logical refund.
+    if refund_doc.get("trip_id") != body.trip_id:
+        raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt på en annen tur")
+    if body.amount is not None and int(body.amount) != int(refund_doc.get("amount") or 0):
+        raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt med et annet beløp")
+    if reason != refund_doc.get("reason"):
+        raise HTTPException(409, "Idempotency-nøkkelen er allerede brukt med en annen begrunnelse")
+
+    # Reserve the requested amount on the trip exactly once. The operation id on the trip
+    # makes crash recovery safe if the process dies after reservation but before the refund row updates.
+    op_id = refund_doc["operation_id"]
+    trip_now = await db.trips.find_one({"trip_id": refund_doc["trip_id"]})
+    already_reserved = bool(trip_now and op_id in (trip_now.get("refund_operation_ids") or []))
+    if not already_reserved:
+        amount = int(refund_doc["amount"])
+        reserved = await db.trips.update_one(
+            {
+                "trip_id": refund_doc["trip_id"],
+                "status": {"$in": ["arrived", "completed", "rated"]},
+                "refund_operation_ids": {"$ne": op_id},
+                "$expr": {
+                    "$lte": [
+                        {"$add": [
+                            {"$ifNull": ["$refunded_total", 0]},
+                            {"$ifNull": ["$refund_pending_total", 0]},
+                            amount,
+                        ]},
+                        {"$ifNull": ["$price", 0]},
+                    ]
+                },
+            },
+            {
+                "$inc": {"refund_pending_total": amount},
+                "$addToSet": {"refund_operation_ids": op_id},
+                "$set": {"refund_status": "pending"},
+            },
+        )
+        if reserved.modified_count != 1:
+            latest = await db.trips.find_one({"trip_id": refund_doc["trip_id"]})
+            if not latest or op_id not in (latest.get("refund_operation_ids") or []):
+                await _refund_mark_failed(refund_doc, "insufficient_refundable_balance", "Refusjonsbeløpet overstiger tilgjengelig saldo.")
+                await _audit(current, "refund.failed", "trip", refund_doc["trip_id"], None, {
+                    "refund_id": refund_doc.get("id"), "code": "insufficient_refundable_balance",
+                }, reason)
+                raise HTTPException(409, "Refusjonsbeløpet overstiger tilgjengelig saldo")
+        await db.refunds.update_one(
+            {"idempotency_key": key},
+            {"$set": {"status": "pending", "reserved_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}},
+        )
+
+    # A short database lease prevents two workers from calling Stripe concurrently for the same operation.
+    now = datetime.now(timezone.utc)
+    lease_id = str(uuid.uuid4())
+    lease_until = now + timedelta(seconds=60)
+    leased = await db.refunds.update_one(
+        {
+            "idempotency_key": key,
+            "status": {"$in": ["requested", "pending"]},
+            "$or": [
+                {"processing_until": {"$exists": False}},
+                {"processing_until": None},
+                {"processing_until": {"$lte": now}},
+            ],
+        },
+        {"$set": {"processing_id": lease_id, "processing_until": lease_until, "last_attempt_at": now, "updated_at": now}},
+    )
+    if leased.modified_count != 1:
+        current_doc = await db.refunds.find_one({"idempotency_key": key})
+        return _refund_public(current_doc)
+
+    refund_doc = await db.refunds.find_one({"idempotency_key": key})
+    pi = refund_doc.get("payment_intent_id")
+    if not pi or not stripe.api_key:
+        # No external provider confirmation exists. Keep the reservation pending rather than
+        # falsely claiming money was returned.
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {"status": "pending", "provider": "manual", "provider_status": "awaiting_manual_confirmation", "updated_at": datetime.now(timezone.utc)},
+             "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+        return _refund_public(await db.refunds.find_one({"idempotency_key": key}))
+
+    kwargs = {"amount": int(refund_doc["amount"]) * 100, "reason": "requested_by_customer"}
+    if str(pi).startswith("ch_"):
+        kwargs["charge"] = pi
+    else:
+        kwargs["payment_intent"] = pi
+    if refund_doc.get("settlement_model") == "stripe_destination_charge":
+        kwargs["reverse_transfer"] = True
+        kwargs["refund_application_fee"] = True
+
+    try:
+        sr = stripe.Refund.create(**kwargs, idempotency_key=key)
+        provider_ref = sr.get("id")
+        provider_status = sr.get("status") or "pending"
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {
+                "provider": "stripe",
+                "provider_ref": provider_ref,
+                "provider_status": provider_status,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        refund_doc = await db.refunds.find_one({"idempotency_key": key})
+        await _apply_refund_provider_state(refund_doc, provider_ref, provider_status)
+        return _refund_public(await db.refunds.find_one({"idempotency_key": key}))
+    except (stripe.error.APIConnectionError, stripe.error.RateLimitError, stripe.error.APIError):
+        # Provider outcome may be unknown. Keep the local reservation and retry with the SAME key.
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {
+                "status": "pending",
+                "provider": "stripe",
+                "failure_code": "provider_outcome_unknown",
+                "failure_message_safe": "Stripe-status er ikke avklart. Samme operasjon kan trygt prøves igjen.",
+                "updated_at": datetime.now(timezone.utc),
+            }, "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+        await _audit(current, "refund.retryable_error", "trip", refund_doc["trip_id"], None, {
+            "refund_id": refund_doc.get("id"), "idempotency_key": key,
+        }, reason)
+        raise HTTPException(503, "Stripe-status er ikke avklart. Prøv samme refusjon på nytt.")
+    except stripe.error.StripeError as exc:
+        safe = getattr(exc, "user_message", None) or "Stripe avviste refusjonen."
+        await _refund_mark_failed(refund_doc, "stripe_error", safe)
+        await _audit(current, "refund.failed", "trip", refund_doc["trip_id"], None, {
+            "refund_id": refund_doc.get("id"), "code": "stripe_error",
+        }, reason)
+        raise HTTPException(502, safe)
+    except Exception:
+        # Unknown exceptions around a provider call are treated as unknown outcome, not failed.
+        await db.refunds.update_one(
+            {"idempotency_key": key, "processing_id": lease_id},
+            {"$set": {
+                "status": "pending",
+                "failure_code": "provider_outcome_unknown",
+                "failure_message_safe": "Providerstatus er ikke avklart. Samme operasjon kan trygt prøves igjen.",
+                "updated_at": datetime.now(timezone.utc),
+            }, "$unset": {"processing_id": "", "processing_until": ""}},
+        )
+        await _audit(current, "refund.retryable_error", "trip", refund_doc["trip_id"], None, {
+            "refund_id": refund_doc.get("id"), "idempotency_key": key,
+        }, reason)
+        raise HTTPException(503, "Providerstatus er ikke avklart. Prøv samme refusjon på nytt.")
 
 
 # ---- Transactions ledger (derived from real records: trips / refunds / payouts) ----
