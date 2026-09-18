@@ -6,34 +6,42 @@ import { Loader } from './ui';
 import Login from './Login';
 import FleetApplications from './FleetApplications';
 import {
-  Dashboard, Live, Trips, Drivers, Customers, Fleets, Vehicles, Documents, Finance, Support, Audit, Settings,
+  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
+import {
+  FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
+} from './controlCenter';
 
 const NAV = [
   { group: 'Oversikt', items: [
-    { to: '/', label: 'Dashbord', ic: '▤', end: true },
-    { to: '/live', label: 'Live drift', ic: '◉' },
+    { to: '/', label: 'Dashbord', ic: '▤', end: true, perm: 'operations' },
+    { to: '/live', label: 'Live drift', ic: '◉', perm: 'operations' },
+    { to: '/actions', label: 'Krever handling', ic: '!', perm: 'operations' },
   ]},
   { group: 'Drift', items: [
-    { to: '/trips', label: 'Turer', ic: '⇄' },
-    { to: '/drivers', label: 'Sjåfører', ic: '☗' },
-    { to: '/customers', label: 'Kunder', ic: '☺' },
+    { to: '/trips', label: 'Turer', ic: '⇄', perm: 'operations' },
+    { to: '/drivers', label: 'Sjåfører', ic: '☗', perm: 'operations' },
+    { to: '/customers', label: 'Kunder', ic: '☺', perm: 'operations' },
     { to: '/fleet-applications', label: 'Løyvesøknader', ic: '◇', superadminOnly: true },
-    { to: '/fleets', label: 'Løyvehavere', ic: '⌂' },
-    { to: '/vehicles', label: 'Kjøretøy', ic: '⛚' },
+    { to: '/fleets', label: 'Løyvehavere', ic: '⌂', perm: 'operations' },
+    { to: '/vehicles', label: 'Kjøretøy', ic: '⛚', perm: 'operations' },
   ]},
   { group: 'Økonomi', items: [
-    { to: '/finance', label: 'Økonomi', ic: '≣' },
+    { to: '/finance', label: 'Økonomi', ic: '≣', perm: 'finance' },
+    { to: '/payments', label: 'Betaling & oppgjør', ic: '₭', perm: 'finance' },
   ]},
-  { group: 'Support & compliance', items: [
-    { to: '/support', label: 'Support', ic: '✆' },
-    { to: '/documents', label: 'Dokumenter', ic: '❑' },
+  { group: 'Kommunikasjon & support', items: [
+    { to: '/communications', label: 'Kommunikasjon', ic: '✉', perm: 'communications' },
+    { to: '/support', label: 'Support', ic: '✆', perm: 'support' },
+    { to: '/documents', label: 'Dokumenter', ic: '❑', perm: 'operations' },
   ]},
   { group: 'System', items: [
-    { to: '/audit', label: 'Audit-logg', ic: '⌘' },
-    { to: '/settings', label: 'Innstillinger', ic: '⚙' },
+    { to: '/integrations', label: 'Integrasjoner', ic: '◎', perm: 'system' },
+    { to: '/admins', label: 'Administratorer', ic: '♙', superadminOnly: true },
+    { to: '/audit', label: 'Audit-logg', ic: '⌘', perm: 'system' },
+    { to: '/settings', label: 'Innstillinger', ic: '⚙', perm: 'system' },
   ]},
-];
+]
 
 function GlobalSearch() {
   const [q, setQ] = useState('');
@@ -110,7 +118,12 @@ function Shell() {
           <div className="nav-group" key={g.group}>
             <div className="nav-group-title">{g.group}</div>
             {g.items
-              .filter((it: any) => !it.superadminOnly || user?.role === 'superadmin')
+              .filter((it: any) => {
+                if (it.superadminOnly && user?.role !== 'superadmin') return false;
+                if (!it.perm || user?.role === 'superadmin') return true;
+                if (user?.permissions == null) return true; // legacy admin keeps existing access
+                return user.permissions.includes(it.perm);
+              })
               .map((it: any) => (
               <NavLink key={it.to} to={it.to} end={it.end}
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -143,10 +156,15 @@ function Shell() {
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/fleet-applications" element={<FleetApplications />} />
-            <Route path="/fleets" element={<Fleets />} />
+            <Route path="/fleets" element={<FleetManagement />} />
             <Route path="/vehicles" element={<Vehicles />} />
             <Route path="/documents" element={<Documents />} />
             <Route path="/finance" element={<Finance />} />
+            <Route path="/payments" element={<PaymentsPayouts />} />
+            <Route path="/communications" element={<Communications />} />
+            <Route path="/actions" element={<ActionCenter />} />
+            <Route path="/integrations" element={<SystemIntegrations />} />
+            <Route path="/admins" element={<AdminRoles />} />
             <Route path="/support" element={<Support />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/settings" element={<Settings />} />
