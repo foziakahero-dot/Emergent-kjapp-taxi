@@ -350,6 +350,124 @@ def test_customer_login_remains_single_factor():
     _run(_with_temp_db(body))
 
 
+def test_google_session_admin_without_totp_requires_enrollment(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+        def json(self):
+            return {"email": "owner@example.no", "name": "P0 Admin", "picture": None}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def get(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", lambda **kwargs: FakeClient())
+
+    async def body(tdb):
+        await _seed_admin(tdb)
+        result = await server.google_session(
+            server.GoogleSessionRequest(session_id="verified-google-session"),
+            Response(),
+        )
+        assert result.get("twofa_setup_required") is True
+        assert result.get("twofa_token")
+        assert "token" not in result
+
+    _run(_with_temp_db(body))
+
+
+def test_google_code_admin_without_totp_requires_enrollment(monkeypatch):
+    class FakeResponse:
+        status_code = 200
+        def json(self):
+            return {"id_token": "signed-google-id-token"}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            return False
+        async def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "client-secret")
+    monkeypatch.setattr(server.httpx, "AsyncClient", lambda **kwargs: FakeClient())
+
+    async def fake_verify(_id_token, _client_id):
+        return {
+            "sub": "google-sub-admin",
+            "email": "owner@example.no",
+            "email_verified": True,
+            "name": "P0 Admin",
+            "picture": None,
+        }
+
+    monkeypatch.setattr(server, "_verify_google_id_token", fake_verify)
+
+    async def body(tdb):
+        await _seed_admin(tdb)
+        result = await server.google_oauth_code(
+            server.GoogleCodeRequest(
+                code="code",
+                code_verifier="verifier",
+                redirect_uri="https://example.invalid/callback",
+            ),
+            Response(),
+        )
+        assert result.get("twofa_setup_required") is True
+        assert result.get("twofa_token")
+        assert "token" not in result
+
+    _run(_with_temp_db(body))
+
+
+def test_apple_admin_without_totp_requires_enrollment(monkeypatch):
+    monkeypatch.setenv("APPLE_CLIENT_ID", "com.kjapp.test")
+
+    class FakeJWT:
+        @staticmethod
+        def get_unverified_header(_token):
+            return {"kid": "kid-1"}
+
+        @staticmethod
+        def decode(*args, **kwargs):
+            return {
+                "sub": "apple-sub-admin",
+                "email": "owner@example.no",
+                "email_verified": True,
+            }
+
+    async def fake_keys():
+        return [{"kid": "kid-1", "kty": "RSA", "n": "x", "e": "AQAB"}]
+
+    class FakeRSA:
+        @staticmethod
+        def from_jwk(_raw):
+            return object()
+
+    monkeypatch.setattr(server, "_get_apple_keys", fake_keys)
+    monkeypatch.setattr(server.jwt, "get_unverified_header", FakeJWT.get_unverified_header)
+    monkeypatch.setattr(server.jwt, "decode", FakeJWT.decode)
+    from jwt import algorithms
+    monkeypatch.setattr(algorithms.RSAAlgorithm, "from_jwk", FakeRSA.from_jwk)
+
+    async def body(tdb):
+        await _seed_admin(tdb)
+        result = await server.apple_signin(
+            server.AppleSignInRequest(identity_token="signed-apple-token"),
+            Response(),
+        )
+        assert result.get("twofa_setup_required") is True
+        assert result.get("twofa_token")
+        assert "token" not in result
+
+    _run(_with_temp_db(body))
+
+
 # ---------------------------------------------------------------------------
 # B. Refund idempotency + atomic reservation
 # ---------------------------------------------------------------------------
