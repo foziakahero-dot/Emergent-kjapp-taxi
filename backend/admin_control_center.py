@@ -384,14 +384,26 @@ def install_admin_control_center(
             snap = _stripe_snapshot(account)
         except Exception as exc:
             raise HTTPException(502, f"Stripe-status kunne ikke hentes: {type(exc).__name__}")
+        payout_schedule = fleet.get("stripe_payout_schedule", "stripe_default")
+        if snap["ready"] and payout_schedule != "weekly_friday":
+            try:
+                await asyncio.to_thread(
+                    stripe.Account.modify,
+                    account_id,
+                    settings={"payouts": {"schedule": {"interval": "weekly", "weekly_anchor": "friday"}}},
+                )
+                payout_schedule = "weekly_friday"
+            except Exception:
+                payout_schedule = "stripe_default"
         await db.fleets.update_one({"_id": _oid(fleet_id)}, {"$set": {
             "stripe_details_submitted": snap["details_submitted"],
             "stripe_charges_enabled": snap["charges_enabled"],
             "stripe_payouts_enabled": snap["payouts_enabled"],
             "stripe_connect_status": "ready" if snap["ready"] else "restricted",
+            "stripe_payout_schedule": payout_schedule,
             "stripe_status_checked_at": _now(),
         }})
-        return {"connected": True, **snap}
+        return {"connected": True, **snap, "payout_schedule": payout_schedule}
 
     @api.get("/admin/control/payouts")
     async def stripe_payouts(current=Depends(require_admin)):
