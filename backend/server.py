@@ -5333,14 +5333,31 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     amount = int(body.amount) if body.amount is not None else eligible
     if amount <= 0 or amount > eligible:
         raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Attempt a real Stripe refund ONLY if a captured charge/intent is stored on the trip.
+    # Resolve the actual captured Stripe payment from the transaction ledger first.
+    # This is the canonical location for Checkout PaymentIntent IDs.
     provider, provider_ref, prov_status = "manual", None, "recorded"
-    pi = trip.get("stripe_payment_intent") or trip.get("payment_intent_id") or trip.get("charge_id")
+    payment_tx = await db.payment_transactions.find_one(
+        {"trip_id": body.trip_id, "payment_status": "paid"},
+        sort=[("updated_at", -1)],
+    )
+    pi = (
+        trip.get("stripe_payment_intent")
+        or trip.get("payment_intent_id")
+        or trip.get("charge_id")
+        or (payment_tx or {}).get("stripe_payment_intent_id")
+    )
     if pi and stripe.api_key:
         try:
             kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"): kwargs["charge"] = pi
-            else: kwargs["payment_intent"] = pi
+            if str(pi).startswith("ch_"):
+                kwargs["charge"] = pi
+            else:
+                kwargs["payment_intent"] = pi
+            if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
+                # Reverse the fleet transfer and refund the proportional platform fee,
+                # otherwise the platform would carry the refund while the fleet kept funds.
+                kwargs["reverse_transfer"] = True
+                kwargs["refund_application_fee"] = True
             sr = stripe.Refund.create(**kwargs)
             provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
         except stripe.error.StripeError as e:
@@ -5350,6 +5367,8 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
         "trip_id": body.trip_id, "user_id": trip.get("user_id"),
         "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
         "provider": provider, "provider_ref": provider_ref, "status": prov_status,
+        "fleet_id": (payment_tx or {}).get("fleet_id"),
+        "settlement_model": (payment_tx or {}).get("settlement_model"),
         "admin_id": current["id"], "admin_email": current.get("email"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -5398,7 +5417,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"refund_{r.get('id')}", "type": "REFUND", "ride": r.get("trip_id"),
                 "customer_id": r.get("user_id"), "amount": -int(r.get("amount") or 0),
                 "provider": r.get("provider"), "status": r.get("status"),
-                "fleet_id": None, "timestamp": r.get("created_at"), "reason": r.get("reason"),
+                "fleet_id": r.get("fleet_id"), "timestamp": r.get("created_at"), "reason": r.get("reason"),
             })
     if want in ("", "PAYOUT"):
         async for p in db.fleet_payouts.find({"period_end": {"$gte": lo[:10], "$lte": hi[:10]}}):
