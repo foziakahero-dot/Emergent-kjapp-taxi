@@ -31,8 +31,10 @@ http.interceptors.response.use(
   },
 );
 
-export const apiError = (e: any) =>
-  e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+export const apiError = (e: any) => {
+  if (e?.response?.status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
+  return e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+};
 
 const encodeStoragePath = (path: string) =>
   String(path || '').split('/').map((part) => encodeURIComponent(part)).join('/');
