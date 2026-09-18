@@ -4404,7 +4404,11 @@ async def _existing_checkout_response(checkout_key: str, user_id: str) -> Option
 
 
 @api.post("/payments/checkout")
-async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
+async def create_trip_checkout(
+    body: TripCheckoutRequest,
+    current=Depends(get_current_user),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
+):
     """Create exactly one logical Stripe Checkout session per active trip checkout attempt."""
     trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
     if not trip:
@@ -4423,7 +4427,10 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
 
     # First request atomically assigns the logical checkout key and freezes the amount/origin
     # for this attempt. Concurrent requests then reuse those exact values.
-    candidate_key = "checkout:" + body.trip_id + ":" + str(uuid.uuid4())
+    supplied_key = (idempotency_key or "").strip()
+    if len(supplied_key) > 160:
+        raise HTTPException(status_code=400, detail="Ugyldig idempotency-nøkkel")
+    candidate_key = "checkout:" + body.trip_id + ":" + (supplied_key or str(uuid.uuid4()))
     now = datetime.now(timezone.utc)
     await db.trips.update_one(
         {
