@@ -81,4 +81,28 @@ export const api = {
     http.post(`/superadmin/fleet-applications/${id}/reject`, { review_notes }).then((r) => r.data),
   applicationFile: (path: string) =>
     http.get(`/files/${encodeStoragePath(path)}`, { responseType: 'blob' }).then((r) => r.data as Blob),
+  // Admin Control Center
+  controlActionCenter: () => http.get('/admin/control/action-center').then((r) => r.data),
+  controlIntegrations: () => http.get('/admin/control/integrations').then((r) => r.data),
+  controlFleets: () => http.get('/admin/fleets-full').then((r) => r.data),
+  createFleet: (body: any) => http.post('/admin/fleets', body).then((r) => r.data),
+  fleetDetail: (id: string) => http.get(`/admin/fleets/${id}`).then((r) => r.data),
+  suspendFleet: (id: string, reason = '') => http.post(`/admin/fleets/${id}/suspend`, { reason }).then((r) => r.data),
+  reactivateFleet: (id: string) => http.post(`/admin/fleets/${id}/reactivate`).then((r) => r.data),
+  updateFleetCommission: (id: string, commission_rate: number, reason = '') =>
+    http.post(`/admin/fleets/${id}/commission`, { commission_rate, reason }).then((r) => r.data),
+  inviteFleetDriver: (id: string, body: any) =>
+    http.post(`/admin/control/fleets/${id}/driver-invites`, body).then((r) => r.data),
+  updateFleetVehicle: (id: string, body: any) =>
+    http.post(`/admin/control/fleets/${id}/vehicle`, body).then((r) => r.data),
+  stripeFleets: () => http.get('/admin/control/stripe-fleets').then((r) => r.data),
+  stripeConnect: (id: string) => http.post(`/admin/control/fleets/${id}/stripe-connect`).then((r) => r.data),
+  stripeStatus: (id: string) => http.get(`/admin/control/fleets/${id}/stripe-status`).then((r) => r.data),
+  stripePayouts: () => http.get('/admin/control/payouts').then((r) => r.data),
+  communications: () => http.get('/admin/control/communications').then((r) => r.data),
+  sendCommunication: (body: any) => http.post('/admin/control/communications', body).then((r) => r.data),
+  adminUsers: () => http.get('/admin/control/admin-users').then((r) => r.data),
+  createAdminUser: (body: any) => http.post('/admin/control/admin-users', body).then((r) => r.data),
+  updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
+
 };
