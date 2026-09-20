@@ -600,6 +600,8 @@ DEFAULT_PRICING = {
     "extra_stop_fee": 0.0,
     "customer_cancellation_fee": 0.0,
     "late_driver_cancellation_fee": 0.0,
+    "free_cancel_minutes": 2,
+    "dispatch_timeout_seconds": 180,
     "surge": {"enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0},
     "vehicle_rates": {
         "ai-first": {"base_fare": 70.0, "per_km": 16.0, "per_minute": 4.0, "minimum_fare": 0.0},
@@ -644,6 +646,29 @@ async def active_pricing() -> dict:
     return {**DEFAULT_PRICING, **((s or {}).get("pricing") or {})}
 
 
+def pricing_for_pickup(pricing: dict, lat: float, lng: float) -> tuple[dict, Optional[str]]:
+    """Apply the first enabled circular service-area override containing pickup coordinates."""
+    cfg = {**DEFAULT_PRICING, **(pricing or {})}
+    for area_id, area in (cfg.get("areas") or {}).items():
+        if not isinstance(area, dict) or area.get("enabled") is False:
+            continue
+        try:
+            center_lat = float(area["center_lat"])
+            center_lng = float(area["center_lng"])
+            radius_km = float(area.get("radius_km", 0))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if radius_km <= 0 or haversine_km(lat, lng, center_lat, center_lng) > radius_km:
+            continue
+        overrides = area.get("pricing") or {}
+        merged = {**cfg, **overrides}
+        merged["vehicle_rates"] = {**(cfg.get("vehicle_rates") or {}), **(overrides.get("vehicle_rates") or {})}
+        merged["surge"] = {**(cfg.get("surge") or {}), **(overrides.get("surge") or {})}
+        merged["version"] = cfg.get("version", 1)
+        return merged, area_id
+    return cfg, None
+
+
 def price_for(distance_km: float, vehicle_type: str, duration_min: float = None, when: datetime = None) -> int:
     """Legacy-compatible fallback used by tests/helpers; live quotes use calculate_price + active_pricing."""
     if duration_min is None:
@@ -652,14 +677,13 @@ def price_for(distance_km: float, vehicle_type: str, duration_min: float = None,
 
 
 def current_surge_info(when: datetime = None) -> dict:
-    """Return current surge multiplier + reason so UI can display it.
-    NOTE: multiplier is kept for internal use only — do not display the % to customers."""
-    now = when or datetime.now(timezone.utc)
-    local_hour = (now.hour + 1) % 24
+    """Return current automatic time-based surge for Norway using DST-safe Europe/Oslo time."""
+    now = (when or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Oslo"))
+    local_hour = now.hour
     weekday = now.weekday()
     reasons = []
     surge = 1.0
-    if (weekday == 4 and local_hour >= 18) or weekday == 5 or (weekday == 6 and local_hour <= 23):
+    if (weekday == 4 and local_hour >= 18) or weekday == 5 or weekday == 6:
         surge = max(surge, 1.25); reasons.append("Helgetillegg")
     if local_hour >= 22 or local_hour < 6:
         surge = max(surge, 1.15); reasons.append("Natt-tillegg")
@@ -1236,13 +1260,14 @@ async def trip_estimate(body: EstimateRequest):
         duration = max(3, int(est * 2.2))
         geometry = None
     pricing = await active_pricing()
+    effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
     for vt in ("ai-first", "enkelt", "trygg", "premium"):
-        quote = calculate_price(est, vt, duration, pricing)
+        quote = calculate_price(est, vt, duration, effective_pricing)
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"]})
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
-            "pricing_version": int(pricing.get("version", 1))}
+            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
 
@@ -1573,7 +1598,9 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         eta_min = max(3, int(est * 2.2))
         geometry = None
     pricing = await active_pricing()
-    quote = calculate_price(est, body.vehicle_type, eta_min, pricing)
+    effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
+    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing)
+    commission_rate = await _platform_commission()
     price = quote["price"]
     trip = {
         "trip_id": trip_id,
@@ -1589,7 +1616,9 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "duration_min": eta_min,
         "price": price,
         "pricing_version": quote["pricing_version"],
-        "pricing_snapshot": pricing,
+        "pricing_area": pricing_area,
+        "pricing_snapshot": effective_pricing,
+        "commission_rate": commission_rate,
         "surge_multiplier": quote["surge_multiplier"],
         "geometry": geometry,
         "status": "searching",
@@ -1737,11 +1766,34 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
 
 @api.post("/trips/{trip_id}/cancel")
 async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Tur ikke funnet")
+    if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
+        raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    fee = 0
+    if trip.get("driver_id"):
+        free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
+        accepted_at = trip.get("driver_route_started_at") or trip.get("updated_at") or trip.get("created_at")
+        try:
+            accepted_dt = datetime.fromisoformat(str(accepted_at).replace("Z", "+00:00"))
+            elapsed = (datetime.now(timezone.utc) - accepted_dt).total_seconds() / 60
+        except Exception:
+            elapsed = 0
+        if elapsed > free_minutes:
+            fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.trips.update_one(
         {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {
+            "status": "cancelled", "cancelled_at": now_iso, "cancelled_by": "customer",
+            "cancellation_fee": fee, "cancellation_fee_status": "pending" if fee > 0 else "not_applicable",
+        }},
     )
-    return {"ok": True}
+    if trip.get("driver_id"):
+        await send_push_to_user(trip["driver_id"], "Turen ble avbestilt", "Kunden har avbestilt turen.", "/driver")
+    return {"ok": True, "cancellation_fee": fee, "currency": "NOK"}
 
 
 @api.get("/trips")
@@ -2330,7 +2382,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(trip.get("pickup_lat"), trip.get("pickup_lng"))
     nxt = next((c for c in cands if c["id"] not in tried), None)
-    commission = await _platform_commission()
+    commission = await _commission_for_trip(trip)
     earnings = int(round((trip.get("price") or 0) * (1 - commission)))
     title = f"Ny tur · {earnings} kr til deg"
     body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
@@ -2372,6 +2424,23 @@ async def dispatch_loop():
                 "dispatch_mode": "sequential",
                 "offer_expires_at": {"$lt": now_iso},
             }).limit(20):
+                pricing = t.get("pricing_snapshot") or await active_pricing()
+                timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
+                try:
+                    created = datetime.fromisoformat(str(t.get("created_at")).replace("Z", "+00:00"))
+                    expired = (datetime.now(timezone.utc) - created).total_seconds() >= timeout_seconds
+                except Exception:
+                    expired = False
+                if expired:
+                    res = await db.trips.update_one(
+                        {"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+                        {"$set": {"status": "cancelled", "cancelled_at": now_iso,
+                                  "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
+                    )
+                    if res.modified_count:
+                        await send_push_to_user(t["user_id"], "Ingen ledig sjåfør",
+                                                "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
+                    continue
                 await offer_trip_to_next_driver(t)
         except Exception as e:
             print(f"dispatch_loop error: {e}")
@@ -2413,7 +2482,9 @@ async def driver_pending(current=Depends(require_driver)):
             continue
         t["id"] = str(t["_id"])
         t.pop("_id", None)
-        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+        trip_commission = await _commission_for_trip(t)
+        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - trip_commission)))
+        t["commission_rate"] = trip_commission
         t["pickup_route"] = None
         u = None
         if t.get("user_id"):
@@ -2528,8 +2599,9 @@ async def driver_current(current=Depends(require_driver)):
         except Exception:
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
-    commission = await _platform_commission()
+    commission = await _commission_for_trip(t)
     t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+    t["commission_rate"] = commission
     u = None
     if t.get("user_id"):
         try:
@@ -3511,7 +3583,17 @@ async def fleet_export_monthly(
 
 async def _platform_commission() -> float:
     s = await db.platform_settings.find_one({"_id": "singleton"})
-    return (s or {}).get("default_commission", 0.10)
+    return float((s or {}).get("default_commission", 0.10))
+
+
+async def _commission_for_trip(trip: dict) -> float:
+    """Historical trips keep the commission captured at booking; legacy trips fall back safely."""
+    if trip.get("commission_rate") is not None:
+        try:
+            return float(trip["commission_rate"])
+        except (TypeError, ValueError):
+            pass
+    return await _platform_commission()
 
 
 # ============================================================
@@ -4417,7 +4499,10 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
     await db.trips.update_many({"user_id": uid}, {"$set": {"user_id": anon_id, "pickup_address": "[slettet]", "dropoff_address": "[slettet]"}})
     # Delete personal data
     await db.chat_messages.delete_many({"user_id": uid})
-    await db.trip_messages.delete_many({"from_user_id": uid})
+    await db.trip_messages.update_many(
+        {"from_user_id": uid},
+        {"$set": {"from_user_id": anon_id, "from_name": "[slettet]"}}
+    )
     await db.payment_methods.delete_many({"user_id": uid})
     await db.settings.delete_many({"user_id": uid})
     await db.push_subscriptions.delete_many({"user_id": uid})
@@ -4443,6 +4528,8 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
         {"$set": {
             "status": "cancelled_by_driver",
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "cancelled_by": "driver",
+            "customer_cancellation_fee": 0,
         }},
     )
     if result.modified_count == 0:
@@ -4517,6 +4604,7 @@ async def driver_payouts(current=Depends(require_driver)):
     driver_id = current["id"]
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
+    pending_net = 0
     trips_count = 0
     async for t in db.trips.find({
         "driver_id": driver_id,
@@ -4524,7 +4612,10 @@ async def driver_payouts(current=Depends(require_driver)):
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
     }):
-        pending += t.get("price", 0)
+        gross = int(t.get("price", 0) or 0)
+        rate = await _commission_for_trip(t)
+        pending += gross
+        pending_net += int(round(gross * (1 - rate)))
         trips_count += 1
     # Read historic payouts if any
     history = []
@@ -4536,7 +4627,7 @@ async def driver_payouts(current=Depends(require_driver)):
     days_ahead = (7 - now.weekday()) % 7 or 7
     next_payout = (now + timedelta(days=days_ahead)).isoformat()
     commission = await _platform_commission()
-    net = int(round(pending * (1 - commission)))
+    net = pending_net
     bonuses = []
     bonus_total = 0
     async for b in db.bonus_payouts.find({"driver_id": driver_id, "paid_out": {"$ne": True}}).sort("earned_at", -1).limit(20):
@@ -5152,7 +5243,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
-            "driver_earnings": int(round((t.get("price") or 0) * (1 - commission))) if finished else None,
+            "driver_earnings": int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission)))) if finished else None,
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
             "accepted_at": t.get("driver_route_started_at"),
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
@@ -5446,7 +5537,9 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
             rows.append({
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
-                "amount": price, "commission": round(price * commission), "driver_net": round(price * (1 - commission)),
+                "amount": price,
+                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
+                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
                 "provider": t.get("payment_method") or "card", "status": t.get("payment_status") or "captured",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
@@ -5629,6 +5722,7 @@ def _validate_pricing(p: dict):
         "waiting_per_minute": (0, 200), "minimum_fare": (0, 5000),
         "extra_stop_fee": (0, 2000), "customer_cancellation_fee": (0, 2000),
         "late_driver_cancellation_fee": (0, 2000),
+        "free_cancel_minutes": (0, 60), "dispatch_timeout_seconds": (30, 1800),
     }
     for key, (lo, hi) in numeric_limits.items():
         if key in p and not lo <= float(p[key]) <= hi:
@@ -5641,6 +5735,17 @@ def _validate_pricing(p: dict):
         if vt not in ("ai-first", "enkelt", "trygg", "premium"):
             raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
         _validate_pricing(rates)
+    for area_id, area in (p.get("areas") or {}).items():
+        if not isinstance(area, dict):
+            raise HTTPException(400, f"Ugyldig område: {area_id}")
+        try:
+            lat = float(area["center_lat"]); lng = float(area["center_lng"]); radius = float(area["radius_km"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, f"Område {area_id} må ha center_lat, center_lng og radius_km")
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180 and 0.1 <= radius <= 300):
+            raise HTTPException(400, f"Ugyldig geometri for område {area_id}")
+        if area.get("pricing"):
+            _validate_pricing(area["pricing"])
 
 
 @api.get("/admin/settings")
@@ -5671,6 +5776,19 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
     if body.features is not None: sets["features"] = body.features
     if not sets: return {"ok": True}
     sets["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if "pricing" in sets or "default_commission" in sets:
+        previous_pricing = {**DEFAULT_PRICING, **(prev.get("pricing") or {})}
+        await db.pricing_versions.update_one(
+            {"version": int(previous_pricing.get("version", 1))},
+            {"$setOnInsert": {
+                "version": int(previous_pricing.get("version", 1)),
+                "pricing": previous_pricing,
+                "default_commission": float(prev.get("default_commission", 0.10)),
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+                "saved_by": current.get("email"),
+            }},
+            upsert=True,
+        )
     await db.platform_settings.update_one({"_id": "singleton"}, {"$set": sets}, upsert=True)
     await _audit(current, "settings.update", "settings", "singleton",
                  {k: prev.get(k) for k in sets if k != "updated_at"},
@@ -5684,24 +5802,127 @@ class PricingTestRequest(BaseModel):
     distance_km: float = Field(ge=0, le=2000)
     duration_min: float = Field(ge=0, le=1440)
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
+
+
+class PricingRouteTestRequest(BaseModel):
+    pickup_address: str = Field(min_length=2, max_length=200)
+    dropoff_address: str = Field(min_length=2, max_length=200)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+
+
+class PricingRollbackRequest(BaseModel):
+    version: int = Field(ge=1)
 
 
 @api.post("/admin/pricing/test")
 async def admin_pricing_test(body: PricingTestRequest, current=Depends(require_admin)):
     pricing = await active_pricing()
-    return {**calculate_price(body.distance_km, body.vehicle_type, body.duration_min, pricing),
-            "distance_km": body.distance_km, "duration_min": body.duration_min, "vehicle_type": body.vehicle_type}
+    effective, area = (pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
+                       if body.pickup_lat is not None and body.pickup_lng is not None else (pricing, None))
+    return {**calculate_price(body.distance_km, body.vehicle_type, body.duration_min, effective),
+            "distance_km": body.distance_km, "duration_min": body.duration_min,
+            "vehicle_type": body.vehicle_type, "pricing_area": area}
+
+
+@api.post("/admin/pricing/test-route")
+async def admin_pricing_test_route(body: PricingRouteTestRequest, current=Depends(require_admin)):
+    pickup = (await search_places(body.pickup_address, 1)).get("results") or []
+    dropoff = (await search_places(body.dropoff_address, 1)).get("results") or []
+    if not pickup or not dropoff:
+        raise HTTPException(400, "Fant ikke én eller begge adressene")
+    p, d = pickup[0], dropoff[0]
+    route = await osrm_route(p["lat"], p["lng"], d["lat"], d["lng"])
+    if not route:
+        raise HTTPException(503, "Kunne ikke beregne kjørerute akkurat nå")
+    pricing = await active_pricing()
+    effective, area = pricing_for_pickup(pricing, p["lat"], p["lng"])
+    quote = calculate_price(route["distance_km"], body.vehicle_type, route["duration_min"], effective)
+    return {
+        **quote, "pricing_area": area, "pickup": p, "dropoff": d,
+        "distance_km": route["distance_km"], "duration_min": route["duration_min"],
+        "vehicle_type": body.vehicle_type,
+    }
 
 
 @api.get("/admin/pricing/history")
 async def admin_pricing_history(current=Depends(require_admin)):
     items = []
-    async for e in db.audit_events.find({"entity_type": "settings", "entity_id": "singleton", "action": "settings.update"}).sort("at", -1).limit(50):
-        before, after = e.get("before") or {}, e.get("after") or {}
-        if "pricing" in before or "pricing" in after:
-            items.append({"at": e.get("at"), "by": e.get("actor_email") or e.get("by"),
-                          "before": before.get("pricing"), "after": after.get("pricing")})
+    current_settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    current_pricing = {**DEFAULT_PRICING, **(current_settings.get("pricing") or {})}
+    items.append({"version": int(current_pricing.get("version", 1)), "pricing": current_pricing,
+                  "default_commission": float(current_settings.get("default_commission", 0.10)),
+                  "current": True, "saved_at": current_settings.get("updated_at")})
+    async for v in db.pricing_versions.find({}).sort("version", -1).limit(49):
+        v.pop("_id", None)
+        v["current"] = False
+        items.append(v)
     return {"items": items}
+
+
+@api.post("/admin/pricing/rollback")
+async def admin_pricing_rollback(body: PricingRollbackRequest, current=Depends(require_superadmin)):
+    previous = await db.pricing_versions.find_one({"version": body.version})
+    if not previous:
+        raise HTTPException(404, "Prisversjonen finnes ikke")
+    current_settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    current_pricing = {**DEFAULT_PRICING, **(current_settings.get("pricing") or {})}
+    restored = {**DEFAULT_PRICING, **(previous.get("pricing") or {})}
+    restored["version"] = int(current_pricing.get("version", 1)) + 1
+    _validate_pricing(restored)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.pricing_versions.update_one(
+        {"version": int(current_pricing.get("version", 1))},
+        {"$setOnInsert": {
+            "version": int(current_pricing.get("version", 1)), "pricing": current_pricing,
+            "default_commission": float(current_settings.get("default_commission", 0.10)),
+            "saved_at": now_iso, "saved_by": current.get("email"),
+        }}, upsert=True,
+    )
+    await db.platform_settings.update_one({"_id": "singleton"}, {"$set": {
+        "pricing": restored,
+        "default_commission": float(previous.get("default_commission", current_settings.get("default_commission", 0.10))),
+        "updated_at": now_iso,
+    }}, upsert=True)
+    await _audit(current, "pricing.rollback", "settings", "singleton",
+                 {"pricing_version": current_pricing.get("version")},
+                 {"pricing_version": restored["version"], "restored_from": body.version})
+    return {"ok": True, "pricing_version": restored["version"], "restored_from": body.version}
+
+
+
+
+@api.get("/admin/beta-readiness")
+async def admin_beta_readiness(current=Depends(require_admin)):
+    """Operational code/config readiness only; legal/insurance approvals still require human verification."""
+    settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    pricing = {**DEFAULT_PRICING, **(settings.get("pricing") or {})}
+    pending_driver_docs = await db.users.count_documents({
+        "role": "driver",
+        "$or": [{"approved": False}, {"approved": {"$exists": False}}],
+    })
+    open_support = await db.support_tickets.count_documents({"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
+    failed_payments = await db.payment_transactions.count_documents({"payment_status": "failed"})
+    checks = {
+        "production_env": IS_PRODUCTION,
+        "stripe_configured": bool(stripe.api_key and STRIPE_WEBHOOK_SECRET),
+        "map_provider_configured": bool(MAPTILER_API_KEY),
+        "native_push_configured": bool((os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip() or (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip()),
+        "admin_2fa_enabled": bool(current.get("totp_enabled")),
+        "pricing_version": int(pricing.get("version", 1)),
+        "pricing_rollback_available": await db.pricing_versions.count_documents({}) > 0,
+        "pending_driver_approvals": pending_driver_docs,
+        "open_support_tickets": open_support,
+        "failed_payments": failed_payments,
+    }
+    blockers = []
+    if IS_PRODUCTION and not checks["stripe_configured"]: blockers.append("Stripe/webhook er ikke fullt konfigurert")
+    if not checks["admin_2fa_enabled"]: blockers.append("Innlogget admin har ikke aktivert 2FA")
+    if pending_driver_docs: blockers.append(f"{pending_driver_docs} sjåførkonto(er) venter på godkjenning")
+    if failed_payments: blockers.append(f"{failed_payments} betaling(er) har feilet")
+    return {"generated_at": datetime.now(timezone.utc).isoformat(), "checks": checks, "blockers": blockers,
+            "note": "Dette er teknisk driftsstatus, ikke juridisk godkjenning."}
 
 
 @api.get("/admin/fleets/{fleet_id}")
