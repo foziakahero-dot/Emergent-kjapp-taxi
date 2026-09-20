@@ -1,0 +1,40 @@
+.mk-beta-trigger{position:relative;display:inline-flex;align-items:center;gap:10px}
+.mk-beta-badge{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:22px;padding:0 8px;border-radius:999px;border:1px solid rgba(17,217,232,.4);background:rgba(17,217,232,.11);color:#7cf4ff;font-size:9px;font-weight:900;letter-spacing:.12em;line-height:1}
+.mk-beta-backdrop{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:20px;background:rgba(1,5,9,.78);backdrop-filter:blur(16px)}
+.mk-beta-dialog{position:relative;width:min(100%,620px);max-height:min(90vh,760px);overflow:auto;border:1px solid rgba(88,225,235,.22);border-radius:28px;background:linear-gradient(160deg,#07111b 0%,#091722 100%);box-shadow:0 36px 120px rgba(0,0,0,.62),0 0 70px rgba(17,217,232,.07);padding:34px;color:#f6fbff}
+.mk-beta-close{position:absolute;right:20px;top:18px;width:40px;height:40px;border:1px solid #233849;border-radius:50%;background:#0b1721;color:#d8e6ef;font-size:24px;cursor:pointer}
+.mk-beta-kicker{display:block;color:#11d9e8;font-size:11px;font-weight:900;letter-spacing:.14em}
+.mk-beta-dialog h2{margin:12px 50px 8px 0;font-size:clamp(30px,5vw,48px);line-height:1.02}
+.mk-beta-dialog>p{margin:0 0 24px;color:#9db0bf;line-height:1.65;max-width:52ch}
+.mk-beta-form{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.mk-beta-form label{display:grid;gap:7px;color:#d9e7ee;font-size:12px;font-weight:800;letter-spacing:.02em}
+.mk-beta-form label:nth-child(5){grid-column:1/-1}
+.mk-beta-form label small{color:#6f8798;font-weight:600}
+.mk-beta-form input,.mk-beta-form select{width:100%;min-height:48px;border:1px solid #253b4a;border-radius:13px;background:#07111a;color:#fff;padding:0 14px;font:inherit;outline:none}
+.mk-beta-form input:focus,.mk-beta-form select:focus{border-color:#11d9e8;box-shadow:0 0 0 3px rgba(17,217,232,.12)}
+.mk-beta-submit{grid-column:1/-1;width:100%;justify-content:center;border:0;cursor:pointer}
+.mk-beta-submit:disabled{opacity:.62;cursor:wait}
+.mk-beta-error,.mk-beta-message{grid-column:1/-1;margin:0;padding:12px 14px;border-radius:12px;font-size:13px}
+.mk-beta-error{border:1px solid rgba(248,113,113,.28);background:rgba(127,29,29,.14);color:#fecaca}
+.mk-beta-message{border:1px solid rgba(17,217,232,.24);background:rgba(17,217,232,.08);color:#c8fbff}
+.mk-beta-privacy{grid-column:1/-1;margin:0!important;color:#718898!important;font-size:11px!important;line-height:1.5!important}
+.mk-beta-privacy a{color:#9feef3}
+.mk-beta-success{display:grid;gap:14px;padding:22px;border:1px solid rgba(52,211,153,.25);border-radius:18px;background:rgba(16,185,129,.07)}
+.mk-beta-success strong{font-size:20px;color:#9cf3d0}
+.mk-beta-success p{margin:0;color:#c4d7df;line-height:1.6}
+.mk-cookie-banner{position:fixed;left:20px;right:20px;bottom:20px;z-index:9000;display:flex;align-items:center;justify-content:space-between;gap:24px;max-width:980px;margin:0 auto;padding:18px 20px;border:1px solid #263947;border-radius:18px;background:rgba(5,13,19,.96);box-shadow:0 18px 70px rgba(0,0,0,.38);backdrop-filter:blur(14px);color:#eef7fb}
+.mk-cookie-banner strong{font-size:13px}
+.mk-cookie-banner p{margin:5px 0 0;color:#8fa4b2;font-size:12px;line-height:1.5}
+.mk-cookie-actions{display:flex;gap:9px;flex:0 0 auto}
+.mk-cookie-actions button{min-height:40px;padding:0 16px;border-radius:999px;font-weight:800;cursor:pointer}
+.mk-cookie-reject{border:1px solid #314552;background:#0a151d;color:#d5e3ea}
+.mk-cookie-accept{border:1px solid #11d9e8;background:#11d9e8;color:#031014}
+.mk-beta-close:focus-visible,.mk-cookie-actions button:focus-visible,.mk-beta-trigger:focus-visible{outline:2px solid #72f3ff;outline-offset:3px}
+@media(max-width:640px){
+ .mk-beta-dialog{padding:28px 18px 22px;border-radius:22px}
+ .mk-beta-form{grid-template-columns:1fr}
+ .mk-beta-form label:nth-child(5),.mk-beta-submit,.mk-beta-error,.mk-beta-message,.mk-beta-privacy{grid-column:1}
+ .mk-cookie-banner{left:12px;right:12px;bottom:12px;align-items:stretch;flex-direction:column;gap:14px}
+ .mk-cookie-actions{width:100%}
+ .mk-cookie-actions button{flex:1}
+}
