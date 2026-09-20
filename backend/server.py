@@ -1884,6 +1884,28 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     return {"ok": True}
 
 
+@api.get("/trips/{trip_id}/cancel-preview")
+async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Tur ikke funnet")
+    if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
+        raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    fee = 0
+    free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
+    if trip.get("driver_id"):
+        accepted_at = trip.get("driver_route_started_at") or trip.get("updated_at") or trip.get("created_at")
+        try:
+            accepted_dt = datetime.fromisoformat(str(accepted_at).replace("Z", "+00:00"))
+            elapsed = (datetime.now(timezone.utc) - accepted_dt).total_seconds() / 60
+        except Exception:
+            elapsed = 0
+        if elapsed > free_minutes:
+            fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
+    return {"cancellation_fee": fee, "currency": "NOK", "free_cancel_minutes": free_minutes}
+
+
 @api.post("/trips/{trip_id}/cancel")
 async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
