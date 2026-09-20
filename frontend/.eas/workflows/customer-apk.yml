@@ -1,0 +1,13 @@
+name: KJAPP Customer Android APK
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  build_customer_android:
+    name: Build KJAPP Customer Android APK
+    type: build
+    params:
+      platform: android
+      profile: apk
