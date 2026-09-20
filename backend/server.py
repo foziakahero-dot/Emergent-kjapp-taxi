@@ -4577,6 +4577,57 @@ async def apple_config():
     }
 
 
+async def send_trip_receipts(trip_id: str):
+    """Send customer + driver receipts once after verified payment capture."""
+    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not trip or trip.get("receipt_emailed_at") or trip.get("payment_status") != "paid":
+        return
+    passenger = None
+    driver = None
+    try:
+        if trip.get("user_id"):
+            passenger = await db.users.find_one({"_id": ObjectId(trip["user_id"])})
+    except Exception:
+        passenger = None
+    try:
+        if trip.get("driver_id"):
+            driver = await db.users.find_one({"_id": ObjectId(trip["driver_id"])})
+    except Exception:
+        driver = None
+
+    price = int(trip.get("price") or 0)
+    commission = float(trip.get("commission_rate", 0.10) or 0.10)
+    fee = int(round(price * commission))
+    driver_net = max(0, price - fee)
+    route = f"{trip.get('pickup_address','')} → {trip.get('dropoff_address','')}"
+    paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
+
+    jobs = []
+    if passenger and passenger.get("email"):
+        jobs.append(asyncio.to_thread(
+            send_email,
+            passenger["email"],
+            f"KJAPP-kvittering · {price} kr",
+            f"<h2>Takk for turen</h2><p>{route}</p><p><strong>Total: {price} kr</strong></p>"
+            f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
+        ))
+    if driver and driver.get("email"):
+        jobs.append(asyncio.to_thread(
+            send_email,
+            driver["email"],
+            f"KJAPP sjåførkvittering · {driver_net} kr",
+            f"<h2>Tur fullført og betalt</h2><p>{route}</p><p>Turpris: {price} kr</p>"
+            f"<p>KJAPP serviceavgift: {fee} kr ({round(commission*100, 2)}%)</p>"
+            f"<p><strong>Til sjåfør/flåte: {driver_net} kr</strong></p><p>Tur-ID: {trip_id}</p>",
+        ))
+    if jobs:
+        await asyncio.gather(*jobs, return_exceptions=True)
+    await db.trips.update_one(
+        {"trip_id": trip_id, "receipt_emailed_at": {"$exists": False}},
+        {"$set": {"receipt_emailed_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+
 # ============================================================
 # Stripe payments (Emergent claimable sandbox)
 # ============================================================
@@ -4682,6 +4733,7 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                         {"trip_id": record["trip_id"], "user_id": current["id"]},
                         {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
                     )
+                    await send_trip_receipts(record["trip_id"])
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
             pass
@@ -4725,16 +4777,30 @@ async def stripe_webhook(request: Request):
                 {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
                 {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
             )
+            await send_trip_receipts(r["trip_id"])
     elif t == "checkout.session.completed":
         await db.payment_transactions.update_one(
             {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {"status": "awaiting_payment", "updated_at": datetime.now(timezone.utc)}},
         )
     elif t == "checkout.session.expired":
+        expired_record = await db.payment_transactions.find_one({"session_id": obj["id"]})
         await db.payment_transactions.update_one(
             {"session_id": obj["id"]},
             {"$set": {"status": "expired", "payment_status": "expired", "updated_at": datetime.now(timezone.utc)}},
         )
+        if expired_record and expired_record.get("trip_id"):
+            await db.trips.update_one(
+                {"trip_id": expired_record["trip_id"], "payment_status": {"$ne": "paid"}},
+                {"$set": {"payment_status": "expired"}},
+            )
+            if expired_record.get("user_id"):
+                await send_push_to_user(
+                    expired_record["user_id"],
+                    "Betalingen ble ikke fullført",
+                    "Åpne kvitteringen for å prøve betalingen på nytt.",
+                    f"/app/receipt/{expired_record['trip_id']}",
+                )
     return {"status": "ok"}
 
 
