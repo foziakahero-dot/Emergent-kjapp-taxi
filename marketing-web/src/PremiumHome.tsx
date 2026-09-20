@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './premium-home.css';
 import './premium-home-v2.css';
+import BetaWaitlist from './BetaWaitlist';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -156,6 +157,14 @@ function VoiceDemo() {
 
 export default function PremiumHome() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const waitlistTrigger = useRef<HTMLElement | null>(null);
+
+  function openWaitlist(event: React.MouseEvent<HTMLElement>) {
+    waitlistTrigger.current = event.currentTarget;
+    setMenuOpen(false);
+    setWaitlistOpen(true);
+  }
 
   return (
     <main id="top" className="mk-page mk-page-v2">
@@ -167,7 +176,7 @@ export default function PremiumHome() {
           <a href="#voice" onClick={() => setMenuOpen(false)}>Voice</a>
           <Link to="/loyvehaver" onClick={() => setMenuOpen(false)}>Løyvehavere</Link>
           <a href={FLEET_URL} onClick={() => setMenuOpen(false)}>Fleet Panel</a>
-          <a className="mk-pill mk-pill-primary" href="#download" onClick={() => setMenuOpen(false)}>Få KJAPP</a>
+          <button className="mk-pill mk-pill-primary mk-beta-trigger" type="button" onClick={openWaitlist}>Få tilgang til beta <span className="mk-beta-badge">BETA</span></button>
         </nav>
         <button className="mk-menu-button" type="button" aria-expanded={menuOpen} aria-label="Åpne hovedmeny" onClick={() => setMenuOpen((open) => !open)}>Meny</button>
       </header>
@@ -179,7 +188,7 @@ export default function PremiumHome() {
           <p className="mk-hero-lead">Kartet først. Bestill med tekst eller stemme. Velg bilen som passer, se estimatet før du bekrefter — og følg reisen live.</p>
           <div className="mk-hero-promise"><span className="mk-pulse" />Si hvor du skal. KJAPP ordner resten.</div>
           <div className="mk-actions">
-            <a className="mk-pill mk-pill-primary" href="#download">Få KJAPP</a>
+            <button className="mk-pill mk-pill-primary mk-beta-trigger" type="button" onClick={openWaitlist}>Få tilgang til beta <span className="mk-beta-badge">BETA</span></button>
             <a className="mk-pill mk-pill-dark" href="#voice">Se voice booking</a>
             <Link className="mk-fleet-inline" to="/loyvehaver">For løyvehavere →</Link>
           </div>
@@ -250,12 +259,13 @@ export default function PremiumHome() {
       <section id="download" className="mk-download mk-shell">
         <span className="mk-section-label">KJAPP BETA</span>
         <h2>Klar når du er.</h2>
-        <p>Vi gjør distribusjonen like ryddig som produktet. Ingen falske butikk-knapper: ekte lenker vises først når de er aktive.</p>
+        <p>KJAPP er i beta. Meld interesse nå, så kontakter vi deg når tilgang åpner for din gruppe. Ekte nedlastingslenker vises først når de er aktive.</p>
         <div className="mk-actions">
-          {ANDROID_BETA_URL ? <a className="mk-pill mk-pill-primary" href={ANDROID_BETA_URL} rel="noreferrer">Last ned Android beta</a> : <span className="mk-pill mk-pill-disabled" aria-disabled="true">Android beta · klargjøres</span>}
-          {IOS_TESTFLIGHT_URL ? <a className="mk-pill mk-pill-dark" href={IOS_TESTFLIGHT_URL} rel="noreferrer">Åpne i TestFlight</a> : <span className="mk-pill mk-pill-disabled" aria-disabled="true">iPhone · kommer snart</span>}
+          <button className="mk-pill mk-pill-primary mk-beta-trigger" type="button" onClick={openWaitlist}>Få tilgang til beta <span className="mk-beta-badge">BETA</span></button>
+          {ANDROID_BETA_URL ? <a className="mk-pill mk-pill-dark" href={ANDROID_BETA_URL} rel="noreferrer">Android beta</a> : <span className="mk-pill mk-pill-disabled" aria-disabled="true">Android beta · klargjøres</span>}
+          {IOS_TESTFLIGHT_URL ? <a className="mk-pill mk-pill-dark" href={IOS_TESTFLIGHT_URL} rel="noreferrer">Åpne i TestFlight</a> : <span className="mk-pill mk-pill-disabled" aria-disabled="true">iPhone beta · kommer snart</span>}
         </div>
-        <a className="mk-download-contact" href={`mailto:${EMAILS.hello}?subject=KJAPP%20beta`}>Vil du teste? Kontakt KJAPP →</a>
+        <a className="mk-download-contact" href={`mailto:${EMAILS.support}?subject=KJAPP%20beta`}>Spørsmål om beta? Kontakt support →</a>
       </section>
 
       <footer className="mk-footer mk-shell">
@@ -276,6 +286,7 @@ export default function PremiumHome() {
         </div>
         <span>© 2026 KJAPP · NexoraHub AS</span>
       </footer>
+      <BetaWaitlist open={waitlistOpen} onClose={() => setWaitlistOpen(false)} returnFocusTo={waitlistTrigger.current} />
     </main>
   );
 }
