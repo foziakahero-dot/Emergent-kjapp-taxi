@@ -1959,8 +1959,10 @@ async def _load_trip_or_403(trip_id: str, current: dict):
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
     is_passenger = trip.get("user_id") == current["id"]
-    is_driver = trip.get("driver_user_id") == current["id"] or (current.get("role") in ("driver", "admin") and trip.get("driver_id") == current.get("driver_id"))
-    if not (is_passenger or is_driver or current.get("role") == "admin"):
+    is_driver = current.get("role") == "driver" and (
+        trip.get("driver_id") == current["id"] or trip.get("driver_user_id") == current["id"]
+    )
+    if not (is_passenger or is_driver or current.get("role") in ("admin", "superadmin")):
         raise HTTPException(status_code=403, detail="Ikke tilgang til denne turen")
     return trip, is_passenger, is_driver
 
