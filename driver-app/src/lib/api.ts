@@ -3,7 +3,7 @@ import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
-export const KJAPP_DEFAULT_COMMISSION_PCT = 12;
+export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
