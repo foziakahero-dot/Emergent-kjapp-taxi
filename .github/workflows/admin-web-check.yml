@@ -1,8 +1,15 @@
 name: Admin web build check
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'admin-web/**'
+      - '.github/workflows/admin-web-check.yml'
   push:
     branches:
+      - main
       - release/emergent-production
     paths:
       - 'admin-web/**'
@@ -22,8 +29,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Validate Vercel production config
+      - name: Validate preview isolation
         run: |
-          node -e "const c=require('./vercel.json'); if(!c.rewrites?.some(r => r.source === '/api/:path*' && r.destination.includes('github-app-builder-28.emergent.host/api/'))) process.exit(1)"
+          node -e "const c=require('./vercel.json'); if(c.rewrites?.some(r => String(r.destination || '').includes('github-app-builder-28.emergent.host/api/'))) process.exit(1)"
       - name: Build production admin
         run: npm run build

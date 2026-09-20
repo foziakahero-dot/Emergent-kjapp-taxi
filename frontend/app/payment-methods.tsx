@@ -23,7 +23,7 @@ export default function PaymentMethods() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
-  const { data, isLoading } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });
   const methods = data?.payment_methods || data?.methods || (Array.isArray(data) ? data : []);
 
   const verifySetup = async (sessionId: string) => {
@@ -91,7 +91,7 @@ export default function PaymentMethods() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
       <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} style={s.back} testID="pm-back">
+        <Pressable onPress={() => router.back()} style={s.back} testID="pm-back" accessibilityRole="button" accessibilityLabel="Tilbake">
           <Icon name="arrow-left" size={20} color={colors.text} />
         </Pressable>
         <Text style={s.title}>Betalingsmåter</Text>
@@ -100,6 +100,15 @@ export default function PaymentMethods() {
       <View style={{ paddingHorizontal: 20 }}>
         {isLoading ? (
           <View style={{ paddingTop: 60 }}><Loader /></View>
+        ) : isError ? (
+          <View style={s.loadError} testID="pm-load-error">
+            <View style={s.loadErrorIcon}><Icon name="card" size={22} color={colors.accent} /></View>
+            <Text style={s.loadErrorTitle}>Kunne ikke hente betalingsmåter</Text>
+            <Text style={s.loadErrorSub}>Dette betyr ikke at kortene dine er borte. Prøv å hente listen på nytt.</Text>
+            <Pressable style={s.retryBtn} onPress={() => refetch()} testID="pm-retry">
+              <Text style={s.retryBtnText}>Prøv igjen</Text>
+            </Pressable>
+          </View>
         ) : (
           <>
             {notice ? (
@@ -123,7 +132,7 @@ export default function PaymentMethods() {
                   <View style={verified ? s.verified : s.unverified}>
                     <Text style={verified ? s.verifiedText : s.unverifiedText}>{verified ? 'Verifisert' : 'Ikke verifisert'}</Text>
                   </View>
-                  <Pressable onPress={() => remove(m.id)} testID={`pm-remove-${m.id}`} style={{ padding: 6 }}>
+                  <Pressable onPress={() => remove(m.id)} testID={`pm-remove-${m.id}`} style={s.removeBtn} accessibilityRole="button" accessibilityLabel="Fjern betalingsmåte">
                     <Icon name="x" size={18} color={colors.textMuted} />
                   </Pressable>
                 </View>
@@ -159,22 +168,29 @@ const useStyles = makeStyles((c) => ({
   header: { paddingHorizontal: 20, paddingBottom: 16, gap: 16 },
   back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   title: { fontFamily: font.display, fontSize: 26, color: c.text },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderRadius: 16, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 12 },
+  loadError: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 22, marginTop: 12 },
+  loadErrorIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  loadErrorTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15, marginTop: 12, textAlign: 'center' },
+  loadErrorSub: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 6, textAlign: 'center' },
+  retryBtn: { minHeight: 46, borderRadius: 12, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, marginTop: 14 },
+  retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card, borderRadius: 16, borderWidth: 1, borderColor: c.line, paddingLeft: 14, paddingRight: 6, paddingVertical: 10, marginBottom: 12 },
   cardIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-  cardLabel: { color: c.text, fontSize: 15, fontWeight: '600' },
+  cardLabel: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
   cardSub: { color: c.textMuted, fontSize: 13, marginTop: 2, fontFamily: font.mono },
+  removeBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   verified: { backgroundColor: c.onlineSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
-  verifiedText: { color: c.online, fontSize: 10, fontWeight: '700' },
+  verifiedText: { color: c.online, fontFamily: font.bold, fontSize: 10 },
   unverified: { backgroundColor: c.dangerSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
-  unverifiedText: { color: c.danger, fontSize: 10, fontWeight: '700' },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(47,224,140,0.25)' },
+  unverifiedText: { color: c.danger, fontFamily: font.bold, fontSize: 10 },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(57,229,140,0.28)' },
   noticeText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, flex: 1 },
   error: { color: c.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   emptyCard: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 20, marginBottom: 12 },
-  emptyTitle: { color: c.text, fontSize: 15, fontWeight: '700', marginTop: 10 },
+  emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15, marginTop: 10 },
   empty: { color: c.textMuted, fontSize: 13, marginTop: 5, lineHeight: 19, textAlign: 'center' },
   stripeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 54, paddingVertical: 15, borderRadius: 16, backgroundColor: c.accent, marginTop: 4 },
-  stripeText: { color: c.accentOn, fontSize: 15, fontWeight: '800' },
+  stripeText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
   securityNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 14, paddingHorizontal: 4 },
   note: { color: c.textMuted, fontSize: 12, lineHeight: 18, flex: 1 },
   vippsNote: { color: c.textMuted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 12, paddingHorizontal: 10 },

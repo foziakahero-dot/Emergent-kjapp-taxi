@@ -74,52 +74,60 @@ export default function Login() {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={[s.wrap, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[s.wrap, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable onPress={() => router.back()} style={s.back} testID="login-back">
+        <Pressable onPress={() => router.back()} style={s.back} testID="login-back" accessibilityRole="button" accessibilityLabel="Tilbake">
           <Icon name="arrow-left" size={20} color={colors.text} />
         </Pressable>
 
-        <Text style={s.brand}>KJ<Text style={{ color: colors.accent }}>A</Text>PP</Text>
+        <View style={s.brandBlock}>
+          <Text style={s.eyebrow}>KJAPP · PASSASJER</Text>
+          <Text style={s.brand}>KJAPP</Text>
+          <View style={s.brandLine} />
+        </View>
         <Text style={s.title}>Velkommen tilbake</Text>
-        <Text style={s.sub}>Logg inn for å bestille din neste tur.</Text>
+        <Text style={s.sub}>Logg inn for å bestille, følge og betale turen din.</Text>
 
-        <View style={s.field}>
-          <Icon name="mail" size={18} color={colors.textMuted} />
-          <TextInput
-            testID="login-email"
-            placeholder="E-post"
-            placeholderTextColor={colors.textMuted}
-            style={s.input}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
+        <View style={s.form}>
+          <View style={s.field}>
+            <Icon name="mail" size={18} color={colors.textMuted} />
+            <TextInput
+              testID="login-email"
+              placeholder="E-post"
+              placeholderTextColor={colors.textMuted}
+              style={s.input}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+              autoComplete="email"
+            />
+          </View>
+
+          <View style={s.field}>
+            <Icon name="lock" size={18} color={colors.textMuted} />
+            <TextInput
+              testID="login-password"
+              placeholder="Passord"
+              placeholderTextColor={colors.textMuted}
+              style={s.input}
+              secureTextEntry={!show}
+              value={password}
+              onChangeText={setPassword}
+              autoComplete="current-password"
+            />
+            <Pressable onPress={() => setShow((v) => !v)} testID="login-toggle-password" style={s.fieldAction} accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}>
+              <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
+            </Pressable>
+          </View>
+
+          {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
+
+          <Button label="Logg inn" onPress={submit} loading={loading} testID="login-submit" style={{ marginTop: 2 }} />
         </View>
-
-        <View style={s.field}>
-          <Icon name="lock" size={18} color={colors.textMuted} />
-          <TextInput
-            testID="login-password"
-            placeholder="Passord"
-            placeholderTextColor={colors.textMuted}
-            style={s.input}
-            secureTextEntry={!show}
-            value={password}
-            onChangeText={setPassword}
-          />
-          <Pressable onPress={() => setShow((v) => !v)} testID="login-toggle-password">
-            <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
-          </Pressable>
-        </View>
-
-        {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
-
-        <Button label="Logg inn" onPress={submit} loading={loading} testID="login-submit" style={{ marginTop: 8 }} />
 
         <View style={s.dividerRow}>
           <View style={s.divLine} />
@@ -127,12 +135,18 @@ export default function Login() {
           <View style={s.divLine} />
         </View>
 
-        <Pressable style={s.googleBtn} onPress={googleSignIn} disabled={gLoading} testID="login-google">
+        <Pressable style={s.googleBtn} onPress={googleSignIn} disabled={gLoading} testID="login-google" accessibilityRole="button" accessibilityLabel="Fortsett med Google">
           {gLoading ? <ActivityIndicator color="#1F1F1F" /> : <><GoogleG size={20} /><Text style={s.googleText}>Fortsett med Google</Text></>}
         </Pressable>
 
+        <View style={s.trustRow}>
+          <View style={s.trustItem}><Icon name="shield" size={14} color={colors.accent} /><Text style={s.trustText}>Trygg konto</Text></View>
+          <View style={s.trustDivider} />
+          <View style={s.trustItem}><Icon name="card" size={14} color={colors.accent} /><Text style={s.trustText}>Sikker betaling</Text></View>
+        </View>
+
         <Pressable onPress={() => router.push('/register')} style={s.footer} testID="login-to-register">
-          <Text style={s.footerText}>Ny hos KJAPP? <Text style={{ color: colors.accent }}>Opprett konto</Text></Text>
+          <Text style={s.footerText}>Ny hos KJAPP? <Text style={s.footerLink}>Opprett konto</Text></Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -152,18 +166,28 @@ function GoogleG({ size = 20 }: { size?: number }) {
 
 const useStyles = makeStyles((c) => ({
   wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.bg },
+  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 28 },
+  brandBlock: { alignSelf: 'flex-start' },
+  eyebrow: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.8 },
+  brand: { fontFamily: font.bold, fontSize: 34, color: c.text, letterSpacing: 0.5, marginTop: 5 },
+  brandLine: { width: 42, height: 3, borderRadius: 2, backgroundColor: c.accent, marginTop: 8 },
+  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 30 },
+  sub: { color: c.textMuted, fontFamily: font.body, fontSize: 14, lineHeight: 20, marginTop: 7, marginBottom: 24 },
+  form: { gap: 12 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingLeft: 16, paddingRight: 6, height: 56 },
+  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
+  fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
   divLine: { flex: 1, height: 1, backgroundColor: c.line },
   divText: { color: c.textMuted, fontSize: 12 },
-  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 999, backgroundColor: '#FFFFFF' },
-  googleText: { color: '#1F1F1F', fontSize: 16, fontWeight: '600' },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 24 },
-  brand: { fontFamily: font.display, fontSize: 34, color: c.text, letterSpacing: 1 },
-  title: { fontFamily: font.display, fontSize: 26, color: c.text, marginTop: 24 },
-  sub: { color: c.textMuted, fontSize: 14, marginTop: 6, marginBottom: 24 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 16, height: 56, marginBottom: 14 },
-  input: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
-  error: { color: c.danger, fontSize: 13, marginBottom: 8 },
-  footer: { alignItems: 'center', marginTop: 24 },
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 14, backgroundColor: '#FFFFFF' },
+  googleText: { color: '#1F1F1F', fontFamily: font.semibold, fontSize: 15 },
+  trustRow: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16, gap: 12 },
+  trustItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  trustText: { color: c.textMuted, fontSize: 11 },
+  trustDivider: { width: 1, height: 16, backgroundColor: c.line },
+  footer: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   footerText: { color: c.textSecondary, fontSize: 14 },
+  footerLink: { color: c.accent, fontFamily: font.semibold },
 }));

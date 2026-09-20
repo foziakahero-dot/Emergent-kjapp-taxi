@@ -73,3 +73,10 @@ export async function submitFleetApplication(uploadToken: string, documents: Rec
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+
+export async function getSharedTrip(token: string) {
+  const res = await fetch(`${API_BASE}/trips/share/${encodeURIComponent(token)}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}

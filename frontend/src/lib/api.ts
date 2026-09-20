@@ -29,7 +29,9 @@ export const tripsApi = {
   active: () => api.get('/trips/active').then((r) => r.data),
   get: (id: string) => api.get(`/trips/${id}`).then((r) => r.data),
   complete: (id: string) => api.post(`/trips/${id}/complete`).then((r) => r.data),
+  cancelPreview: (id: string) => api.get(`/trips/${id}/cancel-preview`).then((r) => r.data),
   cancel: (id: string) => api.post(`/trips/${id}/cancel`).then((r) => r.data),
+  changeDestination: (id: string, data: any) => api.patch(`/trips/${id}/destination`, data).then((r) => r.data),
   rate: (id: string, data: any) => api.post(`/trips/${id}/rate`, data).then((r) => r.data),
   list: () => api.get('/trips').then((r) => r.data),
 };
@@ -69,6 +71,12 @@ export const aiApi = {
 export const messagesApi = {
   list: (tripId: string) => api.get(`/trips/${tripId}/messages`).then((r) => r.data),
   send: (tripId: string, text: string) => api.post(`/trips/${tripId}/messages`, { text }).then((r) => r.data),
+};
+
+export const safetyApi = {
+  log: (tripId: string, data: { kind: 'emergency' | 'report' | 'share'; note?: string; lat?: number; lng?: number }) =>
+    api.post(`/trips/${tripId}/safety`, data).then((r) => r.data),
+  shareLink: (tripId: string) => api.post(`/trips/${tripId}/share-link`).then((r) => r.data),
 };
 
 export const gdprApi = {

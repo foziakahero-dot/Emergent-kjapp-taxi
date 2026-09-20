@@ -30,9 +30,9 @@ export default function CustomerTabsLayout() {
       }}
     >
       <Tabs.Screen name="home" options={{ title: 'Hjem', tabBarIcon: tab('navigation') }} />
-      <Tabs.Screen name="assist" options={{ title: 'Assist', tabBarIcon: tab('sparkles') }} />
       <Tabs.Screen name="history" options={{ title: 'Turer', tabBarIcon: tab('history') }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil', tabBarIcon: tab('user') }} />
+      <Tabs.Screen name="assist" options={{ href: null }} />
     </Tabs>
   );
 }

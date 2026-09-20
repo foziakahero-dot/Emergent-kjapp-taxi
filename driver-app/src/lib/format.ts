@@ -30,10 +30,10 @@ export const VEHICLES: {
   tagline: string;
   seats: number;
 }[] = [
-  { type: 'ai-first', name: 'KJAPP', tagline: 'Standard', seats: 4 },
-  { type: 'enkelt', name: 'Sparsom', tagline: 'Beste pris', seats: 4 },
-  { type: 'trygg', name: 'Komfort XL', tagline: '7 seter', seats: 7 },
-  { type: 'premium', name: 'Premium', tagline: 'Business', seats: 4 },
+  { type: 'ai-first', name: 'KJAPP', tagline: 'Rask og enkel', seats: 4 },
+  { type: 'enkelt', name: 'KJAPP', tagline: 'Rask og enkel', seats: 4 },
+  { type: 'trygg', name: 'KJAPP XL', tagline: 'Mer plass · 7 seter', seats: 7 },
+  { type: 'premium', name: 'Premium', tagline: 'Executive comfort', seats: 4 },
 ];
 
 export function vehicleMeta(type: string) {

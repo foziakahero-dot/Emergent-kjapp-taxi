@@ -1,250 +1,211 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { ApplyPage } from './ApplyPage';
+import PremiumHome from './PremiumHome';
+import { TripSharePage } from './TripSharePage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
+const EMAILS = {
+  hello: 'hei@kjappapp.no',
+  support: 'support@kjappapp.no',
+  driver: 'driver@kjappapp.no',
+  fleet: 'fleet@kjappapp.no',
+  partner: 'partner@kjappapp.no',
+  privacy: 'privacy@kjappapp.no',
+};
 
-function Logo() {
-  return <Link to="/" className="brand" aria-label="KJAPP forside">KJAPP</Link>;
+function PartnerWordmark() {
+  return <Link className="mk-wordmark" to="/" aria-label="KJAPP forside"><span>KJ</span><em>A</em><span>PP</span></Link>;
 }
 
-function Header({ partner = false }: { partner?: boolean }) {
+function PartnerHeader() {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <header className="site-header shell">
-      <Logo />
-      <nav className="desktop-nav" aria-label="Hovedmeny">
-        <Link to="/">Kunder</Link>
-        <Link to="/loyvehaver">Løyvehavere</Link>
-        <a href="mailto:support@kjappapp.no">Hjelp</a>
+    <header className="mk-header mk-shell">
+      <PartnerWordmark />
+      <nav className={menuOpen ? 'is-open' : ''} aria-label="Hovedmeny">
+        <Link to="/" onClick={() => setMenuOpen(false)}>Kunder</Link>
+        <a href={`mailto:${EMAILS.driver}`} onClick={() => setMenuOpen(false)}>Sjåfører</a>
+        <Link to="/loyvehaver" onClick={() => setMenuOpen(false)}>Løyvehavere</Link>
+        <a href={FLEET_URL} onClick={() => setMenuOpen(false)}>Fleet Panel</a>
+        <a href={`mailto:${EMAILS.support}`} onClick={() => setMenuOpen(false)}>Hjelp</a>
+        <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad" onClick={() => setMenuOpen(false)}>Bli partner</Link>
       </nav>
-      {partner ? <a className="small-outline" href={FLEET_URL}>Partner-login</a> : null}
-      <Link className="mobile-menu" to={partner ? '/' : '/loyvehaver'}>{partner ? 'Kunder' : 'Løyvehaver'}</Link>
+      <button className="mk-menu-button" type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Meny</button>
     </header>
   );
 }
 
-function Footer() {
-  return (
-    <footer className="footer shell">
-      <Logo />
-      <div className="footer-links">
-        <Link to="/">Kunder</Link>
-        <Link to="/loyvehaver">Løyvehavere</Link>
-        <a href="mailto:support@kjappapp.no">Hjelp</a>
-        <a href="mailto:personvern@kjappapp.no">Personvern</a>
-        <a href="mailto:hei@kjappapp.no">Kontakt</a>
-      </div>
-      <div className="footer-meta">© KJAPP</div>
-    </footer>
-  );
-}
+function PartnerDashboardPreview() {
+  const tileStyle = {
+    border: '1px solid #24344a',
+    borderRadius: 12,
+    background: '#0b1522',
+    padding: '14px 14px 13px',
+    minHeight: 76,
+  } as const;
 
-function AppPreview() {
   return (
-    <div className="phone-preview" aria-label="KJAPP app forhåndsvisning">
-      <div className="phone-brand">KJAPP</div>
-      <div className="phone-title">Hvor skal du?</div>
-      <div className="phone-field">Fra · Nåværende posisjon</div>
-      <div className="phone-field muted">Til · Søk destinasjon</div>
-      <div className="map-placeholder">
-        <span className="map-dot one" />
-        <span className="map-dot two" />
-        <span className="map-line" />
+    <div
+      aria-label="Forhåndsvisning av KJAPP Fleet Panel"
+      style={{
+        width: '100%',
+        maxWidth: 390,
+        minHeight: 510,
+        justifySelf: 'center',
+        border: '1px solid #26364b',
+        borderRadius: 26,
+        background: 'linear-gradient(160deg,#08111b,#0d1927)',
+        boxShadow: '0 28px 90px rgba(0,0,0,.34)',
+        padding: 24,
+      }}
+    >
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 18, borderBottom: '1px solid #1f3044'}}>
+        <div>
+          <div style={{color: '#11d9e8', fontSize: 10, fontWeight: 900, letterSpacing: '.08em'}}>KJAPP FLEET</div>
+          <div style={{fontSize: 21, fontWeight: 900, marginTop: 6}}>Din flåte. Din kontroll.</div>
+        </div>
+        <span style={{fontSize: 10, color: '#7f91a8'}}>LIVE</span>
       </div>
-      <div className="phone-row"><strong>Standard</strong><span>Fra 189 kr</span></div>
-      <div className="gold-btn full">Bestill KJAPP</div>
+
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18}}>
+        <div style={tileStyle}><span style={{color: '#7f91a8', fontSize: 9}}>SJÅFØRER</span><strong style={{display: 'block', marginTop: 13, fontSize: 15}}>Status og tilgang</strong></div>
+        <div style={tileStyle}><span style={{color: '#7f91a8', fontSize: 9}}>TURER</span><strong style={{display: 'block', marginTop: 13, fontSize: 15}}>Live og historikk</strong></div>
+        <div style={tileStyle}><span style={{color: '#7f91a8', fontSize: 9}}>ØKONOMI</span><strong style={{display: 'block', marginTop: 13, fontSize: 15}}>Oppgjør samlet</strong></div>
+        <div style={tileStyle}><span style={{color: '#7f91a8', fontSize: 9}}>DOKUMENTER</span><strong style={{display: 'block', marginTop: 13, fontSize: 15}}>Godkjenning</strong></div>
+      </div>
+
+      <div style={{marginTop: 14, minHeight: 175, border: '1px solid #24344a', borderRadius: 14, background: 'linear-gradient(135deg,#07121e,#0b1a28)', padding: 18, position: 'relative', overflow: 'hidden'}}>
+        <div style={{color: '#11d9e8', fontSize: 10, fontWeight: 800}}>LIVE FLÅTE</div>
+        <div style={{position: 'absolute', inset: '50px 18px 18px', opacity: .7, backgroundImage: 'linear-gradient(26deg,transparent 48%,#1d354b 49%,#1d354b 51%,transparent 52%),linear-gradient(144deg,transparent 48%,#172c3e 49%,#172c3e 51%,transparent 52%)', backgroundSize: '64px 54px'}} />
+        <span style={{position: 'absolute', left: '27%', top: '53%', width: 12, height: 12, borderRadius: '50%', background: '#11d9e8', boxShadow: '0 0 0 6px rgba(17,217,232,.12)'}} />
+        <span style={{position: 'absolute', right: '27%', top: '38%', width: 9, height: 9, borderRadius: '50%', background: '#34d399'}} />
+        <div style={{position: 'absolute', left: 18, right: 18, bottom: 16, color: '#7f91a8', fontSize: 10}}>Reelle flåtedata vises etter innlogging.</div>
+      </div>
     </div>
   );
 }
 
-function HomePage() {
-  return (
-    <main>
-      <Header />
-      <section className="hero shell">
-        <div className="hero-copy">
-          <div className="eyebrow">NORSK TAXI · MODERNE BESTILLING</div>
-          <h1>Taxi.<br />Enklere.</h1>
-          <p className="lead">Bestill taxi på sekunder. Norske løyvehavere. Tydelig pris. Ingen unødvendig styr.</p>
-          <div className="actions">
-            <a className="gold-btn" href="#app">Last ned KJAPP</a>
-            <Link className="outline-btn" to="/loyvehaver">Er du løyvehaver?</Link>
-          </div>
-        </div>
-        <div id="app"><AppPreview /></div>
-      </section>
+const onboardingSteps = [
+  ['01', 'Send søknad', 'Firma, kontaktinformasjon, løyver og kjøretøy.'],
+  ['02', 'Dokumentasjon', 'Løyvebevis, vognkort, forsikring og bankinformasjon.'],
+  ['03', 'KJAPP kontrollerer', 'Søknaden og dokumentasjonen gjennomgås før aktivering.'],
+  ['04', 'Fleet åpnes', 'Godkjente partnere får tilgang til fleet.kjappapp.no.'],
+];
 
-      <Divider />
-      <section className="section shell">
-        <h2>Bygget for hverdagen.</h2>
-        <p className="muted-copy">Tre steg. Ingen friksjon.</p>
-        <div className="steps-grid">
-          <Step no="01" title="Velg hvor du skal">Åpne KJAPP og skriv inn destinasjonen din.</Step>
-          <Step no="02" title="Se pris og bil">Velg kategorien som passer før du bestiller.</Step>
-          <Step no="03" title="Følg sjåføren">Se bilen på kartet frem til hentestedet.</Step>
-        </div>
-      </section>
-
-      <Divider />
-      <section className="section shell">
-        <div className="eyebrow">HVORFOR KJAPP</div>
-        <h2 className="wide-heading">Lokalt nok til å bry seg.<br />Moderne nok til å være enkelt.</h2>
-        <div className="feature-grid">
-          <Feature title="Norske løyvehavere">KJAPP kobler kunder med godkjente lokale løyvehavere.</Feature>
-          <Feature title="Tydelige priser">Pris og bilvalg presenteres før bestilling.</Feature>
-          <Feature title="Verifiserte sjåfører">Dokumentasjon og tilgang styres gjennom KJAPP-systemet.</Feature>
-          <Feature title="Norsk support">En enklere vei til hjelp når noe faktisk skjer.</Feature>
-        </div>
-      </section>
-
-      <Divider />
-      <section className="assist shell">
-        <div className="assist-copy">
-          <div className="eyebrow">KJAPP ASSIST · KOMMER SNART</div>
-          <h2>Bestill slik du faktisk snakker.</h2>
-          <p className="quote">«Bestill en taxi fra Majorstua til Gardermoen kl. 06:00 i morgen.»</p>
-        </div>
-        <div className="assist-card">
-          <div className="eyebrow">KJAPP ASSIST</div>
-          <div className="chat user">Majorstua → Gardermoen<br />i morgen kl. 06:00</div>
-          <div className="chat assistant">Klart. Standard eller Premium?</div>
-          <div className="tiny">Kommer snart i KJAPP</div>
-        </div>
-      </section>
-
-      <Divider />
-      <section className="partner-cta shell">
-        <div>
-          <div className="eyebrow">FOR LØYVEHAVERE</div>
-          <h2>Ditt løyve.<br />Din virksomhet.</h2>
-          <p>KJAPP gir deg kundeetterspørsel og et enkelt partnerverktøy — uten å ta kontrollen fra deg.</p>
-          <div className="actions">
-            <Link className="gold-btn" to="/loyvehaver/soknad">Bli KJAPP-partner</Link>
-            <a className="outline-btn" href={FLEET_URL}>Logg inn</a>
-          </div>
-        </div>
-        <div className="commission-block">
-          <div className="commission">12%</div>
-          <p>KJAPP-provisjon for godkjente løyvehavere</p>
-          <span>Sjåfører · Turer · Økonomi · Bedrift</span>
-        </div>
-      </section>
-
-      <section className="closing shell">
-        <h2>KJAPP for Norge.</h2>
-        <p>Vi trenger ikke være størst. Vi skal være enklere å forstå, enklere å bruke og bedre tilpasset norske løyvehavere.</p>
-        <a className="gold-btn" href="#app">Last ned KJAPP</a>
-      </section>
-      <Footer />
-    </main>
-  );
-}
+const partnerValues = [
+  ['01', '10 % SERVICEAVGIFT', 'En tydelig modell. 90 % av turinntekten beholdes hos sjåfør/løyvehaver før øvrige egne kostnader.'],
+  ['02', 'UKENTLIG OPPGJØR', 'Digitale betalinger kan avregnes automatisk hver uke. Kontantturer registreres separat.'],
+  ['03', 'FULL OVERSIKT', 'Sjåfører, turer, økonomi og dokumentstatus samlet i Fleet Panel.'],
+  ['04', 'NORSK OPPFØLGING', 'Direkte kontakt når konto, dokumentasjon eller oppgjør må avklares.'],
+];
 
 function PartnerPage() {
+  useEffect(() => {
+    document.title = 'KJAPP for løyvehavere — 10 % serviceavgift';
+    const meta = document.querySelector('meta[name="description"]');
+    meta?.setAttribute('content', 'Bli KJAPP-partner. 10 % serviceavgift, Fleet Panel for sjåfører og turer, og ukentlig oppgjør for digitale betalinger.');
+  }, []);
+
   return (
-    <main>
-      <Header partner />
-      <section className="partner-hero shell">
-        <div>
-          <div className="eyebrow">FOR LØYVEHAVERE</div>
-          <h1>Ditt løyve.<br />Din virksomhet.</h1>
-          <p className="lead">KJAPP gir deg en enkel vei til nye turer og et eget partnerverktøy — uten å ta kontrollen fra deg.</p>
-          <div className="actions">
-            <Link className="gold-btn" to="/loyvehaver/soknad">Søk om å bli partner</Link>
-            <a className="outline-btn" href={FLEET_URL}>Logg inn</a>
+    <main id="top" className="mk-page">
+      <PartnerHeader />
+
+      <section className="mk-hero mk-shell">
+        <div className="mk-hero-copy">
+          <div className="mk-eyebrow">FOR LØYVEHAVERE</div>
+          <h1>DIN FLÅTE.<br />DIN KONTROLL.</h1>
+          <p>KJAPP gir løyvehavere et moderne system for sjåfører, turer, økonomi og dokumentasjon — uten å ta virksomheten fra deg.</p>
+          <div className="mk-actions">
+            <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Søk om å bli partner</Link>
+            <a className="mk-pill mk-pill-dark" href={FLEET_URL}>Åpne Fleet Panel</a>
+          </div>
+          <div className="mk-location">10 % serviceavgift · 90 % beholdes · Fleet Panel · Norsk oppfølging</div>
+        </div>
+        <PartnerDashboardPreview />
+      </section>
+
+      <section className="mk-partner mk-shell">
+        <div className="mk-partner-copy">
+          <span>KJAPP PARTNER</span>
+          <h2>Jobb mindre.<br />Behold mer.</h2>
+          <p>En enkel serviceavgift og ett kontrollpanel. Ved digitale betalinger legges det opp til automatisk ukentlig avregning. Kontantturer kan registreres og avstemmes separat.</p>
+          <div className="mk-actions">
+            <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Bli KJAPP-partner</Link>
+            <a className="mk-pill mk-pill-dark" href={`mailto:${EMAILS.partner}`}>Snakk med KJAPP</a>
           </div>
         </div>
-        <div className="rate-card">
-          <div className="eyebrow">KJAPP PARTNER</div>
-          <div className="rate"><strong>12%</strong><span>provisjon</span></div>
-          <p>En tydelig modell for godkjente løyvehavere.</p>
+        <div className="mk-commission"><strong>10%</strong><p>serviceavgift<br />90% beholdes</p><div /><span>TYDELIG · ENKELT · UKENTLIG OPPGJØR</span></div>
+      </section>
+
+      <section className="mk-journey mk-shell">
+        <div className="mk-journey-copy">
+          <div className="mk-eyebrow">SLIK BLIR DU PARTNER</div>
+          <h2 style={{marginTop: 26}}>Én kontrollert<br />vei inn.</h2>
+          <div className="mk-step-list">
+            {onboardingSteps.map(([number, title, copy]) => (
+              <article className="mk-step" key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></article>
+            ))}
+          </div>
+        </div>
+        <aside className="mk-promise">
+          <span>FLEET PANEL</span>
+          <h3>Alt du trenger.<br />Samlet på ett sted.</h3><div />
+          <p>Sjåfører og status<br />Turer og historikk<br />Økonomi og oppgjør<br />Dokumenter og godkjenning</p>
+          <a className="mk-pill mk-pill-gold" href={FLEET_URL} style={{marginTop: 18}}>Logg inn Fleet</a>
+        </aside>
+      </section>
+
+      <section className="mk-why mk-shell">
+        <div className="mk-why-intro">
+          <div><span>BYGGET FOR LØYVEHAVEREN</span><h2>Mindre administrasjon.<br />Mer kontroll.</h2></div>
+          <p>KJAPP skal gjøre det enklere å drive en moderne taxiflåte. Partneren beholder løyvet, sjåførene og virksomheten — KJAPP leverer teknologien rundt turene.</p>
+        </div>
+        <div className="mk-value-grid">
+          {partnerValues.map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p></article>)}
         </div>
       </section>
 
-      <Divider />
-      <section className="section shell">
-        <div className="eyebrow">BYGGET FOR LØYVEHAVEREN</div>
-        <h2>Mindre administrasjon.<br />Mer kontroll.</h2>
-        <div className="feature-grid">
-          <Feature title="Lav og tydelig provisjon">12 % KJAPP-provisjon. Ingen kompliserte nivåer i første versjon.</Feature>
-          <Feature title="Du beholder kontrollen">Ditt løyve, dine sjåfører og din virksomhet.</Feature>
-          <Feature title="Eget kontrollpanel">Se sjåfører, turer, økonomi og bedriftsinformasjon samlet.</Feature>
-          <Feature title="Norsk oppfølging">Direkte kontakt når dokumentasjon, konto eller oppgjør må avklares.</Feature>
+      <section className="mk-download mk-shell">
+        <div className="mk-eyebrow">KLAR FOR NESTE STEG?</div>
+        <h2 style={{marginTop: 24}}>Bli KJAPP-partner.</h2>
+        <p>Søknaden gir ikke automatisk tilgang. Fleet-konto aktiveres etter at KJAPP har kontrollert og godkjent dokumentasjonen.</p>
+        <div className="mk-actions">
+          <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Start søknaden</Link>
+          <a className="mk-pill mk-pill-dark" href={FLEET_URL}>Allerede godkjent? Logg inn</a>
         </div>
       </section>
 
-      <Divider />
-      <section className="section shell">
-        <div className="eyebrow">SLIK BLIR DU KJAPP-PARTNER</div>
-        <h2>Én kontrollert vei inn.</h2>
-        <div className="process-list">
-          <Process no="01" title="Send søknad">Firma, kontaktinformasjon, antall løyver og biler.</Process>
-          <Process no="02" title="Last opp dokumentasjon">Firmaattest, løyvebevis, vognkort, forsikring og bankdokumentasjon.</Process>
-          <Process no="03" title="KJAPP kontrollerer">Superadmin går gjennom søknaden og dokumentene.</Process>
-          <Process no="04" title="Tilgang aktiveres">Først etter godkjenning opprettes partnerkonto og tilgang til fleet.kjappapp.no.</Process>
+      <footer className="mk-footer mk-shell">
+        <div className="mk-footer-brand"><PartnerWordmark /><p>Norsk taxi. Uten omveier.</p></div>
+        <nav aria-label="Bunnmeny">
+          <Link to="/">Kunder</Link>
+          <a href={`mailto:${EMAILS.driver}`}>Sjåfør</a>
+          <Link to="/loyvehaver">Løyvehaver</Link>
+          <a href={FLEET_URL}>Fleet Panel</a>
+        </nav>
+        <div className="mk-contact-grid" aria-label="Kontakt KJAPP">
+          <a href={`mailto:${EMAILS.hello}`}>hei@kjappapp.no</a>
+          <a href={`mailto:${EMAILS.support}`}>support@kjappapp.no</a>
+          <a href={`mailto:${EMAILS.driver}`}>driver@kjappapp.no</a>
+          <a href={`mailto:${EMAILS.fleet}`}>fleet@kjappapp.no</a>
+          <a href={`mailto:${EMAILS.partner}`}>partner@kjappapp.no</a>
+          <a href={`mailto:${EMAILS.privacy}`}>privacy@kjappapp.no</a>
         </div>
-      </section>
-
-      <Divider />
-      <section className="portal-preview-section shell">
-        <div>
-          <div className="eyebrow">ETTER GODKJENNING</div>
-          <h2>Alt du trenger.<br />Ikke et helt ERP-system.</h2>
-          <p className="lead small">Partnerportalen er bevisst enkel og viser bare det som hjelper deg å drive flåten.</p>
-        </div>
-        <PortalPreview />
-      </section>
-
-      <section className="documents shell">
-        <div className="eyebrow">DOKUMENTASJON</div>
-        <h2>Dette må være klart før godkjenning.</h2>
-        <div className="docs-grid">
-          {['Firmaattest', 'Løyvebevis', 'Vognkort', 'Forsikringsdokumentasjon', 'Bankdokumentasjon'].map((x) => <div className="doc-chip" key={x}><span>✓</span>{x}</div>)}
-        </div>
-      </section>
-
-      <Divider />
-      <section className="final-cta shell">
-        <div>
-          <div className="eyebrow">KLAR FOR Å SØKE?</div>
-          <h2>Bli KJAPP-partner.</h2>
-          <p>Søknaden gir ikke automatisk tilgang. Partnerkontoen aktiveres først etter at KJAPP har kontrollert og godkjent dokumentasjonen.</p>
-        </div>
-        <div className="final-actions">
-          <Link className="gold-btn full" to="/loyvehaver/soknad">Start løyvehaversøknad</Link>
-          <span>Allerede godkjent?</span>
-          <a href={FLEET_URL}>Logg inn på fleet.kjappapp.no →</a>
-        </div>
-      </section>
-      <Footer />
+        <span>© 2026 KJAPP · NexoraHub AS</span>
+      </footer>
     </main>
   );
 }
-
-function PortalPreview() {
-  return (
-    <div className="portal-preview">
-      <div className="portal-side"><strong>KJAPP PARTNER</strong><span>Oversikt</span><span>Sjåfører</span><span>Turer</span><span>Økonomi</span><span>Bedrift</span></div>
-      <div className="portal-content">
-        <div className="metric-row"><div><span>TURER I DAG</span><strong>12</strong></div><div><span>NETTO I DAG</span><strong>4 820 kr</strong></div></div>
-        <div className="live-card"><span>LIVE FLÅTE</span><div className="live-dots">● &nbsp; ● &nbsp;&nbsp;&nbsp; ●</div><small>4 biler pålogget</small></div>
-      </div>
-    </div>
-  );
-}
-
-function Divider() { return <div className="divider shell" />; }
-function Step({ no, title, children }: React.PropsWithChildren<{ no: string; title: string }>) { return <div className="step"><span>{no}</span><h3>{title}</h3><p>{children}</p></div>; }
-function Feature({ title, children }: React.PropsWithChildren<{ title: string }>) { return <article className="feature"><h3>{title}</h3><p>{children}</p></article>; }
-function Process({ no, title, children }: React.PropsWithChildren<{ no: string; title: string }>) { return <div className="process"><span>{no}</span><h3>{title}</h3><p>{children}</p></div>; }
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<PremiumHome />} />
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
-      <Route path="*" element={<HomePage />} />
+      <Route path="/tur/:token" element={<TripSharePage />} />
+      <Route path="*" element={<PremiumHome />} />
     </Routes>
   );
 }

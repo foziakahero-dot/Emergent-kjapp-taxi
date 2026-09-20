@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -7,18 +7,18 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
-import { tripsApi } from '@/src/lib/api';
+import { safetyApi, tripsApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
   searching: { title: 'Søker sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
   booking: { title: 'Bestiller for deg', sub: 'Vi finner nærmeste sjåfør' },
-  driver_on_way: { title: 'Sjåfør på vei', sub: 'kommer om noen minutter' },
+  driver_on_way: { title: 'Sjåfør på vei', sub: 'Følg bilen live på kartet' },
   at_pickup: { title: 'Sjåføren er fremme', sub: 'Kom ut når du er klar' },
   in_trip: { title: 'Turen pågår', sub: 'God tur!' },
   arrived: { title: 'Du er fremme!', sub: 'Takk for turen' },
-  cancelled: { title: 'Turen ble avbrutt', sub: '' },
-  cancelled_by_driver: { title: 'Sjåføren avbrøt', sub: 'Bestill på nytt' },
+  cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur pågår' },
+  cancelled_by_driver: { title: 'Sjåføren måtte avbryte', sub: 'Det søkes ikke automatisk etter ny sjåfør' },
 };
 
 export default function BookingFlow() {
@@ -28,6 +28,10 @@ export default function BookingFlow() {
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [safetyBusy, setSafetyBusy] = useState(false);
+  const [networkIssue, setNetworkIssue] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const nav = useRef(false);
 
   useEffect(() => {
@@ -37,24 +41,82 @@ export default function BookingFlow() {
         const t = await tripsApi.get(tripId!);
         if (!mounted) return;
         setTrip(t);
+        setNetworkIssue(false);
         if (t.status === 'arrived' && !nav.current) {
           nav.current = true;
           try { await tripsApi.complete(tripId!); } catch {}
           router.replace(`/receipt/${tripId}`);
         }
-      } catch {}
+      } catch {
+        if (mounted) setNetworkIssue(true);
+      }
     };
     fetchTrip();
     const i = setInterval(fetchTrip, 2500);
     return () => { mounted = false; clearInterval(i); };
-  }, [tripId]);
+  }, [tripId, retryKey, router]);
 
   const cancel = async () => {
-    try { await tripsApi.cancel(tripId!); } catch {}
-    router.replace('/(app)/home');
+    try {
+      const preview = await tripsApi.cancelPreview(tripId!);
+      const fee = Number(preview?.cancellation_fee || 0);
+      Alert.alert(
+        'Avbestille tur?',
+        fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.',
+        [
+          { text: 'Behold tur', style: 'cancel' },
+          { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
+            try { await tripsApi.cancel(tripId!); } finally { router.replace('/(app)/home'); }
+          } },
+        ],
+      );
+    } catch {
+      Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilkårene. Prøv igjen.');
+    }
+  };
+
+  const callEmergency = async () => {
+    setSafetyBusy(true);
+    try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}
+    finally {
+      setSafetyBusy(false);
+      setSafetyOpen(false);
+      Linking.openURL('tel:112').catch(() => {});
+    }
+  };
+
+  const reportSafety = async () => {
+    setSafetyBusy(true);
+    try {
+      await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
+      setSafetyOpen(false);
+    } catch {}
+    finally { setSafetyBusy(false); }
+  };
+
+  const shareTrip = async () => {
+    setSafetyBusy(true);
+    try {
+      const shared = await safetyApi.shareLink(tripId!);
+      await safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
+      await Share.share({ title: 'Følg KJAPP-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
+    } catch {}
+    finally { setSafetyBusy(false); }
   };
 
   if (!trip) {
+    if (networkIssue) {
+      return (
+        <View style={s.loading} testID="booking-load-error">
+          <View style={s.offlineIcon}><Icon name="crosshair" size={22} color={colors.accent} /></View>
+          <Text style={s.loadErrorTitle}>Får ikke kontakt med turen</Text>
+          <Text style={s.loadErrorSub}>Sjekk nettet ditt. KJAPP gjør ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>
+          <Pressable style={s.retryBtn} onPress={() => setRetryKey((v) => v + 1)} testID="booking-retry-load">
+            <Text style={s.retryBtnText}>Prøv igjen</Text>
+          </Pressable>
+        </View>
+      );
+    }
     return <View style={s.loading}><Loader label="Åpner turen din…" /></View>;
   }
 
@@ -62,7 +124,7 @@ export default function BookingFlow() {
   const route = trip.geometry?.coordinates || [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
-  const driverPhone = String(trip.driver?.phone || '').replace(/[^+\d]/g, '');
+  const driverCancelled = trip.status === 'cancelled_by_driver';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -76,7 +138,7 @@ export default function BookingFlow() {
       />
 
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel">
+        <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel" accessibilityRole="button" accessibilityLabel="Avbryt tur">
           <Icon name="x" size={20} color={colors.text} />
         </Pressable>
         <View style={s.statusPill}>
@@ -87,6 +149,13 @@ export default function BookingFlow() {
 
       <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
         <View style={s.handle} />
+
+        {networkIssue ? (
+          <View style={s.networkBanner} testID="booking-network-warning">
+            <View style={s.networkDot} />
+            <Text style={s.networkText}>Live-data er midlertidig utilgjengelig · prøver igjen automatisk</Text>
+          </View>
+        ) : null}
 
         {trip.status === 'searching' || trip.status === 'booking' ? (
           <View style={{ alignItems: 'center', paddingVertical: 8 }}>
@@ -104,10 +173,16 @@ export default function BookingFlow() {
           </View>
         ) : isFinal ? (
           <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+            <View style={[s.finalIcon, driverCancelled && s.finalIconDriver]}>
+              <Icon name={driverCancelled ? 'car' : 'x'} size={22} color={driverCancelled ? colors.accent : colors.danger} />
+            </View>
             <Text style={s.bigTitle}>{meta.title}</Text>
             <Text style={s.sub}>{meta.sub}</Text>
+            {driverCancelled ? (
+              <Text style={s.recoveryCopy}>Start en ny bestilling når du er klar. KJAPP bruker ikke den avbrutte turen som om den fortsatt var aktiv.</Text>
+            ) : null}
             <Pressable onPress={() => router.replace('/(app)/home')} style={s.homeBtn} testID="booking-home">
-              <Text style={s.homeBtnText}>Tilbake til hjem</Text>
+              <Text style={s.homeBtnText}>{driverCancelled ? 'Bestill ny tur' : 'Tilbake til hjem'}</Text>
             </Pressable>
           </View>
         ) : (
@@ -148,22 +223,54 @@ export default function BookingFlow() {
               </View>
             ) : (
               <View style={s.actions}>
-                {driverPhone ? (
-                  <Action icon="phone" label="Ring" testID="action-call" onPress={() => Linking.openURL(`tel:${driverPhone}`)} />
-                ) : null}
                 <Action icon="message" label="Melding" testID="action-message" onPress={() => setChatOpen(true)} />
-                <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => Linking.openURL('tel:112')} />
+                <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => setSafetyOpen(true)} />
               </View>
             )}
             {trip.status === 'in_trip' ? (
-              <Pressable style={s.chatBtn} onPress={() => setChatOpen(true)} testID="ontrip-chat">
-                <Icon name="message" size={16} color={colors.text} />
-                <Text style={s.chatBtnText}>Melding til sjåfør</Text>
-              </Pressable>
+              <View style={s.onTripActions}>
+                <Pressable style={[s.chatBtn, { marginTop: 0 }]} onPress={() => setChatOpen(true)} testID="ontrip-chat">
+                  <Icon name="message" size={16} color={colors.text} />
+                  <Text style={s.chatBtnText}>Melding</Text>
+                </Pressable>
+                <Pressable style={s.safetyBtn} onPress={() => setSafetyOpen(true)} testID="ontrip-safety">
+                  <Icon name="shield" size={16} color={colors.accent} />
+                  <Text style={s.safetyBtnText}>Sikkerhet</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         )}
       </View>
+
+      <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
+        <Pressable style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
+          <Pressable style={s.safetySheet} onPress={() => {}}>
+            <View style={s.safetyHead}>
+              <View>
+                <Text style={s.safetyOverline}>KJAPP SIKKERHET</Text>
+                <Text style={s.safetyTitle}>Hjelp på turen</Text>
+              </View>
+              <Pressable onPress={() => setSafetyOpen(false)} disabled={safetyBusy} accessibilityLabel="Lukk sikkerhetsmeny">
+                <Icon name="x" size={20} color={colors.text} />
+              </Pressable>
+            </View>
+            <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. KJAPP-support erstatter ikke nødetatene.</Text>
+            <Pressable style={s.emergencyAction} onPress={callEmergency} disabled={safetyBusy} testID="safety-call-112">
+              <Icon name="phone" size={18} color={colors.text} />
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Hendelsen logges også på turen</Text></View>
+            </Pressable>
+            <Pressable style={s.safetyAction} onPress={shareTrip} disabled={safetyBusy} testID="safety-share-trip">
+              <Icon name="navigation" size={18} color={colors.accent} />
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Del live-turen</Text><Text style={s.safetyActionSub}>Lenken utløper automatisk etter 24 timer</Text></View>
+            </Pressable>
+            <Pressable style={s.safetyAction} onPress={reportSafety} disabled={safetyBusy} testID="safety-report">
+              <Icon name="flag" size={18} color={colors.accent} />
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til KJAPP</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <ChatSheet
         tripId={tripId!}
@@ -189,7 +296,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 function Action({ icon, label, onPress, testID }: { icon: IconName; label: string; onPress: () => void; testID: string }) {
   const s = useStyles();
   return (
-    <Pressable style={s.action} onPress={onPress} testID={testID}>
+    <Pressable style={s.action} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label}>
       <Icon name={icon} size={18} color={colors.accent} />
       <Text style={s.actionText}>{label}</Text>
     </Pressable>
@@ -197,38 +304,62 @@ function Action({ icon, label, onPress, testID }: { icon: IconName; label: strin
 }
 
 const useStyles = makeStyles((c) => ({
-  loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' },
+  loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  offlineIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  loadErrorTitle: { color: c.text, fontFamily: font.display, fontSize: 20, marginTop: 16, textAlign: 'center' },
+  loadErrorSub: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 8, textAlign: 'center' },
+  retryBtn: { minHeight: 50, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
+  retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(12,18,22,0.85)', borderWidth: 1, borderColor: c.line },
-  statusPill: { backgroundColor: 'rgba(12,18,22,0.85)', borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingHorizontal: 20, paddingVertical: 11 },
-  statusText: { color: c.text, fontFamily: font.display, fontSize: 16 },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: c.line, paddingHorizontal: 20, paddingTop: 10 },
-  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 16 },
-  radar: { width: 72, height: 72, borderRadius: 36, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: 'rgba(203,163,101,0.3)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line },
+  statusPill: { backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10 },
+  statusText: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: c.line, paddingHorizontal: 20, paddingTop: 10 },
+  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
+  networkBanner: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.warning + '12', borderWidth: 1, borderColor: c.warning, borderRadius: 10, paddingHorizontal: 11, marginBottom: 12 },
+  networkDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.warning },
+  networkText: { color: c.textSecondary, fontSize: 11, flex: 1 },
+  radar: { width: 72, height: 72, borderRadius: 36, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   bigTitle: { color: c.text, fontFamily: font.display, fontSize: 22 },
   sub: { color: c.textMuted, fontSize: 14, marginTop: 4, textAlign: 'center' },
   destBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle, borderRadius: 16, borderWidth: 1, borderColor: c.line, padding: 14, marginTop: 16, alignSelf: 'stretch' },
   destText: { color: c.text, fontSize: 14, flex: 1 },
-  destPrice: { color: c.text, fontFamily: font.display, fontSize: 16 },
+  destPrice: { color: c.text, fontFamily: font.mono, fontSize: 16 },
   cancelLink: { color: c.textMuted, fontSize: 14, textDecorationLine: 'underline' },
-  homeBtn: { marginTop: 20, backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 28, paddingVertical: 14 },
-  homeBtnText: { color: c.accentOn, fontWeight: '700', fontSize: 15 },
+  finalIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  finalIconDriver: { backgroundColor: c.accentSoft, borderColor: c.accent },
+  recoveryCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
+  homeBtn: { marginTop: 20, minHeight: 52, backgroundColor: c.accent, borderRadius: 14, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
+  homeBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  etaBadge: { width: 74, height: 74, borderRadius: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: 'rgba(203,163,101,0.3)' },
+  etaBadge: { width: 74, height: 74, borderRadius: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
   etaNum: { color: c.text, fontFamily: font.display, fontSize: 26 },
-  etaMin: { color: c.accent, fontSize: 9, letterSpacing: 2, marginTop: 2 },
-  overline: { color: c.accent, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase' },
-  driverName: { color: c.text, fontSize: 16, fontWeight: '600', marginTop: 4 },
+  etaMin: { color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 2, marginTop: 2 },
+  overline: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase' },
+  driverName: { color: c.text, fontFamily: font.semibold, fontSize: 16, marginTop: 4 },
   driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingText: { color: c.textMuted, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  action: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 12, borderRadius: 16, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  actionText: { color: c.text, fontSize: 12 },
+  action: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  actionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
   metrics: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: c.line },
   divider: { width: 1, height: 28, backgroundColor: c.line },
   metricLabel: { color: c.textMuted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', textAlign: 'center' },
   metricValue: { color: c.text, fontFamily: font.mono, fontSize: 15, textAlign: 'center', marginTop: 4 },
-  chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, paddingVertical: 12, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  chatBtnText: { color: c.text, fontSize: 14 },
+  chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, minHeight: 48, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  chatBtnText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+  onTripActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  safetyBtn: { minHeight: 48, flex: 0.8, borderRadius: 14, borderWidth: 1, borderColor: c.accent, backgroundColor: c.accentSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  safetyBtnText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.68)' },
+  safetySheet: { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: c.line, padding: 20, paddingBottom: 34 },
+  safetyHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  safetyOverline: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.4 },
+  safetyTitle: { color: c.text, fontFamily: font.display, fontSize: 22, marginTop: 3 },
+  safetyCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 12, marginBottom: 14 },
+  emergencyAction: { minHeight: 66, borderRadius: 16, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, marginTop: 8 },
+  safetyAction: { minHeight: 66, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, marginTop: 8 },
+  safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));

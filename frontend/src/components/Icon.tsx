@@ -2,7 +2,7 @@ import React from 'react';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { colors as theme } from '@/src/theme';
 
-// Lucide-style 24x24 stroke icons. Only the glyphs used across KJAPP.
+// KJAPP icon system — Lucide-style 24x24 strokes with a consistent optical grid.
 type IconName =
   | 'menu' | 'search' | 'x' | 'map-pin' | 'navigation' | 'star' | 'phone'
   | 'message' | 'shield' | 'car' | 'user' | 'settings' | 'clock' | 'chevron-right'
@@ -10,7 +10,7 @@ type IconName =
   | 'plane' | 'card' | 'sparkles' | 'power' | 'wallet' | 'log-out' | 'history'
   | 'trending-up' | 'lock' | 'mail' | 'eye' | 'eye-off' | 'circle-dot' | 'flag'
   | 'help' | 'bell' | 'chevron-up' | 'minus' | 'crosshair' | 'file-text'
-  | 'globe' | 'chevron-down';
+  | 'globe' | 'chevron-down' | 'mic';
 
 const P: Record<IconName, React.ReactNode> = {
   menu: (<><Line x1="3" y1="6" x2="21" y2="6" /><Line x1="3" y1="12" x2="21" y2="12" /><Line x1="3" y1="18" x2="21" y2="18" /></>),
@@ -55,6 +55,7 @@ const P: Record<IconName, React.ReactNode> = {
   'file-text': (<><Path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><Polyline points="14 2 14 8 20 8" /><Line x1="8" y1="13" x2="16" y2="13" /><Line x1="8" y1="17" x2="16" y2="17" /></>),
   globe: (<><Circle cx="12" cy="12" r="10" /><Line x1="2" y1="12" x2="22" y2="12" /><Path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></>),
   'chevron-down': (<Polyline points="6 9 12 15 18 9" />),
+  mic: (<><Rect x="9" y="2" width="6" height="12" rx="3" /><Path d="M5 10a7 7 0 0014 0" /><Line x1="12" y1="17" x2="12" y2="22" /><Line x1="8" y1="22" x2="16" y2="22" /></>),
 };
 
 export function Icon({
