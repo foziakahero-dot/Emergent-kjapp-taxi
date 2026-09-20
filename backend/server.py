@@ -5250,7 +5250,9 @@ class FleetApplicationDraftRequest(BaseModel):
     contact_name: str
     contact_email: EmailStr
     contact_phone: str
-    bank_account: Optional[str] = ""
+    license_count: int = Field(ge=1, le=500)
+    vehicle_count: int = Field(ge=1, le=500)
+    bank_account: str = Field(min_length=5, max_length=64)
     notes: Optional[str] = ""
 
 
@@ -5261,7 +5263,7 @@ class FleetApplicationSubmitRequest(BaseModel):
 
 class FleetApplicationDecisionRequest(BaseModel):
     review_notes: Optional[str] = ""
-    commission_rate: Optional[float] = 0.20
+    commission_rate: Optional[float] = 0.10
 
 
 @api.post("/fleet-applications/draft")
@@ -5275,7 +5277,9 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest):
         "contact_name": body.contact_name.strip(),
         "contact_email": body.contact_email.strip().lower(),
         "contact_phone": body.contact_phone.strip(),
-        "bank_account": (body.bank_account or "").strip(),
+        "license_count": int(body.license_count),
+        "vehicle_count": int(body.vehicle_count),
+        "bank_account": body.bank_account.strip(),
         "notes": (body.notes or "").strip(),
         "documents": {},
         "status": "draft",
@@ -5296,6 +5300,10 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     missing = [k for k in required if k not in (body.documents or {})]
     if missing:
         raise HTTPException(status_code=400, detail=f"Mangler dokumenter: {', '.join(missing)}")
+    if not str(app_doc.get("bank_account") or "").strip():
+        raise HTTPException(status_code=400, detail="Bankkonto må være registrert før søknaden kan sendes inn")
+    if int(app_doc.get("license_count") or 0) < 1 or int(app_doc.get("vehicle_count") or 0) < 1:
+        raise HTTPException(status_code=400, detail="Antall løyver og biler må være registrert før innsending")
     await db.fleet_applications.update_one(
         {"upload_token": body.upload_token},
         {"$set": {
@@ -5366,6 +5374,13 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
         raise HTTPException(status_code=404, detail="Søknad ikke funnet")
     if app_doc.get("status") == "approved":
         raise HTTPException(status_code=400, detail="Allerede godkjent")
+    required_docs = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
+    missing_docs = [k for k in required_docs if k not in (app_doc.get("documents") or {})]
+    if missing_docs or not str(app_doc.get("bank_account") or "").strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Søknaden kan ikke godkjennes før alle dokumenter og bankkonto er registrert",
+        )
     owner_email = app_doc.get("contact_email")
     owner = await db.users.find_one({"email": owner_email})
     if not owner:
@@ -5389,7 +5404,7 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
         "name": app_doc.get("company_name"),
         "org_number": app_doc.get("org_number", ""),
         "owner_user_id": owner_id,
-        "commission_rate": float(body.commission_rate or 0.20),
+        "commission_rate": float(body.commission_rate if body.commission_rate is not None else 0.10),
         "active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "application_id": app_id,
