@@ -836,6 +836,9 @@ async def lifespan(app: FastAPI):
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.revoked_tokens.create_index("jti", unique=True)
     await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.trip_share_tokens.create_index("token_hash", unique=True)
+    await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -1882,6 +1885,122 @@ async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depe
             f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
         )
     return msg
+
+
+class SafetyEventRequest(BaseModel):
+    kind: Literal["emergency", "report", "share"] = "report"
+    note: Optional[str] = Field(default=None, max_length=1000)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
+
+
+@api.post("/trips/{trip_id}/safety")
+async def trip_safety_event(trip_id: str, body: SafetyEventRequest, current=Depends(get_current_user)):
+    """Audit a safety action for a trip. Emergency calls are still placed by the device directly to 112."""
+    trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
+    role = "passenger" if is_passenger else "driver" if is_driver else current.get("role", "admin")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    event = {
+        "id": str(uuid.uuid4()),
+        "trip_id": trip_id,
+        "kind": body.kind,
+        "user_id": current.get("id"),
+        "role": role,
+        "name": current.get("fullName"),
+        "phone": current.get("phone"),
+        "email": current.get("email"),
+        "lat": body.lat,
+        "lng": body.lng,
+        "trip_status": trip.get("status"),
+        "driver_lat": trip.get("driver_lat"),
+        "driver_lng": trip.get("driver_lng"),
+        "note": (body.note or "").strip() or None,
+        "created_at": now_iso,
+    }
+    await db.safety_events.insert_one(dict(event))
+    # Emergency/report creates an operator-visible case immediately. This is NOT a dispatch to 112.
+    if body.kind in ("emergency", "report"):
+        priority = "kritisk" if body.kind == "emergency" else "høy"
+        ticket = {
+            "subject": f"{'AKUTT SIKKERHET' if body.kind == 'emergency' else 'Sikkerhetsrapport'} · tur {trip_id[:8]}",
+            "body": (
+                f"Tur: {trip_id}\nRolle: {role}\nStatus: {trip.get('status')}\n"
+                f"Kontakt: {current.get('fullName') or ''} {current.get('phone') or ''} {current.get('email') or ''}\n"
+                f"Posisjon: {body.lat if body.lat is not None else 'ukjent'}, {body.lng if body.lng is not None else 'ukjent'}\n"
+                f"Notat: {(body.note or '').strip() or '—'}"
+            ),
+            "category": "annet",
+            "priority": priority,
+            "contact_email": current.get("email"),
+            "status": "open",
+            "created_by": current.get("id"),
+            "created_by_email": current.get("email"),
+            "trip_id": trip_id,
+            "safety_event_id": event["id"],
+            "created_at": now_iso,
+            "notes": [],
+        }
+        await db.support_tickets.insert_one(ticket)
+    return {"ok": True, "event_id": event["id"], "emergency_number": "112"}
+
+
+@api.post("/trips/{trip_id}/share-link")
+async def create_trip_share_link(trip_id: str, current=Depends(get_current_user)):
+    trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
+    if not (is_passenger or is_driver):
+        raise HTTPException(403, "Kun kunde eller sjåfør kan dele turen")
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    token_hash = __import__("hashlib").sha256(token.encode("utf-8")).hexdigest()
+    await db.trip_share_tokens.insert_one({
+        "token_hash": token_hash,
+        "trip_id": trip_id,
+        "created_by": current.get("id"),
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": expires_at,
+    })
+    return {
+        "token": token,
+        "url": f"https://kjappapp.no/tur/{token}",
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+@api.get("/trips/share/{token}")
+async def public_trip_share(token: str):
+    token_hash = __import__("hashlib").sha256(token.encode("utf-8")).hexdigest()
+    share = await db.trip_share_tokens.find_one({"token_hash": token_hash})
+    if not share or share.get("expires_at") is None or share["expires_at"] <= datetime.now(timezone.utc):
+        raise HTTPException(404, "Delingslenken er utløpt eller ugyldig")
+    trip = await db.trips.find_one({"trip_id": share["trip_id"]})
+    if not trip:
+        raise HTTPException(404, "Turen finnes ikke")
+    driver = trip.get("driver") or {}
+    # Intentionally omit passenger identity/contact and exact user IDs.
+    return {
+        "trip_id": trip.get("trip_id"),
+        "status": trip.get("status"),
+        "pickup_address": trip.get("pickup_address"),
+        "dropoff_address": trip.get("dropoff_address"),
+        "vehicle_type": trip.get("vehicle_type"),
+        "driver": {
+            "name": driver.get("name"),
+            "car": driver.get("car"),
+            "plate": driver.get("plate"),
+            "rating": driver.get("rating"),
+        } if driver else None,
+        "driver_location": {
+            "lat": trip.get("driver_lat"),
+            "lng": trip.get("driver_lng"),
+            "updated_at": trip.get("driver_location_at"),
+        } if trip.get("driver_lat") is not None and trip.get("driver_lng") is not None else None,
+        "created_at": trip.get("created_at"),
+        "at_pickup_at": trip.get("at_pickup_at"),
+        "trip_started_at": trip.get("trip_started_at"),
+        "arrived_at": trip.get("arrived_at"),
+        "cancelled_at": trip.get("cancelled_at"),
+        "expires_at": share["expires_at"].isoformat(),
+    }
 
 
 class TranslateRequest(BaseModel):
