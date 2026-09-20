@@ -295,8 +295,24 @@ export function Customers() {
   const q = useDebounced(qi);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [busyUser, setBusyUser] = useState('');
   useEffect(() => { setPage(1); }, [q, status]);
-  const { rows, total, totalPages, loading, err } = usePaged('/admin/users', { q, status, page, page_size: PAGE });
+  const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/users', { q, status, page, page_size: PAGE });
+
+  const toggleUser = async (u: any) => {
+    const disabling = !u.disabled;
+    let reason = '';
+    if (disabling) {
+      reason = window.prompt('Årsak til deaktivering (lagres i revisjonslogg):', '') || '';
+      if (!reason.trim()) return;
+      if (!window.confirm(`Deaktiver ${u.fullName || u.email}? Eksisterende økter blir avsluttet.`)) return;
+    } else if (!window.confirm(`Reaktiver ${u.fullName || u.email}?`)) return;
+    setBusyUser(u.id);
+    try { await api.setUserStatus(u.id, disabling, reason); await reload(); }
+    catch (e: any) { window.alert(apiError(e)); }
+    finally { setBusyUser(''); }
+  };
+
   return (
     <>
       <PageHead title="Kunder & brukere" sub={`${total} brukere`} />
@@ -309,17 +325,25 @@ export function Customers() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Navn</th><th>E-post</th><th>Telefon</th><th>Rolle</th><th>Registrert</th></tr></thead>
+          <thead><tr><th>Navn</th><th>E-post</th><th>Telefon</th><th>Rolle</th><th>Status</th><th>Registrert</th><th className="right">Handling</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={5}><Loader /></td></tr> : rows.length ? rows.map((u: any) => (
+            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((u: any) => (
               <tr key={u.id}>
                 <td className="strong">{u.fullName || '—'}</td>
                 <td className="dim">{u.email}</td>
                 <td className="mono">{u.phone || '—'}</td>
                 <td><Pill status="gray" label={u.role || 'kunde'} /></td>
+                <td><Pill status={u.disabled ? 'cancelled' : 'completed'} label={u.disabled ? 'Deaktivert' : 'Aktiv'} /></td>
                 <td className="dim nowrap">{fmtDay(u.created_at)}</td>
+                <td className="right">
+                  {u.role === 'passenger' || !u.role || u.role === 'customer'
+                    ? <Btn variant={u.disabled ? 'sm' : 'danger'} disabled={busyUser === u.id} onClick={() => toggleUser(u)}>
+                        {busyUser === u.id ? 'Lagrer…' : u.disabled ? 'Reaktiver' : 'Blokker'}
+                      </Btn>
+                    : <span className="dim">—</span>}
+                </td>
               </tr>
-            )) : <tr><td colSpan={5}><Empty title="Ingen brukere" /></td></tr>}
+            )) : <tr><td colSpan={7}><Empty title="Ingen brukere" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
