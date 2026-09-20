@@ -3,9 +3,12 @@ import axios from 'axios';
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://github-app-builder-28.emergent.host/api';
-const isProductionFleetHost = window.location.hostname === 'fleet.kjappapp.no';
+const host = window.location.hostname;
+const isProductionFleetHost = host === 'fleet.kjappapp.no';
+const isVercelPreviewHost = host.endsWith('.vercel.app');
 
-export const API_BASE = configuredBase || (isProductionFleetHost ? productionBackend : window.location.origin + '/api');
+// Never proxy a preview deployment into production. Configure VITE_API_BASE to a staging API when needed.
+export const API_BASE = configuredBase || (isProductionFleetHost ? productionBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
 export const TOKEN_KEY = 'kjapp_fleet_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 30000 });
