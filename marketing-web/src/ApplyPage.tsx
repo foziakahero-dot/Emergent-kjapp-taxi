@@ -155,7 +155,7 @@ export function ApplyPage() {
         </div>
         <aside className="apply2-side-card" aria-label="KJAPP partnermodell">
           <div className="apply2-side-top"><span>KJAPP</span><strong>Partner</strong></div>
-          <div className="apply2-rate">14%</div>
+          <div className="apply2-rate">10%</div>
           <p>Serviceavgift for godkjente partnere. Ved digitale betalinger håndteres oppgjør automatisk ukentlig.</p>
           <div className="apply2-side-lines"><span>Søknad</span><span>Dokumentasjon</span><span>Kontroll</span><span>Fleet</span></div>
         </aside>
