@@ -135,7 +135,7 @@ function PartnerPage() {
             <a className="mk-pill mk-pill-dark" href={`mailto:${EMAILS.partner}`}>Snakk med KJAPP</a>
           </div>
         </div>
-        <div className="mk-commission"><strong>14%</strong><p>serviceavgift<br />86% beholdes</p><div /><span>TYDELIG · ENKELT · UKENTLIG OPPGJØR</span></div>
+        <div className="mk-commission"><strong>10%</strong><p>serviceavgift<br />90% beholdes</p><div /><span>TYDELIG · ENKELT · UKENTLIG OPPGJØR</span></div>
       </section>
 
       <section className="mk-journey mk-shell">
