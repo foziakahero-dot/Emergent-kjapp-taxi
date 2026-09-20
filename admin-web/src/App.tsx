@@ -29,6 +29,7 @@ const NAV = [
   { group: 'Økonomi', items: [
     { to: '/finance', label: 'Økonomi', ic: '≣', perm: 'finance' },
     { to: '/payments', label: 'Betaling & oppgjør', ic: '₭', perm: 'finance' },
+    { to: '/pricing', label: 'Prissetting', ic: '◈', perm: 'system' },
   ]},
   { group: 'Kommunikasjon & support', items: [
     { to: '/communications', label: 'Kommunikasjon', ic: '✉', perm: 'communications' },
@@ -141,7 +142,7 @@ function Shell() {
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <div style={{ padding: 14, color: 'var(--muted)', fontSize: 11 }}>v1.0 · {user?.role}</div>
+        <div style={{ padding: 14, color: 'var(--muted)', fontSize: 11 }}>v1.1 · BETA OPS · {user?.role}</div>
       </aside>
 
       <div className="main">
@@ -166,6 +167,7 @@ function Shell() {
             <Route path="/documents" element={gate('operations', <Documents />)} />
             <Route path="/finance" element={gate('finance', <Finance />)} />
             <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
+            <Route path="/pricing" element={gate('system', <Settings />)} />
             <Route path="/communications" element={gate('communications', <Communications />)} />
             <Route path="/actions" element={gate('operations', <ActionCenter />)} />
             <Route path="/integrations" element={gate('system', <SystemIntegrations />)} />

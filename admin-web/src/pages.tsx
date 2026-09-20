@@ -49,6 +49,25 @@ export function Dashboard() {
       {twofa.data?.required && !twofa.data?.enabled && <div className="error-banner" role="alert">
         Administratorkontoen mangler totrinnsbekreftelse. <a href="#/settings" style={{ textDecoration: 'underline' }}>Aktiver 2FA i Innstillinger.</a>
       </div>}
+
+      <Card style={{ marginBottom: 18, border: '1px solid rgba(45,212,191,.28)', boxShadow: '0 0 28px rgba(45,212,191,.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ maxWidth: 720 }}>
+            <div className="dim" style={{ fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 6 }}>KJAPP · Beta Operations 2.0</div>
+            <div className="strong" style={{ fontSize: 20, marginBottom: 6 }}>Nytt operatør- og priskontrollsenter er aktivt</div>
+            <div className="dim" style={{ lineHeight: 1.55 }}>
+              Dynamisk prissetting, prisområder, rollback, operatørinngripen på aktive turer,
+              sjåførutstyr og 10 % serviceavgift er samlet i kontrollsenteret.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <a className="btn primary" href="#/pricing">Åpne prissetting</a>
+            <a className="btn" href="#/trips">Operatørkontroll</a>
+            <a className="btn" href="#/drivers">Sjåførutstyr</a>
+          </div>
+        </div>
+      </Card>
+
       <div className="grid cards">
         <Kpi label="Åpne turer" value={d.trips?.active ?? 0} accent
           foot={<span className="dim">{live.loading ? 'Kontrollerer GPS…' : live.err ? 'GPS-status utilgjengelig' : `${freshCount} sjåfører med fersk GPS`}{staleOpen ? ` · ${staleOpen} turer eldre enn 2t` : ''}</span>} />
