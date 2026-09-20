@@ -4971,15 +4971,36 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     return {"ok": True}
 
 
+def _driver_history_area(address: Optional[str]) -> str:
+    """Return only a coarse area after a ride; never retain exact customer addresses in driver history."""
+    parts = [p.strip() for p in str(address or "").split(",") if p.strip()]
+    if len(parts) >= 2:
+        tail = parts[-1].lower()
+        return parts[-2] if tail in ("norge", "norway") and len(parts) >= 2 else parts[-1]
+    return "Adresse skjult etter tur"
+
+
 @api.get("/driver/history")
 async def driver_history(current=Depends(require_driver), limit: int = 30):
-    """Sjåførens siste gjennomførte turer."""
+    """Driver history deliberately omits exact coordinates and exact customer addresses."""
     driver_id = current["id"]
     trips = []
     async for t in db.trips.find(
         {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}}
     ).sort("created_at", -1).limit(limit):
-        t["id"] = str(t["_id"]); t.pop("_id", None); trips.append(t)
+        trips.append({
+            "trip_id": t.get("trip_id"),
+            "status": t.get("status"),
+            "price": t.get("price", 0),
+            "distance_km": t.get("distance_km"),
+            "duration_min": t.get("duration_min"),
+            "created_at": t.get("created_at"),
+            "arrived_at": t.get("arrived_at"),
+            "vehicle_type": t.get("vehicle_type"),
+            "commission_rate": t.get("commission_rate"),
+            "pickup_address": _driver_history_area(t.get("pickup_address")),
+            "dropoff_address": _driver_history_area(t.get("dropoff_address")),
+        })
     return {"trips": trips}
 
 
@@ -5023,8 +5044,8 @@ async def driver_ratings(current=Depends(require_driver), limit: int = 20):
                 "rating": r,
                 "feedback": t.get("feedback") or "",
                 "created_at": t.get("created_at"),
-                "pickup": t.get("pickup_address"),
-                "dropoff": t.get("dropoff_address"),
+                "pickup": _driver_history_area(t.get("pickup_address")),
+                "dropoff": _driver_history_area(t.get("dropoff_address")),
             })
     avg = round(total / count, 2) if count else 0
     return {"average": avg, "count": count, "breakdown": breakdown, "recent": recent}
