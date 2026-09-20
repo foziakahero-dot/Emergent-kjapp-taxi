@@ -5,9 +5,11 @@ import { BrowserRouter, Link, useLocation } from 'react-router-dom';
 import App from './App';
 import HelpPage from './HelpPage';
 import { setPageSeo } from './seo';
+import CookieConsent from './CookieConsent';
 import './styles.css';
 import './responsive-fixes.css';
 import './support-footer.css';
+import './production-readiness.css';
 
 const SUPPORT_EMAIL = 'support@kjappapp.no';
 
@@ -92,6 +94,7 @@ ReactDOMClient.createRoot(document.getElementById('root')!).render(
       <RouteMetadata />
       <RootContent />
       <SupportFooterPortal />
+      <CookieConsent />
     </BrowserRouter>
   </React.StrictMode>,
 );
