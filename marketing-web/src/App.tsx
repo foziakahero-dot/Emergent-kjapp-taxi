@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { ApplyPage } from './ApplyPage';
 import PremiumHome from './PremiumHome';
+import { TripSharePage } from './TripSharePage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -203,6 +204,7 @@ export default function App() {
       <Route path="/" element={<PremiumHome />} />
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
+      <Route path="/tur/:token" element={<TripSharePage />} />
       <Route path="*" element={<PremiumHome />} />
     </Routes>
   );
