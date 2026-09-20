@@ -6615,7 +6615,10 @@ async def admin_search(q: str, current=Depends(require_admin)):
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 install_marketing_waitlist(api, db)
 
-# Isolated developer experiment: BytePlus ModelArk + DeepWiki MCP. Superadmin only.\ninstall_byteplus_deepwiki(api, require_superadmin=require_superadmin)\n\n# Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
+# Isolated developer experiment: BytePlus ModelArk + DeepWiki MCP. Superadmin only.
+install_byteplus_deepwiki(api, require_superadmin=require_superadmin)
+
+# Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
 install_admin_control_center(
     api,
     db,
