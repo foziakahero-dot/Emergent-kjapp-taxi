@@ -11,10 +11,10 @@ const EMAILS = {
 
 const REQUIRED_DOCS = [
   { key: 'firmaattest', label: 'Firmaattest', detail: 'Fra Brønnøysundregistrene' },
-  { key: 'loyvebevis', label: 'Løyvebevis', detail: 'Gyldig drosjeløyve' },
-  { key: 'vognkort', label: 'Vognkort', detail: 'For bilene som skal kobles til KJAPP' },
-  { key: 'forsikring', label: 'Forsikringsdokumentasjon', detail: 'Gyldig forsikringsbevis' },
-  { key: 'bank', label: 'Bankdokumentasjon', detail: 'For utbetalinger' },
+  { key: 'loyvebevis', label: 'Løyvebevis', detail: 'Alle aktive drosjeløyver · samle i én PDF hvis du har flere' },
+  { key: 'vognkort', label: 'Vognkort', detail: 'Vognkort for alle biler · samle i én PDF hvis du har flere' },
+  { key: 'forsikring', label: 'Forsikringsdokumentasjon', detail: 'Gyldig forsikringsbevis for alle biler' },
+  { key: 'bank', label: 'Bankdokumentasjon', detail: 'Kontobekreftelse som viser bedriftens bankkonto' },
 ] as const;
 
 type FormState = Omit<FleetDraft, 'license_count' | 'vehicle_count'> & {
@@ -66,6 +66,10 @@ export function ApplyPage() {
     }
     if (!form.license_count || !form.vehicle_count) {
       setError('Oppgi antall løyver og antall biler.');
+      return;
+    }
+    if (!String(form.bank_account || '').trim()) {
+      setError('Bankkonto må fylles ut før du går videre.');
       return;
     }
     setBusy(true);
@@ -185,7 +189,7 @@ export function ApplyPage() {
                   <Field label="Antall løyver" type="number" min="1" value={form.license_count} onChange={(v) => update('license_count', v ? Number(v) : '')} />
                   <Field label="Antall biler" type="number" min="1" value={form.vehicle_count} onChange={(v) => update('vehicle_count', v ? Number(v) : '')} />
                 </div>
-                <Field label="Bankkonto (valgfritt i steg 1)" value={form.bank_account || ''} onChange={(v) => update('bank_account', v)} inputMode="numeric" />
+                <Field label="Bankkonto *" value={form.bank_account || ''} onChange={(v) => update('bank_account', v)} inputMode="numeric" />
                 <label className="apply2-field"><span>Kort notat (valgfritt)</span><textarea rows={4} value={form.notes || ''} onChange={(e) => update('notes', e.target.value)} placeholder="Kort om virksomheten, flåten eller ønsket oppstart" /></label>
               </div>
               <div className="apply2-bottom">
@@ -216,7 +220,7 @@ export function ApplyPage() {
           <article>
             <span>02</span>
             <h3>Last opp dokumenter</h3>
-            <p>Firmaattest, løyvebevis, vognkort, forsikring og bankgrunnlag.</p>
+            <p>Firmaattest, alle løyvebevis, vognkort for alle biler, forsikring for bilene og bankgrunnlag.</p>
           </article>
           <article>
             <span>03</span>
