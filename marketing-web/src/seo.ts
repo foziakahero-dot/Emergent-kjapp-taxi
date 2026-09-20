@@ -45,7 +45,8 @@ export function setPageSeo({
     'og:description': description,
     'og:url': canonical,
     'og:type': 'website',
-    'og:image': image,\n    'og:image:alt': 'KJAPP taxi-app',
+    'og:image': image,
+    'og:image:alt': 'KJAPP taxi-app',
     'og:site_name': 'KJAPP',
     'og:locale': 'nb_NO',
   };
