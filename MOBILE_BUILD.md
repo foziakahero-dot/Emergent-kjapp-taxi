@@ -115,7 +115,7 @@ Når sjåføren går offline eller logger ut, background location stoppes.
 2. Kunde og Driver releases separat. De kan installeres samtidig fordi de har ulike bundle/package IDs.
 3. Ikke legg test-/demo-data inn i mobil-UI som om det var ekte drift.
 4. Ikke endre backend-arkitektur fra FastAPI + MongoDB som del av en mobilrelease.
-5. KJAPP-standardprovisjon er 12%; mobilklient skal lese faktisk backend-verdi og aldri falle tilbake til gammel 20%-verdi.
+5. KJAPP-standardprovisjon er 10%; mobilklient skal lese faktisk backend-verdi og aldri falle tilbake til gammel 20%-verdi.
 6. Test alltid minst én komplett flyt før beta-release: Customer bestiller → Driver mottar → aksepterer → fremme → start → fullfører → Customer ser kvittering.
 
 ## Før butikk-release
