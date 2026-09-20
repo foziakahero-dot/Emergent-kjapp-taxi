@@ -589,32 +589,66 @@ def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = 
     """
 
 
+DEFAULT_PRICING = {
+    "version": 1,
+    "currency": "NOK",
+    "base_fare": 70.0,
+    "per_km": 16.0,
+    "per_minute": 4.0,
+    "waiting_per_minute": 4.0,
+    "minimum_fare": 0.0,
+    "extra_stop_fee": 0.0,
+    "customer_cancellation_fee": 0.0,
+    "late_driver_cancellation_fee": 0.0,
+    "surge": {"enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0},
+    "vehicle_rates": {
+        "ai-first": {"base_fare": 70.0, "per_km": 16.0, "per_minute": 4.0, "minimum_fare": 0.0},
+        "enkelt": {"base_fare": 55.0, "per_km": 14.0, "per_minute": 3.5, "minimum_fare": 0.0},
+        "trygg": {"base_fare": 90.0, "per_km": 22.0, "per_minute": 5.0, "minimum_fare": 0.0},
+        "premium": {"base_fare": 120.0, "per_km": 28.0, "per_minute": 6.0, "minimum_fare": 0.0},
+    },
+    "areas": {},
+}
+
+
+def _legacy_surge_multiplier(when: datetime = None) -> float:
+    now = (when or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Oslo"))
+    weekday, hour = now.weekday(), now.hour
+    surge = 1.0
+    if (weekday == 4 and hour >= 18) or weekday == 5 or weekday == 6:
+        surge = max(surge, 1.25)
+    if hour >= 22 or hour < 6:
+        surge = max(surge, 1.15)
+    return surge
+
+
+def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None) -> dict:
+    """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
+    cfg = {**DEFAULT_PRICING, **(pricing or {})}
+    vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
+    r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
+         **(vehicle_rates.get(vehicle_type) or {})}
+    base = float(r["base_fare"]) + float(distance_km) * float(r["per_km"]) + float(duration_min) * float(r["per_minute"])
+    minimum = float(r.get("minimum_fare", cfg.get("minimum_fare", 0)) or 0)
+    surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
+    surge = 1.0
+    if surge_cfg.get("enabled"):
+        surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
+        surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
+    total = max(minimum, base * surge)
+    return {"price": int(round(total)), "surge_multiplier": round(surge, 2), "pricing_version": int(cfg.get("version", 1))}
+
+
+async def active_pricing() -> dict:
+    s = await db.platform_settings.find_one({"_id": "singleton"}, {"pricing": 1})
+    return {**DEFAULT_PRICING, **((s or {}).get("pricing") or {})}
+
+
 def price_for(distance_km: float, vehicle_type: str, duration_min: float = None, when: datetime = None) -> int:
-    """Norwegian taxi rates (based on Oslo Taxi 2024/2025 tariffs):
-    startpris + km-pris + minutt-pris + surge (helg / natt)."""
+    """Legacy-compatible fallback used by tests/helpers; live quotes use calculate_price + active_pricing."""
     if duration_min is None:
         duration_min = max(3, distance_km * 2.2)
-    rates = {
-        "ai-first": {"start": 70, "km": 16.0, "min": 4.0},   # Standard
-        "enkelt":   {"start": 55, "km": 14.0, "min": 3.5},   # Beste pris
-        "trygg":    {"start": 90, "km": 22.0, "min": 5.0},   # Familie / XL / 7 seter
-        "premium":  {"start": 120, "km": 28.0, "min": 6.0},  # Business
-    }
-    r = rates.get(vehicle_type, rates["ai-first"])
-    base = r["start"] + distance_km * r["km"] + duration_min * r["min"]
-    # Norwegian surge model
-    now = when or datetime.now(timezone.utc)
-    # Convert to Norway time (UTC+1, UTC+2 in summer — simple UTC+1 approximation for tariff logic)
-    local_hour = (now.hour + 1) % 24
-    weekday = now.weekday()  # 0=Mon .. 6=Sun
-    surge = 1.0
-    # Weekend: Fri 18:00 → Sun 23:00
-    if (weekday == 4 and local_hour >= 18) or weekday == 5 or (weekday == 6 and local_hour <= 23):
-        surge = max(surge, 1.25)
-    # Night: 22:00 → 06:00 all days
-    if local_hour >= 22 or local_hour < 6:
-        surge = max(surge, 1.15)
-    return int(round(base * surge))
+    return calculate_price(distance_km, vehicle_type, duration_min, DEFAULT_PRICING, when)["price"]
 
 
 def current_surge_info(when: datetime = None) -> dict:
@@ -1201,14 +1235,14 @@ async def trip_estimate(body: EstimateRequest):
         est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
         duration = max(3, int(est * 2.2))
         geometry = None
+    pricing = await active_pricing()
     options = []
-    for vt, mult in [("ai-first", 1.0), ("enkelt", 0.85), ("trygg", 1.2), ("premium", 1.8)]:
-        options.append({
-            "vehicle_type": vt,
-            "price": int(price_for(est, vt, duration)),
-            "eta_min": duration,
-        })
-    return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry}
+    for vt in ("ai-first", "enkelt", "trygg", "premium"):
+        quote = calculate_price(est, vt, duration, pricing)
+        options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
+                        "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"]})
+    return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
+            "pricing_version": int(pricing.get("version", 1))}
 
 
 
@@ -1538,7 +1572,9 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
         eta_min = max(3, int(est * 2.2))
         geometry = None
-    price = price_for(est, body.vehicle_type, eta_min)
+    pricing = await active_pricing()
+    quote = calculate_price(est, body.vehicle_type, eta_min, pricing)
+    price = quote["price"]
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
@@ -1552,6 +1588,9 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "distance_km": est,
         "duration_min": eta_min,
         "price": price,
+        "pricing_version": quote["pricing_version"],
+        "pricing_snapshot": pricing,
+        "surge_multiplier": quote["surge_multiplier"],
         "geometry": geometry,
         "status": "searching",
         "driver_id": None,
@@ -5566,6 +5605,7 @@ async def admin_analytics(days: int = 14, current=Depends(require_admin)):
 # ---- Platform settings ----
 DEFAULT_PLATFORM_SETTINGS = {
     "default_commission": 0.10,
+    "pricing": DEFAULT_PRICING,
     "ride_classes": {
         "ai-first": {"label": "Standard", "multiplier": 1.0, "enabled": True},
         "enkelt":   {"label": "Sparsom",  "multiplier": 0.85, "enabled": True},
@@ -5578,8 +5618,29 @@ DEFAULT_PLATFORM_SETTINGS = {
 
 class PlatformSettingsUpdate(BaseModel):
     default_commission: Optional[float] = None
+    pricing: Optional[dict] = None
     ride_classes: Optional[dict] = None
     features: Optional[dict] = None
+
+
+def _validate_pricing(p: dict):
+    numeric_limits = {
+        "base_fare": (0, 2000), "per_km": (0, 500), "per_minute": (0, 200),
+        "waiting_per_minute": (0, 200), "minimum_fare": (0, 5000),
+        "extra_stop_fee": (0, 2000), "customer_cancellation_fee": (0, 2000),
+        "late_driver_cancellation_fee": (0, 2000),
+    }
+    for key, (lo, hi) in numeric_limits.items():
+        if key in p and not lo <= float(p[key]) <= hi:
+            raise HTTPException(400, f"{key} må være mellom {lo} og {hi}")
+    surge = p.get("surge") or {}
+    for key in ("manual_multiplier", "max_multiplier"):
+        if key in surge and not 1.0 <= float(surge[key]) <= 5.0:
+            raise HTTPException(400, f"surge.{key} må være mellom 1.0 og 5.0")
+    for vt, rates in (p.get("vehicle_rates") or {}).items():
+        if vt not in ("ai-first", "enkelt", "trygg", "premium"):
+            raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
+        _validate_pricing(rates)
 
 
 @api.get("/admin/settings")
@@ -5600,6 +5661,12 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         if not 0.0 <= body.default_commission <= 0.5:
             raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
         sets["default_commission"] = body.default_commission
+    if body.pricing is not None:
+        _validate_pricing(body.pricing)
+        previous_pricing = {**DEFAULT_PRICING, **(prev.get("pricing") or {})}
+        next_pricing = {**previous_pricing, **body.pricing}
+        next_pricing["version"] = int(previous_pricing.get("version", 1)) + 1
+        sets["pricing"] = next_pricing
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
     if body.features is not None: sets["features"] = body.features
     if not sets: return {"ok": True}
@@ -5609,6 +5676,32 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
                  {k: prev.get(k) for k in sets if k != "updated_at"},
                  {k: v for k, v in sets.items() if k != "updated_at"})
     return {"ok": True}
+
+
+
+
+class PricingTestRequest(BaseModel):
+    distance_km: float = Field(ge=0, le=2000)
+    duration_min: float = Field(ge=0, le=1440)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+
+
+@api.post("/admin/pricing/test")
+async def admin_pricing_test(body: PricingTestRequest, current=Depends(require_admin)):
+    pricing = await active_pricing()
+    return {**calculate_price(body.distance_km, body.vehicle_type, body.duration_min, pricing),
+            "distance_km": body.distance_km, "duration_min": body.duration_min, "vehicle_type": body.vehicle_type}
+
+
+@api.get("/admin/pricing/history")
+async def admin_pricing_history(current=Depends(require_admin)):
+    items = []
+    async for e in db.audit_events.find({"entity_type": "settings", "entity_id": "singleton", "action": "settings.update"}).sort("at", -1).limit(50):
+        before, after = e.get("before") or {}, e.get("after") or {}
+        if "pricing" in before or "pricing" in after:
+            items.append({"at": e.get("at"), "by": e.get("actor_email") or e.get("by"),
+                          "before": before.get("pricing"), "after": after.get("pricing")})
+    return {"items": items}
 
 
 @api.get("/admin/fleets/{fleet_id}")
