@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ColorValue } from 'react-native';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { colors as theme } from '@/src/theme';
 
@@ -67,7 +68,7 @@ export function Icon({
 }: {
   name: IconName;
   size?: number;
-  color?: string;
+  color?: ColorValue;
   strokeWidth?: number;
   fill?: string;
 }) {
