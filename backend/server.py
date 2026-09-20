@@ -628,8 +628,16 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
     """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
     cfg = {**DEFAULT_PRICING, **(pricing or {})}
     vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
-    r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
-         **(vehicle_rates.get(vehicle_type) or {})}
+    if vehicle_type == "ai-first":
+        r = {
+            "base_fare": cfg.get("base_fare", DEFAULT_PRICING["base_fare"]),
+            "per_km": cfg.get("per_km", DEFAULT_PRICING["per_km"]),
+            "per_minute": cfg.get("per_minute", DEFAULT_PRICING["per_minute"]),
+            "minimum_fare": cfg.get("minimum_fare", DEFAULT_PRICING["minimum_fare"]),
+        }
+    else:
+        r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
+             **(vehicle_rates.get(vehicle_type) or {})}
     base = float(r["base_fare"]) + float(distance_km) * float(r["per_km"]) + float(duration_min) * float(r["per_minute"])
     minimum = float(r.get("minimum_fare", cfg.get("minimum_fare", 0)) or 0)
     surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
@@ -2442,6 +2450,28 @@ async def dispatch_loop():
                                                 "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
                     continue
                 await offer_trip_to_next_driver(t)
+            # Hard stop for any still-unassigned request, including broadcast mode.
+            async for t in db.trips.find({
+                "status": {"$in": ["searching", "booking"]},
+                "driver_id": None,
+            }).sort("created_at", 1).limit(50):
+                pricing = t.get("pricing_snapshot") or await active_pricing()
+                timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
+                try:
+                    created = datetime.fromisoformat(str(t.get("created_at")).replace("Z", "+00:00"))
+                    expired = (datetime.now(timezone.utc) - created).total_seconds() >= timeout_seconds
+                except Exception:
+                    expired = False
+                if not expired:
+                    continue
+                res = await db.trips.update_one(
+                    {"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+                    {"$set": {"status": "cancelled", "cancelled_at": now_iso,
+                              "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
+                )
+                if res.modified_count:
+                    await send_push_to_user(t["user_id"], "Ingen ledig sjåfør",
+                                            "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
         except Exception as e:
             print(f"dispatch_loop error: {e}")
         await asyncio.sleep(3)
@@ -4523,6 +4553,9 @@ async def pricing_surge():
 async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
     driver_id = current["id"]
+    original = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
+    penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
     result = await db.trips.update_one(
         {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}},
         {"$set": {
@@ -4530,6 +4563,8 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
             "cancelled_by": "driver",
             "customer_cancellation_fee": 0,
+            "driver_cancellation_penalty": penalty,
+            "driver_cancellation_penalty_status": "recorded" if penalty > 0 else "not_applicable",
         }},
     )
     if result.modified_count == 0:
