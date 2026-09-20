@@ -44,6 +44,9 @@ export default function Home() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
+  const [stops, setStops] = useState<any[]>([]);
+  const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
 
@@ -101,8 +104,9 @@ export default function Home() {
     tripsApi.estimate({
       pickup_lat: loc.lat, pickup_lng: loc.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+      stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
     }).then(setEstimate).catch(() => setEstimate(null));
-  }, [dropoff, loc.lat, loc.lng]);
+  }, [dropoff, loc.lat, loc.lng, stops]);
 
   const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
@@ -128,6 +132,8 @@ export default function Home() {
         dropoff_lat: dropoff.lat,
         dropoff_lng: dropoff.lng,
         vehicle_type: selType,
+        stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
+        special_needs: specialNeeds,
       });
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
@@ -306,6 +312,51 @@ export default function Home() {
               <Text style={s.summaryPrice}>{kr(priceFor(selType))}</Text>
             </View>
 
+            <View style={{ gap: 8, marginBottom: 10 }} testID="booking-options">
+              {stops.map((stop, idx) => (
+                <View key={`${stop.name}-${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Icon name="map-pin" size={14} color={colors.accent} />
+                  <Text style={{ color: colors.textSecondary, fontSize: 12, flex: 1 }} numberOfLines={1}>Stopp {idx + 1}: {stop.name}</Text>
+                  <Pressable onPress={() => setStops((prev) => prev.filter((_, i) => i !== idx))} accessibilityLabel={`Fjern stopp ${idx + 1}`}>
+                    <Icon name="x" size={15} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+              ))}
+              {stops.length < 3 ? (
+                <Pressable
+                  style={s.payRow}
+                  onPress={() => { setSearchTarget('stop'); setSearchOpen(true); }}
+                  testID="booking-add-stop"
+                  accessibilityRole="button"
+                  accessibilityLabel="Legg til stopp"
+                >
+                  <Icon name="plus" size={17} color={colors.accent} />
+                  <Text style={s.payText}>Legg til stopp</Text>
+                  <Text style={s.change}>{stops.length}/3</Text>
+                </Pressable>
+              ) : null}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {[
+                  ['wheelchair', 'Rullestol'], ['large_luggage', 'Stor bagasje'], ['pet', 'Kjæledyr'],
+                  ['hearing_impaired', 'Hørselsbehov'], ['visual_impaired', 'Synsbehov'], ['child_seat', 'Barnesete'],
+                ].map(([id, label]) => {
+                  const active = specialNeeds.includes(id);
+                  return (
+                    <Pressable
+                      key={id}
+                      onPress={() => setSpecialNeeds((prev) => active ? prev.filter((x) => x !== id) : [...prev, id])}
+                      style={[s.chip, active && { borderColor: colors.accent, backgroundColor: 'rgba(45,212,191,0.10)' }]}
+                      testID={`need-${id}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[s.chipText, active && { color: colors.accent }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
             <Pressable style={s.payRow} onPress={() => router.push('/payment-methods')} testID="booking-payment-row">
               <Icon name={payMethod?.type === 'vipps' ? 'wallet' : 'card'} size={18} color={colors.accent} />
               <Text style={s.payText}>
@@ -336,7 +387,15 @@ export default function Home() {
         <SearchSheet
           onClose={() => setSearchOpen(false)}
           onVoice={openVoice}
-          onSelect={(d: any) => { setDropoff(d); setSearchOpen(false); }}
+          onSelect={(d: any) => {
+            if (searchTarget === 'stop') {
+              setStops((prev) => prev.length < 3 ? [...prev, d] : prev);
+            } else {
+              setDropoff(d);
+            }
+            setSearchTarget('dropoff');
+            setSearchOpen(false);
+          }}
           featured={featured}
           insets={insets}
         />
