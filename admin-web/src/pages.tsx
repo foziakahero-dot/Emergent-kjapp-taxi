@@ -793,52 +793,106 @@ export function Settings() {
   const { user } = useAuth();
   const { data, loading, err, reload } = useAsync(() => api.list('/admin/settings', {}), []);
   const [comm, setComm] = useState('');
+  const [pricing, setPricing] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => { if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100))); }, [data]);
+  const [test, setTest] = useState({ distance_km: '10', duration_min: '20', vehicle_type: 'ai-first' });
+  const [testResult, setTestResult] = useState<any>(null);
+  useEffect(() => {
+    if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
+    if (data?.pricing) setPricing(data.pricing);
+  }, [data]);
   const isSuper = user?.role === 'superadmin';
   const rideClasses = Array.isArray(data?.ride_classes)
     ? data.ride_classes
     : Object.entries(data?.ride_classes || {}).map(([type, value]: [string, any]) => ({ type, ...(value || {}) }));
+  const setPrice = (key: string, value: any) => setPricing((p: any) => ({ ...p, [key]: value }));
   const save = async () => {
     setBusy(true); setMsg('');
-    try { await api.patchSettings({ default_commission: Number(comm) / 100 }); setMsg('Lagret'); reload(); }
-    catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    try {
+      await api.patchSettings({ default_commission: Number(comm) / 100, pricing });
+      setMsg('Lagret – nye bestillinger bruker ny prisversjon. Pågående turer beholder sitt snapshot.');
+      reload();
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
     finally { setBusy(false); }
   };
+  const runTest = async () => {
+    setTestResult(null);
+    try {
+      const r = await api.post('/admin/pricing/test', {
+        distance_km: Number(test.distance_km), duration_min: Number(test.duration_min), vehicle_type: test.vehicle_type,
+      });
+      setTestResult(r);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Kunne ikke teste pris'); }
+  };
   if (loading) return <Loader />;
+  const fields = [
+    ['base_fare','Grunnpris'], ['per_km','Pris per km'], ['per_minute','Pris per minutt'],
+    ['waiting_per_minute','Ventetid per minutt'], ['minimum_fare','Minimumspris'],
+    ['extra_stop_fee','Ekstra stopp'], ['customer_cancellation_fee','Avbestillingsgebyr kunde'],
+    ['late_driver_cancellation_fee','Sen avbestilling sjåfør'],
+  ];
   return (
     <>
-      <PageHead title="Innstillinger" sub={`Sist oppdatert ${fmtDate(data?.updated_at)}`} />
+      <PageHead title="Innstillinger" sub={`Sist oppdatert ${fmtDate(data?.updated_at)} · prisversjon ${pricing?.version || 1}`} />
       <ErrorBanner msg={err} />
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 820 }}>
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 980 }}>
         <TwoFactorCard />
         <Card>
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
           <div className="field"><label className="label">Standard KJAPP-provisjon (%)</label>
-            <input className="input" type="number" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
-          {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
-            : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre.</div>}
-          {msg && <div style={{ marginTop: 10, color: 'var(--green)', fontSize: 13 }}>{msg}</div>}
-        </Card>
-        <Card>
-          <div className="section-title" style={{ marginTop: 0 }}>Funksjoner</div>
-          {Object.entries(data?.features || {}).map(([k, v]) => (
-            <KV key={k} k={k} v={<Pill status={v ? 'completed' : 'gray'} label={v ? 'På' : 'Av'} />} />
-          ))}
-          {!Object.keys(data?.features || {}).length && <div className="dim">Ingen funksjonsflagg.</div>}
+            <input className="input" type="number" min="0" max="50" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
+          <div className="dim" style={{ fontSize: 12 }}>Endringer er begrenset til superadmin og logges.</div>
         </Card>
       </div>
-      <div className="section-title">Kjøretøyklasser</div>
+
+      <div className="section-title">Dynamisk prissetting</div>
       <Card>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-          {rideClasses.map((r: any, i: number) => (
-            <div key={r.type || i}><div className="strong">{r.label || r.name || r.type}</div>
-              <div className="dim" style={{ fontSize: 12 }}>×{r.multiplier ?? r.price_multiplier ?? 1}</div></div>
-          ))}
-          {!rideClasses.length && <div className="dim">Ingen klasser definert.</div>}
+          {fields.map(([key,label]) => <div className="field" key={key}>
+            <label className="label">{label} (NOK)</label>
+            <input className="input" type="number" min="0" step="0.5" value={pricing?.[key] ?? ''}
+              disabled={!isSuper} onChange={(e) => setPrice(key, Number(e.target.value))} />
+          </div>)}
         </div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 12 }}>
+          <div className="field"><label className="label">Toppris aktiv</label>
+            <select className="input" disabled={!isSuper} value={pricing?.surge?.enabled ? 'on':'off'}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),enabled:e.target.value==='on'})}>
+              <option value="on">På</option><option value="off">Av</option>
+            </select></div>
+          <div className="field"><label className="label">Manuell toppris ×</label>
+            <input className="input" type="number" min="1" max="5" step="0.05" disabled={!isSuper}
+              value={pricing?.surge?.manual_multiplier ?? 1}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),manual_multiplier:Number(e.target.value)})}/></div>
+          <div className="field"><label className="label">Maks toppris ×</label>
+            <input className="input" type="number" min="1" max="5" step="0.05" disabled={!isSuper}
+              value={pricing?.surge?.max_multiplier ?? 2}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),max_multiplier:Number(e.target.value)})}/></div>
+        </div>
+        {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre prisregler'}</Btn>
+          : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre priser.</div>}
+        {msg && <div style={{ marginTop: 10, color: msg.startsWith('Lagret') ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>{msg}</div>}
       </Card>
+
+      <div className="section-title">Test pris før publisering</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr auto', alignItems: 'end' }}>
+          <div className="field"><label className="label">Distanse (km)</label><input className="input" type="number" value={test.distance_km} onChange={e=>setTest({...test,distance_km:e.target.value})}/></div>
+          <div className="field"><label className="label">Tid (min)</label><input className="input" type="number" value={test.duration_min} onChange={e=>setTest({...test,duration_min:e.target.value})}/></div>
+          <div className="field"><label className="label">Kategori</label><select className="input" value={test.vehicle_type} onChange={e=>setTest({...test,vehicle_type:e.target.value})}>
+            <option value="ai-first">Standard</option><option value="enkelt">Sparsom</option><option value="trygg">Komfort</option><option value="premium">Premium</option>
+          </select></div>
+          <Btn onClick={runTest}>Beregn</Btn>
+        </div>
+        {testResult && <div className="strong" style={{ marginTop: 12 }}>{testResult.price} kr · toppris ×{testResult.surge_multiplier} · versjon {testResult.pricing_version}</div>}
+      </Card>
+
+      <div className="section-title">Kjøretøyklasser</div>
+      <Card><div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+        {rideClasses.map((r: any, i: number) => <div key={r.type || i}><div className="strong">{r.label || r.name || r.type}</div>
+          <div className="dim" style={{ fontSize: 12 }}>×{r.multiplier ?? r.price_multiplier ?? 1}</div></div>)}
+      </div></Card>
     </>
   );
 }
