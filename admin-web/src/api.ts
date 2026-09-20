@@ -80,7 +80,7 @@ export const api = {
   approveFleetApplication: (id: string, review_notes = '') =>
     http.post(`/superadmin/fleet-applications/${id}/approve`, {
       review_notes,
-      commission_rate: 0.12,
+      commission_rate: 0.10,
     }).then((r) => r.data),
   rejectFleetApplication: (id: string, review_notes = '') =>
     http.post(`/superadmin/fleet-applications/${id}/reject`, { review_notes }).then((r) => r.data),
