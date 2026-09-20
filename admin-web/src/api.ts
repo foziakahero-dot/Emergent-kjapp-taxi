@@ -65,6 +65,8 @@ export const api = {
   updateTicket: (id: string, body: any) =>
     http.patch(`/admin/support/tickets/${id}`, body).then((r) => r.data),
   patchSettings: (body: any) => http.patch('/admin/settings', body).then((r) => r.data),
+  pricingTest: (body: any) => http.post('/admin/pricing/test', body).then((r) => r.data),
+  pricingHistory: () => http.get('/admin/pricing/history').then((r) => r.data),
   search: (q: string) => http.get('/admin/search', { params: { q } }).then((r) => r.data),
 
   // Superadmin-only løyvehaver onboarding. A fleet_owner account is created only after approval.
