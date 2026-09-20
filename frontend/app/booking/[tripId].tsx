@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Pressable, Share, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -57,8 +57,22 @@ export default function BookingFlow() {
   }, [tripId, retryKey, router]);
 
   const cancel = async () => {
-    try { await tripsApi.cancel(tripId!); } catch {}
-    router.replace('/(app)/home');
+    try {
+      const preview = await tripsApi.cancelPreview(tripId!);
+      const fee = Number(preview?.cancellation_fee || 0);
+      Alert.alert(
+        'Avbestille tur?',
+        fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.',
+        [
+          { text: 'Behold tur', style: 'cancel' },
+          { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
+            try { await tripsApi.cancel(tripId!); } finally { router.replace('/(app)/home'); }
+          } },
+        ],
+      );
+    } catch {
+      Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilkårene. Prøv igjen.');
+    }
   };
 
   const callEmergency = async () => {
