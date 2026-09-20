@@ -148,8 +148,8 @@ export function ApplyPage() {
             ? 'Fortell oss om virksomheten, løyvene og bilene. KJAPP aktiverer ikke Fleet før dokumentasjonen er kontrollert og godkjent.'
             : 'Alle fem dokumenttyper må være klare før søknaden sendes videre til manuell kontroll.'}</p>
           <div className="apply2-trust-row">
-            <span>14 % serviceavgift</span>
-            <span>86 % beholdes</span>
+            <span>10 % serviceavgift</span>
+            <span>90 % beholdes</span>
             <span>Ukentlig digitalt oppgjør</span>
           </div>
         </div>
