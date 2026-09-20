@@ -125,7 +125,6 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
-  const driverPhone = String(trip.driver?.phone || '').replace(/[^+\d]/g, '');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -224,9 +223,6 @@ export default function BookingFlow() {
               </View>
             ) : (
               <View style={s.actions}>
-                {driverPhone ? (
-                  <Action icon="phone" label="Ring" testID="action-call" onPress={() => Linking.openURL(`tel:${driverPhone}`)} />
-                ) : null}
                 <Action icon="message" label="Melding" testID="action-message" onPress={() => setChatOpen(true)} />
                 <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => setSafetyOpen(true)} />
               </View>
