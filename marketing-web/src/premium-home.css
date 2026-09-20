@@ -151,9 +151,9 @@ html {
 
 .mk-pill-disabled {
   cursor: default;
-  border-color: #263642;
+  border-color: #2f4655;
   background: #0a131b;
-  color: #788a96;
+  color: #9aafbd;
 }
 
 .mk-pill-disabled:hover {
@@ -946,8 +946,8 @@ html {
 }
 
 .mk-download {
-  min-height: 500px;
-  padding: 145px 0 120px;
+  min-height: 430px;
+  padding: 125px 0 78px;
 }
 
 .mk-download > p {
@@ -960,10 +960,10 @@ html {
 
 .mk-download-contact {
   display: inline-block;
-  margin-top: 25px;
-  color: #9cafba;
+  margin-top: 30px;
+  color: #a9bbc6;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .mk-footer {
