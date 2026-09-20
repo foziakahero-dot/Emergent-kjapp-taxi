@@ -118,7 +118,6 @@ def install_marketing_waitlist(api, db) -> None:
             "status": "new",
             "consent_context": "beta_interest",
             "created_at": now,
-            "last_seen_at": now,
         }
 
         try:
