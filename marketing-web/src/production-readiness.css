@@ -1,5 +1,5 @@
-.mk-beta-trigger{position:relative;display:inline-flex;align-items:center;gap:10px}
-.mk-beta-badge{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:22px;padding:0 8px;border-radius:999px;border:1px solid rgba(17,217,232,.4);background:rgba(17,217,232,.11);color:#7cf4ff;font-size:9px;font-weight:900;letter-spacing:.12em;line-height:1}
+.mk-beta-trigger{position:relative;display:inline-flex;align-items:center;gap:10px;border:0;font:inherit;cursor:pointer}
+.mk-beta-badge{position:absolute;right:-9px;top:-11px;display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:22px;padding:0 8px;border-radius:999px;border:1px solid rgba(17,217,232,.4);background:rgba(17,217,232,.11);color:#7cf4ff;font-size:9px;font-weight:900;letter-spacing:.12em;line-height:1}
 .mk-beta-backdrop{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:20px;background:rgba(1,5,9,.78);backdrop-filter:blur(16px)}
 .mk-beta-dialog{position:relative;width:min(100%,620px);max-height:min(90vh,760px);overflow:auto;border:1px solid rgba(88,225,235,.22);border-radius:28px;background:linear-gradient(160deg,#07111b 0%,#091722 100%);box-shadow:0 36px 120px rgba(0,0,0,.62),0 0 70px rgba(17,217,232,.07);padding:34px;color:#f6fbff}
 .mk-beta-close{position:absolute;right:20px;top:18px;width:40px;height:40px;border:1px solid #233849;border-radius:50%;background:#0b1721;color:#d8e6ef;font-size:24px;cursor:pointer}
