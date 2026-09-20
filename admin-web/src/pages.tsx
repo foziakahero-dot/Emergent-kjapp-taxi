@@ -796,6 +796,7 @@ export function Settings() {
   const readiness = useAsync(() => api.betaReadiness(), []);
   const [comm, setComm] = useState('');
   const [pricing, setPricing] = useState<any>({});
+  const [compliance, setCompliance] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [test, setTest] = useState({ distance_km: '10', duration_min: '20', vehicle_type: 'ai-first' });
@@ -806,6 +807,7 @@ export function Settings() {
   useEffect(() => {
     if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
     if (data?.pricing) setPricing(data.pricing);
+    if (data?.compliance) setCompliance(data.compliance);
   }, [data]);
 
   const isSuper = user?.role === 'superadmin';
@@ -827,11 +829,34 @@ export function Settings() {
   };
 
   const save = async () => {
+    const prev = data?.pricing || {};
+    const extreme: string[] = [];
+    const checkRatio = (label: string, oldValue: any, newValue: any) => {
+      const a = Number(oldValue), b = Number(newValue);
+      if (a > 0 && Number.isFinite(b) && (b > a * 2 || b < a * 0.5)) extreme.push(`${label}: ${a} → ${b}`);
+    };
+    ['base_fare','per_km','per_minute','minimum_fare'].forEach((k) => checkRatio(k, prev?.[k], pricing?.[k]));
+    for (const type of ['enkelt','trygg','premium']) {
+      for (const k of ['base_fare','per_km','per_minute','minimum_fare']) {
+        checkRatio(`${type}.${k}`, prev?.vehicle_rates?.[type]?.[k], pricing?.vehicle_rates?.[type]?.[k]);
+      }
+    }
+    if (extreme.length && !window.confirm(`Stor prisendring oppdaget:\n\n${extreme.join('\n')}\n\nVil du publisere likevel?`)) return;
     setBusy(true); setMsg('');
     try {
       await api.patchSettings({ default_commission: Number(comm) / 100, pricing });
       setMsg('Lagret – nye bestillinger bruker ny prisversjon. Eksisterende turer beholder pris og provisjon fra bestillingstidspunktet.');
       await Promise.all([reload(), history.reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    finally { setBusy(false); }
+  };
+
+  const saveCompliance = async () => {
+    setBusy(true); setMsg('');
+    try {
+      await api.patchSettings({ compliance });
+      setMsg('Beta-gates lagret. Dette registrerer operatørens bekreftelser; det erstatter ikke juridisk eller faglig godkjenning.');
+      await Promise.all([reload(), readiness.reload()]);
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
     finally { setBusy(false); }
   };
@@ -873,6 +898,17 @@ export function Settings() {
   const areas = Object.entries(pricing?.areas || {}) as [string, any][];
   const versions = history.data?.items || [];
   const checks = readiness.data?.checks || {};
+  const complianceLabels: Record<string,string> = {
+    legal_review_completed: 'Juridisk gjennomgang utført',
+    transport_requirements_verified: 'Transport-/løyvekrav verifisert',
+    commercial_insurance_verified: 'Kommersiell forsikring verifisert',
+    privacy_notice_approved: 'Personvernerklæring godkjent',
+    terms_approved: 'Kunde-/sjåførvilkår godkjent',
+    processor_agreements_verified: 'Databehandleravtaler verifisert',
+    tax_vat_reporting_verified: 'Skatt/MVA/rapportering avklart',
+    accessibility_review_completed: 'Tilgjengelighetsgjennomgang utført',
+    backup_restore_test_completed: 'Backup faktisk gjenopprettet i test',
+  };
 
   return (
     <>
@@ -899,6 +935,21 @@ export function Settings() {
         </div>
         {!!readiness.data?.blockers?.length && <div className="error-banner" style={{ marginTop: 12 }}>{readiness.data.blockers.join(' · ')}</div>}
         <div className="dim" style={{ marginTop: 10, fontSize: 12 }}>Dette viser teknisk driftsstatus. Løyver, forsikring, avtaler og øvrig norsk regelverk må godkjennes separat.</div>
+      </Card>
+
+      <div className="section-title">Manuelle beta-gates</div>
+      <Card>
+        <div className="dim" style={{ marginBottom: 14 }}>Kryss kun av når punktet faktisk er kontrollert. Disse feltene er operatørbekreftelser og er bevisst ikke auto-godkjent av systemet.</div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+          {Object.entries(complianceLabels).map(([key,label]) => (
+            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 42, cursor: isSuper ? 'pointer' : 'default' }}>
+              <input type="checkbox" checked={!!compliance?.[key]} disabled={!isSuper}
+                onChange={(e) => setCompliance((x: any) => ({ ...x, [key]: e.target.checked }))} />
+              <span className="strong" style={{ fontSize: 13 }}>{label}</span>
+            </label>
+          ))}
+        </div>
+        {isSuper ? <div style={{ marginTop: 14 }}><Btn onClick={saveCompliance} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre beta-gates'}</Btn></div> : null}
       </Card>
 
       <div className="section-title">Dynamisk prissetting</div>
