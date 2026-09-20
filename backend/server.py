@@ -4235,6 +4235,47 @@ async def admin_users(q: Optional[str] = None, status: Optional[str] = None, pag
     return _paged(out, total, page, page_size, "users")
 
 
+class AdminUserStatusRequest(BaseModel):
+    disabled: bool
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+@api.post("/admin/users/{user_id}/set-status")
+async def admin_set_user_status(user_id: str, body: AdminUserStatusRequest, current=Depends(require_admin)):
+    try:
+        target = await db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(400, "Ugyldig bruker-id")
+    if not target:
+        raise HTTPException(404, "Bruker ikke funnet")
+    if str(target["_id"]) == current.get("id") and body.disabled:
+        raise HTTPException(400, "Du kan ikke deaktivere din egen konto")
+    if target.get("role") in ("admin", "superadmin") and current.get("role") != "superadmin":
+        raise HTTPException(403, "Kun superadmin kan endre administratorstatus")
+
+    previous = bool(target.get("disabled", False))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sets = {
+        "disabled": body.disabled,
+        "disabled_reason": (body.reason or "").strip() if body.disabled else None,
+        "status_updated_at": now_iso,
+    }
+    if body.disabled:
+        # Invalidate existing sessions immediately.
+        sets["session_version"] = int(target.get("session_version", 0) or 0) + 1
+        sets["online"] = False
+    await db.users.update_one({"_id": target["_id"]}, {"$set": sets})
+    await _audit(
+        current,
+        "user.disable" if body.disabled else "user.reactivate",
+        "user",
+        user_id,
+        {"disabled": previous},
+        {"disabled": body.disabled, "reason": sets["disabled_reason"]},
+    )
+    return {"ok": True, "disabled": body.disabled}
+
+
 @api.get("/admin/drivers")
 async def admin_drivers(current=Depends(require_admin)):
     out = []
