@@ -1334,8 +1334,10 @@ async def trip_estimate(body: EstimateRequest):
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"]})
+    commission_rate = await _platform_commission()
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
+            "commission_rate": commission_rate,
             "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
