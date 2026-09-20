@@ -5692,6 +5692,10 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "distance_km": t.get("distance_km"), "duration_min": t.get("duration_min"),
             "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
             "vehicle_type": t.get("vehicle_type"), "created_at": t.get("created_at"),
+            "stops": t.get("stops") or [], "special_needs": t.get("special_needs") or [],
+            "pricing_version": t.get("pricing_version"), "commission_rate": t.get("commission_rate"),
+            "requires_manual_settlement": t.get("requires_manual_settlement", False),
+            "refunded_total": t.get("refunded_total", 0),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
@@ -5721,6 +5725,120 @@ async def admin_trip_timeline(trip_id: str, current=Depends(require_admin)):
     ev("Kansellert", t.get("cancelled_at"))
     events.sort(key=lambda e: e["at"])
     return {"trip_id": trip_id, "status": t.get("status"), "events": events}
+
+
+class TripInterventionRequest(BaseModel):
+    action: Literal["cancel_active", "release_driver", "adjust_price"]
+    reason: str = Field(min_length=3, max_length=500)
+    price: Optional[int] = Field(default=None, ge=0, le=100000)
+
+
+@api.post("/admin/trips/{trip_id}/intervene")
+async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, current=Depends(require_admin)):
+    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not trip:
+        raise HTTPException(404, "Fant ikke turen")
+    reason = body.reason.strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    active_statuses = ("searching", "booking", "driver_on_way", "at_pickup", "in_trip")
+
+    if body.action == "cancel_active":
+        if trip.get("status") not in active_statuses:
+            raise HTTPException(409, "Kun aktive turer kan avbrytes av operatør")
+        before = {"status": trip.get("status"), "price": trip.get("price"), "driver_id": trip.get("driver_id")}
+        updates = {
+            "status": "cancelled",
+            "cancelled_at": now_iso,
+            "cancelled_by": "admin",
+            "cancel_reason": reason,
+            "updated_at": now_iso,
+        }
+        if trip.get("status") == "in_trip":
+            updates["requires_manual_settlement"] = True
+        await db.trips.update_one(
+            {"trip_id": trip_id, "status": trip.get("status")},
+            {"$set": updates, "$push": {"operator_interventions": {
+                "action": body.action, "reason": reason, "at": now_iso, "by": current.get("email") or current["id"],
+            }}},
+        )
+        await _audit(current, "trip.operator_cancel", "trip", trip_id, before,
+                     {"status": "cancelled", "requires_manual_settlement": updates.get("requires_manual_settlement", False)}, reason)
+        if trip.get("user_id"):
+            await send_push_to_user(trip["user_id"], "Turen er avbrutt av KJAPP",
+                                    "KJAPP følger opp turen. Kontakt support hvis du trenger hjelp.", "/app")
+        if trip.get("driver_id"):
+            await send_push_to_user(trip["driver_id"], "Turen er avbrutt av KJAPP",
+                                    "Stans turen trygt. KJAPP følger opp saken i operatørpanelet.", "/driver")
+        return {"ok": True, "action": body.action, "status": "cancelled",
+                "requires_manual_settlement": updates.get("requires_manual_settlement", False)}
+
+    if body.action == "release_driver":
+        if trip.get("status") not in ("driver_on_way", "at_pickup") or not trip.get("driver_id"):
+            raise HTTPException(409, "Sjåfør kan bare frigjøres før turen er startet")
+        old_driver_id = trip.get("driver_id")
+        before = {"status": trip.get("status"), "driver_id": old_driver_id}
+        unset = {
+            "driver": "", "driver_id": "", "driver_user_id": "", "driver_route_started_at": "",
+            "at_pickup_at": "", "eta_min": "", "driver_start_lat": "", "driver_start_lng": "",
+            "driver_lat": "", "driver_lng": "", "driver_location_at": "", "offer_driver_id": "",
+            "offer_expires_at": "", "dispatch_mode": "",
+        }
+        await db.trips.update_one(
+            {"trip_id": trip_id, "driver_id": old_driver_id, "status": trip.get("status")},
+            {
+                "$set": {"status": "searching", "updated_at": now_iso, "operator_reassigned_at": now_iso},
+                "$unset": unset,
+                "$addToSet": {"offer_history": old_driver_id},
+                "$push": {"operator_interventions": {
+                    "action": body.action, "reason": reason, "at": now_iso, "by": current.get("email") or current["id"],
+                }},
+            },
+        )
+        await _audit(current, "trip.release_driver", "trip", trip_id, before,
+                     {"status": "searching", "driver_id": None}, reason)
+        await send_push_to_user(old_driver_id, "Turen er frigitt av KJAPP",
+                                "Du er tatt av denne turen. Kontakt support hvis du trenger hjelp.", "/driver")
+        if trip.get("user_id"):
+            await send_push_to_user(trip["user_id"], "Vi finner en ny sjåfør",
+                                    "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/app/booking/{trip_id}")
+        refreshed = await db.trips.find_one({"trip_id": trip_id})
+        if refreshed:
+            await offer_trip_to_next_driver(refreshed)
+        return {"ok": True, "action": body.action, "status": "searching"}
+
+    if body.action == "adjust_price":
+        if body.price is None:
+            raise HTTPException(400, "Ny pris må oppgis")
+        if trip.get("payment_status") == "paid":
+            raise HTTPException(409, "Betalt tur kan ikke få omskrevet pris. Bruk refundering i stedet.")
+        if trip.get("status") in ("cancelled", "cancelled_by_driver") and not trip.get("requires_manual_settlement"):
+            raise HTTPException(409, "Avbrutt tur uten oppgjør kan ikke prisjusteres")
+        previous_price = int(trip.get("price") or 0)
+        new_price = int(body.price)
+        adjustment = {
+            "from": previous_price, "to": new_price, "reason": reason,
+            "at": now_iso, "by": current.get("email") or current["id"],
+        }
+        await db.trips.update_one(
+            {"trip_id": trip_id, "payment_status": {"$ne": "paid"}},
+            {"$set": {
+                "price": new_price,
+                "manual_price_adjustment": adjustment,
+                "updated_at": now_iso,
+                "requires_manual_settlement": False,
+            }, "$push": {"operator_interventions": {"action": body.action, **adjustment}}},
+        )
+        await _audit(current, "trip.adjust_price", "trip", trip_id,
+                     {"price": previous_price}, {"price": new_price}, reason)
+        if trip.get("user_id"):
+            await send_push_to_user(trip["user_id"], "Turprisen er justert",
+                                    f"KJAPP har justert turprisen fra {previous_price} kr til {new_price} kr.", f"/app/receipt/{trip_id}")
+        if trip.get("driver_id"):
+            await send_push_to_user(trip["driver_id"], "Turprisen er justert",
+                                    f"Ny turpris er {new_price} kr. Oppgjøret bruker turens lagrede serviceavgift.", "/driver")
+        return {"ok": True, "action": body.action, "price": new_price, "previous_price": previous_price}
+
+    raise HTTPException(400, "Ukjent operatørhandling")
 
 
 @api.get("/admin/finance")
