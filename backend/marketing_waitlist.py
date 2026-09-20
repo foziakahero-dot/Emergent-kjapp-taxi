@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone, timedelta
 from typing import Literal, Optional
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
@@ -79,7 +79,7 @@ async def _consume_global_rate_limit(db, now: datetime) -> None:
 
 def install_marketing_waitlist(api, db) -> None:
     @api.post("/marketing/waitlist", status_code=201)
-    async def create_marketing_waitlist_entry(body: MarketingWaitlistRequest, request: Request):
+    async def create_marketing_waitlist_entry(body: MarketingWaitlistRequest):
         now = datetime.now(timezone.utc)
 
         # Bots commonly fill hidden website fields. Return the same generic success
@@ -119,7 +119,6 @@ def install_marketing_waitlist(api, db) -> None:
             "consent_context": "beta_interest",
             "created_at": now,
             "last_seen_at": now,
-            "submission_count": 1,
         }
 
         try:
