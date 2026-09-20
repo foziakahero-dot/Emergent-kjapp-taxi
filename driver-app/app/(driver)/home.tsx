@@ -10,6 +10,7 @@ import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi, safetyApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
+import { storage } from '@/src/utils/storage';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -17,6 +18,28 @@ function hoursLabel(min?: number) {
   const m = min || 0;
   if (m >= 60) return `${Math.floor(m / 60)}t ${m % 60}m`;
   return `${m}m`;
+}
+
+type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
+type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
+const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
+
+async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
+  if (action === 'at_pickup') return driverApi.atPickup(tripId);
+  if (action === 'start') return driverApi.start(tripId);
+  return driverApi.arrive(tripId);
+}
+
+function actionAlreadyApplied(action: CriticalTripAction, status?: string) {
+  if (action === 'at_pickup') return ['at_pickup','in_trip','arrived','completed','rated'].includes(status || '');
+  if (action === 'start') return ['in_trip','arrived','completed','rated'].includes(status || '');
+  return ['arrived','completed','rated'].includes(status || '');
+}
+
+function actionCanRetry(action: CriticalTripAction, status?: string) {
+  if (action === 'at_pickup') return status === 'driver_on_way';
+  if (action === 'start') return status === 'driver_on_way' || status === 'at_pickup';
+  return status === 'in_trip';
 }
 
 export default function DriverHome() {
@@ -33,12 +56,49 @@ export default function DriverHome() {
   const [chatOpen, setChatOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
+  const actionRetrying = useRef(false);
 
   const poll = useCallback(async () => {
     try {
       const cur = await driverApi.current();
-      setCurrent(cur?.trip || cur || null);
-    } catch { setCurrent(null); }
+      let normalized = cur?.trip || cur || null;
+      setCurrent(normalized);
+
+      if (!actionRetrying.current) {
+        const raw = await storage.getItem(QUEUED_TRIP_ACTION_KEY);
+        if (raw) {
+          try {
+            const queued = JSON.parse(raw) as QueuedTripAction;
+            if (normalized && queued.trip_id !== normalized.trip_id) {
+              await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+            } else if (normalized && queued.trip_id === normalized.trip_id) {
+              if (actionAlreadyApplied(queued.action, normalized.status)) {
+                await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+                setError('');
+              } else if (actionCanRetry(queued.action, normalized.status)) {
+                actionRetrying.current = true;
+                try {
+                  await applyCriticalTripAction(queued.action, queued.trip_id);
+                  await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+                  const refreshed = await driverApi.current();
+                  normalized = refreshed?.trip || refreshed || normalized;
+                  setCurrent(normalized);
+                  setError('');
+                } catch {
+                  // Keep the queued action. A later poll retries after connectivity returns.
+                } finally {
+                  actionRetrying.current = false;
+                }
+              }
+            }
+          } catch {
+            await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+          }
+        }
+      }
+    } catch {
+      // Preserve the last known active trip while temporarily offline.
+    }
     try {
       const p = await driverApi.pending();
       setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
@@ -158,14 +218,28 @@ export default function DriverHome() {
 
   const advance = async () => {
     if (!current) return;
+    const action: CriticalTripAction | null =
+      current.status === 'driver_on_way' ? 'at_pickup'
+      : current.status === 'at_pickup' ? 'start'
+      : current.status === 'in_trip' ? 'arrive'
+      : null;
+    if (!action) return;
+
     setBusy(true);
     try {
-      if (current.status === 'driver_on_way') await driverApi.atPickup(current.trip_id);
-      else if (current.status === 'at_pickup') await driverApi.start(current.trip_id);
-      else if (current.status === 'in_trip') await driverApi.arrive(current.trip_id);
+      await applyCriticalTripAction(action, current.trip_id);
+      await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+      setError('');
       await poll();
-    } catch (e) { setError(apiError(e)); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      if (!e?.response) {
+        const queued: QueuedTripAction = { trip_id: current.trip_id, action, queued_at: new Date().toISOString() };
+        await storage.setItem(QUEUED_TRIP_ACTION_KEY, JSON.stringify(queued));
+        setError('Midlertidig nettfeil. Handlingen er lagret på telefonen og sendes automatisk når forbindelsen er tilbake.');
+      } else {
+        setError(apiError(e));
+      }
+    } finally { setBusy(false); }
   };
 
   const emergency = async () => {
