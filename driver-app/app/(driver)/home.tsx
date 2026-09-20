@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -8,8 +8,9 @@ import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
-import { driverApi } from '@/src/lib/api';
+import { driverApi, safetyApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
+import { storage } from '@/src/utils/storage';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -17,6 +18,28 @@ function hoursLabel(min?: number) {
   const m = min || 0;
   if (m >= 60) return `${Math.floor(m / 60)}t ${m % 60}m`;
   return `${m}m`;
+}
+
+type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
+type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
+const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
+
+async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
+  if (action === 'at_pickup') return driverApi.atPickup(tripId);
+  if (action === 'start') return driverApi.start(tripId);
+  return driverApi.arrive(tripId);
+}
+
+function actionAlreadyApplied(action: CriticalTripAction, status?: string) {
+  if (action === 'at_pickup') return ['at_pickup','in_trip','arrived','completed','rated'].includes(status || '');
+  if (action === 'start') return ['in_trip','arrived','completed','rated'].includes(status || '');
+  return ['arrived','completed','rated'].includes(status || '');
+}
+
+function actionCanRetry(action: CriticalTripAction, status?: string) {
+  if (action === 'at_pickup') return status === 'driver_on_way';
+  if (action === 'start') return status === 'driver_on_way' || status === 'at_pickup';
+  return status === 'in_trip';
 }
 
 export default function DriverHome() {
@@ -33,12 +56,49 @@ export default function DriverHome() {
   const [chatOpen, setChatOpen] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
+  const actionRetrying = useRef(false);
 
   const poll = useCallback(async () => {
     try {
       const cur = await driverApi.current();
-      setCurrent(cur?.trip || cur || null);
-    } catch { setCurrent(null); }
+      let normalized = cur?.trip || cur || null;
+      setCurrent(normalized);
+
+      if (!actionRetrying.current) {
+        const raw = await storage.getItem(QUEUED_TRIP_ACTION_KEY);
+        if (raw) {
+          try {
+            const queued = JSON.parse(raw) as QueuedTripAction;
+            if (normalized && queued.trip_id !== normalized.trip_id) {
+              await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+            } else if (normalized && queued.trip_id === normalized.trip_id) {
+              if (actionAlreadyApplied(queued.action, normalized.status)) {
+                await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+                setError('');
+              } else if (actionCanRetry(queued.action, normalized.status)) {
+                actionRetrying.current = true;
+                try {
+                  await applyCriticalTripAction(queued.action, queued.trip_id);
+                  await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+                  const refreshed = await driverApi.current();
+                  normalized = refreshed?.trip || refreshed || normalized;
+                  setCurrent(normalized);
+                  setError('');
+                } catch {
+                  // Keep the queued action. A later poll retries after connectivity returns.
+                } finally {
+                  actionRetrying.current = false;
+                }
+              }
+            }
+          } catch {
+            await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+          }
+        }
+      }
+    } catch {
+      // Preserve the last known active trip while temporarily offline.
+    }
     try {
       const p = await driverApi.pending();
       setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
@@ -158,14 +218,39 @@ export default function DriverHome() {
 
   const advance = async () => {
     if (!current) return;
+    const action: CriticalTripAction | null =
+      current.status === 'driver_on_way' ? 'at_pickup'
+      : current.status === 'at_pickup' ? 'start'
+      : current.status === 'in_trip' ? 'arrive'
+      : null;
+    if (!action) return;
+
     setBusy(true);
     try {
-      if (current.status === 'driver_on_way') await driverApi.atPickup(current.trip_id);
-      else if (current.status === 'at_pickup') await driverApi.start(current.trip_id);
-      else if (current.status === 'in_trip') await driverApi.arrive(current.trip_id);
+      await applyCriticalTripAction(action, current.trip_id);
+      await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+      setError('');
       await poll();
-    } catch (e) { setError(apiError(e)); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      if (!e?.response) {
+        const queued: QueuedTripAction = { trip_id: current.trip_id, action, queued_at: new Date().toISOString() };
+        await storage.setItem(QUEUED_TRIP_ACTION_KEY, JSON.stringify(queued));
+        setError('Midlertidig nettfeil. Handlingen er lagret på telefonen og sendes automatisk når forbindelsen er tilbake.');
+      } else {
+        setError(apiError(e));
+      }
+    } finally { setBusy(false); }
+  };
+
+  const emergency = async () => {
+    if (!current) return;
+    try {
+      await safetyApi.log(current.trip_id, {
+        kind: 'emergency',
+        ...(loc ? { lat: loc.lat, lng: loc.lng } : {}),
+      });
+    } catch {}
+    Linking.openURL('tel:112').catch(() => {});
   };
 
   const actionLabel =
@@ -173,6 +258,17 @@ export default function DriverHome() {
     : current?.status === 'at_pickup' ? 'Start turen'
     : current?.status === 'in_trip' ? 'Fullfør turen'
     : '';
+
+  const needLabels: Record<string, string> = {
+    wheelchair: 'Rullestol', large_luggage: 'Stor bagasje', pet: 'Kjæledyr',
+    hearing_impaired: 'Hørselsbehov', visual_impaired: 'Synsbehov', child_seat: 'Barnesete',
+  };
+  const tripExtras = (t: any) => {
+    const bits: string[] = [];
+    if (Array.isArray(t?.stops) && t.stops.length) bits.push(`${t.stops.length} ekstra stopp`);
+    if (Array.isArray(t?.special_needs) && t.special_needs.length) bits.push(t.special_needs.map((x: string) => needLabels[x] || x).join(' · '));
+    return bits.join(' · ');
+  };
 
   const firstOffer = pending[0];
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
@@ -253,6 +349,8 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
+            {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
+            {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
             <View style={s.tripActions}>
               <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
                 <Icon name="message" size={17} color={colors.text} />
@@ -264,6 +362,10 @@ export default function DriverHome() {
                 </Pressable>
               ) : null}
             </View>
+            <Pressable style={s.driverSafetyBtn} onPress={emergency} testID="driver-safety-112">
+              <Icon name="shield" size={16} color={colors.danger} />
+              <Text style={s.driverSafetyText}>Sikkerhet · Ring 112</Text>
+            </Pressable>
           </View>
         ) : firstOffer && online ? (
           <View testID={`driver-offer-${firstOffer.trip_id}`}>
@@ -281,6 +383,8 @@ export default function DriverHome() {
               <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
             </View>
             <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min estimert</Text>
+            {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
+            {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
               <Pressable style={s.declineBtn} onPress={() => decline(firstOffer.trip_id)} testID={`driver-decline-${firstOffer.trip_id}`}>
                 <Text style={s.declineText}>Avslå</Text>
@@ -400,6 +504,8 @@ const useStyles = makeStyles((c) => ({
     borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
   },
   msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  driverSafetyBtn: { height: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
   action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
   offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },

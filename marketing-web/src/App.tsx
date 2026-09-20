@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { ApplyPage } from './ApplyPage';
 import PremiumHome from './PremiumHome';
+import { TripSharePage } from './TripSharePage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -93,7 +94,7 @@ const onboardingSteps = [
 ];
 
 const partnerValues = [
-  ['01', '14 % SERVICEAVGIFT', 'En tydelig modell. 86 % av turinntekten beholdes hos sjåfør/løyvehaver før øvrige egne kostnader.'],
+  ['01', '10 % SERVICEAVGIFT', 'En tydelig modell. 90 % av turinntekten beholdes hos sjåfør/løyvehaver før øvrige egne kostnader.'],
   ['02', 'UKENTLIG OPPGJØR', 'Digitale betalinger kan avregnes automatisk hver uke. Kontantturer registreres separat.'],
   ['03', 'FULL OVERSIKT', 'Sjåfører, turer, økonomi og dokumentstatus samlet i Fleet Panel.'],
   ['04', 'NORSK OPPFØLGING', 'Direkte kontakt når konto, dokumentasjon eller oppgjør må avklares.'],
@@ -101,9 +102,9 @@ const partnerValues = [
 
 function PartnerPage() {
   useEffect(() => {
-    document.title = 'KJAPP for løyvehavere — 14 % serviceavgift';
+    document.title = 'KJAPP for løyvehavere — 10 % serviceavgift';
     const meta = document.querySelector('meta[name="description"]');
-    meta?.setAttribute('content', 'Bli KJAPP-partner. 14 % serviceavgift, Fleet Panel for sjåfører og turer, og ukentlig oppgjør for digitale betalinger.');
+    meta?.setAttribute('content', 'Bli KJAPP-partner. 10 % serviceavgift, Fleet Panel for sjåfører og turer, og ukentlig oppgjør for digitale betalinger.');
   }, []);
 
   return (
@@ -119,7 +120,7 @@ function PartnerPage() {
             <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Søk om å bli partner</Link>
             <a className="mk-pill mk-pill-dark" href={FLEET_URL}>Åpne Fleet Panel</a>
           </div>
-          <div className="mk-location">14 % serviceavgift · 86 % beholdes · Fleet Panel · Norsk oppfølging</div>
+          <div className="mk-location">10 % serviceavgift · 90 % beholdes · Fleet Panel · Norsk oppfølging</div>
         </div>
         <PartnerDashboardPreview />
       </section>
@@ -134,7 +135,7 @@ function PartnerPage() {
             <a className="mk-pill mk-pill-dark" href={`mailto:${EMAILS.partner}`}>Snakk med KJAPP</a>
           </div>
         </div>
-        <div className="mk-commission"><strong>14%</strong><p>serviceavgift<br />86% beholdes</p><div /><span>TYDELIG · ENKELT · UKENTLIG OPPGJØR</span></div>
+        <div className="mk-commission"><strong>10%</strong><p>serviceavgift<br />90% beholdes</p><div /><span>TYDELIG · ENKELT · UKENTLIG OPPGJØR</span></div>
       </section>
 
       <section className="mk-journey mk-shell">
@@ -203,6 +204,7 @@ export default function App() {
       <Route path="/" element={<PremiumHome />} />
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
+      <Route path="/tur/:token" element={<TripSharePage />} />
       <Route path="*" element={<PremiumHome />} />
     </Routes>
   );

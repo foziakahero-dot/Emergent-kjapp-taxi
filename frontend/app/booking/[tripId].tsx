@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -7,7 +7,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
-import { tripsApi } from '@/src/lib/api';
+import { safetyApi, tripsApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
@@ -28,6 +28,8 @@ export default function BookingFlow() {
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [safetyBusy, setSafetyBusy] = useState(false);
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const nav = useRef(false);
@@ -55,8 +57,51 @@ export default function BookingFlow() {
   }, [tripId, retryKey, router]);
 
   const cancel = async () => {
-    try { await tripsApi.cancel(tripId!); } catch {}
-    router.replace('/(app)/home');
+    try {
+      const preview = await tripsApi.cancelPreview(tripId!);
+      const fee = Number(preview?.cancellation_fee || 0);
+      Alert.alert(
+        'Avbestille tur?',
+        fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.',
+        [
+          { text: 'Behold tur', style: 'cancel' },
+          { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
+            try { await tripsApi.cancel(tripId!); } finally { router.replace('/(app)/home'); }
+          } },
+        ],
+      );
+    } catch {
+      Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilkårene. Prøv igjen.');
+    }
+  };
+
+  const callEmergency = async () => {
+    setSafetyBusy(true);
+    try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}
+    finally {
+      setSafetyBusy(false);
+      setSafetyOpen(false);
+      Linking.openURL('tel:112').catch(() => {});
+    }
+  };
+
+  const reportSafety = async () => {
+    setSafetyBusy(true);
+    try {
+      await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
+      setSafetyOpen(false);
+    } catch {}
+    finally { setSafetyBusy(false); }
+  };
+
+  const shareTrip = async () => {
+    setSafetyBusy(true);
+    try {
+      const shared = await safetyApi.shareLink(tripId!);
+      await safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
+      await Share.share({ title: 'Følg KJAPP-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
+    } catch {}
+    finally { setSafetyBusy(false); }
   };
 
   if (!trip) {
@@ -80,7 +125,6 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
-  const driverPhone = String(trip.driver?.phone || '').replace(/[^+\d]/g, '');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -179,22 +223,54 @@ export default function BookingFlow() {
               </View>
             ) : (
               <View style={s.actions}>
-                {driverPhone ? (
-                  <Action icon="phone" label="Ring" testID="action-call" onPress={() => Linking.openURL(`tel:${driverPhone}`)} />
-                ) : null}
                 <Action icon="message" label="Melding" testID="action-message" onPress={() => setChatOpen(true)} />
-                <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => Linking.openURL('tel:112')} />
+                <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => setSafetyOpen(true)} />
               </View>
             )}
             {trip.status === 'in_trip' ? (
-              <Pressable style={s.chatBtn} onPress={() => setChatOpen(true)} testID="ontrip-chat">
-                <Icon name="message" size={16} color={colors.text} />
-                <Text style={s.chatBtnText}>Melding til sjåfør</Text>
-              </Pressable>
+              <View style={s.onTripActions}>
+                <Pressable style={[s.chatBtn, { marginTop: 0 }]} onPress={() => setChatOpen(true)} testID="ontrip-chat">
+                  <Icon name="message" size={16} color={colors.text} />
+                  <Text style={s.chatBtnText}>Melding</Text>
+                </Pressable>
+                <Pressable style={s.safetyBtn} onPress={() => setSafetyOpen(true)} testID="ontrip-safety">
+                  <Icon name="shield" size={16} color={colors.accent} />
+                  <Text style={s.safetyBtnText}>Sikkerhet</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         )}
       </View>
+
+      <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
+        <Pressable style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
+          <Pressable style={s.safetySheet} onPress={() => {}}>
+            <View style={s.safetyHead}>
+              <View>
+                <Text style={s.safetyOverline}>KJAPP SIKKERHET</Text>
+                <Text style={s.safetyTitle}>Hjelp på turen</Text>
+              </View>
+              <Pressable onPress={() => setSafetyOpen(false)} disabled={safetyBusy} accessibilityLabel="Lukk sikkerhetsmeny">
+                <Icon name="x" size={20} color={colors.text} />
+              </Pressable>
+            </View>
+            <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. KJAPP-support erstatter ikke nødetatene.</Text>
+            <Pressable style={s.emergencyAction} onPress={callEmergency} disabled={safetyBusy} testID="safety-call-112">
+              <Icon name="phone" size={18} color={colors.text} />
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Hendelsen logges også på turen</Text></View>
+            </Pressable>
+            <Pressable style={s.safetyAction} onPress={shareTrip} disabled={safetyBusy} testID="safety-share-trip">
+              <Icon name="navigation" size={18} color={colors.accent} />
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Del live-turen</Text><Text style={s.safetyActionSub}>Lenken utløper automatisk etter 24 timer</Text></View>
+            </Pressable>
+            <Pressable style={s.safetyAction} onPress={reportSafety} disabled={safetyBusy} testID="safety-report">
+              <Icon name="flag" size={18} color={colors.accent} />
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til KJAPP</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <ChatSheet
         tripId={tripId!}
@@ -273,4 +349,17 @@ const useStyles = makeStyles((c) => ({
   metricValue: { color: c.text, fontFamily: font.mono, fontSize: 15, textAlign: 'center', marginTop: 4 },
   chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, minHeight: 48, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   chatBtnText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+  onTripActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  safetyBtn: { minHeight: 48, flex: 0.8, borderRadius: 14, borderWidth: 1, borderColor: c.accent, backgroundColor: c.accentSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  safetyBtnText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.68)' },
+  safetySheet: { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: c.line, padding: 20, paddingBottom: 34 },
+  safetyHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  safetyOverline: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.4 },
+  safetyTitle: { color: c.text, fontFamily: font.display, fontSize: 22, marginTop: 3 },
+  safetyCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 12, marginBottom: 14 },
+  emergencyAction: { minHeight: 66, borderRadius: 16, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, marginTop: 8 },
+  safetyAction: { minHeight: 66, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, marginTop: 8 },
+  safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));

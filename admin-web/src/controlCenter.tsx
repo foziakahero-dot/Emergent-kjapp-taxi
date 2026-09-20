@@ -39,7 +39,7 @@ export function FleetManagement() {
         {fleets.map((f: any) => <tr key={f.id} className="click" onClick={() => setSelected(f.id)}>
           <td><div className="strong">{f.name}</div><div className="cell-sub">{f.contact_email || f.owner_email || '—'}</div></td>
           <td className="mono dim">{f.org_number || '—'}</td><td className="mono">{f.driver_count ?? f.drivers ?? 0}</td>
-          <td className="mono">{Math.round(Number(f.commission_rate ?? .12) * 100)}%</td><td><StripePill fleet={f} /></td>
+          <td className="mono">{Math.round(Number(f.commission_rate ?? .10) * 100)}%</td><td><StripePill fleet={f} /></td>
           <td>{fleetStatus(f)}</td><td className="right dim">Åpne ›</td>
         </tr>)}
         {!fleets.length && <tr><td colSpan={7}><Empty title="Ingen løyvehavere" sub="Godkjente søknader vises her automatisk." /></td></tr>}
@@ -51,7 +51,7 @@ export function FleetManagement() {
 }
 
 function CreateFleetModal({ onClose, onDone }: any) {
-  const [form, setForm] = useState({ name: '', org_number: '', owner_email: '', commission: '12' });
+  const [form, setForm] = useState({ name: '', org_number: '', owner_email: '', commission: '10' });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const save = async () => {
     setBusy(true); setErr('');
@@ -102,10 +102,10 @@ function FleetDrawer({ id, onClose, onChanged }: any) {
         {f.stripe_account_id && <Btn onClick={refreshStripe} disabled={busy}>Oppdater Stripe-status</Btn>}
         <Btn variant="danger" onClick={toggleFleet} disabled={busy}>{f.status === 'suspended' || f.active === false ? 'Reaktiver' : 'Suspender'}</Btn>
       </div>
-      <Card><KV k="Org.nr." v={f.org_number || '—'} /><KV k="Status" v={f.status || (f.active === false ? 'suspended' : 'active')} /><KV k="Provisjon" v={String(Math.round(Number(f.commission_rate ?? .12) * 100)) + '%'} /><KV k="Stripe-konto" v={f.stripe_account_id || 'Ikke koblet'} /></Card>
+      <Card><KV k="Org.nr." v={f.org_number || '—'} /><KV k="Status" v={f.status || (f.active === false ? 'suspended' : 'active')} /><KV k="Provisjon" v={String(Math.round(Number(f.commission_rate ?? .10) * 100)) + '%'} /><KV k="Stripe-konto" v={f.stripe_account_id || 'Ikke koblet'} /></Card>
       {mode === 'driver' && <InviteDriver fleetId={id} onDone={() => { setMode('none'); state.reload(); }} />}
       {mode === 'vehicle' && <VehicleEditor fleetId={id} drivers={drivers} onDone={() => { setMode('none'); state.reload(); }} />}
-      {mode === 'commission' && <CommissionEditor fleetId={id} current={Number(f.commission_rate ?? .12)} onDone={() => { setMode('none'); state.reload(); onChanged(); }} />}
+      {mode === 'commission' && <CommissionEditor fleetId={id} current={Number(f.commission_rate ?? .10)} onDone={() => { setMode('none'); state.reload(); onChanged(); }} />}
       <div className="section-title">Sjåfører ({drivers.length})</div>
       <div className="tablewrap"><table><thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Status</th><th>Vurd.</th></tr></thead><tbody>
         {drivers.map((d: any) => <tr key={d.id}><td><div className="strong">{d.name || d.email}</div><div className="cell-sub">{d.email}</div></td><td>{d.car || '—'} <span className="mono dim">{d.plate || ''}</span></td><td><Pill status={d.approved ? 'completed' : 'pending'} label={d.approved ? (d.online ? 'Godkjent · online' : 'Godkjent · offline') : 'Venter godkjenning'} /></td><td>{d.rating ?? '—'}</td></tr>)}
@@ -158,7 +158,7 @@ export function PaymentsPayouts() {
     <PageHead title="Betaling & oppgjør" sub="Stripe Connect · KJAPP-provisjon · bankutbetalinger" /><ErrorBanner msg={state.err} />{msg && <div className="info-banner">{msg}</div>}
     <div className="grid cards"><Kpi label="Brutto siste 30 dager" value={fmtMoney(totals.gmv)} accent /><Kpi label="KJAPP-inntekt" value={fmtMoney(totals.kjapp_revenue)} accent /><Kpi label="Turer" value={totals.trips ?? 0} /><Kpi label="Stripe Connect klare" value={String(fleets.filter((f: any) => f.payouts_enabled).length) + '/' + String(fleets.length)} /></div>
     <div className="section-title">Løyvehavere · Stripe Connect</div><div className="tablewrap"><table><thead><tr><th>Løyvehaver</th><th>Provisjon</th><th>Stripe</th><th>Utbetalingsplan</th><th className="right">Handling</th></tr></thead><tbody>
-      {fleets.map((f: any) => <tr key={f.id}><td><div className="strong">{f.name}</div><div className="cell-sub">{f.owner_email || f.org_number || '—'}</div></td><td className="mono">{Math.round(Number(f.commission_rate ?? .12) * 100)}%</td><td><StripePill fleet={f} /></td><td>{f.payout_schedule === 'weekly_friday' ? 'Ukentlig · fredag' : 'Stripe-standard · ikke bekreftet'}</td><td className="right">{user?.role === 'superadmin' ? <div className="inline-actions"><Btn variant="sm" disabled={busyId === f.id} onClick={() => start(f.id)}>{f.stripe_account_id ? 'Fortsett onboarding' : 'Koble Stripe'}</Btn>{f.stripe_account_id && <Btn variant="sm" disabled={busyId === f.id} onClick={() => refresh(f.id)}>Oppdater status</Btn>}</div> : <span className="dim">Kun superadmin endrer</span>}</td></tr>)}
+      {fleets.map((f: any) => <tr key={f.id}><td><div className="strong">{f.name}</div><div className="cell-sub">{f.owner_email || f.org_number || '—'}</div></td><td className="mono">{Math.round(Number(f.commission_rate ?? .10) * 100)}%</td><td><StripePill fleet={f} /></td><td>{f.payout_schedule === 'weekly_friday' ? 'Ukentlig · fredag' : 'Stripe-standard · ikke bekreftet'}</td><td className="right">{user?.role === 'superadmin' ? <div className="inline-actions"><Btn variant="sm" disabled={busyId === f.id} onClick={() => start(f.id)}>{f.stripe_account_id ? 'Fortsett onboarding' : 'Koble Stripe'}</Btn>{f.stripe_account_id && <Btn variant="sm" disabled={busyId === f.id} onClick={() => refresh(f.id)}>Oppdater status</Btn>}</div> : <span className="dim">Kun superadmin endrer</span>}</td></tr>)}
       {!fleets.length && <tr><td colSpan={5}><Empty title="Ingen løyvehavere" /></td></tr>}
     </tbody></table></div>
     <div className="section-title">Faktiske Stripe-utbetalinger</div><div className="tablewrap"><table><thead><tr><th>Løyvehaver</th><th>Payout-ID</th><th>Status</th><th>Ankomst</th><th className="right">Beløp</th></tr></thead><tbody>

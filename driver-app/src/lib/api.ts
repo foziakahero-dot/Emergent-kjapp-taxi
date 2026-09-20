@@ -3,7 +3,7 @@ import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
-export const KJAPP_DEFAULT_COMMISSION_PCT = 12;
+export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
@@ -60,6 +60,12 @@ export const paymentApi = {
 export const messagesApi = {
   list: (tripId: string) => api.get(`/trips/${tripId}/messages`).then((r) => r.data),
   send: (tripId: string, text: string) => api.post(`/trips/${tripId}/messages`, { text }).then((r) => r.data),
+};
+
+export const safetyApi = {
+  log: (tripId: string, data: { kind: 'emergency' | 'report' | 'share'; note?: string; lat?: number; lng?: number }) =>
+    api.post(`/trips/${tripId}/safety`, data).then((r) => r.data),
+  shareLink: (tripId: string) => api.post(`/trips/${tripId}/share-link`).then((r) => r.data),
 };
 
 export const gdprApi = {
