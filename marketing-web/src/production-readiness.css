@@ -10,6 +10,7 @@
 .mk-beta-form label{display:grid;gap:7px;color:#d9e7ee;font-size:12px;font-weight:800;letter-spacing:.02em}
 .mk-beta-form label:nth-child(5){grid-column:1/-1}
 .mk-beta-form label small{color:#6f8798;font-weight:600}
+.mk-beta-honeypot{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
 .mk-beta-form input,.mk-beta-form select{width:100%;min-height:48px;border:1px solid #253b4a;border-radius:13px;background:#07111a;color:#fff;padding:0 14px;font:inherit;outline:none}
 .mk-beta-form input:focus,.mk-beta-form select:focus{border-color:#11d9e8;box-shadow:0 0 0 3px rgba(17,217,232,.12)}
 .mk-beta-submit{grid-column:1/-1;width:100%;justify-content:center;border:0;cursor:pointer}
