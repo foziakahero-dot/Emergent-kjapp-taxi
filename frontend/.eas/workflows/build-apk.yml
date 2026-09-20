@@ -1,7 +1,5 @@
 name: KJAPP Android APKs
 
-on:
-  workflow_dispatch:
 
 jobs:
   build_customer_android_apk:
