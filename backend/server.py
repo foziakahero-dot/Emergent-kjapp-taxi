@@ -5297,7 +5297,11 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     if app_doc.get("status") not in ("draft",):
         raise HTTPException(status_code=410, detail="Søknad allerede sendt inn")
     required = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
-    missing = [k for k in required if k not in (body.documents or {})]
+    missing = [
+        k for k in required
+        if not isinstance((body.documents or {}).get(k), dict)
+        or not str((body.documents or {}).get(k, {}).get("path") or "").strip()
+    ]
     if missing:
         raise HTTPException(status_code=400, detail=f"Mangler dokumenter: {', '.join(missing)}")
     if not str(app_doc.get("bank_account") or "").strip():
@@ -5375,7 +5379,11 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
     if app_doc.get("status") == "approved":
         raise HTTPException(status_code=400, detail="Allerede godkjent")
     required_docs = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
-    missing_docs = [k for k in required_docs if k not in (app_doc.get("documents") or {})]
+    missing_docs = [
+        k for k in required_docs
+        if not isinstance((app_doc.get("documents") or {}).get(k), dict)
+        or not str((app_doc.get("documents") or {}).get(k, {}).get("path") or "").strip()
+    ]
     if missing_docs or not str(app_doc.get("bank_account") or "").strip():
         raise HTTPException(
             status_code=409,
