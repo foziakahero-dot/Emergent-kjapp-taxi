@@ -792,59 +792,114 @@ function TwoFactorCard() {
 export function Settings() {
   const { user } = useAuth();
   const { data, loading, err, reload } = useAsync(() => api.list('/admin/settings', {}), []);
+  const history = useAsync(() => api.pricingHistory(), []);
+  const readiness = useAsync(() => api.betaReadiness(), []);
   const [comm, setComm] = useState('');
   const [pricing, setPricing] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [test, setTest] = useState({ distance_km: '10', duration_min: '20', vehicle_type: 'ai-first' });
+  const [routeTest, setRouteTest] = useState({ pickup_address: '', dropoff_address: '', vehicle_type: 'ai-first' });
   const [testResult, setTestResult] = useState<any>(null);
+  const [routeResult, setRouteResult] = useState<any>(null);
+
   useEffect(() => {
     if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
     if (data?.pricing) setPricing(data.pricing);
   }, [data]);
+
   const isSuper = user?.role === 'superadmin';
   const rideClasses = Array.isArray(data?.ride_classes)
     ? data.ride_classes
     : Object.entries(data?.ride_classes || {}).map(([type, value]: [string, any]) => ({ type, ...(value || {}) }));
+
   const setPrice = (key: string, value: any) => setPricing((p: any) => ({ ...p, [key]: value }));
+  const setVehicleRate = (type: string, key: string, value: number) =>
+    setPricing((p: any) => ({ ...p, vehicle_rates: { ...(p.vehicle_rates || {}), [type]: { ...(p.vehicle_rates?.[type] || {}), [key]: value } } }));
+  const setArea = (id: string, patch: any) =>
+    setPricing((p: any) => ({ ...p, areas: { ...(p.areas || {}), [id]: { ...(p.areas?.[id] || {}), ...patch } } }));
+  const removeArea = (id: string) => setPricing((p: any) => {
+    const areas = { ...(p.areas || {}) }; delete areas[id]; return { ...p, areas };
+  });
+  const addArea = () => {
+    const id = `area_${Object.keys(pricing?.areas || {}).length + 1}`;
+    setArea(id, { name: 'Nytt område', enabled: false, center_lat: 59.9139, center_lng: 10.7522, radius_km: 10, pricing: {} });
+  };
+
   const save = async () => {
     setBusy(true); setMsg('');
     try {
       await api.patchSettings({ default_commission: Number(comm) / 100, pricing });
-      setMsg('Lagret – nye bestillinger bruker ny prisversjon. Pågående turer beholder sitt snapshot.');
-      reload();
+      setMsg('Lagret – nye bestillinger bruker ny prisversjon. Eksisterende turer beholder pris og provisjon fra bestillingstidspunktet.');
+      await Promise.all([reload(), history.reload(), readiness.reload()]);
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
     finally { setBusy(false); }
   };
+
   const runTest = async () => {
-    setTestResult(null);
+    setTestResult(null); setMsg('');
     try {
-      const r = await api.pricingTest({
+      setTestResult(await api.pricingTest({
         distance_km: Number(test.distance_km), duration_min: Number(test.duration_min), vehicle_type: test.vehicle_type,
-      });
-      setTestResult(r);
+      }));
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Kunne ikke teste pris'); }
   };
+
+  const runRouteTest = async () => {
+    setRouteResult(null); setMsg('');
+    try { setRouteResult(await api.pricingRouteTest(routeTest)); }
+    catch (e: any) { setMsg(e?.response?.data?.detail || 'Kunne ikke beregne ruten'); }
+  };
+
+  const rollback = async (version: number) => {
+    if (!isSuper || !window.confirm(`Rull tilbake til prisversjon ${version}? Det opprettes en NY aktiv versjon; eksisterende turer endres ikke.`)) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.pricingRollback(version);
+      setMsg(`Rollback gjennomført. Ny aktiv prisversjon: ${r.pricing_version}.`);
+      await Promise.all([reload(), history.reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Rollback feilet'); }
+    finally { setBusy(false); }
+  };
+
   if (loading) return <Loader />;
   const fields = [
     ['base_fare','Grunnpris'], ['per_km','Pris per km'], ['per_minute','Pris per minutt'],
     ['waiting_per_minute','Ventetid per minutt'], ['minimum_fare','Minimumspris'],
     ['extra_stop_fee','Ekstra stopp'], ['customer_cancellation_fee','Avbestillingsgebyr kunde'],
-    ['late_driver_cancellation_fee','Sen avbestilling sjåfør'],
+    ['late_driver_cancellation_fee','Registrert gebyr ved sen sjåføravbestilling'],
   ];
+  const vehicleLabels: any = { 'ai-first': 'KJAPP', enkelt: 'KJAPP Sparsom', trygg: 'KJAPP XL / Komfort', premium: 'KJAPP Premium' };
+  const areas = Object.entries(pricing?.areas || {}) as [string, any][];
+  const versions = history.data?.items || [];
+  const checks = readiness.data?.checks || {};
+
   return (
     <>
       <PageHead title="Innstillinger" sub={`Sist oppdatert ${fmtDate(data?.updated_at)} · prisversjon ${pricing?.version || 1}`} />
-      <ErrorBanner msg={err} />
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 980 }}>
+      <ErrorBanner msg={err || history.err || readiness.err} />
+
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 1040 }}>
         <TwoFactorCard />
         <Card>
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
-          <div className="field"><label className="label">Standard KJAPP-provisjon (%)</label>
-            <input className="input" type="number" min="0" max="50" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
-          <div className="dim" style={{ fontSize: 12 }}>Endringer er begrenset til superadmin og logges.</div>
+          <div className="field"><label className="label">Standard KJAPP-serviceavgift (%)</label>
+            <input className="input" type="number" min="0" max="50" step="0.1" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
+          <div className="dim" style={{ fontSize: 12 }}>Provisjonen snapshots på hver ny tur. Endringer påvirker ikke historiske eller pågående turer.</div>
         </Card>
       </div>
+
+      <div className="section-title">Teknisk beta-status</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+          <KV k="Produksjonsmiljø" v={<Pill status={checks.production_env ? 'completed' : 'pending'} label={checks.production_env ? 'Ja' : 'Nei'} />} />
+          <KV k="Stripe + webhook" v={<Pill status={checks.stripe_configured ? 'completed' : 'pending'} label={checks.stripe_configured ? 'Klar' : 'Mangler'} />} />
+          <KV k="Native push" v={<Pill status={checks.native_push_configured ? 'completed' : 'pending'} label={checks.native_push_configured ? 'Klar' : 'Mangler'} />} />
+          <KV k="Admin 2FA" v={<Pill status={checks.admin_2fa_enabled ? 'completed' : 'pending'} label={checks.admin_2fa_enabled ? 'Aktiv' : 'Mangler'} />} />
+        </div>
+        {!!readiness.data?.blockers?.length && <div className="error-banner" style={{ marginTop: 12 }}>{readiness.data.blockers.join(' · ')}</div>}
+        <div className="dim" style={{ marginTop: 10, fontSize: 12 }}>Dette viser teknisk driftsstatus. Løyver, forsikring, avtaler og øvrig norsk regelverk må godkjennes separat.</div>
+      </Card>
 
       <div className="section-title">Dynamisk prissetting</div>
       <Card>
@@ -854,6 +909,12 @@ export function Settings() {
             <input className="input" type="number" min="0" step="0.5" value={pricing?.[key] ?? ''}
               disabled={!isSuper} onChange={(e) => setPrice(key, Number(e.target.value))} />
           </div>)}
+          <div className="field"><label className="label">Gratis avbestilling etter aksept (min)</label>
+            <input className="input" type="number" min="0" max="60" value={pricing?.free_cancel_minutes ?? 2}
+              disabled={!isSuper} onChange={(e) => setPrice('free_cancel_minutes', Number(e.target.value))} /></div>
+          <div className="field"><label className="label">Maks søketid etter sjåfør (sek)</label>
+            <input className="input" type="number" min="30" max="1800" value={pricing?.dispatch_timeout_seconds ?? 180}
+              disabled={!isSuper} onChange={(e) => setPrice('dispatch_timeout_seconds', Number(e.target.value))} /></div>
         </div>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 12 }}>
           <div className="field"><label className="label">Toppris aktiv</label>
@@ -870,9 +931,51 @@ export function Settings() {
               value={pricing?.surge?.max_multiplier ?? 2}
               onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),max_multiplier:Number(e.target.value)})}/></div>
         </div>
-        {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre prisregler'}</Btn>
-          : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre priser.</div>}
-        {msg && <div style={{ marginTop: 10, color: msg.startsWith('Lagret') ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>{msg}</div>}
+      </Card>
+
+      <div className="section-title">Pris per kjøretøyklasse</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+          {['ai-first','enkelt','trygg','premium'].map((type) => {
+            const rate = type === 'ai-first'
+              ? { base_fare: pricing?.base_fare, per_km: pricing?.per_km, per_minute: pricing?.per_minute, minimum_fare: pricing?.minimum_fare }
+              : (pricing?.vehicle_rates?.[type] || {});
+            return <div key={type} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 14 }}>
+              <div className="strong">{vehicleLabels[type]}</div>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 10 }}>
+                {([['base_fare','Start'],['per_km','Km'],['per_minute','Min'],['minimum_fare','Min.pris']] as any[]).map(([k,l]) =>
+                  <div className="field" key={k}><label className="label">{l}</label><input className="input" type="number" min="0" step="0.5"
+                    disabled={!isSuper} value={rate?.[k] ?? 0}
+                    onChange={(e) => type === 'ai-first' ? setPrice(k, Number(e.target.value)) : setVehicleRate(type,k,Number(e.target.value))}/></div>
+                )}
+              </div>
+            </div>;
+          })}
+        </div>
+      </Card>
+
+      <div className="section-title">Prisområder</div>
+      <Card>
+        <div className="dim" style={{ marginBottom: 12 }}>Områder bruker henteposisjonen. Første aktive område som inneholder hentestedet overstyrer globale prisregler.</div>
+        {areas.map(([id, area]) => <div key={id} style={{ padding: 14, marginBottom: 10, border: '1px solid var(--line)', borderRadius: 14 }}>
+          <div className="grid" style={{ gridTemplateColumns: '1.3fr .7fr 1fr 1fr 1fr auto', alignItems: 'end' }}>
+            <div className="field"><label className="label">Navn</label><input className="input" disabled={!isSuper} value={area.name || ''} onChange={e=>setArea(id,{name:e.target.value})}/></div>
+            <div className="field"><label className="label">Aktiv</label><select className="input" disabled={!isSuper} value={area.enabled === false ? 'off':'on'} onChange={e=>setArea(id,{enabled:e.target.value==='on'})}><option value="on">På</option><option value="off">Av</option></select></div>
+            <div className="field"><label className="label">Lat</label><input className="input" type="number" step="0.0001" disabled={!isSuper} value={area.center_lat ?? ''} onChange={e=>setArea(id,{center_lat:Number(e.target.value)})}/></div>
+            <div className="field"><label className="label">Lng</label><input className="input" type="number" step="0.0001" disabled={!isSuper} value={area.center_lng ?? ''} onChange={e=>setArea(id,{center_lng:Number(e.target.value)})}/></div>
+            <div className="field"><label className="label">Radius km</label><input className="input" type="number" min="0.1" max="300" step="0.5" disabled={!isSuper} value={area.radius_km ?? 10} onChange={e=>setArea(id,{radius_km:Number(e.target.value)})}/></div>
+            {isSuper ? <Btn onClick={()=>removeArea(id)}>Fjern</Btn> : null}
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 8 }}>
+            {([['base_fare','Start'],['per_km','Km'],['per_minute','Min'],['minimum_fare','Min.pris']] as any[]).map(([k,l]) =>
+              <div className="field" key={k}><label className="label">{l} – override</label><input className="input" type="number" min="0" step="0.5"
+                disabled={!isSuper} value={area.pricing?.[k] ?? ''}
+                onChange={e=>setArea(id,{pricing:{...(area.pricing||{}),[k]:e.target.value===''?undefined:Number(e.target.value)}})}/></div>
+            )}
+          </div>
+        </div>)}
+        {!areas.length && <div className="dim">Ingen lokale prisområder. Globale regler gjelder i hele tjenesten.</div>}
+        {isSuper ? <Btn onClick={addArea}>Legg til prisområde</Btn> : null}
       </Card>
 
       <div className="section-title">Test pris før publisering</div>
@@ -881,11 +984,41 @@ export function Settings() {
           <div className="field"><label className="label">Distanse (km)</label><input className="input" type="number" value={test.distance_km} onChange={e=>setTest({...test,distance_km:e.target.value})}/></div>
           <div className="field"><label className="label">Tid (min)</label><input className="input" type="number" value={test.duration_min} onChange={e=>setTest({...test,duration_min:e.target.value})}/></div>
           <div className="field"><label className="label">Kategori</label><select className="input" value={test.vehicle_type} onChange={e=>setTest({...test,vehicle_type:e.target.value})}>
-            <option value="ai-first">Standard</option><option value="enkelt">Sparsom</option><option value="trygg">Komfort</option><option value="premium">Premium</option>
+            <option value="ai-first">KJAPP</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
           </select></div>
           <Btn onClick={runTest}>Beregn</Btn>
         </div>
         {testResult && <div className="strong" style={{ marginTop: 12 }}>{testResult.price} kr · toppris ×{testResult.surge_multiplier} · versjon {testResult.pricing_version}</div>}
+
+        <div className="section-title">Test ekte norsk rute</div>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr auto', alignItems: 'end' }}>
+          <div className="field"><label className="label">Fra</label><input className="input" placeholder="Adresse / sted" value={routeTest.pickup_address} onChange={e=>setRouteTest({...routeTest,pickup_address:e.target.value})}/></div>
+          <div className="field"><label className="label">Til</label><input className="input" placeholder="Adresse / sted" value={routeTest.dropoff_address} onChange={e=>setRouteTest({...routeTest,dropoff_address:e.target.value})}/></div>
+          <div className="field"><label className="label">Kategori</label><select className="input" value={routeTest.vehicle_type} onChange={e=>setRouteTest({...routeTest,vehicle_type:e.target.value})}>
+            <option value="ai-first">KJAPP</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+          </select></div>
+          <Btn onClick={runRouteTest}>Test rute</Btn>
+        </div>
+        {routeResult && <div style={{ marginTop: 12 }}>
+          <div className="strong">{routeResult.price} kr · {routeResult.distance_km} km · {routeResult.duration_min} min</div>
+          <div className="dim" style={{ fontSize: 12 }}>{routeResult.pickup?.name} → {routeResult.dropoff?.name}{routeResult.pricing_area ? ` · område: ${routeResult.pricing_area}` : ' · global pris'}</div>
+        </div>}
+      </Card>
+
+      <div style={{ marginTop: 14 }}>
+        {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Publiser prisregler'}</Btn>
+          : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre eller publisere priser.</div>}
+        {msg && <div style={{ marginTop: 10, color: msg.includes('feil') || msg.includes('Feil') ? 'var(--red)' : 'var(--green)', fontSize: 13 }}>{msg}</div>}
+      </div>
+
+      <div className="section-title">Prisversjoner og rollback</div>
+      <Card>
+        {versions.slice(0, 12).map((v: any, i: number) => <div key={`${v.version}-${i}`} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 16, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+          <div className="strong">v{v.version}{v.current ? ' · aktiv' : ''}</div>
+          <div className="dim" style={{ fontSize: 12 }}>{fmtDate(v.saved_at)} · provisjon {Math.round((v.default_commission ?? 0.10) * 1000) / 10}%</div>
+          {!v.current && isSuper ? <Btn onClick={()=>rollback(v.version)} disabled={busy}>Gjenopprett</Btn> : null}
+        </div>)}
+        {!versions.length && <div className="dim">Ingen tidligere prisversjoner ennå.</div>}
       </Card>
 
       <div className="section-title">Kjøretøyklasser</div>
