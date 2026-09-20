@@ -819,7 +819,7 @@ export function Settings() {
   const runTest = async () => {
     setTestResult(null);
     try {
-      const r = await api.post('/admin/pricing/test', {
+      const r = await api.pricingTest({
         distance_km: Number(test.distance_km), duration_min: Number(test.duration_min), vehicle_type: test.vehicle_type,
       });
       setTestResult(r);
