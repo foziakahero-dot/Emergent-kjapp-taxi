@@ -31,6 +31,7 @@ import qrcode
 import uuid
 import re
 from admin_safety import public_user, payment_status, bonus_transaction, process_refund, PublicJSONResponse
+from driver_policy import DEFAULT_DRIVER_POLICY, evaluate_driver_policy, normalize_driver_policy
 
 try:
     from pywebpush import webpush, WebPushException
@@ -703,6 +704,8 @@ async def lifespan(app: FastAPI):
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.password_reset_tokens.create_index("token")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.driver_offers.create_index([("driver_id", 1), ("offered_at", -1)])
+    await db.driver_offers.create_index([("trip_id", 1), ("driver_id", 1)], unique=True)
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -827,10 +830,12 @@ async def lifespan(app: FastAPI):
 
     # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
     dispatch_task = asyncio.create_task(dispatch_loop())
+    quality_task = asyncio.create_task(driver_quality_loop())
 
     yield
 
     dispatch_task.cancel()
+    quality_task.cancel()
 
 
 app = FastAPI(lifespan=lifespan, default_response_class=PublicJSONResponse)
@@ -2193,6 +2198,12 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     The offer expires after DISPATCH_OFFER_SECONDS and is then forwarded automatically. When every
     eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
     """
+    previous_driver = trip.get("offer_driver_id")
+    if previous_driver:
+        await db.driver_offers.update_one(
+            {"trip_id": trip["trip_id"], "driver_id": previous_driver, "status": "offered"},
+            {"$set": {"status": "expired", "answered_at": datetime.now(timezone.utc).isoformat()}},
+        )
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(trip.get("pickup_lat"), trip.get("pickup_lng"))
     nxt = next((c for c in cands if c["id"] not in tried), None)
@@ -2207,6 +2218,15 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
             {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
         )
         for c in cands:  # everyone gets a last chance
+            await db.driver_offers.update_one(
+                {"trip_id": trip["trip_id"], "driver_id": c["id"]},
+                {"$setOnInsert": {
+                    "trip_id": trip["trip_id"], "driver_id": c["id"],
+                    "offered_at": datetime.now(timezone.utc).isoformat(), "status": "offered",
+                    "dispatch_mode": "broadcast",
+                }},
+                upsert=True,
+            )
             await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
         return None
 
@@ -2220,6 +2240,15 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     )
     if res.modified_count == 0:
         return None
+    await db.driver_offers.update_one(
+        {"trip_id": trip["trip_id"], "driver_id": nxt["id"]},
+        {"$setOnInsert": {
+            "trip_id": trip["trip_id"], "driver_id": nxt["id"],
+            "offered_at": datetime.now(timezone.utc).isoformat(), "status": "offered",
+            "dispatch_mode": "sequential",
+        }},
+        upsert=True,
+    )
     await send_push_to_user(
         nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
         "/driver", tag="kjapp-new-trip", require_interaction=True,
@@ -2371,6 +2400,11 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    await db.driver_offers.update_one(
+        {"trip_id": body.trip_id, "driver_id": driver_id},
+        {"$set": {"status": "accepted", "answered_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
     t = await db.trips.find_one({"trip_id": body.trip_id})
     await send_push_to_user(
         t["user_id"], "Sjåfør på vei",
@@ -2665,6 +2699,11 @@ async def driver_decline(body: DeclineTripRequest, current=Depends(require_drive
         "trip_id": body.trip_id,
         "declined_at": datetime.now(timezone.utc).isoformat(),
     })
+    await db.driver_offers.update_one(
+        {"trip_id": body.trip_id, "driver_id": current["id"]},
+        {"$set": {"status": "declined", "answered_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
     trip = await db.trips.find_one({"trip_id": body.trip_id, "driver_id": None})
     if trip and trip.get("offer_driver_id") == current["id"]:
         await offer_trip_to_next_driver(trip)
@@ -3032,6 +3071,129 @@ class FleetCreateRequest(BaseModel):
     org_number: Optional[str] = ""
     owner_email: str
     commission_rate: float = 0.20
+
+
+class ManualFleetCreateRequest(BaseModel):
+    name: str
+    org_number: str
+    owner_name: str
+    owner_email: str
+    owner_phone: Optional[str] = ""
+    commission_rate: float = 0.20
+    temporary_password: Optional[str] = None
+
+
+class ManualDriverCreateRequest(BaseModel):
+    full_name: str
+    email: str
+    phone: Optional[str] = ""
+    fleet_id: Optional[str] = None
+    car: str
+    plate: str
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    approved: bool = True
+    temporary_password: Optional[str] = None
+
+
+def _manual_account_password(value: Optional[str]) -> str:
+    password = (value or "").strip() or (secrets.token_urlsafe(12) + "!9a")
+    if len(password) < 12:
+        raise HTTPException(400, "Midlertidig passord må ha minst 12 tegn")
+    return password
+
+
+def _manual_email(value: str) -> str:
+    email = (value or "").strip().lower()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(400, "Ugyldig e-postadresse")
+    return email
+
+
+@api.post("/admin/fleets/manual")
+async def admin_create_fleet_manual(body: ManualFleetCreateRequest, current=Depends(require_admin)):
+    """Create a fleet owner and fleet in one audited admin operation."""
+    name = body.name.strip()
+    owner_name = body.owner_name.strip()
+    email = _manual_email(body.owner_email)
+    org_number = re.sub(r"\D", "", body.org_number or "")
+    if not name or not owner_name:
+        raise HTTPException(400, "Navn på selskap og løyvehaver er påkrevd")
+    if len(org_number) != 9:
+        raise HTTPException(400, "Organisasjonsnummer må ha 9 siffer")
+    if not 0 <= body.commission_rate <= 0.5:
+        raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(409, "E-postadressen er allerede registrert")
+    if await db.fleets.find_one({"org_number": org_number}):
+        raise HTTPException(409, "Organisasjonsnummeret er allerede registrert")
+
+    password = _manual_account_password(body.temporary_password)
+    now = datetime.now(timezone.utc).isoformat()
+    owner_oid, fleet_oid = ObjectId(), ObjectId()
+    owner_id, fleet_id = str(owner_oid), str(fleet_oid)
+    owner = {
+        "_id": owner_oid, "email": email, "password_hash": hash_password(password),
+        "fullName": owner_name, "phone": (body.owner_phone or "").strip(),
+        "role": "fleet_owner", "fleet_id": fleet_id, "approved": True,
+        "must_reset_password": True, "registration_source": "admin_manual", "created_at": now,
+    }
+    fleet = {
+        "_id": fleet_oid, "name": name, "org_number": org_number,
+        "owner_user_id": owner_id, "contact_email": email,
+        "commission_rate": body.commission_rate, "active": True, "status": "active",
+        "registration_source": "admin_manual", "created_at": now,
+    }
+    await db.users.insert_one(owner)
+    try:
+        await db.fleets.insert_one(fleet)
+    except Exception:
+        await db.users.delete_one({"_id": owner_oid, "registration_source": "admin_manual"})
+        raise
+    await _audit(current, "fleet.manual_create", "fleet", fleet_id, None,
+                 {"name": name, "org_number": org_number, "owner_email": email})
+    return {
+        "fleet": {"id": fleet_id, "name": name, "org_number": org_number, "owner_email": email},
+        "credentials": {"email": email, "temporary_password": password, "must_reset_password": True},
+    }
+
+
+@api.post("/admin/drivers/manual")
+async def admin_create_driver_manual(body: ManualDriverCreateRequest, current=Depends(require_admin)):
+    """Create a driver account with a one-time password shown only in this response."""
+    name = body.full_name.strip()
+    email = _manual_email(body.email)
+    plate = re.sub(r"[^A-Z0-9]", "", (body.plate or "").upper())
+    if not name or not body.car.strip() or len(plate) < 2:
+        raise HTTPException(400, "Navn, bil og registreringsnummer er påkrevd")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(409, "E-postadressen er allerede registrert")
+    if await db.users.find_one({"role": "driver", "plate": plate}):
+        raise HTTPException(409, "Registreringsnummeret er allerede knyttet til en sjåfør")
+    if body.fleet_id:
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(body.fleet_id)})
+        except InvalidId:
+            fleet = None
+        if not fleet:
+            raise HTTPException(400, "Ugyldig løyvehaver")
+
+    password = _manual_account_password(body.temporary_password)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "email": email, "password_hash": hash_password(password), "fullName": name,
+        "phone": (body.phone or "").strip(), "role": "driver", "fleet_id": body.fleet_id,
+        "car": body.car.strip(), "plate": plate, "vehicle_type": body.vehicle_type,
+        "rating": None, "approved": body.approved, "online": False,
+        "must_reset_password": True, "registration_source": "admin_manual", "created_at": now,
+    }
+    result = await db.users.insert_one(doc)
+    driver_id = str(result.inserted_id)
+    await _audit(current, "driver.manual_create", "driver", driver_id, None,
+                 {"email": email, "fleet_id": body.fleet_id, "plate": plate, "approved": body.approved})
+    return {
+        "driver": {"id": driver_id, "name": name, "email": email, "plate": plate, "approved": body.approved},
+        "credentials": {"email": email, "temporary_password": password, "must_reset_password": True},
+    }
 
 
 @api.post("/admin/fleets")
@@ -3674,6 +3836,26 @@ async def admin_users(q: Optional[str] = None, status: Optional[str] = None, pag
     return _paged([public_user(u) for u in out], total, page, page_size, "users")
 
 
+@api.get("/admin/users/{user_id}")
+async def admin_user_detail(user_id: str, current=Depends(require_admin)):
+    try:
+        user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    except InvalidId:
+        user = None
+    if not user:
+        raise HTTPException(404, "Fant ikke bruker")
+    result = public_user(user)
+    result["trips_completed"] = await db.trips.count_documents({
+        "$or": [{"driver_id": user_id}, {"user_id": user_id}],
+        "status": {"$in": ["arrived", "completed", "rated"]},
+    })
+    result["quality_status"] = user.get("quality_status")
+    result["quality_reasons"] = user.get("quality_reasons", [])
+    result["suspension_reason"] = user.get("suspension_reason")
+    result["last_completed_at"] = user.get("last_completed_at")
+    return result
+
+
 @api.get("/admin/drivers")
 async def admin_drivers(current=Depends(require_admin)):
     out = []
@@ -3696,6 +3878,7 @@ async def admin_trips(current=Depends(require_admin), limit: int = 100):
 
 class ApproveDriverRequest(BaseModel):
     approved: bool = True
+    reason: Optional[str] = None
 
 
 @api.post("/admin/drivers/{user_id}/approve")
@@ -3704,9 +3887,20 @@ async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
     prev = u.get("approved", False)
-    await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
+    now = datetime.now(timezone.utc).isoformat()
+    if body.approved:
+        update = {"$set": {"approved": True}, "$unset": {
+            "suspended_at": "", "suspension_reason": "", "suspension_source": "",
+        }}
+    else:
+        update = {"$set": {
+            "approved": False, "online": False, "suspended_at": now,
+            "suspension_reason": (body.reason or "Suspendert manuelt av administrator").strip(),
+            "suspension_source": "manual",
+        }}
+    await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, update)
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
-                 {"approved": prev}, {"approved": body.approved})
+                 {"approved": prev}, {"approved": body.approved}, body.reason)
     return {"ok": True}
 
 
@@ -4807,6 +5001,9 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
             "fleet_name": fleet_names.get(u.get("fleet_id")), "fleet_id": u.get("fleet_id"),
             "trips_completed": completed, "last_location_at": u.get("last_location_at"),
             "created_at": u.get("created_at"),
+            "quality_status": u.get("quality_status"), "quality_reasons": u.get("quality_reasons", []),
+            "quality_evaluated_at": u.get("quality_evaluated_at"),
+            "suspension_reason": u.get("suspension_reason"), "suspension_source": u.get("suspension_source"),
             "docs": {k: u.get(k) for k in ("drivers_license_path", "taxi_license_path", "profile_photo_path") if u.get(k)},
         })
     return _paged(out, total, page, page_size, "drivers")
@@ -4818,9 +5015,20 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
     prev = u.get("approved", False)
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"approved": body.approved}})
+    now = datetime.now(timezone.utc).isoformat()
+    if body.approved:
+        update = {"$set": {"approved": True}, "$unset": {
+            "suspended_at": "", "suspension_reason": "", "suspension_source": "",
+        }}
+    else:
+        update = {"$set": {
+            "approved": False, "online": False, "suspended_at": now,
+            "suspension_reason": (body.reason or "Suspendert manuelt av administrator").strip(),
+            "suspension_source": "manual",
+        }}
+    await db.users.update_one({"_id": ObjectId(user_id)}, update)
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
-                 {"approved": prev}, {"approved": body.approved})
+                 {"approved": prev}, {"approved": body.approved}, body.reason)
     return {"ok": True}
 
 
@@ -5285,6 +5493,7 @@ DEFAULT_PLATFORM_SETTINGS = {
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
     "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+    "driver_policy": DEFAULT_DRIVER_POLICY,
 }
 
 
@@ -5292,6 +5501,153 @@ class PlatformSettingsUpdate(BaseModel):
     default_commission: Optional[float] = None
     ride_classes: Optional[dict] = None
     features: Optional[dict] = None
+    driver_policy: Optional[dict] = None
+
+
+class DriverQualityRunRequest(BaseModel):
+    apply_suspensions: bool = False
+
+
+class DriverQualityExemptionRequest(BaseModel):
+    enabled: bool
+    reason: Optional[str] = None
+
+
+async def _driver_policy_settings() -> dict:
+    stored = await db.platform_settings.find_one({"_id": "singleton"}, {"driver_policy": 1}) or {}
+    return normalize_driver_policy(stored.get("driver_policy"))
+
+
+async def _driver_quality_stats(driver_id: str, policy: dict) -> dict:
+    finished = {"$in": ["arrived", "completed", "rated"]}
+    completed = await db.trips.count_documents({"driver_id": driver_id, "status": finished})
+    rating_count = await db.trips.count_documents({
+        "driver_id": driver_id, "passenger_rating": {"$exists": True, "$ne": None},
+    })
+    latest = await db.trips.find_one(
+        {"driver_id": driver_id, "status": finished},
+        {"arrived_at": 1, "updated_at": 1, "created_at": 1},
+        sort=[("arrived_at", -1), ("updated_at", -1), ("created_at", -1)],
+    )
+    last_completed = None
+    if latest:
+        last_completed = latest.get("arrived_at") or latest.get("updated_at") or latest.get("created_at")
+    since = (datetime.now(timezone.utc) - timedelta(days=policy["acceptance_window_days"])).isoformat()
+    accepted = await db.driver_offers.count_documents({
+        "driver_id": driver_id, "offered_at": {"$gte": since}, "status": "accepted",
+    })
+    declined = await db.driver_offers.count_documents({
+        "driver_id": driver_id, "offered_at": {"$gte": since}, "status": {"$in": ["declined", "expired"]},
+    })
+    if accepted + declined == 0:
+        accepted = await db.trips.count_documents({"driver_id": driver_id, "created_at": {"$gte": since}})
+        declined = await db.driver_declines.count_documents({"driver_id": driver_id, "declined_at": {"$gte": since}})
+    return {
+        "completed_count": completed, "rating_count": rating_count,
+        "last_completed_at": last_completed, "accepted_in_window": accepted,
+        "declined_in_window": declined,
+    }
+
+
+async def _evaluate_all_driver_quality(
+    apply_suspensions: bool = False, actor: Optional[dict] = None, use_auto_policy: bool = False,
+) -> dict:
+    policy = await _driver_policy_settings()
+    assessments = []
+    suspended = 0
+    async for driver in db.users.find({"role": "driver", "demo": {"$ne": True}, "is_demo": {"$ne": True}}):
+        driver_id = str(driver["_id"])
+        stats = await _driver_quality_stats(driver_id, policy)
+        stats["rating"] = driver.get("rating")
+        assessment = evaluate_driver_policy(driver, stats, policy)
+        assessment.update({
+            "driver_id": driver_id, "name": driver.get("fullName"), "email": driver.get("email"),
+            "approved": driver.get("approved", False), "fleet_id": driver.get("fleet_id"),
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.users.update_one({"_id": driver["_id"]}, {"$set": {
+            "quality_status": assessment["status"],
+            "quality_reasons": assessment["suspension_reasons"] or assessment["warnings"],
+            "quality_evaluated_at": assessment["evaluated_at"],
+            "last_completed_at": assessment["last_completed_at"],
+        }})
+        should_suspend = (
+            policy["enabled"] and assessment["status"] == "suspend_recommended"
+            and driver.get("approved") is True and driver.get("quality_exempt") is not True
+            and (apply_suspensions or (use_auto_policy and policy["auto_suspend"]))
+        )
+        if should_suspend:
+            reason = "; ".join(assessment["suspension_reasons"])
+            now = datetime.now(timezone.utc).isoformat()
+            await db.users.update_one({"_id": driver["_id"]}, {"$set": {
+                "approved": False, "online": False, "suspended_at": now,
+                "suspension_reason": reason, "suspension_source": "quality_policy",
+                "quality_status": "suspended",
+            }})
+            await db.audit_events.insert_one({
+                "admin_id": (actor or {}).get("id", "system"),
+                "admin_email": (actor or {}).get("email", "system@kjappapp.com"),
+                "action": "driver.quality_suspend", "entity_type": "driver", "entity_id": driver_id,
+                "before": {"approved": True}, "after": {"approved": False},
+                "reason": reason, "at": now,
+            })
+            await send_push_to_user(
+                driver_id, "Kontoen din må vurderes",
+                "Sjåførtilgangen er midlertidig satt på pause. Kontakt support for gjennomgang.",
+                "/driver", tag="kjapp-driver-review",
+            )
+            assessment["status"] = "suspended"
+            assessment["approved"] = False
+            suspended += 1
+        assessments.append(assessment)
+    return {"policy": policy, "items": assessments, "total": len(assessments), "suspended": suspended}
+
+
+async def driver_quality_loop():
+    """Evaluate quality periodically; enforcement happens only when superadmin enabled auto_suspend."""
+    await asyncio.sleep(300)
+    while True:
+        try:
+            policy = await _driver_policy_settings()
+            if policy["enabled"]:
+                await _evaluate_all_driver_quality(False, None, use_auto_policy=True)
+        except Exception as exc:
+            print(f"driver_quality_loop error: {exc}")
+        await asyncio.sleep(6 * 60 * 60)
+
+
+@api.get("/admin/driver-quality")
+async def admin_driver_quality(current=Depends(require_admin)):
+    return await _evaluate_all_driver_quality(False, current)
+
+
+@api.post("/admin/driver-quality/run")
+async def admin_run_driver_quality(body: DriverQualityRunRequest, current=Depends(require_superadmin)):
+    result = await _evaluate_all_driver_quality(body.apply_suspensions, current)
+    await _audit(current, "driver.quality_run", "settings", "driver_policy", None,
+                 {"apply_suspensions": body.apply_suspensions, "suspended": result["suspended"]})
+    return result
+
+
+@api.post("/admin/drivers/{user_id}/quality-exemption")
+async def admin_driver_quality_exemption(user_id: str, body: DriverQualityExemptionRequest, current=Depends(require_superadmin)):
+    try:
+        driver = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except InvalidId:
+        driver = None
+    if not driver:
+        raise HTTPException(404, "Fant ikke sjåfør")
+    if body.enabled and not (body.reason or "").strip():
+        raise HTTPException(400, "Begrunnelse er påkrevd for unntak")
+    update = {"$set": {"quality_exempt": body.enabled}}
+    if body.enabled:
+        update["$set"]["quality_exempt_reason"] = body.reason.strip()
+    else:
+        update["$unset"] = {"quality_exempt_reason": ""}
+    await db.users.update_one({"_id": driver["_id"]}, update)
+    await _audit(current, "driver.quality_exemption", "driver", user_id,
+                 {"enabled": driver.get("quality_exempt", False)}, {"enabled": body.enabled}, body.reason)
+    return {"ok": True}
 
 
 @api.get("/admin/settings")
@@ -5314,6 +5670,7 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         sets["default_commission"] = body.default_commission
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
     if body.features is not None: sets["features"] = body.features
+    if body.driver_policy is not None: sets["driver_policy"] = normalize_driver_policy(body.driver_policy)
     if not sets: return {"ok": True}
     sets["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.platform_settings.update_one({"_id": "singleton"}, {"$set": sets}, upsert=True)

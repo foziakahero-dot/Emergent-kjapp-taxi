@@ -207,8 +207,10 @@ function TripDrawer({ trip, onClose }: any) {
 
 /* ----------------------------- Drivers ----------------------------- */
 export function Drivers() {
+  const { user } = useAuth();
   const [sp] = useSearchParams();
   const [person, setPerson] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [qi, setQi] = useState(sp.get('q') || '');
   useEffect(() => { setQi(sp.get('q') || ''); }, [sp]);
@@ -216,16 +218,22 @@ export function Drivers() {
   const [page, setPage] = useState(1);
   useEffect(() => { setPage(1); }, [status, q]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/drivers-full', { status, q, page, page_size: PAGE });
+  const quality = useAsync(() => api.driverQuality(), []);
 
   const toggle = async (d: any) => {
     const next = !d.approved;
-    if (!window.confirm(next ? `Godkjenne ${d.name}?` : `Suspendere ${d.name}?`)) return;
-    try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(apiError(e)); }
+    const reason = next ? undefined : window.prompt(`Begrunnelse for suspensjon av ${d.name}:`, d.suspension_reason || 'Manuell vurdering');
+    if (!next && reason === null) return;
+    if (next && !window.confirm(`Aktivere ${d.name} igjen?`)) return;
+    try { await api.setDriverStatus(d.id, next, reason || undefined); reload(); quality.reload(); } catch (e: any) { alert(apiError(e)); }
   };
 
   return (
     <>
-      <PageHead title="Sjåfører" sub={`${total} sjåfører`} />
+      <PageHead title="Sjåfører" sub={`${total} sjåfører`}
+        right={<Btn variant="primary" onClick={() => setCreateOpen(true)}>+ Registrer sjåfør</Btn>} />
+      <DriverQualityPanel data={quality.data} loading={quality.loading} error={quality.err}
+        canApply={user?.role === 'superadmin'} onReload={() => { quality.reload(); reload(); }} />
       <div className="toolbar">
         <input className="input" placeholder="Søk navn / e-post / skilt…" value={qi} onChange={(e) => setQi(e.target.value)} />
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -236,15 +244,16 @@ export function Drivers() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Status</th><th className="right">Handling</th></tr></thead>
+          <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Kvalitet</th><th>Status</th><th className="right">Handling</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
+            {loading ? <tr><td colSpan={8}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
                 <td><button className="text-link" onClick={() => setPerson(d.id)}>{d.name}</button><div className="cell-sub">{d.email}</div></td>
                 <td>{d.car || '—'} <span className="dim mono">{d.plate}</span></td>
                 <td className="dim">{d.fleet_name || '—'}</td>
                 <td className="mono">{d.trips_completed ?? 0}</td>
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
+                <td><QualityPill status={d.quality_status} reasons={d.quality_reasons} /></td>
                 <td>{d.online ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent" /> : <Pill status="pending" label="Venter" />}</td>
                 <td className="right">
                   <Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>
@@ -252,14 +261,92 @@ export function Drivers() {
                   </Btn>
                 </td>
               </tr>
-            )) : <tr><td colSpan={7}><Empty title="Ingen sjåfører" /></td></tr>}
+            )) : <tr><td colSpan={8}><Empty title="Ingen sjåfører" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
       {person && <PersonDetail id={person} onClose={() => setPerson(null)} />}
+      {createOpen && <CreateDriverModal onClose={() => setCreateOpen(false)} onCreated={() => { reload(); quality.reload(); }} />}
     </>
   );
+}
+
+function QualityPill({ status, reasons }: any) {
+  const map: any = {
+    good: ['completed', 'God'], warning: ['pending', 'Varsel'],
+    suspend_recommended: ['cancelled', 'Må vurderes'], suspended: ['cancelled', 'Suspendert'],
+    exempt: ['gray', 'Unntak'],
+  };
+  const [kind, label] = map[status] || ['gray', 'Ikke kontrollert'];
+  return <span title={(reasons || []).join('\n')}><Pill status={kind} label={label} /></span>;
+}
+
+function DriverQualityPanel({ data, loading, error, canApply, onReload }: any) {
+  const [busy, setBusy] = useState(false);
+  const issues = (data?.items || []).filter((x: any) => ['warning', 'suspend_recommended', 'suspended'].includes(x.status));
+  const run = async (apply: boolean) => {
+    if (apply && !window.confirm('Suspendere alle sjåfører som bryter de aktive kvalitetsreglene? Dette loggføres og kan reverseres manuelt.')) return;
+    setBusy(true);
+    try { await api.runDriverQuality(apply); onReload(); }
+    catch (e: any) { alert(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <div className="quality-head">
+        <div><div className="strong">Kvalitetskontroll</div>
+          <div className="cell-sub">Minimum {data?.policy?.minimum_ratings ?? 10} vurderinger før rating påvirker status · inaktiv etter {data?.policy?.inactivity_days ?? 60} dager.</div></div>
+        <div className="toolbar" style={{ margin: 0 }}>
+          <Btn variant="sm" disabled={busy || loading} onClick={() => run(false)}>Kontroller nå</Btn>
+          {canApply ? <Btn variant="sm danger" disabled={busy || loading} onClick={() => run(true)}>Kontroller og suspender</Btn> : null}
+        </div>
+      </div>
+      <ErrorBanner msg={error} />
+      {issues.length ? <div className="quality-list">{issues.slice(0, 6).map((x: any) => (
+        <div key={x.driver_id} className="quality-item"><QualityPill status={x.status} reasons={x.suspension_reasons || x.warnings} />
+          <span className="strong">{x.name || x.email}</span><span className="dim">{[...(x.suspension_reasons || []), ...(x.warnings || [])][0]}</span></div>
+      ))}</div> : <div className="cell-sub" style={{ marginTop: 10 }}>{loading ? 'Kontrollerer…' : 'Ingen aktive kvalitetsvarsler.'}</div>}
+    </Card>
+  );
+}
+
+function CredentialsResult({ value }: any) {
+  if (!value) return null;
+  const text = `E-post: ${value.email}\nMidlertidig passord: ${value.temporary_password}`;
+  return <div className="credential-box"><div className="strong">Kontoen er opprettet</div>
+    <div className="cell-sub">Passordet vises bare nå. Del det sikkert og be brukeren velge nytt passord via «Glemt passord».</div>
+    <KV k="E-post" v={<span className="mono">{value.email}</span>} />
+    <KV k="Midlertidig passord" v={<span className="mono">{value.temporary_password}</span>} />
+    <Btn variant="sm" onClick={() => navigator.clipboard?.writeText(text)}>Kopier tilgang</Btn></div>;
+}
+
+function CreateDriverModal({ onClose, onCreated }: any) {
+  const fleets = useAsync(() => api.list('/admin/fleets-full', {}), []);
+  const [form, setForm] = useState<any>({ full_name: '', email: '', phone: '', fleet_id: '', car: '', plate: '', vehicle_type: 'ai-first', approved: true, temporary_password: '' });
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(''), [credentials, setCredentials] = useState<any>(null);
+  const field = (key: string) => (e: any) => setForm((v: any) => ({ ...v, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  const save = async () => {
+    setBusy(true); setErr('');
+    try { const r = await api.createDriver({ ...form, fleet_id: form.fleet_id || null, temporary_password: form.temporary_password || null }); setCredentials(r.credentials); onCreated(); }
+    catch (e: any) { setErr(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  return <Modal title="Registrer sjåfør" sub="Opprett konto, kjøretøy og eventuell løyvehaverkobling." onClose={busy ? () => {} : onClose}>
+    {credentials ? <><CredentialsResult value={credentials} /><Btn className="full" onClick={onClose}>Ferdig</Btn></> : <>
+      <ErrorBanner msg={err || fleets.err} />
+      <div className="form-grid"><label className="field"><span className="label">Fullt navn</span><input className="input" value={form.full_name} onChange={field('full_name')} /></label>
+        <label className="field"><span className="label">E-post</span><input className="input" type="email" value={form.email} onChange={field('email')} /></label>
+        <label className="field"><span className="label">Telefon</span><input className="input" value={form.phone} onChange={field('phone')} /></label>
+        <label className="field"><span className="label">Løyvehaver</span><select className="select" value={form.fleet_id} onChange={field('fleet_id')}><option value="">Ingen</option>{(fleets.data?.fleets || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+        <label className="field"><span className="label">Bilmodell</span><input className="input" value={form.car} onChange={field('car')} /></label>
+        <label className="field"><span className="label">Registreringsnummer</span><input className="input" value={form.plate} onChange={field('plate')} /></label>
+        <label className="field"><span className="label">Kjøretøyklasse</span><select className="select" value={form.vehicle_type} onChange={field('vehicle_type')}><option value="ai-first">Standard</option><option value="enkelt">Enkel</option><option value="trygg">Komfort</option><option value="premium">Premium</option></select></label>
+        <label className="field"><span className="label">Midlertidig passord (valgfritt)</span><input className="input" type="password" autoComplete="new-password" value={form.temporary_password} onChange={field('temporary_password')} placeholder="Genereres automatisk" /></label></div>
+      <label className="check-row"><input type="checkbox" checked={form.approved} onChange={field('approved')} /> Godkjenn sjåføren med en gang</label>
+      <div className="modal-actions"><Btn onClick={onClose}>Avbryt</Btn><Btn variant="primary" disabled={busy} onClick={save}>{busy ? 'Oppretter…' : 'Opprett sjåfør'}</Btn></div>
+    </>}
+  </Modal>;
 }
 
 /* ----------------------------- Customers ----------------------------- */
@@ -307,31 +394,76 @@ export function Customers() {
 
 /* ----------------------------- Fleets ----------------------------- */
 export function Fleets() {
-  const { data, loading, err } = useAsync(() => api.list('/admin/fleets-full', {}), []);
+  const [createOpen, setCreateOpen] = useState(false);
+  const { data, loading, err, reload } = useAsync(() => api.list('/admin/fleets-full', {}), []);
   const fleets = data?.fleets || data?.items || [];
+  const toggle = async (fleet: any) => {
+    try {
+      if (fleet.status === 'suspended') {
+        if (!window.confirm(`Aktivere ${fleet.name} igjen?`)) return;
+        await api.reactivateFleet(fleet.id);
+      } else {
+        const reason = window.prompt(`Begrunnelse for suspensjon av ${fleet.name}:`, 'Manuell vurdering');
+        if (reason === null) return;
+        await api.suspendFleet(fleet.id, reason);
+      }
+      reload();
+    } catch (e: any) { alert(apiError(e)); }
+  };
   return (
     <>
-      <PageHead title="Løyvehavere" sub={`${fleets.length} løyvehavere`} />
+      <PageHead title="Løyvehavere" sub={`${fleets.length} løyvehavere`}
+        right={<Btn variant="primary" onClick={() => setCreateOpen(true)}>+ Registrer løyvehaver</Btn>} />
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Selskap</th><th>Org.nr</th><th>Sjåfører</th><th>Provisjon</th><th className="right">Omsetning</th><th>Status</th></tr></thead>
+          <thead><tr><th>Selskap</th><th>Org.nr</th><th>Eier</th><th>Sjåfører</th><th>Provisjon</th><th className="right">Omsetning</th><th>Status</th><th className="right">Handling</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={6}><Loader /></td></tr> : fleets.length ? fleets.map((f: any) => (
+            {loading ? <tr><td colSpan={8}><Loader /></td></tr> : fleets.length ? fleets.map((f: any) => (
               <tr key={f.id}>
                 <td className="strong">{f.name}</td>
                 <td className="mono dim">{f.org_number || '—'}</td>
+                <td className="dim">{f.contact_email || f.owner_email || '—'}</td>
                 <td className="mono">{f.drivers ?? f.driver_count ?? '—'}</td>
                 <td className="mono">{f.commission_rate != null ? Math.round(f.commission_rate * 100) + '%' : '—'}</td>
                 <td className="right mono">{f.gmv != null ? fmtMoney(f.gmv) : (f.revenue != null ? fmtMoney(f.revenue) : '—')}</td>
                 <td><Pill status={f.status === 'suspended' ? 'cancelled' : 'completed'} label={f.status === 'suspended' ? 'Suspendert' : 'Aktiv'} /></td>
+                <td className="right"><Btn variant={`sm ${f.status === 'suspended' ? 'primary' : 'danger'}`} onClick={() => toggle(f)}>{f.status === 'suspended' ? 'Aktiver' : 'Suspender'}</Btn></td>
               </tr>
-            )) : <tr><td colSpan={6}><Empty title="Ingen løyvehavere" /></td></tr>}
+            )) : <tr><td colSpan={8}><Empty title="Ingen løyvehavere" /></td></tr>}
           </tbody>
         </table>
       </div>
+      {createOpen && <CreateFleetModal onClose={() => setCreateOpen(false)} onCreated={reload} />}
     </>
   );
+}
+
+function CreateFleetModal({ onClose, onCreated }: any) {
+  const [form, setForm] = useState<any>({ name: '', org_number: '', owner_name: '', owner_email: '', owner_phone: '', commission_rate: 20, temporary_password: '' });
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(''), [credentials, setCredentials] = useState<any>(null);
+  const field = (key: string) => (e: any) => setForm((v: any) => ({ ...v, [key]: e.target.value }));
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.createFleet({ ...form, commission_rate: Number(form.commission_rate) / 100, temporary_password: form.temporary_password || null });
+      setCredentials(r.credentials); onCreated();
+    } catch (e: any) { setErr(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  return <Modal title="Registrer løyvehaver" sub="Opprett selskap og eierkonto i samme operasjon." onClose={busy ? () => {} : onClose}>
+    {credentials ? <><CredentialsResult value={credentials} /><Btn className="full" onClick={onClose}>Ferdig</Btn></> : <>
+      <ErrorBanner msg={err} />
+      <div className="form-grid"><label className="field"><span className="label">Selskapsnavn</span><input className="input" value={form.name} onChange={field('name')} /></label>
+        <label className="field"><span className="label">Organisasjonsnummer</span><input className="input" inputMode="numeric" value={form.org_number} onChange={field('org_number')} /></label>
+        <label className="field"><span className="label">Løyvehavers navn</span><input className="input" value={form.owner_name} onChange={field('owner_name')} /></label>
+        <label className="field"><span className="label">E-post</span><input className="input" type="email" value={form.owner_email} onChange={field('owner_email')} /></label>
+        <label className="field"><span className="label">Telefon</span><input className="input" value={form.owner_phone} onChange={field('owner_phone')} /></label>
+        <label className="field"><span className="label">Provisjon (%)</span><input className="input" type="number" min="0" max="50" step="0.1" value={form.commission_rate} onChange={field('commission_rate')} /></label>
+        <label className="field"><span className="label">Midlertidig passord (valgfritt)</span><input className="input" type="password" autoComplete="new-password" value={form.temporary_password} onChange={field('temporary_password')} placeholder="Genereres automatisk" /></label></div>
+      <div className="modal-actions"><Btn onClick={onClose}>Avbryt</Btn><Btn variant="primary" disabled={busy} onClick={save}>{busy ? 'Oppretter…' : 'Opprett løyvehaver'}</Btn></div>
+    </>}
+  </Modal>;
 }
 
 /* ----------------------------- Vehicles ----------------------------- */
@@ -705,13 +837,20 @@ export function Settings() {
   const { user } = useAuth();
   const { data, loading, err, reload } = useAsync(() => api.list('/admin/settings', {}), []);
   const [comm, setComm] = useState('');
+  const [policy, setPolicy] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => { if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100))); }, [data]);
+  useEffect(() => {
+    if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
+    if (data?.driver_policy) setPolicy(data.driver_policy);
+  }, [data]);
   const isSuper = user?.role === 'superadmin';
+  const policyField = (key: string, number = true) => (e: any) => setPolicy((p: any) => ({
+    ...p, [key]: e.target.type === 'checkbox' ? e.target.checked : number ? Number(e.target.value) : e.target.value,
+  }));
   const save = async () => {
     setBusy(true); setMsg('');
-    try { await api.patchSettings({ default_commission: Number(comm) / 100 }); setMsg('Lagret'); reload(); }
+    try { await api.patchSettings({ default_commission: Number(comm) / 100, driver_policy: policy }); setMsg('Lagret'); reload(); }
     catch (e: any) { setMsg(apiError(e)); }
     finally { setBusy(false); }
   };
@@ -725,7 +864,7 @@ export function Settings() {
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
           <div className="field"><label className="label">Standard KJAPP-provisjon (%)</label>
             <input className="input" type="number" min="0" max="50" step="0.1" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
-          {isSuper ? <Btn variant="primary" onClick={save} disabled={busy || (status === "valid" && !viewed) || (status === "rejected" && !reason.trim())}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
+          {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
             : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre.</div>}
           {msg && <div style={{ marginTop: 10, color: 'var(--green)', fontSize: 13 }}>{msg}</div>}
         </Card>
@@ -737,6 +876,21 @@ export function Settings() {
           {!Object.keys(data?.features || {}).length && <div className="dim">Ingen funksjonsflagg.</div>}
         </Card>
       </div>
+      <div className="section-title">Kvalitetsregler for sjåfører</div>
+      <Card>
+        <div className="cell-sub" style={{ marginBottom: 14 }}>Reglene bruker minste datagrunnlag før en sjåfør flagges. Automatisk suspensjon kan slås på av superadmin; alle handlinger loggføres.</div>
+        {policy ? <div className="form-grid policy-grid">
+          <label className="field"><span className="label">Suspender under rating</span><input className="input" type="number" min="1" max="5" step="0.1" value={policy.minimum_rating} disabled={!isSuper} onChange={policyField('minimum_rating')} /></label>
+          <label className="field"><span className="label">Varsle under rating</span><input className="input" type="number" min="1" max="5" step="0.1" value={policy.warning_rating} disabled={!isSuper} onChange={policyField('warning_rating')} /></label>
+          <label className="field"><span className="label">Minste antall vurderinger</span><input className="input" type="number" min="1" value={policy.minimum_ratings} disabled={!isSuper} onChange={policyField('minimum_ratings')} /></label>
+          <label className="field"><span className="label">Inaktivitet før vurdering (dager)</span><input className="input" type="number" min="7" value={policy.inactivity_days} disabled={!isSuper} onChange={policyField('inactivity_days')} /></label>
+          <label className="field"><span className="label">Minste antall turtilbud</span><input className="input" type="number" min="1" value={policy.minimum_offers} disabled={!isSuper} onChange={policyField('minimum_offers')} /></label>
+          <label className="field"><span className="label">Minste akseptrate (%)</span><input className="input" type="number" min="0" max="100" value={policy.minimum_acceptance_rate} disabled={!isSuper} onChange={policyField('minimum_acceptance_rate')} /></label>
+          <label className="check-row"><input type="checkbox" checked={Boolean(policy.enabled)} disabled={!isSuper} onChange={policyField('enabled', false)} /> Kvalitetskontroll aktiv</label>
+          <label className="check-row"><input type="checkbox" checked={Boolean(policy.auto_suspend)} disabled={!isSuper} onChange={policyField('auto_suspend', false)} /> Automatisk suspensjon hver 6. time</label>
+        </div> : <Loader />}
+        {isSuper ? <Btn variant="primary" onClick={save} disabled={busy || !policy}>{busy ? 'Lagrer…' : 'Lagre regler'}</Btn> : null}
+      </Card>
       <div className="section-title">Kjøretøyklasser</div>
       <Card>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>

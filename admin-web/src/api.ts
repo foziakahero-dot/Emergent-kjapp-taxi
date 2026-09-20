@@ -61,8 +61,15 @@ export const api = {
 
   list: (path: string, params: any) => http.get(path, { params }).then((r) => r.data),
   timeline: (id: string) => http.get(`/admin/trips/${id}/timeline`).then((r) => r.data),
-  setDriverStatus: (id: string, approved: boolean) =>
-    http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
+  setDriverStatus: (id: string, approved: boolean, reason?: string) =>
+    http.post(`/admin/drivers/${id}/set-status`, { approved, reason }).then((r) => r.data),
+  createDriver: (body: any) => http.post('/admin/drivers/manual', body).then((r) => r.data),
+  createFleet: (body: any) => http.post('/admin/fleets/manual', body).then((r) => r.data),
+  suspendFleet: (id: string, reason: string) => http.post(`/admin/fleets/${id}/suspend`, { reason }).then((r) => r.data),
+  reactivateFleet: (id: string) => http.post(`/admin/fleets/${id}/reactivate`).then((r) => r.data),
+  driverQuality: () => http.get('/admin/driver-quality').then((r) => r.data),
+  runDriverQuality: (apply_suspensions = false) =>
+    http.post('/admin/driver-quality/run', { apply_suspensions }).then((r) => r.data),
   reviewDoc: (id: string, body: any) =>
     http.post(`/admin/documents/${id}/review`, body).then((r) => r.data),
   refund: (body: any) => http.post('/admin/refunds', body).then((r) => r.data),
