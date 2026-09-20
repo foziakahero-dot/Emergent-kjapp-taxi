@@ -25,19 +25,39 @@ function NativeRuntimeBridge() {
   }, [user?.id, user?.role]);
 
   useEffect(() => {
+    const role = user?.role;
+    const isCustomer = !!user && (!role || role === 'user' || role === 'customer');
+    if (!isCustomer) return;
+
+    let active = true;
+    let sub: { remove: () => void } | undefined;
+
     const open = (notification?: Notifications.Notification | null) => {
       const target = normalizeCustomerNotificationUrl(notification?.request.content.data?.url);
       if (target) router.push(target as any);
     };
 
-    const last = Notifications.getLastNotificationResponse();
-    if (last?.notification) open(last.notification);
+    const init = async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (active && last?.notification) open(last.notification);
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      open(response.notification);
-    });
-    return () => sub.remove();
-  }, []);
+        if (!active) return;
+        sub = Notifications.addNotificationResponseReceivedListener((response) => {
+          open(response.notification);
+        });
+      } catch {
+        // Push/deep-link initialization must never terminate the customer app.
+      }
+    };
+
+    void init();
+
+    return () => {
+      active = false;
+      sub?.remove();
+    };
+  }, [user?.id, user?.role]);
 
   return null;
 }
