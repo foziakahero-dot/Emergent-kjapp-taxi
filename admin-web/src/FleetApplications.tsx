@@ -3,7 +3,7 @@ import { api, apiError } from './api';
 import { useAuth } from './auth';
 import { Btn, Card, Drawer, Empty, ErrorBanner, KV, Loader, PageHead, Pill, fmtDate } from './ui';
 
-const FIXED_COMMISSION = 0.12;
+const FIXED_COMMISSION = 0.10;
 
 const DOC_LABELS: Record<string, string> = {
   firmaattest: 'Firmaattest',
@@ -143,7 +143,7 @@ export default function FleetApplications() {
           <div>
             <div className="section-title" style={{ margin: 0 }}>Fast partnerprovisjon</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-              Nye godkjente løyvehavere opprettes med KJAPP-provisjon på 12 %.
+              Nye godkjente løyvehavere opprettes med KJAPP-serviceavgift på 10 %.
             </div>
           </div>
           <div className="mono" style={{ fontSize: 26, color: 'var(--gold)', fontWeight: 700 }}>
@@ -198,6 +198,8 @@ export default function FleetApplications() {
             <KV k="Kontaktperson" v={selected.contact_name || '—'} />
             <KV k="E-post" v={selected.contact_email || '—'} />
             <KV k="Telefon" v={selected.contact_phone || '—'} />
+            <KV k="Antall løyver" v={selected.license_count ?? '—'} />
+            <KV k="Antall biler" v={selected.vehicle_count ?? '—'} />
             <KV k="Bankkonto" v={selected.bank_account || '—'} />
           </Card>
 
@@ -236,7 +238,7 @@ export default function FleetApplications() {
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>KJAPP-provisjon ved godkjenning</div>
                     <div style={{ marginTop: 4, fontWeight: 700 }}>Fast onboarding-sats</div>
                   </div>
-                  <div className="mono" style={{ fontSize: 24, color: 'var(--gold)', fontWeight: 700 }}>12%</div>
+                  <div className="mono" style={{ fontSize: 24, color: 'var(--gold)', fontWeight: 700 }}>10%</div>
                 </div>
 
                 <textarea
