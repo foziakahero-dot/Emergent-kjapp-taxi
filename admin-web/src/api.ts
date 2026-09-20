@@ -3,11 +3,13 @@ import axios from 'axios';
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://github-app-builder-28.emergent.host/api';
-const isProductionAdminHost = window.location.hostname === 'admin.kjappapp.no';
+const host = window.location.hostname;
+const isProductionAdminHost = host === 'admin.kjappapp.no';
+const isVercelPreviewHost = host.endsWith('.vercel.app');
 
-// Production can call the Emergent backend directly (CORS is allowlisted there).
-// Local/staging can still override VITE_API_BASE; otherwise use the same-origin /api proxy.
-export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : window.location.origin + '/api');
+// Production uses the production API directly. Vercel previews are intentionally isolated:
+// they can only talk to an API when VITE_API_BASE is explicitly configured (e.g. staging).
+export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
 export const TOKEN_KEY = 'kjapp_admin_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 20000 });
