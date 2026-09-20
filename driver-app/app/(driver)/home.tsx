@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -8,7 +8,7 @@ import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
-import { driverApi } from '@/src/lib/api';
+import { driverApi, safetyApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 
 type Loc = { lat: number; lng: number; heading?: number };
@@ -168,6 +168,17 @@ export default function DriverHome() {
     finally { setBusy(false); }
   };
 
+  const emergency = async () => {
+    if (!current) return;
+    try {
+      await safetyApi.log(current.trip_id, {
+        kind: 'emergency',
+        ...(loc ? { lat: loc.lat, lng: loc.lng } : {}),
+      });
+    } catch {}
+    Linking.openURL('tel:112').catch(() => {});
+  };
+
   const actionLabel =
     current?.status === 'driver_on_way' ? 'Jeg er fremme'
     : current?.status === 'at_pickup' ? 'Start turen'
@@ -264,6 +275,10 @@ export default function DriverHome() {
                 </Pressable>
               ) : null}
             </View>
+            <Pressable style={s.driverSafetyBtn} onPress={emergency} testID="driver-safety-112">
+              <Icon name="shield" size={16} color={colors.danger} />
+              <Text style={s.driverSafetyText}>Sikkerhet · Ring 112</Text>
+            </Pressable>
           </View>
         ) : firstOffer && online ? (
           <View testID={`driver-offer-${firstOffer.trip_id}`}>
@@ -400,6 +415,8 @@ const useStyles = makeStyles((c) => ({
     borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
   },
   msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  driverSafetyBtn: { height: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
   action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
   offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
