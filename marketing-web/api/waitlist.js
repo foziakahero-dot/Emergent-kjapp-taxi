@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 const ALLOWED_ROLES = new Set(['passenger', 'driver', 'fleet_owner']);
 
 function send(res, status, body) {
@@ -29,62 +27,54 @@ export default async function handler(req, res) {
   const email = typeof fields.email === 'string' ? fields.email.trim().toLowerCase() : '';
   const city = typeof fields.city === 'string' ? fields.city.trim() : '';
   const role = String(fields.role || '');
+  const website = typeof fields.website === 'string' ? fields.website.trim() : '';
 
   if (
     name.length < 2 || name.length > 100 ||
     !/^[+\d ()-]{8,30}$/.test(phone) ||
     city.length < 2 || city.length > 100 ||
     !ALLOWED_ROLES.has(role) ||
+    website.length > 200 ||
     (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))
   ) {
     return send(res, 400, { error: 'Kontroller feltene og prøv igjen.' });
   }
 
-  const endpoint = process.env.WAITLIST_WEBHOOK_URL;
-  const secret = process.env.WAITLIST_WEBHOOK_SECRET;
-  if (!endpoint || !secret) {
+  const apiBase = (process.env.KJAPP_API_BASE_URL || 'https://github-app-builder-28.emergent.host/api').replace(/\/$/, '');
+  let endpoint;
+  try {
+    endpoint = new URL(`${apiBase}/marketing/waitlist`);
+  } catch {
     return send(res, 503, { error: 'Ventelisten er ikke tilgjengelig akkurat nå. Kontakt support@kjappapp.no.' });
   }
-
-  let url;
-  try {
-    url = new URL(endpoint);
-  } catch {
-    return send(res, 503, { error: 'Ventelisten er ikke tilgjengelig akkurat nå.' });
+  if (endpoint.protocol !== 'https:') {
+    return send(res, 503, { error: 'Ventelisten er ikke tilgjengelig akkurat nå. Kontakt support@kjappapp.no.' });
   }
-  if (url.protocol !== 'https:') return send(res, 503, { error: 'Ventelisten er ikke tilgjengelig akkurat nå.' });
-
-  const normalizedIdentity = [role, phone.replace(/\s+/g, ''), email, city.toLowerCase()].join('|');
-  const idempotencyKey = crypto.createHash('sha256').update(normalizedIdentity).digest('hex');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${secret}`,
-        'Idempotency-Key': idempotencyKey,
         'X-KJAPP-Source': 'kjappapp.no',
       },
-      body: JSON.stringify({
-        name,
-        phone,
-        email,
-        city,
-        role,
-        source: 'kjappapp.no',
-        submitted_at: new Date().toISOString(),
-      }),
+      body: JSON.stringify({ name, phone, email, city, role, website }),
       signal: controller.signal,
     });
 
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      return send(res, 502, { error: 'Påmeldingen kunne ikke lagres. Prøv igjen senere.' });
+      const safeMessage =
+        response.status === 429 && typeof data?.detail === 'string'
+          ? data.detail
+          : 'Påmeldingen kunne ikke lagres. Prøv igjen senere.';
+      return send(res, response.status === 429 ? 429 : 502, { error: safeMessage });
     }
-    return send(res, 201, { ok: true });
+
+    return send(res, 201, { ok: true, status: 'registered' });
   } catch {
     return send(res, 502, { error: 'Påmeldingen kunne ikke lagres. Prøv igjen senere.' });
   } finally {
