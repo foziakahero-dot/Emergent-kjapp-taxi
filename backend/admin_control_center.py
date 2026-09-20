@@ -304,7 +304,7 @@ def install_admin_control_center(
                 "name": fleet.get("name"),
                 "org_number": fleet.get("org_number"),
                 "owner_email": (owner or {}).get("email"),
-                "commission_rate": fleet.get("commission_rate", 0.12),
+                "commission_rate": fleet.get("commission_rate", 0.10),
                 "stripe_account_id": fleet.get("stripe_account_id"),
                 "stripe_connect_status": fleet.get("stripe_connect_status", "not_connected"),
                 "details_submitted": fleet.get("stripe_details_submitted", False),
