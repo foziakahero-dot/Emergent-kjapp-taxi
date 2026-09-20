@@ -14,6 +14,7 @@ type FormState = {
   phone: string;
   city: string;
   role: BetaRole;
+  website: string;
 };
 
 const initialForm: FormState = {
@@ -22,6 +23,7 @@ const initialForm: FormState = {
   phone: '',
   city: 'Oslo',
   role: 'passenger',
+  website: '',
 };
 
 function validate(form: FormState) {
@@ -108,6 +110,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
           phone: form.phone.trim(),
           city: form.city.trim(),
           role: form.role,
+          website: form.website,
         }),
       });
 
@@ -205,6 +208,16 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
                 <option value="driver">Sjåfør</option>
                 <option value="fleet_owner">Løyvehaver / flåte</option>
               </select>
+            </label>
+            <label className="mk-beta-honeypot" aria-hidden="true">
+              <span>Nettside</span>
+              <input
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={form.website}
+                onChange={(event) => setForm({ ...form, website: event.target.value })}
+              />
             </label>
 
             {message && (
