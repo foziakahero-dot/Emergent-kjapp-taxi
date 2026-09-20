@@ -306,9 +306,16 @@ export default function Home() {
             </ScrollView>
 
             <View style={s.summary} testID="booking-price-summary">
-              <Text style={s.summaryLeft}>
-                {estimate ? `${estimate.distance_km} km · estimert kjøretid ${estimate.duration_min} min` : 'Beregner rute…'}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.summaryLeft}>
+                  {estimate ? `${estimate.distance_km} km · estimert kjøretid ${estimate.duration_min} min` : 'Beregner rute…'}
+                </Text>
+                {estimate?.commission_rate != null ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }} testID="booking-service-fee">
+                    KJAPP serviceavgift {Math.round(Number(estimate.commission_rate) * 100)} % · inkludert i vist totalpris
+                  </Text>
+                ) : null}
+              </View>
               <Text style={s.summaryPrice}>{kr(priceFor(selType))}</Text>
             </View>
 
