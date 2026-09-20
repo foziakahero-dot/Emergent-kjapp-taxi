@@ -61,6 +61,8 @@ export const api = {
   timeline: (id: string) => http.get(`/admin/trips/${id}/timeline`).then((r) => r.data),
   setDriverStatus: (id: string, approved: boolean) =>
     http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
+  setUserStatus: (id: string, disabled: boolean, reason = '') =>
+    http.post(`/admin/users/${id}/set-status`, { disabled, reason }).then((r) => r.data),
   reviewDoc: (id: string, body: any) =>
     http.post(`/admin/documents/${id}/review`, body).then((r) => r.data),
   refund: (body: any) => http.post('/admin/refunds', body).then((r) => r.data),
