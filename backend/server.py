@@ -6057,6 +6057,17 @@ DEFAULT_PLATFORM_SETTINGS = {
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
     "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+    "compliance": {
+        "legal_review_completed": False,
+        "transport_requirements_verified": False,
+        "commercial_insurance_verified": False,
+        "privacy_notice_approved": False,
+        "terms_approved": False,
+        "processor_agreements_verified": False,
+        "tax_vat_reporting_verified": False,
+        "accessibility_review_completed": False,
+        "backup_restore_test_completed": False,
+    },
 }
 
 
@@ -6065,6 +6076,7 @@ class PlatformSettingsUpdate(BaseModel):
     pricing: Optional[dict] = None
     ride_classes: Optional[dict] = None
     features: Optional[dict] = None
+    compliance: Optional[dict] = None
 
 
 def _validate_pricing(p: dict):
@@ -6125,6 +6137,14 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         sets["pricing"] = next_pricing
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
     if body.features is not None: sets["features"] = body.features
+    if body.compliance is not None:
+        allowed = set(DEFAULT_PLATFORM_SETTINGS["compliance"].keys())
+        unknown = set(body.compliance.keys()) - allowed
+        if unknown:
+            raise HTTPException(400, f"Ukjente beta-gates: {', '.join(sorted(unknown))}")
+        if any(not isinstance(v, bool) for v in body.compliance.values()):
+            raise HTTPException(400, "Beta-gates må være true/false")
+        sets["compliance"] = {**DEFAULT_PLATFORM_SETTINGS["compliance"], **body.compliance}
     if not sets: return {"ok": True}
     sets["updated_at"] = datetime.now(timezone.utc).isoformat()
     if "pricing" in sets or "default_commission" in sets:
@@ -6249,6 +6269,7 @@ async def admin_beta_readiness(current=Depends(require_admin)):
     """Operational code/config readiness only; legal/insurance approvals still require human verification."""
     settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
     pricing = {**DEFAULT_PRICING, **(settings.get("pricing") or {})}
+    compliance = {**DEFAULT_PLATFORM_SETTINGS["compliance"], **(settings.get("compliance") or {})}
     pending_driver_docs = await db.users.count_documents({
         "role": "driver",
         "$or": [{"approved": False}, {"approved": {"$exists": False}}],
@@ -6266,14 +6287,30 @@ async def admin_beta_readiness(current=Depends(require_admin)):
         "pending_driver_approvals": pending_driver_docs,
         "open_support_tickets": open_support,
         "failed_payments": failed_payments,
+        "compliance": compliance,
     }
     blockers = []
     if IS_PRODUCTION and not checks["stripe_configured"]: blockers.append("Stripe/webhook er ikke fullt konfigurert")
     if not checks["admin_2fa_enabled"]: blockers.append("Innlogget admin har ikke aktivert 2FA")
     if pending_driver_docs: blockers.append(f"{pending_driver_docs} sjåførkonto(er) venter på godkjenning")
     if failed_payments: blockers.append(f"{failed_payments} betaling(er) har feilet")
+    gate_labels = {
+        "legal_review_completed": "Juridisk gjennomgang er ikke bekreftet",
+        "transport_requirements_verified": "Transport-/løyvekrav er ikke bekreftet",
+        "commercial_insurance_verified": "Kommersiell forsikring er ikke bekreftet",
+        "privacy_notice_approved": "Personvernerklæring er ikke godkjent",
+        "terms_approved": "Bruker-/sjåførvilkår er ikke godkjent",
+        "processor_agreements_verified": "Databehandleravtaler er ikke bekreftet",
+        "tax_vat_reporting_verified": "Skatt/MVA/rapportering er ikke bekreftet",
+        "accessibility_review_completed": "Tilgjengelighetsgjennomgang er ikke bekreftet",
+        "backup_restore_test_completed": "Backup-gjenoppretting er ikke testet",
+    }
+    for key, label in gate_labels.items():
+        if not compliance.get(key):
+            blockers.append(label)
     return {"generated_at": datetime.now(timezone.utc).isoformat(), "checks": checks, "blockers": blockers,
-            "note": "Dette er teknisk driftsstatus, ikke juridisk godkjenning."}
+            "ready": not blockers,
+            "note": "Manuelle gates er eksplisitte operatørbekreftelser; systemet hevder ikke juridisk godkjenning på egen hånd."}
 
 
 @api.get("/admin/fleets/{fleet_id}")
