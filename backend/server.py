@@ -461,6 +461,15 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class TripStop(BaseModel):
+    address: str = Field(min_length=1, max_length=200)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+SpecialNeed = Literal["wheelchair", "large_luggage", "pet", "hearing_impaired", "visual_impaired", "child_seat"]
+
+
 class TripRequest(BaseModel):
     pickup_address: str
     pickup_lat: float
@@ -469,6 +478,9 @@ class TripRequest(BaseModel):
     dropoff_lat: float
     dropoff_lng: float
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    stops: List[TripStop] = Field(default_factory=list, max_length=3)
+    special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
+    note: Optional[str] = Field(default=None, max_length=500)
 
 
 class RateTripRequest(BaseModel):
@@ -501,6 +513,14 @@ class EstimateRequest(BaseModel):
     pickup_lng: float
     dropoff_lat: float
     dropoff_lng: float
+    stops: List[TripStop] = Field(default_factory=list, max_length=3)
+
+
+class TripDestinationUpdate(BaseModel):
+    dropoff_address: str = Field(min_length=1, max_length=200)
+    dropoff_lat: float = Field(ge=-90, le=90)
+    dropoff_lng: float = Field(ge=-180, le=180)
+    stops: List[TripStop] = Field(default_factory=list, max_length=3)
 
 
 class SettingsUpdate(BaseModel):
@@ -544,6 +564,36 @@ async def osrm_route(plat, plng, dlat, dlng):
             }
     except Exception:
         return None
+
+
+async def osrm_route_points(points: list[tuple[float, float]]):
+    """Route through pickup, optional stops and destination. Points are (lat, lng)."""
+    if len(points) < 2:
+        return None
+    coords = ";".join(f"{lng},{lat}" for lat, lng in points)
+    url = f"https://router.project-osrm.org/route/v1/driving/{coords}"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(url, params={"overview": "full", "geometries": "geojson"})
+            data = r.json()
+            if data.get("code") != "Ok" or not data.get("routes"):
+                return None
+            route = data["routes"][0]
+            return {
+                "distance_km": round(route["distance"] / 1000.0, 2),
+                "duration_min": max(1, int(round(route["duration"] / 60.0))),
+                "geometry": route["geometry"],
+            }
+    except Exception:
+        return None
+
+
+def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int]:
+    distance = 0.0
+    for idx in range(len(points) - 1):
+        distance += haversine_km(points[idx][0], points[idx][1], points[idx + 1][0], points[idx + 1][1])
+    distance = round(distance, 1)
+    return distance, max(3, int(distance * 2.2))
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
@@ -624,7 +674,7 @@ def _legacy_surge_multiplier(when: datetime = None) -> float:
     return surge
 
 
-def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None) -> dict:
+def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0) -> dict:
     """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
     cfg = {**DEFAULT_PRICING, **(pricing or {})}
     vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
@@ -645,8 +695,14 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
     if surge_cfg.get("enabled"):
         surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
         surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
-    total = max(minimum, base * surge)
-    return {"price": int(round(total)), "surge_multiplier": round(surge, 2), "pricing_version": int(cfg.get("version", 1))}
+    stop_fee = max(0, int(stops_count)) * float(cfg.get("extra_stop_fee", 0) or 0)
+    total = max(minimum, base * surge + stop_fee)
+    return {
+        "price": int(round(total)),
+        "surge_multiplier": round(surge, 2),
+        "pricing_version": int(cfg.get("version", 1)),
+        "extra_stop_fee_total": int(round(stop_fee)),
+    }
 
 
 async def active_pricing() -> dict:
@@ -1261,23 +1317,25 @@ async def search_places(q: str, limit: int = 8):
 
 @api.post("/trips/estimate")
 async def trip_estimate(body: EstimateRequest):
-    route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
+    points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
+    route = await osrm_route_points(points)
     if route:
         est = route["distance_km"]
         duration = route["duration_min"]
         geometry = route["geometry"]
     else:
-        est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
-        duration = max(3, int(est * 2.2))
+        est, duration = fallback_route_points(points)
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
     for vt in ("ai-first", "enkelt", "trygg", "premium"):
-        quote = calculate_price(est, vt, duration, effective_pricing)
+        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
-                        "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"]})
+                        "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
+                        "extra_stop_fee_total": quote["extra_stop_fee_total"]})
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
+            "stops": [s.model_dump() for s in body.stops],
             "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
@@ -1599,18 +1657,18 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     if verified_count == 0:
         raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
     trip_id = str(uuid.uuid4())
-    route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
+    points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
+    route = await osrm_route_points(points)
     if route:
         est = route["distance_km"]
         eta_min = route["duration_min"]
         geometry = route["geometry"]
     else:
-        est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
-        eta_min = max(3, int(est * 2.2))
+        est, eta_min = fallback_route_points(points)
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
-    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing)
+    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
     commission_rate = await _platform_commission()
     price = quote["price"]
     trip = {
@@ -1622,6 +1680,9 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "dropoff_address": body.dropoff_address,
         "dropoff_lat": body.dropoff_lat,
         "dropoff_lng": body.dropoff_lng,
+        "stops": [s.model_dump() for s in body.stops],
+        "special_needs": list(dict.fromkeys(body.special_needs)),
+        "passenger_note": (body.note or "").strip() or None,
         "vehicle_type": body.vehicle_type,
         "distance_km": est,
         "duration_min": eta_min,
@@ -1631,6 +1692,7 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "pricing_snapshot": effective_pricing,
         "commission_rate": commission_rate,
         "surge_multiplier": quote["surge_multiplier"],
+        "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "searching",
         "driver_id": None,
@@ -1669,6 +1731,53 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
+
+
+@api.patch("/trips/{trip_id}/destination")
+async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(get_current_user)):
+    """Change destination/stops while the ride is active, using the price snapshot captured at booking."""
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Tur ikke funnet")
+    if trip.get("status") not in ("driver_on_way", "at_pickup", "in_trip"):
+        raise HTTPException(400, "Destinasjonen kan bare endres på en aktiv tur")
+    points = [(trip["pickup_lat"], trip["pickup_lng"])] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
+    route = await osrm_route_points(points)
+    if route:
+        distance_km, duration_min, geometry = route["distance_km"], route["duration_min"], route["geometry"]
+    else:
+        distance_km, duration_min = fallback_route_points(points)
+        geometry = None
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
+    previous = {
+        "dropoff_address": trip.get("dropoff_address"), "dropoff_lat": trip.get("dropoff_lat"),
+        "dropoff_lng": trip.get("dropoff_lng"), "stops": trip.get("stops") or [], "price": trip.get("price"),
+    }
+    now_iso = datetime.now(timezone.utc).isoformat()
+    revision = {
+        "changed_at": now_iso, "changed_by": current["id"], "previous": previous,
+        "new": {"dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat,
+                "dropoff_lng": body.dropoff_lng, "stops": [s.model_dump() for s in body.stops],
+                "price": quote["price"]},
+    }
+    await db.trips.update_one(
+        {"trip_id": trip_id, "user_id": current["id"]},
+        {"$set": {
+            "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
+            "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
+            "geometry": geometry, "price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
+            "extra_stop_fee_total": quote["extra_stop_fee_total"], "updated_at": now_iso,
+        }, "$push": {"destination_revisions": revision}},
+    )
+    if trip.get("driver_id"):
+        await send_push_to_user(trip["driver_id"], "Destinasjonen er endret",
+                                f"Ny destinasjon: {body.dropoff_address}. Ny avtalt pris: {quote['price']} kr.", "/driver/trip")
+    return {
+        "ok": True, "price": quote["price"], "previous_price": trip.get("price"),
+        "distance_km": distance_km, "duration_min": duration_min,
+        "pricing_version": quote["pricing_version"], "stops": [s.model_dump() for s in body.stops],
+    }
 
 
 @api.post("/trips/{trip_id}/complete")
