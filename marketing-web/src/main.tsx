@@ -46,8 +46,8 @@ function RouteMetadata() {
     }
 
     setPageSeo({
-      title: 'KJAPP — Norsk taxi, uten omveier',
-      description: 'Bestill norsk taxi med tekst eller stemme. Velg KJAPP, KJAPP XL eller Premium, se prisestimat og hentetid før du bekrefter, og følg bilen live.',
+      title: 'KJAPP – Reis smart',
+      description: 'KJAPP er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.',
       canonical: 'https://kjappapp.no/',
     });
   }, [pathname]);
