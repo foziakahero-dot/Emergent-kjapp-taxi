@@ -3283,7 +3283,7 @@ class FleetCreateRequest(BaseModel):
     name: str
     org_number: Optional[str] = ""
     owner_email: str
-    commission_rate: float = 0.20
+    commission_rate: float = 0.10
 
 
 @api.post("/admin/fleets")
@@ -3425,7 +3425,7 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
                 today_gross += price; today_trips += 1
     online_count = await db.users.count_documents({"role": "driver", "fleet_id": fid, "online": True})
     fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = float(fleet.get("commission_rate", 0.20))
+    commission = float(fleet.get("commission_rate", 0.10))
     return {
         "drivers_total": len(drivers_ids),
         "drivers_online": online_count,
