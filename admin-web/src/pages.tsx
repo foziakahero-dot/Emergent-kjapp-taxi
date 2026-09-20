@@ -158,7 +158,7 @@ export function Trips() {
   const [page, setPage] = useState(1);
   const [sel, setSel] = useState<any>(null);
   useEffect(() => { setPage(1); }, [status, q, df, dt, pay]);
-  const { rows, total, totalPages, loading, err } = usePaged('/admin/trips-full',
+  const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/trips-full',
     { status, q, date_from: df, date_to: dt, payment_status: pay, page, page_size: PAGE });
 
   return (
@@ -197,14 +197,69 @@ export function Trips() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
-      {sel && <TripDrawer trip={sel} onClose={() => setSel(null)} />}
+      {sel && <TripDrawer trip={sel} onClose={() => setSel(null)} onChanged={async () => { await reload(); setSel(null); }} />}
     </>
   );
 }
 
-function TripDrawer({ trip, onClose }: any) {
+function TripDrawer({ trip, onClose, onChanged }: any) {
   const tl = useAsync(() => api.timeline(trip.trip_id), [trip.trip_id]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
   const ev = tl.data?.events || [];
+  const active = ['searching','booking','driver_on_way','at_pickup','in_trip'].includes(trip.status);
+  const canRelease = ['driver_on_way','at_pickup'].includes(trip.status) && !!trip.driver_name;
+  const isPaid = ['paid','captured'].includes(String(trip.payment_status || '').toLowerCase());
+
+  const intervene = async (action: 'cancel_active' | 'release_driver' | 'adjust_price') => {
+    const labels: Record<string,string> = {
+      cancel_active: 'avbryte turen',
+      release_driver: 'frigjøre sjåføren og søke på nytt',
+      adjust_price: 'justere turprisen',
+    };
+    let price: number | undefined;
+    if (action === 'adjust_price') {
+      const raw = window.prompt('Ny turpris i kroner:', String(trip.price ?? ''));
+      if (raw == null) return;
+      price = Number(raw);
+      if (!Number.isFinite(price) || price < 0 || price > 100000) {
+        window.alert('Oppgi en gyldig pris mellom 0 og 100 000 kr.');
+        return;
+      }
+    }
+    const reason = window.prompt(`Begrunnelse for å ${labels[action]} (lagres i revisjonsloggen):`, '') || '';
+    if (reason.trim().length < 3) return;
+    if (!window.confirm(`Bekreft: ${labels[action]}?`)) return;
+    setBusy(true); setMsg('');
+    try {
+      await api.interveneTrip(trip.trip_id, { action, reason: reason.trim(), ...(price != null ? { price: Math.round(price) } : {}) });
+      setMsg('Operatørhandlingen er gjennomført og logget.');
+      await onChanged?.();
+    } catch (e: any) {
+      setMsg(apiError(e));
+    } finally { setBusy(false); }
+  };
+
+  const refund = async () => {
+    const raw = window.prompt('Beløp som skal refunderes i kroner (tomt = maksimalt tilgjengelig):', '');
+    if (raw == null) return;
+    const amount = raw.trim() ? Number(raw) : undefined;
+    if (amount != null && (!Number.isFinite(amount) || amount <= 0 || amount > Number(trip.price || 0))) {
+      window.alert('Oppgi et gyldig refusjonsbeløp.');
+      return;
+    }
+    const reason = window.prompt('Begrunnelse for refundering (lagres i revisjonsloggen):', '') || '';
+    if (reason.trim().length < 3) return;
+    if (!window.confirm('Bekreft refundering?')) return;
+    setBusy(true); setMsg('');
+    try {
+      await api.refund({ trip_id: trip.trip_id, ...(amount != null ? { amount: Math.round(amount) } : {}), reason: reason.trim() });
+      setMsg('Refunderingen er registrert.');
+      await onChanged?.();
+    } catch (e: any) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <Drawer title={`Tur ${String(trip.trip_id).slice(0, 8)}`} onClose={onClose}>
       <div style={{ marginBottom: 14 }}><Pill status={trip.status} /></div>
@@ -216,8 +271,27 @@ function TripDrawer({ trip, onClose }: any) {
       <KV k="Sjåfør" v={trip.driver_name ? `${trip.driver_name} · ${trip.driver_car || ''} ${trip.driver_plate || ''}` : '—'} />
       <KV k="Betaling" v={<Pill status={trip.payment_status || 'pending'} />} />
       <KV k="Kjøretøyklasse" v={trip.vehicle_type} />
+      <KV k="Prisversjon" v={trip.pricing_version ?? '—'} />
+      <KV k="Serviceavgift" v={trip.commission_rate != null ? `${Math.round(Number(trip.commission_rate) * 1000) / 10}%` : '—'} />
+      {!!trip.special_needs?.length && <KV k="Spesielle behov" v={trip.special_needs.join(' · ')} />}
+      {!!trip.stops?.length && <KV k="Ekstra stopp" v={String(trip.stops.length)} />}
       <KV k="Vurdering" v={trip.passenger_rating ? `${trip.passenger_rating} ★` : '—'} />
       <KV k="Opprettet" v={fmtDate(trip.created_at)} />
+
+      <div className="section-title">Operatørkontroll</div>
+      <Card style={{ marginBottom: 16 }}>
+        <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>
+          Handlinger logges i revisjonsloggen. Betalte turer kan ikke få omskrevet pris; bruk refundering.
+        </div>
+        {trip.requires_manual_settlement ? <div className="error-banner" style={{ marginBottom: 10 }}>Denne turen krever manuelt oppgjør etter avbrudd.</div> : null}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {canRelease ? <Btn disabled={busy} onClick={() => intervene('release_driver')}>Finn ny sjåfør</Btn> : null}
+          {active ? <Btn variant="danger" disabled={busy} onClick={() => intervene('cancel_active')}>Avbryt tur</Btn> : null}
+          {!isPaid ? <Btn disabled={busy} onClick={() => intervene('adjust_price')}>Juster pris</Btn> : null}
+          {isPaid ? <Btn disabled={busy} onClick={refund}>Refunder</Btn> : null}
+        </div>
+        {msg ? <div className={msg.includes('gjennomført') || msg.includes('registrert') ? 'ok-banner' : 'error-banner'} style={{ marginTop: 10 }}>{msg}</div> : null}
+      </Card>
 
       <div className="section-title">Hendelsesforløp</div>
       {tl.loading ? <Loader /> : ev.length ? (
@@ -250,6 +324,13 @@ export function Drivers() {
     try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(e?.response?.data?.detail || 'Feil'); }
   };
 
+  const toggleCapability = async (d: any, capability: 'wheelchair' | 'child_seat') => {
+    const current = Array.isArray(d.capabilities) ? d.capabilities : [];
+    const next = current.includes(capability) ? current.filter((x: string) => x !== capability) : [...current, capability];
+    try { await api.setDriverCapabilities(d.id, next); await reload(); }
+    catch (e: any) { window.alert(apiError(e)); }
+  };
+
   return (
     <>
       <PageHead title="Sjåfører" sub={`${total} sjåfører`} />
@@ -263,12 +344,22 @@ export function Drivers() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Status</th><th className="right">Handling</th></tr></thead>
+          <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Utstyr</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Status</th><th className="right">Handling</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
+            {loading ? <tr><td colSpan={8}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
                 <td><div className="strong">{d.name}</div><div className="cell-sub">{d.email}</div></td>
                 <td>{d.car || '—'} <span className="dim mono">{d.plate}</span></td>
+                <td>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Btn variant="sm" onClick={() => toggleCapability(d, 'wheelchair')}>
+                      {(d.capabilities || []).includes('wheelchair') ? '✓ Rullestol' : '+ Rullestol'}
+                    </Btn>
+                    <Btn variant="sm" onClick={() => toggleCapability(d, 'child_seat')}>
+                      {(d.capabilities || []).includes('child_seat') ? '✓ Barnesete' : '+ Barnesete'}
+                    </Btn>
+                  </div>
+                </td>
                 <td className="dim">{d.fleet_name || '—'}</td>
                 <td className="mono">{d.trips_completed ?? d.completed ?? 0}</td>
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
@@ -279,7 +370,7 @@ export function Drivers() {
                   </Btn>
                 </td>
               </tr>
-            )) : <tr><td colSpan={7}><Empty title="Ingen sjåfører" /></td></tr>}
+            )) : <tr><td colSpan={8}><Empty title="Ingen sjåfører" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
