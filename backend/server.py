@@ -346,7 +346,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
-    "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status",
+    "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
 })
 
 
@@ -469,6 +469,16 @@ class TripStop(BaseModel):
 
 
 SpecialNeed = Literal["wheelchair", "large_luggage", "pet", "hearing_impaired", "visual_impaired", "child_seat"]
+EQUIPMENT_SPECIAL_NEEDS = {"wheelchair", "child_seat"}
+
+
+def _required_driver_capabilities(special_needs) -> list[str]:
+    return sorted({str(x) for x in (special_needs or []) if str(x) in EQUIPMENT_SPECIAL_NEEDS})
+
+
+def _driver_supports_special_needs(driver: dict, special_needs) -> bool:
+    required = set(_required_driver_capabilities(special_needs))
+    return not required or required.issubset(set(driver.get("capabilities") or []))
 
 
 class TripRequest(BaseModel):
@@ -2611,13 +2621,15 @@ ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
-async def _dispatch_candidates(lat: float, lng: float) -> list:
-    """Real, available drivers sorted by actual distance to the pickup point.
+async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None) -> list:
+    """Real, available drivers sorted by actual distance to pickup.
 
-    Eligible = approved + online + GPS ping within 90 s + not already on a trip.
+    Equipment-bound needs (wheelchair/child seat) are hard requirements. Other needs are
+    communicated to the driver but do not silently exclude otherwise eligible cars.
     """
     if lat is None or lng is None:
         return []
+    required = set(required_capabilities or [])
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
     busy = set()
     async for t in db.trips.find({"status": {"$in": ACTIVE_TRIP_STATUSES}}, {"driver_id": 1}):
@@ -2627,10 +2639,12 @@ async def _dispatch_candidates(lat: float, lng: float) -> list:
     async for d in db.users.find(
         {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True},
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
-        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1},
+        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1},
     ):
         did = str(d["_id"])
         if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
+            continue
+        if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
         out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
     out.sort(key=lambda x: x["km"])
@@ -2644,7 +2658,10 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
     """
     tried = set(trip.get("offer_history") or [])
-    cands = await _dispatch_candidates(trip.get("pickup_lat"), trip.get("pickup_lng"))
+    cands = await _dispatch_candidates(
+        trip.get("pickup_lat"), trip.get("pickup_lng"),
+        _required_driver_capabilities(trip.get("special_needs")),
+    )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
     earnings = int(round((trip.get("price") or 0) * (1 - commission)))
@@ -2766,6 +2783,8 @@ async def driver_pending(current=Depends(require_driver)):
     }).sort("created_at", 1).limit(10):
         if t["trip_id"] in declined:
             continue
+        if not _driver_supports_special_needs(current, t.get("special_needs")):
+            continue
         t["id"] = str(t["_id"])
         t.pop("_id", None)
         trip_commission = await _commission_for_trip(t)
@@ -2813,6 +2832,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
+        raise HTTPException(status_code=403, detail="Turen krever utstyr som ikke er registrert på denne sjåføren")
     if trip_pre.get("dispatch_mode") == "sequential" and trip_pre.get("offer_driver_id") not in (None, driver_id):
         raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
     # Driver's REAL current GPS. If we don't have it we store nothing and report no ETA —
@@ -2917,6 +2938,9 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
+        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        if existing and existing.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
+            return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
@@ -2932,6 +2956,9 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
+        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
+            return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
@@ -2962,6 +2989,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
+        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        if existing and existing.get("status") in ("arrived", "completed", "rated"):
+            return {"ok": True, "already_applied": True, "bonuses": []}
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
@@ -4321,6 +4351,7 @@ class DriverInviteRequest(BaseModel):
     car: str  # e.g. "Tesla Model Y"
     plate: str  # e.g. "EL12345"
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
     email: Optional[str] = None  # if set, send invite via SendGrid
 
@@ -4358,6 +4389,7 @@ async def create_driver_invite(body: DriverInviteRequest, request: Request, curr
         "car": body.car.strip(),
         "plate": body.plate.strip().upper(),
         "vehicle_type": body.vehicle_type,
+        "capabilities": list(dict.fromkeys(body.capabilities)),
         "note": body.note or "",
         "email": (body.email or "").strip().lower() or None,
         "created_by": current["id"],
@@ -4407,6 +4439,7 @@ async def get_driver_invite(token: str):
         "car": inv.get("car"),
         "plate": inv.get("plate"),
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
+        "capabilities": inv.get("capabilities") or [],
         "note": inv.get("note", ""),
     }
 
@@ -4453,6 +4486,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "car": inv.get("car"),
         "plate": inv.get("plate"),
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
+        "capabilities": inv.get("capabilities") or [],
         "rating": 5.0,
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
@@ -5564,6 +5598,7 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
         out.append({
             "id": uid, "name": u.get("fullName"), "email": u.get("email"), "phone": u.get("phone"),
             "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
+            "capabilities": u.get("capabilities") or [],
             "rating": u.get("rating"), "approved": u.get("approved", False), "online": u.get("online", False),
             "fleet_name": fleet_names.get(u.get("fleet_id")), "fleet_id": u.get("fleet_id"),
             "trips_completed": completed, "last_location_at": u.get("last_location_at"),
@@ -5583,6 +5618,26 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
                  {"approved": prev}, {"approved": body.approved})
     return {"ok": True}
+
+
+class DriverCapabilitiesRequest(BaseModel):
+    capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
+
+
+@api.patch("/admin/drivers/{user_id}/capabilities")
+async def admin_set_driver_capabilities(user_id: str, body: DriverCapabilitiesRequest, current=Depends(require_admin)):
+    try:
+        u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception:
+        raise HTTPException(400, "Ugyldig id")
+    if not u:
+        raise HTTPException(404, "Fant ikke sjåfør")
+    capabilities = list(dict.fromkeys(body.capabilities))
+    previous = u.get("capabilities") or []
+    await db.users.update_one({"_id": u["_id"]}, {"$set": {"capabilities": capabilities}})
+    await _audit(current, "driver.capabilities", "driver", user_id,
+                 {"capabilities": previous}, {"capabilities": capabilities})
+    return {"ok": True, "capabilities": capabilities}
 
 
 @api.get("/admin/vehicles")
