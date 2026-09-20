@@ -62,6 +62,12 @@ export const messagesApi = {
   send: (tripId: string, text: string) => api.post(`/trips/${tripId}/messages`, { text }).then((r) => r.data),
 };
 
+export const safetyApi = {
+  log: (tripId: string, data: { kind: 'emergency' | 'report' | 'share'; note?: string; lat?: number; lng?: number }) =>
+    api.post(`/trips/${tripId}/safety`, data).then((r) => r.data),
+  shareLink: (tripId: string) => api.post(`/trips/${tripId}/share-link`).then((r) => r.data),
+};
+
 export const gdprApi = {
   export: () => api.get('/gdpr/export').then((r) => r.data),
   delete: () => api.delete('/gdpr/delete').then((r) => r.data),
