@@ -92,7 +92,7 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     )
     if not snap["ready"]:
         return None
-    rate = float((fleet or {}).get("commission_rate", 0.12) or 0.12)
+    rate = float((fleet or {}).get("commission_rate", 0.10) or 0.10)
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
