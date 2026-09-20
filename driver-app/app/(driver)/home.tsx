@@ -185,6 +185,17 @@ export default function DriverHome() {
     : current?.status === 'in_trip' ? 'Fullfør turen'
     : '';
 
+  const needLabels: Record<string, string> = {
+    wheelchair: 'Rullestol', large_luggage: 'Stor bagasje', pet: 'Kjæledyr',
+    hearing_impaired: 'Hørselsbehov', visual_impaired: 'Synsbehov', child_seat: 'Barnesete',
+  };
+  const tripExtras = (t: any) => {
+    const bits: string[] = [];
+    if (Array.isArray(t?.stops) && t.stops.length) bits.push(`${t.stops.length} ekstra stopp`);
+    if (Array.isArray(t?.special_needs) && t.special_needs.length) bits.push(t.special_needs.map((x: string) => needLabels[x] || x).join(' · '));
+    return bits.join(' · ');
+  };
+
   const firstOffer = pending[0];
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
   const mapDropoff = current && current.status === 'in_trip'
@@ -264,6 +275,8 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
+            {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
+            {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
             <View style={s.tripActions}>
               <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
                 <Icon name="message" size={17} color={colors.text} />
@@ -296,6 +309,8 @@ export default function DriverHome() {
               <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
             </View>
             <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min estimert</Text>
+            {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
+            {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
               <Pressable style={s.declineBtn} onPress={() => decline(firstOffer.trip_id)} testID={`driver-decline-${firstOffer.trip_id}`}>
                 <Text style={s.declineText}>Avslå</Text>
