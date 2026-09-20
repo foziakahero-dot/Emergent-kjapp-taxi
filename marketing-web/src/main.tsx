@@ -5,9 +5,11 @@ import { BrowserRouter, Link, useLocation } from 'react-router-dom';
 import App from './App';
 import HelpPage from './HelpPage';
 import { setPageSeo } from './seo';
+import CookieConsent from './CookieConsent';
 import './styles.css';
 import './responsive-fixes.css';
 import './support-footer.css';
+import './production-readiness.css';
 
 const SUPPORT_EMAIL = 'support@kjappapp.no';
 
@@ -44,8 +46,8 @@ function RouteMetadata() {
     }
 
     setPageSeo({
-      title: 'KJAPP — Norsk taxi, uten omveier',
-      description: 'Bestill norsk taxi med tekst eller stemme. Velg KJAPP, KJAPP XL eller Premium, se prisestimat og hentetid før du bekrefter, og følg bilen live.',
+      title: 'KJAPP – Reis smart',
+      description: 'KJAPP er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.',
       canonical: 'https://kjappapp.no/',
     });
   }, [pathname]);
@@ -92,6 +94,7 @@ ReactDOMClient.createRoot(document.getElementById('root')!).render(
       <RouteMetadata />
       <RootContent />
       <SupportFooterPortal />
+      <CookieConsent />
     </BrowserRouter>
   </React.StrictMode>,
 );
