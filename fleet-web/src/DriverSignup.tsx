@@ -3,12 +3,13 @@ import { Link, useParams } from 'react-router-dom';
 import { api, apiError, PublicDriverInvite } from './api';
 import './driver-signup.css';
 
-type DocKey = 'drivers_license' | 'taxi_license' | 'profile_photo';
+type DocKey = 'drivers_license' | 'taxi_license' | 'police_certificate' | 'profile_photo';
 type Uploaded = { storage_path: string; original_filename?: string };
 
 const DOCS: Array<{ key: DocKey; label: string; sub: string }> = [
   { key: 'drivers_license', label: 'Førerkort', sub: 'Gyldig førerkort' },
   { key: 'taxi_license', label: 'Kjøreseddel', sub: 'Gyldig kjøreseddel for taxi' },
+  { key: 'police_certificate', label: 'Politiattest', sub: 'Gyldig politiattest i PDF eller bildeformat' },
   { key: 'profile_photo', label: 'Profilbilde', sub: 'Tydelig ansiktsbilde' },
 ];
 
@@ -41,12 +42,23 @@ export default function DriverSignup() {
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '' });
 
   useEffect(() => {
-    api.publicDriverInvite(token).then(setInvite).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
+    api.publicDriverInvite(token)
+      .then((data) => {
+        setInvite(data);
+        setForm((current) => ({
+          ...current,
+          fullName: data.prefill?.fullName || current.fullName,
+          email: data.prefill?.email || current.email,
+          phone: data.prefill?.phone || current.phone,
+        }));
+      })
+      .catch((e) => setErr(apiError(e)))
+      .finally(() => setLoading(false));
   }, [token]);
 
   const next = (e: FormEvent) => {
     e.preventDefault(); setErr('');
-    if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim() || form.password.length < 6) {
+    if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim() || form.password.length < 10) {
       setErr('Fyll ut alle feltene. Passord må ha minst 6 tegn.'); return;
     }
     setStep(2);
@@ -70,6 +82,7 @@ export default function DriverSignup() {
         ...form,
         drivers_license_path: uploads.drivers_license!.storage_path,
         taxi_license_path: uploads.taxi_license!.storage_path,
+        police_certificate_path: uploads.police_certificate!.storage_path,
         profile_photo_path: uploads.profile_photo!.storage_path,
       });
       setDone(true);
@@ -91,12 +104,12 @@ export default function DriverSignup() {
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
         <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
         <input type="tel" placeholder="Telefonnummer" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} required />
-        <input type="password" placeholder="Passord · minst 6 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
+        <input type="password" placeholder="Passord · minst 10 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
         <div className="driver-legal">Ved å fortsette godtar du KJAPPs sjåførvilkår og personvernerklæring.</div>
         {err ? <div className="error-box">{err}</div> : null}
         <button className="primary-button">Neste · dokumenter</button>
       </form> : <div className="driver-signup-form">
-        <p className="driver-doc-intro">Førerkort, kjøreseddel og profilbilde må være mottatt før kontoen kan godkjennes.</p>
+        <p className="driver-doc-intro">Førerkort, kjøreseddel, politiattest og profilbilde må være mottatt og godkjent før kontoen kan aktiveres.</p>
         {DOCS.map((d) => <UploadRow key={d.key} item={d} value={uploads[d.key]} busy={uploading[d.key]} onFile={(f) => upload(d.key, f)} onRemove={() => setUploads((s) => ({ ...s, [d.key]: undefined }))} />)}
         {err ? <div className="error-box">{err}</div> : null}
         <button className="primary-button" disabled={busy} onClick={submit}>{busy ? 'Sender…' : 'Send til godkjenning'}</button>
