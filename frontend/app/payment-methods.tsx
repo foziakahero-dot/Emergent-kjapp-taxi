@@ -24,7 +24,9 @@ export default function PaymentMethods() {
   const [error, setError] = useState('');
 
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });
-  const methods = data?.payment_methods || data?.methods || (Array.isArray(data) ? data : []);
+  const { data: vippsConfig } = useQuery({ queryKey: ['vipps-config'], queryFn: paymentApi.vippsConfig });
+  const rawMethods = data?.payment_methods || data?.methods || (Array.isArray(data) ? data : []);
+  const methods = rawMethods.filter((m: any) => m.type !== 'vipps' || vippsConfig?.enabled === true);
 
   const verifySetup = async (sessionId: string) => {
     for (let attempt = 0; attempt < 10; attempt += 1) {
