@@ -9,6 +9,7 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
+import { NetworkBanner } from '@/src/components/NetworkBanner';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
 
 const queryClient = new QueryClient({
@@ -69,6 +70,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
+        <NetworkBanner />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <NativeRuntimeBridge />
