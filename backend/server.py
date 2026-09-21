@@ -2112,15 +2112,19 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
         if elapsed > free_minutes:
             fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
     now_iso = datetime.now(timezone.utc).isoformat()
-    await db.trips.update_one(
+    cancelled_trip, _ = await _transition_trip(
         {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {
-            "status": "cancelled", "cancelled_at": now_iso, "cancelled_by": "customer",
-            "cancellation_fee": fee, "cancellation_fee_status": "pending" if fee > 0 else "not_applicable",
-        }},
+        ("searching", "booking", "driver_on_way", "at_pickup"),
+        "cancelled",
+        set_fields={
+            "cancelled_at": now_iso,
+            "cancelled_by": "customer",
+            "cancellation_fee": fee,
+            "cancellation_fee_status": "pending" if fee > 0 else "not_applicable",
+        },
     )
-    if trip.get("driver_id"):
-        await send_push_to_user(trip["driver_id"], "Turen ble avbestilt", "Kunden har avbestilt turen.", "/driver")
+    if cancelled_trip.get("driver_id"):
+        await send_push_to_user(cancelled_trip["driver_id"], "Turen ble avbestilt", "Kunden har avbestilt turen.", "/driver")
     return {"ok": True, "cancellation_fee": fee, "currency": "NOK"}
 
 
@@ -5062,6 +5066,63 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
     return {"checkout_url": session.url, "session_id": session.id}
 
 
+async def _mark_trip_paid(trip_id: str, user_id: Optional[str], paid_at: Optional[str] = None):
+    """Persist payment truth without bypassing or downgrading the ride state machine.
+
+    A paid ride that has reached `arrived` may advance to `completed`.
+    `rated` is terminal and must never be downgraded to `completed`.
+    If Stripe reports payment for an earlier ride state, preserve that state and
+    flag it for operator review instead of fabricating ride completion.
+    """
+    identity = {"trip_id": trip_id}
+    if user_id:
+        identity["user_id"] = user_id
+    trip = await db.trips.find_one(identity)
+    if not trip:
+        return None
+
+    now_iso = paid_at or datetime.now(timezone.utc).isoformat()
+    updates = {
+        "payment_status": "paid",
+        "paid_at": now_iso,
+        "updated_at": now_iso,
+    }
+    status = trip.get("status")
+    if status == "arrived":
+        updates["status"] = "completed"
+        updates["completed_at"] = trip.get("completed_at") or now_iso
+    elif status not in ("completed", "rated"):
+        updates["payment_state_warning"] = f"paid_while_{status or 'unknown'}"
+        updates["requires_manual_settlement"] = True
+
+    result = await db.trips.update_one(
+        {**identity, "status": status},
+        {"$set": updates},
+    )
+    if result.modified_count == 0:
+        # State changed concurrently. Retry once against the fresh state so payment
+        # truth is not lost, while still never forcing an illegal ride transition.
+        fresh = await db.trips.find_one(identity)
+        if fresh and fresh.get("payment_status") != "paid":
+            fresh_status = fresh.get("status")
+            retry_updates = {
+                "payment_status": "paid",
+                "paid_at": now_iso,
+                "updated_at": now_iso,
+            }
+            if fresh_status == "arrived":
+                retry_updates["status"] = "completed"
+                retry_updates["completed_at"] = fresh.get("completed_at") or now_iso
+            elif fresh_status not in ("completed", "rated"):
+                retry_updates["payment_state_warning"] = f"paid_while_{fresh_status or 'unknown'}"
+                retry_updates["requires_manual_settlement"] = True
+            await db.trips.update_one(
+                {**identity, "status": fresh_status},
+                {"$set": retry_updates},
+            )
+    return await db.trips.find_one(identity)
+
+
 @api.get("/payments/status/{session_id}")
 async def get_payment_status(session_id: str, current=Depends(get_current_user)):
     record = await db.payment_transactions.find_one({"session_id": session_id, "user_id": current["id"]})
@@ -5086,10 +5147,7 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                 )
                 # mark trip as paid
                 if record.get("trip_id"):
-                    await db.trips.update_one(
-                        {"trip_id": record["trip_id"], "user_id": current["id"]},
-                        {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
-                    )
+                    await _mark_trip_paid(record["trip_id"], current["id"])
                     await send_trip_receipts(record["trip_id"])
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
@@ -5130,10 +5188,7 @@ async def stripe_webhook(request: Request):
             }},
         )
         if r and r.get("trip_id"):
-            await db.trips.update_one(
-                {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
-                {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
-            )
+            await _mark_trip_paid(r["trip_id"], r.get("user_id"))
             await send_trip_receipts(r["trip_id"])
     elif t == "checkout.session.completed":
         await db.payment_transactions.update_one(
