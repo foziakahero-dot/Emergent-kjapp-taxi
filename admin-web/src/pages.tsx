@@ -352,7 +352,7 @@ export function Drivers() {
   const toggle = async (d: any) => {
     const next = !d.approved;
     if (!window.confirm(next ? `Godkjenne ${d.name}?` : `Suspendere ${d.name}?`)) return;
-    try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(e?.response?.data?.detail || 'Feil'); }
+    try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { window.alert(apiError(e)); }
   };
 
   const toggleCapability = async (d: any, capability: 'wheelchair' | 'child_seat') => {
