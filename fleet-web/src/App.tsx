@@ -11,6 +11,7 @@ import {
   LoginPage,
   OverviewPage,
   ResetPasswordPage,
+  TwoFASetupPage,
   TripsPage,
 } from './pages';
 
@@ -119,5 +120,10 @@ export default function App() {
       </Routes>
     );
   }
+
+  if (user.twofa_setup_required || user.totp_enabled !== true) {
+    return <TwoFASetupPage />;
+  }
+
   return <PortalShell />;
 }
