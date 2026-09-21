@@ -2,7 +2,7 @@ name: KJAPP Mobile Android validation
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'hardening/beta-p0-p1-p2-20260921']
 
 concurrency:
   cancel_in_progress: true
