@@ -2,7 +2,7 @@ name: KJAPP Customer Android APK
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'hardening/beta-p0-p1-p2-20260921']
 
 jobs:
   build_customer_android:
