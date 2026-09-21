@@ -31,7 +31,7 @@ export default function Register() {
 
   const submit = async () => {
     setError('');
-    if (!fullName.trim() || !email.trim() || password.length < 6) {
+    if (!fullName.trim() || !email.trim() || password.length < 10) {
       setError('Fyll inn navn, e-post og passord (minst 6 tegn).');
       return;
     }
@@ -86,7 +86,7 @@ export default function Register() {
           </View>
         </View>
 
-        <Text style={s.passwordHint}>Minst 6 tegn. Du kan endre kontoinnstillinger senere.</Text>
+        <Text style={s.passwordHint}>Minst 10 tegn. Du kan endre kontoinnstillinger senere.</Text>
         {error ? <Text style={s.error} testID="register-error">{error}</Text> : null}
 
         <Button label="Opprett konto" onPress={submit} loading={loading} testID="register-submit" style={{ marginTop: 12 }} />
