@@ -839,8 +839,23 @@ def _fcm_app():
     try:
         import firebase_admin
         from firebase_admin import credentials
-        cred = credentials.Certificate(json.loads(raw) if raw else path)
-        FCM_APP = firebase_admin.initialize_app(cred, name="kjapp-push")
+
+        service_info = None
+        if raw:
+            service_info = json.loads(raw)
+        elif path:
+            with open(path, "r", encoding="utf-8") as fh:
+                service_info = json.load(fh)
+
+        project_id = str((service_info or {}).get("project_id") or "").strip()
+        expected_project_id = str(os.environ.get("FCM_PROJECT_ID") or "").strip()
+        if expected_project_id and project_id != expected_project_id:
+            raise RuntimeError("FCM service account project_id matcher ikke FCM_PROJECT_ID")
+        if not project_id:
+            raise RuntimeError("FCM service account mangler project_id")
+
+        cred = credentials.Certificate(service_info)
+        FCM_APP = firebase_admin.initialize_app(cred, {"projectId": project_id}, name="kjapp-push")
         print("FCM native push: initialised")
     except Exception as e:
         print(f"FCM init failed: {e}")
@@ -3057,16 +3072,20 @@ async def driver_current(current=Depends(require_driver)):
 async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
     """Driver has arrived at pickup and is waiting for passenger to board."""
     driver_id = current["id"]
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
-        {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
-    )
-    if result.modified_count == 0:
+    try:
+        t, already = await _transition_trip(
+            {"trip_id": trip_id, "driver_id": driver_id},
+            ("driver_on_way",),
+            "at_pickup",
+            set_fields={"at_pickup_at": datetime.now(timezone.utc).isoformat()},
+        )
+    except HTTPException as exc:
         existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
-        if existing and existing.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
+        if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
-        raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
-    t = await db.trips.find_one({"trip_id": trip_id})
+        raise exc
+    if already:
+        return {"ok": True, "already_applied": True}
     await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
     return {"ok": True}
 
@@ -3074,17 +3093,21 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
 @api.post("/driver/trip/{trip_id}/start")
 async def driver_start(trip_id: str, current=Depends(require_driver)):
     driver_id = current["id"]
-    # Accept both driver_on_way and at_pickup as valid transitions to in_trip
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup"]}},
-        {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
-    )
-    if result.modified_count == 0:
+    # Accept both driver_on_way and at_pickup as valid transitions to in_trip.
+    try:
+        t, already = await _transition_trip(
+            {"trip_id": trip_id, "driver_id": driver_id},
+            ("driver_on_way", "at_pickup"),
+            "in_trip",
+            set_fields={"trip_started_at": datetime.now(timezone.utc).isoformat()},
+        )
+    except HTTPException as exc:
         existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
-        if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
+        if existing and existing.get("status") in ("arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
-        raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+        raise exc
+    if already:
+        return {"ok": True, "already_applied": True}
     await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
     return {"ok": True}
 
