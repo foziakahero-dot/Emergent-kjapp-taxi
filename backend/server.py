@@ -1520,6 +1520,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         "role": user.get("role", "user"),
         "driver_id": user.get("driver_id"),
         "fleet_id": user.get("fleet_id"),
+        "approved": bool(user.get("approved")) if user.get("role") == "driver" else user.get("approved"),
         "totp_enabled": bool(user.get("totp_enabled")),
         "twofa_setup_required": _twofa_required_role(user.get("role", "user")) and not bool(user.get("totp_enabled")),
     }}
@@ -2019,6 +2020,43 @@ async def require_driver(current=Depends(get_current_user)):
     if current.get("role") == "driver":
         await _require_active_fleet(current.get("fleet_id"))
     return current
+
+
+@api.get("/driver/documents")
+async def driver_documents(current=Depends(get_current_user)):
+    """Read-only compliance status for the authenticated driver, including pending drivers."""
+    if current.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Kun for sjåfører")
+
+    latest_by_type = {}
+    async for doc in db.uploaded_files.find({
+        "owner_user_id": current["id"],
+        "scope": "driver-docs",
+        "is_deleted": {"$ne": True},
+        "doc_type": {"$in": list(DRIVER_REQUIRED_DOC_TYPES.keys())},
+    }).sort("created_at", -1):
+        dtype = doc.get("doc_type")
+        if dtype and dtype not in latest_by_type:
+            latest_by_type[dtype] = doc
+
+    documents = []
+    for dtype, label in DRIVER_REQUIRED_DOC_TYPES.items():
+        doc = latest_by_type.get(dtype)
+        documents.append({
+            "doc_type": dtype,
+            "label": label,
+            "status": (doc or {}).get("review_status") or ("missing" if not doc else "pending"),
+            "reason": (doc or {}).get("review_reason"),
+            "expiry": (doc or {}).get("review_expiry"),
+            "uploaded_at": (doc or {}).get("created_at"),
+            "reviewed_at": (doc or {}).get("reviewed_at"),
+        })
+
+    return {
+        "approved": current.get("approved") is True,
+        "documents": documents,
+        "all_valid": all(x["status"] == "valid" for x in documents),
+    }
 
 
 class DriverRatePassengerRequest(BaseModel):
@@ -6455,12 +6493,12 @@ async def admin_document_review(file_id: str, body: DocumentReviewRequest, curre
             title, message = "Dokument må oppdateres", f"{label.capitalize()} ble avvist. Åpne dokumentstatus for detaljer."
         else:
             title, message = "Dokument til vurdering", f"{label.capitalize()} er satt tilbake til vurdering."
-        await send_push_to_user(str(owner_id), title, message, "/driver/settings?section=documents")
+        await send_push_to_user(str(owner_id), title, message, "/driver/status")
 
         if body.status == "rejected" and owner.get("email"):
             safe_reason = html.escape((body.reason or "Dokumentet oppfyller ikke kravene.").strip())
             safe_label = html.escape(str(label))
-            deep_link = "kjapp-driver://driver-settings?section=documents"
+            deep_link = "kjapp-driver://driver-status"
             await asyncio.to_thread(
                 send_email,
                 owner["email"],
