@@ -13,7 +13,9 @@ export default function Index() {
   const s = useStyles();
 
   useEffect(() => {
-    if (user?.role === 'driver') router.replace('/(driver)/home');
+    if (user?.role === 'driver') {
+      router.replace(user.approved === true ? '/(driver)/home' : '/driver-status');
+    }
   }, [user, router]);
 
   if (user === undefined || user?.role === 'driver') {
