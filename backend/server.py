@@ -4593,6 +4593,8 @@ class DriverSignupRequest(BaseModel):
     email: str
     phone: str
     password: str
+    drivers_license_number: Optional[str] = None
+    taxi_license_number: Optional[str] = None
     # New: uploaded document paths (from /api/upload/public via a public driver-invite upload token)
     drivers_license_path: Optional[str] = None
     taxi_license_path: Optional[str] = None
@@ -4721,8 +4723,8 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "password_hash": hash_password(body.password),
         "fullName": body.fullName,
         "phone": body.phone,
-        "drivers_license_number": inv.get("drivers_license_number") or None,
-        "taxi_license_number": inv.get("taxi_license_number") or None,
+        "drivers_license_number": (body.drivers_license_number or inv.get("drivers_license_number") or "").strip() or None,
+        "taxi_license_number": (body.taxi_license_number or inv.get("taxi_license_number") or "").strip() or None,
         "role": "driver",
         "car": inv.get("car"),
         "plate": inv.get("plate"),
