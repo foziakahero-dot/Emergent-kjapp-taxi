@@ -2032,15 +2032,27 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("driver_rating"):
-        raise HTTPException(400, "Du har allerede rangert denne kunden")
-    await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": current["id"]},
+        raise HTTPException(409, "Du har allerede rangert denne kunden")
+    if trip.get("status") not in ("arrived", "completed", "rated") and trip.get("payment_status") != "paid":
+        raise HTTPException(409, "Turen må være avsluttet eller betalt før kunden kan vurderes")
+    result = await db.trips.update_one(
+        {
+            "trip_id": trip_id,
+            "driver_id": current["id"],
+            "driver_rating": {"$exists": False},
+            "$or": [
+                {"status": {"$in": ["arrived", "completed", "rated"]}},
+                {"payment_status": "paid"},
+            ],
+        },
         {"$set": {
             "driver_rating": body.rating,
             "driver_feedback": body.feedback,
             "driver_rated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    if result.modified_count == 0:
+        raise HTTPException(409, "Turstatusen endret seg. Oppdater turen og prøv igjen.")
     # Update passenger's rolling rating
     if trip.get("user_id"):
         recent = []
@@ -2064,7 +2076,7 @@ async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
-        raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
+        raise HTTPException(409, "Turen kan ikke avbestilles i denne statusen")
     pricing = trip.get("pricing_snapshot") or await active_pricing()
     fee = 0
     free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
