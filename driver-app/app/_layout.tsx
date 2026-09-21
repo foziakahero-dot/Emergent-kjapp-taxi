@@ -27,10 +27,10 @@ function NativeRuntimeBridge() {
 
   useEffect(() => {
     if (user?.role === 'driver') registerNativePush().catch(() => {});
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
-    if (user?.role !== 'driver') {
+    if (user?.role !== 'driver' || user?.approved !== true) {
       stopDriverBackgroundLocation().catch(() => {});
       return;
     }
@@ -121,6 +121,7 @@ export default function RootLayout() {
               <Stack.Screen name="driver-login" />
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-status" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
