@@ -337,7 +337,7 @@ def _gen_backup_codes(n: int = 8):
 
 
 def _twofa_required_role(role: str) -> bool:
-    return role in ("admin", "superadmin")
+    return role in ("admin", "superadmin", "fleet_owner")
 
 
 USER_RESPONSE_FIELDS = frozenset({
@@ -345,7 +345,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "picture", "photo", "avatar", "car", "plate", "vehicle_type", "rating", "trip_count",
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
-    "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
+    "drivers_license_path", "taxi_license_path", "police_certificate_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
 })
 
@@ -428,6 +428,13 @@ def set_auth_cookie(response: Response, token: str):
         max_age=60 * 60 * 24 * 7,
         path="/",
     )
+
+
+PASSWORD_MIN_LENGTH = 10
+
+def _validate_password(password: str):
+    if len(password or "") < PASSWORD_MIN_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Passord må ha minst {PASSWORD_MIN_LENGTH} tegn")
 
 
 # ------------------ Models ------------------
@@ -1402,8 +1409,7 @@ async def register(body: RegisterRequest, response: Response):
     email = body.email.strip().lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    _validate_password(body.password)
     result = await db.users.insert_one({
         "email": email,
         "password_hash": hash_password(body.password),
@@ -1512,6 +1518,8 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
 
 @api.post("/auth/2fa/disable")
 async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_user)):
+    if _twofa_required_role(current.get("role", "")):
+        raise HTTPException(status_code=409, detail="2FA er obligatorisk for denne rollen")
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
@@ -1637,8 +1645,7 @@ async def check_reset_token(token: str):
 
 @api.post("/auth/reset-password")
 async def reset_password(body: ResetPasswordRequest):
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    _validate_password(body.new_password)
     rec = await db.password_reset_tokens.find_one({
         "token": body.token, "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
@@ -3534,6 +3541,8 @@ ADMIN_PERMISSION_PREFIXES = (
 def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
+    if _twofa_required_role(current.get("role", "")) and not current.get("totp_enabled"):
+        raise HTTPException(status_code=403, detail="2FA må aktiveres før administratortilgang")
     if current.get("role") == "admin":
         permissions = current.get("permissions", None)
         if permissions is not None:
@@ -3546,12 +3555,16 @@ def require_admin(request: Request, current=Depends(get_current_user)):
 def require_superadmin(current=Depends(get_current_user)):
     if current.get("role") != "superadmin":
         raise HTTPException(status_code=403, detail="Kun for superadmin")
+    if not current.get("totp_enabled"):
+        raise HTTPException(status_code=403, detail="2FA må aktiveres før superadmin-tilgang")
     return current
 
 
 async def require_fleet_owner(current=Depends(get_current_user)):
     if current.get("role") not in ("fleet_owner", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for flåteiere")
+    if _twofa_required_role(current.get("role", "")) and not current.get("totp_enabled"):
+        raise HTTPException(status_code=403, detail="2FA må aktiveres før flåtetilgang")
     if current.get("role") == "fleet_owner":
         await _require_active_fleet(current.get("fleet_id"))
     return current
@@ -4454,8 +4467,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         raise HTTPException(status_code=403, detail="Invitasjonen er knyttet til en annen e-postadresse")
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    _validate_password(body.password)
     # Require all three documents
     if not (body.drivers_license_path and body.taxi_license_path and body.profile_photo_path):
         raise HTTPException(status_code=400, detail="Du må laste opp førerkort, kjøreseddel og profilbilde")
