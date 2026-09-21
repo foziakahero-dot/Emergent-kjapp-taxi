@@ -112,8 +112,13 @@ const Shortcut = ({ ic, n, l, c }: any) => (
 export function Live() {
   const { data, loading, err, reload } = useAsync(() => api.live(), []);
   useEffect(() => { const i = setInterval(reload, 5000); return () => clearInterval(i); }, [reload]);
-  const freshDrivers = (data?.drivers || []).filter(hasFreshGps);
-  const staleDrivers = [...(data?.stale_drivers || []), ...(data?.drivers || []).filter((d: any) => !freshDrivers.includes(d))];
+  const freshDrivers = data?.fresh_online || (data?.drivers || []).filter(hasFreshGps);
+  const staleDrivers = data?.stale_online || data?.stale_drivers || [];
+  const offlineDrivers = data?.offline_with_last_location || [];
+  const neverSeen = data?.never_seen || [];
+  const mappedDrivers = [...freshDrivers, ...staleDrivers, ...offlineDrivers]
+    .filter((d: any) => d.lat != null && d.lng != null)
+    .map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }));
   return (
     <>
       <PageHead title="Live drift" sub={data ? `Oppdatert ${fmtDate(data.as_of)} · auto hvert 5s` : ''}
@@ -121,7 +126,13 @@ export function Live() {
       <ErrorBanner msg={err} />
       {loading && !data ? <Loader /> : (
         <>
-        <LiveMap drivers={freshDrivers.map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }))} />
+        <LiveMap drivers={mappedDrivers} />
+        <div className="grid cards" style={{ marginBottom: 16 }}>
+          <Kpi label="Online · fersk GPS" value={freshDrivers.length} />
+          <Kpi label="Online · utdatert GPS" value={staleDrivers.length} />
+          <Kpi label="Offline · siste posisjon" value={offlineDrivers.length} />
+          <Kpi label="Aldri sett på kart" value={neverSeen.length} />
+        </div>
         <div className="grid live-columns">
           <div>
             <div className="section-title" style={{ marginTop: 0 }}>Sjåfører med fersk GPS ({freshDrivers.length})</div>
@@ -156,8 +167,9 @@ export function Live() {
             </div>
           </div>
         </div>
-        {staleDrivers.length > 0 && <div className="live-stale-note">
-          {staleDrivers.length} sjåfør{staleDrivers.length === 1 ? '' : 'er'} har utdatert eller manglende GPS og telles ikke som online.
+        {(staleDrivers.length > 0 || offlineDrivers.length > 0 || neverSeen.length > 0) && <div className="live-stale-note">
+          Kartet viser ferske online-posisjoner, utdatert online-GPS og siste kjente posisjon for offline-biler.
+          {neverSeen.length > 0 ? ` ${neverSeen.length} registrert${neverSeen.length === 1 ? ' bil har' : 'e biler har'} aldri sendt GPS og kan derfor ikke plasseres på kartet.` : ''}
         </div>}
         </>
       )}
