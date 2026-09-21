@@ -4,48 +4,64 @@ import { useAuth } from './auth';
 import { api } from './api';
 import { Loader } from './ui';
 import Login from './Login';
+import AIAssistant from './AIAssistant';
+import FleetApplications from './FleetApplications';
 import {
-  Dashboard, Live, Trips, Drivers, Customers, Fleets, Vehicles, Documents, Finance, Support, Audit, Settings,
+  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
+import {
+  FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
+} from './controlCenter';
 
 const NAV = [
   { group: 'Oversikt', items: [
-    { to: '/', label: 'Dashbord', ic: '▤', end: true },
-    { to: '/live', label: 'Live drift', ic: '◉' },
+    { to: '/', label: 'Dashbord', ic: '▤', end: true, perm: 'operations' },
+    { to: '/live', label: 'Live drift', ic: '◉', perm: 'operations' },
+    { to: '/actions', label: 'Krever handling', ic: '!', perm: 'operations' },
   ]},
   { group: 'Drift', items: [
-    { to: '/trips', label: 'Turer', ic: '⇄' },
-    { to: '/drivers', label: 'Sjåfører', ic: '☗' },
-    { to: '/customers', label: 'Kunder', ic: '☺' },
-    { to: '/fleets', label: 'Løyvehavere', ic: '⌂' },
-    { to: '/vehicles', label: 'Kjøretøy', ic: '⛚' },
+    { to: '/trips', label: 'Turer', ic: '⇄', perm: 'operations' },
+    { to: '/drivers', label: 'Sjåfører', ic: '☗', perm: 'operations' },
+    { to: '/customers', label: 'Kunder', ic: '☺', perm: 'operations' },
+    { to: '/fleet-applications', label: 'Løyvesøknader', ic: '◇', superadminOnly: true },
+    { to: '/fleets', label: 'Løyvehavere', ic: '⌂', perm: 'operations' },
+    { to: '/vehicles', label: 'Kjøretøy', ic: '⛚', perm: 'operations' },
   ]},
   { group: 'Økonomi', items: [
-    { to: '/finance', label: 'Økonomi', ic: '≣' },
+    { to: '/finance', label: 'Økonomi', ic: '≣', perm: 'finance' },
+    { to: '/payments', label: 'Betaling & oppgjør', ic: '₭', perm: 'finance' },
+    { to: '/pricing', label: 'Prissetting', ic: '◈', perm: 'system' },
   ]},
-  { group: 'Support & compliance', items: [
-    { to: '/support', label: 'Support', ic: '✆' },
-    { to: '/documents', label: 'Dokumenter', ic: '❑' },
+  { group: 'Kommunikasjon & support', items: [
+    { to: '/communications', label: 'Kommunikasjon', ic: '✉', perm: 'communications' },
+    { to: '/support', label: 'Support', ic: '✆', perm: 'support' },
+    { to: '/documents', label: 'Dokumenter', ic: '❑', perm: 'operations' },
   ]},
   { group: 'System', items: [
-    { to: '/audit', label: 'Audit-logg', ic: '⌘' },
-    { to: '/settings', label: 'Innstillinger', ic: '⚙' },
+    { to: '/ai-assistant', label: 'AI Assistent', ic: '🤖', superadminOnly: true },
+    { to: '/integrations', label: 'Integrasjoner', ic: '◎', perm: 'system' },
+    { to: '/admins', label: 'Administratorer', ic: '♙', superadminOnly: true },
+    { to: '/audit', label: 'Audit-logg', ic: '⌘', perm: 'system' },
+    { to: '/settings', label: 'Innstillinger', ic: '⚙', perm: 'system' },
   ]},
-];
+]
 
 function GlobalSearch() {
   const [q, setQ] = useState('');
   const [res, setRes] = useState<any>(null);
+  const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
   const t = useRef<any>(null);
 
   useEffect(() => {
     if (t.current) clearTimeout(t.current);
-    if (q.trim().length < 2) { setRes(null); return; }
+    if (q.trim().length < 2) { setRes(null); setError(''); setOpen(false); return; }
     t.current = setTimeout(() => {
-      api.search(q.trim()).then((d) => { setRes(d); setOpen(true); }).catch(() => setRes(null));
+      api.search(q.trim()).then((d) => { setRes(d); setError(''); setOpen(true); })
+        .catch(() => { setRes(null); setError('Søket er midlertidig utilgjengelig. Bruk listene i menyen.'); setOpen(true); });
     }, 250);
+    return () => clearTimeout(t.current);
   }, [q]);
 
   const go = (path: string) => { setOpen(false); setQ(''); nav(path); };
@@ -53,10 +69,11 @@ function GlobalSearch() {
   return (
     <div className="search" onBlur={() => setTimeout(() => setOpen(false), 150)}>
       <input placeholder="Søk turer, sjåfører, kunder, løyvehavere…" value={q}
-        onFocus={() => res && setOpen(true)} onChange={(e) => setQ(e.target.value)} />
-      {open && res && (
+        onFocus={() => (res || error) && setOpen(true)} onChange={(e) => setQ(e.target.value)} />
+      {open && (res || error) && (
         <div className="search-pop">
-          {(res.trips?.length || res.drivers?.length || res.customers?.length || res.fleets?.length) ? (
+          {error ? <div className="search-res dim" role="alert">{error}</div> :
+          (res?.trips?.length || res?.drivers?.length || res?.customers?.length || res?.fleets?.length) ? (
             <>
               {res.trips?.length ? <div className="search-cat">Turer</div> : null}
               {res.trips?.map((x: any) => (
@@ -92,8 +109,22 @@ function GlobalSearch() {
 
 function Shell() {
   const { user, logout } = useAuth();
+  const can = (perm: string) => user?.role === 'superadmin' || user?.permissions == null || user.permissions.includes(perm);
+  const gate = (perm: string, node: React.ReactNode, superadminOnly = false) => {
+    const allowed = superadminOnly ? user?.role === 'superadmin' : can(perm);
+    return allowed ? node : <div className="error-banner" role="alert">Du har ikke tilgang til denne delen av administrasjonspanelet.</div>;
+  };
   const [counts, setCounts] = useState<any>({});
-  useEffect(() => { api.overview().then(setCounts).catch(() => {}); }, []);
+  const [systemHealth, setSystemHealth] = useState<any>(null);
+  useEffect(() => {
+    const refresh = () => {
+      api.overview().then(setCounts).catch(() => {});
+      api.controlIntegrations().then(setSystemHealth).catch(() => setSystemHealth(null));
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   const initials = (user?.fullName || user?.email || 'A').slice(0, 2).toUpperCase();
 
   return (
@@ -103,23 +134,32 @@ function Shell() {
         {NAV.map((g) => (
           <div className="nav-group" key={g.group}>
             <div className="nav-group-title">{g.group}</div>
-            {g.items.map((it) => (
-              <NavLink key={it.to} to={it.to} end={(it as any).end}
+            {g.items
+              .filter((it: any) => {
+                if (it.superadminOnly && user?.role !== 'superadmin') return false;
+                if (!it.perm || user?.role === 'superadmin') return true;
+                if (user?.permissions == null) return true; // legacy admin keeps existing access
+                return user.permissions.includes(it.perm);
+              })
+              .map((it: any) => (
+              <NavLink key={it.to} to={it.to} end={it.end}
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <span className="nav-ic">{it.ic}</span>{it.label}
                 {it.to === '/drivers' && counts?.drivers?.pending ? <span className="nav-badge">{counts.drivers.pending}</span> : null}
+                {it.to === '/fleet-applications' && counts?.fleets?.pending_applications ? <span className="nav-badge">{counts.fleets.pending_applications}</span> : null}
                 {it.to === '/support' && counts?.support?.open ? <span className="nav-badge">{counts.support.open}</span> : null}
               </NavLink>
             ))}
           </div>
         ))}
         <div style={{ flex: 1 }} />
-        <div style={{ padding: 14, color: 'var(--muted)', fontSize: 11 }}>v1.0 · {user?.role}</div>
+        <div style={{ padding: 14, color: 'var(--muted)', fontSize: 11 }}>v1.1 · BETA OPS · {user?.role}</div>
       </aside>
 
       <div className="main">
         <div className="topbar">
-          <GlobalSearch />
+          {can('operations') ? <GlobalSearch /> : <div />}
+          <a className="system-health" href="#/integrations" title="Åpne systemstatus"><span className={`system-health-dot ${systemHealth && (systemHealth.integrations || []).every((x: any) => x.status === 'operational') ? 'ok' : 'warn'}`} />Systemstatus</a>
           <div className="who">
             <span className="who-email">{user?.email}</span>
             <div className="avatar">{initials}</div>
@@ -128,18 +168,26 @@ function Shell() {
         </div>
         <div className="content">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/live" element={<Live />} />
-            <Route path="/trips" element={<Trips />} />
-            <Route path="/drivers" element={<Drivers />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/fleets" element={<Fleets />} />
-            <Route path="/vehicles" element={<Vehicles />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/finance" element={<Finance />} />
-            <Route path="/support" element={<Support />} />
-            <Route path="/audit" element={<Audit />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/" element={gate('operations', <Dashboard />)} />
+            <Route path="/live" element={gate('operations', <Live />)} />
+            <Route path="/trips" element={gate('operations', <Trips />)} />
+            <Route path="/drivers" element={gate('operations', <Drivers />)} />
+            <Route path="/customers" element={gate('operations', <Customers />)} />
+            <Route path="/fleet-applications" element={gate('operations', <FleetApplications />, true)} />
+            <Route path="/fleets" element={gate('operations', <FleetManagement />)} />
+            <Route path="/vehicles" element={gate('operations', <Vehicles />)} />
+            <Route path="/documents" element={gate('operations', <Documents />)} />
+            <Route path="/finance" element={gate('finance', <Finance />)} />
+            <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
+            <Route path="/pricing" element={gate('system', <Settings />)} />
+            <Route path="/communications" element={gate('communications', <Communications />)} />
+            <Route path="/actions" element={gate('operations', <ActionCenter />)} />
+            <Route path="/integrations" element={gate('system', <SystemIntegrations />)} />
+            <Route path="/ai-assistant" element={gate('operations', <AIAssistant />, true)} />
+            <Route path="/admins" element={gate('system', <AdminRoles />, true)} />
+            <Route path="/support" element={gate('support', <Support />)} />
+            <Route path="/audit" element={gate('system', <Audit />)} />
+            <Route path="/settings" element={gate('system', <Settings />)} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
         </div>

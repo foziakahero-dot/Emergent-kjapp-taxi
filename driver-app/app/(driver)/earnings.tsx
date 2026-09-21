@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
-import { driverApi } from '@/src/lib/api';
+import { driverApi, KJAPP_DEFAULT_COMMISSION_PCT } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 type Period = 'today' | 'week' | 'month';
@@ -31,7 +31,8 @@ export default function DriverEarnings() {
 
   const trips = hist?.trips || hist?.history || (Array.isArray(hist) ? hist : []);
   const days = weekly?.days || [];
-  const commission = (payouts?.commission_pct ?? 20) / 100;
+  const commissionPct = payouts?.commission_pct ?? KJAPP_DEFAULT_COMMISSION_PCT;
+  const commission = commissionPct / 100;
 
   const period_data = useMemo(() => {
     if (period === 'today') {
@@ -44,7 +45,6 @@ export default function DriverEarnings() {
       const t = days.reduce((a: number, d: any) => a + (d.trips || 0), 0);
       return { gross, bonus: 0, trips: t, minutes: null, net: Math.round(gross * (1 - commission)) };
     }
-    // month — from recent completed history (last ~30 days available)
     const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();
     const mt = trips.filter((t: any) => (t.created_at || '') >= monthAgo && ['arrived', 'completed', 'rated'].includes(t.status));
     const gross = mt.reduce((a: number, t: any) => a + (t.price || 0), 0);
@@ -57,7 +57,6 @@ export default function DriverEarnings() {
     <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
       <Text style={s.title}>Inntekt</Text>
 
-      {/* period selector */}
       <View style={s.segs}>
         {PERIODS.map((p) => (
           <Pressable key={p.key} onPress={() => setPeriod(p.key)} style={[s.seg, period === p.key && s.segOn]} testID={`earnings-period-${p.key}`}>
@@ -66,7 +65,6 @@ export default function DriverEarnings() {
         ))}
       </View>
 
-      {/* hero net */}
       <View style={s.hero}>
         <Text style={s.heroLabel}>NETTO {PERIODS.find((p) => p.key === period)!.label.toUpperCase()}</Text>
         <Text style={s.heroValue} testID="earnings-net">{kr(period_data.net)}</Text>
@@ -80,16 +78,14 @@ export default function DriverEarnings() {
         </View>
       </View>
 
-      {/* breakdown */}
       <View style={s.card}>
         <BreakRow label="Bruttoinntekt" value={kr(period_data.gross)} s={s} />
-        <BreakRow label={`KJAPP provisjon (${payouts?.commission_pct ?? 20}%)`} value={`− ${kr(Math.round(period_data.gross * commission))}`} muted s={s} />
+        <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.round(period_data.gross * commission))}`} muted s={s} />
         {period_data.bonus ? <BreakRow label="Bonus" value={`+ ${kr(period_data.bonus)}`} accentGreen s={s} /> : null}
         <View style={s.breakDivider} />
         <BreakRow label="Netto" value={kr(period_data.net)} bold s={s} />
       </View>
 
-      {/* weekly chart */}
       <Text style={s.section}>Siste 7 dager</Text>
       <View style={s.card}>
         <ChartBars days={days} max={maxIncome} />
@@ -100,7 +96,6 @@ export default function DriverEarnings() {
         </View>
       </View>
 
-      {/* payout */}
       <Text style={s.section}>Utbetaling</Text>
       <View style={s.card}>
         <View style={s.payTop}>
@@ -116,7 +111,6 @@ export default function DriverEarnings() {
         <Text style={s.payHint}>Brutto {kr(payouts?.pending_gross ?? 0)} · utbetales ukentlig{(payouts?.next_payout_date || payouts?.next_payout) ? ` · neste ${new Date(payouts.next_payout_date || payouts.next_payout).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}` : ''}</Text>
       </View>
 
-      {/* recent */}
       <View style={s.recentHead}>
         <Text style={s.section}>Nylige turer</Text>
         <Pressable onPress={() => router.push('/driver-trips')} testID="earnings-see-all">
@@ -169,7 +163,7 @@ function ChartBars({ days, max }: { days: any[]; max: number }) {
             const bh = Math.max(3, ((d.income || 0) / max) * (H - 10));
             const isToday = i === days.length - 1;
             return (
-              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : 'rgba(47,224,140,0.32)'} />
+              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : 'rgba(57,229,140,0.30)'} />
             );
           })}
         </Svg>
@@ -183,10 +177,10 @@ const useStyles = makeStyles((c) => ({
   segs: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 999, padding: 4, marginBottom: 18 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   segOn: { backgroundColor: c.online },
-  segText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
-  segTextOn: { color: '#04120A' },
+  segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
+  segTextOn: { color: c.accentOn },
   hero: { backgroundColor: c.driverCard, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
-  heroLabel: { color: c.online, fontSize: 11, letterSpacing: 3, fontWeight: '700' },
+  heroLabel: { color: c.online, fontSize: 11, letterSpacing: 3, fontFamily: font.bold },
   heroValue: { color: c.text, fontFamily: font.display, fontSize: 44, marginTop: 8 },
   heroRow: { flexDirection: 'row', gap: 28, marginTop: 20 },
   heroStat: { alignItems: 'center' },
@@ -197,7 +191,7 @@ const useStyles = makeStyles((c) => ({
   breakLabel: { color: c.textSecondary, fontSize: 14 },
   breakValue: { color: c.text, fontFamily: font.mono, fontSize: 14 },
   breakDivider: { height: 1, backgroundColor: c.line, marginVertical: 6 },
-  section: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 26, marginBottom: 4 },
+  section: { color: c.textSecondary, fontSize: 14, fontFamily: font.semibold, marginTop: 26, marginBottom: 4 },
   chartLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   chartLabel: { color: c.textMuted, fontSize: 10, flex: 1, textAlign: 'center' },
   payTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

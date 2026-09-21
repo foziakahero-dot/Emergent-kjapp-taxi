@@ -13,6 +13,9 @@ import bcrypt
 import jwt
 import httpx
 import stripe
+from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from admin_ai_assistant import install_admin_ai_assistant, ensure_admin_ai_indexes
+from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
@@ -216,6 +219,17 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+def _stripe_id(value) -> Optional[str]:
+    """Normalize Stripe expandable fields without trusting their Python shape."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return value.get("id")
+    return getattr(value, "id", None)
+
+
 async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_production: bool) -> dict:
     """In production, rotate an existing superadmin's password_hash to match ADMIN_PASSWORD so any
     old/legacy password stops working. Also fixes role and ensures the account is never disabled.
@@ -283,11 +297,14 @@ async def purge_synthetic_data(db) -> dict:
 
 
 def create_access_token(user_id: str, email: str) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
+        "exp": now + timedelta(days=7),
         "type": "access",
+        "iat": now.timestamp(),
+        "jti": secrets.token_urlsafe(24),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -295,11 +312,14 @@ def create_access_token(user_id: str, email: str) -> str:
 def create_twofa_token(user_id: str) -> str:
     """Short-lived intermediate token issued after password step when 2FA is required.
     It is NOT a session token — get_current_user rejects type == '2fa'."""
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "twofa": True,
         "type": "2fa",
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        "iat": now.timestamp(),
+        "exp": now + timedelta(minutes=5),
+        "jti": secrets.token_urlsafe(24),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -321,12 +341,62 @@ def _twofa_required_role(role: str) -> bool:
     return role in ("admin", "superadmin")
 
 
+USER_RESPONSE_FIELDS = frozenset({
+    "id", "email", "fullName", "full_name", "phone", "role", "driver_id", "fleet_id",
+    "picture", "photo", "avatar", "car", "plate", "vehicle_type", "rating", "trip_count",
+    "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
+    "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
+    "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
+    "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
+})
+
+
+def user_public(user: dict) -> dict:
+    """Only explicitly supported account fields may leave an account endpoint."""
+    result = {key: value for key, value in user.items() if key in USER_RESPONSE_FIELDS}
+    if user.get("_id") is not None:
+        result["id"] = str(user["_id"])
+    result.setdefault("role", "user")
+    return result
+
+
+def _session_is_current(payload: dict, user: dict) -> bool:
+    # Legacy JWTs remain valid until this account resets its password. Fractional
+    # seconds prevent a token minted just before a reset from surviving that reset.
+    cutoff = user.get("tokens_valid_after")
+    issued = payload.get("iat", 0)
+    return cutoff is None or (isinstance(issued, (int, float)) and issued >= cutoff)
+
+
+def _auth_token_from_request(request: Request) -> Optional[str]:
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return request.cookies.get("access_token")
+
+
+async def _session_is_revoked(payload: dict) -> bool:
+    jti = payload.get("jti")
+    return bool(jti and await db.revoked_tokens.find_one({"jti": jti}, {"_id": 1}))
+
+
+async def _fleet_is_suspended(fleet_id) -> bool:
+    if not fleet_id:
+        return False
+    try:
+        fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id)}, {"status": 1})
+    except (InvalidId, TypeError):
+        return True
+    return not fleet or fleet.get("status") == "suspended"
+
+
+async def _require_active_fleet(fleet_id):
+    if await _fleet_is_suspended(fleet_id):
+        raise HTTPException(status_code=403, detail="Flåten er suspendert eller utilgjengelig")
+
+
 async def get_current_user(request: Request) -> dict:
-    token = request.cookies.get("access_token")
-    if not token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:]
+    token = _auth_token_from_request(request)
     if not token:
         raise HTTPException(status_code=401, detail="Ikke innlogget")
     try:
@@ -338,12 +408,11 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Bruker ikke funnet")
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ikke innlogget")
-        user["id"] = str(user["_id"])
-        user.pop("_id", None)
-        user.pop("password_hash", None)
-        # ensure default role
-        user.setdefault("role", "user")
-        return user
+        if not _session_is_current(payload, user):
+            raise HTTPException(status_code=401, detail="Logg inn på nytt")
+        if await _session_is_revoked(payload):
+            raise HTTPException(status_code=401, detail="Logg inn på nytt")
+        return user_public(user)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token utløpt")
     except (jwt.InvalidTokenError, InvalidId, KeyError):
@@ -394,6 +463,25 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class TripStop(BaseModel):
+    address: str = Field(min_length=1, max_length=200)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+SpecialNeed = Literal["wheelchair", "large_luggage", "pet", "hearing_impaired", "visual_impaired", "child_seat"]
+EQUIPMENT_SPECIAL_NEEDS = {"wheelchair", "child_seat"}
+
+
+def _required_driver_capabilities(special_needs) -> list[str]:
+    return sorted({str(x) for x in (special_needs or []) if str(x) in EQUIPMENT_SPECIAL_NEEDS})
+
+
+def _driver_supports_special_needs(driver: dict, special_needs) -> bool:
+    required = set(_required_driver_capabilities(special_needs))
+    return not required or required.issubset(set(driver.get("capabilities") or []))
+
+
 class TripRequest(BaseModel):
     pickup_address: str
     pickup_lat: float
@@ -402,6 +490,9 @@ class TripRequest(BaseModel):
     dropoff_lat: float
     dropoff_lng: float
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    stops: List[TripStop] = Field(default_factory=list, max_length=3)
+    special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
+    note: Optional[str] = Field(default=None, max_length=500)
 
 
 class RateTripRequest(BaseModel):
@@ -434,6 +525,14 @@ class EstimateRequest(BaseModel):
     pickup_lng: float
     dropoff_lat: float
     dropoff_lng: float
+    stops: List[TripStop] = Field(default_factory=list, max_length=3)
+
+
+class TripDestinationUpdate(BaseModel):
+    dropoff_address: str = Field(min_length=1, max_length=200)
+    dropoff_lat: float = Field(ge=-90, le=90)
+    dropoff_lng: float = Field(ge=-180, le=180)
+    stops: List[TripStop] = Field(default_factory=list, max_length=3)
 
 
 class SettingsUpdate(BaseModel):
@@ -479,10 +578,40 @@ async def osrm_route(plat, plng, dlat, dlng):
         return None
 
 
+async def osrm_route_points(points: list[tuple[float, float]]):
+    """Route through pickup, optional stops and destination. Points are (lat, lng)."""
+    if len(points) < 2:
+        return None
+    coords = ";".join(f"{lng},{lat}" for lat, lng in points)
+    url = f"https://router.project-osrm.org/route/v1/driving/{coords}"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(url, params={"overview": "full", "geometries": "geojson"})
+            data = r.json()
+            if data.get("code") != "Ok" or not data.get("routes"):
+                return None
+            route = data["routes"][0]
+            return {
+                "distance_km": round(route["distance"] / 1000.0, 2),
+                "duration_min": max(1, int(round(route["duration"] / 60.0))),
+                "geometry": route["geometry"],
+            }
+    except Exception:
+        return None
+
+
+def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int]:
+    distance = 0.0
+    for idx in range(len(points) - 1):
+        distance += haversine_km(points[idx][0], points[idx][1], points[idx + 1][0], points[idx + 1][1])
+    distance = round(distance, 1)
+    return distance, max(3, int(distance * 2.2))
+
+
 def send_email(to_email: str, subject: str, html: str) -> bool:
     """Send email via SendGrid if configured, else log to console."""
     api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
-    sender = os.environ.get("SENDER_EMAIL", "noreply@kjapp.no").strip()
+    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.com").strip()
     if not api_key:
         print(f"[EMAIL/no-key] to={to_email} subj={subject}\n{html[:200]}")
         return False
@@ -522,43 +651,115 @@ def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = 
     """
 
 
+DEFAULT_PRICING = {
+    "version": 1,
+    "currency": "NOK",
+    "base_fare": 70.0,
+    "per_km": 16.0,
+    "per_minute": 4.0,
+    "waiting_per_minute": 4.0,
+    "minimum_fare": 0.0,
+    "extra_stop_fee": 0.0,
+    "customer_cancellation_fee": 0.0,
+    "late_driver_cancellation_fee": 0.0,
+    "free_cancel_minutes": 2,
+    "dispatch_timeout_seconds": 180,
+    "surge": {"enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0},
+    "vehicle_rates": {
+        "ai-first": {"base_fare": 70.0, "per_km": 16.0, "per_minute": 4.0, "minimum_fare": 0.0},
+        "enkelt": {"base_fare": 55.0, "per_km": 14.0, "per_minute": 3.5, "minimum_fare": 0.0},
+        "trygg": {"base_fare": 90.0, "per_km": 22.0, "per_minute": 5.0, "minimum_fare": 0.0},
+        "premium": {"base_fare": 120.0, "per_km": 28.0, "per_minute": 6.0, "minimum_fare": 0.0},
+    },
+    "areas": {},
+}
+
+
+def _legacy_surge_multiplier(when: datetime = None) -> float:
+    now = (when or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Oslo"))
+    weekday, hour = now.weekday(), now.hour
+    surge = 1.0
+    if (weekday == 4 and hour >= 18) or weekday == 5 or weekday == 6:
+        surge = max(surge, 1.25)
+    if hour >= 22 or hour < 6:
+        surge = max(surge, 1.15)
+    return surge
+
+
+def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0) -> dict:
+    """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
+    cfg = {**DEFAULT_PRICING, **(pricing or {})}
+    vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
+    if vehicle_type == "ai-first":
+        r = {
+            "base_fare": cfg.get("base_fare", DEFAULT_PRICING["base_fare"]),
+            "per_km": cfg.get("per_km", DEFAULT_PRICING["per_km"]),
+            "per_minute": cfg.get("per_minute", DEFAULT_PRICING["per_minute"]),
+            "minimum_fare": cfg.get("minimum_fare", DEFAULT_PRICING["minimum_fare"]),
+        }
+    else:
+        r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
+             **(vehicle_rates.get(vehicle_type) or {})}
+    base = float(r["base_fare"]) + float(distance_km) * float(r["per_km"]) + float(duration_min) * float(r["per_minute"])
+    minimum = float(r.get("minimum_fare", cfg.get("minimum_fare", 0)) or 0)
+    surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
+    surge = 1.0
+    if surge_cfg.get("enabled"):
+        surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
+        surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
+    stop_fee = max(0, int(stops_count)) * float(cfg.get("extra_stop_fee", 0) or 0)
+    total = max(minimum, base * surge + stop_fee)
+    return {
+        "price": int(round(total)),
+        "surge_multiplier": round(surge, 2),
+        "pricing_version": int(cfg.get("version", 1)),
+        "extra_stop_fee_total": int(round(stop_fee)),
+    }
+
+
+async def active_pricing() -> dict:
+    s = await db.platform_settings.find_one({"_id": "singleton"}, {"pricing": 1})
+    return {**DEFAULT_PRICING, **((s or {}).get("pricing") or {})}
+
+
+def pricing_for_pickup(pricing: dict, lat: float, lng: float) -> tuple[dict, Optional[str]]:
+    """Apply the first enabled circular service-area override containing pickup coordinates."""
+    cfg = {**DEFAULT_PRICING, **(pricing or {})}
+    for area_id, area in (cfg.get("areas") or {}).items():
+        if not isinstance(area, dict) or area.get("enabled") is False:
+            continue
+        try:
+            center_lat = float(area["center_lat"])
+            center_lng = float(area["center_lng"])
+            radius_km = float(area.get("radius_km", 0))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if radius_km <= 0 or haversine_km(lat, lng, center_lat, center_lng) > radius_km:
+            continue
+        overrides = area.get("pricing") or {}
+        merged = {**cfg, **overrides}
+        merged["vehicle_rates"] = {**(cfg.get("vehicle_rates") or {}), **(overrides.get("vehicle_rates") or {})}
+        merged["surge"] = {**(cfg.get("surge") or {}), **(overrides.get("surge") or {})}
+        merged["version"] = cfg.get("version", 1)
+        return merged, area_id
+    return cfg, None
+
+
 def price_for(distance_km: float, vehicle_type: str, duration_min: float = None, when: datetime = None) -> int:
-    """Norwegian taxi rates (based on Oslo Taxi 2024/2025 tariffs):
-    startpris + km-pris + minutt-pris + surge (helg / natt)."""
+    """Legacy-compatible fallback used by tests/helpers; live quotes use calculate_price + active_pricing."""
     if duration_min is None:
         duration_min = max(3, distance_km * 2.2)
-    rates = {
-        "ai-first": {"start": 70, "km": 16.0, "min": 4.0},   # Standard
-        "enkelt":   {"start": 55, "km": 14.0, "min": 3.5},   # Beste pris
-        "trygg":    {"start": 90, "km": 22.0, "min": 5.0},   # Familie / XL / 7 seter
-        "premium":  {"start": 120, "km": 28.0, "min": 6.0},  # Business
-    }
-    r = rates.get(vehicle_type, rates["ai-first"])
-    base = r["start"] + distance_km * r["km"] + duration_min * r["min"]
-    # Norwegian surge model
-    now = when or datetime.now(timezone.utc)
-    # Convert to Norway time (UTC+1, UTC+2 in summer — simple UTC+1 approximation for tariff logic)
-    local_hour = (now.hour + 1) % 24
-    weekday = now.weekday()  # 0=Mon .. 6=Sun
-    surge = 1.0
-    # Weekend: Fri 18:00 → Sun 23:00
-    if (weekday == 4 and local_hour >= 18) or weekday == 5 or (weekday == 6 and local_hour <= 23):
-        surge = max(surge, 1.25)
-    # Night: 22:00 → 06:00 all days
-    if local_hour >= 22 or local_hour < 6:
-        surge = max(surge, 1.15)
-    return int(round(base * surge))
+    return calculate_price(distance_km, vehicle_type, duration_min, DEFAULT_PRICING, when)["price"]
 
 
 def current_surge_info(when: datetime = None) -> dict:
-    """Return current surge multiplier + reason so UI can display it.
-    NOTE: multiplier is kept for internal use only — do not display the % to customers."""
-    now = when or datetime.now(timezone.utc)
-    local_hour = (now.hour + 1) % 24
+    """Return current automatic time-based surge for Norway using DST-safe Europe/Oslo time."""
+    now = (when or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Oslo"))
+    local_hour = now.hour
     weekday = now.weekday()
     reasons = []
     surge = 1.0
-    if (weekday == 4 and local_hour >= 18) or weekday == 5 or (weekday == 6 and local_hour <= 23):
+    if (weekday == 4 and local_hour >= 18) or weekday == 5 or weekday == 6:
         surge = max(surge, 1.25); reasons.append("Helgetillegg")
     if local_hour >= 22 or local_hour < 6:
         surge = max(surge, 1.15); reasons.append("Natt-tillegg")
@@ -672,7 +873,7 @@ async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/ap
                 subscription_info=s["subscription"],
                 data=json.dumps(payload),
                 vapid_private_key=vapid["private_pem"],
-                vapid_claims={"sub": "mailto:noreply@kjapp.no"},
+                vapid_claims={"sub": "mailto:security@kjappapp.com"},
             )
         except WebPushException as e:
             # if subscription is gone (410) remove it
@@ -701,6 +902,13 @@ async def lifespan(app: FastAPI):
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.password_reset_tokens.create_index("token")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.revoked_tokens.create_index("jti", unique=True)
+    await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await ensure_marketing_waitlist_indexes(db)
+    await ensure_admin_ai_indexes(db)
+    await db.trip_share_tokens.create_index("token_hash", unique=True)
+    await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -947,7 +1155,7 @@ async def list_places(featured_only: bool = False):
 MAPTILER_API_KEY = os.environ.get("MAPTILER_API_KEY", "")
 
 
-PHOTON_HEADERS = {"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"}
+PHOTON_HEADERS = {"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.com)"}
 
 
 @api.get("/places/reverse")
@@ -1011,7 +1219,7 @@ async def reverse_geocode(lat: float, lng: float):
             r = await client.get(
                 "https://nominatim.openstreetmap.org/reverse",
                 params={"lat": lat, "lon": lng, "format": "json", "zoom": 17, "addressdetails": 1, "accept-language": "no"},
-                headers={"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"},
+                headers={"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.com)"},
             )
             data = r.json() if r.status_code == 200 else {}
     except Exception:
@@ -1096,7 +1304,7 @@ async def search_places(q: str, limit: int = 8):
                     "q": q, "format": "json", "addressdetails": 1,
                     "limit": limit, "countrycodes": "no", "accept-language": "no",
                 },
-                headers={"User-Agent": "KJAPP/1.0 (contact: noreply@kjapp.no)"},
+                headers={"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.com)"},
             )
             data = r.json() if r.status_code == 200 else []
     except Exception:
@@ -1123,23 +1331,28 @@ async def search_places(q: str, limit: int = 8):
 
 @api.post("/trips/estimate")
 async def trip_estimate(body: EstimateRequest):
-    route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
+    points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
+    route = await osrm_route_points(points)
     if route:
         est = route["distance_km"]
         duration = route["duration_min"]
         geometry = route["geometry"]
     else:
-        est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
-        duration = max(3, int(est * 2.2))
+        est, duration = fallback_route_points(points)
         geometry = None
+    pricing = await active_pricing()
+    effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
-    for vt, mult in [("ai-first", 1.0), ("enkelt", 0.85), ("trygg", 1.2), ("premium", 1.8)]:
-        options.append({
-            "vehicle_type": vt,
-            "price": int(price_for(est, vt, duration)),
-            "eta_min": duration,
-        })
-    return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry}
+    for vt in ("ai-first", "enkelt", "trygg", "premium"):
+        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
+        options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
+                        "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
+                        "extra_stop_fee_total": quote["extra_stop_fee_total"]})
+    commission_rate = await _platform_commission()
+    return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
+            "stops": [s.model_dump() for s in body.stops],
+            "commission_rate": commission_rate,
+            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
 
@@ -1232,7 +1445,30 @@ async def login(body: LoginRequest, request: Request, response: Response):
 
 
 @api.post("/auth/logout")
-async def logout(response: Response):
+async def logout(request: Request, response: Response):
+    token = _auth_token_from_request(request)
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = payload.get("sub")
+            jti = payload.get("jti")
+            if jti:
+                expires_at = datetime.fromtimestamp(float(payload.get("exp", 0)), tz=timezone.utc)
+                await db.revoked_tokens.update_one(
+                    {"jti": jti},
+                    {"$set": {"jti": jti, "user_id": user_id, "expires_at": expires_at}},
+                    upsert=True,
+                )
+            elif user_id:
+                # Revoke pre-JTI sessions issued by older deployments.
+                await db.users.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {"$set": {"tokens_valid_after": datetime.now(timezone.utc).timestamp()}},
+                )
+            if user_id:
+                await db.native_push_tokens.delete_many({"user_id": user_id})
+        except (jwt.PyJWTError, InvalidId, TypeError, ValueError):
+            pass
     response.delete_cookie("access_token", path="/")
     return {"ok": True}
 
@@ -1302,7 +1538,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
     except InvalidId:
         raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
-    if not user or not user.get("totp_enabled") or user.get("disabled"):
+    if not user or not user.get("totp_enabled") or user.get("disabled") or not _session_is_current(payload, user):
         raise HTTPException(status_code=401, detail="Ugyldig 2FA-token.")
     email = user["email"]
     ip = _client_ip(request)
@@ -1413,7 +1649,7 @@ async def reset_password(body: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
     await db.users.update_one(
         {"_id": ObjectId(rec["user_id"])},
-        {"$set": {"password_hash": hash_password(body.new_password)}, "$unset": {"must_reset_password": ""}},
+        {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
     )
     await db.password_reset_tokens.update_one({"_id": rec["_id"]}, {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}})
     # Unlock the account: clear brute-force counters so the user can log in immediately
@@ -1423,7 +1659,7 @@ async def reset_password(body: ResetPasswordRequest):
 
 @api.get("/auth/me")
 async def me(current=Depends(get_current_user)):
-    return current
+    return user_public(current)
 
 
 # ---- Trips ----
@@ -1433,20 +1669,24 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
     if pm_count == 0:
         raise HTTPException(status_code=402, detail="Legg til et betalingskort før du bestiller tur")
-    verified_count = await db.payment_methods.count_documents({"user_id": current["id"], "verified": {"$ne": False}})
+    verified_count = await db.payment_methods.count_documents({"user_id": current["id"], "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
     if verified_count == 0:
         raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
     trip_id = str(uuid.uuid4())
-    route = await osrm_route(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng)
+    points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
+    route = await osrm_route_points(points)
     if route:
         est = route["distance_km"]
         eta_min = route["duration_min"]
         geometry = route["geometry"]
     else:
-        est = round(haversine_km(body.pickup_lat, body.pickup_lng, body.dropoff_lat, body.dropoff_lng), 1)
-        eta_min = max(3, int(est * 2.2))
+        est, eta_min = fallback_route_points(points)
         geometry = None
-    price = price_for(est, body.vehicle_type, eta_min)
+    pricing = await active_pricing()
+    effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
+    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
+    commission_rate = await _platform_commission()
+    price = quote["price"]
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
@@ -1456,10 +1696,19 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "dropoff_address": body.dropoff_address,
         "dropoff_lat": body.dropoff_lat,
         "dropoff_lng": body.dropoff_lng,
+        "stops": [s.model_dump() for s in body.stops],
+        "special_needs": list(dict.fromkeys(body.special_needs)),
+        "passenger_note": (body.note or "").strip() or None,
         "vehicle_type": body.vehicle_type,
         "distance_km": est,
         "duration_min": eta_min,
         "price": price,
+        "pricing_version": quote["pricing_version"],
+        "pricing_area": pricing_area,
+        "pricing_snapshot": effective_pricing,
+        "commission_rate": commission_rate,
+        "surge_multiplier": quote["surge_multiplier"],
+        "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "searching",
         "driver_id": None,
@@ -1500,13 +1749,64 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
     return trip
 
 
+@api.patch("/trips/{trip_id}/destination")
+async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(get_current_user)):
+    """Change destination/stops while the ride is active, using the price snapshot captured at booking."""
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Tur ikke funnet")
+    if trip.get("status") not in ("driver_on_way", "at_pickup", "in_trip"):
+        raise HTTPException(400, "Destinasjonen kan bare endres på en aktiv tur")
+    points = [(trip["pickup_lat"], trip["pickup_lng"])] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
+    route = await osrm_route_points(points)
+    if route:
+        distance_km, duration_min, geometry = route["distance_km"], route["duration_min"], route["geometry"]
+    else:
+        distance_km, duration_min = fallback_route_points(points)
+        geometry = None
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
+    previous = {
+        "dropoff_address": trip.get("dropoff_address"), "dropoff_lat": trip.get("dropoff_lat"),
+        "dropoff_lng": trip.get("dropoff_lng"), "stops": trip.get("stops") or [], "price": trip.get("price"),
+    }
+    now_iso = datetime.now(timezone.utc).isoformat()
+    revision = {
+        "changed_at": now_iso, "changed_by": current["id"], "previous": previous,
+        "new": {"dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat,
+                "dropoff_lng": body.dropoff_lng, "stops": [s.model_dump() for s in body.stops],
+                "price": quote["price"]},
+    }
+    await db.trips.update_one(
+        {"trip_id": trip_id, "user_id": current["id"]},
+        {"$set": {
+            "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
+            "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
+            "geometry": geometry, "price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
+            "extra_stop_fee_total": quote["extra_stop_fee_total"], "updated_at": now_iso,
+        }, "$push": {"destination_revisions": revision}},
+    )
+    if trip.get("driver_id"):
+        await send_push_to_user(trip["driver_id"], "Destinasjonen er endret",
+                                f"Ny destinasjon: {body.dropoff_address}. Ny avtalt pris: {quote['price']} kr.", "/driver/trip")
+    return {
+        "ok": True, "price": quote["price"], "previous_price": trip.get("price"),
+        "distance_km": distance_km, "duration_min": duration_min,
+        "pricing_version": quote["pricing_version"], "stops": [s.model_dump() for s in body.stops],
+    }
+
+
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(get_current_user)):
-    await db.trips.update_one(
+    result = await db.trips.update_one(
         {"trip_id": trip_id, "user_id": current["id"]},
         {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}},
     )
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Tur ikke funnet")
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -1550,11 +1850,13 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
     return {"ok": True}
 
 
-def require_driver(current=Depends(get_current_user)):
+async def require_driver(current=Depends(get_current_user)):
     if current.get("role") not in ("driver", "admin"):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("role") == "driver" and current.get("approved") is False:
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+    if current.get("role") == "driver":
+        await _require_active_fleet(current.get("fleet_id"))
     return current
 
 
@@ -1598,13 +1900,58 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     return {"ok": True}
 
 
+@api.get("/trips/{trip_id}/cancel-preview")
+async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Tur ikke funnet")
+    if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
+        raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    fee = 0
+    free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
+    if trip.get("driver_id"):
+        accepted_at = trip.get("driver_route_started_at") or trip.get("updated_at") or trip.get("created_at")
+        try:
+            accepted_dt = datetime.fromisoformat(str(accepted_at).replace("Z", "+00:00"))
+            elapsed = (datetime.now(timezone.utc) - accepted_dt).total_seconds() / 60
+        except Exception:
+            elapsed = 0
+        if elapsed > free_minutes:
+            fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
+    return {"cancellation_fee": fee, "currency": "NOK", "free_cancel_minutes": free_minutes}
+
+
 @api.post("/trips/{trip_id}/cancel")
 async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(404, "Tur ikke funnet")
+    if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
+        raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    fee = 0
+    if trip.get("driver_id"):
+        free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
+        accepted_at = trip.get("driver_route_started_at") or trip.get("updated_at") or trip.get("created_at")
+        try:
+            accepted_dt = datetime.fromisoformat(str(accepted_at).replace("Z", "+00:00"))
+            elapsed = (datetime.now(timezone.utc) - accepted_dt).total_seconds() / 60
+        except Exception:
+            elapsed = 0
+        if elapsed > free_minutes:
+            fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.trips.update_one(
         {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {
+            "status": "cancelled", "cancelled_at": now_iso, "cancelled_by": "customer",
+            "cancellation_fee": fee, "cancellation_fee_status": "pending" if fee > 0 else "not_applicable",
+        }},
     )
-    return {"ok": True}
+    if trip.get("driver_id"):
+        await send_push_to_user(trip["driver_id"], "Turen ble avbestilt", "Kunden har avbestilt turen.", "/driver")
+    return {"ok": True, "cancellation_fee": fee, "currency": "NOK"}
 
 
 @api.get("/trips")
@@ -1628,8 +1975,10 @@ async def _load_trip_or_403(trip_id: str, current: dict):
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
     is_passenger = trip.get("user_id") == current["id"]
-    is_driver = trip.get("driver_user_id") == current["id"] or (current.get("role") in ("driver", "admin") and trip.get("driver_id") == current.get("driver_id"))
-    if not (is_passenger or is_driver or current.get("role") == "admin"):
+    is_driver = current.get("role") == "driver" and (
+        trip.get("driver_id") == current["id"] or trip.get("driver_user_id") == current["id"]
+    )
+    if not (is_passenger or is_driver or current.get("role") in ("admin", "superadmin")):
         raise HTTPException(status_code=403, detail="Ikke tilgang til denne turen")
     return trip, is_passenger, is_driver
 
@@ -1685,6 +2034,122 @@ async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depe
             f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
         )
     return msg
+
+
+class SafetyEventRequest(BaseModel):
+    kind: Literal["emergency", "report", "share"] = "report"
+    note: Optional[str] = Field(default=None, max_length=1000)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
+
+
+@api.post("/trips/{trip_id}/safety")
+async def trip_safety_event(trip_id: str, body: SafetyEventRequest, current=Depends(get_current_user)):
+    """Audit a safety action for a trip. Emergency calls are still placed by the device directly to 112."""
+    trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
+    role = "passenger" if is_passenger else "driver" if is_driver else current.get("role", "admin")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    event = {
+        "id": str(uuid.uuid4()),
+        "trip_id": trip_id,
+        "kind": body.kind,
+        "user_id": current.get("id"),
+        "role": role,
+        "name": current.get("fullName"),
+        "phone": current.get("phone"),
+        "email": current.get("email"),
+        "lat": body.lat,
+        "lng": body.lng,
+        "trip_status": trip.get("status"),
+        "driver_lat": trip.get("driver_lat"),
+        "driver_lng": trip.get("driver_lng"),
+        "note": (body.note or "").strip() or None,
+        "created_at": now_iso,
+    }
+    await db.safety_events.insert_one(dict(event))
+    # Emergency/report creates an operator-visible case immediately. This is NOT a dispatch to 112.
+    if body.kind in ("emergency", "report"):
+        priority = "kritisk" if body.kind == "emergency" else "høy"
+        ticket = {
+            "subject": f"{'AKUTT SIKKERHET' if body.kind == 'emergency' else 'Sikkerhetsrapport'} · tur {trip_id[:8]}",
+            "body": (
+                f"Tur: {trip_id}\nRolle: {role}\nStatus: {trip.get('status')}\n"
+                f"Kontakt: {current.get('fullName') or ''} {current.get('phone') or ''} {current.get('email') or ''}\n"
+                f"Posisjon: {body.lat if body.lat is not None else 'ukjent'}, {body.lng if body.lng is not None else 'ukjent'}\n"
+                f"Notat: {(body.note or '').strip() or '—'}"
+            ),
+            "category": "annet",
+            "priority": priority,
+            "contact_email": current.get("email"),
+            "status": "open",
+            "created_by": current.get("id"),
+            "created_by_email": current.get("email"),
+            "trip_id": trip_id,
+            "safety_event_id": event["id"],
+            "created_at": now_iso,
+            "notes": [],
+        }
+        await db.support_tickets.insert_one(ticket)
+    return {"ok": True, "event_id": event["id"], "emergency_number": "112"}
+
+
+@api.post("/trips/{trip_id}/share-link")
+async def create_trip_share_link(trip_id: str, current=Depends(get_current_user)):
+    trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
+    if not (is_passenger or is_driver):
+        raise HTTPException(403, "Kun kunde eller sjåfør kan dele turen")
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    token_hash = __import__("hashlib").sha256(token.encode("utf-8")).hexdigest()
+    await db.trip_share_tokens.insert_one({
+        "token_hash": token_hash,
+        "trip_id": trip_id,
+        "created_by": current.get("id"),
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": expires_at,
+    })
+    return {
+        "token": token,
+        "url": f"https://kjappapp.no/tur/{token}",
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+@api.get("/trips/share/{token}")
+async def public_trip_share(token: str):
+    token_hash = __import__("hashlib").sha256(token.encode("utf-8")).hexdigest()
+    share = await db.trip_share_tokens.find_one({"token_hash": token_hash})
+    if not share or share.get("expires_at") is None or share["expires_at"] <= datetime.now(timezone.utc):
+        raise HTTPException(404, "Delingslenken er utløpt eller ugyldig")
+    trip = await db.trips.find_one({"trip_id": share["trip_id"]})
+    if not trip:
+        raise HTTPException(404, "Turen finnes ikke")
+    driver = trip.get("driver") or {}
+    # Intentionally omit passenger identity/contact and exact user IDs.
+    return {
+        "trip_id": trip.get("trip_id"),
+        "status": trip.get("status"),
+        "pickup_address": trip.get("pickup_address"),
+        "dropoff_address": trip.get("dropoff_address"),
+        "vehicle_type": trip.get("vehicle_type"),
+        "driver": {
+            "name": driver.get("name"),
+            "car": driver.get("car"),
+            "plate": driver.get("plate"),
+            "rating": driver.get("rating"),
+        } if driver else None,
+        "driver_location": {
+            "lat": trip.get("driver_lat"),
+            "lng": trip.get("driver_lng"),
+            "updated_at": trip.get("driver_location_at"),
+        } if trip.get("driver_lat") is not None and trip.get("driver_lng") is not None else None,
+        "created_at": trip.get("created_at"),
+        "at_pickup_at": trip.get("at_pickup_at"),
+        "trip_started_at": trip.get("trip_started_at"),
+        "arrived_at": trip.get("arrived_at"),
+        "cancelled_at": trip.get("cancelled_at"),
+        "expires_at": share["expires_at"].isoformat(),
+    }
 
 
 class TranslateRequest(BaseModel):
@@ -1817,22 +2282,15 @@ async def list_payment_methods(current=Depends(get_current_user)):
     async for m in cursor:
         m["id"] = str(m["_id"])
         m.pop("_id", None)
-        # Default: legacy records without the field are treated as verified=True
-        # (they were seeded/imported manually; Stripe SetupIntent-created ones set it explicitly)
-        m["verified"] = bool(m.get("verified", True))
+        m["verified"] = bool(m.get("verified") is True and m.get("setup_status") == "succeeded" and m.get("stripe_payment_method_id"))
         methods.append(m)
     return methods
 
 
 @api.post("/payment-methods")
 async def add_payment_method(body: PaymentMethodRequest, current=Depends(get_current_user)):
-    if body.is_default:
-        await db.payment_methods.update_many({"user_id": current["id"]}, {"$set": {"is_default": False}})
-    # SECURITY (SEC-002): cards added through this JSON endpoint are NOT payment-verified —
-    # a chargeable card must be added via Stripe SetupIntent (/payments/card/setup). Vipps is
-    # authenticated by Vipps itself. Storing manual cards as verified=False prevents the booking
-    # payment-gate (/trips/request) from being bypassed with a fabricated card record.
-    verified = body.type == "vipps"
+    # User-entered details never prove a payment instrument, including Vipps.
+    verified = False
     doc = {
         "user_id": current["id"],
         "type": body.type,
@@ -1960,6 +2418,10 @@ async def stripe_card_setup_status(session_id: str, current=Depends(get_current_
         s = stripe.checkout.Session.retrieve(session_id, expand=["setup_intent"])
     except stripe.error.StripeError as e:
         raise HTTPException(400, f"Kunne ikke hente sesjon: {e}")
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    customer_id = (user or {}).get("stripe_customer_id")
+    if not customer_id or (s.get("metadata") or {}).get("user_id") != current["id"] or _stripe_id(s.get("customer")) != customer_id:
+        raise HTTPException(404, "Betalingsoppsett ikke funnet")
     if s.mode != "setup" or s.status != "complete":
         return {"ready": False, "status": s.status}
     si = s.setup_intent
@@ -1967,6 +2429,8 @@ async def stripe_card_setup_status(session_id: str, current=Depends(get_current_
         si_obj = si
     else:
         si_obj = stripe.SetupIntent.retrieve(si)
+    if _stripe_id(si_obj.get("customer")) != customer_id:
+        raise HTTPException(404, "Betalingsoppsett ikke funnet")
     pm_id = si_obj.payment_method
     if not pm_id:
         return {"ready": False, "reason": "no payment method attached"}
@@ -2159,13 +2623,15 @@ ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
-async def _dispatch_candidates(lat: float, lng: float) -> list:
-    """Real, available drivers sorted by actual distance to the pickup point.
+async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None) -> list:
+    """Real, available drivers sorted by actual distance to pickup.
 
-    Eligible = approved + online + GPS ping within 90 s + not already on a trip.
+    Equipment-bound needs (wheelchair/child seat) are hard requirements. Other needs are
+    communicated to the driver but do not silently exclude otherwise eligible cars.
     """
     if lat is None or lng is None:
         return []
+    required = set(required_capabilities or [])
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
     busy = set()
     async for t in db.trips.find({"status": {"$in": ACTIVE_TRIP_STATUSES}}, {"driver_id": 1}):
@@ -2175,10 +2641,12 @@ async def _dispatch_candidates(lat: float, lng: float) -> list:
     async for d in db.users.find(
         {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True},
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
-        {"last_lat": 1, "last_lng": 1, "name": 1},
+        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1},
     ):
         did = str(d["_id"])
-        if did in busy or d.get("last_lat") is None:
+        if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
+            continue
+        if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
         out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
     out.sort(key=lambda x: x["km"])
@@ -2192,9 +2660,12 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
     """
     tried = set(trip.get("offer_history") or [])
-    cands = await _dispatch_candidates(trip.get("pickup_lat"), trip.get("pickup_lng"))
+    cands = await _dispatch_candidates(
+        trip.get("pickup_lat"), trip.get("pickup_lng"),
+        _required_driver_capabilities(trip.get("special_needs")),
+    )
     nxt = next((c for c in cands if c["id"] not in tried), None)
-    commission = await _platform_commission()
+    commission = await _commission_for_trip(trip)
     earnings = int(round((trip.get("price") or 0) * (1 - commission)))
     title = f"Ny tur · {earnings} kr til deg"
     body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
@@ -2236,7 +2707,46 @@ async def dispatch_loop():
                 "dispatch_mode": "sequential",
                 "offer_expires_at": {"$lt": now_iso},
             }).limit(20):
+                pricing = t.get("pricing_snapshot") or await active_pricing()
+                timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
+                try:
+                    created = datetime.fromisoformat(str(t.get("created_at")).replace("Z", "+00:00"))
+                    expired = (datetime.now(timezone.utc) - created).total_seconds() >= timeout_seconds
+                except Exception:
+                    expired = False
+                if expired:
+                    res = await db.trips.update_one(
+                        {"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+                        {"$set": {"status": "cancelled", "cancelled_at": now_iso,
+                                  "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
+                    )
+                    if res.modified_count:
+                        await send_push_to_user(t["user_id"], "Ingen ledig sjåfør",
+                                                "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
+                    continue
                 await offer_trip_to_next_driver(t)
+            # Hard stop for any still-unassigned request, including broadcast mode.
+            async for t in db.trips.find({
+                "status": {"$in": ["searching", "booking"]},
+                "driver_id": None,
+            }).sort("created_at", 1).limit(50):
+                pricing = t.get("pricing_snapshot") or await active_pricing()
+                timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
+                try:
+                    created = datetime.fromisoformat(str(t.get("created_at")).replace("Z", "+00:00"))
+                    expired = (datetime.now(timezone.utc) - created).total_seconds() >= timeout_seconds
+                except Exception:
+                    expired = False
+                if not expired:
+                    continue
+                res = await db.trips.update_one(
+                    {"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+                    {"$set": {"status": "cancelled", "cancelled_at": now_iso,
+                              "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
+                )
+                if res.modified_count:
+                    await send_push_to_user(t["user_id"], "Ingen ledig sjåfør",
+                                            "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
         except Exception as e:
             print(f"dispatch_loop error: {e}")
         await asyncio.sleep(3)
@@ -2275,9 +2785,13 @@ async def driver_pending(current=Depends(require_driver)):
     }).sort("created_at", 1).limit(10):
         if t["trip_id"] in declined:
             continue
+        if not _driver_supports_special_needs(current, t.get("special_needs")):
+            continue
         t["id"] = str(t["_id"])
         t.pop("_id", None)
-        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+        trip_commission = await _commission_for_trip(t)
+        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - trip_commission)))
+        t["commission_rate"] = trip_commission
         t["pickup_route"] = None
         u = None
         if t.get("user_id"):
@@ -2320,6 +2834,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
+        raise HTTPException(status_code=403, detail="Turen krever utstyr som ikke er registrert på denne sjåføren")
     if trip_pre.get("dispatch_mode") == "sequential" and trip_pre.get("offer_driver_id") not in (None, driver_id):
         raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
     # Driver's REAL current GPS. If we don't have it we store nothing and report no ETA —
@@ -2392,8 +2908,9 @@ async def driver_current(current=Depends(require_driver)):
         except Exception:
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
-    commission = await _platform_commission()
+    commission = await _commission_for_trip(t)
     t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+    t["commission_rate"] = commission
     u = None
     if t.get("user_id"):
         try:
@@ -2423,6 +2940,9 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
+        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        if existing and existing.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
+            return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
@@ -2438,6 +2958,9 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
+        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
+            return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
@@ -2468,6 +2991,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
+        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        if existing and existing.get("status") in ("arrived", "completed", "rated"):
+            return {"ok": True, "already_applied": True, "bonuses": []}
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
@@ -2844,6 +3370,8 @@ async def google_session(body: GoogleSessionRequest, response: Response):
         driver_id = user.get("driver_id")
         if not user.get("google_linked"):
             await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
+    if user and user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
@@ -2978,6 +3506,8 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
         driver_id = None
         phone = ""
 
+    if user and user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": phone, "role": role, "driver_id": driver_id}}
@@ -2986,9 +3516,32 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
 # ============================================================
 # Fleet owner portal
 # ============================================================
-def require_admin(current=Depends(get_current_user)):
+ADMIN_PERMISSION_PREFIXES = (
+    ("/api/admin/finance", "finance"),
+    ("/api/admin/transactions", "finance"),
+    ("/api/admin/refunds", "finance"),
+    ("/api/admin/control/payouts", "finance"),
+    ("/api/admin/control/stripe-fleets", "finance"),
+    ("/api/admin/support", "support"),
+    ("/api/admin/control/communication-fleets", "communications"),
+    ("/api/admin/control/communications", "communications"),
+    ("/api/admin/settings", "system"),
+    ("/api/admin/audit-log", "system"),
+    ("/api/admin/control/integrations", "system"),
+    ("/api/admin/control/admin-users", "system"),
+    ("/api/admin/", "operations"),
+)
+
+
+def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
+    if current.get("role") == "admin":
+        permissions = current.get("permissions", None)
+        if permissions is not None:
+            required = next((perm for prefix, perm in ADMIN_PERMISSION_PREFIXES if request.url.path.startswith(prefix)), None)
+            if required and required not in permissions:
+                raise HTTPException(status_code=403, detail=f"Mangler admin-tilgang: {required}")
     return current
 
 
@@ -2998,9 +3551,11 @@ def require_superadmin(current=Depends(get_current_user)):
     return current
 
 
-def require_fleet_owner(current=Depends(get_current_user)):
+async def require_fleet_owner(current=Depends(get_current_user)):
     if current.get("role") not in ("fleet_owner", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for flåteiere")
+    if current.get("role") == "fleet_owner":
+        await _require_active_fleet(current.get("fleet_id"))
     return current
 
 
@@ -3016,7 +3571,7 @@ class FleetCreateRequest(BaseModel):
     name: str
     org_number: Optional[str] = ""
     owner_email: str
-    commission_rate: float = 0.20
+    commission_rate: float = 0.10
 
 
 @api.post("/admin/fleets")
@@ -3024,7 +3579,9 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     """Admin creates a fleet, links an existing (or new) user as fleet_owner."""
     owner_email = body.owner_email.strip().lower()
     owner = await db.users.find_one({"email": owner_email})
+    new_owner = False
     if not owner:
+        new_owner = True
         # Auto-create fleet_owner user with random password (they log in via password reset later)
         temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
@@ -3054,7 +3611,35 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
-    await _audit(current, "fleet.create", "fleet", fleet_id, None, {"name": body.name, "owner_email": owner_email, "commission_rate": body.commission_rate})
+    onboarding_email_sent = False
+    if new_owner:
+        # Complete manual onboarding by sending the new fleet owner directly into the
+        # existing secure password-reset flow. The admin never needs to handle/share
+        # the randomly generated temporary password.
+        now = datetime.now(timezone.utc)
+        reset_token = secrets.token_urlsafe(32)
+        await db.password_reset_tokens.insert_one({
+            "token": reset_token,
+            "user_id": owner_id,
+            "email": owner_email,
+            "created_at": now,
+            "expires_at": now + timedelta(hours=24),
+            "used": False,
+        })
+        frontend = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
+        reset_url = f"{frontend}/reset-password/{reset_token}"
+        onboarding_email_sent = bool(send_email(
+            owner_email,
+            "Velkommen som løyvehaver i KJAPP",
+            email_password_reset_html(reset_url),
+        ))
+    fleet_doc["onboarding_email_sent"] = onboarding_email_sent
+    await _audit(current, "fleet.create", "fleet", fleet_id, None, {
+        "name": body.name,
+        "owner_email": owner_email,
+        "commission_rate": body.commission_rate,
+        "onboarding_email_sent": onboarding_email_sent,
+    })
     return fleet_doc
 
 
@@ -3127,7 +3712,7 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
                 today_gross += price; today_trips += 1
     online_count = await db.users.count_documents({"role": "driver", "fleet_id": fid, "online": True})
     fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = float(fleet.get("commission_rate", 0.20))
+    commission = float(fleet.get("commission_rate", 0.10))
     return {
         "drivers_total": len(drivers_ids),
         "drivers_online": online_count,
@@ -3143,7 +3728,7 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
     if not fid: raise HTTPException(404, "Ingen flåte")
     drivers = []
     async for d in db.users.find({"role": "driver", "fleet_id": fid}):
-        d["id"] = str(d["_id"]); d.pop("_id", None); d.pop("password_hash", None)
+        d = user_public(d)
         # Today income
         today = datetime.now(timezone.utc).date().isoformat()
         income = 0; trips = 0
@@ -3315,7 +3900,17 @@ async def fleet_export_monthly(
 
 async def _platform_commission() -> float:
     s = await db.platform_settings.find_one({"_id": "singleton"})
-    return (s or {}).get("default_commission", 0.10)
+    return float((s or {}).get("default_commission", 0.10))
+
+
+async def _commission_for_trip(trip: dict) -> float:
+    """Historical trips keep the commission captured at booking; legacy trips fall back safely."""
+    if trip.get("commission_rate") is not None:
+        try:
+            return float(trip["commission_rate"])
+        except (TypeError, ValueError):
+            pass
+    return await _platform_commission()
 
 
 # ============================================================
@@ -3493,6 +4088,20 @@ async def admin_bonus_payouts(limit: int = 50, current=Depends(require_admin)):
     return {"payouts": out, "total_kr": total}
 
 
+def _fresh_driver_location(value, now=None) -> bool:
+    """An online flag alone is not evidence that a driver is still online."""
+    if not value:
+        return False
+    try:
+        seen = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        age = ((now or datetime.now(timezone.utc)) - seen).total_seconds()
+        return 0 <= age <= 120
+    except (TypeError, ValueError):
+        return False
+
+
 @api.get("/admin/overview")
 async def admin_overview(current=Depends(require_admin)):
     """KPI dashboard for Operations Control Center."""
@@ -3503,11 +4112,15 @@ async def admin_overview(current=Depends(require_admin)):
 
     active_fleets = await count(db.fleets, {"status": {"$ne": "suspended"}})
     suspended_fleets = await count(db.fleets, {"status": "suspended"})
-    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["submitted", "under_review", "documents_required"]}})
+    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["pending", "submitted", "under_review", "documents_required"]}})
     approved_drivers = await count(db.users, {"role": "driver", "approved": True})
     pending_drivers = await count(db.users, {"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
-    drivers_online = await count(db.users, {"role": "driver", "online": True})
+    drivers_online = 0
+    async for driver in db.users.find({"role": "driver", "online": True}, {"last_location_at": 1, "last_lat": 1, "last_lng": 1}):
+        if _fresh_driver_location(driver.get("last_location_at")) and driver.get("last_lat") is not None and driver.get("last_lng") is not None:
+            drivers_online += 1
     active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}})
+    stale_active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}, "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()}})
     trips_today = await count(db.trips, {"created_at": {"$gte": today}})
     trips_yday = await count(db.trips, {"created_at": {"$gte": yday, "$lt": today}})
     completed_today = await count(db.trips, {"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}})
@@ -3527,7 +4140,7 @@ async def admin_overview(current=Depends(require_admin)):
     return {
         "fleets": {"active": active_fleets, "suspended": suspended_fleets, "pending_applications": pending_applications},
         "drivers": {"approved": approved_drivers, "pending": pending_drivers, "online": drivers_online},
-        "trips": {"active": active_trips, "today": trips_today, "yesterday": trips_yday, "completed_today": completed_today, "cancelled_today": cancelled_today},
+        "trips": {"active": active_trips, "stale_active": stale_active_trips, "today": trips_today, "yesterday": trips_yday, "completed_today": completed_today, "cancelled_today": cancelled_today},
         "finance": {"gmv_today": gmv_today, "kjapp_revenue_today": kjapp_revenue_today, "pending_payouts": pending_payouts},
         "support": {"open": open_support},
         "as_of": datetime.now(timezone.utc).isoformat(),
@@ -3570,6 +4183,7 @@ async def admin_suspend_fleet(fleet_id: str, body: FleetSuspendRequest, current=
     if not f: raise HTTPException(404, "Fant ikke flåte")
     prev = f.get("status", "active")
     await db.fleets.update_one({"_id": ObjectId(fleet_id)}, {"$set": {"status": "suspended", "suspended_at": datetime.now(timezone.utc).isoformat()}})
+    await db.users.update_many({"fleet_id": fleet_id, "role": "driver"}, {"$set": {"online": False}})
     await _audit(current, "fleet.suspend", "fleet", fleet_id, {"status": prev}, {"status": "suspended"}, body.reason)
     return {"ok": True}
 
@@ -3652,20 +4266,117 @@ async def admin_users(q: Optional[str] = None, status: Optional[str] = None, pag
     total = await db.users.count_documents(filt)
     out = []
     async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
-        u["id"] = str(u["_id"])
-        u.pop("_id", None)
-        out.append(u)
+        out.append(user_public(u))
     return _paged(out, total, page, page_size, "users")
+
+
+class AdminUserStatusRequest(BaseModel):
+    disabled: bool
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+@api.post("/admin/users/{user_id}/set-status")
+async def admin_set_user_status(user_id: str, body: AdminUserStatusRequest, current=Depends(require_admin)):
+    try:
+        target = await db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(400, "Ugyldig bruker-id")
+    if not target:
+        raise HTTPException(404, "Bruker ikke funnet")
+    if str(target["_id"]) == current.get("id") and body.disabled:
+        raise HTTPException(400, "Du kan ikke deaktivere din egen konto")
+    if target.get("role") in ("admin", "superadmin") and current.get("role") != "superadmin":
+        raise HTTPException(403, "Kun superadmin kan endre administratorstatus")
+
+    previous = bool(target.get("disabled", False))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sets = {
+        "disabled": body.disabled,
+        "disabled_reason": (body.reason or "").strip() if body.disabled else None,
+        "status_updated_at": now_iso,
+    }
+    if body.disabled:
+        # Invalidate existing sessions immediately.
+        sets["session_version"] = int(target.get("session_version", 0) or 0) + 1
+        sets["online"] = False
+    await db.users.update_one({"_id": target["_id"]}, {"$set": sets})
+    await _audit(
+        current,
+        "user.disable" if body.disabled else "user.reactivate",
+        "user",
+        user_id,
+        {"disabled": previous},
+        {"disabled": body.disabled, "reason": sets["disabled_reason"]},
+    )
+    return {"ok": True, "disabled": body.disabled}
 
 
 @api.get("/admin/drivers")
 async def admin_drivers(current=Depends(require_admin)):
     out = []
     async for u in db.users.find({"role": "driver"}, {"password_hash": 0}).sort("created_at", -1):
-        u["id"] = str(u["_id"])
-        u.pop("_id", None)
-        out.append(u)
+        out.append(user_public(u))
     return {"drivers": out}
+
+
+@api.post("/admin/drivers/manual")
+async def admin_create_driver_manual(body: ManualDriverCreateRequest, current=Depends(require_admin)):
+    """Create a pending driver account from the admin panel.
+
+    A driver without an own car must receive an assigned vehicle immediately;
+    drivers who own a car may complete the vehicle fields later.
+    """
+    email = str(body.email).strip().lower()
+    car = (body.car or "").strip()
+    plate = (body.plate or "").strip().upper()
+    if not body.has_own_car and (not car or not plate):
+        raise HTTPException(400, "Bilmodell og registreringsnummer er påkrevd når sjåføren ikke har egen bil")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(409, "E-post er allerede registrert")
+    fleet_id = (body.fleet_id or "").strip() or None
+    if fleet_id:
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id), "active": {"$ne": False}})
+        except Exception:
+            fleet = None
+        if not fleet:
+            raise HTTPException(400, "Ugyldig eller inaktiv løyvehaver")
+    now = datetime.now(timezone.utc)
+    user_doc = {
+        "email": email,
+        "password_hash": hash_password(secrets.token_urlsafe(24)),
+        "fullName": body.full_name.strip(),
+        "phone": body.phone.strip(),
+        "role": "driver",
+        "approved": False,
+        "online": False,
+        "has_own_car": body.has_own_car,
+        "vehicle_type": body.vehicle_type,
+        "created_at": now.isoformat(),
+        "must_reset_password": True,
+    }
+    if car:
+        user_doc["car"] = car
+    if plate:
+        user_doc["plate"] = plate
+    if fleet_id:
+        user_doc["fleet_id"] = fleet_id
+    result = await db.users.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+    reset_token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.insert_one({
+        "token": reset_token, "user_id": user_id, "email": email,
+        "created_at": now, "expires_at": now + timedelta(hours=24), "used": False,
+    })
+    public_url = (os.environ.get("FLEET_PUBLIC_URL") or os.environ.get("FRONTEND_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
+    activation_url = f"{public_url}/reset-password/{reset_token}"
+    email_sent = bool(send_email(email, "Aktiver KJAPP-sjåførkonto", email_password_reset_html(activation_url)))
+    await _audit(current, "driver.manual_create", "driver", user_id, None, {
+        "email": email, "has_own_car": body.has_own_car, "fleet_id": fleet_id, "email_sent": email_sent,
+    })
+    public = user_public(user_doc)
+    public["id"] = user_id
+    return {"ok": True, "driver": public, "email_sent": email_sent, "activation_url": activation_url if not email_sent else None}
 
 
 @api.get("/admin/trips")
@@ -3701,8 +4412,20 @@ class DriverInviteRequest(BaseModel):
     car: str  # e.g. "Tesla Model Y"
     plate: str  # e.g. "EL12345"
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
     email: Optional[str] = None  # if set, send invite via SendGrid
+
+
+class ManualDriverCreateRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    phone: str = Field(min_length=5, max_length=40)
+    has_own_car: bool = False
+    car: Optional[str] = Field(default=None, max_length=120)
+    plate: Optional[str] = Field(default=None, max_length=20)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    fleet_id: Optional[str] = None
 
 
 class DriverSignupRequest(BaseModel):
@@ -3717,6 +4440,19 @@ class DriverSignupRequest(BaseModel):
     profile_photo_path: Optional[str] = None
 
 
+def _invite_expired(invite: dict) -> bool:
+    value = invite.get("expires_at")
+    if not value:
+        return False
+    try:
+        expires_at = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        return expires_at <= datetime.now(timezone.utc)
+    except (TypeError, ValueError):
+        return True
+
+
 @api.post("/admin/driver-invites")
 async def create_driver_invite(body: DriverInviteRequest, request: Request, current=Depends(require_admin)):
     token = secrets.token_urlsafe(24)
@@ -3725,6 +4461,7 @@ async def create_driver_invite(body: DriverInviteRequest, request: Request, curr
         "car": body.car.strip(),
         "plate": body.plate.strip().upper(),
         "vehicle_type": body.vehicle_type,
+        "capabilities": list(dict.fromkeys(body.capabilities)),
         "note": body.note or "",
         "email": (body.email or "").strip().lower() or None,
         "created_by": current["id"],
@@ -3735,8 +4472,7 @@ async def create_driver_invite(body: DriverInviteRequest, request: Request, curr
     }
     await db.driver_invites.insert_one(doc)
     if body.email:
-        origin = str(request.base_url).rstrip("/").replace("/api", "")
-        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
+        frontend = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
         invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
         ok = send_email(
             body.email,
@@ -3767,14 +4503,14 @@ async def get_driver_invite(token: str):
         raise HTTPException(status_code=404, detail="Invitasjon ikke funnet")
     if inv.get("used"):
         raise HTTPException(status_code=410, detail="Invitasjon allerede brukt")
-    expires = inv.get("expires_at")
-    if expires and expires < datetime.now(timezone.utc).isoformat():
+    if _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon utløpt")
     return {
         "token": inv["token"],
         "car": inv.get("car"),
         "plate": inv.get("plate"),
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
+        "capabilities": inv.get("capabilities") or [],
         "note": inv.get("note", ""),
     }
 
@@ -3782,9 +4518,11 @@ async def get_driver_invite(token: str):
 @api.post("/driver-invites/accept")
 async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     inv = await db.driver_invites.find_one({"token": body.token})
-    if not inv or inv.get("used"):
+    if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon ugyldig")
     email = body.email.strip().lower()
+    if inv.get("email") and inv["email"] != email:
+        raise HTTPException(status_code=403, detail="Invitasjonen er knyttet til en annen e-postadresse")
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
     if len(body.password) < 6:
@@ -3792,6 +4530,24 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     # Require all three documents
     if not (body.drivers_license_path and body.taxi_license_path and body.profile_photo_path):
         raise HTTPException(status_code=400, detail="Du må laste opp førerkort, kjøreseddel og profilbilde")
+    expected_uploads = {
+        body.drivers_license_path: "drivers_license",
+        body.taxi_license_path: "taxi_license",
+        body.profile_photo_path: "profile_photo",
+    }
+    if len(expected_uploads) != 3:
+        raise HTTPException(status_code=400, detail="Hvert dokument må lastes opp separat")
+    verified_uploads = {}
+    async for uploaded in db.uploaded_files.find({
+        "invite_token": body.token,
+        "storage_path": {"$in": list(expected_uploads)},
+        "scope": "driver-docs",
+        "owner_user_id": None,
+        "is_deleted": {"$ne": True},
+    }):
+        verified_uploads[uploaded.get("storage_path")] = uploaded.get("doc_type")
+    if any(verified_uploads.get(path) != doc_type for path, doc_type in expected_uploads.items()):
+        raise HTTPException(status_code=400, detail="Dokumentene tilhører ikke denne invitasjonen")
     doc = {
         "email": email,
         "password_hash": hash_password(body.password),
@@ -3801,6 +4557,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "car": inv.get("car"),
         "plate": inv.get("plate"),
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
+        "capabilities": inv.get("capabilities") or [],
         "rating": 5.0,
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
@@ -3816,7 +4573,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     uid = str(result.inserted_id)
     # Reassign uploaded docs to this driver's owner_user_id (they were uploaded before user existed)
     await db.uploaded_files.update_many(
-        {"storage_path": {"$in": [body.drivers_license_path, body.taxi_license_path, body.profile_photo_path]}},
+        {"invite_token": body.token, "storage_path": {"$in": list(expected_uploads)}},
         {"$set": {"owner_user_id": uid, "scope": "driver-docs"}},
     )
     await db.driver_invites.update_one({"token": body.token}, {"$set": {"used": True, "used_by": uid, "used_at": datetime.now(timezone.utc).isoformat()}})
@@ -3835,7 +4592,7 @@ async def upload_driver_doc(file: UploadFile = File(...), invite_token: str = Fo
     if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
         raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
     inv = await db.driver_invites.find_one({"token": invite_token})
-    if not inv or inv.get("used"):
+    if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=403, detail="Ugyldig invitasjon")
     data = await _read_uploaded_file(file)
     path = _mk_upload_path("driver-docs", f"invite-{invite_token[:12]}", file.filename or "file", file.content_type)
@@ -3954,6 +4711,8 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         email = verified_email
         role = "user"
         driver_id = None
+    if existing and existing.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": "", "role": role, "driver_id": driver_id}}
@@ -3968,6 +4727,57 @@ async def apple_config():
         "enabled": bool(client_id),
         "message": None if client_id else "Sign in with Apple er ikke konfigurert ennå",
     }
+
+
+async def send_trip_receipts(trip_id: str):
+    """Send customer + driver receipts once after verified payment capture."""
+    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not trip or trip.get("receipt_emailed_at") or trip.get("payment_status") != "paid":
+        return
+    passenger = None
+    driver = None
+    try:
+        if trip.get("user_id"):
+            passenger = await db.users.find_one({"_id": ObjectId(trip["user_id"])})
+    except Exception:
+        passenger = None
+    try:
+        if trip.get("driver_id"):
+            driver = await db.users.find_one({"_id": ObjectId(trip["driver_id"])})
+    except Exception:
+        driver = None
+
+    price = int(trip.get("price") or 0)
+    commission = float(trip.get("commission_rate", 0.10) or 0.10)
+    fee = int(round(price * commission))
+    driver_net = max(0, price - fee)
+    route = f"{trip.get('pickup_address','')} → {trip.get('dropoff_address','')}"
+    paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
+
+    jobs = []
+    if passenger and passenger.get("email"):
+        jobs.append(asyncio.to_thread(
+            send_email,
+            passenger["email"],
+            f"KJAPP-kvittering · {price} kr",
+            f"<h2>Takk for turen</h2><p>{route}</p><p><strong>Total: {price} kr</strong></p>"
+            f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
+        ))
+    if driver and driver.get("email"):
+        jobs.append(asyncio.to_thread(
+            send_email,
+            driver["email"],
+            f"KJAPP sjåførkvittering · {driver_net} kr",
+            f"<h2>Tur fullført og betalt</h2><p>{route}</p><p>Turpris: {price} kr</p>"
+            f"<p>KJAPP serviceavgift: {fee} kr ({round(commission*100, 2)}%)</p>"
+            f"<p><strong>Til sjåfør/flåte: {driver_net} kr</strong></p><p>Tur-ID: {trip_id}</p>",
+        ))
+    if jobs:
+        await asyncio.gather(*jobs, return_exceptions=True)
+    await db.trips.update_one(
+        {"trip_id": trip_id, "receipt_emailed_at": {"$exists": False}},
+        {"$set": {"receipt_emailed_at": datetime.now(timezone.utc).isoformat()}},
+    )
 
 
 # ============================================================
@@ -3993,22 +4803,45 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        line_items=[{
+    connect_destination = await stripe_destination_for_trip(db, stripe, trip)
+    metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
+    checkout_kwargs = {
+        "mode": "payment",
+        "line_items": [{
             "price_data": {
                 "currency": "nok",
-                "unit_amount": amount_nok * 100,  # øre
+                "unit_amount": amount_nok * 100,
                 "product_data": {
                     "name": f"KJAPP tur — {trip.get('pickup_address','')[:40]} → {trip.get('dropoff_address','')[:40]}",
                 },
             },
             "quantity": 1,
         }],
-        success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
-        metadata={"trip_id": body.trip_id, "user_id": current["id"]},
-    )
+        "success_url": f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
+        "metadata": metadata,
+    }
+    connect_fields = {}
+    if connect_destination:
+        fee_ore = int(round(amount_nok * 100 * connect_destination["commission_rate"]))
+        checkout_kwargs["payment_intent_data"] = {
+            "application_fee_amount": fee_ore,
+            "transfer_data": {"destination": connect_destination["stripe_account_id"]},
+        }
+        metadata.update({
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": str(connect_destination["commission_rate"]),
+        })
+        connect_fields = {
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": connect_destination["commission_rate"],
+            "platform_fee": fee_ore / 100,
+            "fleet_net": amount_nok - (fee_ore / 100),
+            "settlement_model": "stripe_destination_charge",
+        }
+    session = stripe.checkout.Session.create(**checkout_kwargs)
     await db.payment_transactions.insert_one({
         "session_id": session.id,
         "trip_id": body.trip_id,
@@ -4019,20 +4852,24 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
+        **connect_fields,
     })
     return {"checkout_url": session.url, "session_id": session.id}
 
 
 @api.get("/payments/status/{session_id}")
-async def get_payment_status(session_id: str):
-    record = await db.payment_transactions.find_one({"session_id": session_id})
+async def get_payment_status(session_id: str, current=Depends(get_current_user)):
+    record = await db.payment_transactions.find_one({"session_id": session_id, "user_id": current["id"]})
     if not record:
         raise HTTPException(status_code=404, detail="Betaling ikke funnet")
     # Webhook-fallback: poll Stripe directly if still pending
     if record.get("payment_status") != "paid":
         try:
             s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
+            metadata = s.get("metadata") or {}
+            amount_matches = s.get("amount_total") == int(record.get("amount") or 0) * 100
+            identity_matches = metadata.get("trip_id") == record.get("trip_id") and metadata.get("user_id") == current["id"]
+            if s.payment_status == "paid" and amount_matches and identity_matches and s.get("currency") == record.get("currency", "nok"):
                 await db.payment_transactions.update_one(
                     {"session_id": session_id, "payment_status": {"$ne": "paid"}},
                     {"$set": {
@@ -4045,9 +4882,10 @@ async def get_payment_status(session_id: str):
                 # mark trip as paid
                 if record.get("trip_id"):
                     await db.trips.update_one(
-                        {"trip_id": record["trip_id"]},
+                        {"trip_id": record["trip_id"], "user_id": current["id"]},
                         {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
                     )
+                    await send_trip_receipts(record["trip_id"])
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
             pass
@@ -4070,26 +4908,51 @@ async def stripe_webhook(request: Request):
     except Exception:
         raise HTTPException(400, "Webhook error")
     obj, t = event["data"]["object"], event["type"]
-    if t == "checkout.session.completed":
+    if t == "checkout.session.completed" and obj.get("payment_status") == "paid":
+        existing = await db.payment_transactions.find_one({"session_id": obj["id"]})
+        metadata = obj.get("metadata") or {}
+        if not existing or metadata.get("trip_id") != existing.get("trip_id") or metadata.get("user_id") != existing.get("user_id"):
+            return {"status": "ignored"}
+        if obj.get("amount_total") != int(existing.get("amount") or 0) * 100 or obj.get("currency") != existing.get("currency", "nok"):
+            return {"status": "ignored"}
         r = await db.payment_transactions.find_one_and_update(
             {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {
                 "status": "completed",
-                "payment_status": obj.get("payment_status", "paid"),
+                "payment_status": "paid",
                 "stripe_payment_intent_id": obj.get("payment_intent"),
                 "updated_at": datetime.now(timezone.utc),
             }},
         )
         if r and r.get("trip_id"):
             await db.trips.update_one(
-                {"trip_id": r["trip_id"]},
+                {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
                 {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
             )
+            await send_trip_receipts(r["trip_id"])
+    elif t == "checkout.session.completed":
+        await db.payment_transactions.update_one(
+            {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
+            {"$set": {"status": "awaiting_payment", "updated_at": datetime.now(timezone.utc)}},
+        )
     elif t == "checkout.session.expired":
+        expired_record = await db.payment_transactions.find_one({"session_id": obj["id"]})
         await db.payment_transactions.update_one(
             {"session_id": obj["id"]},
             {"$set": {"status": "expired", "payment_status": "expired", "updated_at": datetime.now(timezone.utc)}},
         )
+        if expired_record and expired_record.get("trip_id"):
+            await db.trips.update_one(
+                {"trip_id": expired_record["trip_id"], "payment_status": {"$ne": "paid"}},
+                {"$set": {"payment_status": "expired"}},
+            )
+            if expired_record.get("user_id"):
+                await send_push_to_user(
+                    expired_record["user_id"],
+                    "Betalingen ble ikke fullført",
+                    "Åpne kvitteringen for å prøve betalingen på nytt.",
+                    f"/app/receipt/{expired_record['trip_id']}",
+                )
     return {"status": "ok"}
 
 
@@ -4100,9 +4963,8 @@ async def stripe_webhook(request: Request):
 async def gdpr_export(current=Depends(get_current_user)):
     """Return all data we hold on this user (GDPR right of access)."""
     uid = current["id"]
-    user = await db.users.find_one({"_id": ObjectId(uid)}, {"password_hash": 0})
-    if user:
-        user["id"] = str(user["_id"]); user.pop("_id", None)
+    raw_user = await db.users.find_one({"_id": ObjectId(uid)})
+    user = user_public(raw_user) if raw_user else None
     trips = []
     async for t in db.trips.find({"user_id": uid}).sort("created_at", -1):
         t["id"] = str(t["_id"]); t.pop("_id", None); trips.append(t)
@@ -4129,16 +4991,20 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
     # erasure endpoint — they require a dedicated offboarding path. Regular users and drivers keep
     # their right to erasure.
     if current.get("role") in ("admin", "superadmin", "fleet_owner"):
-        raise HTTPException(status_code=400, detail="Denne kontotypen kan ikke slettes her. Kontakt support@kjapp.no.")
+        raise HTTPException(status_code=400, detail="Denne kontotypen kan ikke slettes her. Kontakt support@kjappapp.com.")
     # Anonymize trips (keep for accounting/tax compliance in Norway) — replace user id
     anon_id = f"deleted_{uuid.uuid4().hex[:12]}"
     await db.trips.update_many({"user_id": uid}, {"$set": {"user_id": anon_id, "pickup_address": "[slettet]", "dropoff_address": "[slettet]"}})
     # Delete personal data
     await db.chat_messages.delete_many({"user_id": uid})
-    await db.trip_messages.delete_many({"from_user_id": uid})
+    await db.trip_messages.update_many(
+        {"from_user_id": uid},
+        {"$set": {"from_user_id": anon_id, "from_name": "[slettet]"}}
+    )
     await db.payment_methods.delete_many({"user_id": uid})
     await db.settings.delete_many({"user_id": uid})
     await db.push_subscriptions.delete_many({"user_id": uid})
+    await db.native_push_tokens.delete_many({"user_id": uid})
     await db.users.delete_one({"_id": ObjectId(uid)})
     if response is not None:
         response.delete_cookie("access_token", path="/")
@@ -4155,11 +5021,18 @@ async def pricing_surge():
 async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
     driver_id = current["id"]
+    original = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
+    penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
     result = await db.trips.update_one(
         {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}},
         {"$set": {
             "status": "cancelled_by_driver",
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "cancelled_by": "driver",
+            "customer_cancellation_fee": 0,
+            "driver_cancellation_penalty": penalty,
+            "driver_cancellation_penalty_status": "recorded" if penalty > 0 else "not_applicable",
         }},
     )
     if result.modified_count == 0:
@@ -4169,15 +5042,36 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     return {"ok": True}
 
 
+def _driver_history_area(address: Optional[str]) -> str:
+    """Return only a coarse area after a ride; never retain exact customer addresses in driver history."""
+    parts = [p.strip() for p in str(address or "").split(",") if p.strip()]
+    if len(parts) >= 2:
+        tail = parts[-1].lower()
+        return parts[-2] if tail in ("norge", "norway") and len(parts) >= 2 else parts[-1]
+    return "Adresse skjult etter tur"
+
+
 @api.get("/driver/history")
 async def driver_history(current=Depends(require_driver), limit: int = 30):
-    """Sjåførens siste gjennomførte turer."""
+    """Driver history deliberately omits exact coordinates and exact customer addresses."""
     driver_id = current["id"]
     trips = []
     async for t in db.trips.find(
         {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}}
     ).sort("created_at", -1).limit(limit):
-        t["id"] = str(t["_id"]); t.pop("_id", None); trips.append(t)
+        trips.append({
+            "trip_id": t.get("trip_id"),
+            "status": t.get("status"),
+            "price": t.get("price", 0),
+            "distance_km": t.get("distance_km"),
+            "duration_min": t.get("duration_min"),
+            "created_at": t.get("created_at"),
+            "arrived_at": t.get("arrived_at"),
+            "vehicle_type": t.get("vehicle_type"),
+            "commission_rate": t.get("commission_rate"),
+            "pickup_address": _driver_history_area(t.get("pickup_address")),
+            "dropoff_address": _driver_history_area(t.get("dropoff_address")),
+        })
     return {"trips": trips}
 
 
@@ -4221,8 +5115,8 @@ async def driver_ratings(current=Depends(require_driver), limit: int = 20):
                 "rating": r,
                 "feedback": t.get("feedback") or "",
                 "created_at": t.get("created_at"),
-                "pickup": t.get("pickup_address"),
-                "dropoff": t.get("dropoff_address"),
+                "pickup": _driver_history_area(t.get("pickup_address")),
+                "dropoff": _driver_history_area(t.get("dropoff_address")),
             })
     avg = round(total / count, 2) if count else 0
     return {"average": avg, "count": count, "breakdown": breakdown, "recent": recent}
@@ -4234,6 +5128,7 @@ async def driver_payouts(current=Depends(require_driver)):
     driver_id = current["id"]
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
+    pending_net = 0
     trips_count = 0
     async for t in db.trips.find({
         "driver_id": driver_id,
@@ -4241,7 +5136,10 @@ async def driver_payouts(current=Depends(require_driver)):
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
     }):
-        pending += t.get("price", 0)
+        gross = int(t.get("price", 0) or 0)
+        rate = await _commission_for_trip(t)
+        pending += gross
+        pending_net += int(round(gross * (1 - rate)))
         trips_count += 1
     # Read historic payouts if any
     history = []
@@ -4253,7 +5151,7 @@ async def driver_payouts(current=Depends(require_driver)):
     days_ahead = (7 - now.weekday()) % 7 or 7
     next_payout = (now + timedelta(days=days_ahead)).isoformat()
     commission = await _platform_commission()
-    net = int(round(pending * (1 - commission)))
+    net = pending_net
     bonuses = []
     bonus_total = 0
     async for b in db.bonus_payouts.find({"driver_id": driver_id, "paid_out": {"$ne": True}}).sort("earned_at", -1).limit(20):
@@ -4423,7 +5321,9 @@ class FleetApplicationDraftRequest(BaseModel):
     contact_name: str
     contact_email: EmailStr
     contact_phone: str
-    bank_account: Optional[str] = ""
+    license_count: int = Field(ge=1, le=500)
+    vehicle_count: int = Field(ge=1, le=500)
+    bank_account: str = Field(min_length=5, max_length=64)
     notes: Optional[str] = ""
 
 
@@ -4434,7 +5334,7 @@ class FleetApplicationSubmitRequest(BaseModel):
 
 class FleetApplicationDecisionRequest(BaseModel):
     review_notes: Optional[str] = ""
-    commission_rate: Optional[float] = 0.20
+    commission_rate: Optional[float] = 0.10
 
 
 @api.post("/fleet-applications/draft")
@@ -4448,7 +5348,9 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest):
         "contact_name": body.contact_name.strip(),
         "contact_email": body.contact_email.strip().lower(),
         "contact_phone": body.contact_phone.strip(),
-        "bank_account": (body.bank_account or "").strip(),
+        "license_count": int(body.license_count),
+        "vehicle_count": int(body.vehicle_count),
+        "bank_account": body.bank_account.strip(),
         "notes": (body.notes or "").strip(),
         "documents": {},
         "status": "draft",
@@ -4466,9 +5368,17 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     if app_doc.get("status") not in ("draft",):
         raise HTTPException(status_code=410, detail="Søknad allerede sendt inn")
     required = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
-    missing = [k for k in required if k not in (body.documents or {})]
+    missing = [
+        k for k in required
+        if not isinstance((body.documents or {}).get(k), dict)
+        or not str((body.documents or {}).get(k, {}).get("path") or "").strip()
+    ]
     if missing:
         raise HTTPException(status_code=400, detail=f"Mangler dokumenter: {', '.join(missing)}")
+    if not str(app_doc.get("bank_account") or "").strip():
+        raise HTTPException(status_code=400, detail="Bankkonto må være registrert før søknaden kan sendes inn")
+    if int(app_doc.get("license_count") or 0) < 1 or int(app_doc.get("vehicle_count") or 0) < 1:
+        raise HTTPException(status_code=400, detail="Antall løyver og biler må være registrert før innsending")
     await db.fleet_applications.update_one(
         {"upload_token": body.upload_token},
         {"$set": {
@@ -4539,32 +5449,42 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
         raise HTTPException(status_code=404, detail="Søknad ikke funnet")
     if app_doc.get("status") == "approved":
         raise HTTPException(status_code=400, detail="Allerede godkjent")
+    required_docs = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
+    missing_docs = [
+        k for k in required_docs
+        if not isinstance((app_doc.get("documents") or {}).get(k), dict)
+        or not str((app_doc.get("documents") or {}).get(k, {}).get("path") or "").strip()
+    ]
+    if missing_docs or not str(app_doc.get("bank_account") or "").strip():
+        raise HTTPException(
+            status_code=409,
+            detail="Søknaden kan ikke godkjennes før alle dokumenter og bankkonto er registrert",
+        )
     owner_email = app_doc.get("contact_email")
     owner = await db.users.find_one({"email": owner_email})
+    now = datetime.now(timezone.utc)
     if not owner:
-        temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
             "email": owner_email,
-            "password_hash": hash_password(temp_pw),
+            "password_hash": hash_password(secrets.token_urlsafe(24)),
             "fullName": app_doc.get("contact_name") or app_doc.get("company_name"),
             "phone": app_doc.get("contact_phone", ""),
             "role": "fleet_owner",
             "approved": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now.isoformat(),
             "must_reset_password": True,
         })
         owner_id = str(res.inserted_id)
     else:
         owner_id = str(owner["_id"])
-        temp_pw = None
-        await db.users.update_one({"_id": owner["_id"]}, {"$set": {"role": "fleet_owner", "approved": True}})
+        await db.users.update_one({"_id": owner["_id"]}, {"$set": {"role": "fleet_owner", "approved": True, "must_reset_password": True}})
     fleet_doc = {
         "name": app_doc.get("company_name"),
         "org_number": app_doc.get("org_number", ""),
         "owner_user_id": owner_id,
-        "commission_rate": float(body.commission_rate or 0.20),
+        "commission_rate": float(body.commission_rate if body.commission_rate is not None else 0.10),
         "active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now.isoformat(),
         "application_id": app_id,
     }
     fres = await db.fleets.insert_one(fleet_doc)
@@ -4574,20 +5494,26 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
         {"_id": ObjectId(app_id)},
         {"$set": {
             "status": "approved",
-            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "reviewed_at": now.isoformat(),
             "reviewed_by": current["id"],
             "review_notes": body.review_notes or "",
             "fleet_id": fleet_id,
             "fleet_owner_user_id": owner_id,
         }},
     )
-    # Email the applicant
-    send_email(
+    activation_token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.insert_one({
+        "token": activation_token, "user_id": owner_id, "email": owner_email,
+        "created_at": now, "expires_at": now + timedelta(hours=24), "used": False,
+    })
+    fleet_url = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
+    activation_url = f"{fleet_url}/reset-password/{activation_token}"
+    activation_email_sent = bool(send_email(
         owner_email,
         "KJAPP: Løyvehaver-søknaden er godkjent",
-        _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", temp_pw),
-    )
-    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw}
+        _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", activation_url),
+    ))
+    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "activation_email_sent": activation_email_sent}
 
 
 @api.post("/superadmin/fleet-applications/{app_id}/reject")
@@ -4615,12 +5541,12 @@ async def superadmin_reject_application(app_id: str, body: FleetApplicationDecis
     return {"ok": True}
 
 
-def _fleet_application_decision_html(company: str, approved: bool, notes: str, temp_password: Optional[str]) -> str:
+def _fleet_application_decision_html(company: str, approved: bool, notes: str, activation_url: Optional[str]) -> str:
     accent = "#c9a15b"
     heading = "Søknaden er godkjent" if approved else "Søknaden er avslått"
     body_html = ""
     if approved:
-        pw_html = f"<p style='color:#a8b0a8;font-size:13px'>Midlertidig passord: <code style='color:#fff;background:#171d22;padding:4px 8px;border-radius:6px'>{temp_password}</code> — bytt det så snart du logger inn.</p>" if temp_password else ""
+        pw_html = f"<p style='color:#a8b0a8;font-size:13px'>Sett ditt eget passord ved å åpne aktiveringslenken. Lenken er gyldig i 24 timer.</p><p><a href='{activation_url}' style='display:inline-block;background:{accent};color:#0c1216;padding:12px 18px;border-radius:8px;font-weight:700'>Aktiver løyvehaverkonto</a></p>" if activation_url else ""
         body_html = f"""
           <p style="color:#a8b0a8;font-size:14px;line-height:1.6">Velkommen ombord, <strong style="color:#fff">{company}</strong>. Din flåte er opprettet på KJAPP og du kan nå logge inn i flåte-portalen.</p>
           {pw_html}
@@ -4666,8 +5592,7 @@ async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request
     }
     await db.driver_invites.insert_one(doc)
     if body.email:
-        origin = str(request.base_url).rstrip("/").replace("/api", "")
-        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
+        frontend = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
         invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
         ok = send_email(
             body.email,
@@ -4699,7 +5624,7 @@ async def fleet_list_driver_invites(current=Depends(require_fleet_owner)):
 async def admin_list_pending_drivers(current=Depends(require_admin)):
     out = []
     async for u in db.users.find({"role": "driver", "approved": {"$ne": True}}).sort("created_at", -1).limit(200):
-        u["id"] = str(u["_id"]); u.pop("_id", None); u.pop("password_hash", None)
+        u = user_public(u)
         # Enrich with fleet
         if u.get("fleet_id"):
             f = await db.fleets.find_one({"_id": ObjectId(u["fleet_id"])})
@@ -4735,11 +5660,15 @@ async def _fleet_names():
 
 @api.get("/admin/live")
 async def admin_live(current=Depends(require_admin)):
-    """Realtime board: online drivers with GPS + active trips."""
+    """Realtime board: every registered driver with last-known GPS + active trips."""
     drivers = []
+    stale_drivers = []
     fleet_names = await _fleet_names()
-    async for u in db.users.find({"role": "driver", "online": True}, {"password_hash": 0}):
-        drivers.append({
+    async for u in db.users.find({"role": "driver"}, {"password_hash": 0}).sort("fullName", 1):
+        has_coordinates = u.get("last_lat") is not None and u.get("last_lng") is not None
+        fresh = _fresh_driver_location(u.get("last_location_at")) and has_coordinates
+        driver_status = "online" if bool(u.get("online")) and fresh else "stale" if bool(u.get("online")) else "offline"
+        row = {
             "id": str(u["_id"]),
             "name": u.get("fullName"),
             "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
@@ -4747,7 +5676,12 @@ async def admin_live(current=Depends(require_admin)):
             "last_location_at": u.get("last_location_at"), "online_at": u.get("online_at"),
             "fleet_name": fleet_names.get(u.get("fleet_id")),
             "rating": u.get("rating"),
-        })
+            "approved": u.get("approved") is True,
+            "status": driver_status,
+        }
+        drivers.append(row)
+        if not fresh:
+            stale_drivers.append({k: row.get(k) for k in ("id", "name", "car", "plate", "fleet_name", "last_location_at")})
     trips = []
     user_ids = []
     raw = []
@@ -4764,7 +5698,7 @@ async def admin_live(current=Depends(require_admin)):
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
             "created_at": t.get("created_at"),
         })
-    return {"drivers": drivers, "trips": trips, "as_of": datetime.now(timezone.utc).isoformat()}
+    return {"drivers": drivers, "stale_drivers": stale_drivers, "trips": trips, "as_of": datetime.now(timezone.utc).isoformat()}
 
 
 @api.get("/admin/drivers-full")
@@ -4787,7 +5721,8 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
         out.append({
             "id": uid, "name": u.get("fullName"), "email": u.get("email"), "phone": u.get("phone"),
             "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
-            "rating": u.get("rating"), "approved": u.get("approved", False), "online": u.get("online", False),
+            "capabilities": u.get("capabilities") or [],
+            "rating": u.get("rating"), "approved": u.get("approved", False), "disabled": u.get("disabled", False), "online": u.get("online", False),
             "fleet_name": fleet_names.get(u.get("fleet_id")), "fleet_id": u.get("fleet_id"),
             "trips_completed": completed, "last_location_at": u.get("last_location_at"),
             "created_at": u.get("created_at"),
@@ -4808,6 +5743,26 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
     return {"ok": True}
 
 
+class DriverCapabilitiesRequest(BaseModel):
+    capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
+
+
+@api.patch("/admin/drivers/{user_id}/capabilities")
+async def admin_set_driver_capabilities(user_id: str, body: DriverCapabilitiesRequest, current=Depends(require_admin)):
+    try:
+        u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception:
+        raise HTTPException(400, "Ugyldig id")
+    if not u:
+        raise HTTPException(404, "Fant ikke sjåfør")
+    capabilities = list(dict.fromkeys(body.capabilities))
+    previous = u.get("capabilities") or []
+    await db.users.update_one({"_id": u["_id"]}, {"$set": {"capabilities": capabilities}})
+    await _audit(current, "driver.capabilities", "driver", user_id,
+                 {"capabilities": previous}, {"capabilities": capabilities})
+    return {"ok": True, "capabilities": capabilities}
+
+
 @api.get("/admin/vehicles")
 async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
     filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
@@ -4825,6 +5780,7 @@ async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = 
             "vehicle_type": u.get("vehicle_type"), "driver_name": u.get("fullName"),
             "fleet_name": fleet_names.get(u.get("fleet_id")),
             "online": u.get("online", False), "approved": u.get("approved", False),
+            "last_location_at": u.get("last_location_at"),
         })
     return _paged(out, total, page, page_size, "vehicles")
 
@@ -4859,11 +5815,15 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "distance_km": t.get("distance_km"), "duration_min": t.get("duration_min"),
             "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
             "vehicle_type": t.get("vehicle_type"), "created_at": t.get("created_at"),
+            "stops": t.get("stops") or [], "special_needs": t.get("special_needs") or [],
+            "pricing_version": t.get("pricing_version"), "commission_rate": t.get("commission_rate"),
+            "requires_manual_settlement": t.get("requires_manual_settlement", False),
+            "refunded_total": t.get("refunded_total", 0),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
-            "driver_earnings": int(round((t.get("price") or 0) * (1 - commission))) if finished else None,
+            "driver_earnings": int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission)))) if finished else None,
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
             "accepted_at": t.get("driver_route_started_at"),
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
@@ -4888,6 +5848,120 @@ async def admin_trip_timeline(trip_id: str, current=Depends(require_admin)):
     ev("Kansellert", t.get("cancelled_at"))
     events.sort(key=lambda e: e["at"])
     return {"trip_id": trip_id, "status": t.get("status"), "events": events}
+
+
+class TripInterventionRequest(BaseModel):
+    action: Literal["cancel_active", "release_driver", "adjust_price"]
+    reason: str = Field(min_length=3, max_length=500)
+    price: Optional[int] = Field(default=None, ge=0, le=100000)
+
+
+@api.post("/admin/trips/{trip_id}/intervene")
+async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, current=Depends(require_admin)):
+    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not trip:
+        raise HTTPException(404, "Fant ikke turen")
+    reason = body.reason.strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    active_statuses = ("searching", "booking", "driver_on_way", "at_pickup", "in_trip")
+
+    if body.action == "cancel_active":
+        if trip.get("status") not in active_statuses:
+            raise HTTPException(409, "Kun aktive turer kan avbrytes av operatør")
+        before = {"status": trip.get("status"), "price": trip.get("price"), "driver_id": trip.get("driver_id")}
+        updates = {
+            "status": "cancelled",
+            "cancelled_at": now_iso,
+            "cancelled_by": "admin",
+            "cancel_reason": reason,
+            "updated_at": now_iso,
+        }
+        if trip.get("status") == "in_trip":
+            updates["requires_manual_settlement"] = True
+        await db.trips.update_one(
+            {"trip_id": trip_id, "status": trip.get("status")},
+            {"$set": updates, "$push": {"operator_interventions": {
+                "action": body.action, "reason": reason, "at": now_iso, "by": current.get("email") or current["id"],
+            }}},
+        )
+        await _audit(current, "trip.operator_cancel", "trip", trip_id, before,
+                     {"status": "cancelled", "requires_manual_settlement": updates.get("requires_manual_settlement", False)}, reason)
+        if trip.get("user_id"):
+            await send_push_to_user(trip["user_id"], "Turen er avbrutt av KJAPP",
+                                    "KJAPP følger opp turen. Kontakt support hvis du trenger hjelp.", "/app")
+        if trip.get("driver_id"):
+            await send_push_to_user(trip["driver_id"], "Turen er avbrutt av KJAPP",
+                                    "Stans turen trygt. KJAPP følger opp saken i operatørpanelet.", "/driver")
+        return {"ok": True, "action": body.action, "status": "cancelled",
+                "requires_manual_settlement": updates.get("requires_manual_settlement", False)}
+
+    if body.action == "release_driver":
+        if trip.get("status") not in ("driver_on_way", "at_pickup") or not trip.get("driver_id"):
+            raise HTTPException(409, "Sjåfør kan bare frigjøres før turen er startet")
+        old_driver_id = trip.get("driver_id")
+        before = {"status": trip.get("status"), "driver_id": old_driver_id}
+        unset = {
+            "driver": "", "driver_id": "", "driver_user_id": "", "driver_route_started_at": "",
+            "at_pickup_at": "", "eta_min": "", "driver_start_lat": "", "driver_start_lng": "",
+            "driver_lat": "", "driver_lng": "", "driver_location_at": "", "offer_driver_id": "",
+            "offer_expires_at": "", "dispatch_mode": "",
+        }
+        await db.trips.update_one(
+            {"trip_id": trip_id, "driver_id": old_driver_id, "status": trip.get("status")},
+            {
+                "$set": {"status": "searching", "updated_at": now_iso, "operator_reassigned_at": now_iso},
+                "$unset": unset,
+                "$addToSet": {"offer_history": old_driver_id},
+                "$push": {"operator_interventions": {
+                    "action": body.action, "reason": reason, "at": now_iso, "by": current.get("email") or current["id"],
+                }},
+            },
+        )
+        await _audit(current, "trip.release_driver", "trip", trip_id, before,
+                     {"status": "searching", "driver_id": None}, reason)
+        await send_push_to_user(old_driver_id, "Turen er frigitt av KJAPP",
+                                "Du er tatt av denne turen. Kontakt support hvis du trenger hjelp.", "/driver")
+        if trip.get("user_id"):
+            await send_push_to_user(trip["user_id"], "Vi finner en ny sjåfør",
+                                    "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/app/booking/{trip_id}")
+        refreshed = await db.trips.find_one({"trip_id": trip_id})
+        if refreshed:
+            await offer_trip_to_next_driver(refreshed)
+        return {"ok": True, "action": body.action, "status": "searching"}
+
+    if body.action == "adjust_price":
+        if body.price is None:
+            raise HTTPException(400, "Ny pris må oppgis")
+        if trip.get("payment_status") == "paid":
+            raise HTTPException(409, "Betalt tur kan ikke få omskrevet pris. Bruk refundering i stedet.")
+        if trip.get("status") in ("cancelled", "cancelled_by_driver") and not trip.get("requires_manual_settlement"):
+            raise HTTPException(409, "Avbrutt tur uten oppgjør kan ikke prisjusteres")
+        previous_price = int(trip.get("price") or 0)
+        new_price = int(body.price)
+        adjustment = {
+            "from": previous_price, "to": new_price, "reason": reason,
+            "at": now_iso, "by": current.get("email") or current["id"],
+        }
+        await db.trips.update_one(
+            {"trip_id": trip_id, "payment_status": {"$ne": "paid"}},
+            {"$set": {
+                "price": new_price,
+                "manual_price_adjustment": adjustment,
+                "updated_at": now_iso,
+                "requires_manual_settlement": False,
+            }, "$push": {"operator_interventions": {"action": body.action, **adjustment}}},
+        )
+        await _audit(current, "trip.adjust_price", "trip", trip_id,
+                     {"price": previous_price}, {"price": new_price}, reason)
+        if trip.get("user_id"):
+            await send_push_to_user(trip["user_id"], "Turprisen er justert",
+                                    f"KJAPP har justert turprisen fra {previous_price} kr til {new_price} kr.", f"/app/receipt/{trip_id}")
+        if trip.get("driver_id"):
+            await send_push_to_user(trip["driver_id"], "Turprisen er justert",
+                                    f"Ny turpris er {new_price} kr. Oppgjøret bruker turens lagrede serviceavgift.", "/driver")
+        return {"ok": True, "action": body.action, "price": new_price, "previous_price": previous_price}
+
+    raise HTTPException(400, "Ukjent operatørhandling")
 
 
 @api.get("/admin/finance")
@@ -5083,14 +6157,31 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     amount = int(body.amount) if body.amount is not None else eligible
     if amount <= 0 or amount > eligible:
         raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Attempt a real Stripe refund ONLY if a captured charge/intent is stored on the trip.
+    # Resolve the actual captured Stripe payment from the transaction ledger first.
+    # This is the canonical location for Checkout PaymentIntent IDs.
     provider, provider_ref, prov_status = "manual", None, "recorded"
-    pi = trip.get("stripe_payment_intent") or trip.get("payment_intent_id") or trip.get("charge_id")
+    payment_tx = await db.payment_transactions.find_one(
+        {"trip_id": body.trip_id, "payment_status": "paid"},
+        sort=[("updated_at", -1)],
+    )
+    pi = (
+        trip.get("stripe_payment_intent")
+        or trip.get("payment_intent_id")
+        or trip.get("charge_id")
+        or (payment_tx or {}).get("stripe_payment_intent_id")
+    )
     if pi and stripe.api_key:
         try:
             kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"): kwargs["charge"] = pi
-            else: kwargs["payment_intent"] = pi
+            if str(pi).startswith("ch_"):
+                kwargs["charge"] = pi
+            else:
+                kwargs["payment_intent"] = pi
+            if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
+                # Reverse the fleet transfer and refund the proportional platform fee,
+                # otherwise the platform would carry the refund while the fleet kept funds.
+                kwargs["reverse_transfer"] = True
+                kwargs["refund_application_fee"] = True
             sr = stripe.Refund.create(**kwargs)
             provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
         except stripe.error.StripeError as e:
@@ -5100,6 +6191,8 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
         "trip_id": body.trip_id, "user_id": trip.get("user_id"),
         "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
         "provider": provider, "provider_ref": provider_ref, "status": prov_status,
+        "fleet_id": (payment_tx or {}).get("fleet_id"),
+        "settlement_model": (payment_tx or {}).get("settlement_model"),
         "admin_id": current["id"], "admin_email": current.get("email"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -5138,7 +6231,9 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
             rows.append({
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
-                "amount": price, "commission": round(price * commission), "driver_net": round(price * (1 - commission)),
+                "amount": price,
+                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
+                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
                 "provider": t.get("payment_method") or "card", "status": t.get("payment_status") or "captured",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
@@ -5148,7 +6243,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"refund_{r.get('id')}", "type": "REFUND", "ride": r.get("trip_id"),
                 "customer_id": r.get("user_id"), "amount": -int(r.get("amount") or 0),
                 "provider": r.get("provider"), "status": r.get("status"),
-                "fleet_id": None, "timestamp": r.get("created_at"), "reason": r.get("reason"),
+                "fleet_id": r.get("fleet_id"), "timestamp": r.get("created_at"), "reason": r.get("reason"),
             })
     if want in ("", "PAYOUT"):
         async for p in db.fleet_payouts.find({"period_end": {"$gte": lo[:10], "$lte": hi[:10]}}):
@@ -5297,6 +6392,7 @@ async def admin_analytics(days: int = 14, current=Depends(require_admin)):
 # ---- Platform settings ----
 DEFAULT_PLATFORM_SETTINGS = {
     "default_commission": 0.10,
+    "pricing": DEFAULT_PRICING,
     "ride_classes": {
         "ai-first": {"label": "Standard", "multiplier": 1.0, "enabled": True},
         "enkelt":   {"label": "Sparsom",  "multiplier": 0.85, "enabled": True},
@@ -5304,13 +6400,58 @@ DEFAULT_PLATFORM_SETTINGS = {
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
     "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+    "compliance": {
+        "legal_review_completed": False,
+        "transport_requirements_verified": False,
+        "commercial_insurance_verified": False,
+        "privacy_notice_approved": False,
+        "terms_approved": False,
+        "processor_agreements_verified": False,
+        "tax_vat_reporting_verified": False,
+        "accessibility_review_completed": False,
+        "backup_restore_test_completed": False,
+    },
 }
 
 
 class PlatformSettingsUpdate(BaseModel):
     default_commission: Optional[float] = None
+    pricing: Optional[dict] = None
     ride_classes: Optional[dict] = None
     features: Optional[dict] = None
+    compliance: Optional[dict] = None
+
+
+def _validate_pricing(p: dict):
+    numeric_limits = {
+        "base_fare": (0, 2000), "per_km": (0, 500), "per_minute": (0, 200),
+        "waiting_per_minute": (0, 200), "minimum_fare": (0, 5000),
+        "extra_stop_fee": (0, 2000), "customer_cancellation_fee": (0, 2000),
+        "late_driver_cancellation_fee": (0, 2000),
+        "free_cancel_minutes": (0, 60), "dispatch_timeout_seconds": (30, 1800),
+    }
+    for key, (lo, hi) in numeric_limits.items():
+        if key in p and not lo <= float(p[key]) <= hi:
+            raise HTTPException(400, f"{key} må være mellom {lo} og {hi}")
+    surge = p.get("surge") or {}
+    for key in ("manual_multiplier", "max_multiplier"):
+        if key in surge and not 1.0 <= float(surge[key]) <= 5.0:
+            raise HTTPException(400, f"surge.{key} må være mellom 1.0 og 5.0")
+    for vt, rates in (p.get("vehicle_rates") or {}).items():
+        if vt not in ("ai-first", "enkelt", "trygg", "premium"):
+            raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
+        _validate_pricing(rates)
+    for area_id, area in (p.get("areas") or {}).items():
+        if not isinstance(area, dict):
+            raise HTTPException(400, f"Ugyldig område: {area_id}")
+        try:
+            lat = float(area["center_lat"]); lng = float(area["center_lng"]); radius = float(area["radius_km"])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, f"Område {area_id} må ha center_lat, center_lng og radius_km")
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180 and 0.1 <= radius <= 300):
+            raise HTTPException(400, f"Ugyldig geometri for område {area_id}")
+        if area.get("pricing"):
+            _validate_pricing(area["pricing"])
 
 
 @api.get("/admin/settings")
@@ -5331,15 +6472,188 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         if not 0.0 <= body.default_commission <= 0.5:
             raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
         sets["default_commission"] = body.default_commission
+    if body.pricing is not None:
+        _validate_pricing(body.pricing)
+        previous_pricing = {**DEFAULT_PRICING, **(prev.get("pricing") or {})}
+        next_pricing = {**previous_pricing, **body.pricing}
+        next_pricing["version"] = int(previous_pricing.get("version", 1)) + 1
+        sets["pricing"] = next_pricing
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
     if body.features is not None: sets["features"] = body.features
+    if body.compliance is not None:
+        allowed = set(DEFAULT_PLATFORM_SETTINGS["compliance"].keys())
+        unknown = set(body.compliance.keys()) - allowed
+        if unknown:
+            raise HTTPException(400, f"Ukjente beta-gates: {', '.join(sorted(unknown))}")
+        if any(not isinstance(v, bool) for v in body.compliance.values()):
+            raise HTTPException(400, "Beta-gates må være true/false")
+        sets["compliance"] = {**DEFAULT_PLATFORM_SETTINGS["compliance"], **body.compliance}
     if not sets: return {"ok": True}
     sets["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if "pricing" in sets or "default_commission" in sets:
+        previous_pricing = {**DEFAULT_PRICING, **(prev.get("pricing") or {})}
+        await db.pricing_versions.update_one(
+            {"version": int(previous_pricing.get("version", 1))},
+            {"$setOnInsert": {
+                "version": int(previous_pricing.get("version", 1)),
+                "pricing": previous_pricing,
+                "default_commission": float(prev.get("default_commission", 0.10)),
+                "saved_at": datetime.now(timezone.utc).isoformat(),
+                "saved_by": current.get("email"),
+            }},
+            upsert=True,
+        )
     await db.platform_settings.update_one({"_id": "singleton"}, {"$set": sets}, upsert=True)
     await _audit(current, "settings.update", "settings", "singleton",
                  {k: prev.get(k) for k in sets if k != "updated_at"},
                  {k: v for k, v in sets.items() if k != "updated_at"})
     return {"ok": True}
+
+
+
+
+class PricingTestRequest(BaseModel):
+    distance_km: float = Field(ge=0, le=2000)
+    duration_min: float = Field(ge=0, le=1440)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
+
+
+class PricingRouteTestRequest(BaseModel):
+    pickup_address: str = Field(min_length=2, max_length=200)
+    dropoff_address: str = Field(min_length=2, max_length=200)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+
+
+class PricingRollbackRequest(BaseModel):
+    version: int = Field(ge=1)
+
+
+@api.post("/admin/pricing/test")
+async def admin_pricing_test(body: PricingTestRequest, current=Depends(require_admin)):
+    pricing = await active_pricing()
+    effective, area = (pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
+                       if body.pickup_lat is not None and body.pickup_lng is not None else (pricing, None))
+    return {**calculate_price(body.distance_km, body.vehicle_type, body.duration_min, effective),
+            "distance_km": body.distance_km, "duration_min": body.duration_min,
+            "vehicle_type": body.vehicle_type, "pricing_area": area}
+
+
+@api.post("/admin/pricing/test-route")
+async def admin_pricing_test_route(body: PricingRouteTestRequest, current=Depends(require_admin)):
+    pickup = (await search_places(body.pickup_address, 1)).get("results") or []
+    dropoff = (await search_places(body.dropoff_address, 1)).get("results") or []
+    if not pickup or not dropoff:
+        raise HTTPException(400, "Fant ikke én eller begge adressene")
+    p, d = pickup[0], dropoff[0]
+    route = await osrm_route(p["lat"], p["lng"], d["lat"], d["lng"])
+    if not route:
+        raise HTTPException(503, "Kunne ikke beregne kjørerute akkurat nå")
+    pricing = await active_pricing()
+    effective, area = pricing_for_pickup(pricing, p["lat"], p["lng"])
+    quote = calculate_price(route["distance_km"], body.vehicle_type, route["duration_min"], effective)
+    return {
+        **quote, "pricing_area": area, "pickup": p, "dropoff": d,
+        "distance_km": route["distance_km"], "duration_min": route["duration_min"],
+        "vehicle_type": body.vehicle_type,
+    }
+
+
+@api.get("/admin/pricing/history")
+async def admin_pricing_history(current=Depends(require_admin)):
+    items = []
+    current_settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    current_pricing = {**DEFAULT_PRICING, **(current_settings.get("pricing") or {})}
+    items.append({"version": int(current_pricing.get("version", 1)), "pricing": current_pricing,
+                  "default_commission": float(current_settings.get("default_commission", 0.10)),
+                  "current": True, "saved_at": current_settings.get("updated_at")})
+    async for v in db.pricing_versions.find({}).sort("version", -1).limit(49):
+        v.pop("_id", None)
+        v["current"] = False
+        items.append(v)
+    return {"items": items}
+
+
+@api.post("/admin/pricing/rollback")
+async def admin_pricing_rollback(body: PricingRollbackRequest, current=Depends(require_superadmin)):
+    previous = await db.pricing_versions.find_one({"version": body.version})
+    if not previous:
+        raise HTTPException(404, "Prisversjonen finnes ikke")
+    current_settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    current_pricing = {**DEFAULT_PRICING, **(current_settings.get("pricing") or {})}
+    restored = {**DEFAULT_PRICING, **(previous.get("pricing") or {})}
+    restored["version"] = int(current_pricing.get("version", 1)) + 1
+    _validate_pricing(restored)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.pricing_versions.update_one(
+        {"version": int(current_pricing.get("version", 1))},
+        {"$setOnInsert": {
+            "version": int(current_pricing.get("version", 1)), "pricing": current_pricing,
+            "default_commission": float(current_settings.get("default_commission", 0.10)),
+            "saved_at": now_iso, "saved_by": current.get("email"),
+        }}, upsert=True,
+    )
+    await db.platform_settings.update_one({"_id": "singleton"}, {"$set": {
+        "pricing": restored,
+        "default_commission": float(previous.get("default_commission", current_settings.get("default_commission", 0.10))),
+        "updated_at": now_iso,
+    }}, upsert=True)
+    await _audit(current, "pricing.rollback", "settings", "singleton",
+                 {"pricing_version": current_pricing.get("version")},
+                 {"pricing_version": restored["version"], "restored_from": body.version})
+    return {"ok": True, "pricing_version": restored["version"], "restored_from": body.version}
+
+
+
+
+@api.get("/admin/beta-readiness")
+async def admin_beta_readiness(current=Depends(require_admin)):
+    """Operational code/config readiness only; legal/insurance approvals still require human verification."""
+    settings = await db.platform_settings.find_one({"_id": "singleton"}) or {}
+    pricing = {**DEFAULT_PRICING, **(settings.get("pricing") or {})}
+    compliance = {**DEFAULT_PLATFORM_SETTINGS["compliance"], **(settings.get("compliance") or {})}
+    pending_driver_docs = await db.users.count_documents({
+        "role": "driver",
+        "$or": [{"approved": False}, {"approved": {"$exists": False}}],
+    })
+    open_support = await db.support_tickets.count_documents({"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
+    failed_payments = await db.payment_transactions.count_documents({"payment_status": "failed"})
+    checks = {
+        "production_env": IS_PRODUCTION,
+        "stripe_configured": bool(stripe.api_key and STRIPE_WEBHOOK_SECRET),
+        "map_provider_configured": bool(MAPTILER_API_KEY),
+        "native_push_configured": bool((os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip() or (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip()),
+        "admin_2fa_enabled": bool(current.get("totp_enabled")),
+        "pricing_version": int(pricing.get("version", 1)),
+        "pricing_rollback_available": await db.pricing_versions.count_documents({}) > 0,
+        "pending_driver_approvals": pending_driver_docs,
+        "open_support_tickets": open_support,
+        "failed_payments": failed_payments,
+        "compliance": compliance,
+    }
+    blockers = []
+    if IS_PRODUCTION and not checks["stripe_configured"]: blockers.append("Stripe/webhook er ikke fullt konfigurert")
+    if not checks["admin_2fa_enabled"]: blockers.append("Innlogget admin har ikke aktivert 2FA")
+    if pending_driver_docs: blockers.append(f"{pending_driver_docs} sjåførkonto(er) venter på godkjenning")
+    if failed_payments: blockers.append(f"{failed_payments} betaling(er) har feilet")
+    gate_labels = {
+        "legal_review_completed": "Juridisk gjennomgang er ikke bekreftet",
+        "transport_requirements_verified": "Transport-/løyvekrav er ikke bekreftet",
+        "commercial_insurance_verified": "Kommersiell forsikring er ikke bekreftet",
+        "privacy_notice_approved": "Personvernerklæring er ikke godkjent",
+        "terms_approved": "Bruker-/sjåførvilkår er ikke godkjent",
+        "processor_agreements_verified": "Databehandleravtaler er ikke bekreftet",
+        "tax_vat_reporting_verified": "Skatt/MVA/rapportering er ikke bekreftet",
+        "accessibility_review_completed": "Tilgjengelighetsgjennomgang er ikke bekreftet",
+        "backup_restore_test_completed": "Backup-gjenoppretting er ikke testet",
+    }
+    for key, label in gate_labels.items():
+        if not compliance.get(key):
+            blockers.append(label)
+    return {"generated_at": datetime.now(timezone.utc).isoformat(), "checks": checks, "blockers": blockers,
+            "ready": not blockers,
+            "note": "Manuelle gates er eksplisitte operatørbekreftelser; systemet hevder ikke juridisk godkjenning på egen hånd."}
 
 
 @api.get("/admin/fleets/{fleet_id}")
@@ -5398,6 +6712,27 @@ async def admin_search(q: str, current=Depends(require_admin)):
         fleets.append({"id": str(f["_id"]), "name": f.get("name"), "org_number": f.get("org_number"), "status": f.get("status", "active")})
     return {"query": q, "trips": trips, "drivers": drivers[:10], "customers": customers[:10], "fleets": fleets}
 
+
+# Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
+install_marketing_waitlist(api, db)
+
+# Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
+install_admin_control_center(
+    api,
+    db,
+    require_admin=require_admin,
+    require_superadmin=require_superadmin,
+    stripe=stripe,
+    send_push_to_user=send_push_to_user,
+    send_email=send_email,
+    hash_password=hash_password,
+    audit=_audit,
+)
+
+# Superadmin-only AI assistant. This is kept separate from the customer-facing
+# /ai/* routes so provider keys, project context and admin audit records never
+# cross the mobile-app boundary.
+install_admin_ai_assistant(api, db, require_superadmin)
 
 app.include_router(api)
 

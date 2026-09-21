@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "KJAPP Driver",
+    "slug": "kjapp-driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kjapp-driver",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#070B0E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "no.kjapp.driver",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer."
+      }
+    },
+    "android": {
+      "package": "no.kjapp.driver",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#070B0E"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "KJAPP Driver bruker posisjonen din for å finne turer i nærheten.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "kjapp_trips",
+          "color": "#00E5F5",
+          "enableBackgroundRemoteNotifications": true
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "appRole": "driver",
+      "eas": {
+        "projectId": "1dec8949-0423-4fbf-a080-0703f93519d7"
+      }
+    },
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

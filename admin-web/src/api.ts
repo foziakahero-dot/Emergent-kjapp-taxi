@@ -3,11 +3,13 @@ import axios from 'axios';
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://github-app-builder-28.emergent.host/api';
-const isProductionAdminHost = window.location.hostname === 'admin.kjappapp.no';
+const host = window.location.hostname;
+const isProductionAdminHost = host === 'admin.kjappapp.no';
+const isVercelPreviewHost = host.endsWith('.vercel.app');
 
-// Production can call the Emergent backend directly (CORS is allowlisted there).
-// Local/staging can still override VITE_API_BASE; otherwise use the same-origin /api proxy.
-export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : window.location.origin + '/api');
+// Production uses the production API directly. Vercel previews are intentionally isolated:
+// they can only talk to an API when VITE_API_BASE is explicitly configured (e.g. staging).
+export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
 export const TOKEN_KEY = 'kjapp_admin_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 20000 });
@@ -31,8 +33,13 @@ http.interceptors.response.use(
   },
 );
 
-export const apiError = (e: any) =>
-  e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+export const apiError = (e: any) => {
+  if (e?.response?.status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
+  return e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+};
+
+const encodeStoragePath = (path: string) =>
+  String(path || '').split('/').map((part) => encodeURIComponent(part)).join('/');
 
 export const api = {
   login: (email: string, password: string) =>
@@ -40,6 +47,11 @@ export const api = {
   verify2fa: (twofa_token: string, code: string) =>
     http.post('/auth/2fa/verify-login', { twofa_token, code }).then((r) => r.data),
   me: () => http.get('/auth/me').then((r) => r.data),
+  logout: () => http.post('/auth/logout').then((r) => r.data),
+  twofaStatus: () => http.get('/auth/2fa/status').then((r) => r.data),
+  twofaSetup: () => http.post('/auth/2fa/setup').then((r) => r.data),
+  twofaEnable: (code: string) => http.post('/auth/2fa/enable', { code }).then((r) => r.data),
+  twofaDisable: (password: string, code: string) => http.post('/auth/2fa/disable', { password, code }).then((r) => r.data),
 
   overview: () => http.get('/admin/overview').then((r) => r.data),
   live: () => http.get('/admin/live').then((r) => r.data),
@@ -49,11 +61,73 @@ export const api = {
   timeline: (id: string) => http.get(`/admin/trips/${id}/timeline`).then((r) => r.data),
   setDriverStatus: (id: string, approved: boolean) =>
     http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
+  createManualDriver: (body: any) => http.post('/admin/drivers/manual', body).then((r) => r.data),
+  setDriverCapabilities: (id: string, capabilities: string[]) =>
+    http.patch(`/admin/drivers/${id}/capabilities`, { capabilities }).then((r) => r.data),
+  interveneTrip: (id: string, body: any) =>
+    http.post(`/admin/trips/${id}/intervene`, body).then((r) => r.data),
+  setUserStatus: (id: string, disabled: boolean, reason = '') =>
+    http.post(`/admin/users/${id}/set-status`, { disabled, reason }).then((r) => r.data),
   reviewDoc: (id: string, body: any) =>
     http.post(`/admin/documents/${id}/review`, body).then((r) => r.data),
   refund: (body: any) => http.post('/admin/refunds', body).then((r) => r.data),
   updateTicket: (id: string, body: any) =>
     http.patch(`/admin/support/tickets/${id}`, body).then((r) => r.data),
   patchSettings: (body: any) => http.patch('/admin/settings', body).then((r) => r.data),
+  pricingTest: (body: any) => http.post('/admin/pricing/test', body).then((r) => r.data),
+  pricingRouteTest: (body: any) => http.post('/admin/pricing/test-route', body).then((r) => r.data),
+  pricingHistory: () => http.get('/admin/pricing/history').then((r) => r.data),
+  pricingRollback: (version: number) => http.post('/admin/pricing/rollback', { version }).then((r) => r.data),
+  betaReadiness: () => http.get('/admin/beta-readiness').then((r) => r.data),
   search: (q: string) => http.get('/admin/search', { params: { q } }).then((r) => r.data),
+
+  // Superadmin-only løyvehaver onboarding. A fleet_owner account is created only after approval.
+  fleetApplications: (status = 'pending') =>
+    http.get('/superadmin/fleet-applications', { params: status ? { status } : {} }).then((r) => r.data),
+  fleetApplication: (id: string) =>
+    http.get(`/superadmin/fleet-applications/${id}`).then((r) => r.data),
+  approveFleetApplication: (id: string, review_notes = '') =>
+    http.post(`/superadmin/fleet-applications/${id}/approve`, {
+      review_notes,
+      commission_rate: 0.10,
+    }).then((r) => r.data),
+  rejectFleetApplication: (id: string, review_notes = '') =>
+    http.post(`/superadmin/fleet-applications/${id}/reject`, { review_notes }).then((r) => r.data),
+  applicationFile: (path: string) =>
+    http.get(`/files/${encodeStoragePath(path)}`, { responseType: 'blob' }).then((r) => r.data as Blob),
+  // Admin Control Center
+  controlActionCenter: () => http.get('/admin/control/action-center').then((r) => r.data),
+  controlIntegrations: () => http.get('/admin/control/integrations').then((r) => r.data),
+  controlFleets: () => http.get('/admin/fleets-full').then((r) => r.data),
+  createFleet: (body: any) => http.post('/admin/fleets', body).then((r) => r.data),
+  fleetDetail: (id: string) => http.get(`/admin/fleets/${id}`).then((r) => r.data),
+  suspendFleet: (id: string, reason = '') => http.post(`/admin/fleets/${id}/suspend`, { reason }).then((r) => r.data),
+  reactivateFleet: (id: string) => http.post(`/admin/fleets/${id}/reactivate`).then((r) => r.data),
+  updateFleetCommission: (id: string, commission_rate: number, reason = '') =>
+    http.post(`/admin/fleets/${id}/commission`, { commission_rate, reason }).then((r) => r.data),
+  inviteFleetDriver: (id: string, body: any) =>
+    http.post(`/admin/control/fleets/${id}/driver-invites`, body).then((r) => r.data),
+  updateFleetVehicle: (id: string, body: any) =>
+    http.post(`/admin/control/fleets/${id}/vehicle`, body).then((r) => r.data),
+  stripeFleets: () => http.get('/admin/control/stripe-fleets').then((r) => r.data),
+  stripeConnect: (id: string) => http.post(`/admin/control/fleets/${id}/stripe-connect`).then((r) => r.data),
+  stripeStatus: (id: string) => http.get(`/admin/control/fleets/${id}/stripe-status`).then((r) => r.data),
+  stripePayouts: () => http.get('/admin/control/payouts').then((r) => r.data),
+  communicationFleets: () => http.get('/admin/control/communication-fleets').then((r) => r.data),
+  communications: () => http.get('/admin/control/communications').then((r) => r.data),
+  sendCommunication: (body: any) => http.post('/admin/control/communications', body).then((r) => r.data),
+  adminUsers: () => http.get('/admin/control/admin-users').then((r) => r.data),
+  createAdminUser: (body: any) => http.post('/admin/control/admin-users', body).then((r) => r.data),
+  updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
+
+  aiBootstrap: () => http.get('/admin/ai-assistant/bootstrap').then((r) => r.data),
+  aiFiles: () => http.get('/admin/ai-assistant/files').then((r) => r.data),
+  aiConversations: () => http.get('/admin/ai-assistant/conversations').then((r) => r.data),
+  createAIConversation: (title?: string) => http.post('/admin/ai-assistant/conversations', { title }).then((r) => r.data),
+  getAIConversation: (id: string) => http.get(`/admin/ai-assistant/conversations/${encodeURIComponent(id)}`).then((r) => r.data),
+  sendAIMessage: (id: string, body: { message: string; provider: string; file_paths: string[] }) =>
+    http.post(`/admin/ai-assistant/conversations/${encodeURIComponent(id)}/messages`, body).then((r) => r.data),
+  createAIChangeRequest: (body: { conversation_id: string; message_id: string; request: string }) =>
+    http.post('/admin/ai-assistant/change-requests', body).then((r) => r.data),
+
 };

@@ -18,7 +18,7 @@ export default function SuperadminApplicationDetail() {
   const [err, setErr] = useState("");
   const [decision, setDecision] = useState(null); // 'approve' | 'reject'
   const [reviewNotes, setReviewNotes] = useState("");
-  const [commissionRate, setCommissionRate] = useState(0.20);
+  const [commissionRate, setCommissionRate] = useState(0.12);
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLabel, setPreviewLabel] = useState("");
@@ -83,7 +83,6 @@ export default function SuperadminApplicationDetail() {
               <div className="text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full" style={{ background: "rgba(201,161,91,0.14)", color: "var(--accent)" }}>{app.status}</div>
             </div>
 
-            {/* Contact block */}
             <div className="grid sm:grid-cols-3 gap-3 mb-8">
               <InfoCell icon={<Mail size={14} />} label="Kontakt" value={<><div>{app.contact_name}</div><a href={`mailto:${app.contact_email}`} className="text-[12px]" style={{ color: "var(--accent)" }}>{app.contact_email}</a></>} />
               <InfoCell icon={<Phone size={14} />} label="Telefon" value={<a href={`tel:${app.contact_phone}`} style={{ color: "var(--text)" }}>{app.contact_phone}</a>} />
@@ -97,7 +96,6 @@ export default function SuperadminApplicationDetail() {
               </div>
             )}
 
-            {/* Documents */}
             <div className="text-[10px] tracking-widest uppercase mb-3" style={{ color: "var(--text-muted)" }}>Dokumenter</div>
             <div className="grid sm:grid-cols-2 gap-3 mb-10">
               {Object.entries(DOC_LABELS).map(([k, label]) => {
@@ -124,7 +122,6 @@ export default function SuperadminApplicationDetail() {
               })}
             </div>
 
-            {/* Decision */}
             {app.status === "pending" ? (
               <div className="p-4 rounded-2xl" style={{ background: "rgba(232,224,208,0.03)", border: "1px solid rgba(232,224,208,0.10)" }}>
                 <div className="font-display text-[22px] mb-3" style={{ color: "var(--text)" }}>Beslutning</div>

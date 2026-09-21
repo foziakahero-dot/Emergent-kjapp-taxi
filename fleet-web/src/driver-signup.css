@@ -1,0 +1,245 @@
+.driver-signup-screen {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 75% 18%, rgba(203, 163, 101, .07), transparent 34%),
+    #070b0e;
+  padding: 34px 44px 60px;
+}
+
+.driver-signup-screen > .brand {
+  margin: 0 auto;
+  width: min(720px, 100%);
+}
+
+.driver-signup-screen .brand-sub {
+  letter-spacing: .11em;
+}
+
+.driver-signup-card {
+  width: min(620px, 100%);
+  margin: 56px auto 0;
+  padding: 38px;
+  border: 1px solid #273038;
+  border-radius: 28px;
+  background: rgba(12, 18, 22, .96);
+  box-shadow: 0 34px 100px rgba(0, 0, 0, .24);
+}
+
+.driver-signup-card.centered {
+  min-height: 410px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.driver-signup-kicker {
+  color: #cba365;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .12em;
+}
+
+.driver-signup-card h1 {
+  margin: 12px 0 0;
+  color: #f4f4f0;
+  font: 400 38px/1.08 'Fraunces', Georgia, serif;
+  letter-spacing: -.03em;
+}
+
+.driver-signup-card > p,
+.driver-signup-card.centered > p {
+  max-width: 470px;
+  margin: 17px 0 30px;
+  color: #8a96a0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.assigned-car {
+  margin-top: 28px;
+  padding: 18px 20px;
+  border: 1px solid #273038;
+  border-radius: 16px;
+  background: #0e151a;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.assigned-car > span {
+  color: #cba365;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .08em;
+}
+
+.assigned-car > strong {
+  color: #f4f4f0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.assigned-car > small {
+  color: #8a96a0;
+  font-size: 11px;
+}
+
+.driver-signup-form {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.driver-signup-form input {
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid #273038;
+  border-radius: 13px;
+  outline: 0;
+  background: #111920;
+  color: #f4f4f0;
+}
+
+.driver-signup-form input:focus {
+  border-color: rgba(203, 163, 101, .68);
+  box-shadow: 0 0 0 3px rgba(203, 163, 101, .08);
+}
+
+.driver-signup-form input::placeholder {
+  color: #8a96a0;
+}
+
+.driver-legal,
+.driver-doc-intro {
+  color: #8a96a0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.driver-doc-intro {
+  margin: 0 0 8px;
+}
+
+.driver-doc-row {
+  min-height: 76px;
+  padding: 12px 14px;
+  border: 1px solid #273038;
+  border-radius: 16px;
+  background: #0e151a;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.driver-doc-mark {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  background: rgba(244, 244, 240, .045);
+  color: #8a96a0;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+}
+
+.driver-doc-mark.done {
+  background: rgba(203, 163, 101, .13);
+  color: #cba365;
+}
+
+.driver-doc-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.driver-doc-copy strong,
+.driver-doc-copy span {
+  display: block;
+}
+
+.driver-doc-copy strong {
+  color: #f4f4f0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.driver-doc-copy span {
+  margin-top: 5px;
+  overflow: hidden;
+  color: #8a96a0;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.driver-doc-action {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(203, 163, 101, .26);
+  border-radius: 999px;
+  background: rgba(203, 163, 101, .10);
+  color: #cba365;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.driver-signup-form > .primary-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.driver-back {
+  align-self: center;
+  margin-top: 4px;
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: #8a96a0;
+  font-size: 11px;
+}
+
+.driver-invite-help {
+  display: inline-block;
+  margin-top: 26px;
+  color: #8a96a0;
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.driver-invite-help:hover,
+.driver-back:hover {
+  color: #f4f4f0;
+}
+
+@media (max-width: 680px) {
+  .driver-signup-screen {
+    padding: 22px 18px 42px;
+  }
+
+  .driver-signup-card {
+    margin-top: 38px;
+    padding: 24px 20px;
+    border-radius: 22px;
+  }
+
+  .driver-signup-card.centered {
+    min-height: 360px;
+  }
+
+  .driver-signup-card h1 {
+    font-size: 31px;
+  }
+
+  .assigned-car {
+    margin-top: 22px;
+  }
+
+  .driver-doc-row {
+    padding: 11px;
+  }
+}

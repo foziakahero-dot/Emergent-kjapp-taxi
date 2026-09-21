@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from './api';
+import { api, apiError } from './api';
 import { useAuth } from './auth';
+import LiveMap from './LiveMap';
 import {
   Bars, Btn, Card, Drawer, Empty, ErrorBanner, KV, Kpi, Loader, Modal, PageHead, Pagination,
   Pill, Route as RouteView, fmtDate, fmtDay, fmtMoney, useAsync, usePaged,
@@ -15,20 +16,61 @@ function useDebounced<T>(value: T, ms = 300) {
 
 const PAGE = 25;
 
+function hasFreshGps(driver: any) {
+  const seen = Date.parse(driver.last_location_at || '');
+  const age = Date.now() - seen;
+  return Number.isFinite(seen) && age >= 0 && age <= 2 * 60_000 &&
+    driver.lat != null && driver.lng != null &&
+    Number.isFinite(Number(driver.lat)) && Math.abs(Number(driver.lat)) <= 90 &&
+    Number.isFinite(Number(driver.lng)) && Math.abs(Number(driver.lng)) <= 180;
+}
+
+function hasRecentSignal(value: any) {
+  const seen = Date.parse(value || '');
+  const age = Date.now() - seen;
+  return Number.isFinite(seen) && age >= 0 && age <= 2 * 60_000;
+}
+
 /* ----------------------------- Dashboard ----------------------------- */
 export function Dashboard() {
   const ov = useAsync(() => api.overview(), []);
   const fin = useAsync(() => api.finance(30), []);
+  const live = useAsync(() => api.live(), []);
+  const twofa = useAsync(() => api.twofaStatus(), []);
   if (ov.loading) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
   const d = ov.data || {};
   const delta = (d.trips?.today ?? 0) - (d.trips?.yesterday ?? 0);
+  const freshCount = (live.data?.drivers || []).filter(hasFreshGps).length;
+  const staleOpen = live.data?.trips?.filter((t: any) => t.created_at && Date.now() - Date.parse(t.created_at) > 2 * 60 * 60_000).length ?? d.trips?.stale_active ?? 0;
   return (
     <>
       <PageHead title="Dashbord" sub={`Oppdatert ${fmtDate(d.as_of)}`} />
+      {twofa.data?.required && !twofa.data?.enabled && <div className="error-banner" role="alert">
+        Administratorkontoen mangler totrinnsbekreftelse. <a href="#/settings" style={{ textDecoration: 'underline' }}>Aktiver 2FA i Innstillinger.</a>
+      </div>}
+
+      <Card style={{ marginBottom: 18, border: '1px solid rgba(45,212,191,.28)', boxShadow: '0 0 28px rgba(45,212,191,.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ maxWidth: 720 }}>
+            <div className="dim" style={{ fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 6 }}>KJAPP · Beta Operations 2.0</div>
+            <div className="strong" style={{ fontSize: 20, marginBottom: 6 }}>Nytt operatør- og priskontrollsenter er aktivt</div>
+            <div className="dim" style={{ lineHeight: 1.55 }}>
+              Dynamisk prissetting, prisområder, rollback, operatørinngripen på aktive turer,
+              sjåførutstyr og 10 % serviceavgift er samlet i kontrollsenteret.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <a className="btn primary" href="#/pricing">Åpne prissetting</a>
+            <a className="btn" href="#/trips">Operatørkontroll</a>
+            <a className="btn" href="#/drivers">Sjåførutstyr</a>
+          </div>
+        </div>
+      </Card>
+
       <div className="grid cards">
-        <Kpi label="Aktive turer nå" value={d.trips?.active ?? 0} accent
-          foot={<span className="dim">{d.drivers?.online ?? 0} sjåfører online</span>} />
+        <Kpi label="Åpne turer" value={d.trips?.active ?? 0} accent
+          foot={<span className="dim">{live.loading ? 'Kontrollerer GPS…' : live.err ? 'GPS-status utilgjengelig' : `${freshCount} sjåfører med fersk GPS`}{staleOpen ? ` · ${staleOpen} turer eldre enn 2t` : ''}</span>} />
         <Kpi label="Turer i dag" value={d.trips?.today ?? 0}
           foot={<span className={`delta ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs i går</span>} />
         <Kpi label="Brutto i dag (GMV)" value={fmtMoney(d.finance?.gmv_today)}
@@ -44,7 +86,7 @@ export function Dashboard() {
       <div className="section-title">Krever oppmerksomhet</div>
       <div className="grid cards">
         <Shortcut ic="☗" n={d.drivers?.pending ?? 0} l="Sjåfører til godkjenning" c="amber" />
-        <Shortcut ic="◉" n={d.trips?.active ?? 0} l="Aktive turer" c="blue" />
+        <Shortcut ic="◉" n={d.trips?.active ?? 0} l="Åpne turer" c="blue" />
         <Shortcut ic="✆" n={d.support?.open ?? 0} l="Åpne supportsaker" c="red" />
         <Shortcut ic="≣" n={d.finance?.pending_payouts ?? 0} l="Utbetalinger i kø" c="gold" />
       </div>
@@ -70,35 +112,43 @@ const Shortcut = ({ ic, n, l, c }: any) => (
 export function Live() {
   const { data, loading, err, reload } = useAsync(() => api.live(), []);
   useEffect(() => { const i = setInterval(reload, 5000); return () => clearInterval(i); }, [reload]);
+  const allDrivers = data?.drivers || [];
+  const mappableDrivers = allDrivers.filter((d: any) => Number.isFinite(Number(d.lat)) && Number.isFinite(Number(d.lng)) && Math.abs(Number(d.lat)) <= 90 && Math.abs(Number(d.lng)) <= 180);
+  const onlineCount = allDrivers.filter((d: any) => d.status === 'online').length;
+  const staleCount = allDrivers.filter((d: any) => d.status === 'stale').length;
   return (
     <>
       <PageHead title="Live drift" sub={data ? `Oppdatert ${fmtDate(data.as_of)} · auto hvert 5s` : ''}
         right={<Btn variant="sm" onClick={reload}>Oppdater</Btn>} />
       <ErrorBanner msg={err} />
       {loading && !data ? <Loader /> : (
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <>
+        <LiveMap drivers={mappableDrivers.map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }))} />
+        <div className="grid live-columns">
           <div>
-            <div className="section-title" style={{ marginTop: 0 }}>Sjåfører online ({data?.drivers?.length || 0})</div>
+            <div className="section-title" style={{ marginTop: 0 }}>Alle registrerte sjåfører ({allDrivers.length})</div>
             <div className="tablewrap">
               <table><thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Sist sett</th></tr></thead>
                 <tbody>
-                  {(data?.drivers || []).map((x: any) => (
+                  {allDrivers.map((x: any) => (
                     <tr key={x.id}><td className="strong">{x.name}</td>
                       <td>{x.car} <span className="dim mono">{x.plate}</span></td>
                       <td className="dim">{x.fleet_name || '—'}</td>
-                      <td className="dim nowrap">{fmtDate(x.last_location_at)}</td></tr>
+                      <td className="dim nowrap"><Pill status={x.status === 'online' ? 'in_trip' : x.status === 'stale' ? 'pending' : 'gray'} label={x.status === 'online' ? 'Online' : x.status === 'stale' ? 'Utdatert GPS' : 'Offline'} /> <span>{fmtDate(x.last_location_at)}</span></td></tr>
                   ))}
-                  {!data?.drivers?.length && <tr><td colSpan={4}><Empty title="Ingen sjåfører online" /></td></tr>}
+                  {!allDrivers.length && <tr><td colSpan={4}><Empty title="Ingen registrerte sjåfører" /></td></tr>}
                 </tbody></table>
             </div>
           </div>
           <div>
-            <div className="section-title" style={{ marginTop: 0 }}>Aktive turer ({data?.trips?.length || 0})</div>
+            <div className="section-title" style={{ marginTop: 0 }}>Åpne turer ({data?.trips?.length || 0})</div>
             <div className="tablewrap">
               <table><thead><tr><th>Status</th><th>Rute</th><th>Sjåfør</th><th className="right">Pris</th></tr></thead>
                 <tbody>
                   {(data?.trips || []).map((x: any) => (
-                    <tr key={x.trip_id}><td><Pill status={x.status} /></td>
+                    <tr key={x.trip_id}><td><Pill status={x.status} />
+                      {x.created_at && Date.now() - Date.parse(x.created_at) > 2 * 60 * 60_000 &&
+                        <div className="cell-sub" style={{ color: 'var(--amber)' }}>Åpen over 2 timer · undersøk</div>}</td>
                       <td><div>{x.pickup_address}</div><div className="cell-sub">→ {x.dropoff_address}</div></td>
                       <td>{x.driver_name || <span className="dim">—</span>}</td>
                       <td className="right mono">{fmtMoney(x.price)}</td></tr>
@@ -108,6 +158,10 @@ export function Live() {
             </div>
           </div>
         </div>
+        <div className="live-stale-note">
+          {onlineCount} online · {staleCount} med utdatert GPS · {allDrivers.length - onlineCount - staleCount} offline eller uten GPS. Kartet viser alle sjåfører som har en siste kjent posisjon.
+        </div>
+        </>
       )}
     </>
   );
@@ -125,7 +179,7 @@ export function Trips() {
   const [page, setPage] = useState(1);
   const [sel, setSel] = useState<any>(null);
   useEffect(() => { setPage(1); }, [status, q, df, dt, pay]);
-  const { rows, total, totalPages, loading, err } = usePaged('/admin/trips-full',
+  const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/trips-full',
     { status, q, date_from: df, date_to: dt, payment_status: pay, page, page_size: PAGE });
 
   return (
@@ -164,14 +218,69 @@ export function Trips() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
-      {sel && <TripDrawer trip={sel} onClose={() => setSel(null)} />}
+      {sel && <TripDrawer trip={sel} onClose={() => setSel(null)} onChanged={async () => { await reload(); setSel(null); }} />}
     </>
   );
 }
 
-function TripDrawer({ trip, onClose }: any) {
+function TripDrawer({ trip, onClose, onChanged }: any) {
   const tl = useAsync(() => api.timeline(trip.trip_id), [trip.trip_id]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
   const ev = tl.data?.events || [];
+  const active = ['searching','booking','driver_on_way','at_pickup','in_trip'].includes(trip.status);
+  const canRelease = ['driver_on_way','at_pickup'].includes(trip.status) && !!trip.driver_name;
+  const isPaid = ['paid','captured'].includes(String(trip.payment_status || '').toLowerCase());
+
+  const intervene = async (action: 'cancel_active' | 'release_driver' | 'adjust_price') => {
+    const labels: Record<string,string> = {
+      cancel_active: 'avbryte turen',
+      release_driver: 'frigjøre sjåføren og søke på nytt',
+      adjust_price: 'justere turprisen',
+    };
+    let price: number | undefined;
+    if (action === 'adjust_price') {
+      const raw = window.prompt('Ny turpris i kroner:', String(trip.price ?? ''));
+      if (raw == null) return;
+      price = Number(raw);
+      if (!Number.isFinite(price) || price < 0 || price > 100000) {
+        window.alert('Oppgi en gyldig pris mellom 0 og 100 000 kr.');
+        return;
+      }
+    }
+    const reason = window.prompt(`Begrunnelse for å ${labels[action]} (lagres i revisjonsloggen):`, '') || '';
+    if (reason.trim().length < 3) return;
+    if (!window.confirm(`Bekreft: ${labels[action]}?`)) return;
+    setBusy(true); setMsg('');
+    try {
+      await api.interveneTrip(trip.trip_id, { action, reason: reason.trim(), ...(price != null ? { price: Math.round(price) } : {}) });
+      setMsg('Operatørhandlingen er gjennomført og logget.');
+      await onChanged?.();
+    } catch (e: any) {
+      setMsg(apiError(e));
+    } finally { setBusy(false); }
+  };
+
+  const refund = async () => {
+    const raw = window.prompt('Beløp som skal refunderes i kroner (tomt = maksimalt tilgjengelig):', '');
+    if (raw == null) return;
+    const amount = raw.trim() ? Number(raw) : undefined;
+    if (amount != null && (!Number.isFinite(amount) || amount <= 0 || amount > Number(trip.price || 0))) {
+      window.alert('Oppgi et gyldig refusjonsbeløp.');
+      return;
+    }
+    const reason = window.prompt('Begrunnelse for refundering (lagres i revisjonsloggen):', '') || '';
+    if (reason.trim().length < 3) return;
+    if (!window.confirm('Bekreft refundering?')) return;
+    setBusy(true); setMsg('');
+    try {
+      await api.refund({ trip_id: trip.trip_id, ...(amount != null ? { amount: Math.round(amount) } : {}), reason: reason.trim() });
+      setMsg('Refunderingen er registrert.');
+      await onChanged?.();
+    } catch (e: any) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <Drawer title={`Tur ${String(trip.trip_id).slice(0, 8)}`} onClose={onClose}>
       <div style={{ marginBottom: 14 }}><Pill status={trip.status} /></div>
@@ -183,8 +292,27 @@ function TripDrawer({ trip, onClose }: any) {
       <KV k="Sjåfør" v={trip.driver_name ? `${trip.driver_name} · ${trip.driver_car || ''} ${trip.driver_plate || ''}` : '—'} />
       <KV k="Betaling" v={<Pill status={trip.payment_status || 'pending'} />} />
       <KV k="Kjøretøyklasse" v={trip.vehicle_type} />
+      <KV k="Prisversjon" v={trip.pricing_version ?? '—'} />
+      <KV k="Serviceavgift" v={trip.commission_rate != null ? `${Math.round(Number(trip.commission_rate) * 1000) / 10}%` : '—'} />
+      {!!trip.special_needs?.length && <KV k="Spesielle behov" v={trip.special_needs.join(' · ')} />}
+      {!!trip.stops?.length && <KV k="Ekstra stopp" v={String(trip.stops.length)} />}
       <KV k="Vurdering" v={trip.passenger_rating ? `${trip.passenger_rating} ★` : '—'} />
       <KV k="Opprettet" v={fmtDate(trip.created_at)} />
+
+      <div className="section-title">Operatørkontroll</div>
+      <Card style={{ marginBottom: 16 }}>
+        <div className="dim" style={{ fontSize: 12, marginBottom: 10 }}>
+          Handlinger logges i revisjonsloggen. Betalte turer kan ikke få omskrevet pris; bruk refundering.
+        </div>
+        {trip.requires_manual_settlement ? <div className="error-banner" style={{ marginBottom: 10 }}>Denne turen krever manuelt oppgjør etter avbrudd.</div> : null}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {canRelease ? <Btn disabled={busy} onClick={() => intervene('release_driver')}>Finn ny sjåfør</Btn> : null}
+          {active ? <Btn variant="danger" disabled={busy} onClick={() => intervene('cancel_active')}>Avbryt tur</Btn> : null}
+          {!isPaid ? <Btn disabled={busy} onClick={() => intervene('adjust_price')}>Juster pris</Btn> : null}
+          {isPaid ? <Btn disabled={busy} onClick={refund}>Refunder</Btn> : null}
+        </div>
+        {msg ? <div className={msg.includes('gjennomført') || msg.includes('registrert') ? 'ok-banner' : 'error-banner'} style={{ marginTop: 10 }}>{msg}</div> : null}
+      </Card>
 
       <div className="section-title">Hendelsesforløp</div>
       {tl.loading ? <Loader /> : ev.length ? (
@@ -208,6 +336,8 @@ export function Drivers() {
   const [qi, setQi] = useState(sp.get('q') || '');
   const q = useDebounced(qi);
   const [page, setPage] = useState(1);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [busyUser, setBusyUser] = useState('');
   useEffect(() => { setPage(1); }, [status, q]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/drivers-full', { status, q, page, page_size: PAGE });
 
@@ -217,9 +347,27 @@ export function Drivers() {
     try { await api.setDriverStatus(d.id, next); reload(); } catch (e: any) { alert(e?.response?.data?.detail || 'Feil'); }
   };
 
+  const toggleCapability = async (d: any, capability: 'wheelchair' | 'child_seat') => {
+    const current = Array.isArray(d.capabilities) ? d.capabilities : [];
+    const next = current.includes(capability) ? current.filter((x: string) => x !== capability) : [...current, capability];
+    try { await api.setDriverCapabilities(d.id, next); await reload(); }
+    catch (e: any) { window.alert(apiError(e)); }
+  };
+
+  const toggleBlocked = async (d: any) => {
+    const disabling = !d.disabled;
+    const reason = disabling ? (window.prompt('Årsak til blokkering:', '') || '').trim() : '';
+    if (disabling && !reason) return;
+    if (!window.confirm(disabling ? `Blokkere ${d.name || d.email}?` : `Avblokkere ${d.name || d.email}?`)) return;
+    setBusyUser(d.id);
+    try { await api.setUserStatus(d.id, disabling, reason); await reload(); }
+    catch (e) { window.alert(apiError(e)); }
+    finally { setBusyUser(''); }
+  };
+
   return (
     <>
-      <PageHead title="Sjåfører" sub={`${total} sjåfører`} />
+      <PageHead title="Sjåfører" sub={`${total} sjåfører`} right={<Btn variant="primary" onClick={() => setManualOpen(true)}>+ Registrer sjåfør</Btn>} />
       <div className="toolbar">
         <input className="input" placeholder="Søk navn / e-post / skilt…" value={qi} onChange={(e) => setQi(e.target.value)} />
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -230,29 +378,60 @@ export function Drivers() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Status</th><th className="right">Handling</th></tr></thead>
+          <thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Utstyr</th><th>Løyvehaver</th><th>Turer</th><th>Vurd.</th><th>Status</th><th className="right">Handling</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
+            {loading ? <tr><td colSpan={8}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
                 <td><div className="strong">{d.name}</div><div className="cell-sub">{d.email}</div></td>
                 <td>{d.car || '—'} <span className="dim mono">{d.plate}</span></td>
+                <td>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Btn variant="sm" onClick={() => toggleCapability(d, 'wheelchair')}>
+                      {(d.capabilities || []).includes('wheelchair') ? '✓ Rullestol' : '+ Rullestol'}
+                    </Btn>
+                    <Btn variant="sm" onClick={() => toggleCapability(d, 'child_seat')}>
+                      {(d.capabilities || []).includes('child_seat') ? '✓ Barnesete' : '+ Barnesete'}
+                    </Btn>
+                  </div>
+                </td>
                 <td className="dim">{d.fleet_name || '—'}</td>
-                <td className="mono">{d.completed ?? 0}</td>
+                <td className="mono">{d.trips_completed ?? d.completed ?? 0}</td>
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
-                <td>{d.online ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent" /> : <Pill status="pending" label="Venter" />}</td>
+                <td>{d.disabled ? <Pill status="cancelled" label="Blokkert" /> : d.online && hasRecentSignal(d.last_location_at) ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent · offline" /> : <Pill status="pending" label="Venter" />}</td>
                 <td className="right">
-                  <Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>
-                    {d.approved ? 'Suspender' : 'Godkjenn'}
-                  </Btn>
+                  <div className="inline-actions"><Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>{d.approved ? 'Suspender' : 'Godkjenn'}</Btn><Btn variant={`sm ${d.disabled ? '' : 'danger'}`} disabled={busyUser === d.id} onClick={() => toggleBlocked(d)}>{busyUser === d.id ? 'Lagrer…' : d.disabled ? 'Avblokker' : 'Blokker'}</Btn></div>
                 </td>
               </tr>
-            )) : <tr><td colSpan={7}><Empty title="Ingen sjåfører" /></td></tr>}
+            )) : <tr><td colSpan={8}><Empty title="Ingen sjåfører" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
+      {manualOpen && <ManualDriverModal onClose={() => setManualOpen(false)} onDone={() => { setManualOpen(false); reload(); }} />}
     </>
   );
+}
+
+function ManualDriverModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', has_own_car: false, car: '', plate: '', vehicle_type: 'ai-first' });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const save = async () => {
+    if (!form.full_name.trim() || !form.email.trim() || !form.phone.trim()) { setErr('Navn, e-post og telefon er påkrevd.'); return; }
+    if (!form.has_own_car && (!form.car.trim() || !form.plate.trim())) { setErr('Bilmodell og registreringsnummer er påkrevd når sjåføren ikke har egen bil.'); return; }
+    setBusy(true); setErr('');
+    try { const result = await api.createManualDriver(form); if (result.activation_url) window.alert(`Sjåføren er opprettet. Aktiveringslenke (e-post manglet):\n${result.activation_url}`); onDone(); }
+    catch (e) { setErr(apiError(e)); setBusy(false); }
+  };
+
+  return <Modal title="Registrer sjåfør" sub="Kontoen opprettes som ventende og må godkjennes før sjåføren kan kjøre." onClose={onClose}>
+    <ErrorBanner msg={err} />
+    <div className="field"><label className="label">Fullt navn</label><input className="input" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} /></div>
+    <div className="form-grid two"><div className="field"><label className="label">E-post</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div><div className="field"><label className="label">Telefon</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div></div>
+    <label className="permission-item" style={{ margin: '8px 0 14px', cursor: 'pointer' }}><input type="checkbox" checked={form.has_own_car} onChange={e => setForm({ ...form, has_own_car: e.target.checked })} /> Denne sjåføren har egen bil</label>
+    <div className="form-grid two"><div className="field"><label className="label">Bilmodell {form.has_own_car ? '(valgfritt)' : '(påkrevd)'}</label><input className="input" value={form.car} onChange={e => setForm({ ...form, car: e.target.value })} /></div><div className="field"><label className="label">Registreringsnummer {form.has_own_car ? '(valgfritt)' : '(påkrevd)'}</label><input className="input" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} /></div></div>
+    <div className="field"><label className="label">Kjøretøyklasse</label><select className="select" value={form.vehicle_type} onChange={e => setForm({ ...form, vehicle_type: e.target.value })}><option value="ai-first">KJAPP Standard</option><option value="enkelt">KJAPP Sparsom</option><option value="trygg">KJAPP XL / Komfort</option><option value="premium">KJAPP Premium</option></select></div>
+    <div className="modal-actions"><Btn onClick={onClose}>Avbryt</Btn><Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Oppretter…' : 'Opprett sjåfør'}</Btn></div>
+  </Modal>;
 }
 
 /* ----------------------------- Customers ----------------------------- */
@@ -262,8 +441,24 @@ export function Customers() {
   const q = useDebounced(qi);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [busyUser, setBusyUser] = useState('');
   useEffect(() => { setPage(1); }, [q, status]);
-  const { rows, total, totalPages, loading, err } = usePaged('/admin/users', { q, status, page, page_size: PAGE });
+  const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/users', { q, status, page, page_size: PAGE });
+
+  const toggleUser = async (u: any) => {
+    const disabling = !u.disabled;
+    let reason = '';
+    if (disabling) {
+      reason = window.prompt('Årsak til deaktivering (lagres i revisjonslogg):', '') || '';
+      if (!reason.trim()) return;
+      if (!window.confirm(`Deaktiver ${u.fullName || u.email}? Eksisterende økter blir avsluttet.`)) return;
+    } else if (!window.confirm(`Reaktiver ${u.fullName || u.email}?`)) return;
+    setBusyUser(u.id);
+    try { await api.setUserStatus(u.id, disabling, reason); await reload(); }
+    catch (e: any) { window.alert(apiError(e)); }
+    finally { setBusyUser(''); }
+  };
+
   return (
     <>
       <PageHead title="Kunder & brukere" sub={`${total} brukere`} />
@@ -276,17 +471,25 @@ export function Customers() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Navn</th><th>E-post</th><th>Telefon</th><th>Rolle</th><th>Registrert</th></tr></thead>
+          <thead><tr><th>Navn</th><th>E-post</th><th>Telefon</th><th>Rolle</th><th>Status</th><th>Registrert</th><th className="right">Handling</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={5}><Loader /></td></tr> : rows.length ? rows.map((u: any) => (
+            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((u: any) => (
               <tr key={u.id}>
                 <td className="strong">{u.fullName || '—'}</td>
                 <td className="dim">{u.email}</td>
                 <td className="mono">{u.phone || '—'}</td>
                 <td><Pill status="gray" label={u.role || 'kunde'} /></td>
+                <td><Pill status={u.disabled ? 'cancelled' : 'completed'} label={u.disabled ? 'Deaktivert' : 'Aktiv'} /></td>
                 <td className="dim nowrap">{fmtDay(u.created_at)}</td>
+                <td className="right">
+                  {u.role !== 'admin' && u.role !== 'superadmin'
+                    ? <Btn variant={u.disabled ? 'sm' : 'danger'} disabled={busyUser === u.id} onClick={() => toggleUser(u)}>
+                        {busyUser === u.id ? 'Lagrer…' : u.disabled ? 'Reaktiver' : 'Blokker'}
+                      </Btn>
+                    : <span className="dim">—</span>}
+                </td>
               </tr>
-            )) : <tr><td colSpan={5}><Empty title="Ingen brukere" /></td></tr>}
+            )) : <tr><td colSpan={7}><Empty title="Ingen brukere" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
@@ -355,7 +558,7 @@ export function Vehicles() {
                 <td className="dim">{v.vehicle_type || '—'}</td>
                 <td>{v.driver_name || '—'}</td>
                 <td className="dim">{v.fleet_name || '—'}</td>
-                <td>{v.online ? <Pill status="in_trip" label="Online" /> : <Pill status={v.approved ? 'completed' : 'pending'} label={v.approved ? 'Aktiv' : 'Venter'} />}</td>
+                <td>{v.online && hasRecentSignal(v.last_location_at) ? <Pill status="in_trip" label="Online" /> : <Pill status={v.approved ? 'completed' : 'pending'} label={v.approved ? 'Godkjent · offline' : 'Venter'} />}</td>
               </tr>
             )) : <tr><td colSpan={6}><Empty title="Ingen kjøretøy" /></td></tr>}
           </tbody>
@@ -681,52 +884,369 @@ export function Audit() {
 }
 
 /* ----------------------------- Settings ----------------------------- */
+function TwoFactorCard() {
+  const status = useAsync(() => api.twofaStatus(), []);
+  const [setup, setSetup] = useState<any>(null);
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const begin = async () => {
+    setBusy(true); setMsg(''); setBackupCodes([]);
+    try { setSetup(await api.twofaSetup()); }
+    catch (e) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  const enable = async () => {
+    setBusy(true); setMsg('');
+    try {
+      const result = await api.twofaEnable(code.trim());
+      setBackupCodes(result.backup_codes || []);
+      setSetup(null); setCode(''); setMsg('Totrinnsbekreftelse er aktivert. Lagre reservekodene trygt.');
+      status.reload();
+    } catch (e) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  const disable = async () => {
+    setBusy(true); setMsg('');
+    try {
+      await api.twofaDisable(password, code.trim());
+      setPassword(''); setCode(''); setMsg('Totrinnsbekreftelse er deaktivert.');
+      status.reload();
+    } catch (e) { setMsg(apiError(e)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Card style={{ gridColumn: '1 / -1' }}>
+      <div className="section-title" style={{ marginTop: 0 }}>Kontosikkerhet</div>
+      {status.loading ? <Loader /> : status.data?.enabled ? (
+        <>
+          <Pill status="completed" label="Totrinnsbekreftelse aktiv" />
+          <div className="dim" style={{ margin: '12px 0' }}>Passord, autentiseringskode og engangskoder beskytter administratorkontoen.</div>
+          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 620 }}>
+            <div className="field"><label className="label">Nåværende passord</label>
+              <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <div className="field"><label className="label">Kode fra autentiseringsappen</label>
+              <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
+          </div>
+          <Btn onClick={disable} disabled={busy || !password || !code}>{busy ? 'Arbeider…' : 'Deaktiver 2FA'}</Btn>
+        </>
+      ) : setup ? (
+        <>
+          <div className="dim" style={{ marginBottom: 12 }}>Skann QR-koden i en autentiseringsapp og skriv inn den seks-sifrede koden.</div>
+          <img src={setup.qr} alt="QR-kode for totrinnsbekreftelse" width={180} height={180} style={{ background: '#fff', padding: 8, borderRadius: 12 }} />
+          <div className="mono" style={{ margin: '10px 0 14px', wordBreak: 'break-all' }}>{setup.secret}</div>
+          <div className="field" style={{ maxWidth: 320 }}><label className="label">Bekreftelseskode</label>
+            <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
+          <Btn variant="primary" onClick={enable} disabled={busy || !code}>{busy ? 'Aktiverer…' : 'Aktiver 2FA'}</Btn>
+        </>
+      ) : (
+        <>
+          <Pill status="pending" label="Totrinnsbekreftelse er ikke aktiv" />
+          <div className="dim" style={{ margin: '12px 0' }}>Aktiver 2FA før panelet brukes med produksjonsdata.</div>
+          <Btn variant="primary" onClick={begin} disabled={busy}>{busy ? 'Klargjør…' : 'Sett opp 2FA'}</Btn>
+        </>
+      )}
+      {backupCodes.length > 0 && <div style={{ marginTop: 18 }}>
+        <div className="strong">Reservekoder – vises bare nå</div>
+        <div className="mono" style={{ marginTop: 8, lineHeight: 1.8 }}>{backupCodes.join('  ·  ')}</div>
+      </div>}
+      {msg && <div className={msg.includes('aktivert') || msg.includes('deaktivert') ? 'dim' : 'error-banner'} style={{ marginTop: 12 }}>{msg}</div>}
+    </Card>
+  );
+}
+
 export function Settings() {
   const { user } = useAuth();
   const { data, loading, err, reload } = useAsync(() => api.list('/admin/settings', {}), []);
+  const history = useAsync(() => api.pricingHistory(), []);
+  const readiness = useAsync(() => api.betaReadiness(), []);
   const [comm, setComm] = useState('');
+  const [pricing, setPricing] = useState<any>({});
+  const [compliance, setCompliance] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => { if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100))); }, [data]);
+  const [test, setTest] = useState({ distance_km: '10', duration_min: '20', vehicle_type: 'ai-first' });
+  const [routeTest, setRouteTest] = useState({ pickup_address: '', dropoff_address: '', vehicle_type: 'ai-first' });
+  const [testResult, setTestResult] = useState<any>(null);
+  const [routeResult, setRouteResult] = useState<any>(null);
+
+  useEffect(() => {
+    if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
+    if (data?.pricing) setPricing(data.pricing);
+    if (data?.compliance) setCompliance(data.compliance);
+  }, [data]);
+
   const isSuper = user?.role === 'superadmin';
+  const rideClasses = Array.isArray(data?.ride_classes)
+    ? data.ride_classes
+    : Object.entries(data?.ride_classes || {}).map(([type, value]: [string, any]) => ({ type, ...(value || {}) }));
+
+  const setPrice = (key: string, value: any) => setPricing((p: any) => ({ ...p, [key]: value }));
+  const setVehicleRate = (type: string, key: string, value: number) =>
+    setPricing((p: any) => ({ ...p, vehicle_rates: { ...(p.vehicle_rates || {}), [type]: { ...(p.vehicle_rates?.[type] || {}), [key]: value } } }));
+  const setArea = (id: string, patch: any) =>
+    setPricing((p: any) => ({ ...p, areas: { ...(p.areas || {}), [id]: { ...(p.areas?.[id] || {}), ...patch } } }));
+  const removeArea = (id: string) => setPricing((p: any) => {
+    const areas = { ...(p.areas || {}) }; delete areas[id]; return { ...p, areas };
+  });
+  const addArea = () => {
+    const id = `area_${Object.keys(pricing?.areas || {}).length + 1}`;
+    setArea(id, { name: 'Nytt område', enabled: false, center_lat: 59.9139, center_lng: 10.7522, radius_km: 10, pricing: {} });
+  };
+
   const save = async () => {
+    const prev = data?.pricing || {};
+    const extreme: string[] = [];
+    const checkRatio = (label: string, oldValue: any, newValue: any) => {
+      const a = Number(oldValue), b = Number(newValue);
+      if (a > 0 && Number.isFinite(b) && (b > a * 2 || b < a * 0.5)) extreme.push(`${label}: ${a} → ${b}`);
+    };
+    ['base_fare','per_km','per_minute','minimum_fare'].forEach((k) => checkRatio(k, prev?.[k], pricing?.[k]));
+    for (const type of ['enkelt','trygg','premium']) {
+      for (const k of ['base_fare','per_km','per_minute','minimum_fare']) {
+        checkRatio(`${type}.${k}`, prev?.vehicle_rates?.[type]?.[k], pricing?.vehicle_rates?.[type]?.[k]);
+      }
+    }
+    if (extreme.length && !window.confirm(`Stor prisendring oppdaget:\n\n${extreme.join('\n')}\n\nVil du publisere likevel?`)) return;
     setBusy(true); setMsg('');
-    try { await api.patchSettings({ default_commission: Number(comm) / 100 }); setMsg('Lagret'); reload(); }
-    catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    try {
+      await api.patchSettings({ default_commission: Number(comm) / 100, pricing });
+      setMsg('Lagret – nye bestillinger bruker ny prisversjon. Eksisterende turer beholder pris og provisjon fra bestillingstidspunktet.');
+      await Promise.all([reload(), history.reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
     finally { setBusy(false); }
   };
+
+  const saveCompliance = async () => {
+    setBusy(true); setMsg('');
+    try {
+      await api.patchSettings({ compliance });
+      setMsg('Beta-gates lagret. Dette registrerer operatørens bekreftelser; det erstatter ikke juridisk eller faglig godkjenning.');
+      await Promise.all([reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    finally { setBusy(false); }
+  };
+
+  const runTest = async () => {
+    setTestResult(null); setMsg('');
+    try {
+      setTestResult(await api.pricingTest({
+        distance_km: Number(test.distance_km), duration_min: Number(test.duration_min), vehicle_type: test.vehicle_type,
+      }));
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Kunne ikke teste pris'); }
+  };
+
+  const runRouteTest = async () => {
+    setRouteResult(null); setMsg('');
+    try { setRouteResult(await api.pricingRouteTest(routeTest)); }
+    catch (e: any) { setMsg(e?.response?.data?.detail || 'Kunne ikke beregne ruten'); }
+  };
+
+  const rollback = async (version: number) => {
+    if (!isSuper || !window.confirm(`Rull tilbake til prisversjon ${version}? Det opprettes en NY aktiv versjon; eksisterende turer endres ikke.`)) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.pricingRollback(version);
+      setMsg(`Rollback gjennomført. Ny aktiv prisversjon: ${r.pricing_version}.`);
+      await Promise.all([reload(), history.reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Rollback feilet'); }
+    finally { setBusy(false); }
+  };
+
   if (loading) return <Loader />;
+  const fields = [
+    ['base_fare','Grunnpris'], ['per_km','Pris per km'], ['per_minute','Pris per minutt'],
+    ['waiting_per_minute','Ventetid per minutt'], ['minimum_fare','Minimumspris'],
+    ['extra_stop_fee','Ekstra stopp'], ['customer_cancellation_fee','Avbestillingsgebyr kunde'],
+    ['late_driver_cancellation_fee','Registrert gebyr ved sen sjåføravbestilling'],
+  ];
+  const vehicleLabels: any = { 'ai-first': 'KJAPP', enkelt: 'KJAPP Sparsom', trygg: 'KJAPP XL / Komfort', premium: 'KJAPP Premium' };
+  const areas = Object.entries(pricing?.areas || {}) as [string, any][];
+  const versions = history.data?.items || [];
+  const checks = readiness.data?.checks || {};
+  const complianceLabels: Record<string,string> = {
+    legal_review_completed: 'Juridisk gjennomgang utført',
+    transport_requirements_verified: 'Transport-/løyvekrav verifisert',
+    commercial_insurance_verified: 'Kommersiell forsikring verifisert',
+    privacy_notice_approved: 'Personvernerklæring godkjent',
+    terms_approved: 'Kunde-/sjåførvilkår godkjent',
+    processor_agreements_verified: 'Databehandleravtaler verifisert',
+    tax_vat_reporting_verified: 'Skatt/MVA/rapportering avklart',
+    accessibility_review_completed: 'Tilgjengelighetsgjennomgang utført',
+    backup_restore_test_completed: 'Backup faktisk gjenopprettet i test',
+  };
+
   return (
     <>
-      <PageHead title="Innstillinger" sub={`Sist oppdatert ${fmtDate(data?.updated_at)}`} />
-      <ErrorBanner msg={err} />
-      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 820 }}>
+      <PageHead title="Innstillinger" sub={`Sist oppdatert ${fmtDate(data?.updated_at)} · prisversjon ${pricing?.version || 1}`} />
+      <ErrorBanner msg={err || history.err || readiness.err} />
+
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 1040 }}>
+        <TwoFactorCard />
         <Card>
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
-          <div className="field"><label className="label">Standard KJAPP-provisjon (%)</label>
-            <input className="input" type="number" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
-          {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre'}</Btn>
-            : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre.</div>}
-          {msg && <div style={{ marginTop: 10, color: 'var(--green)', fontSize: 13 }}>{msg}</div>}
-        </Card>
-        <Card>
-          <div className="section-title" style={{ marginTop: 0 }}>Funksjoner</div>
-          {Object.entries(data?.features || {}).map(([k, v]) => (
-            <KV key={k} k={k} v={<Pill status={v ? 'completed' : 'gray'} label={v ? 'På' : 'Av'} />} />
-          ))}
-          {!Object.keys(data?.features || {}).length && <div className="dim">Ingen funksjonsflagg.</div>}
+          <div className="field"><label className="label">Standard KJAPP-serviceavgift (%)</label>
+            <input className="input" type="number" min="0" max="50" step="0.1" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
+          <div className="dim" style={{ fontSize: 12 }}>Provisjonen snapshots på hver ny tur. Endringer påvirker ikke historiske eller pågående turer.</div>
         </Card>
       </div>
-      <div className="section-title">Kjøretøyklasser</div>
+
+      <div className="section-title">Teknisk beta-status</div>
       <Card>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-          {(data?.ride_classes || []).map((r: any, i: number) => (
-            <div key={i}><div className="strong">{r.name || r.type}</div>
-              <div className="dim" style={{ fontSize: 12 }}>×{r.multiplier ?? r.price_multiplier ?? 1}</div></div>
+          <KV k="Produksjonsmiljø" v={<Pill status={checks.production_env ? 'completed' : 'pending'} label={checks.production_env ? 'Ja' : 'Nei'} />} />
+          <KV k="Stripe + webhook" v={<Pill status={checks.stripe_configured ? 'completed' : 'pending'} label={checks.stripe_configured ? 'Klar' : 'Mangler'} />} />
+          <KV k="Native push" v={<Pill status={checks.native_push_configured ? 'completed' : 'pending'} label={checks.native_push_configured ? 'Klar' : 'Mangler'} />} />
+          <KV k="Admin 2FA" v={<Pill status={checks.admin_2fa_enabled ? 'completed' : 'pending'} label={checks.admin_2fa_enabled ? 'Aktiv' : 'Mangler'} />} />
+        </div>
+        {!!readiness.data?.blockers?.length && <div className="error-banner" style={{ marginTop: 12 }}>{readiness.data.blockers.join(' · ')}</div>}
+        <div className="dim" style={{ marginTop: 10, fontSize: 12 }}>Dette viser teknisk driftsstatus. Løyver, forsikring, avtaler og øvrig norsk regelverk må godkjennes separat.</div>
+      </Card>
+
+      <div className="section-title">Manuelle beta-gates</div>
+      <Card>
+        <div className="dim" style={{ marginBottom: 14 }}>Kryss kun av når punktet faktisk er kontrollert. Disse feltene er operatørbekreftelser og er bevisst ikke auto-godkjent av systemet.</div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+          {Object.entries(complianceLabels).map(([key,label]) => (
+            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 42, cursor: isSuper ? 'pointer' : 'default' }}>
+              <input type="checkbox" checked={!!compliance?.[key]} disabled={!isSuper}
+                onChange={(e) => setCompliance((x: any) => ({ ...x, [key]: e.target.checked }))} />
+              <span className="strong" style={{ fontSize: 13 }}>{label}</span>
+            </label>
           ))}
-          {!data?.ride_classes?.length && <div className="dim">Ingen klasser definert.</div>}
+        </div>
+        {isSuper ? <div style={{ marginTop: 14 }}><Btn onClick={saveCompliance} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre beta-gates'}</Btn></div> : null}
+      </Card>
+
+      <div className="section-title">Dynamisk prissetting</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+          {fields.map(([key,label]) => <div className="field" key={key}>
+            <label className="label">{label} (NOK)</label>
+            <input className="input" type="number" min="0" step="0.5" value={pricing?.[key] ?? ''}
+              disabled={!isSuper} onChange={(e) => setPrice(key, Number(e.target.value))} />
+          </div>)}
+          <div className="field"><label className="label">Gratis avbestilling etter aksept (min)</label>
+            <input className="input" type="number" min="0" max="60" value={pricing?.free_cancel_minutes ?? 2}
+              disabled={!isSuper} onChange={(e) => setPrice('free_cancel_minutes', Number(e.target.value))} /></div>
+          <div className="field"><label className="label">Maks søketid etter sjåfør (sek)</label>
+            <input className="input" type="number" min="30" max="1800" value={pricing?.dispatch_timeout_seconds ?? 180}
+              disabled={!isSuper} onChange={(e) => setPrice('dispatch_timeout_seconds', Number(e.target.value))} /></div>
+        </div>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 12 }}>
+          <div className="field"><label className="label">Toppris aktiv</label>
+            <select className="input" disabled={!isSuper} value={pricing?.surge?.enabled ? 'on':'off'}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),enabled:e.target.value==='on'})}>
+              <option value="on">På</option><option value="off">Av</option>
+            </select></div>
+          <div className="field"><label className="label">Manuell toppris ×</label>
+            <input className="input" type="number" min="1" max="5" step="0.05" disabled={!isSuper}
+              value={pricing?.surge?.manual_multiplier ?? 1}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),manual_multiplier:Number(e.target.value)})}/></div>
+          <div className="field"><label className="label">Maks toppris ×</label>
+            <input className="input" type="number" min="1" max="5" step="0.05" disabled={!isSuper}
+              value={pricing?.surge?.max_multiplier ?? 2}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),max_multiplier:Number(e.target.value)})}/></div>
         </div>
       </Card>
+
+      <div className="section-title">Pris per kjøretøyklasse</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+          {['ai-first','enkelt','trygg','premium'].map((type) => {
+            const rate = type === 'ai-first'
+              ? { base_fare: pricing?.base_fare, per_km: pricing?.per_km, per_minute: pricing?.per_minute, minimum_fare: pricing?.minimum_fare }
+              : (pricing?.vehicle_rates?.[type] || {});
+            return <div key={type} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 14 }}>
+              <div className="strong">{vehicleLabels[type]}</div>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 10 }}>
+                {([['base_fare','Start'],['per_km','Km'],['per_minute','Min'],['minimum_fare','Min.pris']] as any[]).map(([k,l]) =>
+                  <div className="field" key={k}><label className="label">{l}</label><input className="input" type="number" min="0" step="0.5"
+                    disabled={!isSuper} value={rate?.[k] ?? 0}
+                    onChange={(e) => type === 'ai-first' ? setPrice(k, Number(e.target.value)) : setVehicleRate(type,k,Number(e.target.value))}/></div>
+                )}
+              </div>
+            </div>;
+          })}
+        </div>
+      </Card>
+
+      <div className="section-title">Prisområder</div>
+      <Card>
+        <div className="dim" style={{ marginBottom: 12 }}>Områder bruker henteposisjonen. Første aktive område som inneholder hentestedet overstyrer globale prisregler.</div>
+        {areas.map(([id, area]) => <div key={id} style={{ padding: 14, marginBottom: 10, border: '1px solid var(--line)', borderRadius: 14 }}>
+          <div className="grid" style={{ gridTemplateColumns: '1.3fr .7fr 1fr 1fr 1fr auto', alignItems: 'end' }}>
+            <div className="field"><label className="label">Navn</label><input className="input" disabled={!isSuper} value={area.name || ''} onChange={e=>setArea(id,{name:e.target.value})}/></div>
+            <div className="field"><label className="label">Aktiv</label><select className="input" disabled={!isSuper} value={area.enabled === false ? 'off':'on'} onChange={e=>setArea(id,{enabled:e.target.value==='on'})}><option value="on">På</option><option value="off">Av</option></select></div>
+            <div className="field"><label className="label">Lat</label><input className="input" type="number" step="0.0001" disabled={!isSuper} value={area.center_lat ?? ''} onChange={e=>setArea(id,{center_lat:Number(e.target.value)})}/></div>
+            <div className="field"><label className="label">Lng</label><input className="input" type="number" step="0.0001" disabled={!isSuper} value={area.center_lng ?? ''} onChange={e=>setArea(id,{center_lng:Number(e.target.value)})}/></div>
+            <div className="field"><label className="label">Radius km</label><input className="input" type="number" min="0.1" max="300" step="0.5" disabled={!isSuper} value={area.radius_km ?? 10} onChange={e=>setArea(id,{radius_km:Number(e.target.value)})}/></div>
+            {isSuper ? <Btn onClick={()=>removeArea(id)}>Fjern</Btn> : null}
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 8 }}>
+            {([['base_fare','Start'],['per_km','Km'],['per_minute','Min'],['minimum_fare','Min.pris']] as any[]).map(([k,l]) =>
+              <div className="field" key={k}><label className="label">{l} – override</label><input className="input" type="number" min="0" step="0.5"
+                disabled={!isSuper} value={area.pricing?.[k] ?? ''}
+                onChange={e=>setArea(id,{pricing:{...(area.pricing||{}),[k]:e.target.value===''?undefined:Number(e.target.value)}})}/></div>
+            )}
+          </div>
+        </div>)}
+        {!areas.length && <div className="dim">Ingen lokale prisområder. Globale regler gjelder i hele tjenesten.</div>}
+        {isSuper ? <Btn onClick={addArea}>Legg til prisområde</Btn> : null}
+      </Card>
+
+      <div className="section-title">Test pris før publisering</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr auto', alignItems: 'end' }}>
+          <div className="field"><label className="label">Distanse (km)</label><input className="input" type="number" value={test.distance_km} onChange={e=>setTest({...test,distance_km:e.target.value})}/></div>
+          <div className="field"><label className="label">Tid (min)</label><input className="input" type="number" value={test.duration_min} onChange={e=>setTest({...test,duration_min:e.target.value})}/></div>
+          <div className="field"><label className="label">Kategori</label><select className="input" value={test.vehicle_type} onChange={e=>setTest({...test,vehicle_type:e.target.value})}>
+            <option value="ai-first">KJAPP</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+          </select></div>
+          <Btn onClick={runTest}>Beregn</Btn>
+        </div>
+        {testResult && <div className="strong" style={{ marginTop: 12 }}>{testResult.price} kr · toppris ×{testResult.surge_multiplier} · versjon {testResult.pricing_version}</div>}
+
+        <div className="section-title">Test ekte norsk rute</div>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr auto', alignItems: 'end' }}>
+          <div className="field"><label className="label">Fra</label><input className="input" placeholder="Adresse / sted" value={routeTest.pickup_address} onChange={e=>setRouteTest({...routeTest,pickup_address:e.target.value})}/></div>
+          <div className="field"><label className="label">Til</label><input className="input" placeholder="Adresse / sted" value={routeTest.dropoff_address} onChange={e=>setRouteTest({...routeTest,dropoff_address:e.target.value})}/></div>
+          <div className="field"><label className="label">Kategori</label><select className="input" value={routeTest.vehicle_type} onChange={e=>setRouteTest({...routeTest,vehicle_type:e.target.value})}>
+            <option value="ai-first">KJAPP</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+          </select></div>
+          <Btn onClick={runRouteTest}>Test rute</Btn>
+        </div>
+        {routeResult && <div style={{ marginTop: 12 }}>
+          <div className="strong">{routeResult.price} kr · {routeResult.distance_km} km · {routeResult.duration_min} min</div>
+          <div className="dim" style={{ fontSize: 12 }}>{routeResult.pickup?.name} → {routeResult.dropoff?.name}{routeResult.pricing_area ? ` · område: ${routeResult.pricing_area}` : ' · global pris'}</div>
+        </div>}
+      </Card>
+
+      <div style={{ marginTop: 14 }}>
+        {isSuper ? <Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Lagrer…' : 'Publiser prisregler'}</Btn>
+          : <div className="dim" style={{ fontSize: 12 }}>Kun superadmin kan endre eller publisere priser.</div>}
+        {msg && <div style={{ marginTop: 10, color: msg.includes('feil') || msg.includes('Feil') ? 'var(--red)' : 'var(--green)', fontSize: 13 }}>{msg}</div>}
+      </div>
+
+      <div className="section-title">Prisversjoner og rollback</div>
+      <Card>
+        {versions.slice(0, 12).map((v: any, i: number) => <div key={`${v.version}-${i}`} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 16, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+          <div className="strong">v{v.version}{v.current ? ' · aktiv' : ''}</div>
+          <div className="dim" style={{ fontSize: 12 }}>{fmtDate(v.saved_at)} · provisjon {Math.round((v.default_commission ?? 0.10) * 1000) / 10}%</div>
+          {!v.current && isSuper ? <Btn onClick={()=>rollback(v.version)} disabled={busy}>Gjenopprett</Btn> : null}
+        </div>)}
+        {!versions.length && <div className="dim">Ingen tidligere prisversjoner ennå.</div>}
+      </Card>
+
+      <div className="section-title">Kjøretøyklasser</div>
+      <Card><div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+        {rideClasses.map((r: any, i: number) => <div key={r.type || i}><div className="strong">{r.label || r.name || r.type}</div>
+          <div className="dim" style={{ fontSize: 12 }}>×{r.multiplier ?? r.price_multiplier ?? 1}</div></div>)}
+      </div></Card>
     </>
   );
 }

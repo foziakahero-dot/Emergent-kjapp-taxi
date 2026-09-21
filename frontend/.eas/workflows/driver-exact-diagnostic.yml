@@ -1,0 +1,85 @@
+name: KJAPP Driver exact diagnostic
+
+on:
+  pull_request:
+    branches: ['main']
+  pull_request_comment:
+    types: ['created']
+    if: ${{ github.event.comment.body == '/diagnose-driver' }}
+
+jobs:
+  diagnose_driver:
+    name: Diagnose KJAPP Driver exact error
+    image: sdk-57
+    env:
+      CI: '1'
+      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+    outputs:
+      stage: ${{ steps.diag.outputs.stage }}
+      summary: ${{ steps.diag.outputs.summary }}
+    steps:
+      - uses: eas/checkout
+
+      - id: diag
+        name: Capture Driver failure
+        run: |
+          set +e
+          rm -rf .driver-diag driver-diagnostic.log
+          cp -R ../driver-app .driver-diag
+
+          summarize_failure() {
+            STAGE="$1"
+            SUMMARY=$(grep -Ei 'FAILURE:|Execution failed for task|A problem occurred|Could not|error:|Caused by:|Exception' driver-diagnostic.log | tail -n 14 | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | cut -c1-1800)
+            if [ -z "$SUMMARY" ]; then
+              SUMMARY=$(tail -n 25 driver-diagnostic.log | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | cut -c1-1800)
+            fi
+            set-output stage "$STAGE"
+            set-output summary "$SUMMARY"
+            exit 0
+          }
+
+          cd .driver-diag
+          npm install --no-audit --no-fund > ../driver-diagnostic.log 2>&1
+          CODE=$?
+          cd ..
+          if [ $CODE -ne 0 ]; then summarize_failure "npm-install"; fi
+
+          cd .driver-diag
+          npx expo config --type public >> ../driver-diagnostic.log 2>&1
+          CODE=$?
+          cd ..
+          if [ $CODE -ne 0 ]; then summarize_failure "expo-config"; fi
+
+          cd .driver-diag
+          npx expo prebuild --platform android --clean >> ../driver-diagnostic.log 2>&1
+          CODE=$?
+          cd ..
+          if [ $CODE -ne 0 ]; then summarize_failure "expo-prebuild"; fi
+
+          cd .driver-diag/android
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info >> ../../driver-diagnostic.log 2>&1
+          CODE=$?
+          cd ../..
+          if [ $CODE -ne 0 ]; then summarize_failure "gradle-assembleRelease"; fi
+
+          set-output stage "success"
+          set-output summary "Driver Android assembleRelease completed successfully."
+
+      - uses: eas/upload_artifact
+        if: ${{ always() }}
+        with:
+          type: other
+          name: KJAPP-Driver-Diagnostic-Log
+          path: driver-diagnostic.log
+          ignore_error: true
+
+  post_diagnostic:
+    name: Post Driver diagnostic to GitHub
+    needs: [diagnose_driver]
+    type: github-comment
+    params:
+      payload: |
+        ## KJAPP Driver exact build diagnostic
+        - **Stage:** `${{ needs.diagnose_driver.outputs.stage }}`
+        - **Error:** `${{ needs.diagnose_driver.outputs.summary }}`

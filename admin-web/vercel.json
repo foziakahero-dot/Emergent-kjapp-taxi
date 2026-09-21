@@ -4,10 +4,16 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [
+  "redirects": [
     {
-      "source": "/api/:path*",
-      "destination": "https://github-app-builder-28.emergent.host/api/:path*"
+      "source": "/reset-password/:token",
+      "destination": "https://fleet.kjappapp.no/reset-password/:token",
+      "permanent": false
+    },
+    {
+      "source": "/forgot-password",
+      "destination": "https://fleet.kjappapp.no/glemt-passord",
+      "permanent": false
     }
   ]
 }

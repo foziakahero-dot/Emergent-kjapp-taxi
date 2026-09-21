@@ -1,0 +1,44 @@
+.mk-contact-grid {
+  display: none !important;
+}
+
+.mk-support-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mk-support-footer a {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #243844;
+  border-radius: 12px;
+  background: #09131b;
+  color: #c9d5dc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mk-support-footer a:first-child {
+  border-color: rgba(0,229,245,.55);
+  color: #e7fdff;
+}
+
+.mk-support-footer a:hover {
+  border-color: #00e5f5;
+  color: #00e5f5;
+}
+
+@media (max-width: 700px) {
+  .mk-support-footer {
+    width: 100%;
+  }
+
+  .mk-support-footer a {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

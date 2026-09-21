@@ -29,7 +29,9 @@ export const tripsApi = {
   active: () => api.get('/trips/active').then((r) => r.data),
   get: (id: string) => api.get(`/trips/${id}`).then((r) => r.data),
   complete: (id: string) => api.post(`/trips/${id}/complete`).then((r) => r.data),
+  cancelPreview: (id: string) => api.get(`/trips/${id}/cancel-preview`).then((r) => r.data),
   cancel: (id: string) => api.post(`/trips/${id}/cancel`).then((r) => r.data),
+  changeDestination: (id: string, data: any) => api.patch(`/trips/${id}/destination`, data).then((r) => r.data),
   rate: (id: string, data: any) => api.post(`/trips/${id}/rate`, data).then((r) => r.data),
   list: () => api.get('/trips').then((r) => r.data),
 };
@@ -53,12 +55,28 @@ export const paymentApi = {
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
   cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
   cardSetupStatus: (session_id: string) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),
+  checkout: (trip_id: string, origin_url: string) =>
+    api.post('/payments/checkout', { trip_id, origin_url }).then((r) => r.data),
+  checkoutStatus: (session_id: string) => api.get(`/payments/status/${session_id}`).then((r) => r.data),
   vippsConfig: () => api.get('/payments/vipps/config').then((r) => r.data),
+};
+
+export const aiApi = {
+  chat: (message: string, session_id?: string) =>
+    api.post('/ai/chat', { message, session_id }).then((r) => r.data),
+  transcribe: (audio_base64: string, mime_type = 'audio/m4a', language = 'no') =>
+    api.post('/ai/transcribe', { audio_base64, mime_type, language }).then((r) => r.data),
 };
 
 export const messagesApi = {
   list: (tripId: string) => api.get(`/trips/${tripId}/messages`).then((r) => r.data),
   send: (tripId: string, text: string) => api.post(`/trips/${tripId}/messages`, { text }).then((r) => r.data),
+};
+
+export const safetyApi = {
+  log: (tripId: string, data: { kind: 'emergency' | 'report' | 'share'; note?: string; lat?: number; lng?: number }) =>
+    api.post(`/trips/${tripId}/safety`, data).then((r) => r.data),
+  shareLink: (tripId: string) => api.post(`/trips/${tripId}/share-link`).then((r) => r.data),
 };
 
 export const gdprApi = {
