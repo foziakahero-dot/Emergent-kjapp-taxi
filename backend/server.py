@@ -9,6 +9,7 @@ import secrets
 import json
 import base64
 import traceback
+import html
 import bcrypt
 import jwt
 import httpx
@@ -5775,41 +5776,90 @@ async def _fleet_names():
 
 @api.get("/admin/live")
 async def admin_live(current=Depends(require_admin)):
-    """Realtime board: online drivers with GPS + active trips."""
-    drivers = []
-    stale_drivers = []
+    """Operations map with every registered driver classified by GPS/online state."""
+    fresh_online = []
+    stale_online = []
+    offline_with_last_location = []
+    never_seen = []
     fleet_names = await _fleet_names()
-    async for u in db.users.find({"role": "driver", "online": True}, {"password_hash": 0}):
+
+    async for u in db.users.find({"role": "driver"}, {"password_hash": 0}):
         row = {
             "id": str(u["_id"]),
             "name": u.get("fullName"),
-            "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
-            "lat": u.get("last_lat"), "lng": u.get("last_lng"), "heading": u.get("last_heading"),
-            "last_location_at": u.get("last_location_at"), "online_at": u.get("online_at"),
+            "car": u.get("car"),
+            "plate": u.get("plate"),
+            "vehicle_type": u.get("vehicle_type"),
+            "lat": u.get("last_lat"),
+            "lng": u.get("last_lng"),
+            "heading": u.get("last_heading"),
+            "last_location_at": u.get("last_location_at"),
+            "online_at": u.get("online_at"),
+            "online": bool(u.get("online")),
+            "approved": bool(u.get("approved")),
+            "disabled": bool(u.get("disabled")),
             "fleet_name": fleet_names.get(u.get("fleet_id")),
             "rating": u.get("rating"),
         }
-        if _fresh_driver_location(u.get("last_location_at")) and u.get("last_lat") is not None and u.get("last_lng") is not None:
-            drivers.append(row)
+        has_location = (
+            row["lat"] is not None and row["lng"] is not None
+            and -90 <= float(row["lat"]) <= 90 and -180 <= float(row["lng"]) <= 180
+        )
+        fresh = has_location and _fresh_driver_location(row["last_location_at"])
+
+        if row["online"] and fresh:
+            row["location_state"] = "fresh_online"
+            fresh_online.append(row)
+        elif row["online"]:
+            row["location_state"] = "stale_online"
+            stale_online.append(row)
+        elif has_location:
+            row["location_state"] = "offline_with_last_location"
+            offline_with_last_location.append(row)
         else:
-            stale_drivers.append({k: row.get(k) for k in ("id", "name", "car", "plate", "fleet_name", "last_location_at")})
+            row["location_state"] = "never_seen"
+            never_seen.append({k: row.get(k) for k in (
+                "id", "name", "car", "plate", "vehicle_type", "fleet_name",
+                "last_location_at", "online", "approved", "disabled", "location_state"
+            )})
+
     trips = []
     user_ids = []
     raw = []
-    async for t in db.trips.find({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}}).sort("created_at", -1).limit(100):
-        raw.append(t); user_ids.append(t.get("user_id"))
+    async for t in db.trips.find({
+        "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}
+    }).sort("created_at", -1).limit(100):
+        raw.append(t)
+        user_ids.append(t.get("user_id"))
     users = await _users_by_ids(user_ids)
     for t in raw:
         trips.append({
-            "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
-            "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),
-            "pickup_lat": t.get("pickup_lat"), "pickup_lng": t.get("pickup_lng"),
-            "dropoff_lat": t.get("dropoff_lat"), "dropoff_lng": t.get("dropoff_lng"),
+            "trip_id": t.get("trip_id"),
+            "status": t.get("status"),
+            "price": t.get("price"),
+            "pickup_address": t.get("pickup_address"),
+            "dropoff_address": t.get("dropoff_address"),
+            "pickup_lat": t.get("pickup_lat"),
+            "pickup_lng": t.get("pickup_lng"),
+            "dropoff_lat": t.get("dropoff_lat"),
+            "dropoff_lng": t.get("dropoff_lng"),
             "driver_name": (t.get("driver") or {}).get("name"),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
             "created_at": t.get("created_at"),
         })
-    return {"drivers": drivers, "stale_drivers": stale_drivers, "trips": trips, "as_of": datetime.now(timezone.utc).isoformat()}
+
+    return {
+        # Compatibility keys for older admin builds:
+        "drivers": fresh_online,
+        "stale_drivers": stale_online,
+        # New explicit categories:
+        "fresh_online": fresh_online,
+        "stale_online": stale_online,
+        "offline_with_last_location": offline_with_last_location,
+        "never_seen": never_seen,
+        "trips": trips,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api.get("/admin/drivers-full")
@@ -6243,6 +6293,41 @@ async def admin_document_review(file_id: str, body: DocumentReviewRequest, curre
     }})
     await _audit(current, "document.review", "document", doc.get("id") or str(doc["_id"]),
                  prev, {"review_status": body.status, "expiry": body.expiry}, body.reason)
+
+    owner_id = doc.get("owner_user_id")
+    owner = None
+    if owner_id:
+        try:
+            owner = await db.users.find_one({"_id": ObjectId(str(owner_id))}, {"email": 1, "fullName": 1, "role": 1})
+        except Exception:
+            owner = None
+    if owner_id and owner:
+        label = DRIVER_REQUIRED_DOC_TYPES.get(doc.get("doc_type"), doc.get("doc_type") or "Dokument")
+        if body.status == "valid":
+            title, message = "Dokument godkjent", f"{label.capitalize()} er godkjent av KJAPP."
+        elif body.status == "rejected":
+            title, message = "Dokument må oppdateres", f"{label.capitalize()} ble avvist. Åpne dokumentstatus for detaljer."
+        else:
+            title, message = "Dokument til vurdering", f"{label.capitalize()} er satt tilbake til vurdering."
+        await send_push_to_user(str(owner_id), title, message, "/driver/settings?section=documents")
+
+        if body.status == "rejected" and owner.get("email"):
+            safe_reason = html.escape((body.reason or "Dokumentet oppfyller ikke kravene.").strip())
+            safe_label = html.escape(str(label))
+            deep_link = "kjapp-driver://driver-settings?section=documents"
+            await asyncio.to_thread(
+                send_email,
+                owner["email"],
+                f"KJAPP: {label} må oppdateres",
+                (
+                    "<div style='font-family:Arial,sans-serif'>"
+                    f"<h2>{safe_label.capitalize()} ble avvist</h2>"
+                    f"<p>Begrunnelse: {safe_reason}</p>"
+                    f"<p><a href='{deep_link}'>Åpne KJAPP Driver og se dokumentstatus</a></p>"
+                    "</div>"
+                ),
+            )
+
     return {"ok": True, "review_status": body.status}
 
 
