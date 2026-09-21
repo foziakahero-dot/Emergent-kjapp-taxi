@@ -1512,7 +1512,17 @@ async def login(body: LoginRequest, request: Request, response: Response):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
+    return {"token": token, "user": {
+        "id": uid,
+        "email": email,
+        "fullName": user.get("fullName", ""),
+        "phone": user.get("phone", ""),
+        "role": user.get("role", "user"),
+        "driver_id": user.get("driver_id"),
+        "fleet_id": user.get("fleet_id"),
+        "totp_enabled": bool(user.get("totp_enabled")),
+        "twofa_setup_required": _twofa_required_role(user.get("role", "user")) and not bool(user.get("totp_enabled")),
+    }}
 
 
 @api.post("/auth/logout")
@@ -1637,7 +1647,17 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
     uid = str(user["_id"])
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
+    return {"token": token, "user": {
+        "id": uid,
+        "email": email,
+        "fullName": user.get("fullName", ""),
+        "phone": user.get("phone", ""),
+        "role": user.get("role", "user"),
+        "driver_id": user.get("driver_id"),
+        "fleet_id": user.get("fleet_id"),
+        "totp_enabled": bool(user.get("totp_enabled")),
+        "twofa_setup_required": _twofa_required_role(user.get("role", "user")) and not bool(user.get("totp_enabled")),
+    }}
 
 
 # ---- Password reset via e-postlenke ----
