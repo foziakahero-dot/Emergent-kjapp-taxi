@@ -5,8 +5,13 @@ import * as WebBrowser from 'expo-web-browser';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 
-// Complete any pending auth session (mobile). No-op on web.
-WebBrowser.maybeCompleteAuthSession();
+// Native auth-session completion is optional. A provider/runtime failure must never
+// terminate application startup.
+try {
+  WebBrowser.maybeCompleteAuthSession();
+} catch {
+  // Continue with normal token restore.
+}
 
 const EMERGENT_AUTH = 'https://auth.emergentagent.com/';
 
@@ -42,16 +47,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const lastUrl = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const token = await storage.getItem(TOKEN_KEY);
-    if (!token) {
-      setUser(null);
-      return;
-    }
     try {
+      const token = await storage.getItem(TOKEN_KEY);
+      if (!token) {
+        setUser(null);
+        return;
+      }
       const u = await authApi.me();
       setUser(u);
     } catch {
-      await storage.removeItem(TOKEN_KEY);
+      try { await storage.removeItem(TOKEN_KEY); } catch {}
       setUser(null);
     }
   }, []);
@@ -66,43 +71,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(res.user);
       return res.user;
     } catch {
+      setUser(null);
       return null;
     }
   }, []);
 
-  // Boot: process a returning session_id first, else restore existing session.
+  // Boot: every native/linking/storage failure resolves to a stable signed-out state.
   useEffect(() => {
+    let active = true;
     let sub: { remove: () => void } | undefined;
-    (async () => {
-      if (Platform.OS === 'web') {
-        const href = typeof window !== 'undefined' ? window.location.href : '';
-        const sid = extractSessionId(href);
-        if (sid) {
-          await handleSessionId(sid);
-          // strip session_id, preserve everything else
-          try {
-            const clean = href.replace(/([?#&])session_id=[^&#]*/, '$1').replace(/[?#&]$/, '');
-            window.history.replaceState(window.history.state, '', clean);
-          } catch {}
+
+    const boot = async () => {
+      try {
+        if (Platform.OS === 'web') {
+          const href = typeof window !== 'undefined' ? window.location.href : '';
+          const sid = extractSessionId(href);
+          if (sid) {
+            const signedIn = await handleSessionId(sid);
+            try {
+              const clean = href.replace(/([?#&])session_id=[^&#]*/, '$1').replace(/[?#&]$/, '');
+              window.history.replaceState(window.history.state, '', clean);
+            } catch {}
+            if (!signedIn && active) await refresh();
+            return;
+          }
+          if (active) await refresh();
           return;
         }
-        await refresh();
-      } else {
-        const initial = await Linking.getInitialURL();
+
+        let initial: string | null = null;
+        try {
+          initial = await Linking.getInitialURL();
+        } catch {
+          initial = null;
+        }
         const sid = extractSessionId(initial);
-        if (sid) { await handleSessionId(sid); return; }
-        await refresh();
+        if (sid) {
+          const signedIn = await handleSessionId(sid);
+          if (!signedIn && active) await refresh();
+          return;
+        }
+        if (active) await refresh();
+      } catch {
+        if (active) setUser(null);
+      } finally {
+        if (active) setUser((current) => current === undefined ? null : current);
       }
-    })();
+    };
+
+    void boot();
 
     if (Platform.OS !== 'web') {
-      sub = Linking.addEventListener('url', (e) => {
-        lastUrl.current = e.url;
-        const sid = extractSessionId(e.url);
-        if (sid) handleSessionId(sid);
-      });
+      try {
+        sub = Linking.addEventListener('url', (e) => {
+          lastUrl.current = e.url;
+          const sid = extractSessionId(e.url);
+          if (sid) void handleSessionId(sid);
+        });
+      } catch {
+        // Deep-link listener is optional; auth restore still works.
+      }
     }
-    return () => { sub && sub.remove(); };
+
+    return () => {
+      active = false;
+      try { sub?.remove(); } catch {}
+    };
   }, [refresh, handleSessionId]);
 
   const login = async (email: string, password: string) => {
