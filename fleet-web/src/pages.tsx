@@ -19,18 +19,36 @@ function PageHead({ title, sub, action }: { title: string; sub?: string; action?
 }
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, twofaToken, verifyTwofa, cancelTwofa } = useAuth();
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setErr(''); setBusy(true);
-    try { await login(email.trim(), password); nav('/'); }
-    catch (e: any) { setErr(e?.message || apiError(e)); }
-    finally { setBusy(false); }
+    try {
+      const next = await login(email.trim(), password);
+      if (next) nav('/');
+    } catch (e: any) {
+      setErr(e?.message || apiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitTwofa = async (e: FormEvent) => {
+    e.preventDefault(); setErr(''); setBusy(true);
+    try {
+      await verifyTwofa(code.trim());
+      nav('/');
+    } catch (e: any) {
+      setErr(e?.message || apiError(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return <div className="login-screen">
@@ -42,19 +60,89 @@ export function LoginPage() {
       </div>
       <div className="login-domain">fleet.kjappapp.no</div>
     </div>
-    <form className="login-card" onSubmit={submit}>
-      <h2>Logg inn</h2>
-      <p>For løyvehavere og godkjente partnere</p>
-      <label className="sr-only" htmlFor="fleet-email">E-post</label>
-      <input id="fleet-email" type="email" autoComplete="email" placeholder="E-post" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      <label className="sr-only" htmlFor="fleet-password">Passord</label>
-      <input id="fleet-password" type="password" autoComplete="current-password" placeholder="Passord" value={password} onChange={(e) => setPassword(e.target.value)} required />
-      <ErrorBox message={err} />
-      <button className="primary-button" disabled={busy}>{busy ? 'Logger inn…' : 'Logg inn'}</button>
-      <Link to="/glemt-passord" className="text-link">Glemt passord?</Link>
-      <div className="approval-note">Tilgang aktiveres først etter at KJAPP har godkjent løyvehaversøknaden og dokumentasjonen.</div>
-    </form>
+    {twofaToken ? (
+      <form className="login-card" onSubmit={submitTwofa}>
+        <h2>Totrinnsbekreftelse</h2>
+        <p>Skriv inn den 6-sifrede koden fra autentiseringsappen din, eller en backup-kode.</p>
+        <label className="sr-only" htmlFor="fleet-twofa">2FA-kode</label>
+        <input
+          id="fleet-twofa"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder="000000"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          autoFocus
+          required
+        />
+        <ErrorBox message={err} />
+        <button className="primary-button" disabled={busy || !code.trim()}>{busy ? 'Bekrefter…' : 'Bekreft og logg inn'}</button>
+        <button type="button" className="text-link" onClick={() => { cancelTwofa(); setCode(''); setErr(''); }}>Tilbake til innlogging</button>
+      </form>
+    ) : (
+      <form className="login-card" onSubmit={submit}>
+        <h2>Logg inn</h2>
+        <p>For løyvehavere og godkjente partnere</p>
+        <label className="sr-only" htmlFor="fleet-email">E-post</label>
+        <input id="fleet-email" type="email" autoComplete="email" placeholder="E-post" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <label className="sr-only" htmlFor="fleet-password">Passord</label>
+        <input id="fleet-password" type="password" autoComplete="current-password" placeholder="Passord" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <ErrorBox message={err} />
+        <button className="primary-button" disabled={busy}>{busy ? 'Logger inn…' : 'Logg inn'}</button>
+        <Link to="/glemt-passord" className="text-link">Glemt passord?</Link>
+        <div className="approval-note">Tilgang aktiveres først etter at KJAPP har godkjent løyvehaversøknaden og dokumentasjonen.</div>
+      </form>
+    )}
   </div>;
+}
+
+export function TwoFASetupPage() {
+  const { refresh, logout } = useAuth();
+  const nav = useNavigate();
+  const [setup, setSetup] = useState<any>(null);
+  const [code, setCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.twofaSetup().then(setSetup).catch((e) => setErr(apiError(e)));
+  }, []);
+
+  const enable = async (e: FormEvent) => {
+    e.preventDefault(); setErr(''); setBusy(true);
+    try {
+      const result = await api.twofaEnable(code.trim());
+      setBackupCodes(result.backup_codes || []);
+      await refresh();
+    } catch (e) {
+      setErr(apiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (backupCodes.length) {
+    return <div className="auth-simple"><Brand /><div className="auth-simple-card">
+      <h1>2FA er aktivert</h1>
+      <p>Lagre backup-kodene et sikkert sted. Hver kode kan brukes én gang.</p>
+      <div className="invite-chips">{backupCodes.map((x) => <span key={x} className="mono">{x}</span>)}</div>
+      <button className="primary-button" onClick={() => nav('/')}>Fortsett til KJAPP Partner</button>
+    </div></div>;
+  }
+
+  return <div className="auth-simple"><Brand /><div className="auth-simple-card">
+    <h1>Aktiver totrinnsbekreftelse</h1>
+    <p>2FA er obligatorisk for løyvehavere. Skann QR-koden i Google Authenticator, Microsoft Authenticator, 1Password eller tilsvarende.</p>
+    {setup?.qr ? <img src={setup.qr} alt="QR-kode for 2FA" style={{ width: 220, height: 220, margin: '12px auto', display: 'block' }} /> : <Loading />}
+    {setup?.secret ? <p className="mono" style={{ wordBreak: 'break-all' }}>Manuell nøkkel: {setup.secret}</p> : null}
+    <form onSubmit={enable}>
+      <input inputMode="numeric" autoComplete="one-time-code" placeholder="6-sifret kode" value={code} onChange={(e) => setCode(e.target.value)} required />
+      <ErrorBox message={err} />
+      <button className="primary-button" disabled={busy || code.trim().length < 6}>{busy ? 'Aktiverer…' : 'Aktiver 2FA'}</button>
+    </form>
+    <button type="button" className="text-link" onClick={logout}>Logg ut</button>
+  </div></div>;
 }
 
 export function ForgotPasswordPage() {
@@ -80,7 +168,7 @@ export function ResetPasswordPage() {
   useEffect(() => { api.checkResetToken(token).then(() => setState('form')).catch(() => setState('invalid')); }, [token]);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setErr('');
-    if (pw.length < 6) return setErr('Passord må ha minst 6 tegn');
+    if (pw.length < 10) return setErr('Passord må ha minst 10 tegn');
     if (pw !== pw2) return setErr('Passordene er ikke like');
     setBusy(true);
     try { await api.resetPassword(token, pw); setState('done'); }
