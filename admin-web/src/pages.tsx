@@ -112,8 +112,10 @@ const Shortcut = ({ ic, n, l, c }: any) => (
 export function Live() {
   const { data, loading, err, reload } = useAsync(() => api.live(), []);
   useEffect(() => { const i = setInterval(reload, 5000); return () => clearInterval(i); }, [reload]);
-  const freshDrivers = (data?.drivers || []).filter(hasFreshGps);
-  const staleDrivers = [...(data?.stale_drivers || []), ...(data?.drivers || []).filter((d: any) => !freshDrivers.includes(d))];
+  const allDrivers = data?.drivers || [];
+  const mappableDrivers = allDrivers.filter((d: any) => Number.isFinite(Number(d.lat)) && Number.isFinite(Number(d.lng)) && Math.abs(Number(d.lat)) <= 90 && Math.abs(Number(d.lng)) <= 180);
+  const onlineCount = allDrivers.filter((d: any) => d.status === 'online').length;
+  const staleCount = allDrivers.filter((d: any) => d.status === 'stale').length;
   return (
     <>
       <PageHead title="Live drift" sub={data ? `Oppdatert ${fmtDate(data.as_of)} · auto hvert 5s` : ''}
@@ -121,20 +123,20 @@ export function Live() {
       <ErrorBanner msg={err} />
       {loading && !data ? <Loader /> : (
         <>
-        <LiveMap drivers={freshDrivers.map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }))} />
+        <LiveMap drivers={mappableDrivers.map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }))} />
         <div className="grid live-columns">
           <div>
-            <div className="section-title" style={{ marginTop: 0 }}>Sjåfører med fersk GPS ({freshDrivers.length})</div>
+            <div className="section-title" style={{ marginTop: 0 }}>Alle registrerte sjåfører ({allDrivers.length})</div>
             <div className="tablewrap">
               <table><thead><tr><th>Sjåfør</th><th>Kjøretøy</th><th>Løyvehaver</th><th>Sist sett</th></tr></thead>
                 <tbody>
-                  {freshDrivers.map((x: any) => (
+                  {allDrivers.map((x: any) => (
                     <tr key={x.id}><td className="strong">{x.name}</td>
                       <td>{x.car} <span className="dim mono">{x.plate}</span></td>
                       <td className="dim">{x.fleet_name || '—'}</td>
-                      <td className="dim nowrap">{fmtDate(x.last_location_at)}</td></tr>
+                      <td className="dim nowrap"><Pill status={x.status === 'online' ? 'in_trip' : x.status === 'stale' ? 'pending' : 'gray'} label={x.status === 'online' ? 'Online' : x.status === 'stale' ? 'Utdatert GPS' : 'Offline'} /> <span>{fmtDate(x.last_location_at)}</span></td></tr>
                   ))}
-                  {!freshDrivers.length && <tr><td colSpan={4}><Empty title="Ingen sjåfører med fersk posisjon" /></td></tr>}
+                  {!allDrivers.length && <tr><td colSpan={4}><Empty title="Ingen registrerte sjåfører" /></td></tr>}
                 </tbody></table>
             </div>
           </div>
@@ -156,9 +158,9 @@ export function Live() {
             </div>
           </div>
         </div>
-        {staleDrivers.length > 0 && <div className="live-stale-note">
-          {staleDrivers.length} sjåfør{staleDrivers.length === 1 ? '' : 'er'} har utdatert eller manglende GPS og telles ikke som online.
-        </div>}
+        <div className="live-stale-note">
+          {onlineCount} online · {staleCount} med utdatert GPS · {allDrivers.length - onlineCount - staleCount} offline eller uten GPS. Kartet viser alle sjåfører som har en siste kjent posisjon.
+        </div>
         </>
       )}
     </>
@@ -334,6 +336,8 @@ export function Drivers() {
   const [qi, setQi] = useState(sp.get('q') || '');
   const q = useDebounced(qi);
   const [page, setPage] = useState(1);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [busyUser, setBusyUser] = useState('');
   useEffect(() => { setPage(1); }, [status, q]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/drivers-full', { status, q, page, page_size: PAGE });
 
@@ -350,9 +354,20 @@ export function Drivers() {
     catch (e: any) { window.alert(apiError(e)); }
   };
 
+  const toggleBlocked = async (d: any) => {
+    const disabling = !d.disabled;
+    const reason = disabling ? (window.prompt('Årsak til blokkering:', '') || '').trim() : '';
+    if (disabling && !reason) return;
+    if (!window.confirm(disabling ? `Blokkere ${d.name || d.email}?` : `Avblokkere ${d.name || d.email}?`)) return;
+    setBusyUser(d.id);
+    try { await api.setUserStatus(d.id, disabling, reason); await reload(); }
+    catch (e) { window.alert(apiError(e)); }
+    finally { setBusyUser(''); }
+  };
+
   return (
     <>
-      <PageHead title="Sjåfører" sub={`${total} sjåfører`} />
+      <PageHead title="Sjåfører" sub={`${total} sjåfører`} right={<Btn variant="primary" onClick={() => setManualOpen(true)}>+ Registrer sjåfør</Btn>} />
       <div className="toolbar">
         <input className="input" placeholder="Søk navn / e-post / skilt…" value={qi} onChange={(e) => setQi(e.target.value)} />
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -382,11 +397,9 @@ export function Drivers() {
                 <td className="dim">{d.fleet_name || '—'}</td>
                 <td className="mono">{d.trips_completed ?? d.completed ?? 0}</td>
                 <td className="mono">{d.rating ? `${d.rating}★` : '—'}</td>
-                <td>{d.online && hasRecentSignal(d.last_location_at) ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent · offline" /> : <Pill status="pending" label="Venter" />}</td>
+                <td>{d.disabled ? <Pill status="cancelled" label="Blokkert" /> : d.online && hasRecentSignal(d.last_location_at) ? <Pill status="in_trip" label="Online" /> : d.approved ? <Pill status="completed" label="Godkjent · offline" /> : <Pill status="pending" label="Venter" />}</td>
                 <td className="right">
-                  <Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>
-                    {d.approved ? 'Suspender' : 'Godkjenn'}
-                  </Btn>
+                  <div className="inline-actions"><Btn variant={`sm ${d.approved ? 'danger' : 'primary'}`} onClick={() => toggle(d)}>{d.approved ? 'Suspender' : 'Godkjenn'}</Btn><Btn variant={`sm ${d.disabled ? '' : 'danger'}`} disabled={busyUser === d.id} onClick={() => toggleBlocked(d)}>{busyUser === d.id ? 'Lagrer…' : d.disabled ? 'Avblokker' : 'Blokker'}</Btn></div>
                 </td>
               </tr>
             )) : <tr><td colSpan={8}><Empty title="Ingen sjåfører" /></td></tr>}
@@ -394,8 +407,31 @@ export function Drivers() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
+      {manualOpen && <ManualDriverModal onClose={() => setManualOpen(false)} onDone={() => { setManualOpen(false); reload(); }} />}
     </>
   );
+}
+
+function ManualDriverModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', has_own_car: false, car: '', plate: '', vehicle_type: 'ai-first' });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const save = async () => {
+    if (!form.full_name.trim() || !form.email.trim() || !form.phone.trim()) { setErr('Navn, e-post og telefon er påkrevd.'); return; }
+    if (!form.has_own_car && (!form.car.trim() || !form.plate.trim())) { setErr('Bilmodell og registreringsnummer er påkrevd når sjåføren ikke har egen bil.'); return; }
+    setBusy(true); setErr('');
+    try { const result = await api.createManualDriver(form); if (result.activation_url) window.alert(`Sjåføren er opprettet. Aktiveringslenke (e-post manglet):\n${result.activation_url}`); onDone(); }
+    catch (e) { setErr(apiError(e)); setBusy(false); }
+  };
+
+  return <Modal title="Registrer sjåfør" sub="Kontoen opprettes som ventende og må godkjennes før sjåføren kan kjøre." onClose={onClose}>
+    <ErrorBanner msg={err} />
+    <div className="field"><label className="label">Fullt navn</label><input className="input" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} /></div>
+    <div className="form-grid two"><div className="field"><label className="label">E-post</label><input className="input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div><div className="field"><label className="label">Telefon</label><input className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div></div>
+    <label className="permission-item" style={{ margin: '8px 0 14px', cursor: 'pointer' }}><input type="checkbox" checked={form.has_own_car} onChange={e => setForm({ ...form, has_own_car: e.target.checked })} /> Denne sjåføren har egen bil</label>
+    <div className="form-grid two"><div className="field"><label className="label">Bilmodell {form.has_own_car ? '(valgfritt)' : '(påkrevd)'}</label><input className="input" value={form.car} onChange={e => setForm({ ...form, car: e.target.value })} /></div><div className="field"><label className="label">Registreringsnummer {form.has_own_car ? '(valgfritt)' : '(påkrevd)'}</label><input className="input" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} /></div></div>
+    <div className="field"><label className="label">Kjøretøyklasse</label><select className="select" value={form.vehicle_type} onChange={e => setForm({ ...form, vehicle_type: e.target.value })}><option value="ai-first">KJAPP Standard</option><option value="enkelt">KJAPP Sparsom</option><option value="trygg">KJAPP XL / Komfort</option><option value="premium">KJAPP Premium</option></select></div>
+    <div className="modal-actions"><Btn onClick={onClose}>Avbryt</Btn><Btn variant="primary" onClick={save} disabled={busy}>{busy ? 'Oppretter…' : 'Opprett sjåfør'}</Btn></div>
+  </Modal>;
 }
 
 /* ----------------------------- Customers ----------------------------- */
@@ -446,7 +482,7 @@ export function Customers() {
                 <td><Pill status={u.disabled ? 'cancelled' : 'completed'} label={u.disabled ? 'Deaktivert' : 'Aktiv'} /></td>
                 <td className="dim nowrap">{fmtDay(u.created_at)}</td>
                 <td className="right">
-                  {u.role === 'passenger' || !u.role || u.role === 'customer'
+                  {u.role !== 'admin' && u.role !== 'superadmin'
                     ? <Btn variant={u.disabled ? 'sm' : 'danger'} disabled={busyUser === u.id} onClick={() => toggleUser(u)}>
                         {busyUser === u.id ? 'Lagrer…' : u.disabled ? 'Reaktiver' : 'Blokker'}
                       </Btn>

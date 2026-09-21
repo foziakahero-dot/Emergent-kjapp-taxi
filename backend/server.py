@@ -3626,8 +3626,7 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
             "expires_at": now + timedelta(hours=24),
             "used": False,
         })
-        fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
-        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
+        frontend = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
         reset_url = f"{frontend}/reset-password/{reset_token}"
         onboarding_email_sent = bool(send_email(
             owner_email,
@@ -4113,7 +4112,7 @@ async def admin_overview(current=Depends(require_admin)):
 
     active_fleets = await count(db.fleets, {"status": {"$ne": "suspended"}})
     suspended_fleets = await count(db.fleets, {"status": "suspended"})
-    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["submitted", "under_review", "documents_required"]}})
+    pending_applications = await count(db.fleet_applications, {"status": {"$in": ["pending", "submitted", "under_review", "documents_required"]}})
     approved_drivers = await count(db.users, {"role": "driver", "approved": True})
     pending_drivers = await count(db.users, {"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
     drivers_online = 0
@@ -4320,6 +4319,66 @@ async def admin_drivers(current=Depends(require_admin)):
     return {"drivers": out}
 
 
+@api.post("/admin/drivers/manual")
+async def admin_create_driver_manual(body: ManualDriverCreateRequest, current=Depends(require_admin)):
+    """Create a pending driver account from the admin panel.
+
+    A driver without an own car must receive an assigned vehicle immediately;
+    drivers who own a car may complete the vehicle fields later.
+    """
+    email = str(body.email).strip().lower()
+    car = (body.car or "").strip()
+    plate = (body.plate or "").strip().upper()
+    if not body.has_own_car and (not car or not plate):
+        raise HTTPException(400, "Bilmodell og registreringsnummer er påkrevd når sjåføren ikke har egen bil")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(409, "E-post er allerede registrert")
+    fleet_id = (body.fleet_id or "").strip() or None
+    if fleet_id:
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id), "active": {"$ne": False}})
+        except Exception:
+            fleet = None
+        if not fleet:
+            raise HTTPException(400, "Ugyldig eller inaktiv løyvehaver")
+    now = datetime.now(timezone.utc)
+    user_doc = {
+        "email": email,
+        "password_hash": hash_password(secrets.token_urlsafe(24)),
+        "fullName": body.full_name.strip(),
+        "phone": body.phone.strip(),
+        "role": "driver",
+        "approved": False,
+        "online": False,
+        "has_own_car": body.has_own_car,
+        "vehicle_type": body.vehicle_type,
+        "created_at": now.isoformat(),
+        "must_reset_password": True,
+    }
+    if car:
+        user_doc["car"] = car
+    if plate:
+        user_doc["plate"] = plate
+    if fleet_id:
+        user_doc["fleet_id"] = fleet_id
+    result = await db.users.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+    reset_token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.insert_one({
+        "token": reset_token, "user_id": user_id, "email": email,
+        "created_at": now, "expires_at": now + timedelta(hours=24), "used": False,
+    })
+    public_url = (os.environ.get("FLEET_PUBLIC_URL") or os.environ.get("FRONTEND_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
+    activation_url = f"{public_url}/reset-password/{reset_token}"
+    email_sent = bool(send_email(email, "Aktiver KJAPP-sjåførkonto", email_password_reset_html(activation_url)))
+    await _audit(current, "driver.manual_create", "driver", user_id, None, {
+        "email": email, "has_own_car": body.has_own_car, "fleet_id": fleet_id, "email_sent": email_sent,
+    })
+    public = user_public(user_doc)
+    public["id"] = user_id
+    return {"ok": True, "driver": public, "email_sent": email_sent, "activation_url": activation_url if not email_sent else None}
+
+
 @api.get("/admin/trips")
 async def admin_trips(current=Depends(require_admin), limit: int = 100):
     out = []
@@ -4356,6 +4415,17 @@ class DriverInviteRequest(BaseModel):
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
     email: Optional[str] = None  # if set, send invite via SendGrid
+
+
+class ManualDriverCreateRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    phone: str = Field(min_length=5, max_length=40)
+    has_own_car: bool = False
+    car: Optional[str] = Field(default=None, max_length=120)
+    plate: Optional[str] = Field(default=None, max_length=20)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    fleet_id: Optional[str] = None
 
 
 class DriverSignupRequest(BaseModel):
@@ -4402,8 +4472,7 @@ async def create_driver_invite(body: DriverInviteRequest, request: Request, curr
     }
     await db.driver_invites.insert_one(doc)
     if body.email:
-        origin = str(request.base_url).rstrip("/").replace("/api", "")
-        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
+        frontend = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
         invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
         ok = send_email(
             body.email,
@@ -5393,30 +5462,29 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
         )
     owner_email = app_doc.get("contact_email")
     owner = await db.users.find_one({"email": owner_email})
+    now = datetime.now(timezone.utc)
     if not owner:
-        temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
             "email": owner_email,
-            "password_hash": hash_password(temp_pw),
+            "password_hash": hash_password(secrets.token_urlsafe(24)),
             "fullName": app_doc.get("contact_name") or app_doc.get("company_name"),
             "phone": app_doc.get("contact_phone", ""),
             "role": "fleet_owner",
             "approved": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now.isoformat(),
             "must_reset_password": True,
         })
         owner_id = str(res.inserted_id)
     else:
         owner_id = str(owner["_id"])
-        temp_pw = None
-        await db.users.update_one({"_id": owner["_id"]}, {"$set": {"role": "fleet_owner", "approved": True}})
+        await db.users.update_one({"_id": owner["_id"]}, {"$set": {"role": "fleet_owner", "approved": True, "must_reset_password": True}})
     fleet_doc = {
         "name": app_doc.get("company_name"),
         "org_number": app_doc.get("org_number", ""),
         "owner_user_id": owner_id,
         "commission_rate": float(body.commission_rate if body.commission_rate is not None else 0.10),
         "active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now.isoformat(),
         "application_id": app_id,
     }
     fres = await db.fleets.insert_one(fleet_doc)
@@ -5426,20 +5494,26 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
         {"_id": ObjectId(app_id)},
         {"$set": {
             "status": "approved",
-            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "reviewed_at": now.isoformat(),
             "reviewed_by": current["id"],
             "review_notes": body.review_notes or "",
             "fleet_id": fleet_id,
             "fleet_owner_user_id": owner_id,
         }},
     )
-    # Email the applicant
-    send_email(
+    activation_token = secrets.token_urlsafe(32)
+    await db.password_reset_tokens.insert_one({
+        "token": activation_token, "user_id": owner_id, "email": owner_email,
+        "created_at": now, "expires_at": now + timedelta(hours=24), "used": False,
+    })
+    fleet_url = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
+    activation_url = f"{fleet_url}/reset-password/{activation_token}"
+    activation_email_sent = bool(send_email(
         owner_email,
         "KJAPP: Løyvehaver-søknaden er godkjent",
-        _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", temp_pw),
-    )
-    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw}
+        _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", activation_url),
+    ))
+    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "activation_email_sent": activation_email_sent}
 
 
 @api.post("/superadmin/fleet-applications/{app_id}/reject")
@@ -5467,12 +5541,12 @@ async def superadmin_reject_application(app_id: str, body: FleetApplicationDecis
     return {"ok": True}
 
 
-def _fleet_application_decision_html(company: str, approved: bool, notes: str, temp_password: Optional[str]) -> str:
+def _fleet_application_decision_html(company: str, approved: bool, notes: str, activation_url: Optional[str]) -> str:
     accent = "#c9a15b"
     heading = "Søknaden er godkjent" if approved else "Søknaden er avslått"
     body_html = ""
     if approved:
-        pw_html = f"<p style='color:#a8b0a8;font-size:13px'>Midlertidig passord: <code style='color:#fff;background:#171d22;padding:4px 8px;border-radius:6px'>{temp_password}</code> — bytt det så snart du logger inn.</p>" if temp_password else ""
+        pw_html = f"<p style='color:#a8b0a8;font-size:13px'>Sett ditt eget passord ved å åpne aktiveringslenken. Lenken er gyldig i 24 timer.</p><p><a href='{activation_url}' style='display:inline-block;background:{accent};color:#0c1216;padding:12px 18px;border-radius:8px;font-weight:700'>Aktiver løyvehaverkonto</a></p>" if activation_url else ""
         body_html = f"""
           <p style="color:#a8b0a8;font-size:14px;line-height:1.6">Velkommen ombord, <strong style="color:#fff">{company}</strong>. Din flåte er opprettet på KJAPP og du kan nå logge inn i flåte-portalen.</p>
           {pw_html}
@@ -5518,8 +5592,7 @@ async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request
     }
     await db.driver_invites.insert_one(doc)
     if body.email:
-        origin = str(request.base_url).rstrip("/").replace("/api", "")
-        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
+        frontend = (os.environ.get("FLEET_PUBLIC_URL") or "https://fleet.kjappapp.no").strip().rstrip("/")
         invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
         ok = send_email(
             body.email,
@@ -5587,11 +5660,14 @@ async def _fleet_names():
 
 @api.get("/admin/live")
 async def admin_live(current=Depends(require_admin)):
-    """Realtime board: online drivers with GPS + active trips."""
+    """Realtime board: every registered driver with last-known GPS + active trips."""
     drivers = []
     stale_drivers = []
     fleet_names = await _fleet_names()
-    async for u in db.users.find({"role": "driver", "online": True}, {"password_hash": 0}):
+    async for u in db.users.find({"role": "driver"}, {"password_hash": 0}).sort("fullName", 1):
+        has_coordinates = u.get("last_lat") is not None and u.get("last_lng") is not None
+        fresh = _fresh_driver_location(u.get("last_location_at")) and has_coordinates
+        driver_status = "online" if bool(u.get("online")) and fresh else "stale" if bool(u.get("online")) else "offline"
         row = {
             "id": str(u["_id"]),
             "name": u.get("fullName"),
@@ -5600,10 +5676,11 @@ async def admin_live(current=Depends(require_admin)):
             "last_location_at": u.get("last_location_at"), "online_at": u.get("online_at"),
             "fleet_name": fleet_names.get(u.get("fleet_id")),
             "rating": u.get("rating"),
+            "approved": u.get("approved") is True,
+            "status": driver_status,
         }
-        if _fresh_driver_location(u.get("last_location_at")) and u.get("last_lat") is not None and u.get("last_lng") is not None:
-            drivers.append(row)
-        else:
+        drivers.append(row)
+        if not fresh:
             stale_drivers.append({k: row.get(k) for k in ("id", "name", "car", "plate", "fleet_name", "last_location_at")})
     trips = []
     user_ids = []
@@ -5645,7 +5722,7 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
             "id": uid, "name": u.get("fullName"), "email": u.get("email"), "phone": u.get("phone"),
             "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
             "capabilities": u.get("capabilities") or [],
-            "rating": u.get("rating"), "approved": u.get("approved", False), "online": u.get("online", False),
+            "rating": u.get("rating"), "approved": u.get("approved", False), "disabled": u.get("disabled", False), "online": u.get("online", False),
             "fleet_name": fleet_names.get(u.get("fleet_id")), "fleet_id": u.get("fleet_id"),
             "trips_completed": completed, "last_location_at": u.get("last_location_at"),
             "created_at": u.get("created_at"),

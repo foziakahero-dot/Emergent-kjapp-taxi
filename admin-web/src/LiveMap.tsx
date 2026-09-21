@@ -10,6 +10,7 @@ type DriverPosition = {
   lat: number;
   lng: number;
   last_location_at?: string;
+  status?: 'online' | 'stale' | 'offline';
 };
 
 function FitDrivers({ drivers }: { drivers: DriverPosition[] }) {
@@ -22,22 +23,24 @@ function FitDrivers({ drivers }: { drivers: DriverPosition[] }) {
 }
 
 export default function LiveMap({ drivers }: { drivers: DriverPosition[] }) {
+  const mapTilerKey = String((import.meta as any).env?.VITE_MAPTILER_KEY || '').trim();
   return (
     <div className="live-map-wrap">
       <MapContainer center={[59.9139, 10.7522]} zoom={11} scrollWheelZoom={false} className="live-map">
         <TileLayer
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url={`https://api.maptiler.com/maps/dataviz-dark/{z}/{x}/{y}@2x.png?key=${encodeURIComponent(mapTilerKey)}`}
+          attribution='&copy; MapTiler &middot; OpenStreetMap contributors'
         />
         <FitDrivers drivers={drivers} />
         {drivers.map((driver) => (
           <CircleMarker key={driver.id} center={[driver.lat, driver.lng]} radius={9}
-            pathOptions={{ color: '#06222a', fillColor: '#72dce8', fillOpacity: 1, weight: 3 }}>
-            <Popup><strong>{driver.name || 'Sjåfør'}</strong><br />{driver.car || 'Ukjent bil'} {driver.plate || ''}</Popup>
+            pathOptions={{ color: '#081116', fillColor: driver.status === 'online' ? '#34d399' : driver.status === 'stale' ? '#f5b301' : '#7c8894', fillOpacity: 1, weight: 3 }}>
+            <Popup><strong>{driver.name || 'Sjåfør'}</strong><br />{driver.car || 'Ukjent bil'} {driver.plate || ''}<br />Status: {driver.status === 'online' ? 'Online' : driver.status === 'stale' ? 'Utdatert GPS' : 'Offline'}</Popup>
           </CircleMarker>
         ))}
       </MapContainer>
-      {!drivers.length && <div className="live-map-empty">Ingen ferske GPS-posisjoner</div>}
+      {!drivers.length && <div className="live-map-empty">Ingen sjåfører har registrert posisjon ennå</div>}
+      {!mapTilerKey && <div className="live-map-empty" style={{ top: 'auto', bottom: 16 }}>MAPTILER-nøkkel mangler i admin-web</div>}
     </div>
   );
 }

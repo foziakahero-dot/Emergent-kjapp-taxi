@@ -115,7 +115,16 @@ function Shell() {
     return allowed ? node : <div className="error-banner" role="alert">Du har ikke tilgang til denne delen av administrasjonspanelet.</div>;
   };
   const [counts, setCounts] = useState<any>({});
-  useEffect(() => { api.overview().then(setCounts).catch(() => {}); }, []);
+  const [systemHealth, setSystemHealth] = useState<any>(null);
+  useEffect(() => {
+    const refresh = () => {
+      api.overview().then(setCounts).catch(() => {});
+      api.controlIntegrations().then(setSystemHealth).catch(() => setSystemHealth(null));
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   const initials = (user?.fullName || user?.email || 'A').slice(0, 2).toUpperCase();
 
   return (
@@ -150,6 +159,7 @@ function Shell() {
       <div className="main">
         <div className="topbar">
           {can('operations') ? <GlobalSearch /> : <div />}
+          <a className="system-health" href="#/integrations" title="Åpne systemstatus"><span className={`system-health-dot ${systemHealth && (systemHealth.integrations || []).every((x: any) => x.status === 'operational') ? 'ok' : 'warn'}`} />Systemstatus</a>
           <div className="who">
             <span className="who-email">{user?.email}</span>
             <div className="avatar">{initials}</div>

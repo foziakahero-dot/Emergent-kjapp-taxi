@@ -61,6 +61,7 @@ export const api = {
   timeline: (id: string) => http.get(`/admin/trips/${id}/timeline`).then((r) => r.data),
   setDriverStatus: (id: string, approved: boolean) =>
     http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
+  createManualDriver: (body: any) => http.post('/admin/drivers/manual', body).then((r) => r.data),
   setDriverCapabilities: (id: string, capabilities: string[]) =>
     http.patch(`/admin/drivers/${id}/capabilities`, { capabilities }).then((r) => r.data),
   interveneTrip: (id: string, body: any) =>
