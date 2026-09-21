@@ -20,13 +20,13 @@ Each mobile project uses `app.config.js`. It adds `android.googleServicesFile` o
 From `frontend/`:
 
 ```bash
-eas env:create --environment production --name GOOGLE_SERVICES_JSON --type file --visibility secret --value ./google-services.json
-eas env:create --environment preview --name GOOGLE_SERVICES_JSON --type file --visibility secret --value ./google-services.json
+eas env:set production --name GOOGLE_SERVICES_JSON --type file --visibility secret --value ./google-services.json
+eas env:set preview --name GOOGLE_SERVICES_JSON --type file --visibility secret --value ./google-services.json
 ```
 
 From `driver-app/`, run the same commands with the Driver app's JSON file.
 
-If your installed EAS CLI does not support `--type file` on `env:create`, use the Expo dashboard:
+If your installed EAS CLI does not support `--type file` on `env:set`, use the Expo dashboard:
 Project → Environment variables → New variable → Type: File → name: `GOOGLE_SERVICES_JSON`.
 
 ## 3. FCM V1 service account for EAS credentials
