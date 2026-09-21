@@ -1965,20 +1965,23 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
         raise HTTPException(409, "Du har allerede rangert denne turen")
-    if trip.get("status") != "completed" and trip.get("payment_status") != "paid":
+    if trip.get("status") == "arrived" and trip.get("payment_status") == "paid":
+        trip, _ = await _transition_trip(
+            {"trip_id": trip_id, "user_id": current["id"]},
+            ("arrived",),
+            "completed",
+            set_fields={"completed_at": trip.get("completed_at") or datetime.now(timezone.utc).isoformat()},
+        )
+    if trip.get("status") != "completed":
         raise HTTPException(409, "Turen må være fullført eller betalt før den kan vurderes")
 
-    update_filter = {
-        "trip_id": trip_id,
-        "user_id": current["id"],
-        "passenger_rating": {"$exists": False},
-        "$or": [
-            {"status": "completed"},
-            {"status": "arrived", "payment_status": "paid"},
-        ],
-    }
     result = await db.trips.update_one(
-        update_filter,
+        {
+            "trip_id": trip_id,
+            "user_id": current["id"],
+            "status": "completed",
+            "passenger_rating": {"$exists": False},
+        },
         {"$set": {
             "passenger_rating": body.rating,
             "passenger_feedback": body.feedback,
