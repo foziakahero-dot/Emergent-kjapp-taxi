@@ -35,7 +35,18 @@ http.interceptors.response.use(
 
 export const apiError = (e: any) => {
   if (e?.response?.status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
-  return e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+  const d = e?.response?.data?.detail;
+  if (typeof d === 'string') return d;
+  if (d && typeof d === 'object') {
+    const message = typeof d.message === 'string' ? d.message : '';
+    const docs = Array.isArray(d.documents)
+      ? d.documents.map((x: any) => `${x.label || x.doc_type}: ${x.reason || 'mangler'}`).join(', ')
+      : '';
+    if (message && docs) return `${message} — ${docs}`;
+    if (message) return message;
+    try { return JSON.stringify(d); } catch {}
+  }
+  return e?.message || 'Noe gikk galt';
 };
 
 const encodeStoragePath = (path: string) =>
