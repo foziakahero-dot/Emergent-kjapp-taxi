@@ -312,7 +312,7 @@ export default function Home() {
                 </Text>
                 {estimate?.commission_rate != null ? (
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }} testID="booking-service-fee">
-                    KJAPP serviceavgift {Math.round(Number(estimate.commission_rate) * 100)} % · inkludert i vist totalpris
+                    Inkl. {Math.round(Number(estimate.commission_rate) * 100)} % plattformavgift · ingen ekstra avgift legges oppå totalprisen
                   </Text>
                 ) : null}
               </View>
