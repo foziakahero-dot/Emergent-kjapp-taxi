@@ -3152,13 +3152,16 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
 async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     """Passenger did not show up at pickup — driver cancels + gets small compensation."""
     driver_id = current["id"]
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup"]}},
-        {"$set": {"status": "cancelled", "cancelled_reason": "no_show", "cancelled_at": datetime.now(timezone.utc).isoformat()}},
+    t, _ = await _transition_trip(
+        {"trip_id": trip_id, "driver_id": driver_id},
+        ("driver_on_way", "at_pickup"),
+        "cancelled",
+        set_fields={
+            "cancelled_reason": "no_show",
+            "cancelled_by": "driver_no_show",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        },
     )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
-    t = await db.trips.find_one({"trip_id": trip_id})
     if t and t.get("user_id"):
         await send_push_to_user(t["user_id"], "Turen ble avlyst", "Du dukket ikke opp — kort no-show-avgift kan bli belastet.", "/app")
     return {"ok": True}
@@ -5284,20 +5287,20 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     original = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
     pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
     penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}},
-        {"$set": {
-            "status": "cancelled_by_driver",
+    if not original:
+        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    t, _ = await _transition_trip(
+        {"trip_id": trip_id, "driver_id": driver_id},
+        ("driver_on_way", "at_pickup", "in_trip"),
+        "cancelled_by_driver",
+        set_fields={
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
             "cancelled_by": "driver",
             "customer_cancellation_fee": 0,
             "driver_cancellation_penalty": penalty,
             "driver_cancellation_penalty_status": "recorded" if penalty > 0 else "not_applicable",
-        }},
+        },
     )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="Kunne ikke avbryte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Turen ble avbrutt", "Sjåføren har avbrutt turen. Beklager!", "/app")
     return {"ok": True}
 
