@@ -147,6 +147,8 @@ export const api = {
     email: string;
     phone: string;
     password: string;
+    drivers_license_number?: string;
+    taxi_license_number?: string;
     drivers_license_path: string;
     taxi_license_path: string;
     police_certificate_path: string;
