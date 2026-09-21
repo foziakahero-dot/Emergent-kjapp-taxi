@@ -14,6 +14,7 @@ import jwt
 import httpx
 import stripe
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from admin_ai_assistant import install_admin_ai_assistant, ensure_admin_ai_indexes
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
@@ -904,6 +905,7 @@ async def lifespan(app: FastAPI):
     await db.revoked_tokens.create_index("jti", unique=True)
     await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
     await ensure_marketing_waitlist_indexes(db)
+    await ensure_admin_ai_indexes(db)
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
@@ -6649,6 +6651,11 @@ install_admin_control_center(
     hash_password=hash_password,
     audit=_audit,
 )
+
+# Superadmin-only AI assistant. This is kept separate from the customer-facing
+# /ai/* routes so provider keys, project context and admin audit records never
+# cross the mobile-app boundary.
+install_admin_ai_assistant(api, db, require_superadmin)
 
 app.include_router(api)
 

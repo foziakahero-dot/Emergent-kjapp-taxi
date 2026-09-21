@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { api } from './api';
 import { Loader } from './ui';
 import Login from './Login';
+import AIAssistant from './AIAssistant';
 import FleetApplications from './FleetApplications';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
@@ -37,6 +38,7 @@ const NAV = [
     { to: '/documents', label: 'Dokumenter', ic: '❑', perm: 'operations' },
   ]},
   { group: 'System', items: [
+    { to: '/ai-assistant', label: 'AI Assistent', ic: '🤖', superadminOnly: true },
     { to: '/integrations', label: 'Integrasjoner', ic: '◎', perm: 'system' },
     { to: '/admins', label: 'Administratorer', ic: '♙', superadminOnly: true },
     { to: '/audit', label: 'Audit-logg', ic: '⌘', perm: 'system' },
@@ -171,6 +173,7 @@ function Shell() {
             <Route path="/communications" element={gate('communications', <Communications />)} />
             <Route path="/actions" element={gate('operations', <ActionCenter />)} />
             <Route path="/integrations" element={gate('system', <SystemIntegrations />)} />
+            <Route path="/ai-assistant" element={gate('operations', <AIAssistant />, true)} />
             <Route path="/admins" element={gate('system', <AdminRoles />, true)} />
             <Route path="/support" element={gate('support', <Support />)} />
             <Route path="/audit" element={gate('system', <Audit />)} />

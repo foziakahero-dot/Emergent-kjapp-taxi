@@ -119,4 +119,14 @@ export const api = {
   createAdminUser: (body: any) => http.post('/admin/control/admin-users', body).then((r) => r.data),
   updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
 
+  aiBootstrap: () => http.get('/admin/ai-assistant/bootstrap').then((r) => r.data),
+  aiFiles: () => http.get('/admin/ai-assistant/files').then((r) => r.data),
+  aiConversations: () => http.get('/admin/ai-assistant/conversations').then((r) => r.data),
+  createAIConversation: (title?: string) => http.post('/admin/ai-assistant/conversations', { title }).then((r) => r.data),
+  getAIConversation: (id: string) => http.get(`/admin/ai-assistant/conversations/${encodeURIComponent(id)}`).then((r) => r.data),
+  sendAIMessage: (id: string, body: { message: string; provider: string; file_paths: string[] }) =>
+    http.post(`/admin/ai-assistant/conversations/${encodeURIComponent(id)}/messages`, body).then((r) => r.data),
+  createAIChangeRequest: (body: { conversation_id: string; message_id: string; request: string }) =>
+    http.post('/admin/ai-assistant/change-requests', body).then((r) => r.data),
+
 };
