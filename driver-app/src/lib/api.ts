@@ -113,6 +113,7 @@ export const driverApi = {
   start: (id: string) => api.post(`/driver/trip/${id}/start`).then((r) => r.data),
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
+  ratePassenger: (id: string, data: { rating: number; feedback?: string }) => api.post(`/driver/trip/${id}/rate-passenger`, data).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
   location: (lat: number, lng: number, heading = 0, speed = 0) =>
     api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),

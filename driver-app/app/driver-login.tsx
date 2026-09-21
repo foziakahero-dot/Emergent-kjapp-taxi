@@ -41,6 +41,11 @@ export default function DriverLogin() {
         setError('Denne kontoen er ikke godkjent som KJAPP-sjåfør.');
         return;
       }
+      if (res?.approved === false) {
+        await logout();
+        setError('Sjåførkontoen venter fortsatt på godkjenning fra løyvehaver eller KJAPP.');
+        return;
+      }
       router.replace('/(driver)/home');
     } catch (e) {
       setError(apiError(e));

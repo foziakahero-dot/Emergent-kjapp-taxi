@@ -35,9 +35,9 @@ export default function DriverProfile() {
             <Icon name="star" size={13} color={colors.accent} fill={colors.accent} />
             <Text style={s.badgeText}>{ratings?.count ? `${ratings.average} · ${ratings.count} turer` : 'Ingen vurderinger'}</Text>
           </View>
-          <View style={[s.badge, { backgroundColor: colors.onlineSoft }]}>
-            <Icon name="check" size={13} color={colors.online} />
-            <Text style={[s.badgeText, { color: colors.online }]}>Godkjent</Text>
+          <View style={[s.badge, { backgroundColor: u.approved === false ? colors.accentSoft : colors.onlineSoft }]}>
+            <Icon name={u.approved === false ? 'clock' : 'check'} size={13} color={u.approved === false ? colors.accent : colors.online} />
+            <Text style={[s.badgeText, { color: u.approved === false ? colors.accent : colors.online }]}>{u.approved === false ? 'Venter på godkjenning' : 'Godkjent'}</Text>
           </View>
         </View>
       </View>

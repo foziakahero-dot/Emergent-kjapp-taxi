@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -42,6 +42,9 @@ function actionCanRetry(action: CriticalTripAction, status?: string) {
   return status === 'in_trip';
 }
 
+const FINISHED_STATUSES = ['arrived', 'completed', 'rated'];
+const isFinished = (status?: string) => FINISHED_STATUSES.includes(status || '');
+
 export default function DriverHome() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -54,14 +57,23 @@ export default function DriverHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
+  const [passengerRating, setPassengerRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingBusy, setRatingBusy] = useState(false);
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
+  const dismissedFinishedTrip = useRef<string | null>(null);
 
   const poll = useCallback(async () => {
     try {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
+      if (normalized && isFinished(normalized.status) && dismissedFinishedTrip.current === normalized.trip_id) {
+        normalized = null;
+      } else if (normalized && !isFinished(normalized.status)) {
+        dismissedFinishedTrip.current = null;
+      }
       setCurrent(normalized);
 
       if (!actionRetrying.current) {
@@ -242,6 +254,35 @@ export default function DriverHome() {
     } finally { setBusy(false); }
   };
 
+  const markNoShow = async () => {
+    if (!current || current.status !== 'at_pickup' || busy) return;
+    setBusy(true); setError('');
+    try {
+      await driverApi.noShow(current.trip_id);
+      dismissedFinishedTrip.current = current.trip_id;
+      setCurrent(null);
+      await poll();
+    } catch (e) { setError(apiError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const closeFinishedTrip = () => {
+    if (current?.trip_id) dismissedFinishedTrip.current = current.trip_id;
+    setCurrent(null);
+    setPassengerRating(0);
+    setRatingComment('');
+  };
+
+  const submitPassengerRating = async () => {
+    if (!current?.trip_id || !passengerRating || ratingBusy) return;
+    setRatingBusy(true); setError('');
+    try {
+      await driverApi.ratePassenger(current.trip_id, { rating: passengerRating, feedback: ratingComment.trim() });
+      closeFinishedTrip();
+    } catch (e) { setError(apiError(e)); }
+    finally { setRatingBusy(false); }
+  };
+
   const emergency = async () => {
     if (!current) return;
     try {
@@ -275,11 +316,13 @@ export default function DriverHome() {
   const mapDropoff = current && current.status === 'in_trip'
     ? { lat: current.dropoff_lat, lng: current.dropoff_lng }
     : (current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null);
-  const mapRoute = current?.geometry?.coordinates;
+  const mapRoute = current && ['driver_on_way', 'at_pickup'].includes(current.status) && current.pickup_route?.geometry?.coordinates
+    ? current.pickup_route.geometry.coordinates
+    : current?.geometry?.coordinates;
 
   const gpsLabel = !online ? 'GPS pauset' : loc ? 'GPS aktiv' : 'Finner GPS…';
   const operationalLabel = current
-    ? 'Aktiv tur'
+    ? (isFinished(current.status) ? 'Tur fullført' : 'Aktiv tur')
     : pending.length > 0
       ? `${pending.length} ${pending.length === 1 ? 'forespørsel' : 'forespørsler'}`
       : online ? 'Klar for tur' : 'Ikke på skift';
@@ -334,7 +377,38 @@ export default function DriverHome() {
         <View style={s.handle} />
         {error ? <Text style={s.error} testID="driver-error">{error}</Text> : null}
 
-        {current ? (
+        {current && isFinished(current.status) ? (
+          <View testID="driver-finished-trip">
+            <View style={s.sectionHeading}>
+              <Text style={s.overlineOnline}>TUR FULLFØRT</Text>
+              <Text style={s.tripPrice}>{kr(current.driver_earnings ?? current.price)}</Text>
+            </View>
+            <Text style={s.finishedTitle}>Hvordan var kunden?</Text>
+            <View style={s.ratingStars}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable key={n} onPress={() => setPassengerRating(n)} style={s.ratingStar} testID={`driver-rate-star-${n}`} accessibilityLabel={`${n} stjerner`}>
+                  <Icon name="star" size={28} color={n <= passengerRating ? colors.accent : colors.lineStrong} fill={n <= passengerRating ? colors.accent : 'none'} />
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              placeholder="Valgfri kommentar"
+              placeholderTextColor={colors.textMuted}
+              style={s.ratingInput}
+              maxLength={500}
+              multiline
+              testID="driver-rating-comment"
+            />
+            <View style={s.finishedActions}>
+              <Pressable onPress={closeFinishedTrip} style={s.skipBtn} testID="driver-rating-skip"><Text style={s.skipText}>Hopp over</Text></Pressable>
+              <Pressable onPress={submitPassengerRating} disabled={!passengerRating || ratingBusy} style={[s.action, (!passengerRating || ratingBusy) && { opacity: 0.55 }]} testID="driver-rating-submit">
+                {ratingBusy ? <ActivityIndicator color="#03120B" /> : <Text style={s.actionText}>Send vurdering</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : current ? (
           <View testID="driver-active-trip">
             <View style={s.sectionHeading}>
               <Text style={s.overlineOnline}>AKTIV TUR</Text>
@@ -366,6 +440,11 @@ export default function DriverHome() {
               <Icon name="shield" size={16} color={colors.danger} />
               <Text style={s.driverSafetyText}>Sikkerhet · Ring 112</Text>
             </Pressable>
+            {current.status === 'at_pickup' ? (
+              <Pressable style={s.noShowBtn} onPress={markNoShow} disabled={busy} testID="driver-no-show">
+                <Text style={s.noShowText}>Kunden møtte ikke opp</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : firstOffer && online ? (
           <View testID={`driver-offer-${firstOffer.trip_id}`}>
@@ -508,6 +587,15 @@ const useStyles = makeStyles((c) => ({
   driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
   action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  finishedTitle: { color: c.text, fontFamily: font.display, fontSize: 18, marginTop: 14, textAlign: 'center' },
+  ratingStars: { flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 8 },
+  ratingStar: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  ratingInput: { minHeight: 64, marginTop: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: 'rgba(255,255,255,0.04)', color: c.text, textAlignVertical: 'top', fontSize: 13 },
+  finishedActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  skipBtn: { flex: 0.8, height: 56, borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  skipText: { color: c.textSecondary, fontSize: 14, fontWeight: '600' },
+  noShowBtn: { height: 44, marginTop: 8, borderRadius: 12, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  noShowText: { color: c.textMuted, fontSize: 12, fontWeight: '600' },
   offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
   offerBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
   declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong },
