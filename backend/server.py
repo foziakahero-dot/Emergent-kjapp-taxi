@@ -4463,14 +4463,64 @@ class ApproveDriverRequest(BaseModel):
 
 @api.post("/admin/drivers/{user_id}/approve")
 async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
-    try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
-    except Exception: raise HTTPException(400, "Ugyldig id")
-    if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    try:
+        u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception:
+        raise HTTPException(400, "Ugyldig id")
+    if not u:
+        raise HTTPException(404, "Fant ikke sjåfør")
+    if body.approved:
+        valid, problems = await _driver_document_gate(user_id)
+        if not valid:
+            raise HTTPException(status_code=409, detail={"message": "Sjåføren mangler godkjente dokumenter", "documents": problems})
     prev = u.get("approved", False)
-    await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
+    await db.users.update_one(
+        {"_id": ObjectId(user_id), "role": "driver"},
+        {"$set": {
+            "approved": body.approved,
+            "approved_at": datetime.now(timezone.utc).isoformat() if body.approved else None,
+            "approved_by": current.get("id") if body.approved else None,
+            "online": False if not body.approved else bool(u.get("online", False)),
+        }},
+    )
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
                  {"approved": prev}, {"approved": body.approved})
-    return {"ok": True}
+    return {"ok": True, "approved": body.approved}
+
+
+DRIVER_REQUIRED_DOC_TYPES = {
+    "drivers_license": "førerkort",
+    "taxi_license": "kjøreseddel",
+    "police_certificate": "politiattest",
+    "profile_photo": "profilbilde",
+}
+
+
+async def _driver_document_gate(user_id: str) -> tuple[bool, list[dict]]:
+    """Return whether every required driver document exists and is reviewed valid."""
+    latest_by_type: dict[str, dict] = {}
+    async for doc in db.uploaded_files.find({
+        "owner_user_id": user_id,
+        "scope": "driver-docs",
+        "is_deleted": {"$ne": True},
+        "doc_type": {"$in": list(DRIVER_REQUIRED_DOC_TYPES.keys())},
+    }).sort("created_at", -1):
+        doc_type = doc.get("doc_type")
+        if doc_type and doc_type not in latest_by_type:
+            latest_by_type[doc_type] = doc
+
+    problems = []
+    for doc_type, label in DRIVER_REQUIRED_DOC_TYPES.items():
+        doc = latest_by_type.get(doc_type)
+        if not doc:
+            problems.append({"doc_type": doc_type, "label": label, "reason": "missing"})
+        elif doc.get("review_status") != "valid":
+            problems.append({
+                "doc_type": doc_type,
+                "label": label,
+                "reason": doc.get("review_status") or "pending",
+            })
+    return not problems, problems
 
 
 # ============================================================
@@ -4494,6 +4544,7 @@ class DriverSignupRequest(BaseModel):
     # New: uploaded document paths (from /api/upload/public via a public driver-invite upload token)
     drivers_license_path: Optional[str] = None
     taxi_license_path: Optional[str] = None
+    police_certificate_path: Optional[str] = None
     profile_photo_path: Optional[str] = None
 
 
@@ -4570,6 +4621,13 @@ async def get_driver_invite(token: str):
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
         "capabilities": inv.get("capabilities") or [],
         "note": inv.get("note", ""),
+        "prefill": {
+            "fullName": inv.get("fullName") or "",
+            "email": inv.get("email") or "",
+            "phone": inv.get("phone") or "",
+            "drivers_license_number": inv.get("drivers_license_number") or "",
+            "taxi_license_number": inv.get("taxi_license_number") or "",
+        },
     }
 
 
@@ -4584,15 +4642,16 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
     _validate_password(body.password)
-    # Require all three documents
-    if not (body.drivers_license_path and body.taxi_license_path and body.profile_photo_path):
-        raise HTTPException(status_code=400, detail="Du må laste opp førerkort, kjøreseddel og profilbilde")
+    # Require the complete compliance package before account creation.
+    if not (body.drivers_license_path and body.taxi_license_path and body.police_certificate_path and body.profile_photo_path):
+        raise HTTPException(status_code=400, detail="Du må laste opp førerkort, kjøreseddel, politiattest og profilbilde")
     expected_uploads = {
         body.drivers_license_path: "drivers_license",
         body.taxi_license_path: "taxi_license",
+        body.police_certificate_path: "police_certificate",
         body.profile_photo_path: "profile_photo",
     }
-    if len(expected_uploads) != 3:
+    if len(expected_uploads) != 4:
         raise HTTPException(status_code=400, detail="Hvert dokument må lastes opp separat")
     verified_uploads = {}
     async for uploaded in db.uploaded_files.find({
@@ -4610,6 +4669,8 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "password_hash": hash_password(body.password),
         "fullName": body.fullName,
         "phone": body.phone,
+        "drivers_license_number": inv.get("drivers_license_number") or None,
+        "taxi_license_number": inv.get("taxi_license_number") or None,
         "role": "driver",
         "car": inv.get("car"),
         "plate": inv.get("plate"),
@@ -4621,6 +4682,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "drivers_license_path": body.drivers_license_path,
         "taxi_license_path": body.taxi_license_path,
+        "police_certificate_path": body.police_certificate_path,
         "profile_photo_path": body.profile_photo_path,
         "documents_uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -4646,7 +4708,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
 @api.post("/upload/driver-doc")
 async def upload_driver_doc(file: UploadFile = File(...), invite_token: str = Form(...), doc_type: str = Form(...)):
     """Public upload used inside the driver-signup flow. Validated by invite token."""
-    if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
+    if doc_type not in ("drivers_license", "taxi_license", "police_certificate", "profile_photo"):
         raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
     inv = await db.driver_invites.find_one({"token": invite_token})
     if not inv or inv.get("used") or _invite_expired(inv):
@@ -5775,21 +5837,36 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
             "fleet_name": fleet_names.get(u.get("fleet_id")), "fleet_id": u.get("fleet_id"),
             "trips_completed": completed, "last_location_at": u.get("last_location_at"),
             "created_at": u.get("created_at"),
-            "docs": {k: u.get(k) for k in ("drivers_license_path", "taxi_license_path", "profile_photo_path") if u.get(k)},
+            "docs": {k: u.get(k) for k in ("drivers_license_path", "taxi_license_path", "police_certificate_path", "profile_photo_path") if u.get(k)},
         })
     return _paged(out, total, page, page_size, "drivers")
 
 
 @api.post("/admin/drivers/{user_id}/set-status")
 async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
-    try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
-    except Exception: raise HTTPException(400, "Ugyldig id")
-    if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    try:
+        u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
+    except Exception:
+        raise HTTPException(400, "Ugyldig id")
+    if not u:
+        raise HTTPException(404, "Fant ikke sjåfør")
+    if body.approved:
+        valid, problems = await _driver_document_gate(user_id)
+        if not valid:
+            raise HTTPException(status_code=409, detail={"message": "Sjåføren mangler godkjente dokumenter", "documents": problems})
     prev = u.get("approved", False)
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"approved": body.approved}})
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {
+            "approved": body.approved,
+            "approved_at": datetime.now(timezone.utc).isoformat() if body.approved else None,
+            "approved_by": current.get("id") if body.approved else None,
+            "online": False if not body.approved else bool(u.get("online", False)),
+        }},
+    )
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
                  {"approved": prev}, {"approved": body.approved})
-    return {"ok": True}
+    return {"ok": True, "approved": body.approved}
 
 
 class DriverCapabilitiesRequest(BaseModel):
