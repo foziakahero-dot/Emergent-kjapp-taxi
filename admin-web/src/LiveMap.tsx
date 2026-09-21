@@ -10,6 +10,7 @@ type DriverPosition = {
   lat: number;
   lng: number;
   last_location_at?: string;
+  location_state?: 'fresh_online' | 'stale_online' | 'offline_with_last_location';
 };
 
 function FitDrivers({ drivers }: { drivers: DriverPosition[] }) {
@@ -21,6 +22,18 @@ function FitDrivers({ drivers }: { drivers: DriverPosition[] }) {
   return null;
 }
 
+function markerStyle(state?: DriverPosition['location_state']) {
+  if (state === 'stale_online') return { radius: 8, color: '#4a3510', fillColor: '#f5b942', fillOpacity: .82, weight: 2 };
+  if (state === 'offline_with_last_location') return { radius: 7, color: '#334155', fillColor: '#94a3b8', fillOpacity: .42, weight: 2 };
+  return { radius: 9, color: '#06222a', fillColor: '#72dce8', fillOpacity: 1, weight: 3 };
+}
+
+function stateLabel(state?: DriverPosition['location_state']) {
+  if (state === 'stale_online') return 'Online · utdatert GPS';
+  if (state === 'offline_with_last_location') return 'Offline · siste kjente posisjon';
+  return 'Online · fersk GPS';
+}
+
 export default function LiveMap({ drivers }: { drivers: DriverPosition[] }) {
   return (
     <div className="live-map-wrap">
@@ -30,14 +43,21 @@ export default function LiveMap({ drivers }: { drivers: DriverPosition[] }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
         <FitDrivers drivers={drivers} />
-        {drivers.map((driver) => (
-          <CircleMarker key={driver.id} center={[driver.lat, driver.lng]} radius={9}
-            pathOptions={{ color: '#06222a', fillColor: '#72dce8', fillOpacity: 1, weight: 3 }}>
-            <Popup><strong>{driver.name || 'Sjåfør'}</strong><br />{driver.car || 'Ukjent bil'} {driver.plate || ''}</Popup>
-          </CircleMarker>
-        ))}
+        {drivers.map((driver) => {
+          const style = markerStyle(driver.location_state);
+          return (
+            <CircleMarker key={driver.id} center={[driver.lat, driver.lng]} radius={style.radius}
+              pathOptions={{ color: style.color, fillColor: style.fillColor, fillOpacity: style.fillOpacity, weight: style.weight }}>
+              <Popup>
+                <strong>{driver.name || 'Sjåfør'}</strong><br />
+                {driver.car || 'Ukjent bil'} {driver.plate || ''}<br />
+                <span>{stateLabel(driver.location_state)}</span>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
       </MapContainer>
-      {!drivers.length && <div className="live-map-empty">Ingen ferske GPS-posisjoner</div>}
+      {!drivers.length && <div className="live-map-empty">Ingen registrerte GPS-posisjoner</div>}
     </div>
   );
 }
