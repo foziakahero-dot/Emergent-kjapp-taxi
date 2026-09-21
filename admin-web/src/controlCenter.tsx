@@ -122,11 +122,23 @@ function FleetDrawer({ id, onClose, onChanged }: any) {
 }
 
 function InviteDriver({ fleetId, onDone }: any) {
-  const [form, setForm] = useState({ email: '', car: '', plate: '', vehicle_type: 'ai-first', note: '' });
+  const [form, setForm] = useState({
+    email: '', full_name: '', phone: '', drivers_license_number: '', taxi_license_number: '',
+    car: '', plate: '', vehicle_type: 'ai-first', note: '',
+  });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const save = async () => { setBusy(true); setErr(''); try { await api.inviteFleetDriver(fleetId, form); onDone(); } catch (e) { setErr(apiError(e)); setBusy(false); } };
-  return <Card className="action-card"><div className="strong">Inviter sjåfør til flåten</div><div className="cell-sub">Sjåføren registrerer dokumenter og må godkjennes før kjøring.</div><ErrorBanner msg={err} />
-    <div className="form-grid two"><input className="input" type="email" placeholder="E-post" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /><input className="input" placeholder="Bilmodell" value={form.car} onChange={e => setForm({ ...form, car: e.target.value })} /><input className="input" placeholder="Registreringsnummer" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} /><select className="select" value={form.vehicle_type} onChange={e => setForm({ ...form, vehicle_type: e.target.value })}><option value="ai-first">KJAPP Standard</option><option value="xl">KJAPP XL</option><option value="premium">Premium</option></select></div>
+  return <Card className="action-card"><div className="strong">Inviter sjåfør til flåten</div><div className="cell-sub">Prefyll kjente data. Sjåføren bekrefter dem, laster opp dokumenter og må godkjennes før kjøring.</div><ErrorBanner msg={err} />
+    <div className="form-grid two">
+      <input className="input" placeholder="Navn (valgfritt)" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} />
+      <input className="input" type="email" placeholder="E-post" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+      <input className="input" type="tel" placeholder="Telefon (valgfritt)" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+      <input className="input" placeholder="Førerkortnummer (valgfritt)" value={form.drivers_license_number} onChange={e => setForm({ ...form, drivers_license_number: e.target.value })} />
+      <input className="input" placeholder="Løyve/kjøreseddelnummer (valgfritt)" value={form.taxi_license_number} onChange={e => setForm({ ...form, taxi_license_number: e.target.value })} />
+      <input className="input" placeholder="Bilmodell" value={form.car} onChange={e => setForm({ ...form, car: e.target.value })} />
+      <input className="input" placeholder="Registreringsnummer" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} />
+      <select className="select" value={form.vehicle_type} onChange={e => setForm({ ...form, vehicle_type: e.target.value })}><option value="ai-first">KJAPP Standard</option><option value="xl">KJAPP XL</option><option value="premium">Premium</option></select>
+    </div>
     <textarea className="textarea" placeholder="Notat (valgfritt)" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} />
     <div className="modal-actions"><Btn onClick={onDone}>Avbryt</Btn><Btn variant="primary" onClick={save} disabled={busy || !form.email || !form.car || !form.plate}>{busy ? 'Sender…' : 'Send invitasjon'}</Btn></div>
   </Card>;
