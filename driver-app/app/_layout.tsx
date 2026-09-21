@@ -55,19 +55,44 @@ function NativeRuntimeBridge() {
   }, [user?.id, user?.role]);
 
   useEffect(() => {
+    if (user?.role !== 'driver' || !user?.id) return;
+
+    let alive = true;
+    let sub: Notifications.EventSubscription | undefined;
+
     const open = (notification?: Notifications.Notification | null) => {
-      const target = normalizeDriverNotificationUrl(notification?.request.content.data?.url);
-      if (target) router.push(target as any);
+      if (!alive || !notification) return;
+      try {
+        const target = normalizeDriverNotificationUrl(notification.request.content.data?.url);
+        if (target) router.push(target as any);
+      } catch {
+        // A malformed notification must never crash the native root.
+      }
     };
 
-    const last = Notifications.getLastNotificationResponse();
-    if (last?.notification) open(last.notification);
+    const boot = async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (alive && last?.notification) open(last.notification);
+      } catch {
+        // Native notification state is optional; driver app stays usable without it.
+      }
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      open(response.notification);
-    });
-    return () => sub.remove();
-  }, []);
+      try {
+        sub = Notifications.addNotificationResponseReceivedListener((response) => {
+          open(response.notification);
+        });
+      } catch {
+        // Listener registration failure must not terminate app startup.
+      }
+    };
+
+    void boot();
+    return () => {
+      alive = false;
+      try { sub?.remove(); } catch {}
+    };
+  }, [user?.id, user?.role]);
 
   return null;
 }
