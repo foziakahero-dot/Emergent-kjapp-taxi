@@ -169,7 +169,7 @@ def install_admin_control_center(
     @api.get("/admin/control/action-center")
     async def action_center(current=Depends(require_admin)):
         pending_apps = await db.fleet_applications.count_documents({
-            "status": {"$in": ["submitted", "under_review", "documents_required"]}
+            "status": {"$in": ["pending", "submitted", "under_review", "documents_required"]}
         })
         pending_drivers = await db.users.count_documents({
             "role": "driver",
@@ -456,7 +456,7 @@ def install_admin_control_center(
             "email_sent": False,
         }
         await db.driver_invites.insert_one(doc)
-        base = os.getenv("KJAPP_PUBLIC_URL", "https://kjappapp.no").rstrip("/")
+        base = os.getenv("FLEET_PUBLIC_URL", "https://fleet.kjappapp.no").rstrip("/")
         invite_url = f"{base}/driver-signup/{token}"
         safe_name = html.escape(str(fleet.get("name") or "KJAPP-flåten"))
         safe_car = html.escape(body.car)
