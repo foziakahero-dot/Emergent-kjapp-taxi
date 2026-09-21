@@ -111,6 +111,13 @@ export type PublicDriverInvite = {
   vehicle_type?: string;
   fleet_name?: string;
   expires_at?: string;
+  prefill?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    drivers_license_number?: string;
+    taxi_license_number?: string;
+  };
 };
 
 export const api = {
@@ -142,6 +149,7 @@ export const api = {
     password: string;
     drivers_license_path: string;
     taxi_license_path: string;
+    police_certificate_path: string;
     profile_photo_path: string;
   }) => http.post('/driver-invites/accept', body).then((r) => r.data),
   uploadDriverDoc: (file: File, inviteToken: string, docType: string) => {
