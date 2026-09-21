@@ -31,7 +31,11 @@ function assertFleetOwner(user: FleetUser | undefined | null) {
   if (user.approved === false) {
     throw new Error('Løyvehaverkontoen venter på godkjenning.');
   }
-  return user;
+  return {
+    ...user,
+    twofa_setup_required:
+      user.twofa_setup_required ?? (user.role === 'fleet_owner' && user.totp_enabled !== true),
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
