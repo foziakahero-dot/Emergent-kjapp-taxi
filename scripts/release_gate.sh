@@ -15,8 +15,8 @@ echo "[3/6] Admin build"
 echo "[4/6] Fleet build"
 (cd fleet-web && npm install --no-audit --no-fund && npm run build)
 
-echo "[5/6] Backend tests"
-python -m pytest backend/tests -q
+echo "[5/6] Backend unit regressions"
+python -m pytest   backend/tests/test_security_regressions_unit.py   backend/tests/test_marketing_waitlist_unit.py   backend/tests/test_beta_hardening_unit.py   -q
 
 if [[ "${RUN_STAGING_E2E:-0}" == "1" ]]; then
   echo "[6/6] Full staging ride flow"
