@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,8 @@ export default function Receipt() {
   const [trip, setTrip] = useState<any>(null);
   const [rating, setRating] = useState(0);
   const [rated, setRated] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [savingRating, setSavingRating] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [loadError, setLoadError] = useState(false);
@@ -53,12 +55,13 @@ export default function Receipt() {
     return () => clearInterval(timer);
   }, [tripId, trip?.payment_status, loadTrip]);
 
-  const submitRating = async (stars: number) => {
-    setRating(stars);
+  const submitRating = async () => {
+    if (!rating || savingRating) return;
+    setSavingRating(true);
     try {
-      await tripsApi.rate(tripId!, { rating: stars, feedback: '' });
+      await tripsApi.rate(tripId!, { rating, feedback: feedback.trim() });
       setRated(true);
-    } catch {}
+    } catch {} finally { setSavingRating(false); }
   };
 
   const verifyCheckout = async (sessionId: string) => {
@@ -187,12 +190,15 @@ export default function Receipt() {
           <Text style={s.overline}>{rated ? 'DIN VURDERING' : 'VURDER TUREN'}</Text>
           <View style={s.stars}>
             {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
+              <Pressable key={n} onPress={() => !rated && setRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
                 <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
               </Pressable>
             ))}
           </View>
-          {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
+          {!rated ? <>
+            <TextInput value={feedback} onChangeText={setFeedback} placeholder="Valgfri kommentar" placeholderTextColor={colors.textMuted} style={s.feedbackInput} maxLength={500} multiline testID="rate-feedback" />
+            <Button label="Send vurdering" onPress={submitRating} loading={savingRating} disabled={!rating} testID="rate-submit" style={{ marginTop: 10, alignSelf: 'stretch' }} />
+          </> : <Text style={s.thanks}>Takk for tilbakemeldingen!</Text>}
         </View>
 
         <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
@@ -247,5 +253,6 @@ const useStyles = makeStyles((c) => ({
   driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
   stars: { flexDirection: 'row', gap: 4, marginTop: 10 },
   starHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  feedbackInput: { alignSelf: 'stretch', minHeight: 74, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, color: c.text, fontSize: 13, textAlignVertical: 'top' },
   thanks: { color: c.textMuted, fontSize: 13, marginTop: 8 },
 }));

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 
@@ -26,6 +27,8 @@ type AuthCtx = {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   signInWithGoogle: () => Promise<User>;
+  signInWithApple: () => Promise<User>;
+  signInWithPhone: (phone: string, code: string, fullName?: string) => Promise<User>;
 };
 
 const Ctx = createContext<AuthCtx>(null as any);
@@ -140,13 +143,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return await handleSessionId(sid);
   };
 
+  const signInWithApple = async (): Promise<User> => {
+    if (Platform.OS !== 'ios') throw new Error('Apple-innlogging er tilgjengelig på iPhone og iPad.');
+    const available = await AppleAuthentication.isAvailableAsync();
+    if (!available) throw new Error('Apple-innlogging er ikke tilgjengelig på denne enheten.');
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
+    });
+    if (!credential.identityToken) throw new Error('Apple ga ingen identitetstoken. Prøv igjen.');
+    const fullName = [credential.fullName?.givenName, credential.fullName?.familyName].filter(Boolean).join(' ') || undefined;
+    const res = await authApi.apple({ identity_token: credential.identityToken, fullName, email: credential.email || undefined });
+    await storage.setItem(TOKEN_KEY, res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
+  const signInWithPhone = async (phone: string, code: string, fullName?: string): Promise<User> => {
+    const res = await authApi.phoneOtpVerify(phone, code, fullName);
+    await storage.setItem(TOKEN_KEY, res.token);
+    setUser(res.user);
+    return res.user;
+  };
+
   const logout = async () => {
     await storage.removeItem(TOKEN_KEY);
     setUser(null);
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle }}>
+    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle, signInWithApple, signInWithPhone }}>
       {children}
     </Ctx.Provider>
   );

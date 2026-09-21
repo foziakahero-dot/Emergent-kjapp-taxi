@@ -15,9 +15,10 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
+import { ActivityIndicator } from 'react-native';
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -28,6 +29,16 @@ export default function Register() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [socialLoading, setSocialLoading] = useState(false);
+
+  const finishSocial = async (provider: 'google' | 'apple') => {
+    setError(''); setSocialLoading(true);
+    try {
+      const user = provider === 'google' ? await signInWithGoogle() : await signInWithApple();
+      if (user) router.replace('/(app)/home');
+    } catch (e) { setError(apiError(e)); }
+    finally { setSocialLoading(false); }
+  };
 
   const submit = async () => {
     setError('');
@@ -91,6 +102,12 @@ export default function Register() {
 
         <Button label="Opprett konto" onPress={submit} loading={loading} testID="register-submit" style={{ marginTop: 12 }} />
 
+        <View style={s.dividerRow}><View style={s.divLine} /><Text style={s.divText}>eller opprett med</Text><View style={s.divLine} /></View>
+        <Pressable style={s.googleBtn} onPress={() => finishSocial('google')} disabled={socialLoading} testID="register-google">
+          {socialLoading ? <ActivityIndicator color="#1F1F1F" /> : <><Text style={s.googleMark}>G</Text><Text style={s.googleText}>Fortsett med Google</Text></>}
+        </Pressable>
+        {Platform.OS === 'ios' ? <Pressable style={s.appleBtn} onPress={() => finishSocial('apple')} disabled={socialLoading} testID="register-apple"><Text style={s.appleMark}></Text><Text style={s.appleText}>Fortsett med Apple</Text></Pressable> : null}
+
         <View style={s.trustCard}>
           <Icon name="shield" size={18} color={colors.accent} />
           <Text style={s.trustText}>Kontoen brukes kun til KJAPP-tjenester og dine turdata.</Text>
@@ -128,6 +145,15 @@ const useStyles = makeStyles((c) => ({
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   passwordHint: { color: c.textMuted, fontSize: 11, lineHeight: 16, marginTop: 9 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 9 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
+  divLine: { flex: 1, height: 1, backgroundColor: c.line },
+  divText: { color: c.textMuted, fontSize: 12 },
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 14, backgroundColor: '#FFFFFF' },
+  googleMark: { color: '#4285F4', fontSize: 20, fontWeight: '700' },
+  googleText: { color: '#1F1F1F', fontFamily: font.semibold, fontSize: 15 },
+  appleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 54, borderRadius: 14, backgroundColor: '#000000', marginTop: 10 },
+  appleMark: { color: '#FFFFFF', fontSize: 23 },
+  appleText: { color: '#FFFFFF', fontFamily: font.semibold, fontSize: 15 },
   trustCard: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 16 },
   trustText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },
   footer: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 12 },

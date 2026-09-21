@@ -21,6 +21,9 @@ export const authApi = {
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
+  apple: (data: { identity_token: string; fullName?: string; email?: string }) => api.post('/auth/apple', data).then((r) => r.data),
+  phoneOtpRequest: (phone: string) => api.post('/auth/phone/request', { phone }).then((r) => r.data),
+  phoneOtpVerify: (phone: string, code: string, fullName?: string) => api.post('/auth/phone/verify', { phone, code, fullName }).then((r) => r.data),
 };
 
 export const tripsApi = {
@@ -53,12 +56,22 @@ export const paymentApi = {
   list: () => api.get('/payment-methods').then((r) => r.data),
   add: (data: any) => api.post('/payment-methods', data).then((r) => r.data),
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
+  setDefault: (id: string) => api.patch(`/payment-methods/${id}/default`).then((r) => r.data),
   cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
   cardSetupStatus: (session_id: string) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),
   checkout: (trip_id: string, origin_url: string) =>
     api.post('/payments/checkout', { trip_id, origin_url }).then((r) => r.data),
   checkoutStatus: (session_id: string) => api.get(`/payments/status/${session_id}`).then((r) => r.data),
   vippsConfig: () => api.get('/payments/vipps/config').then((r) => r.data),
+};
+
+export const profileApi = {
+  uploadPhoto: async (uri: string, filename = 'profile.jpg', mimeType = 'image/jpeg') => {
+    const form = new FormData();
+    form.append('file', { uri, name: filename, type: mimeType } as any);
+    form.append('scope', 'profile');
+    return api.post('/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+  },
 };
 
 export const aiApi = {

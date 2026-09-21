@@ -177,6 +177,13 @@ export default function Home() {
         </Pressable>
       </View>
 
+      {!dropoff && !cars.length && !searchOpen ? (
+        <View style={[s.searchingGlass, { top: insets.top + 68 }]} pointerEvents="none" testID="home-searching-indicator">
+          <ActivityIndicator color={colors.accent} size="small" />
+          <View style={{ flex: 1 }}><Text style={s.searchingTitle}>Søker etter ledige biler…</Text><Text style={s.searchingSub}>Oppdaterer nærområdet ditt</Text></View>
+        </View>
+      ) : null}
+
       <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
         <View style={s.handle} />
 
@@ -438,6 +445,9 @@ function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
   return (
     <View style={[s.searchOverlay, { paddingTop: insets.top + 12 }]} testID="search-sheet">
       <View style={s.searchHeader}>
+        <Pressable onPress={onClose} testID="search-back" style={s.searchBack} accessibilityRole="button" accessibilityLabel="Tilbake til kartet">
+          <Icon name="arrow-left" size={20} color={colors.text} />
+        </Pressable>
         <View style={s.searchField}>
           <Icon name="search" size={18} color={colors.textMuted} />
           <TextInput
@@ -518,6 +528,9 @@ const useStyles = makeStyles((c) => ({
   carsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 15 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   carsText: { color: c.textMuted, fontSize: 12 },
+  searchingGlass: { position: 'absolute', left: 16, right: 16, zIndex: 8, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, backgroundColor: 'rgba(8,20,28,0.74)', borderWidth: 1, borderColor: 'rgba(0,229,245,0.28)' },
+  searchingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
+  searchingSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
   destinationCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
     borderRadius: radius.lg, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: c.line,
@@ -574,7 +587,8 @@ const useStyles = makeStyles((c) => ({
   },
   confirmText: { color: c.accentOn, fontSize: 16, fontWeight: '700' },
   searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, paddingHorizontal: 16, zIndex: 50 },
-  searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  searchBack: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   searchField: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card,
     borderWidth: 1, borderColor: c.lineStrong, borderRadius: radius.md, paddingLeft: 14, paddingRight: 6, height: 54,

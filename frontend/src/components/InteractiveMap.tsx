@@ -298,9 +298,10 @@ export function InteractiveMap({
 
             {pickup ? (
               <G>
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={10} fill={colors.accentSoft} />
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={5.5} fill={colors.accent} />
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={2} fill={colors.accentOn} />
+                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={24} fill={colors.accentGlow} opacity={0.4} />
+                <G transform={`translate(${sx(pickup.lng)}, ${sy(pickup.lat)}) scale(${32 / 24}) translate(-12, -12)`}>
+                  <CarShape {...CAR_ACTIVE} />
+                </G>
               </G>
             ) : null}
 
@@ -311,11 +312,12 @@ export function InteractiveMap({
               </G>
             ) : null}
 
-            {user ? (
+            {user && !pickup ? (
               <G>
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(64,145,255,0.16)" />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill="#4091FF" stroke="#FFFFFF" strokeWidth={2.5} />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={3} fill="#FFFFFF" />
+                <G transform={`translate(${sx(user.lng)}, ${sy(user.lat)}) scale(${30 / 24}) translate(-12, -12)`}>
+                  <CarShape {...CAR_ACTIVE} />
+                </G>
                 <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill="#FFFFFF" fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>
             ) : null}

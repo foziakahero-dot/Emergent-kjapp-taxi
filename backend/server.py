@@ -9,6 +9,7 @@ import secrets
 import json
 import base64
 import traceback
+import re
 import bcrypt
 import jwt
 import httpx
@@ -204,6 +205,7 @@ db = client[DB_NAME]
 # Stripe setup
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PREAUTH_ENABLED = str(os.environ.get("STRIPE_PREAUTH_ENABLED", "true" if IS_PRODUCTION else "false")).strip().lower() in ("1", "true", "yes", "on")
 
 
 # ------------------ Utils ------------------
@@ -227,6 +229,47 @@ def _stripe_id(value) -> Optional[str]:
     if isinstance(value, dict):
         return value.get("id")
     return getattr(value, "id", None)
+
+
+async def _authorize_trip_amount(user_id: str, trip_id: str, amount_nok: int) -> Optional[dict]:
+    """Reserver estimert turbeløp på kundens verifiserte kort.
+
+    Funksjonen er feature-gated for å la miljøer uten Stripe-konto fortsette med
+    den eksisterende etterbetalingstrømmen. I produksjon bør STRIPE_PREAUTH_ENABLED
+    stå på når kortbetaling skal brukes som dekningstest.
+    """
+    if not STRIPE_PREAUTH_ENABLED:
+        return None
+    if not stripe.api_key:
+        raise HTTPException(status_code=503, detail="Kortreservasjon er ikke konfigurert")
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    pm = await db.payment_methods.find_one({
+        "user_id": user_id, "verified": True, "setup_status": "succeeded",
+        "stripe_payment_method_id": {"$type": "string"},
+    }, sort=[("is_default", -1), ("created_at", 1)])
+    customer_id = (user or {}).get("stripe_customer_id")
+    if not pm or not customer_id:
+        raise HTTPException(status_code=402, detail="Velg et verifisert kort før du bestiller tur")
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=int(amount_nok) * 100,
+            currency="nok",
+            customer=customer_id,
+            payment_method=pm["stripe_payment_method_id"],
+            confirmation_method="automatic",
+            confirm=True,
+            capture_method="manual",
+            off_session=True,
+            metadata={"trip_id": trip_id, "user_id": user_id, "purpose": "kjapp_trip_hold"},
+        )
+    except stripe.error.CardError as exc:
+        msg = getattr(exc, "user_message", None) or "Kortet kunne ikke reservere turbeløpet. Velg et annet kort."
+        raise HTTPException(status_code=402, detail=msg)
+    except stripe.error.StripeError as exc:
+        raise HTTPException(status_code=502, detail=f"Kortreservasjon feilet: {getattr(exc, 'user_message', str(exc))}")
+    if intent.status != "requires_capture":
+        raise HTTPException(status_code=402, detail="Kortet kunne ikke reservere turbeløpet")
+    return {"payment_intent_id": intent.id, "payment_status": "authorized", "authorized_amount": int(amount_nok)}
 
 
 async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_production: bool) -> dict:
@@ -443,6 +486,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class PhoneOtpRequest(BaseModel):
+    phone: str
+
+
+class PhoneOtpVerifyRequest(BaseModel):
+    phone: str
+    code: str
+    fullName: Optional[str] = None
+
+
 class TwoFAEnableRequest(BaseModel):
     code: str
 
@@ -496,7 +549,7 @@ class TripRequest(BaseModel):
 
 class RateTripRequest(BaseModel):
     rating: int
-    feedback: Optional[str] = ""
+    feedback: Optional[str] = Field(default="", max_length=500)
 
 
 class PaymentMethodRequest(BaseModel):
@@ -1442,6 +1495,85 @@ async def login(body: LoginRequest, request: Request, response: Response):
     return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
 
 
+def _normalize_phone(phone: str) -> str:
+    """Normaliserer telefon til E.164. Norske 8-sifrede nummer får +47."""
+    raw = (phone or "").strip()
+    digits = re.sub(r"[^0-9+]", "", raw)
+    if digits.startswith("00"):
+        digits = "+" + digits[2:]
+    if digits.startswith("8") and len(digits) == 8:
+        digits = "+47" + digits
+    if not re.fullmatch(r"\+[1-9][0-9]{7,14}", digits):
+        raise HTTPException(status_code=400, detail="Skriv inn et gyldig mobilnummer med landskode, for eksempel +47 400 00 000")
+    return digits
+
+
+async def _send_phone_otp(phone: str, code: str) -> None:
+    """Send OTP via Twilio når leverandør er konfigurert. Koden logges aldri."""
+    sid = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+    token = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+    sender = os.environ.get("TWILIO_FROM_NUMBER", "").strip()
+    if not sid or not token or not sender:
+        raise HTTPException(status_code=503, detail="SMS-leverandør er ikke konfigurert ennå")
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
+    body = {"To": phone, "From": sender, "Body": f"KJAPP-koden din er {code}. Den utløper om 5 minutter."}
+    async with httpx.AsyncClient(timeout=12.0) as client:
+        res = await client.post(url, data=body, auth=(sid, token))
+    if res.status_code >= 300:
+        raise HTTPException(status_code=502, detail="Kunne ikke sende SMS akkurat nå")
+
+
+@api.post("/auth/phone/request")
+async def request_phone_otp(body: PhoneOtpRequest, request: Request):
+    phone = _normalize_phone(body.phone)
+    ip = _client_ip(request)
+    window = datetime.now(timezone.utc) - timedelta(minutes=10)
+    if await db.phone_otps.count_documents({"phone": phone, "created_at": {"$gte": window}}) >= 3:
+        raise HTTPException(status_code=429, detail="For mange koder. Prøv igjen om noen minutter.")
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    now = datetime.now(timezone.utc)
+    await db.phone_otps.update_many({"phone": phone, "used": False}, {"$set": {"used": True}})
+    await db.phone_otps.insert_one({
+        "phone": phone, "code_hash": hash_password(code), "used": False,
+        "attempts": 0, "created_at": now, "expires_at": now + timedelta(minutes=5), "ip": ip,
+    })
+    try:
+        await _send_phone_otp(phone, code)
+    except Exception:
+        await db.phone_otps.update_many({"phone": phone, "created_at": now}, {"$set": {"used": True}})
+        raise
+    return {"ok": True, "phone": phone, "expires_in": 300}
+
+
+@api.post("/auth/phone/verify")
+async def verify_phone_otp(body: PhoneOtpVerifyRequest, response: Response):
+    phone = _normalize_phone(body.phone)
+    rec = await db.phone_otps.find_one({"phone": phone, "used": False}, sort=[("created_at", -1)])
+    if not rec or rec.get("expires_at", datetime.min.replace(tzinfo=timezone.utc)) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Koden er utløpt. Be om en ny kode.")
+    if int(rec.get("attempts", 0)) >= 5:
+        raise HTTPException(status_code=429, detail="For mange forsøk. Be om en ny kode.")
+    if not verify_password(body.code.strip(), rec.get("code_hash", "")):
+        await db.phone_otps.update_one({"_id": rec["_id"]}, {"$inc": {"attempts": 1}})
+        raise HTTPException(status_code=400, detail="Feil kode")
+    await db.phone_otps.update_one({"_id": rec["_id"]}, {"$set": {"used": True, "verified_at": datetime.now(timezone.utc)}})
+    user = await db.users.find_one({"phone": phone})
+    if not user:
+        alias = f"phone_{re.sub(r'[^0-9]', '', phone)}@phone.kjapp.no"
+        result = await db.users.insert_one({
+            "email": alias, "password_hash": hash_password(secrets.token_urlsafe(32)),
+            "fullName": (body.fullName or "KJAPP-bruker").strip()[:120], "phone": phone,
+            "role": "user", "phone_verified": True, "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        user = await db.users.find_one({"_id": result.inserted_id})
+    elif user.get("disabled"):
+        raise HTTPException(status_code=401, detail="Kontoen er deaktivert")
+    uid, email = str(user["_id"]), user.get("email", "")
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": user_public(user)}
+
+
 @api.post("/auth/logout")
 async def logout(request: Request, response: Response):
     token = _auth_token_from_request(request)
@@ -1685,6 +1817,7 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
     commission_rate = await _platform_commission()
     price = quote["price"]
+    authorization = await _authorize_trip_amount(current["id"], trip_id, price)
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
@@ -1713,6 +1846,8 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if authorization:
+        trip.update(authorization)
     await db.trips.insert_one(trip)
     # Trip stays in "searching" — a real driver must accept via /api/driver/accept.
     # Nearest-driver-first: offer it to the closest available driver, forward automatically on timeout.
@@ -1796,9 +1931,23 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
 
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    # Capture den faktiske serverprisen når turen avsluttes. Stripe avslutter
+    # reservasjonen atomisk; ved feil blir turen stående urørt og kan prøves igjen.
+    if trip.get("payment_status") == "authorized" and trip.get("payment_intent_id"):
+        if not stripe.api_key:
+            raise HTTPException(status_code=503, detail="Betalingsleverandør er ikke tilgjengelig")
+        try:
+            intent = stripe.PaymentIntent.capture(trip["payment_intent_id"], amount_to_capture=int(trip.get("price") or 0) * 100)
+            if intent.status not in ("succeeded", "requires_capture"):
+                raise HTTPException(status_code=402, detail="Kunne ikke fullføre kortbetalingen")
+        except stripe.error.StripeError as exc:
+            raise HTTPException(status_code=402, detail=f"Kortbetalingen kunne ikke fullføres: {getattr(exc, 'user_message', str(exc))}")
     result = await db.trips.update_one(
         {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat(), **({"payment_status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()} if trip.get("payment_status") == "authorized" else {})}},
     )
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
@@ -1818,6 +1967,8 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
+    if trip.get("status") not in ("arrived", "completed", "rated"):
+        raise HTTPException(400, "Du kan vurdere turen når den er fullført")
     if trip.get("passenger_rating"):
         raise HTTPException(400, "Du har allerede rangert denne turen")
     await db.trips.update_one(
@@ -1939,6 +2090,11 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
             elapsed = 0
         if elapsed > free_minutes:
             fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
+    if trip.get("payment_status") == "authorized" and trip.get("payment_intent_id") and stripe.api_key:
+        try:
+            stripe.PaymentIntent.cancel(trip["payment_intent_id"])
+        except stripe.error.StripeError as exc:
+            raise HTTPException(status_code=502, detail=f"Kortreservasjonen kunne ikke kanselleres: {getattr(exc, 'user_message', str(exc))}")
     now_iso = datetime.now(timezone.utc).isoformat()
     await db.trips.update_one(
         {"trip_id": trip_id, "user_id": current["id"]},
@@ -2315,6 +2471,23 @@ async def delete_payment_method(pm_id: str, current=Depends(get_current_user)):
     if r.deleted_count == 0:
         raise HTTPException(404, "Ikke funnet")
     return {"deleted": True}
+
+
+@api.patch("/payment-methods/{pm_id}/default")
+async def set_default_payment_method(pm_id: str, current=Depends(get_current_user)):
+    try:
+        oid = ObjectId(pm_id)
+    except InvalidId:
+        raise HTTPException(400, "Ugyldig ID")
+    method = await db.payment_methods.find_one({"_id": oid, "user_id": current["id"]})
+    if not method:
+        raise HTTPException(404, "Betalingsmåte ikke funnet")
+    verified = method.get("verified") is True and method.get("setup_status") == "succeeded" and bool(method.get("stripe_payment_method_id"))
+    if not verified:
+        raise HTTPException(400, "Betalingsmåten må verifiseres før den kan velges")
+    await db.payment_methods.update_many({"user_id": current["id"]}, {"$set": {"is_default": False}})
+    await db.payment_methods.update_one({"_id": oid, "user_id": current["id"]}, {"$set": {"is_default": True}})
+    return {"ok": True, "id": pm_id}
 
 
 # ---- Personal saved places (per-user Home/Work/favourites) ----
@@ -5167,6 +5340,8 @@ def _mk_upload_path(scope: str, subject_id: str, filename: str, content_type: st
 async def upload_auth(file: UploadFile = File(...), scope: str = Form("misc"), current=Depends(get_current_user)):
     data = await _read_uploaded_file(file)
     safe_scope = scope if scope in ("driver-docs", "profile", "misc") else "misc"
+    if safe_scope == "profile" and len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Profilbildet kan ikke være større enn 5 MB")
     path = _mk_upload_path(safe_scope, current["id"], file.filename or "file", file.content_type)
     result = storage_put(path, data, file.content_type)
     doc = {
@@ -5181,6 +5356,13 @@ async def upload_auth(file: UploadFile = File(...), scope: str = Form("misc"), c
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.uploaded_files.insert_one(doc)
+    if safe_scope == "profile":
+        # Lagre bare objektstien på kontoen; sjåføren kan hente bildet gjennom
+        # den eksisterende tilgangskontrollerte /files-ruten.
+        await db.users.update_one(
+            {"_id": ObjectId(current["id"])},
+            {"$set": {"profile_photo_path": result["path"], "profile_photo_updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
     doc.pop("_id", None)
     return doc
 
@@ -5233,6 +5415,14 @@ async def download_file(path: str, current=Depends(get_current_user)):
             driver_user = await db.users.find_one({"_id": ObjectId(rec.get("owner_user_id", "") or "000000000000000000000000")}) if rec.get("owner_user_id") else None
             if driver_user and fleet_id and driver_user.get("fleet_id") == fleet_id:
                 allowed = True
+    elif rec.get("scope") == "profile" and role == "driver" and rec.get("owner_user_id"):
+        # Sjåføren får bare se kundens profilbilde når kunden faktisk er knyttet
+        # til samme pågående tur.
+        linked = await db.trips.find_one({
+            "user_id": rec.get("owner_user_id"), "driver_id": current["id"],
+            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
+        }, {"_id": 1})
+        allowed = bool(linked)
     elif is_owner:
         allowed = True
     if not allowed:

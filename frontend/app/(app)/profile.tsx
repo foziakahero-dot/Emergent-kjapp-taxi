@@ -1,25 +1,55 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { useAuth } from '@/src/context/AuthContext';
-import { gdprApi } from '@/src/lib/api';
+import { gdprApi, profileApi } from '@/src/lib/api';
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const initials = (user?.fullName || user?.email || 'K')
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+
+  const choosePhoto = async (camera: boolean) => {
+    setPhotoBusy(true);
+    try {
+      const permission = camera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) { Alert.alert('Tilgang kreves', camera ? 'KJAPP trenger kameratilgang for profilbildet.' : 'KJAPP trenger tilgang til bildegalleriet.'); return; }
+      const result = camera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.86 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.86 });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) { Alert.alert('Bildet er for stort', 'Velg et bilde på maks 5 MB.'); return; }
+      const uri = asset.uri;
+      setPhotoUri(uri);
+      await profileApi.uploadPhoto(uri, camera ? 'profile-camera.jpg' : 'profile-gallery.jpg', asset.mimeType || 'image/jpeg');
+      await refresh();
+    } catch (e: any) { Alert.alert('Kunne ikke laste opp', e?.response?.data?.detail || 'Prøv igjen senere.'); }
+    finally { setPhotoBusy(false); }
+  };
+
+  const openPhotoMenu = () => Alert.alert('Profilbilde', 'Velg kilde', [
+    { text: 'Ta bilde', onPress: () => choosePhoto(true) },
+    { text: 'Velg fra galleri', onPress: () => choosePhoto(false) },
+    { text: 'Avbryt', style: 'cancel' },
+  ]);
 
   const rows: { icon: IconName; label: string; onPress: () => void; testID: string }[] = [
     { icon: 'map-pin', label: 'Lagrede steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
@@ -51,7 +81,11 @@ export default function Profile() {
         <Text style={s.title}>Profil</Text>
 
         <View style={s.card} testID="profile-card">
-          <View style={s.avatar}><Text style={s.avatarText}>{initials}</Text></View>
+          <Pressable style={s.avatar} onPress={openPhotoMenu} disabled={photoBusy} testID="profile-photo-picker">
+            {photoUri ? <Image source={{ uri: photoUri }} style={s.avatarImage} /> : <Text style={s.avatarText}>{initials}</Text>}
+            <View style={s.cameraBadge}><Icon name="plus" size={13} color={colors.bg} /></View>
+          </Pressable>
+          {photoBusy ? <Text style={s.photoHint}>Laster opp profilbildet…</Text> : <Text style={s.photoHint}>Trykk på bildet for å endre</Text>}
           <Text style={s.name}>{user?.fullName || 'KJAPP-bruker'}</Text>
           <Text style={s.email}>{user?.email}</Text>
           {user?.phone ? <Text style={s.email}>{user.phone}</Text> : null}
@@ -129,7 +163,10 @@ const useStyles = makeStyles((c) => ({
   title: { fontFamily: font.display, fontSize: 28, color: c.text, marginBottom: 20 },
   card: { backgroundColor: c.card, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
   avatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  avatarImage: { width: 76, height: 76, borderRadius: 38 },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 25, height: 25, borderRadius: 13, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.card },
   avatarText: { color: c.accent, fontFamily: font.display, fontSize: 28 },
+  photoHint: { color: c.textMuted, fontSize: 11, marginTop: -7, marginBottom: 8 },
   name: { color: c.text, fontFamily: font.display, fontSize: 22 },
   email: { color: c.textMuted, fontSize: 14, marginTop: 4 },
   menu: { marginTop: 20, backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.line, overflow: 'hidden' },

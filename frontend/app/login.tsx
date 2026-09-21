@@ -16,11 +16,12 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
+import { authApi } from '@/src/lib/api';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
 export default function Login() {
-  const { login, logout, signInWithGoogle } = useAuth();
+  const { login, logout, signInWithGoogle, signInWithApple, signInWithPhone } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -30,6 +31,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
   const [error, setError] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const finishLogin = async (u: any) => {
     if (!isCustomerRole(u?.role)) {
@@ -70,6 +76,32 @@ export default function Login() {
     } finally {
       setGLoading(false);
     }
+  };
+
+  const requestOtp = async () => {
+    setError('');
+    setPhoneLoading(true);
+    try {
+      await authApi.phoneOtpRequest(phone.trim());
+      setOtpSent(true);
+    } catch (e) { setError(apiError(e)); }
+    finally { setPhoneLoading(false); }
+  };
+
+  const verifyOtp = async () => {
+    setError('');
+    setPhoneLoading(true);
+    try { await finishLogin(await signInWithPhone(phone.trim(), otp.trim())); }
+    catch (e) { setError(apiError(e)); }
+    finally { setPhoneLoading(false); }
+  };
+
+  const appleSignIn = async () => {
+    setError('');
+    setAppleLoading(true);
+    try { await finishLogin(await signInWithApple()); }
+    catch (e) { setError(apiError(e)); }
+    finally { setAppleLoading(false); }
   };
 
   return (
@@ -138,6 +170,22 @@ export default function Login() {
           {gLoading ? <ActivityIndicator color="#1F1F1F" /> : <><GoogleG size={20} /><Text style={s.googleText}>Fortsett med Google</Text></>}
         </Pressable>
 
+        {Platform.OS === 'ios' ? (
+          <Pressable style={s.appleBtn} onPress={appleSignIn} disabled={appleLoading} testID="login-apple" accessibilityRole="button" accessibilityLabel="Fortsett med Apple">
+            {appleLoading ? <ActivityIndicator color="#FFFFFF" /> : <><Text style={s.appleMark}></Text><Text style={s.appleText}>Fortsett med Apple</Text></>}
+          </Pressable>
+        ) : null}
+
+        <View style={s.phoneCard}>
+          <View style={s.phoneTitleRow}><Icon name="phone" size={17} color={colors.accent} /><Text style={s.phoneTitle}>Logg inn med mobilnummer</Text></View>
+          <View style={s.field}>
+            <Icon name="phone" size={18} color={colors.textMuted} />
+            <TextInput placeholder="+47 400 00 000" placeholderTextColor={colors.textMuted} style={s.input} keyboardType="phone-pad" value={phone} onChangeText={setPhone} testID="login-phone" />
+          </View>
+          {otpSent ? <View style={s.field}><Icon name="lock" size={18} color={colors.textMuted} /><TextInput placeholder="6-sifret kode" placeholderTextColor={colors.textMuted} style={s.input} keyboardType="number-pad" value={otp} onChangeText={setOtp} maxLength={6} testID="login-otp" /></View> : null}
+          <Button label={otpSent ? 'Bekreft kode' : 'Send SMS-kode'} onPress={otpSent ? verifyOtp : requestOtp} loading={phoneLoading} variant="ghost" testID="login-phone-submit" />
+        </View>
+
         <View style={s.trustRow}>
           <View style={s.trustItem}><Icon name="shield" size={14} color={colors.accent} /><Text style={s.trustText}>Trygg konto</Text></View>
           <View style={s.trustDivider} />
@@ -174,6 +222,12 @@ const useStyles = makeStyles((c) => ({
   divText: { color: c.textMuted, fontSize: 12 },
   googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 14, backgroundColor: '#FFFFFF' },
   googleText: { color: '#1F1F1F', fontFamily: font.semibold, fontSize: 15 },
+  appleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 54, borderRadius: 14, backgroundColor: '#000000', marginTop: 10 },
+  appleMark: { color: '#FFFFFF', fontSize: 23, lineHeight: 24 },
+  appleText: { color: '#FFFFFF', fontFamily: font.semibold, fontSize: 15 },
+  phoneCard: { marginTop: 16, padding: 14, gap: 10, borderRadius: 16, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  phoneTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  phoneTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   trustRow: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16, gap: 12 },
   trustItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   trustText: { color: c.textMuted, fontSize: 11 },

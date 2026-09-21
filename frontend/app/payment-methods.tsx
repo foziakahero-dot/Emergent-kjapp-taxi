@@ -65,6 +65,12 @@ export default function PaymentMethods() {
     }
   };
 
+  const setDefault = async (id: string) => {
+    setError('');
+    try { await paymentApi.setDefault(id); await qc.invalidateQueries({ queryKey: ['payment-methods'] }); }
+    catch (e) { setError(apiError(e)); }
+  };
+
   const addStripeCard = async () => {
     if (busy) return;
     setBusy(true);
@@ -121,7 +127,7 @@ export default function PaymentMethods() {
             {error ? <Text style={s.error} testID="pm-error">{error}</Text> : null}
 
             {methods.map((m: any) => {
-              const verified = m.verified !== false;
+              const verified = m.verified === true;
               return (
                 <View key={m.id} style={s.card} testID={`pm-${m.id}`}>
                   <View style={s.cardIcon}><Icon name={m.type === 'vipps' ? 'wallet' : 'card'} size={20} color={colors.accent} /></View>
@@ -132,9 +138,12 @@ export default function PaymentMethods() {
                   <View style={verified ? s.verified : s.unverified}>
                     <Text style={verified ? s.verifiedText : s.unverifiedText}>{verified ? 'Verifisert' : 'Ikke verifisert'}</Text>
                   </View>
-                  <Pressable onPress={() => remove(m.id)} testID={`pm-remove-${m.id}`} style={s.removeBtn} accessibilityRole="button" accessibilityLabel="Fjern betalingsmåte">
+                  <View style={{ alignItems: 'flex-end' }}>
+                    {verified && !m.is_default ? <Pressable onPress={() => setDefault(m.id)} testID={`pm-default-${m.id}`}><Text style={s.defaultLink}>Velg</Text></Pressable> : null}
+                    <Pressable onPress={() => remove(m.id)} testID={`pm-remove-${m.id}`} style={s.removeBtn} accessibilityRole="button" accessibilityLabel="Fjern betalingsmåte">
                     <Icon name="x" size={18} color={colors.textMuted} />
-                  </Pressable>
+                    </Pressable>
+                  </View>
                 </View>
               );
             })}
@@ -156,7 +165,7 @@ export default function PaymentMethods() {
               <Icon name="shield" size={15} color={colors.online} />
               <Text style={s.note}>Kortopplysninger håndteres av Stripe. KJAPP lagrer ikke kortnummer eller CVC i appen.</Text>
             </View>
-            <Text style={s.vippsNote}>Vipps aktiveres først når produksjonsintegrasjonen er konfigurert og verifisert.</Text>
+            <Text style={s.vippsNote}>Vipps vises automatisk når produksjonsintegrasjonen er konfigurert og verifisert. Uverifiserte metoder kan ikke brukes til bestilling.</Text>
           </>
         )}
       </View>
@@ -179,6 +188,7 @@ const useStyles = makeStyles((c) => ({
   cardLabel: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
   cardSub: { color: c.textMuted, fontSize: 13, marginTop: 2, fontFamily: font.mono },
   removeBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  defaultLink: { color: c.accent, fontFamily: font.semibold, fontSize: 11, paddingHorizontal: 8, paddingTop: 2 },
   verified: { backgroundColor: c.onlineSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   verifiedText: { color: c.online, fontFamily: font.bold, fontSize: 10 },
   unverified: { backgroundColor: c.dangerSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },

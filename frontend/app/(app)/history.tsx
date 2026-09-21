@@ -66,6 +66,7 @@ export default function History() {
                   <Text style={s.rowSub} numberOfLines={1}>
                     {new Date(item.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })} · {STATUS_LABEL[item.status] || item.status}
                   </Text>
+                  {done && !item.passenger_rating ? <Text style={s.ratePrompt}>Trykk for å vurdere sjåføren</Text> : null}
                 </View>
                 <Text style={s.rowPrice}>{kr(item.price)}</Text>
               </Pressable>
@@ -89,5 +90,6 @@ const useStyles = makeStyles((c) => ({
   rowIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { color: c.text, fontSize: 15 },
   rowSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
+  ratePrompt: { color: c.accent, fontSize: 11, marginTop: 4, fontFamily: font.semibold },
   rowPrice: { color: c.text, fontFamily: font.mono, fontSize: 15 },
 }));
