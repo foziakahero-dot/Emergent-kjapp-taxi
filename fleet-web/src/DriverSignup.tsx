@@ -39,7 +39,10 @@ export default function DriverSignup() {
   const [busy, setBusy] = useState(false);
   const [uploads, setUploads] = useState<Partial<Record<DocKey, Uploaded>>>({});
   const [uploading, setUploading] = useState<Partial<Record<DocKey, boolean>>>({});
-  const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '' });
+  const [form, setForm] = useState({
+    fullName: '', email: '', phone: '', password: '',
+    drivers_license_number: '', taxi_license_number: '',
+  });
 
   useEffect(() => {
     api.publicDriverInvite(token)
@@ -50,6 +53,8 @@ export default function DriverSignup() {
           fullName: data.prefill?.fullName || current.fullName,
           email: data.prefill?.email || current.email,
           phone: data.prefill?.phone || current.phone,
+          drivers_license_number: data.prefill?.drivers_license_number || current.drivers_license_number,
+          taxi_license_number: data.prefill?.taxi_license_number || current.taxi_license_number,
         }));
       })
       .catch((e) => setErr(apiError(e)))
@@ -104,6 +109,8 @@ export default function DriverSignup() {
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
         <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
         <input type="tel" placeholder="Telefonnummer" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} required />
+        <input type="text" placeholder="Førerkortnummer (valgfritt)" value={form.drivers_license_number} onChange={(e) => setForm((s) => ({ ...s, drivers_license_number: e.target.value }))} />
+        <input type="text" placeholder="Løyve/kjøreseddelnummer (valgfritt)" value={form.taxi_license_number} onChange={(e) => setForm((s) => ({ ...s, taxi_license_number: e.target.value }))} />
         <input type="password" placeholder="Passord · minst 10 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
         <div className="driver-legal">Ved å fortsette godtar du KJAPPs sjåførvilkår og personvernerklæring.</div>
         {err ? <div className="error-box">{err}</div> : null}
