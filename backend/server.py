@@ -664,6 +664,7 @@ DEFAULT_PRICING = {
     "per_km": 16.0,
     "per_minute": 4.0,
     "waiting_per_minute": 4.0,
+    "free_waiting_minutes": 2,
     "minimum_fare": 0.0,
     "extra_stop_fee": 0.0,
     "customer_cancellation_fee": 0.0,
@@ -692,8 +693,20 @@ def _legacy_surge_multiplier(when: datetime = None) -> float:
     return surge
 
 
-def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0) -> dict:
-    """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
+def calculate_price(
+    distance_km: float,
+    vehicle_type: str,
+    duration_min: float,
+    pricing: dict,
+    when: datetime = None,
+    stops_count: int = 0,
+    waiting_minutes: float = 0,
+) -> dict:
+    """Pure pricing engine.
+
+    Waiting is supplied by server-side trip timestamps. Clients never decide payable
+    waiting time. The supplied pricing document is snapshotted onto the trip.
+    """
     cfg = {**DEFAULT_PRICING, **(pricing or {})}
     vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
     if vehicle_type == "ai-first":
@@ -704,8 +717,11 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
             "minimum_fare": cfg.get("minimum_fare", DEFAULT_PRICING["minimum_fare"]),
         }
     else:
-        r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
-             **(vehicle_rates.get(vehicle_type) or {})}
+        r = {
+            **DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
+            **(vehicle_rates.get(vehicle_type) or {}),
+        }
+
     base = float(r["base_fare"]) + float(distance_km) * float(r["per_km"]) + float(duration_min) * float(r["per_minute"])
     minimum = float(r.get("minimum_fare", cfg.get("minimum_fare", 0)) or 0)
     surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
@@ -713,14 +729,43 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
     if surge_cfg.get("enabled"):
         surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
         surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
+
     stop_fee = max(0, int(stops_count)) * float(cfg.get("extra_stop_fee", 0) or 0)
-    total = max(minimum, base * surge + stop_fee)
+    payable_waiting_minutes = max(0.0, float(waiting_minutes or 0))
+    waiting_fee = payable_waiting_minutes * float(cfg.get("waiting_per_minute", 0) or 0)
+    subtotal = base * surge + stop_fee + waiting_fee
+    total = max(minimum, subtotal)
+
     return {
         "price": int(round(total)),
+        "customer_total": int(round(total)),
         "surge_multiplier": round(surge, 2),
         "pricing_version": int(cfg.get("version", 1)),
         "extra_stop_fee_total": int(round(stop_fee)),
+        "waiting_minutes": round(payable_waiting_minutes, 2),
+        "waiting_fee": int(round(waiting_fee)),
     }
+
+
+def _server_waiting_minutes(trip: dict, end_at: Optional[datetime] = None) -> float:
+    """Billable waiting minutes after the configured free period.
+
+    Waiting starts when the driver records at_pickup. It stops when the trip starts.
+    If the ride never starts, the supplied end_at/current server time is used.
+    """
+    at_pickup = trip.get("at_pickup_at")
+    if not at_pickup:
+        return 0.0
+    try:
+        start = datetime.fromisoformat(str(at_pickup).replace("Z", "+00:00"))
+        stop_raw = trip.get("trip_started_at")
+        stop = datetime.fromisoformat(str(stop_raw).replace("Z", "+00:00")) if stop_raw else (end_at or datetime.now(timezone.utc))
+        elapsed = max(0.0, (stop - start).total_seconds() / 60.0)
+    except (TypeError, ValueError):
+        return 0.0
+    pricing = trip.get("pricing_snapshot") or DEFAULT_PRICING
+    free = max(0.0, float(pricing.get("free_waiting_minutes", 2) or 0))
+    return max(0.0, elapsed - free)
 
 
 async def active_pricing() -> dict:
@@ -1350,13 +1395,19 @@ async def trip_estimate(body: EstimateRequest):
     options = []
     for vt in ("ai-first", "enkelt", "trygg", "premium"):
         quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
-        options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
+        options.append({"vehicle_type": vt, "price": quote["price"], "customer_total": quote["customer_total"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
-                        "extra_stop_fee_total": quote["extra_stop_fee_total"]})
+                        "extra_stop_fee_total": quote["extra_stop_fee_total"],
+                        "waiting_fee": quote["waiting_fee"]})
     commission_rate = await _platform_commission()
+    for option in options:
+        platform_fee = int(round(option["customer_total"] * commission_rate))
+        option["service_fee_amount"] = platform_fee
+        option["fleet_net"] = max(0, option["customer_total"] - platform_fee)
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
+            "platform_fee_rate": commission_rate,
             "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
@@ -1667,6 +1718,53 @@ async def me(current=Depends(get_current_user)):
     return user_public(current)
 
 
+TRIP_ALLOWED_TRANSITIONS = {
+    "searching": {"driver_on_way", "cancelled"},
+    "booking": {"driver_on_way", "cancelled"},
+    "driver_on_way": {"at_pickup", "in_trip", "cancelled", "cancelled_by_driver", "searching"},
+    "at_pickup": {"in_trip", "cancelled", "cancelled_by_driver", "searching"},
+    "in_trip": {"arrived", "cancelled", "cancelled_by_driver"},
+    "arrived": {"completed"},
+    "completed": {"rated"},
+    "rated": set(),
+    "cancelled": set(),
+    "cancelled_by_driver": set(),
+}
+
+
+async def _transition_trip(
+    identity: dict,
+    from_statuses,
+    to_status: str,
+    *,
+    set_fields: Optional[dict] = None,
+    not_found_detail: str = "Tur ikke funnet",
+):
+    allowed_from = tuple(from_statuses)
+    invalid = [state for state in allowed_from if to_status not in TRIP_ALLOWED_TRANSITIONS.get(state, set())]
+    if invalid:
+        raise RuntimeError(f"Ugyldig intern state transition {invalid} -> {to_status}")
+
+    updates = {"status": to_status, "updated_at": datetime.now(timezone.utc).isoformat()}
+    updates.update(set_fields or {})
+    result = await db.trips.update_one(
+        {**identity, "status": {"$in": list(allowed_from)}},
+        {"$set": updates},
+    )
+    if result.modified_count:
+        return await db.trips.find_one(identity), False
+
+    existing = await db.trips.find_one(identity)
+    if not existing:
+        raise HTTPException(status_code=404, detail=not_found_detail)
+    if existing.get("status") == to_status:
+        return existing, True
+    raise HTTPException(
+        status_code=409,
+        detail=f"Ugyldig turstatus: {existing.get('status')} kan ikke endres til {to_status}",
+    )
+
+
 # ---- Trips ----
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
@@ -1692,6 +1790,8 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
     commission_rate = await _platform_commission()
     price = quote["price"]
+    platform_fee_amount = int(round(price * commission_rate))
+    fleet_net = max(0, price - platform_fee_amount)
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
@@ -1708,12 +1808,17 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "distance_km": est,
         "duration_min": eta_min,
         "price": price,
+        "customer_total": price,
+        "service_fee_amount": platform_fee_amount,
+        "fleet_net": fleet_net,
         "pricing_version": quote["pricing_version"],
         "pricing_area": pricing_area,
         "pricing_snapshot": effective_pricing,
         "commission_rate": commission_rate,
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
+        "waiting_minutes": 0,
+        "waiting_fee": 0,
         "geometry": geometry,
         "status": "searching",
         "driver_id": None,
@@ -1803,15 +1908,12 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
 
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(get_current_user)):
-    result = await db.trips.update_one(
+    trip, _ = await _transition_trip(
         {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}},
+        ("arrived",),
+        "completed",
+        set_fields={"completed_at": datetime.now(timezone.utc).isoformat()},
     )
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Tur ikke funnet")
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
-    if not trip:
-        raise HTTPException(status_code=404, detail="Tur ikke funnet")
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -1826,9 +1928,21 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
-        raise HTTPException(400, "Du har allerede rangert denne turen")
-    await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
+        raise HTTPException(409, "Du har allerede rangert denne turen")
+    if trip.get("status") != "completed" and trip.get("payment_status") != "paid":
+        raise HTTPException(409, "Turen må være fullført eller betalt før den kan vurderes")
+
+    update_filter = {
+        "trip_id": trip_id,
+        "user_id": current["id"],
+        "passenger_rating": {"$exists": False},
+        "$or": [
+            {"status": "completed"},
+            {"status": "arrived", "payment_status": "paid"},
+        ],
+    }
+    result = await db.trips.update_one(
+        update_filter,
         {"$set": {
             "passenger_rating": body.rating,
             "passenger_feedback": body.feedback,
@@ -1836,8 +1950,11 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
             "feedback": body.feedback,
             "status": "rated",
             "rated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    if result.modified_count == 0:
+        raise HTTPException(409, "Turstatusen endret seg. Oppdater turen og prøv igjen.")
     # Update driver's rolling rating (avg of last 50 trip ratings)
     if trip.get("driver_id"):
         recent = []
@@ -1858,8 +1975,8 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
 async def require_driver(current=Depends(get_current_user)):
     if current.get("role") not in ("driver", "admin"):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
-    if current.get("role") == "driver" and current.get("approved") is False:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+    if current.get("role") == "driver" and current.get("approved") is not True:
+        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din er ikke godkjent for kjøring")
     if current.get("role") == "driver":
         await _require_active_fleet(current.get("fleet_id"))
     return current
@@ -2486,9 +2603,8 @@ async def stripe_card_setup_status(session_id: str, current=Depends(get_current_
 # ---- Vipps (stub, awaiting API keys) ----
 @api.get("/payments/vipps/config")
 async def vipps_config():
-    """Vipps availability. Returns enabled=false until VIPPS_CLIENT_ID / secret are in env."""
-    enabled = bool(os.environ.get("VIPPS_CLIENT_ID"))
-    return {"enabled": enabled, "provider": "Vipps"}
+    """Vipps is intentionally hidden until create-payment/webhook/status/refund are complete."""
+    return {"enabled": False, "provider": "Vipps", "reason": "not_implemented"}
 
 
 # ---- Settings ----
@@ -6358,7 +6474,7 @@ class PlatformSettingsUpdate(BaseModel):
 def _validate_pricing(p: dict):
     numeric_limits = {
         "base_fare": (0, 2000), "per_km": (0, 500), "per_minute": (0, 200),
-        "waiting_per_minute": (0, 200), "minimum_fare": (0, 5000),
+        "waiting_per_minute": (0, 200), "free_waiting_minutes": (0, 60), "minimum_fare": (0, 5000),
         "extra_stop_fee": (0, 2000), "customer_cancellation_fee": (0, 2000),
         "late_driver_cancellation_fee": (0, 2000),
         "free_cancel_minutes": (0, 60), "dispatch_timeout_seconds": (30, 1800),
