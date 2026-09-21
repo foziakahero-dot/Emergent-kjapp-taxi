@@ -3108,19 +3108,47 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
 @api.post("/driver/trip/{trip_id}/arrive")
 async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     driver_id = current["id"]
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"},
-        {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
+    trip_pre = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    if not trip_pre:
+        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    if trip_pre.get("status") in ("arrived", "completed", "rated"):
+        return {"ok": True, "already_applied": True, "bonuses": []}
+    if trip_pre.get("status") != "in_trip":
+        raise HTTPException(status_code=409, detail=f"Ugyldig turstatus: {trip_pre.get('status')} kan ikke avsluttes")
+
+    waiting_minutes = _server_waiting_minutes(trip_pre)
+    pricing = trip_pre.get("pricing_snapshot") or await active_pricing()
+    waiting_fee = int(round(waiting_minutes * float(pricing.get("waiting_per_minute", 0) or 0)))
+    old_waiting_fee = int(trip_pre.get("waiting_fee") or 0)
+    final_price = max(0, int(trip_pre.get("price") or 0) - old_waiting_fee + waiting_fee)
+    commission_rate = float(trip_pre.get("commission_rate", await _platform_commission()) or 0)
+    service_fee_amount = int(round(final_price * commission_rate))
+    fleet_net = max(0, final_price - service_fee_amount)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    t, _ = await _transition_trip(
+        {"trip_id": trip_id, "driver_id": driver_id},
+        ("in_trip",),
+        "arrived",
+        set_fields={
+            "arrived_at": now_iso,
+            "waiting_minutes": round(waiting_minutes, 2),
+            "waiting_fee": waiting_fee,
+            "price": final_price,
+            "customer_total": final_price,
+            "service_fee_amount": service_fee_amount,
+            "fleet_net": fleet_net,
+        },
     )
-    if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
-        if existing and existing.get("status") in ("arrived", "completed", "rated"):
-            return {"ok": True, "already_applied": True, "bonuses": []}
-        raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
     bonuses = await award_driver_bonuses(driver_id)
-    return {"ok": True, "bonuses": bonuses}
+    return {
+        "ok": True,
+        "bonuses": bonuses,
+        "waiting_minutes": t.get("waiting_minutes", 0),
+        "waiting_fee": t.get("waiting_fee", 0),
+        "customer_total": t.get("customer_total", t.get("price")),
+    }
 
 
 @api.get("/driver/demand")
