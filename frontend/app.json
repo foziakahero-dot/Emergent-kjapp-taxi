@@ -18,6 +18,7 @@
       "bundleIdentifier": "no.kjapp.app",
       "usesAppleSignIn": true,
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Del posisjon under turen for trygg henting",
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi."
