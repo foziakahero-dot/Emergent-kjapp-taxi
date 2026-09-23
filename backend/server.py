@@ -4682,8 +4682,12 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
     """Verify Apple identity_token and log user in.
     Requires APPLE_CLIENT_ID env var to be set (App Store Service ID / Bundle ID)."""
     apple_client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
-    if not apple_client_id:
-        raise HTTPException(status_code=501, detail="Apple Sign In er ikke konfigurert. Sett APPLE_CLIENT_ID.")
+    apple_bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
+    if not apple_client_id and not apple_bundle_id:
+        raise HTTPException(
+            status_code=501,
+            detail="Apple Sign In er ikke konfigurert. Sett APPLE_BUNDLE_ID for native iOS eller APPLE_CLIENT_ID for web.",
+        )
     try:
         # Get unverified header to find kid
         header = jwt.get_unverified_header(body.identity_token)
@@ -4696,7 +4700,7 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         from jwt.algorithms import RSAAlgorithm
         public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
         # Web/Android use the Services ID, native iOS uses the App/bundle ID — both are ours.
-        allowed_aud = [a for a in (apple_client_id, os.environ.get("APPLE_BUNDLE_ID", "").strip()) if a]
+        allowed_aud = [a for a in (apple_client_id, apple_bundle_id) if a]
         payload = jwt.decode(
             body.identity_token, public_key, algorithms=["RS256"],
             audience=allowed_aud, issuer="https://appleid.apple.com",
@@ -4758,12 +4762,15 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
 
 @api.get("/auth/apple/config")
 async def apple_config():
-    """Expose only the public Apple client ID (Services ID) so the app can start the Apple flow."""
+    """Expose non-secret Apple auth readiness for web/native clients."""
     client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
+    bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
+    enabled = bool(client_id or bundle_id)
     return {
         "client_id": client_id,
-        "enabled": bool(client_id),
-        "message": None if client_id else "Sign in with Apple er ikke konfigurert ennå",
+        "bundle_id": bundle_id,
+        "enabled": enabled,
+        "message": None if enabled else "Sign in with Apple er ikke konfigurert ennå",
     }
 
 
