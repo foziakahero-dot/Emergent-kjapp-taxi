@@ -831,23 +831,85 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict):
     return dead
 
 
-async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None):
-    """Push to the user's real mobile devices (locked screen) via FCM/APNs."""
-    if not _fcm_app():
-        return
-    tokens = []
-    async for t in db.native_push_tokens.find({"user_id": user_id}, {"token": 1}):
-        if t.get("token"):
-            tokens.append(t["token"])
+def _is_expo_push_token(token: str) -> bool:
+    return isinstance(token, str) and token.startswith(("ExpoPushToken[", "ExponentPushToken["))
+
+
+async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> list[str]:
+    """Send real native notifications through Expo Push -> APNs/FCM.
+
+    Expo tokens are preferred for the React Native apps because getDevicePushTokenAsync()
+    returns a raw APNs token on iOS, which cannot be sent through Firebase Admin directly.
+    """
     if not tokens:
-        return
+        return []
+    messages = [{
+        "to": token,
+        "title": title,
+        "body": body,
+        "sound": "default",
+        "priority": "high",
+        "channelId": "kjapp_trips",
+        "data": {k: str(v) for k, v in (data or {}).items()},
+    } for token in tokens]
+    dead = []
     try:
-        dead = await asyncio.to_thread(_fcm_send, tokens, title, body, {"url": url, "tag": tag or ""})
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            response = await client.post(
+                "https://exp.host/--/api/v2/push/send",
+                headers={"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Content-Type": "application/json"},
+                json=messages,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        results = payload.get("data") or []
+        if isinstance(results, dict):
+            results = [results]
+        for token, result in zip(tokens, results):
+            if result.get("status") == "error" and (result.get("details") or {}).get("error") == "DeviceNotRegistered":
+                dead.append(token)
+            elif result.get("status") == "error":
+                print(f"Expo push error for token ...{token[-8:]}: {result.get('message')}")
     except Exception as e:
-        print(f"send_native_push failed: {e}")
+        print(f"Expo push send failed: {type(e).__name__}: {e}")
+    return dead
+
+
+async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None):
+    """Push to real mobile devices.
+
+    Current Expo apps register Expo Push tokens, which Expo delivers through APNs on
+    iOS and FCM on Android. Legacy FCM registration tokens remain supported.
+    """
+    docs = []
+    async for t in db.native_push_tokens.find({"user_id": user_id}, {"token": 1, "provider": 1}):
+        if t.get("token"):
+            docs.append(t)
+    if not docs:
         return
+
+    expo_tokens = [
+        t["token"] for t in docs
+        if t.get("provider") == "expo" or _is_expo_push_token(t["token"])
+    ]
+    legacy_fcm_tokens = [
+        t["token"] for t in docs
+        if t["token"] not in expo_tokens and t.get("provider") != "apns"
+    ]
+    dead = []
+    data = {"url": url, "tag": tag or ""}
+
+    if expo_tokens:
+        dead.extend(await _expo_send(expo_tokens, title, body, data))
+
+    if legacy_fcm_tokens and _fcm_app():
+        try:
+            dead.extend(await asyncio.to_thread(_fcm_send, legacy_fcm_tokens, title, body, data))
+        except Exception as e:
+            print(f"FCM legacy push failed: {type(e).__name__}: {e}")
+
     if dead:
-        await db.native_push_tokens.delete_many({"token": {"$in": dead}})
+        await db.native_push_tokens.delete_many({"token": {"$in": list(set(dead))}})
 
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
@@ -3328,42 +3390,46 @@ async def push_test(current=Depends(get_current_user)):
 class NativePushSubscribeRequest(BaseModel):
     platform: Literal["ios", "android", "web"]
     token: str
+    provider: Literal["expo", "fcm", "apns"] = "expo"
     device_id: Optional[str] = None
 
 
 @api.get("/push/native-config")
 async def push_native_config():
-    """Tells the app whether native (locked-screen) push is configured on this environment."""
-    ready = _fcm_app() is not None
+    """Native sender status.
+
+    Expo Push requires no provider secret in this backend. Signed mobile builds still
+    need their APNs/FCM credentials configured in EAS/Firebase.
+    """
     return {
-        "enabled": ready,
-        "provider": "fcm",
-        "message": None if ready else "Native push er ikke konfigurert ennå — legg inn FCM_SERVICE_ACCOUNT_JSON i backend-miljøet",
+        "enabled": True,
+        "provider": "expo",
+        "legacy_fcm_enabled": _fcm_app() is not None,
+        "message": None,
     }
 
 
 @api.post("/push/native-subscribe")
 async def push_native_subscribe(body: NativePushSubscribeRequest, current=Depends(get_current_user)):
-    """
-    Store a native push token (APNs for iOS or FCM for Android) so backend can push notifications
-    to the mobile app. Actual APNs/FCM sender is added later (server key required).
-    Composite key is (user_id, platform, device_id) so multi-device users don't overwrite each other.
-    """
+    """Store one device push token without overwriting the user's other devices."""
     if not body.token:
         raise HTTPException(status_code=400, detail="Mangler token")
-    dev_id = body.device_id or body.token[-12:]  # fallback so key is stable per token
+    if body.provider == "expo" and not _is_expo_push_token(body.token):
+        raise HTTPException(status_code=400, detail="Ugyldig Expo push-token")
+    dev_id = body.device_id or body.token[-12:]
     await db.native_push_tokens.update_one(
         {"user_id": current["id"], "platform": body.platform, "device_id": dev_id},
         {"$set": {
             "user_id": current["id"],
             "platform": body.platform,
+            "provider": body.provider,
             "device_id": dev_id,
             "token": body.token,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
         upsert=True,
     )
-    return {"ok": True}
+    return {"ok": True, "provider": body.provider}
 
 
 # ============================================================
