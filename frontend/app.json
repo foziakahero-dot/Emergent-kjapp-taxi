@@ -20,7 +20,8 @@
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "no.kjapp.app",
@@ -63,7 +64,8 @@
           "recordAudioAndroid": true
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "extra": {
       "appRole": "customer",
