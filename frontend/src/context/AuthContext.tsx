@@ -164,7 +164,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fullName,
         email: credential.email,
       });
-      if (res.twofa_required) return res;
+      if (res.twofa_required) {
+        throw new Error('Kontoen krever tofaktor — logg inn via web-portalen.');
+      }
       await storage.setItem(TOKEN_KEY, res.token);
       setUser(res.user);
       return res.user;
