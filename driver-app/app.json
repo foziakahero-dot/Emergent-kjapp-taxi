@@ -18,7 +18,12 @@
       "bundleIdentifier": "no.kjapp.driver",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
