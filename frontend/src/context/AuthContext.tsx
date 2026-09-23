@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
@@ -26,6 +27,7 @@ type AuthCtx = {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   signInWithGoogle: () => Promise<User>;
+  signInWithApple: () => Promise<User>;
 };
 
 const Ctx = createContext<AuthCtx>(null as any);
@@ -140,13 +142,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return await handleSessionId(sid);
   };
 
+  const signInWithApple = async (): Promise<User> => {
+    if (Platform.OS !== 'ios') return null;
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) {
+        throw new Error('Apple returnerte ikke et gyldig identity token.');
+      }
+      const fullName = [
+        credential.fullName?.givenName,
+        credential.fullName?.middleName,
+        credential.fullName?.familyName,
+      ].filter(Boolean).join(' ').trim() || undefined;
+      const res = await authApi.appleSignIn({
+        identity_token: credential.identityToken,
+        fullName,
+        email: credential.email,
+      });
+      if (res.twofa_required) return res;
+      await storage.setItem(TOKEN_KEY, res.token);
+      setUser(res.user);
+      return res.user;
+    } catch (e: any) {
+      if (e?.code === 'ERR_REQUEST_CANCELED') return null;
+      throw e;
+    }
+  };
+
   const logout = async () => {
     await storage.removeItem(TOKEN_KEY);
     setUser(null);
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle }}>
+    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle, signInWithApple }}>
       {children}
     </Ctx.Provider>
   );
