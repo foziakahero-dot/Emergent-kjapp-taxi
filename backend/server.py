@@ -1725,6 +1725,17 @@ async def me(current=Depends(get_current_user)):
 # ---- Trips ----
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+    # Server-side duplicate guard: one passenger cannot create overlapping active rides.
+    existing_active = await db.trips.find_one(
+        {
+            "user_id": current["id"],
+            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
+        },
+        {"trip_id": 1, "status": 1},
+    )
+    if existing_active:
+        raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
+
     # Payment gate: user must have at least one VERIFIED payment method to book
     pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
     if pm_count == 0:
@@ -2041,6 +2052,13 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
         }},
     )
     if trip.get("driver_id"):
+        try:
+            await db.users.update_one(
+                {"_id": ObjectId(trip["driver_id"]), "active_trip_id": trip_id},
+                {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+            )
+        except (InvalidId, TypeError):
+            pass
         await send_push_to_user(trip["driver_id"], "Turen ble avbestilt", "Kunden har avbestilt turen.", "/driver")
     return {"ok": True, "cancellation_fee": fee, "currency": "NOK"}
 
@@ -2955,6 +2973,21 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
             "driver_lng": d_lng,
             "driver_location_at": datetime.now(timezone.utc).isoformat(),
         })
+    # Atomically reserve this driver so two concurrent offers cannot both be accepted.
+    driver_oid = ObjectId(driver_id)
+    lock = await db.users.update_one(
+        {
+            "_id": driver_oid,
+            "$or": [
+                {"active_trip_id": {"$exists": False}},
+                {"active_trip_id": None},
+            ],
+        },
+        {"$set": {"active_trip_id": body.trip_id, "active_trip_locked_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    if lock.modified_count == 0:
+        raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
+
     claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}
     if trip_pre.get("dispatch_mode") == "sequential":
         claim["offer_driver_id"] = trip_pre.get("offer_driver_id")
@@ -2963,6 +2996,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         {"$set": updates, "$unset": {"offer_driver_id": "", "offer_expires_at": ""}},
     )
     if result.modified_count == 0:
+        await db.users.update_one(
+            {"_id": driver_oid, "active_trip_id": body.trip_id},
+            {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+        )
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     t = await db.trips.find_one({"trip_id": body.trip_id})
     await send_push_to_user(
@@ -3077,6 +3114,10 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
+    await db.users.update_one(
+        {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
+        {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+    )
     t = await db.trips.find_one({"trip_id": trip_id})
     if t and t.get("user_id"):
         await send_push_to_user(t["user_id"], "Turen ble avlyst", "Du dukket ikke opp — kort no-show-avgift kan bli belastet.", "/app")
@@ -3095,6 +3136,10 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         if existing and existing.get("status") in ("arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True, "bonuses": []}
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
+    await db.users.update_one(
+        {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
+        {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+    )
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(
         t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
@@ -3327,6 +3372,13 @@ class DriverOnlineRequest(BaseModel):
 @api.post("/driver/online")
 async def driver_online(body: DriverOnlineRequest, current=Depends(require_driver)):
     now_iso = datetime.now(timezone.utc).isoformat()
+    if not body.online:
+        active = await db.trips.find_one(
+            {"driver_id": current["id"], "status": {"$in": ACTIVE_TRIP_STATUSES}},
+            {"trip_id": 1},
+        )
+        if active:
+            raise HTTPException(status_code=409, detail="Fullfør eller avbryt aktiv tur før du går offline")
     await db.users.update_one(
         {"_id": ObjectId(current["id"])},
         {"$set": {"online": body.online, "online_at": now_iso}},
@@ -5101,6 +5153,10 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke avbryte turen")
+    await db.users.update_one(
+        {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
+        {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+    )
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(t["user_id"], "Turen ble avbrutt", "Sjåføren har avbrutt turen. Beklager!", "/app")
     return {"ok": True}
