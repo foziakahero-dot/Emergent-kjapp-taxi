@@ -2986,7 +2986,33 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         {"$set": {"active_trip_id": body.trip_id, "active_trip_locked_at": datetime.now(timezone.utc).isoformat()}},
     )
     if lock.modified_count == 0:
-        raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
+        # Self-heal a lock left behind by an already-finished/cancelled ride.
+        locked_driver = await db.users.find_one({"_id": driver_oid}, {"active_trip_id": 1})
+        locked_trip_id = (locked_driver or {}).get("active_trip_id")
+        locked_trip = None
+        if locked_trip_id:
+            locked_trip = await db.trips.find_one(
+                {"trip_id": locked_trip_id, "driver_id": driver_id, "status": {"$in": ACTIVE_TRIP_STATUSES}},
+                {"_id": 1},
+            )
+        if locked_trip:
+            raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
+        await db.users.update_one(
+            {"_id": driver_oid},
+            {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+        )
+        lock = await db.users.update_one(
+            {
+                "_id": driver_oid,
+                "$or": [
+                    {"active_trip_id": {"$exists": False}},
+                    {"active_trip_id": None},
+                ],
+            },
+            {"$set": {"active_trip_id": body.trip_id, "active_trip_locked_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        if lock.modified_count == 0:
+            raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
 
     claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}
     if trip_pre.get("dispatch_mode") == "sequential":
@@ -3022,7 +3048,18 @@ async def driver_current(current=Depends(require_driver)):
         {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
         sort=[("created_at", -1)],
     )
-    if not t:
+    if t:
+        # Keep the driver reservation in sync with the canonical trip state.
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id)},
+            {"$set": {"active_trip_id": t["trip_id"]}},
+        )
+    else:
+        # No active trip means any reservation lock is stale and must not block new work.
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id)},
+            {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+        )
         # Just-finished trip: keep the summary visible for 15 minutes. "completed"/"rated" appear
         # as soon as the passenger's app closes the trip, so they must be included here too.
         t = await db.trips.find_one(
