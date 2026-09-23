@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -253,6 +253,29 @@ export default function DriverHome() {
     Linking.openURL('tel:112').catch(() => {});
   };
 
+  const openNavigation = async () => {
+    if (!current) return;
+    const toPickup = current.status === 'driver_on_way';
+    const lat = Number(toPickup ? current.pickup_lat : current.dropoff_lat);
+    const lng = Number(toPickup ? current.pickup_lng : current.dropoff_lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setError('Mangler gyldige koordinater for navigasjon.');
+      return;
+    }
+
+    const fallback = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+    const native = Platform.OS === 'ios'
+      ? `maps://?daddr=${lat},${lng}&dirflg=d`
+      : `google.navigation:q=${lat},${lng}&mode=d`;
+
+    try {
+      const supported = await Linking.canOpenURL(native);
+      await Linking.openURL(supported ? native : fallback);
+    } catch {
+      Linking.openURL(fallback).catch(() => setError('Kunne ikke åpne navigasjon på telefonen.'));
+    }
+  };
+
   const actionLabel =
     current?.status === 'driver_on_way' ? 'Jeg er fremme'
     : current?.status === 'at_pickup' ? 'Start turen'
@@ -351,6 +374,14 @@ export default function DriverHome() {
             </View>
             {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
             {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
+            {['driver_on_way', 'in_trip'].includes(current.status) ? (
+              <Pressable style={s.navBtn} onPress={openNavigation} testID="driver-navigation">
+                <Icon name="navigation" size={17} color={colors.online} />
+                <Text style={s.navBtnText}>
+                  {current.status === 'driver_on_way' ? 'Naviger til henting' : 'Naviger til destinasjon'}
+                </Text>
+              </Pressable>
+            ) : null}
             <View style={s.tripActions}>
               <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
                 <Icon name="message" size={17} color={colors.text} />
@@ -498,7 +529,12 @@ const useStyles = makeStyles((c) => ({
   beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.online },
   square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
   epText: { color: c.text, fontSize: 14, flex: 1 },
-  tripActions: { flexDirection: 'row', gap: 10, marginTop: 15 },
+  navBtn: {
+    minHeight: 50, marginTop: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(57,229,140,0.35)',
+    backgroundColor: 'rgba(57,229,140,0.07)', flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center',
+  },
+  navBtnText: { color: c.text, fontSize: 14, fontWeight: '700' },
+  tripActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   msgBtn: {
     minWidth: 112, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
