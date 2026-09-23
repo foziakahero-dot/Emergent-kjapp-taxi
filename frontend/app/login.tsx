@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
@@ -21,7 +22,7 @@ import { apiError } from '@/src/lib/format';
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
 export default function Login() {
-  const { login, logout, signInWithGoogle } = useAuth();
+  const { login, logout, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -30,6 +31,7 @@ export default function Login() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [error, setError] = useState('');
 
   const finishLogin = async (u: any) => {
@@ -70,6 +72,19 @@ export default function Login() {
       setError(apiError(e));
     } finally {
       setGLoading(false);
+    }
+  };
+
+  const appleSignIn = async () => {
+    setError('');
+    setAppleLoading(true);
+    try {
+      const u = await signInWithApple();
+      if (u) await finishLogin(u);
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -139,6 +154,22 @@ export default function Login() {
           {gLoading ? <ActivityIndicator color="#1F1F1F" /> : <><GoogleG size={20} /><Text style={s.googleText}>Fortsett med Google</Text></>}
         </Pressable>
 
+        {Platform.OS === 'ios' ? (
+          <View style={s.appleWrap} testID="login-apple">
+            {appleLoading ? (
+              <View style={s.appleLoading}><ActivityIndicator color="#FFFFFF" /></View>
+            ) : (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE_OUTLINE}
+                cornerRadius={14}
+                style={{ width: '100%', height: 54 }}
+                onPress={appleSignIn}
+              />
+            )}
+          </View>
+        ) : null}
+
         <View style={s.trustRow}>
           <View style={s.trustItem}><Icon name="shield" size={14} color={colors.accent} /><Text style={s.trustText}>Trygg konto</Text></View>
           <View style={s.trustDivider} />
@@ -183,6 +214,8 @@ const useStyles = makeStyles((c) => ({
   divText: { color: c.textMuted, fontSize: 12 },
   googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, height: 54, borderRadius: 14, backgroundColor: '#FFFFFF' },
   googleText: { color: '#1F1F1F', fontFamily: font.semibold, fontSize: 15 },
+  appleWrap: { marginTop: 10, width: '100%' },
+  appleLoading: { height: 54, borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
   trustRow: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16, gap: 12 },
   trustItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   trustText: { color: c.textMuted, fontSize: 11 },
