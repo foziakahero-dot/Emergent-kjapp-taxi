@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -91,18 +92,20 @@ export async function registerNativePush() {
   if (status !== 'granted') return false;
 
   try {
-    const nativeToken = await Notifications.getDevicePushTokenAsync();
-    const token = typeof nativeToken.data === 'string'
-      ? nativeToken.data
-      : JSON.stringify(nativeToken.data);
+    const projectId =
+      (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
+      (Constants as any)?.easConfig?.projectId;
+    if (!projectId) return false;
 
+    const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
     await api.post('/push/native-subscribe', {
       platform: Platform.OS,
-      token,
+      provider: 'expo',
+      token: expoToken.data,
     });
     return true;
   } catch {
-    // The app remains usable if FCM/APNs credentials are not provisioned yet.
+    // The app remains usable if push credentials are not provisioned yet.
     // On-shift Driver notifications also have a background-location fallback.
     return false;
   }
