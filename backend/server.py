@@ -1785,8 +1785,13 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         }, "$push": {"destination_revisions": revision}},
     )
     if trip.get("driver_id"):
-        await send_push_to_user(trip["driver_id"], "Destinasjonen er endret",
-                                f"Ny destinasjon: {body.dropoff_address}. Ny avtalt pris: {quote['price']} kr.", "/driver/trip")
+        await send_push_to_user(
+            trip["driver_id"],
+            "Destinasjonen er endret",
+            f"Ny destinasjon: {body.dropoff_address}. Ny avtalt pris: {quote['price']} kr.",
+            "/driver",
+            "trip_destination_changed",
+        )
     return {
         "ok": True, "price": quote["price"], "previous_price": trip.get("price"),
         "distance_km": distance_km, "duration_min": duration_min,
@@ -1796,15 +1801,41 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
 
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(get_current_user)):
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}},
-    )
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    """Passenger closes a ride after the driver has reached the destination.
+
+    This endpoint is intentionally idempotent and never allows a passenger to skip
+    ahead in the canonical ride state machine.
+    """
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
+
+    status = trip.get("status")
+    if status not in ("arrived", "completed", "rated"):
+        raise HTTPException(status_code=409, detail="Turen kan ikke fullføres i denne statusen")
+
+    transitioned = False
+    if status == "arrived":
+        now_iso = datetime.now(timezone.utc).isoformat()
+        result = await db.trips.update_one(
+            {"trip_id": trip_id, "user_id": current["id"], "status": "arrived"},
+            {"$set": {"status": "completed", "completed_at": now_iso, "updated_at": now_iso}},
+        )
+        transitioned = result.modified_count == 1
+
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+
+    if transitioned and trip.get("driver_id"):
+        await send_push_to_user(
+            trip["driver_id"],
+            "Turen er fullført",
+            "Kunden har markert turen som fullført.",
+            "/driver",
+            "trip_completed",
+        )
+
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -2029,7 +2060,8 @@ async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depe
             other_user_id,
             f"Melding fra {'kunde' if is_passenger else trip.get('driver', {}).get('name', 'sjåfør')}",
             text[:140],
-            f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
+            "/driver" if is_passenger else f"/booking/{trip_id}",
+            "trip_message",
         )
     return msg
 
@@ -2872,9 +2904,11 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     t = await db.trips.find_one({"trip_id": body.trip_id})
     await send_push_to_user(
-        t["user_id"], "Sjåfør på vei",
+        t["user_id"],
+        "Sjåfør på vei",
         f"{driver['name']} kommer om {eta} min." if eta else f"{driver['name']} er på vei til deg.",
-        f"/app/booking/{body.trip_id}",
+        f"/booking/{body.trip_id}",
+        "driver_assigned",
     )
     t["id"] = str(t["_id"]); t.pop("_id", None)
     return t
@@ -2943,7 +2977,10 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
     t = await db.trips.find_one({"trip_id": trip_id})
-    await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
+    await send_push_to_user(
+        t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.",
+        f"/booking/{trip_id}", "driver_at_pickup",
+    )
     return {"ok": True}
 
 
@@ -2961,7 +2998,10 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
-    await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
+    await send_push_to_user(
+        t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.",
+        f"/booking/{trip_id}", "trip_started",
+    )
     return {"ok": True}
 
 
@@ -2994,7 +3034,10 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
             return {"ok": True, "already_applied": True, "bonuses": []}
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
     t = await db.trips.find_one({"trip_id": trip_id})
-    await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
+    await send_push_to_user(
+        t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
+        f"/receipt/{trip_id}", "trip_arrived",
+    )
     bonuses = await award_driver_bonuses(driver_id)
     return {"ok": True, "bonuses": bonuses}
 
@@ -4854,10 +4897,28 @@ async def stripe_webhook(request: Request):
             }},
         )
         if r and r.get("trip_id"):
+            paid_at = datetime.now(timezone.utc).isoformat()
             await db.trips.update_one(
                 {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
-                {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                {"$set": {"payment_status": "paid", "paid_at": paid_at}},
             )
+            if r.get("user_id"):
+                await send_push_to_user(
+                    r["user_id"],
+                    "Betalingen er gjennomført",
+                    f"Turen er betalt med {r.get('amount') or 0} kr.",
+                    f"/receipt/{r['trip_id']}",
+                    "trip_payment_paid",
+                )
+            trip = await db.trips.find_one({"trip_id": r["trip_id"]})
+            if trip and trip.get("driver_id"):
+                await send_push_to_user(
+                    trip["driver_id"],
+                    "Betalingen er gjennomført",
+                    f"Kunden har betalt {r.get('amount') or 0} kr. for turen.",
+                    "/driver",
+                    "trip_payment_paid",
+                )
             await send_trip_receipts(r["trip_id"])
     elif t == "checkout.session.completed":
         await db.payment_transactions.update_one(
@@ -4880,7 +4941,8 @@ async def stripe_webhook(request: Request):
                     expired_record["user_id"],
                     "Betalingen ble ikke fullført",
                     "Åpne kvitteringen for å prøve betalingen på nytt.",
-                    f"/app/receipt/{expired_record['trip_id']}",
+                    f"/receipt/{expired_record['trip_id']}",
+                    "trip_payment_expired",
                 )
     return {"status": "ok"}
 
