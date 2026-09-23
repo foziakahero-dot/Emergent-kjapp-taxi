@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { api } from '@/src/lib/api';
 
@@ -31,16 +32,22 @@ export async function registerNativePush() {
   }
   if (status !== 'granted') return false;
 
-  const nativeToken = await Notifications.getDevicePushTokenAsync();
-  const token = typeof nativeToken.data === 'string'
-    ? nativeToken.data
-    : JSON.stringify(nativeToken.data);
+  try {
+    const projectId =
+      (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
+      (Constants as any)?.easConfig?.projectId;
+    if (!projectId) return false;
 
-  await api.post('/push/native-subscribe', {
-    platform: Platform.OS,
-    token,
-  });
-  return true;
+    const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
+    await api.post('/push/native-subscribe', {
+      platform: Platform.OS,
+      provider: 'expo',
+      token: expoToken.data,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function normalizeCustomerNotificationUrl(url: unknown) {
