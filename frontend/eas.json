@@ -19,7 +19,8 @@
       },
       "ios": {
         "image": "latest"
-      }
+      },
+      "autoIncrement": true
     },
     "ios-simulator": {
       "distribution": "internal",
@@ -31,5 +32,8 @@
         "image": "latest"
       }
     }
+  },
+  "cli": {
+    "version": ">= 16.0.0"
   }
 }
