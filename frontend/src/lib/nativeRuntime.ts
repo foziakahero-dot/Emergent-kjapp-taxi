@@ -45,10 +45,15 @@ export async function registerNativePush() {
 
 export function normalizeCustomerNotificationUrl(url: unknown) {
   if (typeof url !== 'string') return null;
-  if (url === '/app' || url === '/' || url === '/home') return '/(app)/home';
-  if (url.startsWith('/trips/') || url.startsWith('/booking/')) {
-    const id = url.split('/').filter(Boolean).pop();
+  const normalized = url.startsWith('/app/') ? url.slice(4) : url;
+  if (normalized === '/app' || normalized === '/' || normalized === '/home') return '/(app)/home';
+  if (normalized.startsWith('/trips/') || normalized.startsWith('/booking/')) {
+    const id = normalized.split('/').filter(Boolean).pop();
     return id ? `/booking/${id}` : '/(app)/home';
   }
-  return url;
+  if (normalized.startsWith('/receipt/')) {
+    const id = normalized.split('/').filter(Boolean).pop();
+    return id ? `/receipt/${id}` : '/(app)/home';
+  }
+  return normalized;
 }
