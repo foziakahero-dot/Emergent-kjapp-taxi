@@ -86,22 +86,29 @@ def test_checkout_origin_falls_back_to_kjapp(monkeypatch):
     assert server._trusted_checkout_origin("https://evil.example") == "https://kjappapp.no"
 
 
-def test_driver_role_gate_rejects_admin_and_unapproved_driver():
+def test_driver_role_gate_rejects_admin_unapproved_and_missing_legal_consent():
     import asyncio
     from fastapi import HTTPException
 
     async def run():
         try:
-            await server.require_driver({"id": "a1", "role": "admin", "approved": True})
+            await server.require_driver({"id": "a1", "role": "admin", "approved": True, "legal_accepted": True})
             assert False, "admin must not enter live driver endpoints"
         except HTTPException as exc:
             assert exc.status_code == 403
 
         try:
-            await server.require_driver({"id": "d1", "role": "driver", "approved": None})
+            await server.require_driver({"id": "d1", "role": "driver", "approved": None, "legal_accepted": True})
             assert False, "missing approval must fail closed"
         except HTTPException as exc:
             assert exc.status_code == 403
+
+        try:
+            await server.require_driver({"id": "d2", "role": "driver", "approved": True, "legal_accepted": False})
+            assert False, "approved legacy driver must accept current legal gate"
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert "vilkår" in exc.detail.lower()
 
     asyncio.run(run())
 
