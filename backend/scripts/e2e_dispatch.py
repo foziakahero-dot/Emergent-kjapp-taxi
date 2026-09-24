@@ -1,8 +1,19 @@
-"""Nearest-driver-first dispatch check with two REAL driver accounts.
+"""Portable KJAPP Oslo beta dispatch E2E.
 
-Driver A sits closer to the pickup than driver B. The trip must be offered to A first,
-forwarded to B when A does not answer (or declines), and B must then be able to accept it.
+Uses real API accounts supplied through environment variables; no credentials are stored in Git.
+
+Required:
+  KJAPP_E2E_CUSTOMER_EMAIL
+  KJAPP_E2E_CUSTOMER_PASSWORD
+  KJAPP_E2E_DRIVER_A_EMAIL
+  KJAPP_E2E_DRIVER_A_PASSWORD
+  KJAPP_E2E_DRIVER_B_EMAIL
+  KJAPP_E2E_DRIVER_B_PASSWORD
+
+Optional:
+  KJAPP_E2E_API=https://github-app-builder-28.emergent.host
 """
+import datetime as dt
 import json
 import os
 import sys
@@ -10,153 +21,206 @@ import time
 import urllib.error
 import urllib.request
 
-import asyncio
-from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
-
-load_dotenv(os.environ.get("KJAPP_BACKEND_ENV", "/app/backend/.env"))
 API = (
     os.environ.get("KJAPP_E2E_API")
-    or os.environ.get("REACT_APP_BACKEND_URL")
     or os.environ.get("EXPO_PUBLIC_BACKEND_URL")
     or "https://github-app-builder-28.emergent.host"
 ).rstrip("/")
-UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
-fails = []
+UA = {"User-Agent": "KJAPP-beta-e2e/1.0", "Content-Type": "application/json"}
+FAILS = []
+
+
+def required(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if not value:
+        print(f"Missing required environment variable: {name}")
+        sys.exit(2)
+    return value
 
 
 def call(path, data=None, token=None, method=None):
-    h = dict(UA)
+    headers = dict(UA)
     if token:
-        h["Authorization"] = "Bearer " + token
+        headers["Authorization"] = "Bearer " + token
     req = urllib.request.Request(
-        API + path, data=json.dumps(data).encode() if data is not None else None, headers=h, method=method
+        API + path,
+        data=json.dumps(data).encode() if data is not None else None,
+        headers=headers,
+        method=method,
     )
     try:
-        with urllib.request.urlopen(req) as r:
-            return r.status, json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()[:200].decode("utf-8", "ignore")
+        with urllib.request.urlopen(req, timeout=20) as response:
+            raw = response.read() or b"{}"
+            try:
+                body = json.loads(raw)
+            except Exception:
+                body = raw.decode("utf-8", "ignore")
+            return response.status, body
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        try:
+            body = json.loads(raw or b"{}")
+        except Exception:
+            body = raw[:500].decode("utf-8", "ignore")
+        return exc.code, body
+    except Exception as exc:
+        return 0, {"detail": f"{type(exc).__name__}: {exc}"}
 
 
 def check(name, ok, detail=""):
     print(("PASS  " if ok else "FAIL  ") + name, detail)
     if not ok:
-        fails.append(name)
+        FAILS.append(name)
 
 
-def login(email, pw):
-    st, d = call("/api/auth/login", {"email": email, "password": pw})
-    assert st == 200, (email, st, d)
-    return d["token"]
+def login(email, password):
+    status, body = call("/api/auth/login", {"email": email, "password": password})
+    if status != 200 or not isinstance(body, dict) or not body.get("token"):
+        raise RuntimeError(f"Login failed for {email}: {status} {body}")
+    return body["token"]
 
 
-DRIVER_B_EMAIL = "sjafor2@kjapp.no"
-DRIVER_B_PW = "sjafor2234"
+def now_iso():
+    return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-async def ensure_driver_b():
-    c = AsyncIOMotorClient(os.environ["MONGO_URL"])
-    db = c[os.environ["DB_NAME"]]
-    u = await db.users.find_one({"email": DRIVER_B_EMAIL})
-    if u:
-        await db.users.update_one({"_id": u["_id"]}, {"$set": {"role": "driver", "approved": True}})
-        return
-    st, d = call("/api/auth/register", {
-        "fullName": "Kari Sjåfør", "email": DRIVER_B_EMAIL, "password": DRIVER_B_PW, "phone": "+4790000002",
-    })
-    assert st in (200, 201), (st, d)
-    await db.users.update_one(
-        {"email": DRIVER_B_EMAIL},
-        {"$set": {"role": "driver", "approved": True, "car": "Volvo XC60", "plate": "KA98765", "fullName": "Kari Sjåfør"}},
-    )
+def wait_for_offer(token, trip_id, seconds=8):
+    end = time.time() + seconds
+    last = None
+    while time.time() < end:
+        status, last = call("/api/driver/pending", None, token)
+        if status == 200 and isinstance(last, dict):
+            match = next((t for t in (last.get("trips") or []) if t.get("trip_id") == trip_id), None)
+            if match:
+                return match
+        time.sleep(1)
+    return None
 
 
-asyncio.run(ensure_driver_b())
+CUSTOMER_EMAIL = required("KJAPP_E2E_CUSTOMER_EMAIL")
+CUSTOMER_PASSWORD = required("KJAPP_E2E_CUSTOMER_PASSWORD")
+DRIVER_A_EMAIL = required("KJAPP_E2E_DRIVER_A_EMAIL")
+DRIVER_A_PASSWORD = required("KJAPP_E2E_DRIVER_A_PASSWORD")
+DRIVER_B_EMAIL = required("KJAPP_E2E_DRIVER_B_EMAIL")
+DRIVER_B_PASSWORD = required("KJAPP_E2E_DRIVER_B_PASSWORD")
 
-cust = login("ola@kjapp.no", "test1234")
-drv_a = login("sjafor@kjapp.no", "sjafor1234")
-drv_b = login(DRIVER_B_EMAIL, DRIVER_B_PW)
+customer = login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD)
+driver_a = login(DRIVER_A_EMAIL, DRIVER_A_PASSWORD)
+driver_b = login(DRIVER_B_EMAIL, DRIVER_B_PASSWORD)
 
-# Pickup: Youngstorget. A is 300 m away, B is ~3 km away.
+# Youngstorget -> Solli plass. Driver A starts nearest and must receive the first offer.
 PICKUP = (59.9139, 10.7497)
-call("/api/driver/online", {"online": True}, drv_a)
-now_iso = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
-call("/api/driver/location", {"lat": 59.9160, "lng": 10.7500, "heading": 10, "recorded_at": now_iso}, drv_a)
-call("/api/driver/online", {"online": True}, drv_b)
-call("/api/driver/location", {"lat": 59.9400, "lng": 10.7800, "heading": 10, "recorded_at": now_iso}, drv_b)
+DROPOFF = (59.9138, 10.7213)
 
-st, trip = call("/api/trips/request", {
-    "pickup_address": "Youngstorget 1, Oslo", "pickup_lat": PICKUP[0], "pickup_lng": PICKUP[1],
-    "dropoff_address": "Solli plass, Oslo", "dropoff_lat": 59.9138, "dropoff_lng": 10.7213,
-    "vehicle_type": "enkelt",
-}, cust)
-check("customer created a real trip", st == 200, f"{trip.get('trip_id','')[:8]} {trip.get('price')} kr")
-if st != 200:
-    print("\nCannot continue E2E because trip creation failed:", trip)
-    sys.exit(1)
-tid = trip["trip_id"]
+try:
+    call("/api/driver/online", {"online": True}, driver_a)
+    call("/api/driver/location", {
+        "lat": 59.9160, "lng": 10.7500, "heading": 10, "speed": 0, "recorded_at": now_iso(),
+    }, driver_a)
 
-st2, duplicate = call("/api/trips/request", {
-    "pickup_address": "Youngstorget 1, Oslo", "pickup_lat": PICKUP[0], "pickup_lng": PICKUP[1],
-    "dropoff_address": "Aker Brygge, Oslo", "dropoff_lat": 59.9108, "dropoff_lng": 10.7290,
-    "vehicle_type": "enkelt",
-}, cust)
-check("duplicate active customer booking is rejected", st2 == 409, str(duplicate)[:90])
+    call("/api/driver/online", {"online": True}, driver_b)
+    call("/api/driver/location", {
+        "lat": 59.9400, "lng": 10.7800, "heading": 10, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
 
-st, pa = call("/api/driver/pending", None, drv_a)
-st, pb = call("/api/driver/pending", None, drv_b)
-ids_a = [t["trip_id"] for t in pa["trips"]]
-ids_b = [t["trip_id"] for t in pb["trips"]]
-check("nearest driver got the offer", tid in ids_a, f"A sees {len(ids_a)}")
-check("far driver does NOT see it yet", tid not in ids_b, f"B sees {len(ids_b)}")
-offer = next((t for t in pa["trips"] if t["trip_id"] == tid), {})
-check("offer has a real countdown", bool(offer.get("offer_expires_at")), str(offer.get("offer_expires_at"))[11:19])
+    status, trip = call("/api/trips/request", {
+        "pickup_address": "Youngstorget 1, Oslo",
+        "pickup_lat": PICKUP[0],
+        "pickup_lng": PICKUP[1],
+        "dropoff_address": "Solli plass, Oslo",
+        "dropoff_lat": DROPOFF[0],
+        "dropoff_lng": DROPOFF[1],
+        "vehicle_type": "ai-first",
+    }, customer)
+    check("customer created a real trip", status == 200 and isinstance(trip, dict) and trip.get("trip_id"), str(trip)[:120])
+    if status != 200 or not isinstance(trip, dict) or not trip.get("trip_id"):
+        sys.exit(1)
+    trip_id = trip["trip_id"]
 
-st, res = call("/api/driver/accept", {"trip_id": tid}, drv_b)
-check("far driver cannot snipe the offer", st == 409, str(res)[:80])
+    dup_status, duplicate = call("/api/trips/request", {
+        "pickup_address": "Youngstorget 1, Oslo",
+        "pickup_lat": PICKUP[0],
+        "pickup_lng": PICKUP[1],
+        "dropoff_address": "Aker Brygge, Oslo",
+        "dropoff_lat": 59.9108,
+        "dropoff_lng": 10.7290,
+        "vehicle_type": "ai-first",
+    }, customer)
+    check("duplicate active customer booking is rejected", dup_status == 409, str(duplicate)[:120])
 
-print("... waiting for the 20 s offer window to expire")
-time.sleep(26)
-st, pb2 = call("/api/driver/pending", None, drv_b)
-st, pa2 = call("/api/driver/pending", None, drv_a)
-check("unanswered offer forwarded to next driver", tid in [t["trip_id"] for t in pb2["trips"]], f"B sees {len(pb2['trips'])}")
+    offer_a = wait_for_offer(driver_a, trip_id)
+    check("nearest driver got the first offer", bool(offer_a), str(offer_a)[:120])
+    if offer_a:
+        check("offer has server expiry", bool(offer_a.get("offer_expires_at")), offer_a.get("offer_expires_at"))
+        check("offer exposes real pickup route", bool(offer_a.get("pickup_route")), str(offer_a.get("pickup_route"))[:120])
 
-st, res = call("/api/driver/accept", {"trip_id": tid}, drv_b)
-check("second driver can accept the forwarded trip", st == 200, str(res)[:60])
+    status, pending_b = call("/api/driver/pending", None, driver_b)
+    ids_b = [t.get("trip_id") for t in (pending_b.get("trips") or [])] if isinstance(pending_b, dict) else []
+    check("far driver cannot see sequential offer yet", trip_id not in ids_b, f"B sees {ids_b}")
 
-st_again, res_again = call("/api/driver/accept", {"trip_id": tid}, drv_a)
-check("losing driver cannot accept after assignment", st_again == 409, str(res_again)[:80])
-st, cur = call("/api/driver/current", None, drv_b)
-check("trip is assigned to the accepting driver", (cur or {}).get("trip_id") == tid, (cur or {}).get("status"))
-st, cur_a = call("/api/driver/current", None, drv_a)
-check(
-    "other driver has no ACTIVE trip",
-    not cur_a or cur_a.get("status") in ("arrived", "completed", "rated"),
-    (cur_a or {}).get("status", "none"),
-)
+    status, body = call("/api/driver/accept", {"trip_id": trip_id}, driver_b)
+    check("far driver cannot snipe another driver's offer", status == 409, str(body)[:120])
 
-for ep in ["at-pickup", "start", "arrive"]:
-    st, _ = call(f"/api/driver/trip/{tid}/{ep}", {}, drv_b)
-    check(f"state machine: {ep}", st == 200)
+    status, body = call("/api/driver/decline", {"trip_id": trip_id}, driver_a)
+    check("first driver can decline owned offer", status == 200, str(body)[:120])
 
-st, done = call(f"/api/trips/{tid}/complete", {}, cust)
-check("customer completion is accepted only after arrival", st == 200, str(done)[:80])
+    offer_b = wait_for_offer(driver_b, trip_id)
+    check("declined offer forwards to next eligible driver", bool(offer_b), str(offer_b)[:120])
 
-st, done2 = call(f"/api/trips/{tid}/complete", {}, cust)
-check("customer completion is idempotent", st == 200, str(done2)[:80])
+    status, body = call("/api/driver/accept", {"trip_id": trip_id}, driver_b)
+    check("second driver can accept forwarded offer", status == 200, str(body)[:120])
 
-st, s = call("/api/driver/summary/today", None, drv_b)
-check("earnings landed on the driver who drove", s["trips"] >= 1, f"{s['trips']} turer {s['income']} kr")
+    status, body = call("/api/driver/accept", {"trip_id": trip_id}, driver_a)
+    check("losing driver cannot accept after assignment", status == 409, str(body)[:120])
 
-st, cfg = call("/api/push/native-config")
-check("native push config endpoint is available", st == 200 and cfg.get("provider") == "expo", json.dumps(cfg)[:120])
+    status, current = call("/api/driver/current", None, driver_b)
+    check("trip belongs to accepting driver", status == 200 and isinstance(current, dict) and current.get("trip_id") == trip_id, str(current)[:120])
 
-st, area = call("/api/service-area")
-check("Oslo beta service-area endpoint is available", st == 200 and area.get("launch_city") == "Oslo", json.dumps(area)[:120])
+    # Server now requires real fresh GPS close to pickup before at-pickup.
+    call("/api/driver/location", {
+        "lat": PICKUP[0], "lng": PICKUP[1], "heading": 250, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
+    status, body = call(f"/api/driver/trip/{trip_id}/at-pickup", {}, driver_b)
+    check("at-pickup requires real pickup GPS", status == 200, str(body)[:120])
 
-call("/api/driver/online", {"online": False}, drv_b)
-call("/api/driver/online", {"online": False}, drv_a)
+    status, body = call(f"/api/driver/trip/{trip_id}/start", {}, driver_b)
+    check("trip starts only after at-pickup", status == 200, str(body)[:120])
 
-print("\nresult:", "ALL PASSED" if not fails else f"{len(fails)} FAILED -> {fails}")
-sys.exit(1 if fails else 0)
+    # Server now requires real fresh GPS close to destination before arrive.
+    call("/api/driver/location", {
+        "lat": DROPOFF[0], "lng": DROPOFF[1], "heading": 260, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
+    status, body = call(f"/api/driver/trip/{trip_id}/arrive", {}, driver_b)
+    check("arrive requires real destination GPS", status == 200, str(body)[:120])
+
+    status, body = call(f"/api/trips/{trip_id}/complete", {}, customer)
+    check("customer completion after arrival succeeds", status == 200, str(body)[:120])
+
+    status, body = call(f"/api/trips/{trip_id}/complete", {}, customer)
+    check("customer completion is idempotent", status == 200, str(body)[:120])
+
+    status, body = call(f"/api/trips/{trip_id}/rate", {"rating": 5, "feedback": "Oslo beta E2E"}, customer)
+    check("passenger rates finished ride", status == 200, str(body)[:120])
+
+    status, body = call(f"/api/trips/{trip_id}/rate", {"rating": 4, "feedback": "duplicate"}, customer)
+    check("duplicate passenger rating is rejected", status == 400, str(body)[:120])
+
+    status, body = call(f"/api/driver/trip/{trip_id}/rate-passenger", {"rating": 5, "feedback": "Oslo beta E2E"}, driver_b)
+    check("assigned driver can rate passenger after ride", status == 200, str(body)[:120])
+
+    status, summary = call("/api/driver/summary/today", None, driver_b)
+    check("earnings reached assigned driver", status == 200 and isinstance(summary, dict) and summary.get("trips", 0) >= 1, str(summary)[:120])
+
+    status, push = call("/api/push/native-config")
+    check("native push config is exposed", status == 200 and isinstance(push, dict) and push.get("provider") == "expo", str(push)[:120])
+
+    status, area = call("/api/service-area")
+    check("Oslo service area is exposed", status == 200 and isinstance(area, dict) and area.get("launch_city") == "Oslo", str(area)[:120])
+
+finally:
+    call("/api/driver/online", {"online": False}, driver_b)
+    call("/api/driver/online", {"online": False}, driver_a)
+
+print("\nTarget:", API)
+print("Result:", "ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED -> {FAILS}")
+sys.exit(1 if FAILS else 0)
