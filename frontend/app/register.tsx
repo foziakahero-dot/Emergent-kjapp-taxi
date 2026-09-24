@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -26,6 +27,7 @@ export default function Register() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,9 +37,20 @@ export default function Register() {
       setError('Fyll inn navn, e-post og passord (minst 6 tegn).');
       return;
     }
+    if (!acceptedTerms) {
+      setError('Du må godta vilkår og personvern før kontoen opprettes.');
+      return;
+    }
     setLoading(true);
     try {
-      await register({ fullName: fullName.trim(), email: email.trim(), phone: phone.trim(), password });
+      await register({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password,
+        accepted_terms: true,
+        legal_version: '2026-09',
+      });
       router.replace('/(app)/home');
     } catch (e) {
       setError(apiError(e));
@@ -87,6 +100,19 @@ export default function Register() {
         </View>
 
         <Text style={s.passwordHint}>Minst 6 tegn. Du kan endre kontoinnstillinger senere.</Text>
+
+        <Pressable
+          style={s.consentRow}
+          onPress={() => setAcceptedTerms((v) => !v)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: acceptedTerms }}
+          testID="register-legal-consent"
+        >
+          <View style={[s.checkbox, acceptedTerms && s.checkboxOn]}><Text style={s.checkmark}>{acceptedTerms ? '✓' : ''}</Text></View>
+          <Text style={s.consentText}>
+            Jeg godtar <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>vilkårene</Text> og har lest <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>personvernerklæringen</Text>.
+          </Text>
+        </Pressable>
         {error ? <Text style={s.error} testID="register-error">{error}</Text> : null}
 
         <Button label="Opprett konto" onPress={submit} loading={loading} testID="register-submit" style={{ marginTop: 12 }} />
@@ -127,6 +153,12 @@ const useStyles = makeStyles((c) => ({
   input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   passwordHint: { color: c.textMuted, fontSize: 11, lineHeight: 16, marginTop: 9 },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 16, minHeight: 44 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
+  checkmark: { color: c.bg, fontSize: 14, fontWeight: '800' },
+  consentText: { color: c.textMuted, fontSize: 12, lineHeight: 18, flex: 1 },
+  consentLink: { color: c.accent, textDecorationLine: 'underline' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 9 },
   trustCard: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 16 },
   trustText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },
