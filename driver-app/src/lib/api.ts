@@ -5,6 +5,12 @@ const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-buil
 export const TOKEN_KEY = 'kjapp_token';
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
+export const apiError = (e: any) => {
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  return e?.message || 'Noe gikk galt';
+};
+
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
   timeout: 30000,
