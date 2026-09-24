@@ -13,10 +13,10 @@ export default function Index() {
   const s = useStyles();
 
   useEffect(() => {
-    if (user?.role === 'driver') router.replace('/(driver)/home');
+    if (user?.role === 'driver' && user?.approved === true) router.replace('/(driver)/home');
   }, [user, router]);
 
-  if (user === undefined || user?.role === 'driver') {
+  if (user === undefined || (user?.role === 'driver' && user?.approved === true)) {
     return (
       <View style={s.splash}>
         <BrandMark />
@@ -25,13 +25,18 @@ export default function Index() {
     );
   }
 
-  if (user && user.role !== 'driver') {
+  if (user && (user.role !== 'driver' || user.approved !== true)) {
+    const pendingApproval = user.role === 'driver' && user.approved !== true;
     return (
       <View style={[s.splash, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }]}>
         <View style={s.center}>
           <BrandMark />
-          <Text style={s.title}>Denne appen er kun for sjåfører</Text>
-          <Text style={s.subtitle}>Logg ut og bruk en godkjent KJAPP-sjåførkonto.</Text>
+          <Text style={s.title}>{pendingApproval ? 'Kontoen venter på godkjenning' : 'Denne appen er kun for sjåfører'}</Text>
+          <Text style={s.subtitle}>
+            {pendingApproval
+              ? 'Du får tilgang til turer og posisjonsdeling når KJAPP har godkjent sjåførkontoen og dokumentasjonen.'
+              : 'Logg ut og bruk en godkjent KJAPP-sjåførkonto.'}
+          </Text>
         </View>
         <Button
           label="Logg ut"
