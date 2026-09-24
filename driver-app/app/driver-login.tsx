@@ -106,6 +106,10 @@ export default function DriverLogin() {
           </View>
         </View>
 
+        <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password">
+          <Text style={s.forgotText}>Glemt passord?</Text>
+        </Pressable>
+
         {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
 
         <Button label="Logg inn som sjåfør" onPress={submit} loading={loading} testID="driver-login-submit" style={{ marginTop: 12 }} />
@@ -133,6 +137,8 @@ const useStyles = makeStyles((c) => ({
   field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.driverCard, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingLeft: 16, paddingRight: 6, height: 56 },
   input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  forgot: { minHeight: 32, alignSelf: 'flex-end', justifyContent: 'center', marginTop: 6 },
+  forgotText: { color: c.online, fontFamily: font.semibold, fontSize: 13 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 10 },
   note: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.onlineSoft, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 18 },
   noteText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },
