@@ -53,6 +53,7 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 # ------------------ Environment / security hardening ------------------
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 IS_PRODUCTION = APP_ENV == "production"
+CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").strip()[:32] or "2026-09"
 
 PRODUCTION_CORS_ORIGINS = [
     "https://kjappapp.no",            # root (reserved for marketing site)
@@ -348,6 +349,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
+    "legal_version",
 })
 
 
@@ -357,9 +359,13 @@ def user_public(user: dict) -> dict:
     if user.get("_id") is not None:
         result["id"] = str(user["_id"])
     result.setdefault("role", "user")
-    # Preserve the derived flag when user_public() is called on an already-sanitized
-    # dependency result (for example /auth/me), otherwise derive it from the DB field.
-    result["legal_accepted"] = bool(user.get("legal_accepted") or user.get("accepted_terms_at"))
+    accepted_at = user.get("accepted_terms_at")
+    accepted_version = user.get("legal_version")
+    # Consent is current only for the server-declared legal version. A future
+    # terms/privacy revision can therefore require re-consent without redesigning the apps.
+    result["legal_accepted"] = bool(accepted_at and accepted_version == CURRENT_LEGAL_VERSION)
+    result["legal_version"] = accepted_version
+    result["current_legal_version"] = CURRENT_LEGAL_VERSION
     return result
 
 
@@ -441,7 +447,7 @@ class RegisterRequest(BaseModel):
     phone: Optional[str] = None
     password: str
     accepted_terms: bool = False
-    legal_version: str = "2026-09"
+    legal_version: str = CURRENT_LEGAL_VERSION
 
 
 class LoginRequest(BaseModel):
@@ -451,7 +457,7 @@ class LoginRequest(BaseModel):
 
 class AcceptLegalRequest(BaseModel):
     accepted_terms: bool
-    legal_version: str = "2026-09"
+    legal_version: str = CURRENT_LEGAL_VERSION
 
 
 class ClientErrorEvent(BaseModel):
@@ -1663,7 +1669,7 @@ async def register(body: RegisterRequest, request: Request, response: Response):
         "phone": body.phone or "",
         "role": "user",
         "accepted_terms_at": now_iso,
-        "legal_version": (body.legal_version or "2026-09")[:32],
+        "legal_version": CURRENT_LEGAL_VERSION,
         "created_at": now_iso,
     })
     uid = str(result.inserted_id)
@@ -1933,6 +1939,15 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     return {"ok": True}
 
 
+@api.get("/auth/legal-config")
+async def legal_config():
+    return {
+        "legal_version": CURRENT_LEGAL_VERSION,
+        "terms_url": "https://kjappapp.no/vilkar",
+        "privacy_url": "https://kjappapp.no/personvern",
+    }
+
+
 @api.post("/auth/accept-legal")
 async def accept_legal(body: AcceptLegalRequest, current=Depends(get_current_user)):
     if body.accepted_terms is not True:
@@ -1946,7 +1961,7 @@ async def accept_legal(body: AcceptLegalRequest, current=Depends(get_current_use
         {"_id": oid},
         {"$set": {
             "accepted_terms_at": now_iso,
-            "legal_version": (body.legal_version or "2026-09")[:32],
+            "legal_version": CURRENT_LEGAL_VERSION,
         }},
     )
     updated = await db.users.find_one({"_id": oid})
@@ -5332,7 +5347,7 @@ class DriverSignupRequest(BaseModel):
     phone: str
     password: str
     accepted_terms: bool = False
-    legal_version: str = "2026-09"
+    legal_version: str = CURRENT_LEGAL_VERSION
     # New: uploaded document paths (from /api/upload/public via a public driver-invite upload token)
     drivers_license_path: Optional[str] = None
     taxi_license_path: Optional[str] = None
@@ -5465,7 +5480,7 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
         "accepted_terms_at": datetime.now(timezone.utc).isoformat(),
-        "legal_version": (body.legal_version or "2026-09")[:32],
+        "legal_version": CURRENT_LEGAL_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "drivers_license_path": body.drivers_license_path,
         "taxi_license_path": body.taxi_license_path,
@@ -6553,7 +6568,7 @@ class FleetApplicationDraftRequest(BaseModel):
     bank_account: str = Field(min_length=5, max_length=64)
     notes: Optional[str] = ""
     accepted_terms: bool = False
-    legal_version: str = "2026-09"
+    legal_version: str = CURRENT_LEGAL_VERSION
 
 
 class FleetApplicationSubmitRequest(BaseModel):
@@ -6586,7 +6601,7 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest, req
         "bank_account": body.bank_account.strip(),
         "notes": (body.notes or "").strip(),
         "accepted_terms_at": accepted_at,
-        "legal_version": (body.legal_version or "2026-09")[:32],
+        "legal_version": CURRENT_LEGAL_VERSION,
         "documents": {},
         "status": "draft",
         "created_at": accepted_at,
