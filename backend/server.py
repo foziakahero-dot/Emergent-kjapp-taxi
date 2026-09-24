@@ -4884,8 +4884,16 @@ async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(r
 
     client_errors = await db.client_errors.count_documents({"created_at": {"$gte": cutoff_dt}})
     fatal_errors = await db.client_errors.count_documents({"created_at": {"$gte": cutoff_dt}, "is_fatal": True})
+    critical_support = await db.support_tickets.count_documents({
+        "created_at": {"$gte": cutoff},
+        "priority": "kritisk",
+    })
+    self_serve_filter = dict(completed_filter)
+    self_serve_filter["operator_interventions"] = {"$exists": False}
+    self_serve_completed = await db.trips.count_documents(self_serve_filter)
 
     pct = lambda a, b: round((a / b) * 100, 1) if b else None
+    per_100 = lambda a, b: round((a / b) * 100, 2) if b else None
     return {
         "days": days,
         "trips": {
@@ -4905,6 +4913,13 @@ async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(r
             "online_drivers": online_total,
             "fresh_drivers": gps_fresh,
             "freshness_pct": pct(gps_fresh, online_total),
+        },
+        "operations": {
+            "self_serve_completed": self_serve_completed,
+            "self_serve_completion_pct": pct(self_serve_completed, completed),
+            "critical_support_cases": critical_support,
+            "critical_cases_per_100_trips": per_100(critical_support, total),
+            "fatal_client_errors_per_100_trips": per_100(fatal_errors, total),
         },
         "client_errors": {
             "total": client_errors,
