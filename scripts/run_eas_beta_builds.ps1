@@ -25,9 +25,9 @@ function Run-EasWorkflow([string]$RelativePath, [string]$Workflow, [string]$Labe
   $dir = Join-Path $Root $RelativePath
   Push-Location $dir
   try {
-    $args = @("eas-cli@latest", "workflow:run", ".eas/workflows/$Workflow", "--non-interactive")
-    if ($Wait) { $args += "--wait" }
-    Run-Step "$Label" { npx @args }
+    $npxArgs = @("--yes", "--package", "eas-cli@latest", "eas", "workflow:run", ".eas/workflows/$Workflow", "--non-interactive")
+    if ($Wait) { $npxArgs += "--wait" }
+    Run-Step "$Label" { npx @npxArgs }
   }
   finally {
     Pop-Location
