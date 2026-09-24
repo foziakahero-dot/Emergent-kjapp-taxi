@@ -44,9 +44,19 @@
     }
   },
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6815866825"
+      }
+    },
+    "testflight-beta": {
+      "ios": {
+        "ascAppId": "6815866825"
+      }
+    }
   }
 }
