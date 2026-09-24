@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
@@ -24,6 +25,11 @@ export default function Settings() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const version = Constants.expoConfig?.version || '1.0.0';
+  const buildNumber =
+    (Constants.expoConfig?.ios as any)?.buildNumber ||
+    (Constants.expoConfig?.android as any)?.versionCode ||
+    null;
 
   const exportData = async () => {
     setExporting(true);
@@ -96,7 +102,7 @@ export default function Settings() {
             </View>
 
             <View style={[s.card, { marginTop: 16 }]}>
-              <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>1.0.0</Text></View>
+              <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
               <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
                 <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjappapp.no</Text>
               </Pressable>
