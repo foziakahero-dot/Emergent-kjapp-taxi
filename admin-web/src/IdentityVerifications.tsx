@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, apiError } from './api';
 import { Btn, Empty, ErrorBanner, Loader, PageHead, Pagination, Pill, fmtDate } from './ui';
+import { useAuth } from './auth';
 
 type Verification = {
   id: string;
@@ -35,6 +36,7 @@ const statusPill = (status?: string) => {
 };
 
 export default function IdentityVerifications() {
+  const { user } = useAuth();
   const [status, setStatus] = useState('pending_review');
   const [page, setPage] = useState(1);
   const [data, setData] = useState<any>(null);
@@ -42,6 +44,9 @@ export default function IdentityVerifications() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
   const [selected, setSelected] = useState<Verification | null>(null);
+  const [retention, setRetention] = useState<any>(null);
+  const [retentionBusy, setRetentionBusy] = useState('');
+  const [retentionMsg, setRetentionMsg] = useState('');
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -51,6 +56,39 @@ export default function IdentityVerifications() {
   };
 
   useEffect(() => { void load(); }, [status, page]);
+
+  const loadRetention = async () => {
+    if (user?.role !== 'superadmin') return;
+    try { setRetention(await api.identityRetention()); }
+    catch (e) { setErr(apiError(e)); }
+  };
+
+  useEffect(() => { void loadRetention(); }, [user?.role]);
+
+  const retentionDryRun = async () => {
+    setRetentionBusy('dry'); setRetentionMsg(''); setErr('');
+    try {
+      const result = await api.purgeExpiredIdentitySelfies(true, 100);
+      setRetentionMsg(`Dry-run: ${result.eligible || 0} selfie(r) er klare for sletting. Ingen filer ble slettet.`);
+      await loadRetention();
+    } catch (e) { setErr(apiError(e)); }
+    finally { setRetentionBusy(''); }
+  };
+
+  const retentionPurge = async () => {
+    const eligible = Number(retention?.eligible_for_purge || 0);
+    if (!eligible) { setRetentionMsg('Ingen selfies er klare for sletting.'); return; }
+    if (!window.confirm(`Slett fysisk opptil ${eligible} utløpte identitetsselfies fra objektlageret? Dette kan ikke angres.`)) return;
+    setRetentionBusy('purge'); setRetentionMsg(''); setErr('');
+    try {
+      const result = await api.purgeExpiredIdentitySelfies(false, 100);
+      const failed = result.failed?.length || 0;
+      setRetentionMsg(`Slettet ${result.purged?.length || 0} selfie(r)${failed ? `; ${failed} feilet og ble beholdt` : ''}.`);
+      await loadRetention();
+      await load();
+    } catch (e) { setErr(apiError(e)); }
+    finally { setRetentionBusy(''); }
+  };
 
   const rows: Verification[] = useMemo(
     () => data?.items || data?.verifications || [],
@@ -117,6 +155,28 @@ export default function IdentityVerifications() {
           <option value="all">Alle</option>
         </select>
       </div>
+
+      {user?.role === 'superadmin' ? (
+        <div className="card" style={{ marginBottom: 18 }}>
+          <div className="section-title" style={{ marginTop: 0 }}>Selfie-retention</div>
+          <div className="info-banner">
+            Rå identitetsselfies beholdes i {retention?.retention_days ?? 30} dager etter terminal behandling.
+            Ventende saker slettes aldri av denne jobben.
+          </div>
+          <div className="kv"><div className="k">Klar for sletting</div><div className="v">{retention?.eligible_for_purge ?? '—'}</div></div>
+          <div className="kv"><div className="k">Terminale, fortsatt beholdt</div><div className="v">{retention?.retained_terminal ?? '—'}</div></div>
+          <div className="kv"><div className="k">Ventende, ekskludert</div><div className="v">{retention?.pending_review_excluded ?? '—'}</div></div>
+          <div className="fleet-actions" style={{ marginTop: 14 }}>
+            <Btn variant="sm" disabled={Boolean(retentionBusy)} onClick={() => void retentionDryRun()}>
+              {retentionBusy === 'dry' ? 'Kontrollerer…' : 'Kjør dry-run'}
+            </Btn>
+            <Btn variant="danger" disabled={Boolean(retentionBusy) || !(retention?.eligible_for_purge > 0)} onClick={() => void retentionPurge()}>
+              {retentionBusy === 'purge' ? 'Sletter…' : 'Slett utløpte selfies'}
+            </Btn>
+          </div>
+          {retentionMsg ? <div className="info-banner" style={{ marginTop: 12 }}>{retentionMsg}</div> : null}
+        </div>
+      ) : null}
 
       <ErrorBanner msg={err} />
 
