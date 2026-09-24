@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -266,6 +266,33 @@ export default function DriverHome() {
     } finally { setBusy(false); }
   };
 
+  const noShow = async () => {
+    if (!current || current.status !== 'at_pickup' || busy) return;
+    Alert.alert(
+      'Kunden kom ikke?',
+      'No-show kan bare registreres etter ventetiden ved hentestedet. KJAPP kontrollerer ankomsttid og GPS på serveren.',
+      [
+        { text: 'Fortsett å vente', style: 'cancel' },
+        {
+          text: 'Registrer no-show',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            setError('');
+            try {
+              await driverApi.noShow(current.trip_id);
+              await poll();
+            } catch (e) {
+              setError(apiError(e));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const emergency = async () => {
     if (!current) return;
     try {
@@ -417,6 +444,12 @@ export default function DriverHome() {
                 </Pressable>
               ) : null}
             </View>
+            {current.status === 'at_pickup' ? (
+              <Pressable style={s.noShowBtn} onPress={noShow} disabled={busy} testID="driver-no-show">
+                <Icon name="clock" size={15} color={colors.textMuted} />
+                <Text style={s.noShowText}>Kunden kom ikke · registrer no-show</Text>
+              </Pressable>
+            ) : null}
             <Pressable style={s.driverSafetyBtn} onPress={emergency} testID="driver-safety-112">
               <Icon name="shield" size={16} color={colors.danger} />
               <Text style={s.driverSafetyText}>Sikkerhet · Ring 112</Text>
@@ -564,6 +597,8 @@ const useStyles = makeStyles((c) => ({
     borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
   },
   msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  noShowBtn: { minHeight: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  noShowText: { color: c.textSecondary, fontSize: 12, fontWeight: '600' },
   driverSafetyBtn: { height: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
   driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
   action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
