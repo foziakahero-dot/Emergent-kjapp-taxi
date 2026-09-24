@@ -359,11 +359,15 @@ def user_public(user: dict) -> dict:
     if user.get("_id") is not None:
         result["id"] = str(user["_id"])
     result.setdefault("role", "user")
-    accepted_at = user.get("accepted_terms_at")
     accepted_version = user.get("legal_version")
-    # Consent is current only for the server-declared legal version. A future
-    # terms/privacy revision can therefore require re-consent without redesigning the apps.
-    result["legal_accepted"] = bool(accepted_at and accepted_version == CURRENT_LEGAL_VERSION)
+    # Raw DB documents contain accepted_terms_at. Already-sanitized dependency results
+    # contain the derived legal_accepted flag instead. Preserve the flag only when its
+    # recorded version still equals the server-controlled current legal version.
+    if "accepted_terms_at" in user:
+        legal_accepted = bool(user.get("accepted_terms_at") and accepted_version == CURRENT_LEGAL_VERSION)
+    else:
+        legal_accepted = bool(user.get("legal_accepted") and accepted_version == CURRENT_LEGAL_VERSION)
+    result["legal_accepted"] = legal_accepted
     result["legal_version"] = accepted_version
     result["current_legal_version"] = CURRENT_LEGAL_VERSION
     return result
