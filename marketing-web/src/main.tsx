@@ -35,6 +35,16 @@ function RouteMetadata() {
       return;
     }
 
+    if (pathname.startsWith('/payment/')) {
+      setPageSeo({
+        title: 'KJAPP betaling',
+        description: 'Sikker retur til KJAPP etter betaling.',
+        canonical: `https://kjappapp.no${pathname}`,
+        robots: 'noindex,nofollow',
+      });
+      return;
+    }
+
     if (pathname === '/loyvehaver/soknad') {
       setPageSeo({
         title: 'KJAPP Partner — løyvehaversøknad',
