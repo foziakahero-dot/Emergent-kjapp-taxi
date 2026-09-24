@@ -78,3 +78,40 @@ def test_stale_driver_presence_does_not_count_as_live():
     assert not server._fresh_driver_location((now - timedelta(days=7)).isoformat(), now)
     assert not server._fresh_driver_location(None, now)
     assert not server._fresh_driver_location("broken timestamp", now)
+
+def test_checkout_origin_falls_back_to_kjapp(monkeypatch):
+    monkeypatch.setenv("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no")
+    monkeypatch.setenv("KJAPP_CHECKOUT_ALLOWED_ORIGINS", "https://kjappapp.no,https://staging.kjappapp.no")
+    assert server._trusted_checkout_origin("https://staging.kjappapp.no") == "https://staging.kjappapp.no"
+    assert server._trusted_checkout_origin("https://evil.example") == "https://kjappapp.no"
+
+
+def test_driver_role_gate_rejects_admin_and_unapproved_driver():
+    import asyncio
+    from fastapi import HTTPException
+
+    async def run():
+        try:
+            await server.require_driver({"id": "a1", "role": "admin", "approved": True})
+            assert False, "admin must not enter live driver endpoints"
+        except HTTPException as exc:
+            assert exc.status_code == 403
+
+        try:
+            await server.require_driver({"id": "d1", "role": "driver", "approved": None})
+            assert False, "missing approval must fail closed"
+        except HTTPException as exc:
+            assert exc.status_code == 403
+
+    asyncio.run(run())
+
+
+def test_oslo_service_area_helper_can_fail_closed(monkeypatch):
+    original = server.OSLO_BETA_ENFORCE
+    try:
+        server.OSLO_BETA_ENFORCE = True
+        assert server._pickup_inside_launch_area(server.OSLO_BETA_CENTER_LAT, server.OSLO_BETA_CENTER_LNG)
+        assert not server._pickup_inside_launch_area(60.8, 11.8)
+    finally:
+        server.OSLO_BETA_ENFORCE = original
+
