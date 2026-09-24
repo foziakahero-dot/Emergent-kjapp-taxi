@@ -85,17 +85,43 @@ eas build --platform ios --profile production
 
 ## Native push
 
-Mobilklienten bruker `expo-notifications` og registrerer native APNs/FCM-token mot:
+Mobilklientene bruker `expo-notifications` og registrerer **Expo Push tokens** mot:
 
 `POST /api/push/native-subscribe`
 
-Backenden har allerede native push-sender. For faktisk FCM-levering på Android må Firebase være riktig konfigurert for app-ID-ene og serveren må ha gyldig Firebase service-account-konfigurasjon. Ikke legg private service-account-nøkler i Git.
+Dette gir ekte native varsler: Expo Push leverer videre via **APNs på iOS** og **FCM på Android**. Backenden kan fortsatt sende til eldre direkte FCM-tokens, men nye Customer/Driver-builds bruker Expo-token slik at iOS ikke feilaktig behandles som et FCM-token.
 
-`google-services.json` er klientkonfigurasjon og må høre til riktig Firebase Android-app. Når den brukes med EAS/CNG, sett `android.googleServicesFile` til riktig filbane i app-configen.
+På iOS må APNs/push-capability være knyttet til riktige bundle-ID-er og EAS/Apple credentials. På Android må FCM være konfigurert for riktig Expo/Firebase-prosjekt før butikk-release.
 
-På iOS må APNs/push-capability være knyttet til de riktige bundle-ID-ene og EAS/Apple credentials.
+Driver har i tillegg en on-shift fallback: mens bakgrunnsposisjon kjører, kontrolleres ekte pending trips og en lokal varsling kan vises ved nytt tilbud. Native push er fortsatt primær kanal.
 
-Driver har i tillegg en on-shift fallback: mens bakgrunnsposisjon kjører, kontrolleres ekte pending trips og en lokal varsling kan vises ved nytt tilbud. FCM/APNs er fortsatt primær kanal.
+## Apple Developer / TestFlight
+
+Kontoen skal ha to eksplisitte App IDs:
+
+- Customer: `no.kjapp.app`
+- Driver: `no.kjapp.driver`
+
+Aktiver capabilities slik:
+
+**Customer**
+- Push Notifications
+- Sign in with Apple
+
+**Driver**
+- Push Notifications
+- Background Modes / Location (genereres av Expo config)
+- Background remote notifications
+
+Customer-appen har `ios.usesAppleSignIn=true` og bruker Apples native Sign in with Apple-komponent. Backenden godtar native Apple-token med `aud=no.kjapp.app` når følgende finnes i backend-miljøet:
+
+```
+APPLE_BUNDLE_ID=no.kjapp.app
+```
+
+For web-basert Apple-innlogging senere kan `APPLE_CLIENT_ID` (Services ID) legges til separat.
+
+En APNs auth key (.p8) kan brukes gjennom EAS credentials for begge appene dersom Apple-kontoen/Teamet tillater det. Ikke legg .p8-filen i Git.
 
 ## Bakgrunnsposisjon — Driver
 
