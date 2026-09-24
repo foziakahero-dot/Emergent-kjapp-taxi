@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -25,7 +25,7 @@ export default function Profile() {
     { icon: 'map-pin', label: 'Lagrede steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
     { icon: 'card', label: 'Betalingsmåter', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
     { icon: 'settings', label: 'Innstillinger', onPress: () => router.push('/settings'), testID: 'profile-settings' },
-    { icon: 'help', label: 'Hjelp og support', onPress: () => router.push('/settings'), testID: 'profile-help' },
+    { icon: 'help', label: 'Hjelp og support', onPress: () => Linking.openURL('https://kjappapp.no/help'), testID: 'profile-help' },
   ];
 
   const deleteAccount = async () => {
