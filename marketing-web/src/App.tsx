@@ -6,6 +6,7 @@ import { TripSharePage } from './TripSharePage';
 import { PaymentReturnPage } from './PaymentReturnPage';
 import HelpPage from './HelpPage';
 import LegalPage from './LegalPage';
+import PasswordResetPage from './PasswordResetPage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -216,6 +217,7 @@ export default function App() {
       <Route path="/hjelp" element={<HelpPage />} />
       <Route path="/personvern" element={<LegalPage kind="privacy" />} />
       <Route path="/vilkar" element={<LegalPage kind="terms" />} />
+      <Route path="/reset-password/:token" element={<PasswordResetPage />} />
       <Route path="*" element={<PremiumHome />} />
     </Routes>
   );
