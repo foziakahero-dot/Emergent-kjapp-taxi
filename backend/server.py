@@ -5176,7 +5176,8 @@ async def get_driver_invite(token: str):
 
 
 @api.post("/driver-invites/accept")
-async def accept_driver_invite(body: DriverSignupRequest, response: Response):
+async def accept_driver_invite(body: DriverSignupRequest, request: Request, response: Response):
+    await _enforce_rate_limit(request, "driver-invite-accept", 10, 3600)
     inv = await db.driver_invites.find_one({"token": body.token})
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon ugyldig")
@@ -5251,8 +5252,9 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
 
 
 @api.post("/upload/driver-doc")
-async def upload_driver_doc(file: UploadFile = File(...), invite_token: str = Form(...), doc_type: str = Form(...)):
+async def upload_driver_doc(request: Request, file: UploadFile = File(...), invite_token: str = Form(...), doc_type: str = Form(...)):
     """Public upload used inside the driver-signup flow. Validated by invite token."""
+    await _enforce_rate_limit(request, "driver-public-upload", 20, 3600)
     if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
         raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
     inv = await db.driver_invites.find_one({"token": invite_token})
@@ -6204,8 +6206,9 @@ async def upload_auth(file: UploadFile = File(...), scope: str = Form("misc"), c
 
 
 @api.post("/upload/public")
-async def upload_public(file: UploadFile = File(...), application_token: str = Form(...)):
+async def upload_public(request: Request, file: UploadFile = File(...), application_token: str = Form(...)):
     """Public upload — only accepted with a valid fleet application token."""
+    await _enforce_rate_limit(request, "fleet-public-upload", 30, 3600)
     app_doc = await db.fleet_applications.find_one({"upload_token": application_token})
     if not app_doc or app_doc.get("status") not in (None, "draft"):
         raise HTTPException(status_code=403, detail="Ugyldig eller lukket søknad")
@@ -6285,8 +6288,9 @@ class FleetApplicationDecisionRequest(BaseModel):
 
 
 @api.post("/fleet-applications/draft")
-async def create_fleet_application_draft(body: FleetApplicationDraftRequest):
+async def create_fleet_application_draft(body: FleetApplicationDraftRequest, request: Request):
     """Public: creates a draft application, returns an upload_token used to attach documents."""
+    await _enforce_rate_limit(request, "fleet-application-draft", 6, 3600)
     upload_token = secrets.token_urlsafe(24)
     doc = {
         "upload_token": upload_token,
@@ -6309,6 +6313,7 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest):
 
 @api.post("/fleet-applications/submit")
 async def submit_fleet_application(body: FleetApplicationSubmitRequest, request: Request):
+    await _enforce_rate_limit(request, "fleet-application-submit", 10, 3600)
     app_doc = await db.fleet_applications.find_one({"upload_token": body.upload_token})
     if not app_doc:
         raise HTTPException(status_code=404, detail="Søknad ikke funnet")
