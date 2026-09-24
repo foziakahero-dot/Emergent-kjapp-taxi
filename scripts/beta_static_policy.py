@@ -71,7 +71,7 @@ if driver.get("android", {}).get("package") != "no.kjapp.driver":
 if driver.get("extra", {}).get("eas", {}).get("projectId") != "1dec8949-0423-4fbf-a080-0703f93519d7":
     fail("Driver EAS projectId changed unexpectedly")
 
-# --- EAS API targets -------------------------------------------------------
+# --- EAS API targets / iOS release config ---------------------------------
 for path in ("frontend/eas.json", "driver-app/eas.json"):
     cfg = read_json(path)
     beta_url = cfg.get("build", {}).get("testflight-beta", {}).get("env", {}).get("EXPO_PUBLIC_BACKEND_URL")
@@ -80,6 +80,32 @@ for path in ("frontend/eas.json", "driver-app/eas.json"):
         fail(f"{path}: TestFlight beta must target the currently controlled beta backend")
     if prod_url != "https://api.kjappapp.no":
         fail(f"{path}: production profile must target the KJAPP-owned API hostname")
+    if cfg.get("cli", {}).get("appVersionSource") != "remote":
+        fail(f"{path}: EAS appVersionSource must be remote")
+    if "testflight-beta" not in cfg.get("submit", {}):
+        fail(f"{path}: missing submit.testflight-beta profile")
+
+customer_eas = read_json("frontend/eas.json")
+customer_asc = customer_eas.get("submit", {}).get("testflight-beta", {}).get("ios", {}).get("ascAppId")
+if customer_asc != "6815866825":
+    fail("frontend/eas.json: Customer TestFlight ascAppId must remain 6815866825")
+
+require_text(
+    "frontend/.eas/workflows/testflight-beta.yml",
+    "profile: testflight-beta",
+    "Customer TestFlight workflow must use the testflight-beta submit profile",
+)
+require_text(
+    "driver-app/.eas/workflows/testflight-beta.yml",
+    "profile: testflight-beta",
+    "Driver TestFlight workflow must use the testflight-beta submit profile",
+)
+
+# Lockfiles are intentionally mandatory for signed mobile release builds.
+# EAS should never fall back to a non-deterministic dependency resolution.
+for path in ("frontend/package-lock.json", "driver-app/package-lock.json"):
+    if not (ROOT / path).exists():
+        warn(f"{path} is missing from this checkout; signed EAS builds require it before release.")
 
 # --- Canonical support/legal URLs in live mobile code ---------------------
 live_mobile_files = [
