@@ -12,7 +12,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "android": {
         "image": "latest"
@@ -29,6 +29,16 @@
       },
       "ios": {
         "simulator": true,
+        "image": "latest"
+      }
+    },
+    "testflight-beta": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+      },
+      "ios": {
         "image": "latest"
       }
     }
