@@ -38,7 +38,7 @@ function actionAlreadyApplied(action: CriticalTripAction, status?: string) {
 
 function actionCanRetry(action: CriticalTripAction, status?: string) {
   if (action === 'at_pickup') return status === 'driver_on_way';
-  if (action === 'start') return status === 'driver_on_way' || status === 'at_pickup';
+  if (action === 'start') return status === 'at_pickup';
   return status === 'in_trip';
 }
 
@@ -102,6 +102,9 @@ export default function DriverHome() {
     try {
       const p = await driverApi.pending();
       setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
+      if (p?.gps_stale) {
+        setError('GPS-posisjonen er for gammel. KJAPP sender ikke nye turer før en fersk posisjon er registrert.');
+      }
     } catch { setPending([]); }
     driverApi.summary().then((r) => {
       setSummary(r);
