@@ -46,6 +46,7 @@ jobs:
           fi
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
 
@@ -74,5 +75,6 @@ jobs:
           fi
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
