@@ -43,3 +43,15 @@ def test_fleet_live_routes_require_fleet_owner_scope():
             args = ast.unparse(node.args)
             assert "require_fleet_owner" in args
     assert found == names
+
+
+def test_identity_enforcement_covers_admin_approval_and_retention():
+    source = _source()
+    assert "_enforce_identity_before_driver_approval" in source
+    assert 'Sjåføren må ha verifisert Selfie ID før kontoen kan godkjennes' in source
+    assert '/admin/identity-verifications/retention' in source
+    assert '/admin/identity-verifications/purge-expired' in source
+    assert 'dry_run: bool = True' in source
+    assert 'status": {"$in": ["verified", "retry_required", "superseded"]}' in source
+    assert 'status") == "pending_review"' in source
+    assert "storage_delete(path)" in source
