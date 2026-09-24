@@ -68,6 +68,10 @@ export default function DriverSettings() {
   };
 
   const version = Constants.expoConfig?.version || '1.0.0';
+  const buildNumber =
+    (Constants.expoConfig?.ios as any)?.buildNumber ||
+    (Constants.expoConfig?.android as any)?.versionCode ||
+    null;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
@@ -121,7 +125,7 @@ export default function DriverSettings() {
 
           <Text style={s.sectionTitle}>Om appen</Text>
           <View style={s.card}>
-            <View style={s.linkRow}><Text style={s.linkLabel}>Versjon</Text><Text style={s.linkValue}>{version}</Text></View>
+            <View style={s.linkRow}><Text style={s.linkLabel}>Versjon</Text><Text style={s.linkValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
             <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>kjappapp.no/vilkar</Text></View>
           </View>
 
