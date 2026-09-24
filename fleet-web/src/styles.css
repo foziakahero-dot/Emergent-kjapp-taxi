@@ -292,3 +292,54 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .9; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
 }
+
+
+/* ---------- Fleet live operations ---------- */
+.status-amber { color: var(--amber) !important; font-weight: 600; }
+.live-fleet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.live-fleet-head small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
+.live-dot-label { display: inline-flex; align-items: center; gap: 7px; color: var(--green); font: 600 9px var(--mono); letter-spacing: .08em; }
+.live-dot-label i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(52,211,153,.08); }
+.map-shell { position: absolute; inset: 68px 26px 52px; overflow: hidden; border: 1px solid rgba(39,48,56,.85); border-radius: 14px; background: #091015; }
+.fleet-real-map { width: 100%; height: 100%; background: #091015; }
+.fleet-real-map .leaflet-control-zoom a { background: #0e151a; color: var(--text); border-color: var(--line); }
+.fleet-real-map .leaflet-control-attribution { background: rgba(7,11,14,.8); color: var(--muted); font-size: 8px; }
+.fleet-real-map .leaflet-control-attribution a { color: var(--soft); }
+.fleet-real-map .leaflet-popup-content-wrapper, .fleet-real-map .leaflet-popup-tip { background: #0e151a; color: var(--text); border: 1px solid var(--line); }
+.fleet-map-popup { display: flex; min-width: 165px; flex-direction: column; gap: 5px; }
+.fleet-map-popup strong { font-size: 12px; }
+.fleet-map-popup span { color: var(--soft); font-size: 10px; }
+.fleet-map-popup small { color: var(--muted); font-size: 9px; }
+.map-empty-overlay { position: absolute; inset: auto 14px 14px; z-index: 500; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(7,11,14,.88); color: var(--muted); font-size: 10px; pointer-events: none; }
+.live-trip-row b { font-size: 9px; letter-spacing: .04em; }
+
+.row-button { width: 100%; padding: 0; border: 0; background: transparent; text-align: left; font-family: inherit; cursor: pointer; }
+.row-button:hover { background: rgba(255,255,255,.018); }
+.vehicle-table .tr { grid-template-columns: 1.35fr .8fr 1.3fr .85fr .85fr; }
+.document-table .tr { grid-template-columns: 1.55fr 1.15fr .9fr .85fr .8fr .55fr; gap: 12px; }
+.table-action { min-height: 34px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--active); color: var(--soft); font-size: 10px; }
+.table-action:hover { color: var(--text); border-color: rgba(203,163,101,.45); }
+.detail-modal { width: min(680px, 100%); max-height: min(86vh, 760px); overflow: auto; }
+.detail-grid { margin-top: 20px; border-top: 1px solid var(--line); }
+.detail-grid .info-row { grid-template-columns: 180px 1fr; min-height: 58px; }
+.detail-section { margin-top: 24px; padding: 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--card-deep); display: flex; flex-direction: column; gap: 8px; }
+.detail-section > strong { font-size: 12px; font-weight: 500; color: var(--soft); }
+.detail-section > small { color: var(--muted); font-size: 10px; }
+.detail-doc { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(39,48,56,.6); font-size: 11px; }
+.detail-doc:last-child { border-bottom: 0; }
+.compliance-kpis .kpi-card:nth-child(2) > span, .compliance-kpis .kpi-card:nth-child(3) > span { color: var(--amber); }
+.compliance-kpis .kpi-card:nth-child(4) > span { color: var(--red); }
+
+@media (max-width: 900px) {
+  .document-table { overflow-x: auto; }
+  .document-table .tr { min-width: 880px; }
+  .vehicle-table { overflow-x: auto; }
+  .vehicle-table .tr { min-width: 720px; }
+}
+
+@media (max-width: 760px) {
+  .map-shell { inset: 68px 16px 52px; }
+  .live-fleet-card { padding: 20px 16px; }
+  .live-fleet-foot { left: 16px; right: 16px; }
+  .detail-grid .info-row { grid-template-columns: 130px 1fr; }
+}
