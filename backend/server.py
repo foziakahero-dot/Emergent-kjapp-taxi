@@ -348,8 +348,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
-    "selfie_verification_path", "selfie_verification_status", "selfie_verification_submitted_at",
-    "selfie_verification_verified_at", "selfie_verification_verified_by", "selfie_verification_review_note",
+    "selfie_verification_status", "selfie_verification_submitted_at", "selfie_verification_verified_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
     "legal_version",
 })
@@ -6819,6 +6818,11 @@ async def download_file(path: str, current=Depends(get_current_user)):
         allowed = True
     elif rec.get("scope") == "fleet-applications" and role in ("admin",):
         allowed = True
+    elif rec.get("scope") == "fleet-applications" and role == "fleet_owner":
+        fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+        application = await db.fleet_applications.find_one({"upload_token": rec.get("application_token")}) if rec.get("application_token") else None
+        if application and fleet_id and application.get("fleet_id") == fleet_id:
+            allowed = True
     elif rec.get("scope") == "driver-docs":
         if is_owner or role in ("admin", "superadmin"):
             allowed = True
