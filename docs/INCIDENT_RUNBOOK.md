@@ -15,6 +15,8 @@ This runbook is operational guidance. It does not replace legal, payment-provide
 
 ## Golden rules
 
+If a P0/P1 can affect new rides, use **Admin → Innstillinger → Operatørkontroll → Nye bestillinger = PAUSET**. This blocks new trip creation but leaves existing rides intact for recovery.
+
 1. Never fabricate driver GPS or ride status.
 2. Never manually mark a payment paid without provider evidence.
 3. Never force a ride lifecycle backwards to repair a payment state.
