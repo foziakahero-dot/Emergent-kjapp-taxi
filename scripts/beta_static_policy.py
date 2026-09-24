@@ -109,6 +109,8 @@ require_text("backend/server.py", '@api.post("/client-errors"', "Client error te
 require_text("backend/server.py", '@api.get("/admin/beta-health")', "Admin beta-health endpoint missing")
 require_text("backend/server.py", '@api.get("/ready")', "Deployment readiness endpoint missing")
 require_text("backend/server.py", '_enforce_rate_limit', "Backend rate limiting helper missing")
+require_text("backend/server.py", 'CURRENT_LEGAL_VERSION', "Server-controlled legal version gate missing")
+require_text("backend/server.py", '@api.get("/auth/legal-config")', "Public legal configuration endpoint missing")
 
 require_text("frontend/app/_layout.tsx", "installClientErrorMonitor", "Customer error monitor not installed")
 require_text("driver-app/app/_layout.tsx", "installClientErrorMonitor", "Driver error monitor not installed")
