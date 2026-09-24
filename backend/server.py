@@ -474,6 +474,13 @@ class ClientErrorEvent(BaseModel):
     route: Optional[str] = Field(default=None, max_length=200)
 
 
+class PublicSupportRequest(BaseModel):
+    topic: Literal["tur", "betaling", "konto", "sjafor", "loyvehaver", "annet"] = "annet"
+    name: Optional[str] = Field(default=None, max_length=120)
+    contact: str = Field(min_length=3, max_length=200)
+    message: str = Field(min_length=10, max_length=4000)
+
+
 class TwoFAEnableRequest(BaseModel):
     code: str
 
@@ -1653,6 +1660,36 @@ async def ingest_client_error(body: ClientErrorEvent, request: Request):
         "expires_at": now + timedelta(days=30),
     })
     return {"ok": True}
+
+
+@api.post("/support/public", status_code=201)
+async def create_public_support_ticket(body: PublicSupportRequest, request: Request):
+    """Rate-limited support intake for kjappapp.no/help."""
+    await _enforce_rate_limit(request, "support-public", 8, 3600)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    topic_labels = {
+        "tur": "Tur eller bestilling",
+        "betaling": "Betaling eller kvittering",
+        "konto": "Konto eller innlogging",
+        "sjafor": "Sjåfør",
+        "loyvehaver": "Løyvehaver / Fleet",
+        "annet": "Annet",
+    }
+    ticket_id = str(uuid.uuid4())
+    await db.support_tickets.insert_one({
+        "id": ticket_id,
+        "subject": f"Web: {topic_labels.get(body.topic, 'Annet')}",
+        "category": body.topic,
+        "priority": "normal",
+        "status": "open",
+        "name": (body.name or "").strip()[:120],
+        "contact": body.contact.strip()[:200],
+        "message": body.message.strip()[:4000],
+        "source": "kjappapp.no/help",
+        "created_at": now_iso,
+        "notes": [],
+    })
+    return {"ok": True, "ticket_id": ticket_id}
 
 
 @api.post("/auth/register")
