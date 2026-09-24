@@ -180,8 +180,13 @@ export default function DriverHome() {
           new Date(pos.timestamp).toISOString(),
         ).catch(() => {});
 
+        const activeTrip = ['driver_on_way', 'at_pickup', 'in_trip'].includes(current?.status || '');
         const subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
+          {
+            accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
+            distanceInterval: activeTrip ? 5 : 40,
+            timeInterval: activeTrip ? 3000 : 12000,
+          },
           (u) => {
             if (!active) return;
             const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
@@ -210,7 +215,7 @@ export default function DriverHome() {
       active = false;
       stopWatching();
     };
-  }, [online]);
+  }, [online, current?.status]);
 
   const toggleOnline = async () => {
     const next = !online;
