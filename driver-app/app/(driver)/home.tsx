@@ -347,10 +347,23 @@ export default function DriverHome() {
       return;
     }
 
-    const fallback = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
-    const native = Platform.OS === 'ios'
-      ? `maps://?daddr=${lat},${lng}&dirflg=d`
-      : `google.navigation:q=${lat},${lng}&mode=d`;
+    const stops: any[] = !toPickup && Array.isArray(current.stops) ? current.stops : [];
+    const validStops = stops.filter((stop) =>
+      Number.isFinite(Number(stop?.lat)) && Number.isFinite(Number(stop?.lng))
+    );
+    const waypoints = validStops
+      .map((stop) => `${Number(stop.lat)},${Number(stop.lng)}`)
+      .join('|');
+
+    const fallback =
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
+      (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '') +
+      '&travelmode=driving';
+    const native = validStops.length
+      ? fallback
+      : Platform.OS === 'ios'
+        ? `maps://?daddr=${lat},${lng}&dirflg=d`
+        : `google.navigation:q=${lat},${lng}&mode=d`;
 
     try {
       const supported = await Linking.canOpenURL(native);
