@@ -50,6 +50,12 @@ def main() -> int:
 
     status, ready = get("/api/ready")
     ok &= check("deployment readiness", status == 200 and ready.get("ready") is True, ready)
+    if STRICT:
+        ok &= check(
+            "new bookings are open",
+            ready.get("checks", {}).get("booking_enabled") is True,
+            ready.get("checks", {}),
+        )
 
     status, area = get("/api/service-area")
     ok &= check(
