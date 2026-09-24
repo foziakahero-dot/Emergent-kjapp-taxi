@@ -4,6 +4,8 @@ import { ApplyPage } from './ApplyPage';
 import PremiumHome from './PremiumHome';
 import { TripSharePage } from './TripSharePage';
 import { PaymentReturnPage } from './PaymentReturnPage';
+import HelpPage from './HelpPage';
+import LegalPage from './LegalPage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -210,6 +212,10 @@ export default function App() {
       <Route path="/payment/cancel" element={<PaymentReturnPage kind="trip-cancel" />} />
       <Route path="/payment/setup-success" element={<PaymentReturnPage kind="setup-success" />} />
       <Route path="/payment/setup-cancel" element={<PaymentReturnPage kind="setup-cancel" />} />
+      <Route path="/help" element={<HelpPage />} />
+      <Route path="/hjelp" element={<HelpPage />} />
+      <Route path="/personvern" element={<LegalPage kind="privacy" />} />
+      <Route path="/vilkar" element={<LegalPage kind="terms" />} />
       <Route path="*" element={<PremiumHome />} />
     </Routes>
   );
