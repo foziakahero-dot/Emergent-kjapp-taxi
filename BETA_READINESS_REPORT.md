@@ -63,7 +63,7 @@ Implemented without redesigning Customer or Driver:
 ### Account recovery / legal wiring
 - Customer and Driver now have native forgot-password and reset-password routes.
 - Reset emails use fixed KJAPP app schemes (`kjapp://` / `kjapp-driver://`) with a trusted web fallback.
-- Web fallback is controlled by `PASSWORD_RESET_WEB_BASE` and defaults to `https://fleet.kjappapp.no`; it is not derived from request headers.
+- Web fallback is controlled by `PASSWORD_RESET_WEB_BASE` and defaults to `https://kjappapp.no`; it is not derived from request headers. The marketing app now has a neutral `/reset-password/:token` fallback page for Customer and Driver.
 - Customer signup requires explicit terms/privacy consent and stores consent timestamp + legal version.
 - Driver invite signup requires the same explicit consent and stores it on the driver account.
 - Fleet/løyvehaver application intake now also requires explicit partner/platform terms + privacy consent and stores consent timestamp + legal version.
@@ -89,6 +89,7 @@ Implemented without redesigning Customer or Driver:
   - fatal client-error count.
 
 ### Operations / store preparation
+- Admin now has an audited **Nye bestillinger** kill switch. It blocks only new booking creation; existing rides remain canonical and can be managed in Live drift.
 - `docs/INCIDENT_RUNBOOK.md` documents P0–P3 handling for dispatch, GPS, push, ride state, payment, settlement, app crash, API outage, Admin outage and privacy/security incidents.
 - `docs/STORE_RELEASE_PACK.md` documents Customer/Driver IDs, draft store metadata, release notes, privacy-label review inventory and TestFlight/public-store gates.
 - `docs/PHYSICAL_BETA_QA.md` is now the physical-device release gate for locked-screen push, background GPS, dispatch integrity, full ride lifecycle, payment, restart/network recovery and Admin/Fleet reconciliation.
@@ -104,8 +105,9 @@ Before production deployment configure/verify:
 - Stripe production/test keys appropriate for beta
 - MongoDB production connection
 - JWT secret
-- any email credentials used for receipts
+- any email credentials used for receipts/password reset
 - `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
+- optional explicit `PASSWORD_RESET_WEB_BASE=https://kjappapp.no` (this is also the safe default)
 - keep `KJAPP_AUTO_CHARGE_ENABLED=false` until Stripe saved-card/Connect test E2E passes; only then enable it intentionally
 
 ### Apple / EAS
@@ -153,7 +155,7 @@ The portable `backend/scripts/e2e_dispatch.py` checks duplicate customer booking
 
 Use `docs/PHYSICAL_BETA_QA.md` for the physical-device evidence run.
 
-1. Backend Python compile/test.
+1. Backend Python compile/test, including auth/rate-limit/booking-kill-switch regressions.
 2. Customer TypeScript + Expo config.
 3. Driver TypeScript + Expo config.
 4. Android Customer APK.
