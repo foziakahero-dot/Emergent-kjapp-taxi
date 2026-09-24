@@ -51,8 +51,11 @@ Customer:
 - [ ] clean install launches
 - [ ] returning install launches
 - [ ] fonts/icons/maps render
-- [ ] login works
+- [ ] email/password login works
 - [ ] Sign in with Apple works on physical iPhone
+- [ ] Google login completes and returns to the Customer app
+- [ ] destination/booking sheet can collapse to the compact “Hvor vil du?” pill and expand again
+- [ ] destination search can be minimized back to the map without losing the booking flow
 - [ ] forgot-password deep link opens the Customer reset screen
 - [ ] the same reset email works through `https://kjappapp.no/reset-password/:token` if the app cannot open
 - [ ] existing account without current legal consent is sent through the consent gate
