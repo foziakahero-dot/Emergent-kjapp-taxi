@@ -58,6 +58,7 @@ try {
   }
 
   Step "Backend Python compile" { python -m compileall -q backend }
+  Step "Static beta release policy" { python scripts/beta_static_policy.py }
 
   if (Test-Path (Join-Path $Root "backend\tests")) {
     Step "Backend focused unit tests" {
