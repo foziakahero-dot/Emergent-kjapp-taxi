@@ -14,7 +14,7 @@
       "backgroundColor": "#070B0E"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "no.kjapp.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
