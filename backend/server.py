@@ -2959,9 +2959,17 @@ async def driver_pending(current=Depends(require_driver)):
     """Real ride requests waiting for a driver (status=searching/booking, no driver assigned).
     Pickup distance + ETA come from real routing (OSRM) based on the driver's live GPS —
     never from hardcoded values. Fabricated/demo/test trips are filtered out."""
-    # Only a genuinely on-duty driver receives ride requests.
+    # Only a genuinely on-duty driver with fresh GPS receives ride requests.
     if not current.get("online"):
         return {"trips": [], "offline": True, "commission": await _platform_commission(), "driver_gps": None}
+    if not _fresh_driver_location(current.get("last_location_at")):
+        return {
+            "trips": [],
+            "offline": False,
+            "gps_stale": True,
+            "commission": await _platform_commission(),
+            "driver_gps": None,
+        }
     commission = await _platform_commission()
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     # A request the driver just declined must not bounce straight back on the next poll.
@@ -3024,6 +3032,8 @@ async def driver_pending(current=Depends(require_driver)):
 
 @api.post("/driver/accept")
 async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)):
+    if current.get("online") is not True:
+        raise HTTPException(status_code=409, detail="Gå online før du godtar en tur")
     driver_id = current["id"]  # driver's user id is the driver_id now
     driver = {
         "name": current.get("fullName") or "Sjåfør",
