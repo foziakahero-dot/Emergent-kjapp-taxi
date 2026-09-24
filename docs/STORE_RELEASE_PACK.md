@@ -156,15 +156,17 @@ Driver:
 ## TestFlight gate
 
 Before submitting either app to external TestFlight testers:
-1. Beta Gate CI green.
+1. Beta Gate CI green, or the equivalent `scripts/beta_local_gate.ps1` result is recorded while the GitHub Actions startup issue is unresolved.
 2. Signed iOS build succeeds.
 3. Correct Apple Team/App IDs/credentials in EAS.
 4. APNs capability works.
 5. Customer Apple Sign In works on a physical iPhone.
 6. Driver background location works on a physical iPhone.
 7. New-trip push works with Driver screen locked.
-8. One complete physical Customer -> Driver ride succeeds.
+8. One complete physical Customer -> Driver ride succeeds using `docs/PHYSICAL_BETA_QA.md`.
 9. Auto-charge remains OFF unless Stripe test E2E has separately passed.
+
+Native GitHub APK/iOS compile workflows are manual-only to avoid redundant builds on every PR update. The explicit EAS beta workflows are the signed-artifact path.
 
 ## Public App Store gate
 
