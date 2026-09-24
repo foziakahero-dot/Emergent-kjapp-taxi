@@ -13,7 +13,11 @@ export default function Index() {
   const s = useStyles();
 
   useEffect(() => {
-    if (user?.role === 'driver' && user?.approved === true) router.replace('/(driver)/home');
+    if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) {
+      router.replace('/(driver)/home');
+    } else if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted !== true) {
+      router.replace('/driver-legal-consent');
+    }
   }, [user, router]);
 
   if (user === undefined || (user?.role === 'driver' && user?.approved === true)) {
