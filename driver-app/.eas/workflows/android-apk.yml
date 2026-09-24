@@ -1,0 +1,9 @@
+name: KJAPP Driver Android Beta APK
+
+jobs:
+  build_android:
+    name: Build KJAPP Driver Android beta APK
+    type: build
+    params:
+      platform: android
+      profile: apk
