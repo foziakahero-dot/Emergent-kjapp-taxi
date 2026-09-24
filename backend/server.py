@@ -349,6 +349,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
+    "identity_verification_status", "identity_verification_updated_at",
     "legal_version",
 })
 
@@ -1040,6 +1041,8 @@ async def lifespan(app: FastAPI):
     await db.rate_limit_buckets.create_index("expires_at", expireAfterSeconds=0)
     await db.client_errors.create_index([("created_at", -1)])
     await db.client_errors.create_index("expires_at", expireAfterSeconds=0)
+    await db.driver_identity_verifications.create_index([("driver_user_id", 1), ("created_at", -1)])
+    await db.driver_identity_verifications.create_index([("status", 1), ("created_at", -1)])
     await db.password_reset_tokens.create_index("token")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.revoked_tokens.create_index("jti", unique=True)
@@ -4681,6 +4684,7 @@ async def fleet_live(current=Depends(require_fleet_owner)):
             "last_location_at": u.get("last_location_at"),
             "rating": u.get("rating"),
             "active_trip_id": (active_trip or {}).get("trip_id"),
+            "identity_verification_status": u.get("identity_verification_status") or "not_submitted",
         })
 
     return {
@@ -4719,6 +4723,7 @@ async def fleet_vehicles(current=Depends(require_fleet_owner)):
             "online": bool(u.get("online")),
             "gps_fresh": fresh,
             "last_location_at": u.get("last_location_at"),
+            "identity_verification_status": u.get("identity_verification_status") or "not_submitted",
         })
     return {"vehicles": vehicles}
 
@@ -6758,6 +6763,195 @@ def _mk_upload_path(scope: str, subject_id: str, filename: str, content_type: st
     ext = (ext or "bin").replace("/", "").replace(".", "")
     return f"{STORAGE_APP}/{scope}/{subject_id}/{uuid.uuid4()}.{ext}"
 
+_IDENTITY_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+
+
+async def _require_driver_identity_user(current=Depends(get_current_user)):
+    if current.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Kun for sjåfører")
+    if current.get("disabled"):
+        raise HTTPException(status_code=403, detail="Sjåførkontoen er deaktivert")
+    return current
+
+
+@api.get("/driver/identity-verification")
+async def driver_identity_verification_status(current=Depends(_require_driver_identity_user)):
+    latest = await db.driver_identity_verifications.find_one(
+        {"driver_user_id": current["id"]},
+        sort=[("created_at", -1)],
+    )
+    if not latest:
+        return {
+            "status": current.get("identity_verification_status") or "not_submitted",
+            "submitted_at": None,
+            "reviewed_at": None,
+            "review_reason": None,
+        }
+    return {
+        "id": latest.get("id") or str(latest["_id"]),
+        "status": latest.get("status") or "pending_review",
+        "submitted_at": latest.get("created_at"),
+        "reviewed_at": latest.get("reviewed_at"),
+        "review_reason": latest.get("review_reason"),
+    }
+
+
+@api.post("/driver/identity-verification/selfie", status_code=201)
+async def driver_identity_verification_selfie(
+    request: Request,
+    file: UploadFile = File(...),
+    current=Depends(_require_driver_identity_user),
+):
+    """Accept a fresh front-camera selfie for manual identity review.
+
+    The beta flow deliberately does not run an automatic face-match decision.
+    Raw selfie access is restricted to the driver and KJAPP admins.
+    """
+    await _enforce_rate_limit(request, "driver-identity-selfie", 10, 3600)
+    if file.content_type not in _IDENTITY_IMAGE_MIME:
+        raise HTTPException(status_code=415, detail="Selfie må være et bilde")
+    data = await _read_uploaded_file(file)
+    now = datetime.now(timezone.utc).isoformat()
+    storage_path = _mk_upload_path(
+        "driver-identity-selfie",
+        current["id"],
+        file.filename or "selfie.jpg",
+        file.content_type,
+    )
+    result = storage_put(storage_path, data, file.content_type)
+    upload_id = str(uuid.uuid4())
+    await db.uploaded_files.insert_one({
+        "id": upload_id,
+        "storage_path": result["path"],
+        "original_filename": file.filename or "selfie.jpg",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "driver-identity-selfie",
+        "is_deleted": False,
+        "created_at": now,
+    })
+
+    await db.driver_identity_verifications.update_many(
+        {"driver_user_id": current["id"], "status": "pending_review"},
+        {"$set": {"status": "superseded", "superseded_at": now}},
+    )
+    verification_id = str(uuid.uuid4())
+    await db.driver_identity_verifications.insert_one({
+        "id": verification_id,
+        "driver_user_id": current["id"],
+        "selfie_file_id": upload_id,
+        "selfie_storage_path": result["path"],
+        "status": "pending_review",
+        "created_at": now,
+    })
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"])},
+        {"$set": {
+            "identity_verification_status": "pending_review",
+            "identity_verification_updated_at": now,
+        }},
+    )
+    return {
+        "id": verification_id,
+        "status": "pending_review",
+        "submitted_at": now,
+    }
+
+
+class DriverIdentityReviewRequest(BaseModel):
+    status: Literal["verified", "retry_required"]
+    reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+@api.get("/admin/identity-verifications")
+async def admin_identity_verifications(
+    status: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    current=Depends(require_admin),
+):
+    q = {}
+    if status and status != "all":
+        q["status"] = status
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.driver_identity_verifications.count_documents(q)
+    rows = []
+    async for v in db.driver_identity_verifications.find(q).sort("created_at", -1).skip(skip).limit(page_size):
+        driver = None
+        try:
+            driver = await db.users.find_one({"_id": ObjectId(v.get("driver_user_id"))})
+        except Exception:
+            driver = None
+        if not driver:
+            continue
+        rows.append({
+            "id": v.get("id") or str(v["_id"]),
+            "status": v.get("status"),
+            "submitted_at": v.get("created_at"),
+            "reviewed_at": v.get("reviewed_at"),
+            "reviewed_by": v.get("reviewed_by"),
+            "review_reason": v.get("review_reason"),
+            "selfie_storage_path": v.get("selfie_storage_path"),
+            "driver_id": str(driver["_id"]),
+            "driver_name": driver.get("fullName") or driver.get("full_name"),
+            "driver_email": driver.get("email"),
+            "fleet_id": driver.get("fleet_id"),
+            "car": driver.get("car"),
+            "plate": driver.get("plate"),
+            "profile_photo_path": driver.get("profile_photo_path"),
+            "drivers_license_path": driver.get("drivers_license_path"),
+            "taxi_license_path": driver.get("taxi_license_path"),
+        })
+    return _paged(rows, total, page, page_size, "verifications")
+
+
+@api.post("/admin/identity-verifications/{verification_id}/review")
+async def admin_review_identity_verification(
+    verification_id: str,
+    body: DriverIdentityReviewRequest,
+    current=Depends(require_admin),
+):
+    verification = await db.driver_identity_verifications.find_one({"id": verification_id})
+    if not verification:
+        raise HTTPException(404, "Fant ikke identitetskontrollen")
+    if verification.get("status") == "superseded":
+        raise HTTPException(409, "Denne selfien er erstattet av en nyere innsending")
+
+    now = datetime.now(timezone.utc).isoformat()
+    previous = verification.get("status")
+    await db.driver_identity_verifications.update_one(
+        {"_id": verification["_id"]},
+        {"$set": {
+            "status": body.status,
+            "review_reason": (body.reason or "").strip() or None,
+            "reviewed_at": now,
+            "reviewed_by": current.get("id"),
+        }},
+    )
+    driver_id = verification.get("driver_user_id")
+    try:
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id)},
+            {"$set": {
+                "identity_verification_status": body.status,
+                "identity_verification_updated_at": now,
+            }},
+        )
+    except Exception:
+        pass
+    await _audit(
+        current,
+        "driver.identity_review",
+        "driver",
+        driver_id,
+        {"status": previous},
+        {"status": body.status},
+        body.reason,
+    )
+    return {"ok": True, "status": body.status, "reviewed_at": now}
+
+
 
 @api.post("/upload")
 async def upload_auth(file: UploadFile = File(...), scope: str = Form("misc"), current=Depends(get_current_user)):
@@ -6829,6 +7023,10 @@ async def download_file(path: str, current=Depends(get_current_user)):
         except Exception:
             app_doc = None
         if app_doc and rec.get("application_token") == app_doc.get("upload_token"):
+            allowed = True
+    elif rec.get("scope") == "driver-identity-selfie":
+        # Raw identity selfies are intentionally not exposed to fleet owners.
+        if is_owner or role in ("admin", "superadmin"):
             allowed = True
     elif rec.get("scope") == "driver-docs":
         if is_owner or role in ("admin", "superadmin"):
