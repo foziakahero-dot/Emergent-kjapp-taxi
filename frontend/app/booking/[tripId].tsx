@@ -132,6 +132,18 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
+  const canCancel = ['searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status);
+  const etaValue = Number(trip.eta_min);
+  const etaMinutes = Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
+  const driverDistance = Number(trip.driver_distance_to_pickup_km);
+  const driverDistanceLabel = Number.isFinite(driverDistance) && driverDistance >= 0
+    ? `${driverDistance.toFixed(driverDistance < 10 ? 1 : 0)} km unna`
+    : null;
+  let driverGpsFresh = true;
+  if (trip.driver_location_at && ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status)) {
+    const stamp = Date.parse(trip.driver_location_at);
+    if (Number.isFinite(stamp)) driverGpsFresh = Date.now() - stamp <= 30000;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -145,9 +157,11 @@ export default function BookingFlow() {
       />
 
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel" accessibilityRole="button" accessibilityLabel="Avbryt tur">
-          <Icon name="x" size={20} color={colors.text} />
-        </Pressable>
+        {canCancel ? (
+          <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel" accessibilityRole="button" accessibilityLabel="Avbryt tur">
+            <Icon name="x" size={20} color={colors.text} />
+          </Pressable>
+        ) : <View style={{ width: 44 }} />}
         <View style={s.statusPill}>
           <Text style={s.statusText} testID="customer-trip-status">{meta.title}</Text>
         </View>
@@ -161,6 +175,11 @@ export default function BookingFlow() {
           <View style={s.networkBanner} testID="booking-network-warning">
             <View style={s.networkDot} />
             <Text style={s.networkText}>Live-data er midlertidig utilgjengelig · prøver igjen automatisk</Text>
+          </View>
+        ) : !driverGpsFresh ? (
+          <View style={s.networkBanner} testID="booking-gps-warning">
+            <View style={s.networkDot} />
+            <Text style={s.networkText}>Sjåførposisjonen oppdateres · viser siste kjente posisjon</Text>
           </View>
         ) : null}
 
@@ -198,10 +217,15 @@ export default function BookingFlow() {
               <View style={s.etaBadge}>
                 {trip.status === 'in_trip' ? (
                   <Icon name="navigation" size={22} color={colors.accent} />
+                ) : trip.status === 'at_pickup' ? (
+                  <>
+                    <Text style={s.etaNum}>✓</Text>
+                    <Text style={s.etaMin}>FREMME</Text>
+                  </>
                 ) : (
                   <>
-                    <Text style={s.etaNum}>{trip.eta_min || 2}</Text>
-                    <Text style={s.etaMin}>MIN</Text>
+                    <Text style={s.etaNum}>{etaMinutes ?? '—'}</Text>
+                    <Text style={s.etaMin}>{etaMinutes ? 'MIN' : 'PÅ VEI'}</Text>
                   </>
                 )}
               </View>
@@ -215,7 +239,12 @@ export default function BookingFlow() {
                   <View style={s.ratingRow}>
                     <Icon name="star" size={12} color={colors.accent} fill={colors.accent} />
                     <Text style={s.ratingText}>{trip.driver.rating}</Text>
+                    {trip.status === 'driver_on_way' && driverDistanceLabel ? (
+                      <Text style={s.driverDistance}>· {driverDistanceLabel}</Text>
+                    ) : null}
                   </View>
+                ) : trip.status === 'driver_on_way' && driverDistanceLabel ? (
+                  <Text style={s.driverDistance}>{driverDistanceLabel}</Text>
                 ) : null}
               </View>
             </View>
@@ -347,6 +376,7 @@ const useStyles = makeStyles((c) => ({
   driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingText: { color: c.textMuted, fontSize: 12 },
+  driverDistance: { color: c.textMuted, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
   action: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   actionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
