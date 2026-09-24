@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "apk": {
@@ -42,6 +43,15 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleTeamId": "KUPTFG8BZ2"
+      }
+    },
+    "testflight-beta": {
+      "ios": {
+        "appleTeamId": "KUPTFG8BZ2"
+      }
+    }
   }
 }
