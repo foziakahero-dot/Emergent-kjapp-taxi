@@ -1675,9 +1675,7 @@ async def create_public_support_ticket(body: PublicSupportRequest, request: Requ
         "loyvehaver": "Løyvehaver / Fleet",
         "annet": "Annet",
     }
-    ticket_id = str(uuid.uuid4())
-    await db.support_tickets.insert_one({
-        "id": ticket_id,
+    result = await db.support_tickets.insert_one({
         "subject": f"Web: {topic_labels.get(body.topic, 'Annet')}",
         "category": body.topic,
         "priority": "normal",
@@ -1689,7 +1687,7 @@ async def create_public_support_ticket(body: PublicSupportRequest, request: Requ
         "created_at": now_iso,
         "notes": [],
     })
-    return {"ok": True, "ticket_id": ticket_id}
+    return {"ok": True, "ticket_id": str(result.inserted_id)}
 
 
 @api.post("/auth/register")
