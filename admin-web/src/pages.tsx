@@ -37,6 +37,7 @@ export function Dashboard() {
   const fin = useAsync(() => api.finance(30), []);
   const live = useAsync(() => api.live(), []);
   const health = useAsync(() => api.betaHealth(7), []);
+  const clientErrors = useAsync(() => api.clientErrors(8), []);
   const twofa = useAsync(() => api.twofaStatus(), []);
   if (ov.loading) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
@@ -95,6 +96,29 @@ export function Dashboard() {
           foot={<span className="dim">{health.data ? `${health.data.operations.critical_support_cases} kritiske support · ${health.data.operations.fatal_client_errors_per_100_trips ?? '—'} fatale appfeil /100` : 'Beta incident-rate'}</span>} />
       </div>
       {health.err ? <ErrorBanner msg={health.err} /> : null}
+
+      <div className="section-title">Siste appfeil</div>
+      <div className="tablewrap">
+        <table>
+          <thead><tr><th>App</th><th>Feil</th><th>Fatal</th><th>Versjon</th><th>Tid</th></tr></thead>
+          <tbody>
+            {clientErrors.loading ? <tr><td colSpan={5}><Loader /></td></tr> :
+              (clientErrors.data?.items || []).length ? (clientErrors.data.items || []).map((e: any) => (
+                <tr key={e.id}>
+                  <td><Pill status="gray" label={e.app || 'app'} /></td>
+                  <td>
+                    <div className="strong">{String(e.message || 'Ukjent feil').slice(0, 180)}</div>
+                    {e.platform ? <div className="cell-sub">{e.platform}{e.route ? ' · ' + e.route : ''}</div> : null}
+                  </td>
+                  <td>{e.is_fatal ? <Pill status="failed" label="Fatal" /> : <Pill status="gray" label="Ikke fatal" />}</td>
+                  <td className="mono dim">{e.version || '—'}</td>
+                  <td className="dim nowrap">{fmtDate(e.created_at)}</td>
+                </tr>
+              )) : <tr><td colSpan={5}><Empty title="Ingen klientfeil registrert i beta" /></td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {clientErrors.err ? <ErrorBanner msg={clientErrors.err} /> : null}
 
       <div className="section-title">Siste 30 dager — brutto omsetning</div>
       <Card>
