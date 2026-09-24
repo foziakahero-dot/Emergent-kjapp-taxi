@@ -10,6 +10,7 @@ import {
   FinancePage,
   ForgotPasswordPage,
   LoginPage,
+  LiveOpsPage,
   OverviewPage,
   ResetPasswordPage,
   TripsPage,
@@ -18,6 +19,7 @@ import {
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true },
+  { to: '/live', label: 'Live drift' },
   { to: '/sjaforer', label: 'Sjåfører' },
   { to: '/kjoretoy', label: 'Kjøretøy' },
   { to: '/turer', label: 'Turer' },
@@ -90,6 +92,7 @@ function PortalShell() {
       <main className="portal-main">
         <Routes>
           <Route path="/" element={<OverviewPage />} />
+          <Route path="/live" element={<LiveOpsPage />} />
           <Route path="/sjaforer" element={<DriversPage />} />
           <Route path="/kjoretoy" element={<VehiclesPage />} />
           <Route path="/turer" element={<TripsPage />} />
