@@ -46,6 +46,10 @@ export default function DriverLogin() {
         setError('Sjåførkontoen din venter fortsatt på godkjenning. Du får tilgang når dokumentene og kontoen er godkjent.');
         return;
       }
+      if (res?.legal_accepted !== true) {
+        router.replace('/driver-legal-consent');
+        return;
+      }
       router.replace('/(driver)/home');
     } catch (e) {
       setError(apiError(e));
