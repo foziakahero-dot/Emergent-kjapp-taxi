@@ -53,6 +53,10 @@ try {
 
   Step "Git diff check" { git diff --check }
 
+  if (-not $SkipInstall) {
+    Step "Backend portable test dependencies" { python -m pip install -r backend/requirements-ci.txt }
+  }
+
   Step "Backend Python compile" { python -m compileall -q backend }
 
   if (Test-Path (Join-Path $Root "backend\tests")) {
