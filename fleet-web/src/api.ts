@@ -140,6 +140,8 @@ export const api = {
     email: string;
     phone: string;
     password: string;
+    accepted_terms: boolean;
+    legal_version: string;
     drivers_license_path: string;
     taxi_license_path: string;
     profile_photo_path: string;
