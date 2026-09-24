@@ -2543,12 +2543,13 @@ async def stripe_card_setup(body: CardSetupRequest, current=Depends(get_current_
         cust = stripe.Customer.create(email=user["email"], name=user.get("fullName") or user["email"], metadata={"user_id": current["id"]})
         customer_id = cust.id
         await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"stripe_customer_id": customer_id}})
+    origin = _trusted_checkout_origin(body.origin_url)
     session = stripe.checkout.Session.create(
         mode="setup",
         customer=customer_id,
         payment_method_types=["card"],
-        success_url=f"{body.origin_url}/app/payment-methods?setup=success&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/app/payment-methods?setup=cancel",
+        success_url=f"{origin}/payment/setup-success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/payment/setup-cancel",
         metadata={"user_id": current["id"]},
     )
     return {"checkout_url": session.url, "session_id": session.id}
@@ -4993,6 +4994,20 @@ class TripCheckoutRequest(BaseModel):
     origin_url: str
 
 
+def _trusted_checkout_origin(requested: str) -> str:
+    default_origin = os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no").rstrip("/")
+    configured = {
+        x.strip().rstrip("/")
+        for x in os.environ.get("KJAPP_CHECKOUT_ALLOWED_ORIGINS", default_origin).split(",")
+        if x.strip()
+    }
+    configured.add(default_origin)
+    candidate = (requested or "").strip().rstrip("/")
+    if candidate in configured:
+        return candidate
+    return default_origin
+
+
 @api.post("/payments/checkout")
 async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
     """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
@@ -5027,6 +5042,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         except stripe.error.StripeError:
             pass
 
+    origin = _trusted_checkout_origin(body.origin_url)
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
     checkout_kwargs = {
@@ -5041,8 +5057,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
             },
             "quantity": 1,
         }],
-        "success_url": f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        "cancel_url": f"{body.origin_url}/payment/cancel?trip_id={body.trip_id}",
+        "success_url": f"{origin}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{origin}/payment/cancel?trip_id={body.trip_id}",
         "metadata": metadata,
     }
     connect_fields = {}
