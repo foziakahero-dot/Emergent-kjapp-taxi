@@ -6306,6 +6306,8 @@ class FleetApplicationDraftRequest(BaseModel):
     vehicle_count: int = Field(ge=1, le=500)
     bank_account: str = Field(min_length=5, max_length=64)
     notes: Optional[str] = ""
+    accepted_terms: bool = False
+    legal_version: str = "2026-09"
 
 
 class FleetApplicationSubmitRequest(BaseModel):
@@ -6322,7 +6324,10 @@ class FleetApplicationDecisionRequest(BaseModel):
 async def create_fleet_application_draft(body: FleetApplicationDraftRequest, request: Request):
     """Public: creates a draft application, returns an upload_token used to attach documents."""
     await _enforce_rate_limit(request, "fleet-application-draft", 20, 3600)
+    if body.accepted_terms is not True:
+        raise HTTPException(status_code=400, detail="Du må godta partner-/plattformvilkår og personvern før søknaden opprettes")
     upload_token = secrets.token_urlsafe(24)
+    accepted_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "upload_token": upload_token,
         "company_name": body.company_name.strip(),
@@ -6334,9 +6339,11 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest, req
         "vehicle_count": int(body.vehicle_count),
         "bank_account": body.bank_account.strip(),
         "notes": (body.notes or "").strip(),
+        "accepted_terms_at": accepted_at,
+        "legal_version": (body.legal_version or "2026-09")[:32],
         "documents": {},
         "status": "draft",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": accepted_at,
     }
     await db.fleet_applications.insert_one(doc)
     return {"upload_token": upload_token, "status": "draft"}
