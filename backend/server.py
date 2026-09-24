@@ -4734,8 +4734,11 @@ async def award_driver_bonuses(driver_id: str) -> list:
             payout.pop("_id", None)
             earned.append({"name": c["name"], "amount": int(c["bonus_kr"]), "trips": p["required"]})
             await send_push_to_user(
-                driver_id, f"Bonus opptjent · +{c['bonus_kr']} kr",
-                f"{c['name']} — {p['required']} turer fullført", "/driver/payouts", tag="kjapp-bonus",
+                driver_id,
+                f"Bonus opptjent · +{c['bonus_kr']} kr",
+                f"{c['name']} — {p['required']} turer fullført",
+                "/driver",
+                tag="kjapp-bonus",
             )
     return earned
 
