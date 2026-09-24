@@ -4937,6 +4937,25 @@ async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_cu
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
+    # Reuse an existing open Checkout session for this ride so repeated taps/network retries
+    # cannot create multiple simultaneous payment intents for the same fare.
+    existing_payment = await db.payment_transactions.find_one(
+        {
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "payment_status": {"$ne": "paid"},
+            "status": {"$in": ["initiated", "awaiting_payment"]},
+        },
+        sort=[("created_at", -1)],
+    )
+    if existing_payment and existing_payment.get("session_id"):
+        try:
+            existing_session = stripe.checkout.Session.retrieve(existing_payment["session_id"])
+            if existing_session.get("status") == "open" and existing_session.get("url"):
+                return {"checkout_url": existing_session.url, "session_id": existing_session.id, "reused": True}
+        except stripe.error.StripeError:
+            pass
+
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
     checkout_kwargs = {
@@ -5004,7 +5023,7 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
             amount_matches = s.get("amount_total") == int(record.get("amount") or 0) * 100
             identity_matches = metadata.get("trip_id") == record.get("trip_id") and metadata.get("user_id") == current["id"]
             if s.payment_status == "paid" and amount_matches and identity_matches and s.get("currency") == record.get("currency", "nok"):
-                await db.payment_transactions.update_one(
+                paid_record = await db.payment_transactions.find_one_and_update(
                     {"session_id": session_id, "payment_status": {"$ne": "paid"}},
                     {"$set": {
                         "status": "completed",
@@ -5013,13 +5032,29 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                         "updated_at": datetime.now(timezone.utc),
                     }},
                 )
-                # mark trip as paid
-                if record.get("trip_id"):
+                if paid_record and paid_record.get("trip_id"):
+                    paid_at = datetime.now(timezone.utc).isoformat()
                     await db.trips.update_one(
-                        {"trip_id": record["trip_id"], "user_id": current["id"]},
-                        {"$set": {"payment_status": "paid", "status": "completed", "paid_at": datetime.now(timezone.utc).isoformat()}},
+                        {"trip_id": paid_record["trip_id"], "user_id": current["id"]},
+                        {"$set": {"payment_status": "paid", "paid_at": paid_at}},
                     )
-                    await send_trip_receipts(record["trip_id"])
+                    await send_push_to_user(
+                        current["id"],
+                        "Betalingen er gjennomført",
+                        f"Turen er betalt med {paid_record.get('amount') or 0} kr.",
+                        f"/receipt/{paid_record['trip_id']}",
+                        "trip_payment_paid",
+                    )
+                    paid_trip = await db.trips.find_one({"trip_id": paid_record["trip_id"]})
+                    if paid_trip and paid_trip.get("driver_id"):
+                        await send_push_to_user(
+                            paid_trip["driver_id"],
+                            "Betalingen er gjennomført",
+                            f"Kunden har betalt {paid_record.get('amount') or 0} kr. for turen.",
+                            "/driver",
+                            "trip_payment_paid",
+                        )
+                    await send_trip_receipts(paid_record["trip_id"])
                 record = await db.payment_transactions.find_one({"session_id": session_id})
         except stripe.error.StripeError:
             pass
