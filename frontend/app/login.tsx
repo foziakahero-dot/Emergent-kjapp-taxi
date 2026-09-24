@@ -139,6 +139,10 @@ export default function Login() {
             </Pressable>
           </View>
 
+          <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="login-forgot-password">
+            <Text style={s.forgotText}>Glemt passord?</Text>
+          </Pressable>
+
           {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
 
           <Button label="Logg inn" onPress={submit} loading={loading} testID="login-submit" style={{ marginTop: 2 }} />
@@ -208,6 +212,8 @@ const useStyles = makeStyles((c) => ({
   field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingLeft: 16, paddingRight: 6, height: 56 },
   input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  forgot: { minHeight: 32, alignSelf: 'flex-end', justifyContent: 'center', paddingHorizontal: 2 },
+  forgotText: { color: c.accent, fontFamily: font.semibold, fontSize: 13 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
   divLine: { flex: 1, height: 1, backgroundColor: c.line },
