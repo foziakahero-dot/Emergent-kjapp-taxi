@@ -3218,8 +3218,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
         f"/receipt/{trip_id}", "trip_arrived",
     )
+    payment = await _attempt_trip_auto_charge(t)
     bonuses = await award_driver_bonuses(driver_id)
-    return {"ok": True, "bonuses": bonuses}
+    return {"ok": True, "bonuses": bonuses, "payment": payment}
 
 
 @api.get("/driver/demand")
@@ -4986,6 +4987,204 @@ async def send_trip_receipts(trip_id: str):
         {"trip_id": trip_id, "receipt_emailed_at": {"$exists": False}},
         {"$set": {"receipt_emailed_at": datetime.now(timezone.utc).isoformat()}},
     )
+
+
+AUTO_CHARGE_ENABLED = str(os.environ.get("KJAPP_AUTO_CHARGE_ENABLED", "false")).strip().lower() in ("1", "true", "yes", "on")
+
+
+async def _attempt_trip_auto_charge(trip: dict) -> dict:
+    """Charge a previously verified saved card after arrival.
+
+    Disabled by default. When enabled, Stripe is the source of truth and a deterministic
+    idempotency key prevents duplicate captures. Any failed/3DS-required off-session attempt
+    is cancelled and the customer falls back to the existing manual Checkout flow.
+    """
+    if not AUTO_CHARGE_ENABLED:
+        return {"attempted": False, "reason": "disabled"}
+    if not stripe.api_key:
+        return {"attempted": False, "reason": "stripe_not_configured"}
+    if not trip or trip.get("payment_status") == "paid":
+        return {"attempted": False, "reason": "already_paid_or_missing"}
+
+    trip_id = trip.get("trip_id")
+    user_id = trip.get("user_id")
+    amount_nok = int(trip.get("price") or 0)
+    if not trip_id or not user_id or amount_nok <= 0:
+        return {"attempted": False, "reason": "invalid_trip"}
+
+    prior = await db.payment_transactions.find_one({
+        "trip_id": trip_id,
+        "kind": "auto_charge",
+        "payment_status": "paid",
+    })
+    if prior:
+        return {"attempted": False, "reason": "already_captured"}
+
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    customer_id = (user or {}).get("stripe_customer_id")
+    if not customer_id:
+        return {"attempted": False, "reason": "no_stripe_customer"}
+
+    pm = await db.payment_methods.find_one(
+        {
+            "user_id": user_id,
+            "verified": True,
+            "setup_status": "succeeded",
+            "stripe_payment_method_id": {"$exists": True, "$ne": None},
+        },
+        sort=[("is_default", -1), ("created_at", -1)],
+    )
+    if not pm:
+        return {"attempted": False, "reason": "no_verified_payment_method"}
+
+    payment_method_id = pm.get("stripe_payment_method_id")
+    metadata = {"trip_id": trip_id, "user_id": user_id, "source": "kjapp_auto_charge"}
+    kwargs = {
+        "amount": amount_nok * 100,
+        "currency": "nok",
+        "customer": customer_id,
+        "payment_method": payment_method_id,
+        "confirm": True,
+        "off_session": True,
+        "description": f"KJAPP tur {trip_id}",
+        "metadata": metadata,
+    }
+
+    connect_destination = await stripe_destination_for_trip(db, stripe, trip)
+    connect_fields = {}
+    if connect_destination:
+        fee_ore = int(round(amount_nok * 100 * connect_destination["commission_rate"]))
+        kwargs["application_fee_amount"] = fee_ore
+        kwargs["transfer_data"] = {"destination": connect_destination["stripe_account_id"]}
+        connect_fields = {
+            "fleet_id": connect_destination["fleet_id"],
+            "stripe_account_id": connect_destination["stripe_account_id"],
+            "commission_rate": connect_destination["commission_rate"],
+            "platform_fee": fee_ore / 100,
+            "fleet_net": amount_nok - (fee_ore / 100),
+            "settlement_model": "stripe_destination_charge",
+        }
+
+    payment_intent = None
+    try:
+        payment_intent = await asyncio.to_thread(
+            stripe.PaymentIntent.create,
+            **kwargs,
+            idempotency_key=f"kjapp-trip-auto-charge-{trip_id}",
+        )
+        pi_id = _stripe_id(payment_intent)
+        status = getattr(payment_intent, "status", None) or payment_intent.get("status")
+        if status != "succeeded":
+            if pi_id:
+                try:
+                    await asyncio.to_thread(stripe.PaymentIntent.cancel, pi_id)
+                except Exception:
+                    pass
+            await db.payment_transactions.update_one(
+                {"trip_id": trip_id, "kind": "auto_charge"},
+                {"$set": {
+                    "trip_id": trip_id,
+                    "user_id": user_id,
+                    "kind": "auto_charge",
+                    "amount": amount_nok,
+                    "currency": "nok",
+                    "status": "requires_action",
+                    "payment_status": "requires_action",
+                    "stripe_payment_intent_id": pi_id,
+                    "updated_at": datetime.now(timezone.utc),
+                    **connect_fields,
+                }, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            await db.trips.update_one(
+                {"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}},
+                {"$set": {"payment_status": "requires_action"}},
+            )
+            await send_push_to_user(
+                user_id,
+                "Bekreft betaling",
+                f"Åpne KJAPP for å betale {amount_nok} kr for turen.",
+                f"/receipt/{trip_id}",
+                "trip_payment_action_required",
+            )
+            return {"attempted": True, "paid": False, "reason": "requires_action"}
+
+        paid_at = datetime.now(timezone.utc).isoformat()
+        await db.payment_transactions.update_one(
+            {"trip_id": trip_id, "kind": "auto_charge"},
+            {"$set": {
+                "trip_id": trip_id,
+                "user_id": user_id,
+                "kind": "auto_charge",
+                "amount": amount_nok,
+                "currency": "nok",
+                "status": "completed",
+                "payment_status": "paid",
+                "stripe_payment_intent_id": pi_id,
+                "updated_at": datetime.now(timezone.utc),
+                **connect_fields,
+            }, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+        await db.trips.update_one(
+            {"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}},
+            {"$set": {"payment_status": "paid", "paid_at": paid_at}},
+        )
+        await send_push_to_user(
+            user_id,
+            "Betalingen er gjennomført",
+            f"{amount_nok} kr ble betalt automatisk for turen.",
+            f"/receipt/{trip_id}",
+            "trip_payment_paid",
+        )
+        if trip.get("driver_id"):
+            await send_push_to_user(
+                trip["driver_id"],
+                "Betalingen er gjennomført",
+                f"Kunden har betalt {amount_nok} kr for turen.",
+                "/driver",
+                "trip_payment_paid",
+            )
+        await send_trip_receipts(trip_id)
+        return {"attempted": True, "paid": True, "payment_intent_id": pi_id}
+
+    except stripe.error.StripeError as exc:
+        pi = getattr(exc, "payment_intent", None)
+        pi_id = _stripe_id(pi) or _stripe_id(payment_intent)
+        if pi_id:
+            try:
+                await asyncio.to_thread(stripe.PaymentIntent.cancel, pi_id)
+            except Exception:
+                pass
+        await db.payment_transactions.update_one(
+            {"trip_id": trip_id, "kind": "auto_charge"},
+            {"$set": {
+                "trip_id": trip_id,
+                "user_id": user_id,
+                "kind": "auto_charge",
+                "amount": amount_nok,
+                "currency": "nok",
+                "status": "failed",
+                "payment_status": "failed",
+                "stripe_payment_intent_id": pi_id,
+                "failure_code": getattr(exc, "code", None),
+                "updated_at": datetime.now(timezone.utc),
+                **connect_fields,
+            }, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+        await db.trips.update_one(
+            {"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}},
+            {"$set": {"payment_status": "failed"}},
+        )
+        await send_push_to_user(
+            user_id,
+            "Betalingen må fullføres",
+            f"Automatisk betaling av {amount_nok} kr gikk ikke gjennom. Åpne KJAPP for å betale.",
+            f"/receipt/{trip_id}",
+            "trip_payment_failed",
+        )
+        return {"attempted": True, "paid": False, "reason": "stripe_error"}
 
 
 # ============================================================
