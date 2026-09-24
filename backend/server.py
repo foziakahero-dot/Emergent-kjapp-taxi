@@ -436,6 +436,8 @@ class RegisterRequest(BaseModel):
     email: str
     phone: Optional[str] = None
     password: str
+    accepted_terms: bool = False
+    legal_version: str = "2026-09"
 
 
 class LoginRequest(BaseModel):
@@ -1535,13 +1537,18 @@ async def register(body: RegisterRequest, response: Response):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    if body.accepted_terms is not True:
+        raise HTTPException(status_code=400, detail="Du må godta vilkår og personvern før kontoen opprettes")
+    now_iso = datetime.now(timezone.utc).isoformat()
     result = await db.users.insert_one({
         "email": email,
         "password_hash": hash_password(body.password),
         "fullName": body.fullName,
         "phone": body.phone or "",
         "role": "user",
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "accepted_terms_at": now_iso,
+        "legal_version": (body.legal_version or "2026-09")[:32],
+        "created_at": now_iso,
     })
     uid = str(result.inserted_id)
     token = create_access_token(uid, email)
@@ -1697,6 +1704,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
 # ---- Password reset via e-postlenke ----
 class ForgotPasswordRequest(BaseModel):
     email: str
+    client: Literal["web", "customer", "driver"] = "web"
 
 
 class ResetPasswordRequest(BaseModel):
@@ -1704,7 +1712,7 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-def email_password_reset_html(reset_url: str) -> str:
+def email_password_reset_html(reset_url: str, fallback_url: Optional[str] = None) -> str:
     return f"""
     <div style="font-family:'Segoe UI',Arial,sans-serif;background:#0B1013;color:#F4F4F0;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
       <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:#CBA365">A</span>PP</div>
@@ -1714,6 +1722,7 @@ def email_password_reset_html(reset_url: str) -> str:
         Trykk på knappen under for å velge et nytt passord. Lenken er gyldig i 1 time og kan bare brukes én gang.
       </p>
       <a href="{reset_url}" style="display:inline-block;background:#CBA365;color:#0B1013;font-weight:600;padding:14px 28px;border-radius:12px;text-decoration:none;margin:16px 0;">Velg nytt passord</a>
+      ${f'<p style="color:#8A9198;font-size:12px;line-height:1.6">Hvis appen ikke åpnes, kan du <a href="{fallback_url}" style="color:#CBA365">tilbakestille passordet i nettleseren</a>.</p>' if fallback_url else ''}
       <p style="color:#8A9198;font-size:12px;line-height:1.6">
         Hvis du ikke ba om dette, kan du trygt ignorere e-posten — passordet ditt forblir uendret.
       </p>
@@ -1744,12 +1753,18 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
             "expires_at": now + timedelta(hours=1),
             "used": False,
         })
-        # SECURITY (SEC-001): never build the reset link from the attacker-controllable
-        # Origin/Host header. Use a trusted server-side domain from config only.
+        # SECURITY (SEC-001): never build the reset link from attacker-controllable
+        # Origin/Host headers. Client deep links are fixed allowlisted schemes; web fallback is trusted config.
         fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
-        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
-        reset_url = f"{frontend}/reset-password/{token}"
-        send_email(email, "Tilbakestill passordet ditt — KJAPP", email_password_reset_html(reset_url))
+        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://fleet.kjappapp.no"
+        fallback_url = f"{frontend}/reset-password/{token}"
+        if body.client == "customer":
+            reset_url = f"kjapp://reset-password/{token}"
+        elif body.client == "driver":
+            reset_url = f"kjapp-driver://reset-password/{token}"
+        else:
+            reset_url = fallback_url
+        send_email(email, "Tilbakestill passordet ditt — KJAPP", email_password_reset_html(reset_url, fallback_url if reset_url != fallback_url else None))
     return {"ok": True}
 
 
