@@ -1,15 +1,39 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, apiError, FleetDriver, FleetMe, FleetOverview, FleetPayout } from './api';
+import {
+  api, apiError, FleetDocument, FleetDriver, FleetDriverDetail, FleetLive,
+  FleetLiveDriver, FleetMe, FleetOverview, FleetPayout, FleetVehicle,
+} from './api';
 import { useAuth } from './auth';
 import { FleetWorkbook, FleetWorkbookTrip, loadFleetWorkbook } from './xlsx';
 import { Brand } from './App';
+import { FleetMap } from './FleetMap';
 
 const fmtMoney = (v: unknown) => `${new Intl.NumberFormat('nb-NO').format(Math.round(Number(v) || 0))} kr`;
 const fmtDate = (v?: string) => v ? new Date(v).toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 const monthTitle = (date = new Date()) => date.toLocaleDateString('nb-NO', { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
 const nameOf = (d: FleetDriver) => d.fullName || d.full_name || d.email || 'Sjåfør';
 const statusDone = (s: string) => ['arrived', 'completed', 'rated', 'Fullført'].includes(s);
+
+const liveStatusLabel = (s?: string) => ({
+  available: 'Ledig',
+  driver_on_way: 'På vei til kunde',
+  at_pickup: 'Ved hentested',
+  in_trip: 'På tur',
+  gps_stale: 'GPS utløpt',
+  offline: 'Avlogget',
+}[s || ''] || s || 'Ukjent');
+
+const complianceLabel = (s?: string) => ({
+  VALID: 'Godkjent',
+  EXPIRING: 'Utløper snart',
+  EXPIRED: 'Utløpt',
+  PENDING: 'Til vurdering',
+  REJECTED: 'Avvist',
+}[s || ''] || s || 'Ukjent');
+
+const complianceClass = (s?: string) =>
+  s === 'VALID' ? 'status-green' : s === 'EXPIRING' || s === 'PENDING' ? 'status-amber' : 'status-red';
 
 function Loading() { return <div className="page-loading"><div className="spinner" /></div>; }
 function ErrorBox({ message }: { message: string }) { return message ? <div className="error-box">{message}</div> : null; }
@@ -95,45 +119,87 @@ export function ResetPasswordPage() {
   </div></div>;
 }
 
-function LiveFleet({ drivers }: { drivers: FleetDriver[] }) {
-  const points = drivers.filter((d) => d.online && Number.isFinite(d.last_lat) && Number.isFinite(d.last_lng));
-  const coords = points.map((d) => ({ lat: Number(d.last_lat), lng: Number(d.last_lng) }));
-  const minLat = Math.min(...coords.map((c) => c.lat)); const maxLat = Math.max(...coords.map((c) => c.lat));
-  const minLng = Math.min(...coords.map((c) => c.lng)); const maxLng = Math.max(...coords.map((c) => c.lng));
-  const pos = (d: FleetDriver) => {
-    const lat = Number(d.last_lat); const lng = Number(d.last_lng);
-    const x = maxLng === minLng ? 50 : 12 + ((lng - minLng) / (maxLng - minLng)) * 76;
-    const y = maxLat === minLat ? 52 : 84 - ((lat - minLat) / (maxLat - minLat)) * 66;
-    return { left: `${x}%`, top: `${y}%` };
-  };
+function LiveFleet({ drivers }: { drivers: FleetLiveDriver[] }) {
+  const online = drivers.filter((d) => d.online);
+  const fresh = online.filter((d) => d.gps_fresh);
+  const stale = online.filter((d) => !d.gps_fresh);
   return <div className="live-fleet-card">
-    <div className="eyebrow green">LIVE FLÅTE</div>
-    <div className="map-grid" aria-label={`${points.length} sjåfører med aktiv posisjon`}>
-      {points.map((d) => <span key={d.id} className="fleet-dot" style={pos(d)} title={nameOf(d)} />)}
-      {!points.length ? <div className="map-empty">Ingen aktive posisjoner akkurat nå</div> : null}
+    <div className="live-fleet-head">
+      <div><div className="eyebrow green">LIVE FLÅTE</div><small>Oppdateres automatisk hvert 5. sekund</small></div>
+      <span className="live-dot-label"><i /> LIVE</span>
     </div>
-    <div className="live-fleet-foot"><span>{points.length} på kartet</span><span>{drivers.filter((d) => d.online).length} pålogget</span></div>
+    <div className="map-shell">
+      <FleetMap drivers={drivers} />
+      {!fresh.length ? <div className="map-empty-overlay">Ingen biler med fersk GPS akkurat nå</div> : null}
+    </div>
+    <div className="live-fleet-foot">
+      <span>{fresh.length} med fersk GPS</span>
+      <span>{online.length} pålogget{stale.length ? ` · ${stale.length} GPS utløpt` : ''}</span>
+    </div>
+  </div>;
+}
+
+function LiveTrips({ live }: { live: FleetLive | null }) {
+  const drivers = live?.drivers || [];
+  const trips = live?.trips || [];
+  const driverName = (id?: string) => drivers.find((d) => d.id === id)?.name || 'Sjåfør';
+  return <div className="recent-card">
+    <div className="eyebrow">LIVE TURER</div>
+    {trips.length ? trips.slice(0, 5).map((t) =>
+      <div className="recent-row live-trip-row" key={t.trip_id}>
+        <div>
+          <strong>{t.pickup_address || 'Hentested'} → {t.dropoff_address || 'Destinasjon'}</strong>
+          <span>{driverName(t.driver_id)} · {liveStatusLabel(t.status)}</span>
+        </div>
+        <b className="status-green">{String(t.trip_id || '').slice(0, 6)}</b>
+      </div>
+    ) : <div className="empty-state">Ingen aktive turer akkurat nå.</div>}
   </div>;
 }
 
 export function OverviewPage() {
-  const [me, setMe] = useState<FleetMe | null>(null); const [ov, setOv] = useState<FleetOverview | null>(null); const [drivers, setDrivers] = useState<FleetDriver[]>([]); const [book, setBook] = useState<FleetWorkbook | null>(null); const [err, setErr] = useState('');
+  const [me, setMe] = useState<FleetMe | null>(null);
+  const [ov, setOv] = useState<FleetOverview | null>(null);
+  const [live, setLive] = useState<FleetLive | null>(null);
+  const [err, setErr] = useState('');
+
   useEffect(() => {
-    const now = new Date();
-    Promise.all([api.fleetMe(), api.overview(), api.drivers(), loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1)])
-      .then(([m, o, d, b]) => { setMe(m); setOv(o); setDrivers(d.drivers || []); setBook(b); }).catch((e) => setErr(apiError(e)));
+    let mounted = true;
+    Promise.all([api.fleetMe(), api.overview(), api.live()])
+      .then(([m, o, l]) => {
+        if (!mounted) return;
+        setMe(m); setOv(o); setLive(l);
+      })
+      .catch((e) => mounted && setErr(apiError(e)));
+
+    const liveTimer = window.setInterval(() => {
+      api.live().then((l) => mounted && setLive(l)).catch(() => {});
+    }, 5000);
+    const overviewTimer = window.setInterval(() => {
+      api.overview().then((o) => mounted && setOv(o)).catch(() => {});
+    }, 30000);
+    return () => {
+      mounted = false;
+      window.clearInterval(liveTimer);
+      window.clearInterval(overviewTimer);
+    };
   }, []);
+
   if (!me || !ov) return err ? <ErrorBox message={err} /> : <Loading />;
-  const recent = [...(book?.trips || [])].reverse().slice(0, 4);
+  const liveDrivers = live?.drivers || [];
+  const online = liveDrivers.filter((d) => d.online).length;
+  const available = liveDrivers.filter((d) => d.operational_status === 'available').length;
+  const active = liveDrivers.filter((d) => ['driver_on_way', 'at_pickup', 'in_trip'].includes(d.operational_status || '')).length;
+
   return <div className="page-content">
-    <PageHead title={`God kveld, ${me.name}`} sub="Oversikt over egen virksomhet" />
+    <PageHead title={`God kveld, ${me.name}`} sub="Live oversikt over egen virksomhet" />
     <div className="kpi-grid four">
       <div className="kpi-card"><span>TURER I DAG</span><strong>{ov.today.trips}</strong><small>{fmtMoney(ov.today.gross)} brutto</small></div>
-      <div className="kpi-card"><span>SJÅFØRER</span><strong>{ov.drivers_online} / {ov.drivers_total}</strong><small>pålogget nå</small></div>
+      <div className="kpi-card"><span>SJÅFØRER ONLINE</span><strong>{online} / {ov.drivers_total}</strong><small>{available} ledige nå</small></div>
+      <div className="kpi-card desktop-kpi-extra"><span>AKTIVE TURER</span><strong>{active}</strong><small>på vei / hentested / i tur</small></div>
       <div className="kpi-card desktop-kpi-extra"><span>UKE NETTO</span><strong>{fmtMoney(ov.week.net)}</strong><small>etter {ov.commission_pct}% provisjon</small></div>
-      <div className="kpi-card desktop-kpi-extra"><span>BILER PÅLOGGET</span><strong>{drivers.filter((d) => d.online).length}</strong><small>av {drivers.length} registrerte</small></div>
     </div>
-    <div className="overview-grid"><LiveFleet drivers={drivers} /><div className="recent-card"><div className="eyebrow">SISTE TURER</div>{recent.length ? recent.map((t, i) => <div className="recent-row" key={`${t.tripId}-${i}`}><div><strong>{t.from || '—'} → {t.to || '—'}</strong><span>{t.driver}</span></div><b>{fmtMoney(t.price)}</b></div>) : <div className="empty-state">Ingen fullførte turer denne måneden.</div>}</div></div>
+    <div className="overview-grid"><LiveFleet drivers={liveDrivers} /><LiveTrips live={live} /></div>
     <div className="mobile-week"><span>Denne uken</span><strong>{fmtMoney(ov.week.net)}</strong><small>{ov.week.trips} turer · netto etter provisjon</small></div>
     <div className="week-summary"><span>Denne uken</span><strong>{ov.week.trips} turer</strong><span>{fmtMoney(ov.week.gross)} brutto</span><span>{fmtMoney(ov.week.gross - ov.week.net)} KJAPP</span><b>{fmtMoney(ov.week.net)} netto</b></div>
     <ErrorBox message={err} />
@@ -147,14 +213,142 @@ function InviteModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
 }
 
 export function DriversPage() {
-  const [drivers, setDrivers] = useState<FleetDriver[]>([]); const [invites, setInvites] = useState<any[]>([]); const [q, setQ] = useState(''); const [modal, setModal] = useState(false); const [err, setErr] = useState('');
-  const load = () => Promise.all([api.drivers(), api.invites()]).then(([d, i]) => { setDrivers(d.drivers || []); setInvites(i.invites || []); }).catch((e) => setErr(apiError(e)));
+  const [drivers, setDrivers] = useState<FleetDriver[]>([]);
+  const [invites, setInvites] = useState<any[]>([]);
+  const [q, setQ] = useState('');
+  const [modal, setModal] = useState(false);
+  const [selected, setSelected] = useState<FleetDriverDetail | null>(null);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const load = () => Promise.all([api.drivers(), api.invites()])
+    .then(([d, i]) => { setDrivers(d.drivers || []); setInvites(i.invites || []); })
+    .catch((e) => setErr(apiError(e)));
   useEffect(() => { load(); }, []);
-  const filtered = drivers.filter((d) => `${nameOf(d)} ${d.car || ''} ${d.plate || ''}`.toLowerCase().includes(q.toLowerCase()));
-  return <div className="page-content"><PageHead title="Sjåfører" sub="Administrer personer og biler i din flåte" action={<button className="primary-button compact-button" onClick={() => setModal(true)}>+ Legg til sjåfør</button>} />
-    <div className="table-card"><div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk navn, skilt eller bil" /></div><div className="fleet-table driver-table"><div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>TURER I DAG</span><span>OMSETNING</span></div>{filtered.map((d) => <div className="tr" key={d.id}><span className="driver-name"><i className={`status-dot ${d.online ? 'on' : ''}`} />{nameOf(d)}</span><span>{d.car || '—'}{d.plate ? ` · ${d.plate}` : ''}</span><span className={d.online ? 'status-green' : 'muted'}>{d.online ? 'Pålogget' : 'Avlogget'}</span><span className="mono">{d.today_trips || 0}</span><span className="mono">{fmtMoney(d.today_income || 0)}</span></div>)}{!filtered.length ? <div className="empty-state padded">Ingen sjåfører funnet.</div> : null}</div></div>
-    <section className="invites-section"><h2>Invitasjoner</h2><p>Opprett en invitasjon og send den til ny sjåfør.</p>{invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => <span key={i.token}>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : i.email_sent ? 'Sendt' : 'Venter'}</span>)}</div> : null}</section>
-    <ErrorBox message={err} />{modal ? <InviteModal onClose={() => setModal(false)} onDone={() => { setModal(false); load(); }} /> : null}
+
+  const openDriver = async (id: string) => {
+    setDetailBusy(true);
+    try { setSelected(await api.driverDetail(id)); }
+    catch (e) { setErr(apiError(e)); }
+    finally { setDetailBusy(false); }
+  };
+
+  const filtered = drivers.filter((d) =>
+    `${nameOf(d)} ${d.car || ''} ${d.plate || ''}`.toLowerCase().includes(q.toLowerCase())
+  );
+
+  return <div className="page-content">
+    <PageHead title="Sjåfører" sub="Administrer personer og biler i din flåte" action={<button className="primary-button compact-button" onClick={() => setModal(true)}>+ Legg til sjåfør</button>} />
+    <div className="table-card">
+      <div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk navn, skilt eller bil" /></div>
+      <div className="fleet-table driver-table">
+        <div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>TURER I DAG</span><span>OMSETNING</span></div>
+        {filtered.map((d) =>
+          <button className="tr row-button" key={d.id} onClick={() => void openDriver(d.id)}>
+            <span className="driver-name"><i className={`status-dot ${d.online ? 'on' : ''}`} />{nameOf(d)}</span>
+            <span>{d.car || '—'}{d.plate ? ` · ${d.plate}` : ''}</span>
+            <span className={d.online ? 'status-green' : 'muted'}>{d.online ? 'Pålogget' : 'Avlogget'}</span>
+            <span className="mono">{d.today_trips || 0}</span>
+            <span className="mono">{fmtMoney(d.today_income || 0)}</span>
+          </button>
+        )}
+        {!filtered.length ? <div className="empty-state padded">Ingen sjåfører funnet.</div> : null}
+      </div>
+    </div>
+    <section className="invites-section">
+      <h2>Invitasjoner</h2><p>Opprett en invitasjon og send den til ny sjåfør.</p>
+      {invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => <span key={i.token}>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : i.email_sent ? 'Sendt' : 'Venter'}</span>)}</div> : null}
+    </section>
+    <ErrorBox message={err} />
+    {modal ? <InviteModal onClose={() => setModal(false)} onDone={() => { setModal(false); load(); }} /> : null}
+    {detailBusy ? <div className="modal-backdrop"><div className="modal-card"><Loading /></div></div> : null}
+    {selected ? <DriverDetailModal driver={selected} onClose={() => setSelected(null)} /> : null}
+  </div>;
+}
+
+function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onClose: () => void }) {
+  const docs = driver.documents || [];
+  return <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-card detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-head"><div><span className="eyebrow">SJÅFØR</span><h2>{nameOf(driver)}</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div>
+      <div className="detail-grid">
+        <InfoRow label="Status" value={<span className={driver.online ? 'status-green' : 'muted'}>{driver.online ? 'Pålogget' : 'Avlogget'}</span>} />
+        <InfoRow label="Godkjenning" value={driver.approved ? 'Godkjent' : 'Venter'} />
+        <InfoRow label="Bil" value={driver.car || '—'} />
+        <InfoRow label="Skilt" value={driver.plate || '—'} />
+        <InfoRow label="Telefon" value={driver.phone || '—'} />
+        <InfoRow label="E-post" value={driver.email || '—'} />
+        <InfoRow label="Fullførte turer" value={driver.trips_completed ?? 0} />
+        <InfoRow label="Sist GPS" value={driver.last_location_at ? new Date(driver.last_location_at).toLocaleString('nb-NO') : '—'} />
+      </div>
+      {driver.active_trip ? <div className="detail-section"><span className="eyebrow green">AKTIV TUR</span><strong>{driver.active_trip.pickup_address || 'Hentested'} → {driver.active_trip.dropoff_address || 'Destinasjon'}</strong><small>{liveStatusLabel(driver.active_trip.status)}</small></div> : null}
+      <div className="detail-section"><span className="eyebrow">DOKUMENTER</span>{docs.length ? docs.map((d) => <div className="detail-doc" key={d.id}><span>{d.doc_type || d.filename || 'Dokument'}</span><b className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</b></div>) : <small>Ingen dokumenter registrert.</small>}</div>
+    </div>
+  </div>;
+}
+
+export function VehiclesPage() {
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [q, setQ] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => { api.vehicles().then((r) => setVehicles(r.vehicles || [])).catch((e) => setErr(apiError(e))); }, []);
+  const rows = vehicles.filter((v) => `${v.car || ''} ${v.plate || ''} ${v.driver_name || ''}`.toLowerCase().includes(q.toLowerCase()));
+  return <div className="page-content">
+    <PageHead title="Kjøretøy" sub="Biler registrert på sjåførene i din flåte" />
+    <div className="kpi-grid three">
+      <div className="kpi-card"><span>REGISTRERTE BILER</span><strong>{vehicles.length}</strong><small>i din flåte</small></div>
+      <div className="kpi-card"><span>PÅLOGGET</span><strong>{vehicles.filter((v) => v.online).length}</strong><small>sjåfører online</small></div>
+      <div className="kpi-card"><span>FERSK GPS</span><strong>{vehicles.filter((v) => v.gps_fresh).length}</strong><small>aktive posisjoner</small></div>
+    </div>
+    <div className="table-card">
+      <div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk bil, skilt eller sjåfør" /></div>
+      <div className="fleet-table vehicle-table">
+        <div className="tr th"><span>BIL</span><span>SKILT</span><span>SJÅFØR</span><span>STATUS</span><span>SIST GPS</span></div>
+        {rows.map((v) => <div className="tr" key={v.id}><span>{v.car || '—'}</span><span className="mono">{v.plate || '—'}</span><span>{v.driver_name || '—'}</span><span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>{v.online ? (v.gps_fresh ? 'Online' : 'GPS utløpt') : 'Offline'}</span><span className="muted">{v.last_location_at ? new Date(v.last_location_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—'}</span></div>)}
+        {!rows.length ? <div className="empty-state padded">Ingen kjøretøy funnet.</div> : null}
+      </div>
+    </div>
+    <ErrorBox message={err} />
+  </div>;
+}
+
+export function DocumentsPage() {
+  const [docs, setDocs] = useState<FleetDocument[]>([]);
+  const [summary, setSummary] = useState<Record<string, number>>({});
+  const [busyId, setBusyId] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    api.documents().then((r) => { setDocs(r.documents || []); setSummary(r.summary || {}); }).catch((e) => setErr(apiError(e)));
+  }, []);
+
+  const openDoc = async (d: FleetDocument) => {
+    if (!d.storage_path) return;
+    setBusyId(d.id);
+    setErr('');
+    try {
+      const blob = await api.downloadFile(d.storage_path);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { setErr(apiError(e)); }
+    finally { setBusyId(''); }
+  };
+
+  return <div className="page-content">
+    <PageHead title="Dokumenter" sub="Løyvehaver- og sjåførdokumenter som tilhører din flåte" />
+    <div className="kpi-grid four compliance-kpis">
+      <div className="kpi-card"><span>GODKJENT</span><strong>{summary.VALID || 0}</strong><small>gyldige dokumenter</small></div>
+      <div className="kpi-card"><span>UTLØPER</span><strong>{summary.EXPIRING || 0}</strong><small>innen 30 dager</small></div>
+      <div className="kpi-card"><span>TIL VURDERING</span><strong>{summary.PENDING || 0}</strong><small>venter på KJAPP</small></div>
+      <div className="kpi-card"><span>AVVIK</span><strong>{(summary.EXPIRED || 0) + (summary.REJECTED || 0)}</strong><small>utløpt eller avvist</small></div>
+    </div>
+    <div className="table-card no-tools">
+      <div className="fleet-table document-table">
+        <div className="tr th"><span>DOKUMENT</span><span>EIER</span><span>TYPE</span><span>STATUS</span><span>UTLØP</span><span /></div>
+        {docs.map((d) => <div className="tr" key={d.id}><span>{d.filename || d.doc_type || 'Dokument'}</span><span>{d.owner_name || (d.owner_type === 'fleet' ? 'Bedrift' : 'Sjåfør')}</span><span className="muted">{d.owner_type === 'fleet' ? 'Løyvehaver' : d.doc_type || 'Sjåfør'}</span><span className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</span><span className="muted">{d.expiry ? fmtDate(d.expiry) : '—'}</span><span><button className="table-action" disabled={!d.storage_path || busyId === d.id} onClick={() => void openDoc(d)}>{busyId === d.id ? 'Åpner…' : 'Åpne'}</button></span></div>)}
+        {!docs.length ? <div className="empty-state padded">Ingen dokumenter funnet for denne flåten.</div> : null}
+      </div>
+    </div>
+    <ErrorBox message={err} />
   </div>;
 }
 
