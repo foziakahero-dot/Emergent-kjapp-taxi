@@ -143,6 +143,20 @@ Flyt:
 
 Ikke aktiver dette med live Stripe-nøkler før testkort/Connect/webhook/idempotency er verifisert.
 
+## Driver pickup / no-show sikkerhetsgrenser
+
+Backend håndhever disse grensene selv; UI-knapper kan ikke omgå dem:
+
+```
+KJAPP_PICKUP_ARRIVAL_RADIUS_M=400
+KJAPP_NO_SHOW_WAIT_MINUTES=5
+```
+
+- Sjåføren må ha fersk GPS og være innenfor radiusen før «Jeg er fremme» godtas.
+- «Start turen» krever at turen allerede er i `at_pickup`.
+- No-show kan først registreres etter ventetiden regnet fra serverens registrerte ankomsttid.
+- Verdiene kan justeres uten app-release.
+
 ## Oslo beta serviceområde
 
 Backenden har en launch-gate for **hentested**. Destinasjonen kan fortsatt være utenfor sonen.
