@@ -14,8 +14,13 @@ import asyncio
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
-load_dotenv("/app/backend/.env")
-API = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split()[0]
+load_dotenv(os.environ.get("KJAPP_BACKEND_ENV", "/app/backend/.env"))
+API = (
+    os.environ.get("KJAPP_E2E_API")
+    or os.environ.get("REACT_APP_BACKEND_URL")
+    or os.environ.get("EXPO_PUBLIC_BACKEND_URL")
+    or "https://github-app-builder-28.emergent.host"
+).rstrip("/")
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 fails = []
 
@@ -76,9 +81,10 @@ drv_b = login(DRIVER_B_EMAIL, DRIVER_B_PW)
 # Pickup: Youngstorget. A is 300 m away, B is ~3 km away.
 PICKUP = (59.9139, 10.7497)
 call("/api/driver/online", {"online": True}, drv_a)
-call("/api/driver/location", {"lat": 59.9160, "lng": 10.7500, "heading": 10}, drv_a)
+now_iso = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+call("/api/driver/location", {"lat": 59.9160, "lng": 10.7500, "heading": 10, "recorded_at": now_iso}, drv_a)
 call("/api/driver/online", {"online": True}, drv_b)
-call("/api/driver/location", {"lat": 59.9400, "lng": 10.7800, "heading": 10}, drv_b)
+call("/api/driver/location", {"lat": 59.9400, "lng": 10.7800, "heading": 10, "recorded_at": now_iso}, drv_b)
 
 st, trip = call("/api/trips/request", {
     "pickup_address": "Youngstorget 1, Oslo", "pickup_lat": PICKUP[0], "pickup_lng": PICKUP[1],
@@ -86,7 +92,17 @@ st, trip = call("/api/trips/request", {
     "vehicle_type": "enkelt",
 }, cust)
 check("customer created a real trip", st == 200, f"{trip.get('trip_id','')[:8]} {trip.get('price')} kr")
+if st != 200:
+    print("\nCannot continue E2E because trip creation failed:", trip)
+    sys.exit(1)
 tid = trip["trip_id"]
+
+st2, duplicate = call("/api/trips/request", {
+    "pickup_address": "Youngstorget 1, Oslo", "pickup_lat": PICKUP[0], "pickup_lng": PICKUP[1],
+    "dropoff_address": "Aker Brygge, Oslo", "dropoff_lat": 59.9108, "dropoff_lng": 10.7290,
+    "vehicle_type": "enkelt",
+}, cust)
+check("duplicate active customer booking is rejected", st2 == 409, str(duplicate)[:90])
 
 st, pa = call("/api/driver/pending", None, drv_a)
 st, pb = call("/api/driver/pending", None, drv_b)
@@ -108,6 +124,9 @@ check("unanswered offer forwarded to next driver", tid in [t["trip_id"] for t in
 
 st, res = call("/api/driver/accept", {"trip_id": tid}, drv_b)
 check("second driver can accept the forwarded trip", st == 200, str(res)[:60])
+
+st_again, res_again = call("/api/driver/accept", {"trip_id": tid}, drv_a)
+check("losing driver cannot accept after assignment", st_again == 409, str(res_again)[:80])
 st, cur = call("/api/driver/current", None, drv_b)
 check("trip is assigned to the accepting driver", (cur or {}).get("trip_id") == tid, (cur or {}).get("status"))
 st, cur_a = call("/api/driver/current", None, drv_a)
@@ -121,11 +140,20 @@ for ep in ["at-pickup", "start", "arrive"]:
     st, _ = call(f"/api/driver/trip/{tid}/{ep}", {}, drv_b)
     check(f"state machine: {ep}", st == 200)
 
+st, done = call(f"/api/trips/{tid}/complete", {}, cust)
+check("customer completion is accepted only after arrival", st == 200, str(done)[:80])
+
+st, done2 = call(f"/api/trips/{tid}/complete", {}, cust)
+check("customer completion is idempotent", st == 200, str(done2)[:80])
+
 st, s = call("/api/driver/summary/today", None, drv_b)
 check("earnings landed on the driver who drove", s["trips"] >= 1, f"{s['trips']} turer {s['income']} kr")
 
 st, cfg = call("/api/push/native-config")
-check("native push config endpoint is key-optional", st == 200 and "enabled" in cfg, json.dumps(cfg)[:90])
+check("native push config endpoint is available", st == 200 and cfg.get("provider") == "expo", json.dumps(cfg)[:120])
+
+st, area = call("/api/service-area")
+check("Oslo beta service-area endpoint is available", st == 200 and area.get("launch_city") == "Oslo", json.dumps(area)[:120])
 
 call("/api/driver/online", {"online": False}, drv_b)
 call("/api/driver/online", {"online": False}, drv_a)
