@@ -463,12 +463,81 @@ function CreateVehicleModal({ onClose, onDone }: { onClose: () => void; onDone: 
   </div>;
 }
 
+function VehicleDocumentsModal({ vehicle, onClose }: { vehicle: FleetVehicle; onClose: () => void }) {
+  const [docs, setDocs] = useState<FleetDocument[]>([]);
+  const [file, setFile] = useState<File | null>(null);
+  const [docType, setDocType] = useState('registration');
+  const [expiry, setExpiry] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [openBusy, setOpenBusy] = useState('');
+  const [err, setErr] = useState('');
+  const labels: Record<string,string> = { registration: 'Vognkort', insurance: 'Forsikring', inspection: 'EU-kontroll' };
+
+  const load = () => api.documents()
+    .then((r) => setDocs((r.documents || []).filter((d) => d.owner_type === 'vehicle' && d.owner_id === vehicle.id)))
+    .catch((e) => setErr(apiError(e)));
+  useEffect(() => { void load(); }, [vehicle.id]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!file) { setErr('Velg en fil først.'); return; }
+    setBusy(true); setErr('');
+    try {
+      await api.uploadVehicleDocument(vehicle.id, file, docType, expiry || undefined);
+      setFile(null); setExpiry('');
+      const input = document.getElementById('vehicle-doc-file') as HTMLInputElement | null;
+      if (input) input.value = '';
+      await load();
+    } catch (e) { setErr(apiError(e)); }
+    finally { setBusy(false); }
+  };
+
+  const openDoc = async (d: FleetDocument) => {
+    if (!d.storage_path) return;
+    setOpenBusy(d.id); setErr('');
+    try {
+      const blob = await api.downloadFile(d.storage_path);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { setErr(apiError(e)); }
+    finally { setOpenBusy(''); }
+  };
+
+  return <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-card detail-modal vehicle-doc-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-head"><div><span className="eyebrow">KJØRETØYDOKUMENTER</span><h2>{vehicle.car || 'Bil'} · {vehicle.plate || '—'}</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div>
+      <form className="vehicle-doc-upload" onSubmit={submit}>
+        <select value={docType} onChange={(e) => setDocType(e.target.value)}>
+          <option value="registration">Vognkort</option>
+          <option value="insurance">Forsikring</option>
+          <option value="inspection">EU-kontroll</option>
+        </select>
+        <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} aria-label="Utløpsdato" />
+        <input id="vehicle-doc-file" type="file" accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
+        <button className="primary-button" disabled={busy}>{busy ? 'Laster opp…' : 'Last opp'}</button>
+      </form>
+      <ErrorBox message={err} />
+      <div className="detail-section">
+        <span className="eyebrow">REGISTRERTE DOKUMENTER</span>
+        {docs.length ? docs.map((d) => <div className="vehicle-doc-row" key={d.id}>
+          <div><strong>{labels[d.doc_type || ''] || d.doc_type || d.filename || 'Dokument'}</strong><span>{d.expiry ? 'Utløp ' + fmtDate(d.expiry) : d.filename || 'Ingen utløpsdato'}</span></div>
+          <b className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</b>
+          <button className="table-action" disabled={!d.storage_path || openBusy === d.id} onClick={() => void openDoc(d)}>{openBusy === d.id ? 'Åpner…' : 'Åpne'}</button>
+        </div>) : <small>Ingen kjøretøydokumenter lastet opp ennå.</small>}
+      </div>
+    </div>
+  </div>;
+}
+
+
 export function VehiclesPage() {
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
   const [q, setQ] = useState('');
   const [err, setErr] = useState('');
   const [modal, setModal] = useState(false);
+  const [docVehicle, setDocVehicle] = useState<FleetVehicle | null>(null);
   const [busy, setBusy] = useState('');
   const load = () => Promise.all([api.vehicles(), api.drivers()])
     .then(([v, d]) => { setVehicles(v.vehicles || []); setDrivers(d.drivers || []); })
@@ -513,13 +582,17 @@ export function VehiclesPage() {
           </span>
           <span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>{v.online ? (v.gps_fresh ? 'Online' : 'GPS utløpt') : 'Offline'}</span>
           <span className="muted">{v.last_location_at ? new Date(v.last_location_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
-          <span><button className="table-action" disabled={busy === v.id || Boolean(v.online)} onClick={() => void toggleVehicle(v)}>{busy === v.id ? 'Lagrer…' : v.active === false ? 'Aktiver' : 'Parker'}</button></span>
+          <span className="vehicle-actions">
+            <button className="table-action" onClick={() => setDocVehicle(v)}>Dok.</button>
+            <button className="table-action" disabled={busy === v.id || Boolean(v.online)} onClick={() => void toggleVehicle(v)}>{busy === v.id ? 'Lagrer…' : v.active === false ? 'Aktiver' : 'Parker'}</button>
+          </span>
         </div>)}
         {!rows.length ? <div className="empty-state padded">Ingen kjøretøy funnet.</div> : null}
       </div>
     </div>
     <ErrorBox message={err} />
     {modal ? <CreateVehicleModal onClose={() => setModal(false)} onDone={() => { setModal(false); void load(); }} /> : null}
+    {docVehicle ? <VehicleDocumentsModal vehicle={docVehicle} onClose={() => setDocVehicle(null)} /> : null}
   </div>;
 }
 
@@ -556,7 +629,7 @@ export function DocumentsPage() {
     <div className="table-card no-tools">
       <div className="fleet-table document-table">
         <div className="tr th"><span>DOKUMENT</span><span>EIER</span><span>TYPE</span><span>STATUS</span><span>UTLØP</span><span /></div>
-        {docs.map((d) => <div className="tr" key={d.id}><span>{d.filename || d.doc_type || 'Dokument'}</span><span>{d.owner_name || (d.owner_type === 'fleet' ? 'Bedrift' : 'Sjåfør')}</span><span className="muted">{d.owner_type === 'fleet' ? 'Løyvehaver' : d.doc_type || 'Sjåfør'}</span><span className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</span><span className="muted">{d.expiry ? fmtDate(d.expiry) : '—'}</span><span><button className="table-action" disabled={!d.storage_path || busyId === d.id} onClick={() => void openDoc(d)}>{busyId === d.id ? 'Åpner…' : 'Åpne'}</button></span></div>)}
+        {docs.map((d) => <div className="tr" key={d.id}><span>{d.filename || d.doc_type || 'Dokument'}</span><span>{d.owner_name || (d.owner_type === 'fleet' ? 'Bedrift' : 'Sjåfør')}</span><span className="muted">{d.owner_type === 'fleet' ? 'Løyvehaver' : d.owner_type === 'vehicle' ? 'Kjøretøy' : d.doc_type || 'Sjåfør'}</span><span className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</span><span className="muted">{d.expiry ? fmtDate(d.expiry) : '—'}</span><span><button className="table-action" disabled={!d.storage_path || busyId === d.id} onClick={() => void openDoc(d)}>{busyId === d.id ? 'Åpner…' : 'Åpne'}</button></span></div>)}
         {!docs.length ? <div className="empty-state padded">Ingen dokumenter funnet for denne flåten.</div> : null}
       </div>
     </div>
