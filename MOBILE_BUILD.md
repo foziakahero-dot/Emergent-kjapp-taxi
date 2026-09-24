@@ -6,8 +6,8 @@ KJAPP mobile består nå av **to separate Expo / React Native-apper**. Den gamle
 
 | App | Mappe | Android | iOS | Expo project |
 | --- | --- | --- | --- | --- |
-| KJAPP Customer | `frontend/` | `no.kjapp.app` | `no.kjapp.app` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
-| KJAPP Driver | `driver-app/` | `no.kjapp.driver` | `no.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
+| KJAPP Customer | `frontend/` | `no.kjapp.app` | `no.nexorahub.kjapp.customer` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
+| KJAPP Driver | `driver-app/` | `no.kjapp.driver` | `no.nexorahub.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
 
 Den kontrollerte **betaen/TestFlight** bruker fortsatt den kjente Emergent-backenden:
 
@@ -124,8 +124,8 @@ Driver har i tillegg en on-shift fallback: mens bakgrunnsposisjon kjører, kontr
 
 Kontoen skal ha to eksplisitte App IDs:
 
-- Customer: `no.kjapp.app`
-- Driver: `no.kjapp.driver`
+- Customer: `no.nexorahub.kjapp.customer`
+- Driver: `no.nexorahub.kjapp.driver`
 
 Aktiver capabilities slik:
 
@@ -138,10 +138,10 @@ Aktiver capabilities slik:
 - Background Modes / Location (genereres av Expo config)
 - Background remote notifications
 
-Customer-appen har `ios.usesAppleSignIn=true` og bruker Apples native Sign in with Apple-komponent. Backenden godtar native Apple-token med `aud=no.kjapp.app` når følgende finnes i backend-miljøet:
+Customer-appen har `ios.usesAppleSignIn=true` og bruker Apples native Sign in with Apple-komponent. Backenden godtar native Apple-token med `aud=no.nexorahub.kjapp.customer` når følgende finnes i backend-miljøet:
 
 ```
-APPLE_BUNDLE_ID=no.kjapp.app
+APPLE_BUNDLE_ID=no.nexorahub.kjapp.customer
 ```
 
 For web-basert Apple-innlogging senere kan `APPLE_CLIENT_ID` (Services ID) legges til separat.
