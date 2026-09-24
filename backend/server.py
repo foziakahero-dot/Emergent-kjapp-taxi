@@ -4919,13 +4919,16 @@ async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(r
     }
     total = await db.trips.count_documents(trip_filter)
     completed_filter = dict(trip_filter)
-    completed_filter["status"] = {"$in": ["arrived", "completed", "rated"]}
+    completed_filter["status"] = {"$in": ["completed", "rated"]}
     completed = await db.trips.count_documents(completed_filter)
+    arrived_unclosed_filter = dict(trip_filter)
+    arrived_unclosed_filter["status"] = "arrived"
+    arrived_unclosed = await db.trips.count_documents(arrived_unclosed_filter)
     assigned_filter = dict(trip_filter)
     assigned_filter["driver_id"] = {"$exists": True, "$nin": [None, ""]}
     assigned = await db.trips.count_documents(assigned_filter)
     cancelled_filter = dict(trip_filter)
-    cancelled_filter["status"] = "cancelled"
+    cancelled_filter["status"] = {"$in": ["cancelled", "cancelled_by_driver"]}
     cancelled = await db.trips.count_documents(cancelled_filter)
 
     accept_seconds = []
@@ -4989,6 +4992,7 @@ async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(r
         "trips": {
             "requested": total,
             "completed": completed,
+            "arrived_unclosed": arrived_unclosed,
             "cancelled": cancelled,
             "completion_rate_pct": pct(completed, total),
         },
