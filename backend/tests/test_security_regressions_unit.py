@@ -157,3 +157,28 @@ def test_missing_email_provider_never_logs_message_body(monkeypatch, capsys):
 def test_platform_defaults_never_enable_demo_trips():
     assert server.DEFAULT_PLATFORM_SETTINGS["features"]["demo_trips"] is False
 
+def test_client_error_redaction_removes_tokens_and_email():
+    raw = "Authorization: Bearer abcdefghijklmnopqrstuvwxyz token=secret-value user@example.no"
+    cleaned = server._redact_client_error_text(raw)
+    assert "abcdefghijklmnopqrstuvwxyz" not in cleaned
+    assert "secret-value" not in cleaned
+    assert "user@example.no" not in cleaned
+    assert "[REDACTED]" in cleaned
+    assert "[REDACTED_EMAIL]" in cleaned
+
+
+def test_trip_request_rejects_impossible_coordinates():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        server.TripRequest(
+            pickup_address="Oslo",
+            pickup_lat=120,
+            pickup_lng=10.75,
+            dropoff_address="Aker Brygge",
+            dropoff_lat=59.91,
+            dropoff_lng=10.72,
+            vehicle_type="ai-first",
+        )
+
