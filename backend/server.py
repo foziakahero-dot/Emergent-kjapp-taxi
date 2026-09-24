@@ -7092,11 +7092,21 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         await _audit(current, "trip.adjust_price", "trip", trip_id,
                      {"price": previous_price}, {"price": new_price}, reason)
         if trip.get("user_id"):
-            await send_push_to_user(trip["user_id"], "Turprisen er justert",
-                                    f"KJAPP har justert turprisen fra {previous_price} kr til {new_price} kr.", f"/app/receipt/{trip_id}")
+            await send_push_to_user(
+                trip["user_id"],
+                "Turprisen er justert",
+                f"KJAPP har justert turprisen fra {previous_price} kr til {new_price} kr.",
+                f"/receipt/{trip_id}",
+                "trip_price_adjusted",
+            )
         if trip.get("driver_id"):
-            await send_push_to_user(trip["driver_id"], "Turprisen er justert",
-                                    f"Ny turpris er {new_price} kr. Oppgjøret bruker turens lagrede serviceavgift.", "/driver")
+            await send_push_to_user(
+                trip["driver_id"],
+                "Turprisen er justert",
+                f"Ny turpris er {new_price} kr. Oppgjøret bruker turens lagrede serviceavgift.",
+                "/driver",
+                "trip_price_adjusted",
+            )
         return {"ok": True, "action": body.action, "price": new_price, "previous_price": previous_price}
 
     raise HTTPException(400, "Ukjent operatørhandling")
