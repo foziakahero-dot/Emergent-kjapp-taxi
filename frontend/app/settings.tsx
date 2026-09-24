@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -32,7 +32,7 @@ export default function Settings() {
       const d = await gdprApi.export();
       const trips = (d.trips || []).length;
       const payments = (d.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjapp.no for en full kopi på e-post.`);
+      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjappapp.no for en full kopi på e-post.`);
     } catch {
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {
@@ -97,9 +97,15 @@ export default function Settings() {
 
             <View style={[s.card, { marginTop: 16 }]}>
               <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>1.0.0</Text></View>
-              <View style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]}>
-                <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjapp.no</Text>
-              </View>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
+                <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjappapp.no</Text>
+              </Pressable>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
+                <Text style={s.rowLabel}>Personvern</Text><Text style={s.rowValue}>Åpne</Text>
+              </Pressable>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
+                <Text style={s.rowLabel}>Vilkår</Text><Text style={s.rowValue}>Åpne</Text>
+              </Pressable>
             </View>
 
             <Text style={s.sectionTitle}>Personvern og data</Text>
