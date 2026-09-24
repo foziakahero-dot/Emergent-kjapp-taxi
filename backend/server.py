@@ -1785,7 +1785,7 @@ def email_password_reset_html(reset_url: str, fallback_url: Optional[str] = None
         Trykk på knappen under for å velge et nytt passord. Lenken er gyldig i 1 time og kan bare brukes én gang.
       </p>
       <a href="{reset_url}" style="display:inline-block;background:#CBA365;color:#0B1013;font-weight:600;padding:14px 28px;border-radius:12px;text-decoration:none;margin:16px 0;">Velg nytt passord</a>
-      ${f'<p style="color:#8A9198;font-size:12px;line-height:1.6">Hvis appen ikke åpnes, kan du <a href="{fallback_url}" style="color:#CBA365">tilbakestille passordet i nettleseren</a>.</p>' if fallback_url else ''}
+      {f'<p style="color:#8A9198;font-size:12px;line-height:1.6">Hvis appen ikke åpnes, kan du <a href="{fallback_url}" style="color:#CBA365">tilbakestille passordet i nettleseren</a>.</p>' if fallback_url else ''}
       <p style="color:#8A9198;font-size:12px;line-height:1.6">
         Hvis du ikke ba om dette, kan du trygt ignorere e-posten — passordet ditt forblir uendret.
       </p>
