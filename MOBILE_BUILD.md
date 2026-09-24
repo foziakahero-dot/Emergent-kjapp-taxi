@@ -123,6 +123,26 @@ For web-basert Apple-innlogging senere kan `APPLE_CLIENT_ID` (Services ID) legge
 
 En APNs auth key (.p8) kan brukes gjennom EAS credentials for begge appene dersom Apple-kontoen/Teamet tillater det. Ikke legg .p8-filen i Git.
 
+## Automatisk betaling etter tur
+
+Kodebanen for Bolt/Uber-lignende automatisk kortbetaling er implementert, men er **av som standard**.
+
+Aktiver først etter Stripe test-E2E og eksplisitt beta-beslutning:
+
+```
+KJAPP_AUTO_CHARGE_ENABLED=true
+```
+
+Flyt:
+- bruker legger til/verifiserer kort via Stripe Setup
+- turen avsluttes
+- backend forsøker en idempotent off-session PaymentIntent mot det lagrede kortet
+- ved success: turens `payment_status=paid`, kvittering/push sendes
+- ved bank/3DS-krav eller feil: forsøket fullføres ikke, og kunden faller tilbake til eksisterende sikre Stripe Checkout fra kvitteringen
+- ride lifecycle `status` endres aldri av betalingshendelsen
+
+Ikke aktiver dette med live Stripe-nøkler før testkort/Connect/webhook/idempotency er verifisert.
+
 ## Oslo beta serviceområde
 
 Backenden har en launch-gate for **hentested**. Destinasjonen kan fortsatt være utenfor sonen.
