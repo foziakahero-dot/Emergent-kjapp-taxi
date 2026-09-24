@@ -13,6 +13,7 @@ Canonical public URLs:
 - Support: https://kjappapp.no/help
 - Privacy: https://kjappapp.no/personvern
 - Terms: https://kjappapp.no/vilkar
+- Password reset fallback: https://kjappapp.no/reset-password/:token
 - Marketing: https://kjappapp.no
 
 The privacy/terms routes are stable beta URLs. Final legally approved text remains a public-release gate.
