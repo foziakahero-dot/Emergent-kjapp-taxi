@@ -2402,6 +2402,8 @@ async def _translate_via_llm(text: str, target_lang: str) -> Optional[str]:
 @api.post("/trips/{trip_id}/messages")
 async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depends(get_current_user)):
     trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
+    if not (is_passenger or is_driver):
+        raise HTTPException(status_code=403, detail="Kun kunden eller tildelt sjåfør kan sende turmeldinger")
     text = (body.text or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Melding kan ikke være tom")
