@@ -4960,8 +4960,13 @@ async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(r
         "created_at": {"$gte": cutoff},
         "priority": "kritisk",
     })
-    self_serve_filter = dict(completed_filter)
-    self_serve_filter["operator_interventions"] = {"$exists": False}
+    self_serve_filter = {
+        **completed_filter,
+        "$or": [
+            {"operator_interventions": {"$exists": False}},
+            {"operator_interventions": {"$size": 0}},
+        ],
+    }
     self_serve_completed = await db.trips.count_documents(self_serve_filter)
 
     pct = lambda a, b: round((a / b) * 100, 1) if b else None
