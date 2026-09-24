@@ -218,7 +218,7 @@ export const api = {
     drivers_license_path: string;
     taxi_license_path: string;
     profile_photo_path: string;
-    selfie_verification_path?: string;
+    selfie_verification_path: string;
   }) => http.post('/driver-invites/accept', body).then((r) => r.data),
   uploadDriverDoc: (file: File, inviteToken: string, docType: string) => {
     const form = new FormData();
