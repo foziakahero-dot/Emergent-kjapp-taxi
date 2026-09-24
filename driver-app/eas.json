@@ -45,12 +45,14 @@
   "submit": {
     "production": {
       "ios": {
-        "appleTeamId": "KUPTFG8BZ2"
+        "appleTeamId": "KUPTFG8BZ2",
+        "ascAppId": "6815872647"
       }
     },
     "testflight-beta": {
       "ios": {
-        "appleTeamId": "KUPTFG8BZ2"
+        "appleTeamId": "KUPTFG8BZ2",
+        "ascAppId": "6815872647"
       }
     }
   }
