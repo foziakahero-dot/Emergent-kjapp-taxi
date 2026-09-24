@@ -90,6 +90,11 @@ customer_asc = customer_eas.get("submit", {}).get("testflight-beta", {}).get("io
 if customer_asc != "6815866825":
     fail("frontend/eas.json: Customer TestFlight ascAppId must remain 6815866825")
 
+driver_eas = read_json("driver-app/eas.json")
+driver_asc = driver_eas.get("submit", {}).get("testflight-beta", {}).get("ios", {}).get("ascAppId")
+if driver_asc != "6815872647":
+    fail("driver-app/eas.json: Driver TestFlight ascAppId must remain 6815872647")
+
 require_text(
     "frontend/.eas/workflows/testflight-beta.yml",
     "profile: testflight-beta",
