@@ -55,3 +55,19 @@ def test_identity_enforcement_covers_admin_approval_and_retention():
     assert 'status": {"$in": ["verified", "retry_required", "superseded"]}' in source
     assert 'status") == "pending_review"' in source
     assert "storage_delete(path)" in source
+
+
+def test_fleet_management_vehicle_and_driver_controls_are_scoped():
+    source = _source()
+    for route in (
+        '/fleet/vehicles',
+        '/fleet/vehicles/{vehicle_id}',
+        '/fleet/vehicles/{vehicle_id}/assign-driver',
+        '/fleet/drivers/{driver_id}/set-active',
+    ):
+        assert route in source
+    assert '"fleet_id": fid' in source
+    assert 'Løyvehaveren har deaktivert sjåføren i flåten' in source
+    assert 'Tildelt kjøretøy er parkert av løyvehaver' in source
+    assert 'Sjåføren må gå offline før bilbytte' in source
+    assert 'Sjåføren har en aktiv tur og kan ikke deaktiveres' in source
