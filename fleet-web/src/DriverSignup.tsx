@@ -3,13 +3,14 @@ import { Link, useParams } from 'react-router-dom';
 import { api, apiError, PublicDriverInvite } from './api';
 import './driver-signup.css';
 
-type DocKey = 'drivers_license' | 'taxi_license' | 'profile_photo';
+type DocKey = 'drivers_license' | 'taxi_license' | 'profile_photo' | 'selfie_verification';
 type Uploaded = { storage_path: string; original_filename?: string };
 
-const DOCS: Array<{ key: DocKey; label: string; sub: string }> = [
+const DOCS: Array<{ key: DocKey; label: string; sub: string; accept?: string; capture?: 'user' }> = [
   { key: 'drivers_license', label: 'Førerkort', sub: 'Gyldig førerkort' },
   { key: 'taxi_license', label: 'Kjøreseddel', sub: 'Gyldig kjøreseddel for taxi' },
   { key: 'profile_photo', label: 'Profilbilde', sub: 'Tydelig ansiktsbilde' },
+  { key: 'selfie_verification', label: 'Selfie ID', sub: 'Ta en fersk selfie av ansiktet ditt nå', accept: 'image/*', capture: 'user' },
 ];
 
 function InviteBrand() {
@@ -20,11 +21,11 @@ function UploadRow({ item, value, busy, onFile, onRemove }: {
   item: typeof DOCS[number]; value?: Uploaded; busy?: boolean; onFile: (f: File) => void; onRemove: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
-  return <div className="driver-doc-row">
+  return <div className={`driver-doc-row ${item.key === 'selfie_verification' ? 'selfie-required' : ''}`}>
     <div className={`driver-doc-mark ${value ? 'done' : ''}`}>{value ? '✓' : '□'}</div>
     <div className="driver-doc-copy"><strong>{item.label}</strong><span>{value?.original_filename || item.sub}</span></div>
-    {value ? <button type="button" className="driver-doc-action" onClick={onRemove}>Fjern</button> : <button type="button" className="driver-doc-action" disabled={busy} onClick={() => ref.current?.click()}>{busy ? 'Laster…' : 'Last opp'}</button>}
-    <input ref={ref} type="file" accept="image/*,application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+    {value ? <button type="button" className="driver-doc-action" onClick={onRemove}>Fjern</button> : <button type="button" className="driver-doc-action" disabled={busy} onClick={() => ref.current?.click()}>{busy ? 'Laster…' : item.key === 'selfie_verification' ? 'Ta selfie' : 'Last opp'}</button>}
+    <input ref={ref} type="file" accept={item.accept || 'image/*,application/pdf'} capture={item.capture} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
   </div>;
 }
 
@@ -77,6 +78,7 @@ export default function DriverSignup() {
         drivers_license_path: uploads.drivers_license!.storage_path,
         taxi_license_path: uploads.taxi_license!.storage_path,
         profile_photo_path: uploads.profile_photo!.storage_path,
+        selfie_verification_path: uploads.selfie_verification!.storage_path,
       });
       setDone(true);
     } catch (e) { setErr(apiError(e)); }
@@ -85,13 +87,13 @@ export default function DriverSignup() {
 
   if (loading) return <div className="full-loader"><div className="spinner" /></div>;
   if (!invite) return <div className="driver-signup-screen"><InviteBrand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">SJÅFØRINVITASJON</span><h1>Lenken virker ikke</h1><p>{err || 'Invitasjonen er brukt, utløpt eller ugyldig.'}</p><a className="primary-button" href="https://kjappapp.no">Til KJAPP</a></div></div>;
-  if (done) return <div className="driver-signup-screen"><InviteBrand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">MOTTATT</span><h1>Registreringen er sendt.</h1><p>Dokumentene dine blir kontrollert før sjåførkontoen aktiveres. Når du er godkjent bruker du den separate KJAPP Driver-appen.</p><a className="primary-button" href="https://kjappapp.no/sjafor">Om KJAPP Driver</a></div></div>;
+  if (done) return <div className="driver-signup-screen"><InviteBrand /><div className="driver-signup-card centered"><span className="driver-signup-kicker">MOTTATT</span><h1>Registreringen er sendt.</h1><p>Dokumentene og selfie-ID er mottatt. KJAPP kontrollerer at riktig person registrerer seg før sjåførkontoen aktiveres.</p><a className="primary-button" href="https://kjappapp.no/sjafor">Om KJAPP Driver</a></div></div>;
 
   return <div className="driver-signup-screen">
     <InviteBrand />
     <div className="driver-signup-card">
       <span className="driver-signup-kicker">SJÅFØRREGISTRERING · STEG {step}/2</span>
-      <h1>{step === 1 ? 'Velkommen til KJAPP.' : 'Dokumentasjon.'}</h1>
+      <h1>{step === 1 ? 'Velkommen til KJAPP.' : 'Dokumentasjon og selfie-ID.'}</h1>
       <div className="assigned-car"><span>BIL TILDELT</span><strong>{invite.car || 'KJAPP-bil'}{invite.plate ? ` · ${invite.plate}` : ''}</strong>{invite.fleet_name ? <small>{invite.fleet_name}</small> : null}</div>
       {step === 1 ? <form onSubmit={next} className="driver-signup-form">
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
@@ -105,7 +107,7 @@ export default function DriverSignup() {
         {err ? <div className="error-box">{err}</div> : null}
         <button className="primary-button">Neste · dokumenter</button>
       </form> : <div className="driver-signup-form">
-        <p className="driver-doc-intro">Førerkort, kjøreseddel og profilbilde må være mottatt før kontoen kan godkjennes.</p>
+        <p className="driver-doc-intro">Førerkort, kjøreseddel, profilbilde og en fersk selfie-ID må være mottatt før kontoen kan godkjennes. Selfien brukes til manuell identitetskontroll i beta.</p>
         {DOCS.map((d) => <UploadRow key={d.key} item={d} value={uploads[d.key]} busy={uploading[d.key]} onFile={(f) => upload(d.key, f)} onRemove={() => setUploads((s) => ({ ...s, [d.key]: undefined }))} />)}
         {err ? <div className="error-box">{err}</div> : null}
         <button className="primary-button" disabled={busy} onClick={submit}>{busy ? 'Sender…' : 'Send til godkjenning'}</button>
