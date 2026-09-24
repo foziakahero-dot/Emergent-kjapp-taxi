@@ -104,7 +104,7 @@ export default function DriverSettings() {
           <Text style={s.sectionTitle}>Om appen</Text>
           <View style={s.card}>
             <View style={s.linkRow}><Text style={s.linkLabel}>Versjon</Text><Text style={s.linkValue}>{version}</Text></View>
-            <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>kjapp.no/vilkar</Text></View>
+            <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>kjappapp.no/vilkar</Text></View>
           </View>
 
           <Pressable style={s.logout} onPress={logout} testID="ds-logout">
