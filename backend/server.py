@@ -1084,6 +1084,7 @@ async def lifespan(app: FastAPI):
     await db.driver_identity_verifications.create_index([("status", 1), ("reviewed_at", 1)])
     await db.driver_identity_verifications.create_index("purged_at")
     await db.uploaded_files.create_index([("scope", 1), ("storage_path", 1)])
+    await db.uploaded_files.create_index([("scope", 1), ("fleet_id", 1), ("vehicle_id", 1)])
     await db.fleet_vehicles.create_index([("fleet_id", 1), ("plate", 1)], unique=True)
     await db.fleet_vehicles.create_index([("fleet_id", 1), ("assigned_driver_id", 1)])
     await db.password_reset_tokens.create_index("token")
@@ -5044,6 +5045,84 @@ async def fleet_set_driver_active(driver_id: str, body: FleetDriverActiveRequest
     return {"ok": True, "active": body.active}
 
 
+
+FLEET_VEHICLE_DOC_TYPES = {"registration", "insurance", "inspection"}
+
+
+@api.post("/fleet/vehicles/{vehicle_id}/documents", status_code=201)
+async def fleet_upload_vehicle_document(
+    vehicle_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    doc_type: str = Form(...),
+    expiry: Optional[str] = Form(None),
+    current=Depends(require_fleet_owner),
+):
+    """Upload a compliance document for one vehicle owned by the authenticated fleet."""
+    await _enforce_rate_limit(request, "fleet-vehicle-doc-upload", 120, 3600)
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        oid = ObjectId(vehicle_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(400, "Ugyldig kjøretøy-id")
+    vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    if not vehicle:
+        raise HTTPException(404, "Fant ikke bilen i din flåte")
+    doc_type = str(doc_type or "").strip().lower()
+    if doc_type not in FLEET_VEHICLE_DOC_TYPES:
+        raise HTTPException(400, "Ugyldig dokumenttype")
+    if expiry:
+        try:
+            datetime.fromisoformat(str(expiry)[:10])
+        except ValueError:
+            raise HTTPException(400, "Ugyldig utløpsdato")
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("fleet-vehicle-docs", vehicle_id, file.filename or "file", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "fleet-vehicle-docs",
+        "fleet_id": fid,
+        "vehicle_id": vehicle_id,
+        "doc_type": doc_type,
+        "review_status": "pending",
+        "review_expiry": str(expiry)[:10] if expiry else None,
+        "is_deleted": False,
+        "created_at": now,
+    }
+    await db.uploaded_files.insert_one(doc)
+    await _audit(current, "fleet.vehicle_document_upload", "vehicle", vehicle_id, None, {
+        "doc_type": doc_type,
+        "filename": doc["original_filename"],
+        "expiry": doc["review_expiry"],
+    })
+    doc.pop("_id", None)
+    return {
+        "id": doc["id"],
+        "filename": doc["original_filename"],
+        "content_type": doc["content_type"],
+        "size": doc["size"],
+        "scope": doc["scope"],
+        "doc_type": doc_type,
+        "created_at": now,
+        "storage_path": doc["storage_path"],
+        "owner_type": "vehicle",
+        "owner_id": vehicle_id,
+        "owner_name": vehicle.get("plate") or vehicle.get("car"),
+        "review_status": "pending",
+        "expiry": doc["review_expiry"],
+        "compliance": _fleet_document_compliance("pending", doc["review_expiry"]),
+    }
+
+
 def _fleet_document_compliance(review_status, expiry):
     today = datetime.now(timezone.utc).date().isoformat()
     soon = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
@@ -5073,6 +5152,10 @@ async def fleet_documents(current=Depends(require_fleet_owner)):
         driver_ids.append(uid)
         driver_names[uid] = u.get("fullName") or u.get("full_name") or "Sjåfør"
 
+    vehicle_names = {}
+    async for v in db.fleet_vehicles.find({"fleet_id": fid}, {"plate": 1, "car": 1}):
+        vehicle_names[str(v["_id"])] = v.get("plate") or v.get("car") or "Kjøretøy"
+
     application = None
     app_token = None
     application_id = fleet.get("application_id")
@@ -5086,6 +5169,7 @@ async def fleet_documents(current=Depends(require_fleet_owner)):
     filters = []
     if driver_ids:
         filters.append({"scope": "driver-docs", "owner_user_id": {"$in": driver_ids}})
+    filters.append({"scope": "fleet-vehicle-docs", "fleet_id": fid})
     if app_token:
         filters.append({"scope": "fleet-applications", "application_token": app_token})
 
@@ -5098,18 +5182,28 @@ async def fleet_documents(current=Depends(require_fleet_owner)):
             owner_id = d.get("owner_user_id")
             rs = d.get("review_status") or "pending"
             expiry = d.get("review_expiry")
+            scope = d.get("scope")
+            vehicle_id = d.get("vehicle_id")
+            owner_type = "driver" if scope == "driver-docs" else "vehicle" if scope == "fleet-vehicle-docs" else "fleet"
+            owner_name = (
+                driver_names.get(owner_id)
+                if owner_type == "driver"
+                else vehicle_names.get(vehicle_id)
+                if owner_type == "vehicle"
+                else fleet.get("name")
+            )
             docs.append({
                 "id": d.get("id") or str(d["_id"]),
                 "filename": d.get("original_filename"),
                 "content_type": d.get("content_type"),
                 "size": d.get("size"),
-                "scope": d.get("scope"),
+                "scope": scope,
                 "doc_type": d.get("doc_type"),
                 "created_at": d.get("created_at"),
                 "storage_path": d.get("storage_path"),
-                "owner_type": "driver" if d.get("scope") == "driver-docs" else "fleet",
-                "owner_id": owner_id,
-                "owner_name": driver_names.get(owner_id) if owner_id else fleet.get("name"),
+                "owner_type": owner_type,
+                "owner_id": vehicle_id if owner_type == "vehicle" else owner_id,
+                "owner_name": owner_name,
                 "review_status": rs,
                 "expiry": expiry,
                 "compliance": _fleet_document_compliance(rs, expiry),
@@ -7468,6 +7562,12 @@ async def download_file(path: str, current=Depends(get_current_user)):
             app_doc = None
         if app_doc and rec.get("application_token") == app_doc.get("upload_token"):
             allowed = True
+    elif rec.get("scope") == "fleet-vehicle-docs":
+        if role in ("admin", "superadmin"):
+            allowed = True
+        elif role == "fleet_owner":
+            fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+            allowed = bool(fleet_id and rec.get("fleet_id") == fleet_id)
     elif rec.get("scope") == "driver-identity-selfie":
         # Raw identity selfies are intentionally not exposed to fleet owners.
         if is_owner or role in ("admin", "superadmin"):
