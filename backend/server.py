@@ -1902,6 +1902,8 @@ async def me(current=Depends(get_current_user)):
 # ---- Trips ----
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+    if current.get("legal_accepted") is not True:
+        raise HTTPException(status_code=403, detail="Godta vilkår og personvern før du bestiller tur")
     _require_launch_pickup(body.pickup_lat, body.pickup_lng)
     # Server-side duplicate guard: one passenger cannot create overlapping active rides.
     existing_active = await db.trips.find_one(
