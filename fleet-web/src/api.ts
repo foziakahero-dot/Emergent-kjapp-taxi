@@ -126,9 +126,11 @@ export type FleetVehicle = {
   car?: string;
   plate?: string;
   vehicle_type?: string;
+  active?: boolean;
   driver_id?: string;
   driver_name?: string;
   approved?: boolean;
+  fleet_active?: boolean | null;
   online?: boolean;
   gps_fresh?: boolean;
   last_location_at?: string;
@@ -224,6 +226,14 @@ export const api = {
   driverDetail: (id: string): Promise<FleetDriverDetail> => http.get(`/fleet/drivers/${id}`).then((r) => r.data),
   live: (): Promise<FleetLive> => http.get('/fleet/live').then((r) => r.data),
   vehicles: (): Promise<{ vehicles: FleetVehicle[] }> => http.get('/fleet/vehicles').then((r) => r.data),
+  createVehicle: (body: { car: string; plate: string; vehicle_type: string }): Promise<FleetVehicle> =>
+    http.post('/fleet/vehicles', body).then((r) => r.data),
+  updateVehicle: (id: string, body: { car?: string; plate?: string; vehicle_type?: string; active?: boolean }): Promise<FleetVehicle> =>
+    http.patch(`/fleet/vehicles/${id}`, body).then((r) => r.data),
+  assignVehicleDriver: (id: string, driver_id?: string | null): Promise<FleetVehicle> =>
+    http.post(`/fleet/vehicles/${id}/assign-driver`, { driver_id: driver_id || null }).then((r) => r.data),
+  setDriverActive: (id: string, active: boolean) =>
+    http.post(`/fleet/drivers/${id}/set-active`, { active }).then((r) => r.data),
   documents: (): Promise<FleetDocuments> => http.get('/fleet/documents').then((r) => r.data),
   downloadFile: (storagePath: string) => {
     const encoded = storagePath.split('/').map(encodeURIComponent).join('/');
