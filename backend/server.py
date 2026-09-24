@@ -2318,15 +2318,29 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
     )
     if result.modified_count != 1:
         raise HTTPException(status_code=409, detail="Turen har endret status og kan ikke avbestilles nå")
-    if trip.get("driver_id"):
+
+    # Re-read after the atomic transition. A driver may have been assigned between the
+    # initial read and cancellation; cleanup must use canonical post-update ownership.
+    cancelled_trip = await db.trips.find_one(
+        {"trip_id": trip_id, "user_id": current["id"]},
+        {"driver_id": 1},
+    )
+    assigned_driver_id = (cancelled_trip or {}).get("driver_id")
+    if assigned_driver_id:
         try:
             await db.users.update_one(
-                {"_id": ObjectId(trip["driver_id"]), "active_trip_id": trip_id},
+                {"_id": ObjectId(assigned_driver_id), "active_trip_id": trip_id},
                 {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
             )
         except (InvalidId, TypeError):
             pass
-        await send_push_to_user(trip["driver_id"], "Turen ble avbestilt", "Kunden har avbestilt turen.", "/driver")
+        await send_push_to_user(
+            assigned_driver_id,
+            "Turen ble avbestilt",
+            "Kunden har avbestilt turen.",
+            "/driver",
+            "trip_cancelled",
+        )
     return {"ok": True, "cancellation_fee": fee, "currency": "NOK"}
 
 
