@@ -40,6 +40,7 @@ Before starting:
 - [ ] Customer notification permission is granted
 - [ ] Driver notification permission is granted
 - [ ] Admin can see the same Driver account and fleet
+- [ ] Admin booking kill switch is OPEN for the test
 - [ ] `GET /api/health` is healthy
 - [ ] `GET /api/ready` is ready for the intended beta environment
 - [ ] `KJAPP_AUTO_CHARGE_ENABLED=false` unless the separate Stripe auto-charge test has already passed
@@ -53,6 +54,7 @@ Customer:
 - [ ] login works
 - [ ] Sign in with Apple works on physical iPhone
 - [ ] forgot-password deep link opens the Customer reset screen
+- [ ] the same reset email works through `https://kjappapp.no/reset-password/:token` if the app cannot open
 - [ ] existing account without current legal consent is sent through the consent gate
 
 Driver:
