@@ -21,15 +21,21 @@ concurrency:
 
 jobs:
   backend-syntax:
-    name: Backend syntax
+    name: Backend syntax + focused regressions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
       - name: Compile backend Python
         run: python -m compileall -q backend
+      - name: Run beta security regressions
+        run: python -m pytest -q backend/tests/test_security_regressions_unit.py
 
   admin-web:
     name: Admin web build
