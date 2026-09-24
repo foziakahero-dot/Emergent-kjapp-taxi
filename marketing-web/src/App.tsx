@@ -3,6 +3,7 @@ import { Link, Route, Routes } from 'react-router-dom';
 import { ApplyPage } from './ApplyPage';
 import PremiumHome from './PremiumHome';
 import { TripSharePage } from './TripSharePage';
+import { PaymentReturnPage } from './PaymentReturnPage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -205,6 +206,10 @@ export default function App() {
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
       <Route path="/tur/:token" element={<TripSharePage />} />
+      <Route path="/payment/success" element={<PaymentReturnPage kind="trip-success" />} />
+      <Route path="/payment/cancel" element={<PaymentReturnPage kind="trip-cancel" />} />
+      <Route path="/payment/setup-success" element={<PaymentReturnPage kind="setup-success" />} />
+      <Route path="/payment/setup-cancel" element={<PaymentReturnPage kind="setup-cancel" />} />
       <Route path="*" element={<PremiumHome />} />
     </Routes>
   );
