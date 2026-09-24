@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { setPageSeo } from './seo';
+import { createPublicSupportTicket } from './api';
 import './help.css';
 
 const SUPPORT_EMAIL = 'support@kjappapp.no';
@@ -25,6 +26,10 @@ export default function HelpPage() {
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [message, setMessage] = useState('');
+  const [contactError, setContactError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sentTicketId, setSentTicketId] = useState('');
+  const [sendError, setSendError] = useState('');
 
   useEffect(() => {
     setPageSeo({
@@ -36,21 +41,34 @@ export default function HelpPage() {
 
   const topicLabel = useMemo(() => topics.find((item) => item.value === topic)?.label || 'Annet', [topic]);
 
-  const sendSupportEmail = (event: FormEvent) => {
+  const submitSupport = async (event: FormEvent) => {
     event.preventDefault();
-    const subject = `[KJAPP Support] ${topicLabel}`;
-    const body = [
-      `Kategori: ${topicLabel}`,
-      `Navn: ${name || '-'}`,
-      `Kontakt: ${contact || '-'}`,
-      '',
-      'Beskrivelse:',
-      message || '-',
-      '',
-      'Sendt fra kjappapp.no/help',
-    ].join('\n');
-
-    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setContactError('');
+    setSendError('');
+    setSentTicketId('');
+    if (contact.trim().length < 3) {
+      setContactError('Skriv inn e-post eller telefon slik at support kan svare deg.');
+      return;
+    }
+    if (message.trim().length < 10) {
+      setSendError('Beskriv saken med minst 10 tegn.');
+      return;
+    }
+    setSending(true);
+    try {
+      const result = await createPublicSupportTicket({
+        topic: topic as any,
+        name: name.trim() || undefined,
+        contact: contact.trim(),
+        message: message.trim(),
+      });
+      setSentTicketId(result.ticket_id || '');
+      setMessage('');
+    } catch (error: any) {
+      setSendError(error?.message || 'Kunne ikke sende supportsaken. Prøv igjen eller bruk e-post.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -68,7 +86,7 @@ export default function HelpPage() {
         <div>
           <span className="help-kicker">KJAPP SUPPORT</span>
           <h1>Hva kan vi<br />hjelpe deg med?</h1>
-          <p>Velg hva saken gjelder og beskriv problemet. E-posten blir automatisk adressert til <strong>{SUPPORT_EMAIL}</strong>.</p>
+          <p>Velg hva saken gjelder og beskriv problemet. Saken går direkte til KJAPP Support og kan følges opp i operatørpanelet.</p>
         </div>
         <aside className="help-status">
           <span className="help-status-dot" />
@@ -91,11 +109,11 @@ export default function HelpPage() {
           ))}
         </div>
 
-        <form className="help-form" onSubmit={sendSupportEmail}>
+        <form className="help-form" onSubmit={submitSupport}>
           <div className="help-form-head">
             <span>NY SUPPORTSAK</span>
             <h2>Send til KJAPP Support</h2>
-            <p>Vi fyller inn mottaker og saksinformasjon automatisk. Du godkjenner og sender fra ditt eget e-postprogram.</p>
+            <p>Saken registreres direkte hos KJAPP Support. Ikke legg inn kortnummer, passord eller andre hemmeligheter.</p>
           </div>
 
           <label>
@@ -107,7 +125,11 @@ export default function HelpPage() {
 
           <div className="help-form-row">
             <label><span>Navn</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ditt navn" autoComplete="name" /></label>
-            <label><span>E-post eller telefon</span><input value={contact} onChange={(event) => setContact(event.target.value)} placeholder="Hvordan kan vi kontakte deg?" /></label>
+            <label>
+              <span>E-post eller telefon</span>
+              <input required value={contact} onChange={(event) => setContact(event.target.value)} placeholder="Hvordan kan vi kontakte deg?" />
+              {contactError ? <small style={{ color: '#ff6b6b' }}>{contactError}</small> : null}
+            </label>
           </div>
 
           <label>
@@ -115,8 +137,10 @@ export default function HelpPage() {
             <textarea required value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Fortell kort hva som har skjedd, gjerne med tur-ID eller annen relevant informasjon." rows={7} />
           </label>
 
-          <button className="help-submit" type="submit">Åpne e-post til support →</button>
-          <small className="help-form-note">Ingenting sendes uten at du selv trykker «Send» i e-postprogrammet ditt.</small>
+          <button className="help-submit" type="submit" disabled={sending}>{sending ? 'Sender…' : 'Send supportsak →'}</button>
+          {sentTicketId ? <small className="help-form-note" style={{ color: '#2dd4bf' }}>Supportsaken er registrert. Referanse: {sentTicketId.slice(0, 8)}.</small> : null}
+          {sendError ? <small className="help-form-note" style={{ color: '#ff6b6b' }}>{sendError} <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: 'inherit' }}>Send e-post</a></small> : null}
+          {!sentTicketId && !sendError ? <small className="help-form-note">Ved tekniske problemer kan du også sende e-post til {SUPPORT_EMAIL}.</small> : null}
         </form>
       </section>
 
