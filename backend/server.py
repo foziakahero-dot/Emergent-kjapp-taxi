@@ -356,6 +356,7 @@ def user_public(user: dict) -> dict:
     if user.get("_id") is not None:
         result["id"] = str(user["_id"])
     result.setdefault("role", "user")
+    result["legal_accepted"] = bool(user.get("accepted_terms_at"))
     return result
 
 
@@ -443,6 +444,11 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class AcceptLegalRequest(BaseModel):
+    accepted_terms: bool
+    legal_version: str = "2026-09"
 
 
 class ClientErrorEvent(BaseModel):
@@ -1616,7 +1622,8 @@ async def register(body: RegisterRequest, request: Request, response: Response):
     uid = str(result.inserted_id)
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": body.phone or ""}}
+    created_user = await db.users.find_one({"_id": result.inserted_id})
+    return {"token": token, "user": user_public(created_user or {"_id": result.inserted_id, "email": email, "fullName": body.fullName, "phone": body.phone or "", "role": "user", "accepted_terms_at": now_iso})}
 
 
 @api.post("/auth/login")
@@ -1861,6 +1868,28 @@ async def reset_password(body: ResetPasswordRequest):
     # Unlock the account: clear brute-force counters so the user can log in immediately
     await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
     return {"ok": True}
+
+
+@api.post("/auth/accept-legal")
+async def accept_legal(body: AcceptLegalRequest, current=Depends(get_current_user)):
+    if body.accepted_terms is not True:
+        raise HTTPException(status_code=400, detail="Du må godta vilkår og personvern for å fortsette")
+    try:
+        oid = ObjectId(current["id"])
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=401, detail="Ugyldig bruker")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"_id": oid},
+        {"$set": {
+            "accepted_terms_at": now_iso,
+            "legal_version": (body.legal_version or "2026-09")[:32],
+        }},
+    )
+    updated = await db.users.find_one({"_id": oid})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Bruker ikke funnet")
+    return user_public(updated)
 
 
 @api.get("/auth/me")
