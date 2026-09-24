@@ -53,7 +53,8 @@ class TestAuthRegression:
     def test_register_new_user(self, client):
         email = f"TEST_iter9_{int(time.time()*1000)}@kjapp.no"
         r = client.post(f"{API}/auth/register", json={
-            "email": email, "password": "test12345", "fullName": "Iter9 Tester", "phone": "+4790000009"
+            "email": email, "password": "test12345", "fullName": "Iter9 Tester", "phone": "+4790000009",
+            "accepted_terms": True, "legal_version": "test"
         })
         assert r.status_code in (200, 201), r.text
         data = r.json()
