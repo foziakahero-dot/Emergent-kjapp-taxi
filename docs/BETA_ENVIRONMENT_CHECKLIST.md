@@ -116,6 +116,38 @@ Never commit:
 - distribution certificate private key
 - Expo access token
 
+## Direct EAS beta artifact path
+
+GitHub Actions currently fails before jobs start, so signed artifacts can be launched directly through EAS Workflows from the reviewed branch.
+
+Guarded Windows helper from repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_eas_beta_builds.ps1 -Target all -Platform android -Wait
+powershell -ExecutionPolicy Bypass -File .\scripts\run_eas_beta_builds.ps1 -Target all -Platform ios -Wait
+```
+
+The helper refuses to run unless:
+- current branch is `beta/oslo-production-ready`
+- working tree is clean
+- local HEAD exactly matches `origin/beta/oslo-production-ready`
+- the static beta policy passes
+- EAS CLI authentication is valid
+
+Direct equivalents:
+
+```powershell
+cd frontend
+npx eas-cli@latest workflow:run .eas/workflows/android-apk.yml --non-interactive --wait
+npx eas-cli@latest workflow:run .eas/workflows/testflight-beta.yml --non-interactive --wait
+
+cd ..\driver-app
+npx eas-cli@latest workflow:run .eas/workflows/android-apk.yml --non-interactive --wait
+npx eas-cli@latest workflow:run .eas/workflows/testflight-beta.yml --non-interactive --wait
+```
+
+The iOS workflow builds the signed beta and submits it to TestFlight. Configure the Apple / App Store Connect connection in EAS before running it.
+
 ## Pre-deploy source gate
 
 Preferred:
