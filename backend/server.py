@@ -4929,6 +4929,8 @@ class DriverSignupRequest(BaseModel):
     email: str
     phone: str
     password: str
+    accepted_terms: bool = False
+    legal_version: str = "2026-09"
     # New: uploaded document paths (from /api/upload/public via a public driver-invite upload token)
     drivers_license_path: Optional[str] = None
     taxi_license_path: Optional[str] = None
@@ -5023,6 +5025,8 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    if body.accepted_terms is not True:
+        raise HTTPException(status_code=400, detail="Du må godta sjåførvilkår og personvern før registrering")
     # Require all three documents
     if not (body.drivers_license_path and body.taxi_license_path and body.profile_photo_path):
         raise HTTPException(status_code=400, detail="Du må laste opp førerkort, kjøreseddel og profilbilde")
@@ -5057,6 +5061,8 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "rating": 5.0,
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
+        "accepted_terms_at": datetime.now(timezone.utc).isoformat(),
+        "legal_version": (body.legal_version or "2026-09")[:32],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "drivers_license_path": body.drivers_license_path,
         "taxi_license_path": body.taxi_license_path,
