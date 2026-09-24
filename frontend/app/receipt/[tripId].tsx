@@ -122,6 +122,11 @@ export default function Receipt() {
 
   const v = vehicleMeta(trip.vehicle_type);
   const isPaid = trip.payment_status === 'paid';
+  const paymentNeedsAction = trip.payment_status === 'requires_action' || trip.payment_status === 'failed';
+  const paymentLabel = isPaid ? 'Betalt' : paymentNeedsAction ? 'Betaling må fullføres' : 'Venter på betaling';
+  const paymentHint = paymentNeedsAction
+    ? 'Automatisk betaling kunne ikke fullføres uten ny godkjenning. Du kan betale sikkert med kort nedenfor.'
+    : 'Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.';
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
@@ -132,7 +137,7 @@ export default function Receipt() {
         <Text style={s.title}>Takk for turen</Text>
         <Text style={s.price}>{kr(trip.price)}</Text>
         <Text style={[s.paymentStatus, { color: isPaid ? colors.online : colors.warning }]} testID="receipt-payment-status">
-          {isPaid ? 'Betalt' : 'Venter på betaling'}
+          {paymentLabel}
         </Text>
       </View>
 
@@ -155,7 +160,7 @@ export default function Receipt() {
               <View style={s.paymentIcon}><Icon name="lock" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.paymentTitle}>Betal turen sikkert</Text>
-                <Text style={s.paymentSub}>Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.</Text>
+                <Text style={s.paymentSub}>{paymentHint}</Text>
               </View>
             </View>
             <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} />
