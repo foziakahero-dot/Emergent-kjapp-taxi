@@ -106,6 +106,7 @@ export default function RootLayout() {
               <Stack.Screen name="driver-legal-consent" />
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-identity" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
