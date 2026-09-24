@@ -54,6 +54,7 @@ export default function DriverHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
+  const [offerClock, setOfferClock] = useState(Date.now());
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
@@ -119,6 +120,11 @@ export default function DriverHome() {
       return () => clearInterval(i);
     }, [poll]),
   );
+
+  useEffect(() => {
+    const i = setInterval(() => setOfferClock(Date.now()), 500);
+    return () => clearInterval(i);
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -348,6 +354,24 @@ export default function DriverHome() {
   };
 
   const firstOffer = pending[0];
+  const offerExpiresMs = firstOffer?.offer_expires_at ? Date.parse(firstOffer.offer_expires_at) : NaN;
+  const offerRemaining = Number.isFinite(offerExpiresMs)
+    ? Math.max(0, Math.ceil((offerExpiresMs - offerClock) / 1000))
+    : null;
+  const offerExpired = offerRemaining !== null && offerRemaining <= 0;
+  const pickupRoute = firstOffer?.pickup_route;
+  const offerDistance = pickupRoute?.distance_km ?? firstOffer?.offer_km ?? null;
+  const offerDuration = pickupRoute?.duration_min ?? null;
+
+  useEffect(() => {
+    if (!firstOffer?.offer_expires_at) return;
+    const expires = Date.parse(firstOffer.offer_expires_at);
+    if (!Number.isFinite(expires)) return;
+    const delay = Math.min(30000, Math.max(500, expires - Date.now() + 500));
+    const timer = setTimeout(() => { void poll(); }, delay);
+    return () => clearTimeout(timer);
+  }, [firstOffer?.trip_id, firstOffer?.offer_expires_at, poll]);
+
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
   const mapDropoff = current && current.status === 'in_trip'
     ? { lat: current.dropoff_lat, lng: current.dropoff_lng }
@@ -473,15 +497,28 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
             </View>
-            <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min estimert</Text>
+            <Text style={s.offerMeta}>
+              {offerDistance != null ? `${Number(offerDistance).toFixed(1)} km til henting` : 'Beregner avstand til henting'}
+              {offerDuration != null ? ` · ${Math.max(1, Math.round(Number(offerDuration)))} min` : ''}
+            </Text>
+            <Text style={[s.offerCountdown, offerExpired && s.offerCountdownExpired]} testID="driver-offer-countdown">
+              {offerRemaining != null
+                ? (offerExpired ? 'Tilbudet sendes videre…' : `Sendes videre om ${offerRemaining} sek`)
+                : 'Åpen for alle ledige sjåfører'}
+            </Text>
             {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
             {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
               <Pressable style={s.declineBtn} onPress={() => decline(firstOffer.trip_id)} testID={`driver-decline-${firstOffer.trip_id}`}>
                 <Text style={s.declineText}>Avslå</Text>
               </Pressable>
-              <Pressable style={s.acceptBtn} onPress={() => accept(firstOffer.trip_id)} disabled={busy} testID={`driver-accept-${firstOffer.trip_id}`}>
-                {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.acceptText}>Godta tur</Text>}
+              <Pressable
+                style={[s.acceptBtn, offerExpired && s.acceptBtnDisabled]}
+                onPress={() => accept(firstOffer.trip_id)}
+                disabled={busy || offerExpired}
+                testID={`driver-accept-${firstOffer.trip_id}`}
+              >
+                {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.acceptText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
               </Pressable>
             </View>
           </View>
@@ -607,10 +644,13 @@ const useStyles = makeStyles((c) => ({
   action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
   offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
+  offerCountdown: { color: c.online, fontSize: 12, fontWeight: '700', marginTop: 8 },
+  offerCountdownExpired: { color: c.textMuted },
   offerBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
   declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong },
   declineText: { color: c.textSecondary, fontSize: 15, fontWeight: '600' },
   acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: c.online },
+  acceptBtnDisabled: { opacity: 0.45 },
   acceptText: { color: '#03120B', fontSize: 15, fontWeight: '800' },
   waiting: {
     flexDirection: 'row', alignItems: 'center', gap: 13, minHeight: 72, marginTop: 12,
