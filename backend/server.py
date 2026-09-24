@@ -1606,8 +1606,8 @@ async def register(body: RegisterRequest, request: Request, response: Response):
     email = body.email.strip().lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Passord må ha minst 8 tegn")
     if body.accepted_terms is not True:
         raise HTTPException(status_code=400, detail="Du må godta vilkår og personvern før kontoen opprettes")
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1828,8 +1828,8 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         })
         # SECURITY (SEC-001): never build the reset link from attacker-controllable
         # Origin/Host headers. Client deep links are fixed allowlisted schemes; web fallback is trusted config.
-        configured_reset_base = (os.environ.get("PASSWORD_RESET_WEB_BASE") or "https://fleet.kjappapp.no").strip().rstrip("/")
-        reset_web_base = configured_reset_base if configured_reset_base.startswith("https://") else "https://fleet.kjappapp.no"
+        configured_reset_base = (os.environ.get("PASSWORD_RESET_WEB_BASE") or "https://kjappapp.no").strip().rstrip("/")
+        reset_web_base = configured_reset_base if configured_reset_base.startswith("https://") else "https://kjappapp.no"
         fallback_url = f"{reset_web_base}/reset-password/{token}"
         if body.client == "customer":
             reset_url = f"kjapp://reset-password/{token}"
@@ -1842,7 +1842,8 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
 
 
 @api.get("/auth/reset-password/{token}")
-async def check_reset_token(token: str):
+async def check_reset_token(token: str, request: Request):
+    await _enforce_rate_limit(request, "auth-reset-check", 60, 900)
     rec = await db.password_reset_tokens.find_one({
         "token": token, "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
@@ -1853,9 +1854,10 @@ async def check_reset_token(token: str):
 
 
 @api.post("/auth/reset-password")
-async def reset_password(body: ResetPasswordRequest):
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+async def reset_password(body: ResetPasswordRequest, request: Request):
+    await _enforce_rate_limit(request, "auth-reset", 30, 900)
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Passord må ha minst 8 tegn")
     rec = await db.password_reset_tokens.find_one({
         "token": body.token, "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
@@ -5219,8 +5221,8 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
         raise HTTPException(status_code=403, detail="Invitasjonen er knyttet til en annen e-postadresse")
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Passord må ha minst 8 tegn")
     if body.accepted_terms is not True:
         raise HTTPException(status_code=400, detail="Du må godta sjåførvilkår og personvern før registrering")
     # Require all three documents
