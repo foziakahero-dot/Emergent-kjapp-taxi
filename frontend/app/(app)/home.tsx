@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -34,8 +35,9 @@ export default function Home() {
   const { user } = useAuth();
 
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
-  const [pickupLabel, setPickupLabel] = useState('Din posisjon');
+  const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
   const [locDenied, setLocDenied] = useState(false);
+  const [locationReady, setLocationReady] = useState(false);
   const [cars, setCars] = useState<any[]>([]);
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
@@ -70,45 +72,61 @@ export default function Home() {
     }, [loadMethods, loadPlaces, router]),
   );
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setLoc(p);
-          placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});
-        } else {
-          setLocDenied(true);
-        }
-      } catch {
+  const refreshLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationReady(false);
         setLocDenied(true);
+        setPickupLabel('Posisjon ikke tilgjengelig');
+        return false;
       }
-    })();
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setLoc(p);
+      setLocationReady(true);
+      setLocDenied(false);
+      setPickupLabel('Din posisjon');
+      placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});
+      return true;
+    } catch {
+      setLocationReady(false);
+      setLocDenied(true);
+      setPickupLabel('Posisjon ikke tilgjengelig');
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLocation();
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
     loadPlaces();
-  }, [loadMethods, loadPlaces]);
+  }, [loadMethods, loadPlaces, refreshLocation]);
 
   useEffect(() => {
     let mounted = true;
+    if (!locationReady) {
+      setCars([]);
+      return () => { mounted = false; };
+    }
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
     load();
     const i = setInterval(load, 8000);
     return () => { mounted = false; clearInterval(i); };
-  }, [loc.lat, loc.lng]);
+  }, [locationReady, loc.lat, loc.lng]);
 
   useEffect(() => {
-    if (!dropoff) { setEstimate(null); return; }
+    if (!dropoff || !locationReady) { setEstimate(null); return; }
     tripsApi.estimate({
       pickup_lat: loc.lat, pickup_lng: loc.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
       stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
     }).then(setEstimate).catch(() => setEstimate(null));
-  }, [dropoff, loc.lat, loc.lng, stops]);
+  }, [dropoff, locationReady, loc.lat, loc.lng, stops]);
 
-  const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
+  const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
+  const nearest = etaValues.length ? Math.min(...etaValues) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
@@ -121,6 +139,19 @@ export default function Home() {
 
   const book = async () => {
     if (!dropoff) return;
+    if (!locationReady) {
+      setError('KJAPP trenger en fersk posisjon før du kan bestille tur.');
+      return;
+    }
+    if (!estimate || priceFor(selType) == null) {
+      setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
+      return;
+    }
+    if (!payMethod) {
+      setError('Legg til et betalingskort før du bestiller.');
+      router.push('/payment-methods');
+      return;
+    }
     setError('');
     setBooking(true);
     try {
@@ -149,13 +180,14 @@ export default function Home() {
   };
 
   const routeGeom = estimate?.geometry?.coordinates;
+  const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        user={loc}
-        pickup={dropoff ? loc : null}
+        user={locationReady ? loc : null}
+        pickup={dropoff && locationReady ? loc : null}
         dropoff={dropoff}
         route={routeGeom}
         cars={dropoff ? [] : cars}
@@ -188,8 +220,8 @@ export default function Home() {
           <View style={[s.dot, { backgroundColor: cars.length ? colors.online : colors.textMuted }]} />
           <Text style={s.carsText}>
             {cars.length
-              ? `${cars.length} biler i nærheten · nærmeste ${nearest} min`
-              : 'Søker etter ledige biler…'}
+              ? (nearest != null ? `${cars.length} biler i nærheten · nærmeste ${nearest} min` : `${cars.length} biler i nærheten`)
+              : (locationReady ? 'Søker etter ledige biler…' : 'Posisjon kreves for å se biler i nærheten')}
           </Text>
         </View>
 
@@ -248,7 +280,17 @@ export default function Home() {
             </ScrollView>
 
             {locDenied ? (
-              <Text style={s.hint}>Slå på posisjon for å se biler rundt deg — vi bruker Oslo sentrum inntil videre.</Text>
+              <View style={s.locationWarning} testID="home-location-required">
+                <Text style={s.hint}>KJAPP bestiller aldri fra en antatt posisjon. Slå på posisjon for å velge korrekt hentested.</Text>
+                <View style={s.locationActions}>
+                  <Pressable style={s.locationAction} onPress={() => void refreshLocation()}>
+                    <Text style={s.locationActionText}>Prøv igjen</Text>
+                  </Pressable>
+                  <Pressable style={s.locationAction} onPress={() => Linking.openSettings().catch(() => {})}>
+                    <Text style={s.locationActionText}>Innstillinger</Text>
+                  </Pressable>
+                </View>
+              </View>
             ) : null}
           </>
         ) : (
@@ -375,9 +417,9 @@ export default function Home() {
             {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
 
             <Pressable
-              style={[s.confirm, booking && { opacity: 0.6 }]}
+              style={[s.confirm, !canBook && { opacity: 0.55 }]}
               onPress={book}
-              disabled={booking}
+              disabled={!canBook}
               testID="booking-confirm"
             >
               {booking ? (
@@ -542,6 +584,10 @@ const useStyles = makeStyles((c) => ({
   chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 15, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
   chipEditText: { color: c.textSecondary, fontSize: 14 },
   hint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 },
+  locationWarning: { backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, padding: 12, marginTop: 8 },
+  locationActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  locationAction: { minHeight: 38, flex: 1, borderRadius: 10, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  locationActionText: { color: c.accent, fontSize: 12, fontWeight: '700' },
   endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 12 },
   epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   epText: { color: c.text, fontSize: 14, flex: 1 },
