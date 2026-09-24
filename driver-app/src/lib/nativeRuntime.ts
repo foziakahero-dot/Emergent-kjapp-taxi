@@ -62,7 +62,8 @@ if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         heading: pos.coords.heading || 0,
-        speed: pos.coords.speed || 0,
+        speed: Math.max(0, pos.coords.speed || 0),
+        recorded_at: new Date(pos.timestamp).toISOString(),
       });
     } catch {
       // Foreground polling will recover on the next active session.
