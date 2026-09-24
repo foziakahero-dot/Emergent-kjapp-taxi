@@ -11,6 +11,8 @@ export type FleetDraft = {
   vehicle_count?: number;
   bank_account?: string;
   notes?: string;
+  accepted_terms?: boolean;
+  legal_version?: string;
 };
 
 export type UploadedDocument = {
