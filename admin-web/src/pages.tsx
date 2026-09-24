@@ -89,6 +89,10 @@ export function Dashboard() {
           foot={<span className="dim">{health.data?.dispatch?.p95_accept_seconds != null ? `p95 ${Math.round(health.data.dispatch.p95_accept_seconds)}s` : 'Venter på nok turer'}</span>} />
         <Kpi label="GPS freshness" value={health.loading ? '…' : health.err ? '—' : health.data?.gps?.freshness_pct == null ? '—' : `${health.data.gps.freshness_pct}%`}
           foot={<span className="dim">{health.data ? `${health.data.gps.fresh_drivers}/${health.data.gps.online_drivers} online · ${health.data.client_errors.fatal} fatale klientfeil` : 'Aktive sjåfører'}</span>} />
+        <Kpi label="Self-serve completion" value={health.loading ? '…' : health.err ? '—' : health.data?.operations?.self_serve_completion_pct == null ? '—' : `${health.data.operations.self_serve_completion_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.operations.self_serve_completed}/${health.data.trips.completed} fullført uten operatørinngrep` : 'Fullførte turer'}</span>} />
+        <Kpi label="Kritiske saker / 100 turer" value={health.loading ? '…' : health.err ? '—' : health.data?.operations?.critical_cases_per_100_trips == null ? '—' : health.data.operations.critical_cases_per_100_trips}
+          foot={<span className="dim">{health.data ? `${health.data.operations.critical_support_cases} kritiske support · ${health.data.operations.fatal_client_errors_per_100_trips ?? '—'} fatale appfeil /100` : 'Beta incident-rate'}</span>} />
       </div>
       {health.err ? <ErrorBanner msg={health.err} /> : null}
 
