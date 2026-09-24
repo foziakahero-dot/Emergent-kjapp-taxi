@@ -147,7 +147,7 @@ export type FleetDocument = {
   doc_type?: string;
   created_at?: string;
   storage_path?: string;
-  owner_type?: 'driver' | 'fleet';
+  owner_type?: 'driver' | 'fleet' | 'vehicle';
   owner_id?: string;
   owner_name?: string;
   review_status?: string;
@@ -233,6 +233,13 @@ export const api = {
     http.patch(`/fleet/vehicles/${id}`, body).then((r) => r.data),
   assignVehicleDriver: (id: string, driver_id?: string | null): Promise<FleetVehicle> =>
     http.post(`/fleet/vehicles/${id}/assign-driver`, { driver_id: driver_id || null }).then((r) => r.data),
+  uploadVehicleDocument: (id: string, file: File, doc_type: string, expiry?: string): Promise<FleetDocument> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('doc_type', doc_type);
+    if (expiry) form.append('expiry', expiry);
+    return http.post(`/fleet/vehicles/${id}/documents`, form).then((r) => r.data);
+  },
   setDriverActive: (id: string, active: boolean) =>
     http.post(`/fleet/drivers/${id}/set-active`, { active }).then((r) => r.data),
   documents: (): Promise<FleetDocuments> => http.get('/fleet/documents').then((r) => r.data),
