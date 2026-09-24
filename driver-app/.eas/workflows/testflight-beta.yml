@@ -1,0 +1,16 @@
+name: KJAPP Driver TestFlight Beta
+
+jobs:
+  build_ios:
+    name: Build KJAPP Driver iOS beta
+    type: build
+    params:
+      platform: ios
+      profile: testflight-beta
+
+  submit_testflight:
+    name: Submit Driver beta to TestFlight
+    needs: [build_ios]
+    type: testflight
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
