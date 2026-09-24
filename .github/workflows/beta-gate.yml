@@ -29,9 +29,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - name: Install backend dependencies
-        run: python -m pip install -r backend/requirements.txt
+          cache-dependency-path: backend/requirements-ci.txt
+      - name: Install portable backend test dependencies
+        run: python -m pip install -r backend/requirements-ci.txt
       - name: Compile backend Python
         run: python -m compileall -q backend
       - name: Run beta security regressions
