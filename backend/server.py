@@ -5616,11 +5616,21 @@ class ApproveDriverRequest(BaseModel):
     approved: bool = True
 
 
+def _enforce_identity_before_driver_approval(driver: dict, approving: bool) -> None:
+    """When rollout enforcement is enabled, Admin cannot approve an unverified driver."""
+    if approving and KJAPP_DRIVER_IDENTITY_REQUIRED and driver.get("identity_verification_status") != "verified":
+        raise HTTPException(
+            status_code=409,
+            detail="Sjåføren må ha verifisert Selfie ID før kontoen kan godkjennes",
+        )
+
+
 @api.post("/admin/drivers/{user_id}/approve")
 async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
     try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    _enforce_identity_before_driver_approval(u, body.approved)
     prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
@@ -7481,6 +7491,7 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
     try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    _enforce_identity_before_driver_approval(u, body.approved)
     prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"approved": body.approved}})
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
