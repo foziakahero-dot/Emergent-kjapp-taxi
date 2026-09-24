@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
+import { stopDriverBackgroundLocation, unregisterNativePush } from '@/src/lib/nativeRuntime';
 
 // Complete any pending auth session (mobile). No-op on web.
 WebBrowser.maybeCompleteAuthSession();
@@ -141,6 +142,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    try { await stopDriverBackgroundLocation(); } catch {}
+    try { await unregisterNativePush(); } catch {}
+    try { await authApi.logout(); } catch {}
     await storage.removeItem(TOKEN_KEY);
     setUser(null);
   };
