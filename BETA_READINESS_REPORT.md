@@ -120,11 +120,15 @@ One-time account work:
 ### Android
 - Verify FCM credentials used by the Expo projects before Play-store release.
 
-## CI status
+## CI / build status
 
-GitHub is still returning workflow conclusion `startup_failure` with **zero jobs started** on PR-triggered runs, including the current P0/P1 commits. The run metadata shows `path: BuildFailed` and no jobs are created. This occurs before `compileall`, TypeScript, Expo Doctor, Vite or Xcode commands can execute, so it is **not** a successful validation and is also not evidence that application code failed compilation.
+GitHub is still returning workflow conclusion `startup_failure` with **zero jobs started** on PR-triggered runs. The run metadata shows `path: BuildFailed` and no jobs are created. This occurs before `compileall`, TypeScript, Expo Doctor, Vite or Xcode commands can execute, so it is **not** a successful validation and is also not evidence that application code failed compilation.
 
-Until GitHub Actions execution is restored, the branch must remain unmerged. The intended gate is `.github/workflows/beta-gate.yml`: backend compile, Admin build, Marketing build, Customer typecheck/Expo Doctor/config and Driver typecheck/Expo Doctor/config.
+Until GitHub Actions execution is restored (or an equivalent local gate is recorded), the branch must remain unmerged. The intended source gate is `.github/workflows/beta-gate.yml`: backend compile, Admin build, Marketing build, Customer typecheck/Expo Doctor/config and Driver typecheck/Expo Doctor/config.
+
+A Windows fallback now exists at `scripts/beta_local_gate.ps1` and performs the same class of source checks without deploying or changing production data.
+
+Expensive native APK and iOS simulator GitHub workflows are **manual-only** so PR updates do not trigger redundant native builds. Signed beta artifacts are intentionally built through the explicit EAS Android/iOS workflows when credentials are ready.
 
 ## Backend ownership migration
 
