@@ -17,11 +17,39 @@ function RouteMetadata() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    if (pathname === '/help') {
+    if (pathname === '/help' || pathname === '/hjelp') {
       setPageSeo({
         title: 'KJAPP Hjelp & support',
         description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. KJAPP support svarer på support@kjappapp.no.',
         canonical: 'https://kjappapp.no/help',
+      });
+      return;
+    }
+
+    if (pathname === '/personvern') {
+      setPageSeo({
+        title: 'KJAPP Personvern',
+        description: 'Personverninformasjon for KJAPP beta.',
+        canonical: 'https://kjappapp.no/personvern',
+      });
+      return;
+    }
+
+    if (pathname === '/vilkar') {
+      setPageSeo({
+        title: 'KJAPP Vilkår',
+        description: 'Vilkårsinformasjon for KJAPP beta.',
+        canonical: 'https://kjappapp.no/vilkar',
+      });
+      return;
+    }
+
+    if (pathname.startsWith('/reset-password/')) {
+      setPageSeo({
+        title: 'KJAPP Tilbakestill passord',
+        description: 'Sikker tilbakestilling av KJAPP-passord.',
+        canonical: 'https://kjappapp.no/reset-password',
+        robots: 'noindex,nofollow',
       });
       return;
     }
@@ -70,7 +98,7 @@ function SupportFooterPortal() {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (pathname === '/help') {
+    if (pathname === '/help' || pathname === '/hjelp') {
       setTarget(null);
       return;
     }
@@ -95,7 +123,7 @@ function SupportFooterPortal() {
 
 function RootContent() {
   const { pathname } = useLocation();
-  return pathname === '/help' ? <HelpPage /> : <App />;
+  return pathname === '/help' || pathname === '/hjelp' ? <HelpPage /> : <App />;
 }
 
 ReactDOMClient.createRoot(document.getElementById('root')!).render(
