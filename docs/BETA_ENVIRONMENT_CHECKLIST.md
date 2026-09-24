@@ -13,6 +13,14 @@ Use this checklist for the controlled Oslo beta backend deployment. Do not paste
 
 Production startup intentionally refuses weak/default JWT/admin credentials.
 
+## Reverse proxy / rate limiting
+
+The backend rate limiter uses the client IP. Before beta deployment verify how the hosting layer exposes the original client address.
+
+- Keep `TRUST_PROXY=false` unless the backend is definitely behind a controlled proxy that overwrites `X-Forwarded-For`.
+- If the controlled hosting proxy requires forwarded-client-IP handling, enable `TRUST_PROXY=true` only after confirming callers cannot inject an arbitrary forwarded address.
+- After deployment, test two separate phones/networks against a harmless rate-limited endpoint to confirm users do not unintentionally share one proxy bucket.
+
 ## Customer / web identity
 
 - `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
