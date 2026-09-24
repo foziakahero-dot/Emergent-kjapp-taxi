@@ -10,7 +10,7 @@ Scope: `marketing-web/` only. No Customer, Driver, Admin, Fleet or payment-syste
 - Existing Android/iOS beta URLs are environment-driven.
 - Existing SEO helper already supported per-route canonical/meta tags.
 - No marketing analytics provider is installed, so this pass does not introduce one.
-- No production privacy/terms pages exist in `marketing-web`; this change does not fabricate legal text.
+- Stable `/personvern` and `/vilkar` routes now exist for app deep links and beta distribution. They intentionally contain beta placeholder copy only; final legally approved text is still required before public commercial release.
 
 ## Production-readiness changes
 
@@ -43,7 +43,7 @@ VITE_IOS_TESTFLIGHT_URL=https://...
 ## External release blockers
 
 1. The branch backend containing `/api/marketing/waitlist` must be deployed before the preview can persist real signups.
-2. Privacy/terms text must be approved by the responsible company before dedicated legal pages are published.
+2. Final privacy/terms text must be approved by the responsible company and replace the clearly marked beta placeholder text before public commercial release.
 3. Android/TestFlight URLs must only be configured after those builds are actually available.
 
 ## Validation gate
