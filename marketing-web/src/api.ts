@@ -82,3 +82,19 @@ export async function getSharedTrip(token: string) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+export async function checkPasswordResetToken(token: string) {
+  const res = await fetch(`${API_BASE}/auth/reset-password/${encodeURIComponent(token)}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
