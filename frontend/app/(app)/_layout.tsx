@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Icon, IconName } from '@/src/components/Icon';
 import { colors, font } from '@/src/theme';
+import { useAuth } from '@/src/context/AuthContext';
 
 function tab(name: IconName) {
   const TabIcon = ({ color, size }: { color: string; size: number }) => (
@@ -13,6 +14,16 @@ function tab(name: IconName) {
 }
 
 export default function CustomerTabsLayout() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user === null) router.replace('/login');
+    else if (user && user.legal_accepted !== true) router.replace('/legal-consent');
+  }, [user, router]);
+
+  if (!user || user.legal_accepted !== true) return null;
+
   return (
     <Tabs
       screenOptions={{
