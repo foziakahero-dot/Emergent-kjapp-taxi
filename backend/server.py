@@ -482,12 +482,12 @@ def _driver_supports_special_needs(driver: dict, special_needs) -> bool:
 
 
 class TripRequest(BaseModel):
-    pickup_address: str
-    pickup_lat: float
-    pickup_lng: float
-    dropoff_address: str
-    dropoff_lat: float
-    dropoff_lng: float
+    pickup_address: str = Field(min_length=1, max_length=200)
+    pickup_lat: float = Field(ge=-90, le=90)
+    pickup_lng: float = Field(ge=-180, le=180)
+    dropoff_address: str = Field(min_length=1, max_length=200)
+    dropoff_lat: float = Field(ge=-90, le=90)
+    dropoff_lng: float = Field(ge=-180, le=180)
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
     stops: List[TripStop] = Field(default_factory=list, max_length=3)
     special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
@@ -495,8 +495,8 @@ class TripRequest(BaseModel):
 
 
 class RateTripRequest(BaseModel):
-    rating: int
-    feedback: Optional[str] = ""
+    rating: int = Field(ge=1, le=5)
+    feedback: Optional[str] = Field(default="", max_length=1000)
 
 
 class PaymentMethodRequest(BaseModel):
@@ -507,23 +507,23 @@ class PaymentMethodRequest(BaseModel):
 
 
 class UserPlaceRequest(BaseModel):
-    label: str
-    name: str
-    lat: float
-    lng: float
-    icon: str = "map-pin"
+    label: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=120)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    icon: str = Field(default="map-pin", max_length=40)
 
 
 class NearbyCarsRequest(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 class EstimateRequest(BaseModel):
-    pickup_lat: float
-    pickup_lng: float
-    dropoff_lat: float
-    dropoff_lng: float
+    pickup_lat: float = Field(ge=-90, le=90)
+    pickup_lng: float = Field(ge=-180, le=180)
+    dropoff_lat: float = Field(ge=-90, le=90)
+    dropoff_lng: float = Field(ge=-180, le=180)
     stops: List[TripStop] = Field(default_factory=list, max_length=3)
 
 
@@ -3587,9 +3587,9 @@ async def push_test(current=Depends(get_current_user)):
 
 class NativePushSubscribeRequest(BaseModel):
     platform: Literal["ios", "android", "web"]
-    token: str
+    token: str = Field(min_length=10, max_length=4096)
     provider: Literal["expo", "fcm", "apns"] = "expo"
-    device_id: Optional[str] = None
+    device_id: Optional[str] = Field(default=None, max_length=256)
 
 
 @api.get("/push/native-config")
