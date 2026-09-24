@@ -108,6 +108,16 @@ Implemented without redesigning Customer or Driver:
 - Customer and Driver settings expose their actual app version/build for physical-beta incident reporting.
 - `docs/BETA_ENVIRONMENT_CHECKLIST.md` is the canonical beta deployment environment/preflight checklist.
 
+### Final pre-build safety additions
+- A static beta release-policy gate now verifies Customer/Driver bundle IDs, schemes, Expo project IDs, canonical KJAPP URLs, EAS beta/production API targets, error telemetry, legal/reset routes, demo safety and required release documents before a build is treated as valid.
+- Customer and Driver direct EAS Android APK workflows now exist in addition to the TestFlight workflows.
+- `scripts/run_eas_beta_builds.ps1` refuses to start signed beta artifacts unless the local working tree is clean and its HEAD exactly matches the GitHub beta branch.
+- Beta client-error ingestion redacts common bearer tokens, API-key/secret patterns and email addresses before 30-day diagnostic storage.
+- Admin now exposes recent Customer/Driver beta errors alongside the existing Beta Health KPIs.
+- Password-reset tokens are stored hashed at rest for new requests; legacy outstanding plaintext reset records remain readable only for transition compatibility and are removed when consumed.
+- Legal consent is controlled by `KJAPP_LEGAL_VERSION` on the server. Accounts with an older/missing consent version are automatically required to re-consent before Customer booking or Driver operations.
+- `GET /api/auth/legal-config` exposes the current legal version and canonical privacy/terms URLs without exposing secrets.
+
 ## External configuration still required
 
 ### Emergent backend
@@ -119,6 +129,7 @@ Before production deployment configure/verify:
 - any email credentials used for receipts/password reset
 - `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
 - optional explicit `PASSWORD_RESET_WEB_BASE=https://kjappapp.no` (this is also the safe default)
+- `KJAPP_LEGAL_VERSION=2026-09` for the current beta consent version; increment this only when a newly approved legal version is published
 - keep `KJAPP_AUTO_CHARGE_ENABLED=false` until Stripe saved-card/Connect test E2E passes; only then enable it intentionally
 
 ### Apple / EAS
