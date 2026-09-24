@@ -123,6 +123,22 @@ For web-basert Apple-innlogging senere kan `APPLE_CLIENT_ID` (Services ID) legge
 
 En APNs auth key (.p8) kan brukes gjennom EAS credentials for begge appene dersom Apple-kontoen/Teamet tillater det. Ikke legg .p8-filen i Git.
 
+## Oslo beta serviceområde
+
+Backenden har en launch-gate for **hentested**. Destinasjonen kan fortsatt være utenfor sonen.
+
+Aktiver i Emergent beta/produksjonsmiljøet:
+
+```
+KJAPP_SERVICE_AREA_ENFORCE=true
+KJAPP_SERVICE_AREA_CENTER_LAT=59.9139
+KJAPP_SERVICE_AREA_CENTER_LNG=10.7522
+KJAPP_SERVICE_AREA_RADIUS_KM=45
+```
+
+Radiusen er konfigurerbar uten kodeendring. `GET /api/service-area` viser aktiv konfigurasjon.
+Når `KJAPP_SERVICE_AREA_ENFORCE=false` er funksjonen bygget, men ingen bestilling blokkeres.
+
 ## Bakgrunnsposisjon — Driver
 
 Driver bruker `expo-location` + `expo-task-manager`.
