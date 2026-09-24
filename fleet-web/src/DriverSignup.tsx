@@ -59,7 +59,11 @@ export default function DriverSignup() {
 
   const upload = async (key: DocKey, file: File) => {
     setErr(''); setUploading((s) => ({ ...s, [key]: true }));
-    try { const r = await api.uploadDriverDoc(file, token, key); setUploads((s) => ({ ...s, [key]: r })); }
+    // Backend accepts the locked driver-doc scopes drivers_license/taxi_license/profile_photo.
+    // During beta, selfie evidence is uploaded through the existing image-safe profile_photo scope
+    // while the returned storage path is kept separately as selfie_verification_path in the client payload.
+    const backendDocType = key === 'selfie_verification' ? 'profile_photo' : key;
+    try { const r = await api.uploadDriverDoc(file, token, backendDocType); setUploads((s) => ({ ...s, [key]: r })); }
     catch (e) { setErr(apiError(e)); }
     finally { setUploading((s) => ({ ...s, [key]: false })); }
   };
