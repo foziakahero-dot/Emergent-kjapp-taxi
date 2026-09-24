@@ -87,6 +87,7 @@ export default function RootLayout() {
               <Stack.Screen name="register" />
               <Stack.Screen name="forgot-password" />
               <Stack.Screen name="reset-password/[token]" />
+              <Stack.Screen name="legal-consent" />
               <Stack.Screen name="(app)" />
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />
