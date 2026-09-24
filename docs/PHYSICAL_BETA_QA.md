@@ -61,6 +61,7 @@ Driver:
 - [ ] clean install launches
 - [ ] approved Driver login works
 - [ ] unapproved Driver is blocked from live Driver routes
+- [ ] approved legacy Driver without current legal consent is sent to the Driver consent gate before push/GPS starts
 - [ ] forgot-password deep link opens the Driver reset screen
 - [ ] going online starts the correct location runtime
 
