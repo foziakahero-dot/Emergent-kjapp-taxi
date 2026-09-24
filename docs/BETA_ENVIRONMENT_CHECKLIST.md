@@ -91,6 +91,23 @@ Configure only if the feature is enabled for the beta:
 
 A non-critical AI outage must not block booking, dispatch, GPS or payment state.
 
+## Driver identity verification
+
+The Driver selfie-ID flow is staged behind an enforcement flag.
+
+During initial QA:
+- `KJAPP_DRIVER_IDENTITY_REQUIRED=false`
+- Driver can submit a fresh front-camera selfie.
+- KJAPP Admin reviews the selfie against existing profile/driver ID material.
+- Fleet owners see verification status only; they cannot open the raw identity selfie.
+
+After physical QA and privacy/retention validation:
+- set `KJAPP_DRIVER_IDENTITY_REQUIRED=true` to require status `verified` before operational Driver endpoints can be used.
+
+The beta implementation does **not** make an automatic negative decision from face matching. `retry_required` requests another selfie/review without automatically suspending the Driver account.
+
+Before public release, implement and verify physical object deletion / retention for identity selfies in the object-storage layer. Database deletion alone must not be treated as physical image deletion.
+
 ## Mobile beta configuration
 
 Customer:
