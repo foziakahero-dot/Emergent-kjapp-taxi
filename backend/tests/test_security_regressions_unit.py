@@ -122,3 +122,26 @@ def test_oslo_service_area_helper_can_fail_closed(monkeypatch):
     finally:
         server.OSLO_BETA_ENFORCE = original
 
+def test_demo_data_is_always_disabled_in_production():
+    assert server.demo_data_enabled("production", "true") is False
+    assert server.demo_data_enabled("production", None) is False
+    assert server.demo_data_enabled("development", "true") is True
+    assert server.demo_data_enabled("development", "false") is False
+
+
+def test_production_config_rejects_weak_admin_and_jwt():
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        server.validate_production_config({
+            "JWT_SECRET": "secret",
+            "ADMIN_EMAIL": "admin@kjappapp.no",
+            "ADMIN_PASSWORD": "admin123",
+        })
+
+    server.validate_production_config({
+        "JWT_SECRET": "a-secure-beta-secret-that-is-longer-than-thirty-two-characters",
+        "ADMIN_EMAIL": "admin@kjappapp.no",
+        "ADMIN_PASSWORD": "a-strong-admin-password-2026",
+    })
+
