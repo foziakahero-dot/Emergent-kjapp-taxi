@@ -60,6 +60,67 @@ export type FleetOverview = {
   commission_pct: number;
 };
 
+export type FleetLiveDriver = {
+  id: string;
+  name?: string;
+  car?: string;
+  plate?: string;
+  vehicle_type?: string;
+  online?: boolean;
+  approved?: boolean;
+  last_lat?: number;
+  last_lng?: number;
+  last_heading?: number;
+  last_location_at?: string;
+  operational_status?: 'offline'|'gps_stale'|'available'|'to_pickup'|'at_pickup'|'on_trip';
+  today_trips?: number;
+  today_income?: number;
+  selfie_verification_status?: string;
+  active_trip?: null | {
+    trip_id?: string;
+    status?: string;
+    pickup_address?: string;
+    dropoff_address?: string;
+  };
+};
+
+export type FleetVehicle = {
+  id: string;
+  plate?: string | null;
+  car?: string;
+  vehicle_type?: string;
+  drivers: Array<{ id: string; name?: string; online?: boolean }>;
+  online?: boolean;
+  last_lat?: number | null;
+  last_lng?: number | null;
+  last_location_at?: string | null;
+  approved?: boolean;
+};
+
+export type FleetSelfieVerification = {
+  driver_id: string;
+  driver_name?: string;
+  approved?: boolean;
+  status: string;
+  submitted_at?: string;
+  verified_at?: string;
+  review_note?: string;
+};
+
+export type FleetDocumentsResponse = {
+  fleet_application_status?: string;
+  fleet_documents: Array<{ type: string; status: string; filename?: string; path?: string }>;
+  drivers: Array<{
+    driver_id: string;
+    driver_name?: string;
+    approved?: boolean;
+    documents: Record<string, { present: boolean; path?: string }>;
+    selfie_verification_status?: string;
+    selfie_verification_submitted_at?: string;
+    selfie_verification_verified_at?: string;
+  }>;
+};
+
 export type FleetDriver = {
   id: string;
   fullName?: string;
@@ -132,6 +193,11 @@ export const api = {
   fleetMe: (): Promise<FleetMe> => http.get('/fleet/me').then((r) => r.data),
   overview: (): Promise<FleetOverview> => http.get('/fleet/overview').then((r) => r.data),
   drivers: (): Promise<{ drivers: FleetDriver[] }> => http.get('/fleet/drivers').then((r) => r.data),
+  live: (): Promise<{ generated_at: string; drivers: FleetLiveDriver[] }> => http.get('/fleet/live').then((r) => r.data),
+  vehicles: (): Promise<{ vehicles: FleetVehicle[] }> => http.get('/fleet/vehicles').then((r) => r.data),
+  liveTrips: (): Promise<{ trips: any[] }> => http.get('/fleet/live-trips').then((r) => r.data),
+  fleetDocuments: (): Promise<FleetDocumentsResponse> => http.get('/fleet/documents').then((r) => r.data),
+  selfieVerifications: (): Promise<{ verifications: FleetSelfieVerification[] }> => http.get('/fleet/selfie-verifications').then((r) => r.data),
   payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
   createInvite: (body: { car: string; plate: string; vehicle_type: string; email?: string; note?: string }) =>
