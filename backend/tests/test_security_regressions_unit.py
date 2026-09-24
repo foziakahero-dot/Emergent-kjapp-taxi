@@ -182,3 +182,11 @@ def test_trip_request_rejects_impossible_coordinates():
             vehicle_type="ai-first",
         )
 
+def test_password_reset_tokens_are_hashed_at_rest_helper():
+    token = "example-reset-token-with-enough-entropy-123456"
+    hashed = server._password_reset_token_hash(token)
+    assert hashed != token
+    assert len(hashed) == 64
+    assert hashed == server._password_reset_token_hash(token)
+    assert hashed != server._password_reset_token_hash(token + "x")
+
