@@ -198,7 +198,9 @@ def test_legal_consent_requires_current_server_version():
         "accepted_terms_at": datetime.now(timezone.utc).isoformat(),
         "legal_version": current,
     }
-    assert server.user_public(user)["legal_accepted"] is True
+    public = server.user_public(user)
+    assert public["legal_accepted"] is True
+    assert server.user_public(public)["legal_accepted"] is True
 
     stale = dict(user)
     stale["legal_version"] = "older-version"
