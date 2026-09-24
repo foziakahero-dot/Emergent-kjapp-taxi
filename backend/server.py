@@ -2369,6 +2369,18 @@ async def require_driver(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
+    if current.get("vehicle_id"):
+        try:
+            assigned_vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(current["vehicle_id"]),
+                "fleet_id": current.get("fleet_id"),
+            })
+        except (InvalidId, TypeError):
+            assigned_vehicle = None
+        if not assigned_vehicle:
+            raise HTTPException(status_code=403, detail="Tildelt kjøretøy finnes ikke lenger i flåten")
+        if assigned_vehicle.get("active") is False:
+            raise HTTPException(status_code=403, detail="Tildelt kjøretøy er parkert av løyvehaver")
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
     if KJAPP_DRIVER_IDENTITY_REQUIRED and current.get("identity_verification_status") != "verified":
@@ -4897,8 +4909,11 @@ async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest,
             assigned_driver = await db.users.find_one({"_id": ObjectId(vehicle["assigned_driver_id"]), "fleet_id": fid, "role": "driver"})
         except (InvalidId, TypeError):
             assigned_driver = None
-    if assigned_driver and assigned_driver.get("online") and any(v is not None for v in (body.car, body.plate, body.vehicle_type)):
-        raise HTTPException(409, "Sjåføren må gå offline før bilinformasjon endres")
+    if assigned_driver and assigned_driver.get("online") and (
+        any(v is not None for v in (body.car, body.plate, body.vehicle_type))
+        or body.active is False
+    ):
+        raise HTTPException(409, "Sjåføren må gå offline før bilen endres eller parkeres")
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
     if body.car is not None:
         update["car"] = body.car.strip()
@@ -4939,6 +4954,8 @@ async def fleet_assign_vehicle_driver(vehicle_id: str, body: FleetVehicleAssignm
     vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
     if not vehicle:
         raise HTTPException(404, "Fant ikke bilen i din flåte")
+    if vehicle.get("active") is False and body.driver_id:
+        raise HTTPException(409, "Aktiver bilen før du tildeler en sjåfør")
 
     previous_driver_id = vehicle.get("assigned_driver_id")
     previous_driver = None
