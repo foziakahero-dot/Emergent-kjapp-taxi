@@ -42,14 +42,33 @@ export default function Index() {
               : 'Logg ut og bruk en godkjent KJAPP-sjåførkonto.'}
           </Text>
         </View>
-        <Button
-          label="Logg ut"
-          onPress={async () => {
-            await logout();
-            router.replace('/driver-login');
-          }}
-          testID="driver-role-logout"
-        />
+        {pendingApproval ? (
+          <View style={{ gap: 10 }}>
+            <Button
+              label="Ta identitetsselfie"
+              onPress={() => router.push('/driver-identity')}
+              testID="driver-pending-identity"
+            />
+            <Button
+              label="Logg ut"
+              variant="secondary"
+              onPress={async () => {
+                await logout();
+                router.replace('/driver-login');
+              }}
+              testID="driver-role-logout"
+            />
+          </View>
+        ) : (
+          <Button
+            label="Logg ut"
+            onPress={async () => {
+              await logout();
+              router.replace('/driver-login');
+            }}
+            testID="driver-role-logout"
+          />
+        )}
       </View>
     );
   }
