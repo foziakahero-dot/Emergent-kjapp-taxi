@@ -25,7 +25,8 @@ The backend rate limiter uses the client IP. Before beta deployment verify how t
 
 - `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
 - `PASSWORD_RESET_WEB_BASE=https://kjappapp.no`
-- `APPLE_BUNDLE_ID=no.nexorahub.kjapp.customer`
+- Native Apple audience is pinned in backend to `no.nexorahub.kjapp.customer`.
+- `APPLE_BUNDLE_ID=no.nexorahub.kjapp.customer` is still recommended for environment consistency; if present it must match this value.
 - `KJAPP_LEGAL_VERSION=2026-09` — current beta consent version; only increment after the corresponding approved privacy/terms text is published
 
 Optional web Apple OAuth later:
@@ -128,6 +129,14 @@ Never commit:
 - Expo access token
 
 ## Direct EAS beta artifact path
+
+Before any signed mobile build, generate and commit deterministic mobile lockfiles:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare_mobile_lockfiles.ps1
+```
+
+Both `frontend/package-lock.json` and `driver-app/package-lock.json` must be committed. The signed-build helper refuses to continue without them.
 
 GitHub Actions currently fails before jobs start, so signed artifacts can be launched directly through EAS Workflows from the reviewed branch.
 
