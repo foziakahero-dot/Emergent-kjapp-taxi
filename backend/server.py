@@ -8355,16 +8355,29 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
         filt["$or"] = [{"original_filename": rx}, {"scope": rx}]
     page, page_size, skip = _page_params(page, page_size)
     total = await db.uploaded_files.count_documents(filt)
-    raw, owner_ids, app_tokens = [], [], []
+    raw, owner_ids, app_tokens, vehicle_ids = [], [], [], []
     async for f in db.uploaded_files.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(f)
         owner_ids.append(f.get("owner_user_id"))
         if f.get("application_token"): app_tokens.append(f["application_token"])
+        if f.get("vehicle_id"): vehicle_ids.append(f["vehicle_id"])
     owners = await _users_by_ids(owner_ids)
     app_names = {}
     if app_tokens:
         async for a in db.fleet_applications.find({"upload_token": {"$in": list(set(app_tokens))}}, {"company_name": 1, "upload_token": 1}):
             app_names[a.get("upload_token")] = a.get("company_name")
+    vehicle_names = {}
+    if vehicle_ids:
+        vehicle_object_ids = []
+        for vehicle_id in set(vehicle_ids):
+            try:
+                vehicle_object_ids.append(ObjectId(vehicle_id))
+            except (InvalidId, TypeError):
+                continue
+        if vehicle_object_ids:
+            async for v in db.fleet_vehicles.find({"_id": {"$in": vehicle_object_ids}}, {"plate": 1, "car": 1}):
+                vehicle_names[str(v["_id"])] = v.get("plate") or v.get("car") or "Kjøretøy"
+
     out = []
     scopes = set()
     today = datetime.now(timezone.utc).date().isoformat()
@@ -8382,13 +8395,19 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
         o = owners.get(f.get("owner_user_id")) or {}
         rs = f.get("review_status") or "pending"
         exp = f.get("review_expiry")
+        scope_name = f.get("scope")
+        vehicle_id = f.get("vehicle_id")
+        owner_type = "vehicle" if scope_name == "fleet-vehicle-docs" else "driver" if scope_name == "driver-docs" else "fleet" if scope_name == "fleet-applications" else "user"
+        owner_name = vehicle_names.get(vehicle_id) if owner_type == "vehicle" else (o.get("name") or app_names.get(f.get("application_token")))
         out.append({
             "id": f.get("id") or str(f["_id"]),
             "filename": f.get("original_filename"), "content_type": f.get("content_type"),
-            "size": f.get("size"), "scope": f.get("scope"), "created_at": f.get("created_at"),
+            "size": f.get("size"), "scope": scope_name, "created_at": f.get("created_at"),
             "storage_path": f.get("storage_path"),
-            "owner_name": o.get("name") or app_names.get(f.get("application_token")),
-            "owner_email": o.get("email"),
+            "doc_type": f.get("doc_type"), "vehicle_id": vehicle_id, "fleet_id": f.get("fleet_id"),
+            "owner_type": owner_type,
+            "owner_name": owner_name,
+            "owner_email": o.get("email") if owner_type != "vehicle" else None,
             "review_status": rs, "expiry": exp, "compliance": _compliance(rs, exp),
             "reviewed_by": f.get("reviewed_by"), "reviewed_at": f.get("reviewed_at"),
         })
