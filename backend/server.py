@@ -2548,6 +2548,7 @@ async def stripe_card_setup(body: CardSetupRequest, current=Depends(get_current_
         mode="setup",
         customer=customer_id,
         payment_method_types=["card"],
+        setup_intent_data={"usage": "off_session"},
         success_url=f"{origin}/payment/setup-success?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{origin}/payment/setup-cancel",
         metadata={"user_id": current["id"]},
