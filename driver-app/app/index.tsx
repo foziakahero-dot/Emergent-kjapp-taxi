@@ -51,7 +51,7 @@ export default function Index() {
             />
             <Button
               label="Logg ut"
-              variant="secondary"
+              variant="ghost"
               onPress={async () => {
                 await logout();
                 router.replace('/driver-login');
