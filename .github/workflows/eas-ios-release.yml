@@ -51,6 +51,7 @@ jobs:
           fi
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform ios --profile testflight-beta --non-interactive --wait
       - name: Submit latest build to TestFlight
@@ -85,5 +86,6 @@ jobs:
           fi
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform ios --profile testflight-beta --non-interactive --wait
