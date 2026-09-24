@@ -1825,8 +1825,12 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
+    token: str = Field(min_length=20, max_length=512)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+def _password_reset_token_hash(token: str) -> str:
+    return __import__("hashlib").sha256(str(token).encode("utf-8")).hexdigest()
 
 
 def email_password_reset_html(reset_url: str, fallback_url: Optional[str] = None) -> str:
@@ -1864,7 +1868,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
     if user:
         token = secrets.token_urlsafe(32)
         await db.password_reset_tokens.insert_one({
-            "token": token,
+            "token_hash": _password_reset_token_hash(token),
             "user_id": str(user["_id"]),
             "email": email,
             "created_at": now,
@@ -1889,8 +1893,10 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
 @api.get("/auth/reset-password/{token}")
 async def check_reset_token(token: str, request: Request):
     await _enforce_rate_limit(request, "auth-reset-check", 60, 900)
+    token_hash = _password_reset_token_hash(token)
     rec = await db.password_reset_tokens.find_one({
-        "token": token, "used": False,
+        "$or": [{"token_hash": token_hash}, {"token": token}],
+        "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
     })
     if not rec:
@@ -1903,8 +1909,10 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     await _enforce_rate_limit(request, "auth-reset", 30, 900)
     if len(body.new_password) < 8:
         raise HTTPException(status_code=400, detail="Passord må ha minst 8 tegn")
+    token_hash = _password_reset_token_hash(body.token)
     rec = await db.password_reset_tokens.find_one({
-        "token": body.token, "used": False,
+        "$or": [{"token_hash": token_hash}, {"token": body.token}],
+        "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
     })
     if not rec:
@@ -1913,7 +1921,13 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
         {"_id": ObjectId(rec["user_id"])},
         {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
     )
-    await db.password_reset_tokens.update_one({"_id": rec["_id"]}, {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}})
+    await db.password_reset_tokens.update_one(
+        {"_id": rec["_id"]},
+        {
+            "$set": {"used": True, "used_at": datetime.now(timezone.utc)},
+            "$unset": {"token": ""},
+        },
+    )
     # Unlock the account: clear brute-force counters so the user can log in immediately
     await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
     return {"ok": True}
