@@ -54,6 +54,7 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 IS_PRODUCTION = APP_ENV == "production"
 CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").strip()[:32] or "2026-09"
+APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"
 
 PRODUCTION_CORS_ORIGINS = [
     "https://kjappapp.no",            # root (reserved for marketing site)
@@ -1255,8 +1256,9 @@ async def readiness():
             os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no").rstrip("/") == "https://kjappapp.no"
         ),
         "expo_push_sender": True,
-        "apple_native_auth_configured": (
-            (os.environ.get("APPLE_BUNDLE_ID") or "").strip() == "no.nexorahub.kjapp.customer"
+        "apple_native_auth_configured": True,
+        "apple_bundle_env_matches": (
+            (os.environ.get("APPLE_BUNDLE_ID") or "").strip() in ("", APPLE_NATIVE_BUNDLE_ID)
         ),
         "object_storage_configured": bool((EMERGENT_LLM_KEY or "").strip()),
         "service_area_enforced": OSLO_BETA_ENFORCE,
@@ -5603,14 +5605,13 @@ async def _get_apple_keys():
 async def apple_signin(body: AppleSignInRequest, request: Request, response: Response):
     await _enforce_rate_limit(request, "auth-apple", 60, 900)
     """Verify Apple identity_token and log user in.
-    Requires APPLE_CLIENT_ID env var to be set (App Store Service ID / Bundle ID)."""
+
+    Native iOS always accepts the canonical Customer bundle ID compiled into this
+    release. APPLE_CLIENT_ID is optional and only extends the allowed audience
+    set for a future web Services ID flow.
+    """
     apple_client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
-    apple_bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
-    if not apple_client_id and not apple_bundle_id:
-        raise HTTPException(
-            status_code=501,
-            detail="Apple Sign In er ikke konfigurert. Sett APPLE_BUNDLE_ID for native iOS eller APPLE_CLIENT_ID for web.",
-        )
+    configured_bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
     try:
         # Get unverified header to find kid
         header = jwt.get_unverified_header(body.identity_token)
@@ -5623,7 +5624,7 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
         from jwt.algorithms import RSAAlgorithm
         public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
         # Web/Android use the Services ID, native iOS uses the App/bundle ID — both are ours.
-        allowed_aud = [a for a in (apple_client_id, apple_bundle_id) if a]
+        allowed_aud = list(dict.fromkeys(a for a in (apple_client_id, configured_bundle_id, APPLE_NATIVE_BUNDLE_ID) if a))
         payload = jwt.decode(
             body.identity_token, public_key, algorithms=["RS256"],
             audience=allowed_aud, issuer="https://appleid.apple.com",
@@ -5690,13 +5691,13 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
 async def apple_config():
     """Expose non-secret Apple auth readiness for web/native clients."""
     client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
-    bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
-    enabled = bool(client_id or bundle_id)
+    configured_bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
     return {
         "client_id": client_id,
-        "bundle_id": bundle_id,
-        "enabled": enabled,
-        "message": None if enabled else "Sign in with Apple er ikke konfigurert ennå",
+        "bundle_id": APPLE_NATIVE_BUNDLE_ID,
+        "enabled": True,
+        "bundle_env_matches": configured_bundle_id in ("", APPLE_NATIVE_BUNDLE_ID),
+        "message": None,
     }
 
 
