@@ -54,6 +54,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Validate Expo project
+        run: npx expo-doctor@latest
+
       - name: Validate Expo config
         run: npx expo config --type public
 
@@ -98,6 +104,12 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Validate Expo project
+        run: npx expo-doctor@latest
 
       - name: Validate Expo config
         run: npx expo config --type public
