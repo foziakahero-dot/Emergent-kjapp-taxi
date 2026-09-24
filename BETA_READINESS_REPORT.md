@@ -128,7 +128,14 @@ Until GitHub Actions execution is restored (or an equivalent local gate is recor
 
 A Windows fallback now exists at `scripts/beta_local_gate.ps1` and performs the same class of source checks without deploying or changing production data.
 
-Expensive native APK and iOS simulator GitHub workflows are **manual-only** so PR updates do not trigger redundant native builds. Signed beta artifacts are intentionally built through the explicit EAS Android/iOS workflows when credentials are ready.
+Expensive native APK and iOS simulator GitHub workflows are **manual-only** so PR updates do not trigger redundant native builds. Signed beta artifacts are intentionally built through EAS when credentials are ready.
+
+Direct pre-merge EAS Workflows now exist inside each Expo project:
+- `frontend/.eas/workflows/testflight-beta.yml` — Customer iOS build + TestFlight
+- `driver-app/.eas/workflows/testflight-beta.yml` — Driver iOS build + TestFlight
+- existing Customer/Driver Android APK EAS workflows remain available
+
+These can be started with `eas workflow:run` while authenticated to the correct Expo projects, avoiding dependence on the currently failing GitHub Actions startup path.
 
 ## Backend ownership migration
 
