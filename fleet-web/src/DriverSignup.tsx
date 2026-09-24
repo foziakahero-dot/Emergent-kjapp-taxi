@@ -47,8 +47,8 @@ export default function DriverSignup() {
 
   const next = (e: FormEvent) => {
     e.preventDefault(); setErr('');
-    if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim() || form.password.length < 6) {
-      setErr('Fyll ut alle feltene. Passord må ha minst 6 tegn.'); return;
+    if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim() || form.password.length < 8) {
+      setErr('Fyll ut alle feltene. Passord må ha minst 8 tegn.'); return;
     }
     if (!acceptedTerms) {
       setErr('Du må godta sjåførvilkår og personvern før du fortsetter.'); return;
@@ -97,7 +97,7 @@ export default function DriverSignup() {
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
         <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
         <input type="tel" placeholder="Telefonnummer" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} required />
-        <input type="password" placeholder="Passord · minst 6 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
+        <input type="password" placeholder="Passord · minst 8 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
         <label className="driver-legal">
           <input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} />
           <span>Jeg godtar <a href="https://kjappapp.no/vilkar" target="_blank" rel="noreferrer">KJAPPs sjåførvilkår</a> og har lest <a href="https://kjappapp.no/personvern" target="_blank" rel="noreferrer">personvernerklæringen</a>.</span>
