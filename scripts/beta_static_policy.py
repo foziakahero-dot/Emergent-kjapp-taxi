@@ -55,8 +55,8 @@ driver = read_json("driver-app/app.json").get("expo", {})
 
 if customer.get("scheme") != "kjapp":
     fail("Customer scheme must remain 'kjapp'")
-if customer.get("ios", {}).get("bundleIdentifier") != "no.kjapp.app":
-    fail("Customer iOS bundleIdentifier must be no.kjapp.app")
+if customer.get("ios", {}).get("bundleIdentifier") != "no.nexorahub.kjapp.customer":
+    fail("Customer iOS bundleIdentifier must be no.nexorahub.kjapp.customer")
 if customer.get("android", {}).get("package") != "no.kjapp.app":
     fail("Customer Android package must be no.kjapp.app")
 if customer.get("extra", {}).get("eas", {}).get("projectId") != "3631002e-5b25-4847-b5d8-05ec2ef304b5":
