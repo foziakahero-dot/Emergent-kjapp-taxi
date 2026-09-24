@@ -1906,6 +1906,10 @@ async def me(current=Depends(get_current_user)):
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta vilkår og personvern før du bestiller tur")
+    settings = await db.platform_settings.find_one({"_id": "singleton"}, {"features": 1}) or {}
+    features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(settings.get("features") or {})}
+    if features.get("booking_enabled") is False:
+        raise HTTPException(status_code=503, detail="KJAPP tar midlertidig ikke imot nye bestillinger. Prøv igjen litt senere.")
     _require_launch_pickup(body.pickup_lat, body.pickup_lng)
     # Server-side duplicate guard: one passenger cannot create overlapping active rides.
     existing_active = await db.trips.find_one(
@@ -7385,7 +7389,7 @@ DEFAULT_PLATFORM_SETTINGS = {
         "trygg":    {"label": "Komfort",  "multiplier": 1.25, "enabled": True},
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
-    "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+    "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False, "booking_enabled": True},
     "compliance": {
         "legal_review_completed": False,
         "transport_requirements_verified": False,
@@ -7622,6 +7626,7 @@ async def admin_beta_readiness(current=Depends(require_admin)):
         "service_area_enforced": OSLO_BETA_ENFORCE,
         "service_area_radius_km": OSLO_BETA_RADIUS_KM,
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
+        "booking_enabled": bool(({**DEFAULT_PLATFORM_SETTINGS["features"], **((settings.get("features") or {}))}).get("booking_enabled", True)),
         "public_web_origin": os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no"),
         "admin_2fa_enabled": bool(current.get("totp_enabled")),
         "pricing_version": int(pricing.get("version", 1)),
@@ -7634,6 +7639,7 @@ async def admin_beta_readiness(current=Depends(require_admin)):
     blockers = []
     if IS_PRODUCTION and not checks["stripe_configured"]: blockers.append("Stripe/webhook er ikke fullt konfigurert")
     if IS_PRODUCTION and not checks["apple_native_auth_configured"]: blockers.append("APPLE_BUNDLE_ID mangler for native Sign in with Apple")
+    if not checks["booking_enabled"]: blockers.append("Nye bestillinger er satt på pause av operatør")
     if not checks["admin_2fa_enabled"]: blockers.append("Innlogget admin har ikke aktivert 2FA")
     if pending_driver_docs: blockers.append(f"{pending_driver_docs} sjåførkonto(er) venter på godkjenning")
     if failed_payments: blockers.append(f"{failed_payments} betaling(er) har feilet")
