@@ -15,7 +15,9 @@ async function report(error: any, isFatal: boolean) {
         stack: String(error?.stack || '').slice(0, 12000),
         is_fatal: !!isFatal,
         platform: Platform.OS,
-        version: [Constants.expoConfig?.version || 'unknown', Constants.nativeBuildVersion].filter(Boolean).join(' (' ) + (Constants.nativeBuildVersion ? ')' : ''),
+        version: Constants.nativeBuildVersion
+          ? `${Constants.expoConfig?.version || 'unknown'} (${Constants.nativeBuildVersion})`
+          : (Constants.expoConfig?.version || 'unknown'),
       }),
     });
   } catch {
