@@ -71,6 +71,7 @@ export type FleetDriver = {
   rating?: number;
   online?: boolean;
   approved?: boolean;
+  fleet_active?: boolean;
   last_lat?: number;
   last_lng?: number;
   last_heading?: number;
