@@ -165,7 +165,13 @@ export default function DriverHome() {
         gpsBlocked.current = false;
         setLoc(p);
         setError('');
-        driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
+        driverApi.location(
+          p.lat,
+          p.lng,
+          p.heading || 0,
+          Math.max(0, pos.coords.speed || 0),
+          new Date(pos.timestamp).toISOString(),
+        ).catch(() => {});
 
         const subscription = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
@@ -173,7 +179,13 @@ export default function DriverHome() {
             if (!active) return;
             const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
             setLoc(np);
-            driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
+            driverApi.location(
+              np.lat,
+              np.lng,
+              np.heading || 0,
+              Math.max(0, u.coords.speed || 0),
+              new Date(u.timestamp).toISOString(),
+            ).catch(() => {});
           },
         );
         if (!active) subscription.remove();
