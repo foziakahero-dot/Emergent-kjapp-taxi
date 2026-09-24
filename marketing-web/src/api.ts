@@ -98,3 +98,19 @@ export async function resetPassword(token: string, newPassword: string) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+export async function createPublicSupportTicket(data: {
+  topic: 'tur' | 'betaling' | 'konto' | 'sjafor' | 'loyvehaver' | 'annet';
+  name?: string;
+  contact: string;
+  message: string;
+}) {
+  const res = await fetch(`${API_BASE}/support/public`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
