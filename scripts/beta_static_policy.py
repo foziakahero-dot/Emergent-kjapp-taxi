@@ -140,7 +140,8 @@ require_text("backend/server.py", '@api.get("/auth/legal-config")', "Public lega
 
 require_text("frontend/app/_layout.tsx", "installClientErrorMonitor", "Customer error monitor not installed")
 require_text("driver-app/app/_layout.tsx", "installClientErrorMonitor", "Driver error monitor not installed")
-require_text("backend/server.py", '== "no.nexorahub.kjapp.customer"', "Backend Apple readiness must validate the current Customer bundle id")
+require_text("backend/server.py", 'APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"', "Backend must pin the current Customer Apple audience")
+require_text("backend/server.py", "configured_bundle_id, APPLE_NATIVE_BUNDLE_ID", "Apple token verification must allow the canonical native bundle id")
 forbid_text("backend/scripts/release_smoke.py", 'bundle_id") == "no.kjapp.app"', "Release smoke still expects the retired Customer iOS bundle id")
 require_text("backend/scripts/release_smoke.py", 'bundle_id") == "no.nexorahub.kjapp.customer"', "Release smoke must validate the current Customer iOS bundle id")
 require_text("frontend/app/(app)/home.tsx", 'testID="home-sheet-collapse"', "Customer booking sheet collapse control missing")
