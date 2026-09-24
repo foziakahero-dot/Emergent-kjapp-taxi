@@ -4644,6 +4644,7 @@ async def fleet_live(current=Depends(require_fleet_owner)):
         driver_ids.append(did)
         drivers_raw.append(d)
     active_by_driver = {}
+    today_stats = {did: {"today_trips": 0, "today_income": 0} for did in driver_ids}
     if driver_ids:
         async for t in db.trips.find({
             "driver_id": {"$in": driver_ids},
@@ -4652,6 +4653,16 @@ async def fleet_live(current=Depends(require_fleet_owner)):
             did = t.get("driver_id")
             if did and did not in active_by_driver:
                 active_by_driver[did] = t
+        today = now.date().isoformat()
+        async for t in db.trips.find({
+            "driver_id": {"$in": driver_ids},
+            "created_at": {"$gte": today},
+            "status": {"$in": ["arrived", "completed", "rated"]},
+        }):
+            did = t.get("driver_id")
+            if did in today_stats:
+                today_stats[did]["today_trips"] += 1
+                today_stats[did]["today_income"] += int(t.get("price") or 0)
     drivers = []
     for d in drivers_raw:
         did = str(d["_id"])
@@ -4669,6 +4680,9 @@ async def fleet_live(current=Depends(require_fleet_owner)):
             "last_heading": d.get("last_heading"),
             "last_location_at": d.get("last_location_at"),
             "operational_status": _fleet_driver_operational_status(d, active, now),
+            "today_trips": today_stats.get(did, {}).get("today_trips", 0),
+            "today_income": today_stats.get(did, {}).get("today_income", 0),
+            "selfie_verification_status": d.get("selfie_verification_status") or "missing",
             "active_trip": {
                 "trip_id": active.get("trip_id"),
                 "status": active.get("status"),
