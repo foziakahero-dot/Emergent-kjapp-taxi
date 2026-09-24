@@ -54,6 +54,18 @@ Migration target:
 - direct OpenAI API or another selected provider
 - AI failure must never block ride booking, dispatch, payment or driver GPS
 
+### Google authentication
+Customer Google Sign-In still has a legacy Emergent-managed session path (`auth.emergentagent.com` / Emergent session exchange). The backend already contains a KJAPP-owned Google Authorization Code + PKCE flow (`/api/auth/google/config` and `/api/auth/google/code`), but the current Customer client still uses the legacy session path.
+
+Migration target:
+- configure KJAPP-owned `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+- switch Customer Google Sign-In to the existing KJAPP-owned PKCE endpoints
+- verify Android/iOS redirect URIs and account linking
+- keep legal-consent gating for newly linked OAuth accounts
+- retire the legacy Emergent Google session exchange only after native Google login is physically verified
+
+Do not combine this auth cutover with the first backend-host migration window unless it has already passed its own device test.
+
 ### Database
 Current application contract is MongoDB through Motor.
 
@@ -107,7 +119,9 @@ Marketing web ────────┘               ▼
 - Verify document upload/read/admin review.
 - Keep old storage read-only during rollback window.
 
-### Phase 4 — AI decoupling
+### Phase 4 — Auth + AI decoupling
+- Move Customer Google Sign-In from the legacy Emergent session path to the existing KJAPP-owned Google PKCE flow.
+- Verify Google account linking on physical iOS/Android builds before removing the legacy endpoint.
 - Replace Emergent-specific AI calls behind a provider interface.
 - Preserve current API responses for mobile clients.
 - Keep AI non-critical to ride operations.
