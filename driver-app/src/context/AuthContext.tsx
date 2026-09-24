@@ -19,12 +19,14 @@ export type User = {
   role?: string;
   driver_id?: string;
   approved?: boolean;
+  legal_accepted?: boolean;
 } | null;
 
 type AuthCtx = {
   user: User | undefined; // undefined = loading, null = signed out
   login: (email: string, password: string) => Promise<any>;
   register: (data: any) => Promise<any>;
+  acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   signInWithGoogle: () => Promise<User>;
@@ -122,6 +124,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return res.user;
   };
 
+  const acceptLegal = async (): Promise<User> => {
+    const updated = await authApi.acceptLegal('2026-09');
+    setUser(updated);
+    return updated;
+  };
+
   const signInWithGoogle = async (): Promise<User> => {
     const redirectUrl = Platform.OS === 'web'
       ? window.location.origin + '/'
@@ -151,7 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle }}>
+    <Ctx.Provider value={{ user, login, register, acceptLegal, logout, refresh, signInWithGoogle }}>
       {children}
     </Ctx.Provider>
   );
