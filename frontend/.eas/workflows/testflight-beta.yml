@@ -1,0 +1,16 @@
+name: KJAPP Customer TestFlight Beta
+
+jobs:
+  build_ios:
+    name: Build KJAPP Customer iOS beta
+    type: build
+    params:
+      platform: ios
+      profile: testflight-beta
+
+  submit_testflight:
+    name: Submit Customer beta to TestFlight
+    needs: [build_ios]
+    type: testflight
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
