@@ -64,8 +64,8 @@ if customer.get("extra", {}).get("eas", {}).get("projectId") != "3631002e-5b25-4
 
 if driver.get("scheme") != "kjapp-driver":
     fail("Driver scheme must remain 'kjapp-driver'")
-if driver.get("ios", {}).get("bundleIdentifier") != "no.kjapp.driver":
-    fail("Driver iOS bundleIdentifier must be no.kjapp.driver")
+if driver.get("ios", {}).get("bundleIdentifier") != "no.nexorahub.kjapp.driver":
+    fail("Driver iOS bundleIdentifier must be no.nexorahub.kjapp.driver")
 if driver.get("android", {}).get("package") != "no.kjapp.driver":
     fail("Driver Android package must be no.kjapp.driver")
 if driver.get("extra", {}).get("eas", {}).get("projectId") != "1dec8949-0423-4fbf-a080-0703f93519d7":
