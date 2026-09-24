@@ -127,4 +127,14 @@ export const driverApi = {
   payouts: () => api.get('/driver/payouts')
     .then((r) => normalizePayouts(r.data))
     .catch(() => normalizePayouts()),
+  identityVerification: () => api.get('/driver/identity-verification').then((r) => r.data),
+  submitIdentitySelfie: (uri: string) => {
+    const form = new FormData();
+    form.append('file', {
+      uri,
+      name: `kjapp-selfie-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+    } as any);
+    return api.post('/driver/identity-verification/selfie', form).then((r) => r.data);
+  },
 };
