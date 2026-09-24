@@ -145,3 +145,15 @@ def test_production_config_rejects_weak_admin_and_jwt():
         "ADMIN_PASSWORD": "a-strong-admin-password-2026",
     })
 
+def test_missing_email_provider_never_logs_message_body(monkeypatch, capsys):
+    monkeypatch.delenv("SENDGRID_API_KEY", raising=False)
+    secret_marker = "RESET-TOKEN-MUST-NOT-LEAK"
+    assert server.send_email("user@example.no", "Reset", f"<p>{secret_marker}</p>") is False
+    output = capsys.readouterr().out
+    assert secret_marker not in output
+    assert "body=redacted" in output
+
+
+def test_platform_defaults_never_enable_demo_trips():
+    assert server.DEFAULT_PLATFORM_SETTINGS["features"]["demo_trips"] is False
+
