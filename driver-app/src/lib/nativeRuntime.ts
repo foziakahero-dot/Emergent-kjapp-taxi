@@ -9,6 +9,7 @@ import { storage } from '@/src/utils/storage';
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
 let backgroundPermissionRequestedThisSession = false;
+let backgroundLocationMode: 'idle' | 'active' | null = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -112,7 +113,7 @@ export async function registerNativePush() {
   }
 }
 
-export async function startDriverBackgroundLocation() {
+export async function startDriverBackgroundLocation(mode: 'idle' | 'active' = 'idle') {
   if (Platform.OS === 'web') return { foreground: false, background: false };
 
   const foregroundCurrent = await Location.getForegroundPermissionsAsync();
@@ -132,33 +133,43 @@ export async function startDriverBackgroundLocation() {
     return { foreground: true, background: false };
   }
 
-  const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  let running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  if (running && backgroundLocationMode !== mode) {
+    await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+    running = false;
+  }
+
   if (!running) {
+    const activeTrip = mode === 'active';
     await Location.startLocationUpdatesAsync(DRIVER_LOCATION_TASK, {
-      accuracy: Location.Accuracy.BestForNavigation,
+      accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
       activityType: Location.ActivityType.AutomotiveNavigation,
-      distanceInterval: 15,
-      timeInterval: 6000,
-      deferredUpdatesDistance: 30,
-      deferredUpdatesInterval: 12000,
+      distanceInterval: activeTrip ? 5 : 50,
+      timeInterval: activeTrip ? 3000 : 15000,
+      deferredUpdatesDistance: activeTrip ? 10 : 100,
+      deferredUpdatesInterval: activeTrip ? 5000 : 30000,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: 'KJAPP Driver er på skift',
-        notificationBody: 'Posisjonen deles for å motta og gjennomføre turer.',
+        notificationTitle: activeTrip ? 'KJAPP Driver · aktiv tur' : 'KJAPP Driver er på skift',
+        notificationBody: activeTrip
+          ? 'Posisjonen deles live under den aktive turen.'
+          : 'Posisjonen deles for å motta turer i nærheten.',
         notificationColor: '#00E5F5',
         killServiceOnDestroy: false,
       },
     });
   }
+  backgroundLocationMode = mode;
 
-  return { foreground: true, background: true };
+  return { foreground: true, background: true, mode };
 }
 
 export async function stopDriverBackgroundLocation() {
   if (Platform.OS === 'web') return;
   const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
   if (running) await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  backgroundLocationMode = null;
   await storage.removeItem(LAST_BACKGROUND_OFFER_KEY);
 }
 
