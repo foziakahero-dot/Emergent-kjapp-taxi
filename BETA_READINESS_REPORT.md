@@ -108,6 +108,11 @@ Implemented without redesigning Customer or Driver:
 - Customer and Driver settings expose their actual app version/build for physical-beta incident reporting.
 - `docs/BETA_ENVIRONMENT_CHECKLIST.md` is the canonical beta deployment environment/preflight checklist.
 
+### Support operations
+- `kjappapp.no/help` now submits rate-limited support tickets directly into the canonical Admin support queue, with e-mail retained as a fallback channel.
+- The Admin Support list can open each ticket and show contact, source and message details without a redesign.
+- Public support references use the canonical Mongo ticket ID so the same case can be found by operations.
+
 ### Final pre-build safety additions
 - A static beta release-policy gate now verifies Customer/Driver bundle IDs, schemes, Expo project IDs, canonical KJAPP URLs, EAS beta/production API targets, error telemetry, legal/reset routes, demo safety and required release documents before a build is treated as valid.
 - Customer and Driver direct EAS Android APK workflows now exist in addition to the TestFlight workflows.
