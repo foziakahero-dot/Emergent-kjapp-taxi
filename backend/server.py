@@ -2159,6 +2159,8 @@ async def require_driver(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+    if current.get("legal_accepted") is not True:
+        raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
     await _require_active_fleet(current.get("fleet_id"))
     return current
 
