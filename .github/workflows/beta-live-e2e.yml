@@ -1,0 +1,62 @@
+name: KJAPP live beta E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      api:
+        description: Beta API origin without /api
+        required: true
+        default: https://github-app-builder-28.emergent.host
+        type: string
+      strict_smoke:
+        description: Require Apple/push/service-area production readiness
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kjapp-live-beta-e2e
+  cancel-in-progress: false
+
+jobs:
+  live-e2e:
+    name: Controlled Oslo ride E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KJAPP_SMOKE_API: ${{ inputs.api }}
+      KJAPP_SMOKE_STRICT: ${{ inputs.strict_smoke }}
+      KJAPP_E2E_API: ${{ inputs.api }}
+      KJAPP_E2E_CUSTOMER_EMAIL: ${{ secrets.KJAPP_E2E_CUSTOMER_EMAIL }}
+      KJAPP_E2E_CUSTOMER_PASSWORD: ${{ secrets.KJAPP_E2E_CUSTOMER_PASSWORD }}
+      KJAPP_E2E_DRIVER_A_EMAIL: ${{ secrets.KJAPP_E2E_DRIVER_A_EMAIL }}
+      KJAPP_E2E_DRIVER_A_PASSWORD: ${{ secrets.KJAPP_E2E_DRIVER_A_PASSWORD }}
+      KJAPP_E2E_DRIVER_B_EMAIL: ${{ secrets.KJAPP_E2E_DRIVER_B_EMAIL }}
+      KJAPP_E2E_DRIVER_B_PASSWORD: ${{ secrets.KJAPP_E2E_DRIVER_B_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify E2E secrets exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in             KJAPP_E2E_CUSTOMER_EMAIL KJAPP_E2E_CUSTOMER_PASSWORD             KJAPP_E2E_DRIVER_A_EMAIL KJAPP_E2E_DRIVER_A_PASSWORD             KJAPP_E2E_DRIVER_B_EMAIL KJAPP_E2E_DRIVER_B_PASSWORD
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing GitHub secret: $name"
+              exit 1
+            fi
+          done
+
+      - name: Non-destructive backend smoke
+        run: python backend/scripts/release_smoke.py
+
+      - name: Controlled dispatch/trip lifecycle E2E
+        run: python backend/scripts/e2e_dispatch.py
