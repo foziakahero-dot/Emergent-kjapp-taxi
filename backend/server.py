@@ -1929,7 +1929,45 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     verified_count = await db.payment_methods.count_documents({"user_id": current["id"], "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
     if verified_count == 0:
         raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
+
+    # Close the concurrent double-tap race between the active-trip check and insert.
+    # This is a short creation lock only; canonical active-trip truth remains in db.trips.
     trip_id = str(uuid.uuid4())
+    user_oid = ObjectId(current["id"])
+    lock_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
+    lock = await db.users.update_one(
+        {
+            "_id": user_oid,
+            "$or": [
+                {"booking_request_lock": {"$exists": False}},
+                {"booking_request_lock": None},
+                {"booking_request_locked_at": {"$lt": lock_cutoff}},
+            ],
+        },
+        {"$set": {
+            "booking_request_lock": trip_id,
+            "booking_request_locked_at": datetime.now(timezone.utc),
+        }},
+    )
+    if lock.modified_count != 1:
+        raise HTTPException(status_code=409, detail="En bestilling behandles allerede. Vent et øyeblikk.")
+
+    # Re-check after acquiring the lock in case another request inserted a trip just
+    # before this request obtained the lock.
+    existing_after_lock = await db.trips.find_one(
+        {
+            "user_id": current["id"],
+            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
+        },
+        {"trip_id": 1},
+    )
+    if existing_after_lock:
+        await db.users.update_one(
+            {"_id": user_oid, "booking_request_lock": trip_id},
+            {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
+        )
+        raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
+
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
     if route:
@@ -1972,7 +2010,18 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.trips.insert_one(trip)
+    try:
+        await db.trips.insert_one(trip)
+    except Exception:
+        await db.users.update_one(
+            {"_id": user_oid, "booking_request_lock": trip_id},
+            {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
+        )
+        raise
+    await db.users.update_one(
+        {"_id": user_oid, "booking_request_lock": trip_id},
+        {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
+    )
     # Trip stays in "searching" — a real driver must accept via /api/driver/accept.
     # Nearest-driver-first: offer it to the closest available driver, forward automatically on timeout.
     try:
