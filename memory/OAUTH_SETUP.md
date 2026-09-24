@@ -71,16 +71,22 @@ Emergent-hostet login lenger.
      `https://kjappapp.no/.well-known/apple-developer-domain-association.txt`
 4. **Keys → + → Sign in with Apple** → last ned `.p8`-filen (kun én gang).
    Noter **Key ID** og **Team ID** (Membership-siden).
-5. Legg i backend-miljøet:
+5. For **native iOS Customer** holder det nå å sette:
    ```
-   APPLE_CLIENT_ID=no.kjapp.app.web     # Services ID (web/Android)
-   APPLE_BUNDLE_ID=no.kjapp.app         # App ID (native iOS)
-   APPLE_TEAM_ID=<team id>
-   APPLE_KEY_ID=<key id>
-   APPLE_PRIVATE_KEY=<innholdet i .p8, backend-only>
+   APPLE_BUNDLE_ID=no.kjapp.app
    ```
-6. Restart backend → `GET /api/auth/apple/config` svarer `{"enabled": true}` og
-   Apple-knappen aktiveres.
+   KJAPP verifiserer Apples native identity token direkte mot Apples JWKS, så privat Apple-nøkkel
+   er ikke nødvendig for selve native innloggingen.
+
+   For **web-basert Sign in with Apple** legger du i tillegg inn Services ID:
+   ```
+   APPLE_CLIENT_ID=no.kjapp.app.web
+   ```
+
+   `APPLE_TEAM_ID`, `APPLE_KEY_ID` og `APPLE_PRIVATE_KEY` er bare nødvendig dersom vi senere
+   bygger server-side Apple OAuth/client-secret-flyt. Private .p8-filer skal aldri inn i Git.
+6. Restart backend → `GET /api/auth/apple/config` skal vise `enabled: true` og
+   `bundle_id: "no.kjapp.app"` for native iOS.
 
 ### Sikkerhet som allerede er på plass
 - `identity_token` verifiseres mot Apples JWKS (RS256, `iss=https://appleid.apple.com`,
