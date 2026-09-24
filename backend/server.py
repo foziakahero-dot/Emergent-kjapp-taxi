@@ -3369,24 +3369,61 @@ async def driver_decline(body: DeclineTripRequest, current=Depends(require_drive
 
 # ---- Driver GPS + Online status ----
 class DriverLocationRequest(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
     heading: Optional[float] = None
     speed: Optional[float] = None
+    recorded_at: Optional[str] = None
 
 
 @api.post("/driver/location")
 async def driver_location(body: DriverLocationRequest, current=Depends(require_driver)):
-    """Driver pushes GPS position. Called every ~5s while online."""
-    now_iso = datetime.now(timezone.utc).isoformat()
+    """Accept a fresh, physically plausible GPS sample from the driver device."""
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    recorded = now
+    if body.recorded_at:
+        try:
+            recorded = datetime.fromisoformat(str(body.recorded_at).replace("Z", "+00:00"))
+            if recorded.tzinfo is None:
+                recorded = recorded.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Ugyldig GPS-tidspunkt")
+        age = (now - recorded).total_seconds()
+        if age > 90 or age < -10:
+            raise HTTPException(status_code=409, detail="GPS-posisjonen er for gammel eller har ugyldig tidspunkt")
+
+    previous_lat = current.get("last_lat")
+    previous_lng = current.get("last_lng")
+    previous_at = current.get("last_location_at")
+    if previous_lat is not None and previous_lng is not None and previous_at:
+        try:
+            prev_dt = datetime.fromisoformat(str(previous_at).replace("Z", "+00:00"))
+            if prev_dt.tzinfo is None:
+                prev_dt = prev_dt.replace(tzinfo=timezone.utc)
+            elapsed = max(0.1, (now - prev_dt).total_seconds())
+            distance_km = haversine_km(previous_lat, previous_lng, body.lat, body.lng)
+            implied_kph = distance_km / elapsed * 3600
+            # Conservative GPS-spoof/jump guard: normal road driving will never approach this.
+            if distance_km > 1.0 and elapsed < 120 and implied_kph > 300:
+                raise HTTPException(status_code=409, detail="GPS-hopp avvist. Venter på neste posisjon.")
+        except HTTPException:
+            raise
+        except (TypeError, ValueError):
+            pass
+
+    speed = max(0.0, float(body.speed or 0.0))
+    heading = float(body.heading or 0.0) % 360
     await db.users.update_one(
         {"_id": ObjectId(current["id"])},
         {"$set": {
             "last_lat": body.lat,
             "last_lng": body.lng,
-            "last_heading": body.heading,
-            "last_speed": body.speed,
+            "last_heading": heading,
+            "last_speed": speed,
             "last_location_at": now_iso,
+            "last_location_recorded_at": recorded.isoformat(),
         }},
     )
     # If driver has active trip, also update trip.driver_lat/lng so passenger sees live position
@@ -3395,11 +3432,12 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
         {"$set": {
             "driver_lat": body.lat,
             "driver_lng": body.lng,
-            "driver_heading": body.heading,
+            "driver_heading": heading,
             "driver_location_at": now_iso,
+            "driver_location_recorded_at": recorded.isoformat(),
         }},
     )
-    return {"ok": True}
+    return {"ok": True, "recorded_at": recorded.isoformat(), "received_at": now_iso}
 
 
 class DriverOnlineRequest(BaseModel):
