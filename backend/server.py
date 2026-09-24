@@ -1219,6 +1219,8 @@ async def readiness():
     except Exception:
         db_ok = False
 
+    settings = await db.platform_settings.find_one({"_id": "singleton"}, {"features": 1}) if db_ok else {}
+    runtime_features = {**DEFAULT_PLATFORM_SETTINGS["features"], **((settings or {}).get("features") or {})}
     checks = {
         "database": db_ok,
         "jwt_configured": bool((JWT_SECRET or "").strip()),
@@ -1228,6 +1230,7 @@ async def readiness():
         "apple_native_auth_configured": bool((os.environ.get("APPLE_BUNDLE_ID") or "").strip()),
         "service_area_enforced": OSLO_BETA_ENFORCE,
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
+        "booking_enabled": runtime_features.get("booking_enabled", True),
     }
     required = checks["database"] and checks["jwt_configured"]
     return {
@@ -1254,6 +1257,7 @@ async def cars_nearby(body: NearbyCarsRequest):
     async for u in db.users.find({
         "role": "driver",
         "approved": True,
+        "accepted_terms_at": {"$exists": True, "$ne": None},
         "online": True,
         "disabled": {"$ne": True},
         "demo": {"$ne": True},
@@ -1262,7 +1266,7 @@ async def cars_nearby(body: NearbyCarsRequest):
     }):
         lat = u.get("last_lat")
         lng = u.get("last_lng")
-        if lat is None or lng is None:
+        if lat is None or lng is None or await _fleet_is_suspended(u.get("fleet_id")):
             continue
         d_km = haversine_km(body.lat, body.lng, lat, lng)
         if d_km > 10:
@@ -3036,7 +3040,8 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
             busy.add(t["driver_id"])
     out = []
     async for d in db.users.find(
-        {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True},
+        {"role": "driver", "approved": True, "accepted_terms_at": {"$exists": True, "$ne": None},
+         "online": True, "disabled": {"$ne": True},
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
         {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1},
     ):
