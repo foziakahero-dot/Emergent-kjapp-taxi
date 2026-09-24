@@ -2444,7 +2444,9 @@ class SafetyEventRequest(BaseModel):
 async def trip_safety_event(trip_id: str, body: SafetyEventRequest, current=Depends(get_current_user)):
     """Audit a safety action for a trip. Emergency calls are still placed by the device directly to 112."""
     trip, is_passenger, is_driver = await _load_trip_or_403(trip_id, current)
-    role = "passenger" if is_passenger else "driver" if is_driver else current.get("role", "admin")
+    if not (is_passenger or is_driver):
+        raise HTTPException(status_code=403, detail="Kun kunde eller tildelt sjåfør kan registrere en sikkerhetshendelse på turen")
+    role = "passenger" if is_passenger else "driver"
     now_iso = datetime.now(timezone.utc).isoformat()
     event = {
         "id": str(uuid.uuid4()),
