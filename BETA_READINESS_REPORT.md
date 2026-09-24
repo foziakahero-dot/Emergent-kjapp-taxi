@@ -31,6 +31,8 @@ Emergent production backend deployment: **not performed**
 - Existing live GPS updates remain canonical in `/driver/location`.
 - Assigned driver's coordinates continue to update the active trip shown on the customer map.
 - Customer/Driver map already smooths movement between received GPS points.
+- Foreground and background GPS now adapt to ride state: lower-frequency while idle/online and higher-frequency during `driver_on_way`, `at_pickup`, and `in_trip`.
+- GPS samples include device capture timestamps; backend rejects stale samples and implausible jumps.
 
 ### iOS
 - Customer bundle ID: `no.kjapp.app`.
@@ -69,6 +71,8 @@ One-time account work:
 GitHub is currently returning workflow conclusion `startup_failure` with **zero jobs started** on PR-triggered runs. This happens before repository build/test commands execute, so it is not evidence of a TypeScript, Python or Xcode compile failure. GitHub Actions account/repository execution must be restored before CI can certify the branch.
 
 ## Required verification before beta
+
+The portable `backend/scripts/e2e_dispatch.py` now also checks duplicate customer booking rejection, losing-driver acceptance rejection, idempotent completion, native push config and Oslo service-area readiness.
 
 1. Backend Python compile/test.
 2. Customer TypeScript + Expo config.
