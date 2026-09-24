@@ -33,8 +33,8 @@ export default function Register() {
 
   const submit = async () => {
     setError('');
-    if (!fullName.trim() || !email.trim() || password.length < 6) {
-      setError('Fyll inn navn, e-post og passord (minst 6 tegn).');
+    if (!fullName.trim() || !email.trim() || password.length < 8) {
+      setError('Fyll inn navn, e-post og passord (minst 8 tegn).');
       return;
     }
     if (!acceptedTerms) {
@@ -99,7 +99,7 @@ export default function Register() {
           </View>
         </View>
 
-        <Text style={s.passwordHint}>Minst 6 tegn. Du kan endre kontoinnstillinger senere.</Text>
+        <Text style={s.passwordHint}>Minst 8 tegn. Du kan endre kontoinnstillinger senere.</Text>
 
         <Pressable
           style={s.consentRow}
