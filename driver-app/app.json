@@ -14,7 +14,7 @@
       "backgroundColor": "#070B0E"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "no.kjapp.driver",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
