@@ -18,6 +18,7 @@ Production startup intentionally refuses weak/default JWT/admin credentials.
 - `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
 - `PASSWORD_RESET_WEB_BASE=https://kjappapp.no`
 - `APPLE_BUNDLE_ID=no.kjapp.app`
+- `KJAPP_LEGAL_VERSION=2026-09` — current beta consent version; only increment after the corresponding approved privacy/terms text is published
 
 Optional web Apple OAuth later:
 - `APPLE_CLIENT_ID` — Services ID only when the web flow is enabled
