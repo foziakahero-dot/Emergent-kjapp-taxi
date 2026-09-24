@@ -558,6 +558,37 @@ def haversine_km(lat1, lng1, lat2, lng2):
     return R * c
 
 
+OSLO_BETA_CENTER_LAT = float(os.environ.get("KJAPP_SERVICE_AREA_CENTER_LAT", "59.9139"))
+OSLO_BETA_CENTER_LNG = float(os.environ.get("KJAPP_SERVICE_AREA_CENTER_LNG", "10.7522"))
+OSLO_BETA_RADIUS_KM = float(os.environ.get("KJAPP_SERVICE_AREA_RADIUS_KM", "45"))
+OSLO_BETA_ENFORCE = str(os.environ.get("KJAPP_SERVICE_AREA_ENFORCE", "false")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _pickup_inside_launch_area(lat: float, lng: float) -> bool:
+    if not OSLO_BETA_ENFORCE:
+        return True
+    return haversine_km(lat, lng, OSLO_BETA_CENTER_LAT, OSLO_BETA_CENTER_LNG) <= OSLO_BETA_RADIUS_KM
+
+
+def _require_launch_pickup(lat: float, lng: float) -> None:
+    if not _pickup_inside_launch_area(lat, lng):
+        raise HTTPException(
+            status_code=422,
+            detail=f"KJAPP beta tar foreløpig imot hentinger i Oslo-området (ca. {int(OSLO_BETA_RADIUS_KM)} km fra sentrum).",
+        )
+
+
+@api.get("/service-area")
+async def service_area():
+    return {
+        "launch_city": "Oslo",
+        "enforced": OSLO_BETA_ENFORCE,
+        "center": {"lat": OSLO_BETA_CENTER_LAT, "lng": OSLO_BETA_CENTER_LNG},
+        "radius_km": OSLO_BETA_RADIUS_KM,
+        "pickup_only": True,
+    }
+
+
 async def osrm_route(plat, plng, dlat, dlng):
     """Real driving distance + duration + polyline via public OSRM API. Returns None on failure."""
     url = f"https://router.project-osrm.org/route/v1/driving/{plng},{plat};{dlng},{dlat}"
@@ -1391,6 +1422,7 @@ async def search_places(q: str, limit: int = 8):
 
 @api.post("/trips/estimate")
 async def trip_estimate(body: EstimateRequest):
+    _require_launch_pickup(body.pickup_lat, body.pickup_lng)
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
     if route:
@@ -1725,6 +1757,7 @@ async def me(current=Depends(get_current_user)):
 # ---- Trips ----
 @api.post("/trips/request")
 async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+    _require_launch_pickup(body.pickup_lat, body.pickup_lng)
     # Server-side duplicate guard: one passenger cannot create overlapping active rides.
     existing_active = await db.trips.find_one(
         {
