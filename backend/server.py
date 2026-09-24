@@ -1226,21 +1226,48 @@ async def readiness():
     runtime_features = {**DEFAULT_PLATFORM_SETTINGS["features"], **((settings or {}).get("features") or {})}
     checks = {
         "database": db_ok,
+        "production_mode": IS_PRODUCTION,
+        "demo_data_disabled": not ENABLE_DEMO_DATA,
         "jwt_configured": bool((JWT_SECRET or "").strip()),
+        "admin_identity_configured": bool((os.environ.get("ADMIN_EMAIL") or "").strip()),
         "stripe_key_configured": bool((stripe.api_key or "").strip()),
         "stripe_webhook_configured": bool((STRIPE_WEBHOOK_SECRET or "").strip()),
+        "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
+        "public_web_origin_configured": (
+            os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no").rstrip("/") == "https://kjappapp.no"
+        ),
         "expo_push_sender": True,
-        "apple_native_auth_configured": bool((os.environ.get("APPLE_BUNDLE_ID") or "").strip()),
+        "apple_native_auth_configured": (
+            (os.environ.get("APPLE_BUNDLE_ID") or "").strip() == "no.kjapp.app"
+        ),
+        "object_storage_configured": bool((EMERGENT_LLM_KEY or "").strip()),
         "service_area_enforced": OSLO_BETA_ENFORCE,
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
         "booking_enabled": runtime_features.get("booking_enabled", True),
     }
-    required = checks["database"] and checks["jwt_configured"]
+    required_keys = (
+        "database",
+        "production_mode",
+        "demo_data_disabled",
+        "jwt_configured",
+        "admin_identity_configured",
+        "stripe_key_configured",
+        "stripe_webhook_configured",
+        "email_configured",
+        "public_web_origin_configured",
+        "apple_native_auth_configured",
+        "service_area_enforced",
+        "booking_enabled",
+    )
+    blockers = [key for key in required_keys if not checks[key]]
+    if checks["auto_charge_enabled"]:
+        blockers.append("auto_charge_must_remain_off_until_stripe_e2e")
     return {
         "app": "KJAPP",
-        "ready": required,
-        "status": "ready" if required else "not_ready",
+        "ready": not blockers,
+        "status": "ready" if not blockers else "not_ready",
         "checks": checks,
+        "blockers": blockers,
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
