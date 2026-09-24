@@ -821,6 +821,7 @@ function RefundModal({ onClose, onDone }: any) {
 export function Support() {
   const [status, setStatus] = useState('open');
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<any>(null);
   useEffect(() => { setPage(1); }, [status]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/support/tickets', { status, page, page_size: PAGE });
   const setTicket = async (id: string, s: string) => { try { await api.updateTicket(id, { status: s }); reload(); } catch {} };
@@ -840,7 +841,16 @@ export function Support() {
           <tbody>
             {loading ? <tr><td colSpan={6}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
               <tr key={t.id}>
-                <td className="strong">{t.subject}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(t)}
+                    style={{ appearance: 'none', border: 0, background: 'transparent', padding: 0, color: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <span className="strong">{t.subject}</span>
+                    {(t.contact || t.contact_email) ? <div className="cell-sub">{t.contact || t.contact_email}</div> : null}
+                  </button>
+                </td>
                 <td className="dim">{t.category}</td>
                 <td><Pill status="gray" label={t.priority} /></td>
                 <td><Pill status={t.status} /></td>
@@ -856,6 +866,22 @@ export function Support() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
+      {selected ? (
+        <Modal title={selected.subject || 'Supportsak'} sub={`Referanse ${String(selected.id || '').slice(0, 8)}`} onClose={() => setSelected(null)}>
+          <div className="grid" style={{ gap: 12 }}>
+            <KV label="Kategori" value={selected.category || '—'} />
+            <KV label="Prioritet" value={selected.priority || '—'} />
+            <KV label="Status" value={selected.status || '—'} />
+            <KV label="Navn" value={selected.name || '—'} />
+            <KV label="Kontakt" value={selected.contact || selected.contact_email || '—'} />
+            <KV label="Kilde" value={selected.source || 'admin'} />
+            <div>
+              <div className="dim" style={{ marginBottom: 6 }}>Melding</div>
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{selected.message || selected.body || 'Ingen melding registrert.'}</div>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
