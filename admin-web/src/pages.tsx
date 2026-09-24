@@ -82,7 +82,7 @@ export function Dashboard() {
       <div className="section-title">Beta Health · siste 7 dager</div>
       <div className="grid cards">
         <Kpi label="Completion" value={health.loading ? '…' : health.err ? '—' : health.data?.trips?.completion_rate_pct == null ? '—' : `${health.data.trips.completion_rate_pct}%`}
-          foot={<span className="dim">{health.data ? `${health.data.trips.completed}/${health.data.trips.requested} fullført` : 'Ekte turdata'}</span>} />
+          foot={<span className="dim">{health.data ? `${health.data.trips.completed}/${health.data.trips.requested} fullført${health.data.trips.arrived_unclosed ? ` · ${health.data.trips.arrived_unclosed} ankommet ikke lukket` : ''}` : 'Ekte turdata'}</span>} />
         <Kpi label="Dispatch success" value={health.loading ? '…' : health.err ? '—' : health.data?.dispatch?.success_rate_pct == null ? '—' : `${health.data.dispatch.success_rate_pct}%`}
           foot={<span className="dim">{health.data ? `${health.data.dispatch.assigned}/${health.data.trips.requested} tildelt` : 'Sjåførtilordning'}</span>} />
         <Kpi label="Median accept" value={health.loading ? '…' : health.err ? '—' : health.data?.dispatch?.median_accept_seconds == null ? '—' : `${Math.round(health.data.dispatch.median_accept_seconds)}s`}
