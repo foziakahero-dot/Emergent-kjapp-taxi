@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
+import { Alert, AppState, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -53,7 +53,14 @@ export default function BookingFlow() {
     };
     fetchTrip();
     const i = setInterval(fetchTrip, 2500);
-    return () => { mounted = false; clearInterval(i); };
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void fetchTrip();
+    });
+    return () => {
+      mounted = false;
+      clearInterval(i);
+      appStateSub.remove();
+    };
   }, [tripId, retryKey, router]);
 
   const cancel = async () => {
