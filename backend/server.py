@@ -2982,10 +2982,12 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         raise HTTPException(status_code=403, detail="Turen krever utstyr som ikke er registrert på denne sjåføren")
     if trip_pre.get("dispatch_mode") == "sequential" and trip_pre.get("offer_driver_id") not in (None, driver_id):
         raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
-    # Driver's REAL current GPS. If we don't have it we store nothing and report no ETA —
-    # a fabricated start position/ETA would be shown to the customer as if it were real.
+    # Acceptance requires fresh REAL GPS. Dispatch already filters stale drivers, but
+    # the accept endpoint also enforces this so an old/broadcast offer cannot bypass it.
     d_lat = current.get("last_lat")
     d_lng = current.get("last_lng")
+    if d_lat is None or d_lng is None or not _fresh_driver_location(current.get("last_location_at")):
+        raise HTTPException(status_code=409, detail="Oppdater GPS-posisjonen før du godtar turen")
     eta = None
     updates = {
         "status": "driver_on_way",
