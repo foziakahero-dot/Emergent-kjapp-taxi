@@ -66,8 +66,10 @@ Implemented without redesigning Customer or Driver:
 - Web fallback is controlled by `PASSWORD_RESET_WEB_BASE` and defaults to `https://fleet.kjappapp.no`; it is not derived from request headers.
 - Customer signup requires explicit terms/privacy consent and stores consent timestamp + legal version.
 - Driver invite signup requires the same explicit consent and stores it on the driver account.
+- Fleet/løyvehaver application intake now also requires explicit partner/platform terms + privacy consent and stores consent timestamp + legal version.
 - Canonical help/privacy/terms routes are now `/help`, `/personvern`, and `/vilkar` on `kjappapp.no`.
-- Old mobile references to `support@kjapp.no` / `kjapp.no/vilkar` were replaced with `kjappapp.no` addresses.
+- Customer profile/settings and Driver settings route support/legal actions to the canonical `kjappapp.no` URLs.
+- Old mobile/geocoding references to `support@kjapp.no`, `support@kjappapp.com` and `kjapp.no/vilkar` were replaced in active product code with `kjappapp.no` addresses.
 - Legal routes intentionally contain beta placeholder copy only; final legally approved text remains a public-release blocker.
 
 ### Abuse protection / beta telemetry
@@ -89,8 +91,10 @@ Implemented without redesigning Customer or Driver:
 ### Operations / store preparation
 - `docs/INCIDENT_RUNBOOK.md` documents P0–P3 handling for dispatch, GPS, push, ride state, payment, settlement, app crash, API outage, Admin outage and privacy/security incidents.
 - `docs/STORE_RELEASE_PACK.md` documents Customer/Driver IDs, draft store metadata, release notes, privacy-label review inventory and TestFlight/public-store gates.
+- `docs/PHYSICAL_BETA_QA.md` is now the physical-device release gate for locked-screen push, background GPS, dispatch integrity, full ride lifecycle, payment, restart/network recovery and Admin/Fleet reconciliation.
 - Driver store screenshots currently duplicate Customer assets and are explicitly marked placeholders; real Driver screenshots are still required before public store submission.
 - Duplicate Customer TestFlight submit step was removed from the iOS release workflow.
+- The approved P0/P1 implementation pass is now code-complete on this branch; the remaining work is build/device/deployment verification, not a product redesign.
 
 ## External configuration still required
 
@@ -134,7 +138,9 @@ Release strategy:
 
 ## Required verification before beta
 
-The portable `backend/scripts/e2e_dispatch.py` now also checks duplicate customer booking rejection, losing-driver acceptance rejection, idempotent completion, native push config and Oslo service-area readiness.
+The portable `backend/scripts/e2e_dispatch.py` checks duplicate customer booking rejection, sequential offer ownership/forwarding, losing-driver acceptance rejection, real pickup/destination GPS gates, idempotent completion, post-trip ratings, native push config and Oslo service-area readiness. It reads test credentials only from environment variables.
+
+Use `docs/PHYSICAL_BETA_QA.md` for the physical-device evidence run.
 
 1. Backend Python compile/test.
 2. Customer TypeScript + Expo config.
