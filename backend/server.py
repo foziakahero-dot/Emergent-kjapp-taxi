@@ -1278,7 +1278,7 @@ async def cars_nearby(body: NearbyCarsRequest):
             "name": u.get("fullName") or "Sjåfør",
             "car": u.get("car") or "",
             "plate": u.get("plate") or "",
-            "rating": u.get("rating") or 4.9,
+            "rating": round(float(u["rating"]), 1) if isinstance(u.get("rating"), (int, float)) else None,
             "type": u.get("vehicle_type") or "ai-first",
             "lat": lat,
             "lng": lng,
@@ -3028,11 +3028,12 @@ ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
-async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None) -> list:
+async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, vehicle_type: Optional[str] = None) -> list:
     """Real, available drivers sorted by actual distance to pickup.
 
-    Equipment-bound needs (wheelchair/child seat) are hard requirements. Other needs are
-    communicated to the driver but do not silently exclude otherwise eligible cars.
+    Equipment-bound needs (wheelchair/child seat) are hard requirements. Ride class is
+    also enforced server-side so a Premium/Komfort booking cannot be assigned to the
+    wrong configured vehicle class.
     """
     if lat is None or lng is None:
         return []
@@ -3047,12 +3048,15 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         {"role": "driver", "approved": True, "accepted_terms_at": {"$exists": True, "$ne": None},
          "online": True, "disabled": {"$ne": True},
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
-        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1},
+        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_type": 1},
     ):
         did = str(d["_id"])
         if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
             continue
         if required and not required.issubset(set(d.get("capabilities") or [])):
+            continue
+        driver_vehicle_type = d.get("vehicle_type") or "ai-first"
+        if vehicle_type and driver_vehicle_type != vehicle_type:
             continue
         out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
     out.sort(key=lambda x: x["km"])
@@ -3067,8 +3071,10 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(
-        trip.get("pickup_lat"), trip.get("pickup_lng"),
+        trip.get("pickup_lat"),
+        trip.get("pickup_lng"),
         _required_driver_capabilities(trip.get("special_needs")),
+        trip.get("vehicle_type") or "ai-first",
     )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
