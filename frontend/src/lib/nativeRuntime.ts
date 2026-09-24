@@ -12,6 +12,15 @@ Notifications.setNotificationHandler({
   }),
 });
 
+async function getExpoPushTokenData() {
+  const projectId =
+    (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
+    (Constants as any)?.easConfig?.projectId;
+  if (!projectId) return null;
+  const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
+  return expoToken.data || null;
+}
+
 export async function registerNativePush() {
   if (Platform.OS === 'web') return false;
 
@@ -33,16 +42,30 @@ export async function registerNativePush() {
   if (status !== 'granted') return false;
 
   try {
-    const projectId =
-      (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
-      (Constants as any)?.easConfig?.projectId;
-    if (!projectId) return false;
-
-    const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
+    const token = await getExpoPushTokenData();
+    if (!token) return false;
     await api.post('/push/native-subscribe', {
       platform: Platform.OS,
       provider: 'expo',
-      token: expoToken.data,
+      token,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function unregisterNativePush() {
+  if (Platform.OS === 'web') return false;
+  try {
+    const permission = await Notifications.getPermissionsAsync();
+    if (permission.status !== 'granted') return false;
+    const token = await getExpoPushTokenData();
+    if (!token) return false;
+    await api.post('/push/native-unsubscribe', {
+      platform: Platform.OS,
+      provider: 'expo',
+      token,
     });
     return true;
   } catch {
