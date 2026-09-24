@@ -2134,13 +2134,19 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
         if elapsed > free_minutes:
             fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
     now_iso = datetime.now(timezone.utc).isoformat()
-    await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
+    result = await db.trips.update_one(
+        {
+            "trip_id": trip_id,
+            "user_id": current["id"],
+            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup"]},
+        },
         {"$set": {
             "status": "cancelled", "cancelled_at": now_iso, "cancelled_by": "customer",
             "cancellation_fee": fee, "cancellation_fee_status": "pending" if fee > 0 else "not_applicable",
         }},
     )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Turen har endret status og kan ikke avbestilles nå")
     if trip.get("driver_id"):
         try:
             await db.users.update_one(
@@ -3048,8 +3054,22 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
         raise HTTPException(status_code=403, detail="Turen krever utstyr som ikke er registrert på denne sjåføren")
-    if trip_pre.get("dispatch_mode") == "sequential" and trip_pre.get("offer_driver_id") not in (None, driver_id):
-        raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
+    if trip_pre.get("dispatch_mode") == "sequential":
+        if trip_pre.get("offer_driver_id") not in (None, driver_id):
+            raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
+        expires_at = trip_pre.get("offer_expires_at")
+        if expires_at:
+            try:
+                expires_dt = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+                if expires_dt.tzinfo is None:
+                    expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) >= expires_dt:
+                    await offer_trip_to_next_driver(trip_pre)
+                    raise HTTPException(status_code=409, detail="Tilbudet er utløpt og sendes videre")
+            except HTTPException:
+                raise
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=409, detail="Tilbudet har ugyldig utløpstid")
     # Acceptance requires fresh REAL GPS. Dispatch already filters stale drivers, but
     # the accept endpoint also enforces this so an old/broadcast offer cannot bypass it.
     d_lat = current.get("last_lat")
@@ -3509,14 +3529,24 @@ class DeclineTripRequest(BaseModel):
 
 @api.post("/driver/decline")
 async def driver_decline(body: DeclineTripRequest, current=Depends(require_driver)):
-    """Driver declines a pending trip — logged for acceptance-rate and forwarded immediately."""
-    await db.driver_declines.insert_one({
-        "driver_id": current["id"],
+    """Decline only a ride that is actually visible to this driver."""
+    trip = await db.trips.find_one({
         "trip_id": body.trip_id,
-        "declined_at": datetime.now(timezone.utc).isoformat(),
+        "status": {"$in": ["searching", "booking"]},
+        "driver_id": None,
     })
-    trip = await db.trips.find_one({"trip_id": body.trip_id, "driver_id": None})
-    if trip and trip.get("offer_driver_id") == current["id"]:
+    if not trip:
+        raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    if trip.get("dispatch_mode") == "sequential" and trip.get("offer_driver_id") != current["id"]:
+        raise HTTPException(status_code=409, detail="Turen er ikke tilbudt deg")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.driver_declines.update_one(
+        {"driver_id": current["id"], "trip_id": body.trip_id},
+        {"$set": {"declined_at": now_iso}},
+        upsert=True,
+    )
+    if trip.get("offer_driver_id") == current["id"]:
         await offer_trip_to_next_driver(trip)
     return {"ok": True}
 
