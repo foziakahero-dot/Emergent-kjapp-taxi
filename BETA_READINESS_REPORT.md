@@ -56,6 +56,42 @@ Emergent production backend deployment: **not performed**
 - EAS production auto-increment enabled for both apps.
 - iOS smoke workflow now covers Customer and Driver simulator compilation.
 
+## Approved P0/P1 beta-hardening pass — 24.09.2026
+
+Implemented without redesigning Customer or Driver:
+
+### Account recovery / legal wiring
+- Customer and Driver now have native forgot-password and reset-password routes.
+- Reset emails use fixed KJAPP app schemes (`kjapp://` / `kjapp-driver://`) with a trusted web fallback.
+- Web fallback is controlled by `PASSWORD_RESET_WEB_BASE` and defaults to `https://fleet.kjappapp.no`; it is not derived from request headers.
+- Customer signup requires explicit terms/privacy consent and stores consent timestamp + legal version.
+- Driver invite signup requires the same explicit consent and stores it on the driver account.
+- Canonical help/privacy/terms routes are now `/help`, `/personvern`, and `/vilkar` on `kjappapp.no`.
+- Old mobile references to `support@kjapp.no` / `kjapp.no/vilkar` were replaced with `kjappapp.no` addresses.
+- Legal routes intentionally contain beta placeholder copy only; final legally approved text remains a public-release blocker.
+
+### Abuse protection / beta telemetry
+- Mongo-backed fixed-window IP rate limits protect registration, password reset, Apple auth, address search, AI calls, payment-session creation, public fleet onboarding and public document uploads.
+- Existing login brute-force protection remains separate and unchanged.
+- Customer and Driver install a lightweight global JavaScript crash monitor.
+- Client error reports are stored for 30 days through rate-limited `POST /api/client-errors`.
+- This beta collector is not represented as a full native Crashlytics/Sentry replacement.
+
+### Admin Beta Health
+- New `GET /api/admin/beta-health` derives operational metrics from real non-demo records.
+- Existing Admin dashboard now shows, without redesign:
+  - trip completion rate,
+  - dispatch assignment success,
+  - median / p95 accept time,
+  - fresh-GPS percentage,
+  - fatal client-error count.
+
+### Operations / store preparation
+- `docs/INCIDENT_RUNBOOK.md` documents P0–P3 handling for dispatch, GPS, push, ride state, payment, settlement, app crash, API outage, Admin outage and privacy/security incidents.
+- `docs/STORE_RELEASE_PACK.md` documents Customer/Driver IDs, draft store metadata, release notes, privacy-label review inventory and TestFlight/public-store gates.
+- Driver store screenshots currently duplicate Customer assets and are explicitly marked placeholders; real Driver screenshots are still required before public store submission.
+- Duplicate Customer TestFlight submit step was removed from the iOS release workflow.
+
 ## External configuration still required
 
 ### Emergent backend
@@ -82,7 +118,9 @@ One-time account work:
 
 ## CI status
 
-GitHub is currently returning workflow conclusion `startup_failure` with **zero jobs started** on PR-triggered runs. This happens before repository build/test commands execute, so it is not evidence of a TypeScript, Python or Xcode compile failure. GitHub Actions account/repository execution must be restored before CI can certify the branch.
+GitHub is still returning workflow conclusion `startup_failure` with **zero jobs started** on PR-triggered runs, including the current P0/P1 commits. The run metadata shows `path: BuildFailed` and no jobs are created. This occurs before `compileall`, TypeScript, Expo Doctor, Vite or Xcode commands can execute, so it is **not** a successful validation and is also not evidence that application code failed compilation.
+
+Until GitHub Actions execution is restored, the branch must remain unmerged. The intended gate is `.github/workflows/beta-gate.yml`: backend compile, Admin build, Marketing build, Customer typecheck/Expo Doctor/config and Driver typecheck/Expo Doctor/config.
 
 ## Backend ownership migration
 
