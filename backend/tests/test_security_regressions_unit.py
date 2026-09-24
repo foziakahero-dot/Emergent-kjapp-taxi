@@ -190,3 +190,21 @@ def test_password_reset_tokens_are_hashed_at_rest_helper():
     assert hashed == server._password_reset_token_hash(token)
     assert hashed != server._password_reset_token_hash(token + "x")
 
+def test_legal_consent_requires_current_server_version():
+    current = server.CURRENT_LEGAL_VERSION
+    user = {
+        "_id": "507f1f77bcf86cd799439011",
+        "email": "customer@example.no",
+        "accepted_terms_at": datetime.now(timezone.utc).isoformat(),
+        "legal_version": current,
+    }
+    assert server.user_public(user)["legal_accepted"] is True
+
+    stale = dict(user)
+    stale["legal_version"] = "older-version"
+    assert server.user_public(stale)["legal_accepted"] is False
+
+    missing = dict(user)
+    missing.pop("legal_version")
+    assert server.user_public(missing)["legal_accepted"] is False
+
