@@ -42,6 +42,10 @@ export default function Login() {
         : 'Denne kontotypen kan ikke brukes i kundeappen.');
       return;
     }
+    if (u?.legal_accepted !== true) {
+      router.replace('/legal-consent');
+      return;
+    }
     router.replace('/(app)/home');
   };
 
