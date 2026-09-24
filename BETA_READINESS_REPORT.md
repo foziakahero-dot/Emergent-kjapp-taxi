@@ -10,13 +10,22 @@ Emergent production backend deployment: **not performed**
 - Passenger duplicate active-booking guard.
 - Atomic driver reservation lock prevents one driver from accepting two concurrent rides.
 - Driver reservation lock self-heals when no canonical active trip remains.
+- Live driver actions require an approved driver account; admin accounts cannot impersonate a driver.
+- Driver offers require online state and fresh GPS; stale/broadcast offers cannot bypass the acceptance gate.
 - Driver cannot go offline while an active ride is in progress.
+- Pickup arrival is GPS-proximity checked (configurable radius) before the driver can mark arrival.
+- Trip start requires the explicit at-pickup state; the driver cannot skip the pickup transition.
+- No-show requires the configured waiting time after a valid pickup arrival.
 - Customer trip completion is state-guarded and idempotent.
+- Passenger/driver rating is restricted to a finished ride lifecycle.
 - Driver lock is released on arrival, no-show, customer cancellation and driver cancellation.
 
 ### Push notifications
 - New mobile builds register Expo Push tokens instead of treating raw iOS APNs tokens as Firebase tokens.
 - Backend sends Expo Push notifications to real devices through APNs/FCM and keeps legacy FCM-token support.
+- One native token is rebound to one authenticated account; shared/reused phones cannot keep another account's push subscription.
+- Customer logout unregisters this device and revokes the server session.
+- Driver logout also stops background GPS before unregistering push and revoking the session.
 - Customer and Driver push deep-links are normalized to valid Expo Router routes.
 - Push events covered include driver assigned, driver arrived, trip started, trip completed, cancellation and payment state.
 
