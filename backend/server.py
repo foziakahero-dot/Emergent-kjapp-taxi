@@ -1165,7 +1165,7 @@ async def root():
 
 @api.get("/health")
 async def health():
-    """Health check used by mobile apps + external uptime monitors."""
+    """Cheap liveness/DB health check used by apps and uptime monitors."""
     try:
         await db.command("ping")
         db_ok = True
@@ -1175,6 +1175,39 @@ async def health():
         "app": "KJAPP",
         "status": "ok" if db_ok else "degraded",
         "db": db_ok,
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api.get("/ready")
+async def readiness():
+    """Deployment readiness without exposing secrets.
+
+    This endpoint deliberately distinguishes process/database health from optional integrations.
+    It is safe for load-balancer and migration smoke checks.
+    """
+    try:
+        await db.command("ping")
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    checks = {
+        "database": db_ok,
+        "jwt_configured": bool((JWT_SECRET or "").strip()),
+        "stripe_key_configured": bool((stripe.api_key or "").strip()),
+        "stripe_webhook_configured": bool((STRIPE_WEBHOOK_SECRET or "").strip()),
+        "expo_push_sender": True,
+        "apple_native_auth_configured": bool((os.environ.get("APPLE_BUNDLE_ID") or "").strip()),
+        "service_area_enforced": OSLO_BETA_ENFORCE,
+        "auto_charge_enabled": AUTO_CHARGE_ENABLED,
+    }
+    required = checks["database"] and checks["jwt_configured"]
+    return {
+        "app": "KJAPP",
+        "ready": required,
+        "status": "ready" if required else "not_ready",
+        "checks": checks,
         "time": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -1246,7 +1279,7 @@ async def list_places(featured_only: bool = False):
 MAPTILER_API_KEY = os.environ.get("MAPTILER_API_KEY", "")
 
 
-PHOTON_HEADERS = {"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.com)"}
+PHOTON_HEADERS = {"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.no)"}
 
 
 @api.get("/places/reverse")
@@ -7092,11 +7125,24 @@ async def admin_beta_readiness(current=Depends(require_admin)):
     })
     open_support = await db.support_tickets.count_documents({"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
     failed_payments = await db.payment_transactions.count_documents({"payment_status": "failed"})
+    apple_bundle_id = (os.environ.get("APPLE_BUNDLE_ID") or "").strip()
+    legacy_fcm = bool(
+        (os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip()
+        or (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip()
+    )
     checks = {
         "production_env": IS_PRODUCTION,
         "stripe_configured": bool(stripe.api_key and STRIPE_WEBHOOK_SECRET),
         "map_provider_configured": bool(MAPTILER_API_KEY),
-        "native_push_configured": bool((os.environ.get("FCM_SERVICE_ACCOUNT_JSON") or "").strip() or (os.environ.get("FCM_SERVICE_ACCOUNT_FILE") or "").strip()),
+        "native_push_sender": "expo",
+        "native_push_backend_ready": True,
+        "legacy_fcm_configured": legacy_fcm,
+        "apple_native_auth_configured": bool(apple_bundle_id),
+        "apple_bundle_id": apple_bundle_id or None,
+        "service_area_enforced": OSLO_BETA_ENFORCE,
+        "service_area_radius_km": OSLO_BETA_RADIUS_KM,
+        "auto_charge_enabled": AUTO_CHARGE_ENABLED,
+        "public_web_origin": os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no"),
         "admin_2fa_enabled": bool(current.get("totp_enabled")),
         "pricing_version": int(pricing.get("version", 1)),
         "pricing_rollback_available": await db.pricing_versions.count_documents({}) > 0,
@@ -7107,6 +7153,7 @@ async def admin_beta_readiness(current=Depends(require_admin)):
     }
     blockers = []
     if IS_PRODUCTION and not checks["stripe_configured"]: blockers.append("Stripe/webhook er ikke fullt konfigurert")
+    if IS_PRODUCTION and not checks["apple_native_auth_configured"]: blockers.append("APPLE_BUNDLE_ID mangler for native Sign in with Apple")
     if not checks["admin_2fa_enabled"]: blockers.append("Innlogget admin har ikke aktivert 2FA")
     if pending_driver_docs: blockers.append(f"{pending_driver_docs} sjåførkonto(er) venter på godkjenning")
     if failed_payments: blockers.append(f"{failed_payments} betaling(er) har feilet")
