@@ -7548,9 +7548,9 @@ async def admin_pricing_test(body: PricingTestRequest, current=Depends(require_a
 
 
 @api.post("/admin/pricing/test-route")
-async def admin_pricing_test_route(body: PricingRouteTestRequest, current=Depends(require_admin)):
-    pickup = (await search_places(body.pickup_address, 1)).get("results") or []
-    dropoff = (await search_places(body.dropoff_address, 1)).get("results") or []
+async def admin_pricing_test_route(body: PricingRouteTestRequest, request: Request, current=Depends(require_admin)):
+    pickup = (await search_places(body.pickup_address, request, 1)).get("results") or []
+    dropoff = (await search_places(body.dropoff_address, request, 1)).get("results") or []
     if not pickup or not dropoff:
         raise HTTPException(400, "Fant ikke én eller begge adressene")
     p, d = pickup[0], dropoff[0]
