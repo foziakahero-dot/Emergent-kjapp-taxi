@@ -49,6 +49,7 @@ export type FleetMe = {
   created_at?: string;
   status?: string;
   active?: boolean;
+  documents?: Record<string, any>;
 };
 
 export type FleetOverview = {
@@ -77,6 +78,12 @@ export type FleetDriver = {
   last_location_at?: string;
   today_income?: number;
   today_trips?: number;
+  drivers_license_path?: string;
+  taxi_license_path?: string;
+  profile_photo_path?: string;
+  selfie_verification_path?: string;
+  selfie_verified_at?: string;
+  documents_uploaded_at?: string;
 };
 
 export type FleetPayout = {
@@ -145,6 +152,7 @@ export const api = {
     drivers_license_path: string;
     taxi_license_path: string;
     profile_photo_path: string;
+    selfie_verification_path?: string;
   }) => http.post('/driver-invites/accept', body).then((r) => r.data),
   uploadDriverDoc: (file: File, inviteToken: string, docType: string) => {
     const form = new FormData();
