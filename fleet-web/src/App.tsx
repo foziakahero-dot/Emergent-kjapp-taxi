@@ -13,11 +13,12 @@ import {
   ResetPasswordPage,
   TripsPage,
 } from './pages';
-import { DriverVerificationPage, FleetDocumentsPage, FleetLiveOpsPage, VehiclesPage } from './FleetOps';
+import { DriverVerificationPage, FleetDocumentsPage, FleetLiveOpsPage, FleetLiveTripsPage, VehiclesPage } from './FleetOps';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true },
   { to: '/live', label: 'Live kart' },
+  { to: '/live-turer', label: 'Live turer' },
   { to: '/sjaforer', label: 'Sjåfører' },
   { to: '/biler', label: 'Biler' },
   { to: '/dokumenter', label: 'Dokumenter' },
@@ -92,6 +93,7 @@ function PortalShell() {
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/live" element={<FleetLiveOpsPage />} />
+          <Route path="/live-turer" element={<FleetLiveTripsPage />} />
           <Route path="/sjaforer" element={<DriversPage />} />
           <Route path="/biler" element={<VehiclesPage />} />
           <Route path="/dokumenter" element={<FleetDocumentsPage />} />
