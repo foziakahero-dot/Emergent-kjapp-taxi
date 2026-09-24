@@ -57,9 +57,6 @@ jobs:
       - name: Submit latest build to TestFlight
         if: ${{ inputs.submit_to_testflight }}
         run: npx eas-cli@latest submit --platform ios --profile production --latest --non-interactive
-      - name: Submit latest build to TestFlight
-        if: ${{ inputs.submit_to_testflight }}
-        run: npx eas-cli@latest submit --platform ios --profile production --latest --non-interactive
 
   driver-ios:
     name: Driver signed iOS build
