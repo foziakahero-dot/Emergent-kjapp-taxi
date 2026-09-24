@@ -9,9 +9,15 @@ KJAPP mobile består nå av **to separate Expo / React Native-apper**. Den gamle
 | KJAPP Customer | `frontend/` | `no.kjapp.app` | `no.kjapp.app` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
 | KJAPP Driver | `driver-app/` | `no.kjapp.driver` | `no.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
 
-Begge bruker samme produksjonsbackend:
+Den kontrollerte **betaen/TestFlight** bruker fortsatt den kjente Emergent-backenden:
 
 `https://github-app-builder-28.emergent.host/api`
+
+Den langsiktige produksjonsprofilen er allerede konfigurert mot KJAPPs permanente API-navn:
+
+`https://api.kjappapp.no`
+
+`api.kjappapp.no` skal først peke til en verifisert backend før offentlig store-release. Selve backend-migreringen bort fra Emergent gjøres separat etter beta-stabilisering.
 
 Admin, Fleet og backend er separate systemer og skal ikke pakkes inn i mobilappene.
 
@@ -46,6 +52,25 @@ npx expo start
 ```
 
 Bakgrunnsposisjon og native push må testes i en development build / installert APK eller IPA, ikke bare Expo Go.
+
+## Lokal full beta-gate på Windows
+
+Når GitHub Actions ikke starter jobs, kan den samme kildekodekontrollen kjøres lokalt fra repo-roten uten å deploye eller endre produksjonsdata:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\beta_local_gate.ps1
+```
+
+Scriptet krever at aktiv branch er `beta/oslo-production-ready` og kjører:
+- `git diff --check`
+- Python compile
+- fokuserte sikkerhets-unit-tester
+- Admin build
+- Marketing build
+- Customer TypeScript + Expo Doctor + Expo config
+- Driver TypeScript + Expo Doctor + Expo config
+
+Det gjør **ikke** merge, deploy, Stripe-trekk eller produksjonsendringer.
 
 ## Android test-APK
 
@@ -122,6 +147,38 @@ APPLE_BUNDLE_ID=no.kjapp.app
 For web-basert Apple-innlogging senere kan `APPLE_CLIENT_ID` (Services ID) legges til separat.
 
 En APNs auth key (.p8) kan brukes gjennom EAS credentials for begge appene dersom Apple-kontoen/Teamet tillater det. Ikke legg .p8-filen i Git.
+
+### Første Apple/EAS-kobling
+
+Kjør dette separat i hver appmappe med din egen Expo/Apple-innlogging:
+
+```bash
+cd frontend
+npx eas-cli@latest credentials -p ios
+
+cd ../driver-app
+npx eas-cli@latest credentials -p ios
+```
+
+La EAS knytte riktige distribution/provisioning/APNs-credentials til bundle-ID-en for den aktuelle appen. Apple-passord, .p8-fil og private nøkler skal aldri limes inn i kode, chat eller Git.
+
+Når credentials er klare kan kontrollert TestFlight-build kjøres:
+
+```bash
+cd frontend
+npx eas-cli@latest build --platform ios --profile testflight-beta
+
+cd ../driver-app
+npx eas-cli@latest build --platform ios --profile testflight-beta
+```
+
+Etter en vellykket signert build:
+
+```bash
+npx eas-cli@latest submit --platform ios --profile production --latest
+```
+
+Alternativt kan den manuelle GitHub-workflowen `KJAPP signed iOS EAS build` bygge Customer, Driver eller begge. Den krever GitHub-secret `EXPO_TOKEN`; selve Apple-signeringen må allerede være konfigurert i EAS.
 
 ## Automatisk betaling etter tur
 
