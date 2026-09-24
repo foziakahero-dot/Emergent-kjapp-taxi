@@ -77,6 +77,7 @@ export type FleetDriver = {
   last_location_at?: string;
   today_income?: number;
   today_trips?: number;
+  identity_verification_status?: string;
 };
 
 export type FleetLiveDriver = {
@@ -97,6 +98,7 @@ export type FleetLiveDriver = {
   last_location_at?: string;
   rating?: number;
   active_trip_id?: string;
+  identity_verification_status?: string;
 };
 
 export type FleetLiveTrip = {
@@ -130,6 +132,7 @@ export type FleetVehicle = {
   online?: boolean;
   gps_fresh?: boolean;
   last_location_at?: string;
+  identity_verification_status?: string;
 };
 
 export type FleetDocument = {
