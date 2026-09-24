@@ -31,7 +31,7 @@ function PartnerHeader() {
         <a href={`mailto:${EMAILS.driver}`} onClick={() => setMenuOpen(false)}>Sjåfører</a>
         <Link to="/loyvehaver" onClick={() => setMenuOpen(false)}>Løyvehavere</Link>
         <a href={FLEET_URL} onClick={() => setMenuOpen(false)}>Fleet Panel</a>
-        <a href={`mailto:${EMAILS.support}`} onClick={() => setMenuOpen(false)}>Hjelp</a>
+        <Link to="/help" onClick={() => setMenuOpen(false)}>Hjelp</Link>
         <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad" onClick={() => setMenuOpen(false)}>Bli partner</Link>
       </nav>
       <button className="mk-menu-button" type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Meny</button>
