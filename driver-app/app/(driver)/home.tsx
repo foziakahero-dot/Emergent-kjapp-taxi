@@ -258,21 +258,39 @@ export default function DriverHome() {
       : null;
     if (!action) return;
 
-    setBusy(true);
-    try {
-      await applyCriticalTripAction(action, current.trip_id);
-      await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
-      setError('');
-      await poll();
-    } catch (e: any) {
-      if (!e?.response) {
-        const queued: QueuedTripAction = { trip_id: current.trip_id, action, queued_at: new Date().toISOString() };
-        await storage.setItem(QUEUED_TRIP_ACTION_KEY, JSON.stringify(queued));
-        setError('Midlertidig nettfeil. Handlingen er lagret på telefonen og sendes automatisk når forbindelsen er tilbake.');
-      } else {
-        setError(apiError(e));
+    const execute = async () => {
+      setBusy(true);
+      try {
+        await applyCriticalTripAction(action, current.trip_id);
+        await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+        setError('');
+        await poll();
+      } catch (e: any) {
+        if (!e?.response) {
+          const queued: QueuedTripAction = { trip_id: current.trip_id, action, queued_at: new Date().toISOString() };
+          await storage.setItem(QUEUED_TRIP_ACTION_KEY, JSON.stringify(queued));
+          setError('Midlertidig nettfeil. Handlingen er lagret på telefonen og sendes automatisk når forbindelsen er tilbake.');
+        } else {
+          setError(apiError(e));
+        }
+      } finally {
+        setBusy(false);
       }
-    } finally { setBusy(false); }
+    };
+
+    if (action === 'arrive') {
+      Alert.alert(
+        'Fullføre turen?',
+        'KJAPP kontrollerer at du er nær destinasjonen før turen avsluttes og betaling kan starte.',
+        [
+          { text: 'Fortsett turen', style: 'cancel' },
+          { text: 'Fullfør turen', onPress: () => { void execute(); } },
+        ],
+      );
+      return;
+    }
+
+    await execute();
   };
 
   const noShow = async () => {
