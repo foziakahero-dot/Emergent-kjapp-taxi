@@ -7567,7 +7567,7 @@ DEFAULT_PLATFORM_SETTINGS = {
         "trygg":    {"label": "Komfort",  "multiplier": 1.25, "enabled": True},
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
-    "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False, "booking_enabled": True},
+    "features": {"surge": True, "ai_chat": True, "demo_trips": False, "vipps": False, "booking_enabled": True},
     "compliance": {
         "legal_review_completed": False,
         "transport_requirements_verified": False,
