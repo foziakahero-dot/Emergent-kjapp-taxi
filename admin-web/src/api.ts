@@ -69,6 +69,10 @@ export const api = {
     http.get('/admin/identity-verifications', { params: { status, page, page_size } }).then((r) => r.data),
   reviewIdentityVerification: (id: string, status: 'verified' | 'retry_required', reason?: string) =>
     http.post(`/admin/identity-verifications/${id}/review`, { status, reason: reason || null }).then((r) => r.data),
+  identityRetention: () =>
+    http.get('/admin/identity-verifications/retention').then((r) => r.data),
+  purgeExpiredIdentitySelfies: (dry_run = true, limit = 100) =>
+    http.post('/admin/identity-verifications/purge-expired', { dry_run, limit }).then((r) => r.data),
   secureFile: (path: string) =>
     http.get(`/files/${encodeStoragePath(path)}`, { responseType: 'blob' }).then((r) => r.data as Blob),
   interveneTrip: (id: string, body: any) =>
