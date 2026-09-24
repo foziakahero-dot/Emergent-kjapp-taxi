@@ -91,19 +91,20 @@ export default function DriverSettings() {
           <Text style={s.sectionTitle}>Personvern</Text>
           <View style={s.card}>
             <LinkRow icon="map-pin" label="Posisjonstilgang" onPress={() => Linking.openSettings()} s={s} testID="ds-location" />
-            <LinkRow icon="file-text" label="Last ned mine data" onPress={() => Linking.openURL('mailto:support@kjapp.no?subject=Innsyn%20i%20data')} border s={s} testID="ds-gdpr" />
+            <LinkRow icon="file-text" label="Last ned mine data" onPress={() => Linking.openURL('mailto:support@kjappapp.no?subject=Innsyn%20i%20data')} border s={s} testID="ds-gdpr" />
+            <LinkRow icon="shield" label="Personvern" onPress={() => Linking.openURL('https://kjappapp.no/personvern')} border s={s} testID="ds-privacy" />
           </View>
 
           <Text style={s.sectionTitle}>Hjelp</Text>
           <View style={s.card}>
-            <LinkRow icon="help" label="Kontakt KJAPP" onPress={() => Linking.openURL('mailto:support@kjapp.no')} s={s} testID="ds-support" />
+            <LinkRow icon="help" label="Kontakt KJAPP" onPress={() => Linking.openURL('https://kjappapp.no/help')} s={s} testID="ds-support" />
             <LinkRow icon="shield" label="Nødhjelp (112)" onPress={() => Linking.openURL('tel:112')} border s={s} testID="ds-emergency" />
           </View>
 
           <Text style={s.sectionTitle}>Om appen</Text>
           <View style={s.card}>
             <View style={s.linkRow}><Text style={s.linkLabel}>Versjon</Text><Text style={s.linkValue}>{version}</Text></View>
-            <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjapp.no/vilkar')}>kjapp.no/vilkar</Text></View>
+            <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>kjapp.no/vilkar</Text></View>
           </View>
 
           <Pressable style={s.logout} onPress={logout} testID="ds-logout">
