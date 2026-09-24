@@ -39,8 +39,15 @@ function NativeRuntimeBridge() {
       try {
         const summary = await driverApi.summary();
         if (!alive) return;
-        if (summary?.online) await startDriverBackgroundLocation();
-        else await stopDriverBackgroundLocation();
+        if (summary?.online) {
+          const current = await driverApi.current().catch(() => null);
+          if (!alive) return;
+          const trip = current?.trip || current;
+          const active = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip?.status || '');
+          await startDriverBackgroundLocation(active ? 'active' : 'idle');
+        } else {
+          await stopDriverBackgroundLocation();
+        }
       } catch {
         // Foreground screens keep polling the backend; retry on the next interval.
       }
