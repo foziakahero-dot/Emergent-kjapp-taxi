@@ -3057,8 +3057,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
         raise HTTPException(status_code=403, detail="Turen krever utstyr som ikke er registrert på denne sjåføren")
     if trip_pre.get("dispatch_mode") == "sequential":
-        if trip_pre.get("offer_driver_id") not in (None, driver_id):
-            raise HTTPException(status_code=409, detail="Turen er tilbudt en annen sjåfør akkurat nå")
+        if trip_pre.get("offer_driver_id") != driver_id:
+            raise HTTPException(status_code=409, detail="Turen er ikke aktivt tilbudt deg")
         expires_at = trip_pre.get("offer_expires_at")
         if expires_at:
             try:
