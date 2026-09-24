@@ -36,6 +36,7 @@ export function Dashboard() {
   const ov = useAsync(() => api.overview(), []);
   const fin = useAsync(() => api.finance(30), []);
   const live = useAsync(() => api.live(), []);
+  const health = useAsync(() => api.betaHealth(7), []);
   const twofa = useAsync(() => api.twofaStatus(), []);
   if (ov.loading) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
@@ -77,6 +78,19 @@ export function Dashboard() {
           foot={<span className="dim">{d.trips?.completed_today ?? 0} fullført</span>} />
         <Kpi label="KJAPP-inntekt i dag" value={fmtMoney(d.finance?.kjapp_revenue_today)} accent />
       </div>
+
+      <div className="section-title">Beta Health · siste 7 dager</div>
+      <div className="grid cards">
+        <Kpi label="Completion" value={health.loading ? '…' : health.err ? '—' : health.data?.trips?.completion_rate_pct == null ? '—' : `${health.data.trips.completion_rate_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.trips.completed}/${health.data.trips.requested} fullført` : 'Ekte turdata'}</span>} />
+        <Kpi label="Dispatch success" value={health.loading ? '…' : health.err ? '—' : health.data?.dispatch?.success_rate_pct == null ? '—' : `${health.data.dispatch.success_rate_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.dispatch.assigned}/${health.data.trips.requested} tildelt` : 'Sjåførtilordning'}</span>} />
+        <Kpi label="Median accept" value={health.loading ? '…' : health.err ? '—' : health.data?.dispatch?.median_accept_seconds == null ? '—' : `${Math.round(health.data.dispatch.median_accept_seconds)}s`}
+          foot={<span className="dim">{health.data?.dispatch?.p95_accept_seconds != null ? `p95 ${Math.round(health.data.dispatch.p95_accept_seconds)}s` : 'Venter på nok turer'}</span>} />
+        <Kpi label="GPS freshness" value={health.loading ? '…' : health.err ? '—' : health.data?.gps?.freshness_pct == null ? '—' : `${health.data.gps.freshness_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.gps.fresh_drivers}/${health.data.gps.online_drivers} online · ${health.data.client_errors.fatal} fatale klientfeil` : 'Aktive sjåfører'}</span>} />
+      </div>
+      {health.err ? <ErrorBanner msg={health.err} /> : null}
 
       <div className="section-title">Siste 30 dager — brutto omsetning</div>
       <Card>
