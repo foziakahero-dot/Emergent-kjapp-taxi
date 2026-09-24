@@ -1988,17 +1988,30 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
         raise HTTPException(400, "Du har allerede rangert denne turen")
-    await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {
-            "passenger_rating": body.rating,
-            "passenger_feedback": body.feedback,
-            "rating": body.rating,
-            "feedback": body.feedback,
-            "status": "rated",
-            "rated_at": datetime.now(timezone.utc).isoformat(),
-        }},
+    if trip.get("status") not in ("arrived", "completed"):
+        raise HTTPException(409, "Turen må være avsluttet før den kan vurderes")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        "passenger_rating": body.rating,
+        "passenger_feedback": body.feedback,
+        "rating": body.rating,
+        "feedback": body.feedback,
+        "status": "rated",
+        "rated_at": now_iso,
+    }
+    if not trip.get("completed_at"):
+        update["completed_at"] = now_iso
+    result = await db.trips.update_one(
+        {
+            "trip_id": trip_id,
+            "user_id": current["id"],
+            "status": {"$in": ["arrived", "completed"]},
+            "passenger_rating": {"$exists": False},
+        },
+        {"$set": update},
     )
+    if result.modified_count != 1:
+        raise HTTPException(409, "Turen ble endret. Oppdater kvitteringen og prøv igjen.")
     # Update driver's rolling rating (avg of last 50 trip ratings)
     if trip.get("driver_id"):
         recent = []
@@ -2029,8 +2042,8 @@ async def require_driver(current=Depends(get_current_user)):
 
 
 class DriverRatePassengerRequest(BaseModel):
-    rating: int
-    feedback: Optional[str] = None
+    rating: int = Field(ge=1, le=5)
+    feedback: Optional[str] = Field(default=None, max_length=1000)
 
 
 @api.post("/driver/trip/{trip_id}/rate-passenger")
@@ -2043,14 +2056,23 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("driver_rating"):
         raise HTTPException(400, "Du har allerede rangert denne kunden")
-    await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": current["id"]},
+    if trip.get("status") not in ("arrived", "completed", "rated"):
+        raise HTTPException(409, "Turen må være avsluttet før kunden kan vurderes")
+    result = await db.trips.update_one(
+        {
+            "trip_id": trip_id,
+            "driver_id": current["id"],
+            "status": {"$in": ["arrived", "completed", "rated"]},
+            "driver_rating": {"$exists": False},
+        },
         {"$set": {
             "driver_rating": body.rating,
             "driver_feedback": body.feedback,
             "driver_rated_at": datetime.now(timezone.utc).isoformat(),
         }},
     )
+    if result.modified_count != 1:
+        raise HTTPException(409, "Turen ble endret. Oppdater og prøv igjen.")
     # Update passenger's rolling rating
     if trip.get("user_id"):
         recent = []
