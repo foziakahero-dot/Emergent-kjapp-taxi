@@ -216,6 +216,119 @@ export function OverviewPage() {
   </div>;
 }
 
+
+export function LiveOpsPage() {
+  const [live, setLive] = useState<FleetLive | null>(null);
+  const [err, setErr] = useState('');
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [filter, setFilter] = useState<'all'|'online'|'available'|'active'|'stale'>('all');
+
+  useEffect(() => {
+    let mounted = true;
+    const load = () => api.live()
+      .then((data) => {
+        if (!mounted) return;
+        setLive(data);
+        setUpdatedAt(new Date());
+        setErr('');
+      })
+      .catch((e) => mounted && setErr(apiError(e)));
+    void load();
+    const timer = window.setInterval(() => void load(), 5000);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, []);
+
+  if (!live && !err) return <Loading />;
+
+  const drivers = live?.drivers || [];
+  const trips = live?.trips || [];
+  const online = drivers.filter((d) => d.online);
+  const available = drivers.filter((d) => d.operational_status === 'available');
+  const active = drivers.filter((d) => ['driver_on_way','at_pickup','in_trip'].includes(d.operational_status || ''));
+  const stale = drivers.filter((d) => d.operational_status === 'gps_stale');
+  const visibleDrivers = drivers.filter((d) => {
+    if (filter === 'online') return d.online;
+    if (filter === 'available') return d.operational_status === 'available';
+    if (filter === 'active') return ['driver_on_way','at_pickup','in_trip'].includes(d.operational_status || '');
+    if (filter === 'stale') return d.operational_status === 'gps_stale';
+    return true;
+  });
+  const driverName = (id?: string) => drivers.find((d) => d.id === id)?.name || 'Sjåfør';
+
+  return <div className="page-content live-ops-page">
+    <PageHead title="Live drift" sub="Sanntidsoversikt over biler, sjåfører og aktive turer i din egen flåte" />
+
+    <div className="kpi-grid five live-ops-kpis">
+      <button className={filter === 'all' ? 'kpi-card active-filter' : 'kpi-card'} onClick={() => setFilter('all')}>
+        <span>ALLE SJÅFØRER</span><strong>{drivers.length}</strong><small>{updatedAt ? 'Oppdatert ' + updatedAt.toLocaleTimeString('nb-NO',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—'}</small>
+      </button>
+      <button className={filter === 'online' ? 'kpi-card active-filter' : 'kpi-card'} onClick={() => setFilter('online')}>
+        <span>ONLINE</span><strong>{online.length}</strong><small>pålogget nå</small>
+      </button>
+      <button className={filter === 'available' ? 'kpi-card active-filter' : 'kpi-card'} onClick={() => setFilter('available')}>
+        <span>LEDIGE</span><strong>{available.length}</strong><small>klar for ny tur</small>
+      </button>
+      <button className={filter === 'active' ? 'kpi-card active-filter' : 'kpi-card'} onClick={() => setFilter('active')}>
+        <span>AKTIVE TURER</span><strong>{active.length}</strong><small>henting / på tur</small>
+      </button>
+      <button className={filter === 'stale' ? 'kpi-card active-filter' : 'kpi-card'} onClick={() => setFilter('stale')}>
+        <span>GPS UTLØPT</span><strong>{stale.length}</strong><small>krever oppfølging</small>
+      </button>
+    </div>
+
+    <div className="live-ops-grid">
+      <section className="live-ops-map-card">
+        <div className="live-fleet-head">
+          <div><div className="eyebrow green">SANNTIDSKART</div><small>Oppdateres hvert 5. sekund</small></div>
+          <span className="live-dot-label"><i /> LIVE</span>
+        </div>
+        <div className="live-ops-map-shell">
+          <FleetMap drivers={visibleDrivers} />
+          {!visibleDrivers.some((d) => d.online && d.gps_fresh) ? <div className="map-empty-overlay">Ingen biler med fersk GPS i valgt filter</div> : null}
+        </div>
+      </section>
+
+      <section className="live-ops-driver-card">
+        <div className="live-ops-section-head">
+          <div><div className="eyebrow">SJÅFØRER</div><small>{visibleDrivers.length} i valgt filter</small></div>
+        </div>
+        <div className="live-driver-list">
+          {visibleDrivers.map((d) => <div className="live-driver-row" key={d.id}>
+            <div className="live-driver-main">
+              <i className={'status-dot ' + (d.online ? 'on' : '')} />
+              <div><strong>{d.name || d.email || 'Sjåfør'}</strong><span>{d.car || '—'}{d.plate ? ' · ' + d.plate : ''}</span></div>
+            </div>
+            <div className="live-driver-meta">
+              <b className={d.operational_status === 'available' ? 'status-green' : d.operational_status === 'gps_stale' ? 'status-amber' : d.online ? 'status-green' : 'muted'}>{liveStatusLabel(d.operational_status)}</b>
+              <span>{d.last_location_at ? new Date(d.last_location_at).toLocaleTimeString('nb-NO',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : 'Ingen GPS'}</span>
+            </div>
+          </div>)}
+          {!visibleDrivers.length ? <div className="empty-state padded">Ingen sjåfører i dette filteret.</div> : null}
+        </div>
+      </section>
+    </div>
+
+    <section className="table-card no-tools live-ops-trips-card">
+      <div className="live-ops-section-head padded-head">
+        <div><div className="eyebrow">AKTIVE TURER</div><small>{trips.length} pågående nå</small></div>
+      </div>
+      <div className="fleet-table live-trip-table">
+        <div className="tr th"><span>TUR</span><span>SJÅFØR</span><span>FRA → TIL</span><span>STATUS</span><span>PRIS</span></div>
+        {trips.map((t) => <div className="tr" key={t.trip_id}>
+          <span className="mono">{String(t.trip_id || '').slice(0, 8)}</span>
+          <span>{driverName(t.driver_id)}</span>
+          <span>{t.pickup_address || 'Hentested'} → {t.dropoff_address || 'Destinasjon'}</span>
+          <span className="status-green">{liveStatusLabel(t.status)}</span>
+          <span className="mono">{fmtMoney(t.price || 0)}</span>
+        </div>)}
+        {!trips.length ? <div className="empty-state padded">Ingen aktive turer akkurat nå.</div> : null}
+      </div>
+    </section>
+
+    <ErrorBox message={err} />
+  </div>;
+}
+
 function InviteModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [car, setCar] = useState(''); const [plate, setPlate] = useState(''); const [email, setEmail] = useState(''); const [vehicle, setVehicle] = useState('ai-first'); const [note, setNote] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const submit = async (e: FormEvent) => { e.preventDefault(); setErr(''); setBusy(true); try { await api.createInvite({ car, plate: plate.toUpperCase(), email: email || undefined, vehicle_type: vehicle, note }); onDone(); } catch (e) { setErr(apiError(e)); } finally { setBusy(false); } };
