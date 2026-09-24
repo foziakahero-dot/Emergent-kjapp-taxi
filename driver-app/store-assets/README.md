@@ -1,26 +1,29 @@
-# KJAPP — Butikk-grafikk (klar til opplasting)
+# KJAPP Driver — butikk-grafikk
 
-Alle bilder er generert fra ekte app-skjermer (ingen fiktive data).
-Kildeskjermer ligger i `raw/`. Regenerer med `python /app/gen_store.py`.
+## Viktig status
 
-## Google Play
-- `play-feature-graphic-1024x500.png` — **Feature graphic** (påkrevd), 1024×500.
-- `play-screenshot-1..4-1080x1920.png` — **Telefon-skjermbilder**, 1080×1920 (9:16).
-  Last opp minst 2 (maks 8) under "Grafiske ressurser → Telefon".
-- App-ikon til Play: bruk `../assets/adaptive-icon.png` (Play henter 512×512 fra bygget automatisk).
+Filene som ligger i denne mappen i dag matcher Customer-bildene byte-for-byte og skal derfor behandles som **midlertidige placeholders**, ikke som godkjente Driver-skjermbilder.
 
-## Apple App Store
-- `appstore-screenshot-1..4-1290x2796.png` — **iPhone 6.7"** skjermbilder, 1290×2796 (påkrevd størrelse).
-  App Store Connect bruker 6.7"-settet også for mindre enheter.
-- App-ikon: genereres automatisk fra `../assets/icon.png` (1024×1024) i bygget.
+De må **ikke** brukes i en offentlig App Store / Google Play-oppføring for KJAPP Driver.
 
-## Motiver (rekkefølge)
-1. Nordisk taxi, reimaginert — onboarding
-2. Se biler i nærheten — sanntidskart
-3. Fast pris, ingen overraskelser — bestilling
-4. Følg sjåføren live — live-sporing
+Dette blokkerer ikke:
+- intern Android APK
+- signert iOS build
+- intern/TestFlight beta
 
-## Tips
-- Du kan laste disse rett opp i Play Console / App Store Connect.
-- Endrer du appen senere: kjør `python /app/cap.py A` og `python /app/cap.py B`
-  (med en aktiv demo-tur) for nye kildeskjermer, deretter `python /app/gen_store.py`.
+## Før offentlig Driver-release
+
+Ta nye skjermbilder fra den faktiske nåværende KJAPP Driver-appen uten redesign:
+
+1. Online-kart / skiftstatus
+2. Ny turforespørsel med ekte pickup-data
+3. Aktiv tur / navigasjon
+4. Inntekt / historikk
+
+Krav:
+- ingen fiktive kundeopplysninger presentert som ekte
+- ingen hemmeligheter, testpassord eller personlige data
+- vis samme produksjonsnære design som app-builden som sendes inn
+- kontroller Apple/Google-størrelser før opplasting
+
+Se `docs/STORE_RELEASE_PACK.md` for release metadata og gates.
