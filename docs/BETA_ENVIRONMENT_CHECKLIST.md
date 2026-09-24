@@ -25,7 +25,7 @@ The backend rate limiter uses the client IP. Before beta deployment verify how t
 
 - `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
 - `PASSWORD_RESET_WEB_BASE=https://kjappapp.no`
-- `APPLE_BUNDLE_ID=no.kjapp.app`
+- `APPLE_BUNDLE_ID=no.nexorahub.kjapp.customer`
 - `KJAPP_LEGAL_VERSION=2026-09` — current beta consent version; only increment after the corresponding approved privacy/terms text is published
 
 Optional web Apple OAuth later:
@@ -94,11 +94,13 @@ A non-critical AI outage must not block booking, dispatch, GPS or payment state.
 ## Mobile beta configuration
 
 Customer:
-- bundle/package: `no.kjapp.app`
+- Android package: `no.kjapp.app`
+- iOS bundle: `no.nexorahub.kjapp.customer`
 - Expo project: `3631002e-5b25-4847-b5d8-05ec2ef304b5`
 
 Driver:
-- bundle/package: `no.kjapp.driver`
+- Android package: `no.kjapp.driver`
+- iOS bundle: `no.nexorahub.kjapp.driver`
 - Expo project: `1dec8949-0423-4fbf-a080-0703f93519d7`
 
 TestFlight/APK beta profile:
@@ -112,10 +114,10 @@ Do not point public store builds at `api.kjappapp.no` until that hostname is liv
 ## Apple / EAS
 
 In Apple Developer / EAS credentials:
-- App ID `no.kjapp.app`
+- App ID `no.nexorahub.kjapp.customer`
   - Push Notifications
   - Sign in with Apple
-- App ID `no.kjapp.driver`
+- App ID `no.nexorahub.kjapp.driver`
   - Push Notifications
   - background location / remote notification capabilities generated from app config
 
