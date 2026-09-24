@@ -944,6 +944,7 @@ export function Settings() {
   const readiness = useAsync(() => api.betaReadiness(), []);
   const [comm, setComm] = useState('');
   const [pricing, setPricing] = useState<any>({});
+  const [features, setFeatures] = useState<any>({});
   const [compliance, setCompliance] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -955,6 +956,7 @@ export function Settings() {
   useEffect(() => {
     if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
     if (data?.pricing) setPricing(data.pricing);
+    if (data?.features) setFeatures(data.features);
     if (data?.compliance) setCompliance(data.compliance);
   }, [data]);
 
@@ -995,6 +997,19 @@ export function Settings() {
       await api.patchSettings({ default_commission: Number(comm) / 100, pricing });
       setMsg('Lagret – nye bestillinger bruker ny prisversjon. Eksisterende turer beholder pris og provisjon fra bestillingstidspunktet.');
       await Promise.all([reload(), history.reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    finally { setBusy(false); }
+  };
+
+  const saveOperations = async () => {
+    if (!isSuper) return;
+    const nextEnabled = features?.booking_enabled !== false;
+    if (!nextEnabled && !window.confirm('Sette nye KJAPP-bestillinger på pause? Pågående turer påvirkes ikke.')) return;
+    setBusy(true); setMsg('');
+    try {
+      await api.patchSettings({ features });
+      setMsg(nextEnabled ? 'Nye bestillinger er åpne.' : 'Nye bestillinger er satt på pause. Pågående turer fortsetter.');
+      await Promise.all([reload(), readiness.reload()]);
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
     finally { setBusy(false); }
   };
@@ -1078,11 +1093,33 @@ export function Settings() {
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
           <KV k="Produksjonsmiljø" v={<Pill status={checks.production_env ? 'completed' : 'pending'} label={checks.production_env ? 'Ja' : 'Nei'} />} />
           <KV k="Stripe + webhook" v={<Pill status={checks.stripe_configured ? 'completed' : 'pending'} label={checks.stripe_configured ? 'Klar' : 'Mangler'} />} />
-          <KV k="Native push" v={<Pill status={checks.native_push_configured ? 'completed' : 'pending'} label={checks.native_push_configured ? 'Klar' : 'Mangler'} />} />
+          <KV k="Native push" v={<Pill status={checks.native_push_backend_ready ? 'completed' : 'pending'} label={checks.native_push_backend_ready ? 'Klar' : 'Mangler'} />} />
           <KV k="Admin 2FA" v={<Pill status={checks.admin_2fa_enabled ? 'completed' : 'pending'} label={checks.admin_2fa_enabled ? 'Aktiv' : 'Mangler'} />} />
         </div>
         {!!readiness.data?.blockers?.length && <div className="error-banner" style={{ marginTop: 12 }}>{readiness.data.blockers.join(' · ')}</div>}
         <div className="dim" style={{ marginTop: 10, fontSize: 12 }}>Dette viser teknisk driftsstatus. Løyver, forsikring, avtaler og øvrig norsk regelverk må godkjennes separat.</div>
+      </Card>
+
+      <div className="section-title">Operatørkontroll</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: '1fr auto', gap: 18, alignItems: 'center' }}>
+          <div>
+            <div className="strong">Nye bestillinger</div>
+            <div className="dim" style={{ marginTop: 5, lineHeight: 1.5 }}>
+              Nødstopp for nye turer ved alvorlig GPS-, betalings- eller dispatch-hendelse. Pågående turer fortsetter og kan håndteres i Live drift.
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isSuper ? 'pointer' : 'default' }}>
+            <input
+              type="checkbox"
+              checked={features?.booking_enabled !== false}
+              disabled={!isSuper || busy}
+              onChange={(e) => setFeatures((x: any) => ({ ...x, booking_enabled: e.target.checked }))}
+            />
+            <span className="strong">{features?.booking_enabled !== false ? 'ÅPEN' : 'PAUSET'}</span>
+          </label>
+        </div>
+        {isSuper ? <div style={{ marginTop: 14 }}><Btn onClick={saveOperations} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre driftstatus'}</Btn></div> : null}
       </Card>
 
       <div className="section-title">Manuelle beta-gates</div>
