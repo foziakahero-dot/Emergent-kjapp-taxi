@@ -6950,20 +6950,30 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         }
         if trip.get("status") == "in_trip":
             updates["requires_manual_settlement"] = True
-        await db.trips.update_one(
+        result = await db.trips.update_one(
             {"trip_id": trip_id, "status": trip.get("status")},
             {"$set": updates, "$push": {"operator_interventions": {
                 "action": body.action, "reason": reason, "at": now_iso, "by": current.get("email") or current["id"],
             }}},
         )
+        if result.modified_count != 1:
+            raise HTTPException(409, "Turen endret status før operatøravbruddet kunne utføres")
+        if trip.get("driver_id"):
+            try:
+                await db.users.update_one(
+                    {"_id": ObjectId(trip["driver_id"]), "active_trip_id": trip_id},
+                    {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+                )
+            except (InvalidId, TypeError):
+                pass
         await _audit(current, "trip.operator_cancel", "trip", trip_id, before,
                      {"status": "cancelled", "requires_manual_settlement": updates.get("requires_manual_settlement", False)}, reason)
         if trip.get("user_id"):
             await send_push_to_user(trip["user_id"], "Turen er avbrutt av KJAPP",
-                                    "KJAPP følger opp turen. Kontakt support hvis du trenger hjelp.", "/app")
+                                    "KJAPP følger opp turen. Kontakt support hvis du trenger hjelp.", "/app", "trip_operator_cancelled")
         if trip.get("driver_id"):
             await send_push_to_user(trip["driver_id"], "Turen er avbrutt av KJAPP",
-                                    "Stans turen trygt. KJAPP følger opp saken i operatørpanelet.", "/driver")
+                                    "Stans turen trygt. KJAPP følger opp saken i operatørpanelet.", "/driver", "trip_operator_cancelled")
         return {"ok": True, "action": body.action, "status": "cancelled",
                 "requires_manual_settlement": updates.get("requires_manual_settlement", False)}
 
@@ -6978,7 +6988,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
             "driver_lat": "", "driver_lng": "", "driver_location_at": "", "offer_driver_id": "",
             "offer_expires_at": "", "dispatch_mode": "",
         }
-        await db.trips.update_one(
+        result = await db.trips.update_one(
             {"trip_id": trip_id, "driver_id": old_driver_id, "status": trip.get("status")},
             {
                 "$set": {"status": "searching", "updated_at": now_iso, "operator_reassigned_at": now_iso},
@@ -6989,13 +6999,22 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
                 }},
             },
         )
+        if result.modified_count != 1:
+            raise HTTPException(409, "Turen endret status før sjåføren kunne frigjøres")
+        try:
+            await db.users.update_one(
+                {"_id": ObjectId(old_driver_id), "active_trip_id": trip_id},
+                {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+            )
+        except (InvalidId, TypeError):
+            pass
         await _audit(current, "trip.release_driver", "trip", trip_id, before,
                      {"status": "searching", "driver_id": None}, reason)
         await send_push_to_user(old_driver_id, "Turen er frigitt av KJAPP",
-                                "Du er tatt av denne turen. Kontakt support hvis du trenger hjelp.", "/driver")
+                                "Du er tatt av denne turen. Kontakt support hvis du trenger hjelp.", "/driver", "trip_released")
         if trip.get("user_id"):
             await send_push_to_user(trip["user_id"], "Vi finner en ny sjåfør",
-                                    "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/app/booking/{trip_id}")
+                                    "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/booking/{trip_id}", "trip_reassigning")
         refreshed = await db.trips.find_one({"trip_id": trip_id})
         if refreshed:
             await offer_trip_to_next_driver(refreshed)
