@@ -75,6 +75,13 @@ KJAPP_DRIVER_IDENTITY_REQUIRED = str(
     os.environ.get("KJAPP_DRIVER_IDENTITY_REQUIRED", "false")
 ).strip().lower() in ("1", "true", "yes", "on")
 
+try:
+    KJAPP_IDENTITY_SELFIE_RETENTION_DAYS = max(
+        1, min(365, int(os.environ.get("KJAPP_IDENTITY_SELFIE_RETENTION_DAYS", "30")))
+    )
+except (TypeError, ValueError):
+    KJAPP_IDENTITY_SELFIE_RETENTION_DAYS = 30
+
 # Known legacy seed/demo accounts that must be disabled (cannot authenticate) in production.
 LEGACY_DEMO_EMAILS = {
     "ola@kjapp.no", "sjafor@kjapp.no", "floteier1@kjapp.no",
@@ -199,6 +206,31 @@ def storage_get(path: str) -> tuple[bytes, str]:
         )
     r.raise_for_status()
     return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+def storage_delete(path: str) -> None:
+    """Physically delete an object. Metadata is only tombstoned after this succeeds."""
+    key = init_storage()
+    if not key:
+        raise RuntimeError("Objektlager utilgjengelig")
+    r = http_requests.delete(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key},
+        timeout=60,
+    )
+    if r.status_code == 404:
+        # Treat already-missing objects as deleted; retry once only when the storage key may have expired.
+        key = init_storage(force=True)
+        retry = http_requests.delete(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key or ""},
+            timeout=60,
+        )
+        if retry.status_code not in (200, 202, 204, 404):
+            retry.raise_for_status()
+        return
+    if r.status_code not in (200, 202, 204):
+        r.raise_for_status()
 
 
 ALLOWED_UPLOAD_MIME = {
@@ -6971,6 +7003,123 @@ async def admin_review_identity_verification(
         body.reason,
     )
     return {"ok": True, "status": body.status, "reviewed_at": now}
+
+
+class IdentityRetentionPurgeRequest(BaseModel):
+    dry_run: bool = True
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+def _identity_retention_cutoff() -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=KJAPP_IDENTITY_SELFIE_RETENTION_DAYS)
+
+
+def _identity_terminal_at(v: dict) -> Optional[datetime]:
+    value = v.get("reviewed_at") or v.get("superseded_at") or v.get("created_at")
+    if not value:
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+@api.get("/admin/identity-verifications/retention")
+async def admin_identity_retention(current=Depends(require_superadmin)):
+    """Return privacy-retention status without exposing selfie bytes."""
+    cutoff = _identity_retention_cutoff()
+    eligible = 0
+    retained = 0
+    pending = 0
+    async for v in db.driver_identity_verifications.find({}):
+        if v.get("status") == "pending_review":
+            pending += 1
+            continue
+        if not v.get("selfie_storage_path") or v.get("purged_at"):
+            continue
+        terminal_at = _identity_terminal_at(v)
+        if terminal_at and terminal_at <= cutoff:
+            eligible += 1
+        else:
+            retained += 1
+    return {
+        "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS,
+        "cutoff": cutoff.isoformat(),
+        "eligible_for_purge": eligible,
+        "retained_terminal": retained,
+        "pending_review_excluded": pending,
+    }
+
+
+@api.post("/admin/identity-verifications/purge-expired")
+async def admin_purge_identity_selfies(body: IdentityRetentionPurgeRequest, current=Depends(require_superadmin)):
+    """Purge aged terminal selfie objects while retaining minimal audit metadata.
+
+    Pending reviews are never purged. Physical object deletion must succeed before DB paths are removed.
+    Use dry_run=true first in beta to validate eligibility before destructive execution.
+    """
+    cutoff = _identity_retention_cutoff()
+    candidates = []
+    async for v in db.driver_identity_verifications.find({
+        "status": {"$in": ["verified", "retry_required", "superseded"]},
+        "selfie_storage_path": {"$exists": True, "$ne": None},
+        "purged_at": {"$exists": False},
+    }).sort("created_at", 1).limit(body.limit):
+        terminal_at = _identity_terminal_at(v)
+        if terminal_at and terminal_at <= cutoff:
+            candidates.append(v)
+
+    if body.dry_run:
+        return {
+            "dry_run": True,
+            "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS,
+            "eligible": len(candidates),
+            "verification_ids": [(v.get("id") or str(v["_id"])) for v in candidates],
+        }
+
+    purged = []
+    failed = []
+    now = datetime.now(timezone.utc).isoformat()
+    for v in candidates:
+        verification_id = v.get("id") or str(v["_id"])
+        path = v.get("selfie_storage_path")
+        try:
+            if path:
+                storage_delete(path)
+            await db.uploaded_files.update_many(
+                {"storage_path": path, "scope": "driver-identity-selfie"},
+                {"$set": {"is_deleted": True, "deleted_at": now, "deleted_reason": "identity_retention"}},
+            )
+            await db.driver_identity_verifications.update_one(
+                {"_id": v["_id"]},
+                {
+                    "$set": {
+                        "purged_at": now,
+                        "purged_by": current.get("id"),
+                        "selfie_purged": True,
+                    },
+                    "$unset": {"selfie_storage_path": "", "selfie_file_id": ""},
+                },
+            )
+            purged.append(verification_id)
+        except Exception as exc:
+            failed.append({"verification_id": verification_id, "error": type(exc).__name__})
+
+    await _audit(
+        current,
+        "identity.retention_purge",
+        "identity_verification",
+        "batch",
+        None,
+        {"purged": len(purged), "failed": len(failed), "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS},
+    )
+    return {
+        "dry_run": False,
+        "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS,
+        "purged": purged,
+        "failed": failed,
+    }
 
 
 
