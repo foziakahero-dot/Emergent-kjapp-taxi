@@ -9,6 +9,7 @@ import secrets
 import json
 import base64
 import traceback
+import re
 import bcrypt
 import jwt
 import httpx
@@ -1616,14 +1617,24 @@ async def _enforce_rate_limit(request: Request, scope: str, limit: int, window_s
         )
 
 
+def _redact_client_error_text(value: str) -> str:
+    """Remove common secrets/PII from beta diagnostic text before persistence."""
+    text = str(value or "")
+    text = re.sub(r"(?i)(authorization\\s*[:=]\\s*bearer\\s+)[A-Za-z0-9._~+/=-]+", r"\\1[REDACTED]", text)
+    text = re.sub(r"(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]{20,}", r"\\1[REDACTED]", text)
+    text = re.sub(r"(?i)(token|access_token|refresh_token|api[_-]?key|secret)(\\s*[:=]\\s*)[^\\s&,;]+", r"\\1\\2[REDACTED]", text)
+    text = re.sub(r"(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", "[REDACTED_EMAIL]", text)
+    return text
+
+
 @api.post("/client-errors", status_code=202)
 async def ingest_client_error(body: ClientErrorEvent, request: Request):
     await _enforce_rate_limit(request, "client-errors", 30, 60)
     now = datetime.now(timezone.utc)
     await db.client_errors.insert_one({
         "app": body.app,
-        "message": body.message.strip()[:1200],
-        "stack": (body.stack or "")[:12000],
+        "message": _redact_client_error_text(body.message.strip())[:1200],
+        "stack": _redact_client_error_text(body.stack or "")[:12000],
         "is_fatal": bool(body.is_fatal),
         "platform": (body.platform or "")[:40],
         "version": (body.version or "")[:40],
@@ -4932,6 +4943,43 @@ async def admin_overview(current=Depends(require_admin)):
         "finance": {"gmv_today": gmv_today, "kjapp_revenue_today": kjapp_revenue_today, "pending_payouts": pending_payouts},
         "support": {"open": open_support},
         "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api.get("/admin/client-errors")
+async def admin_client_errors(
+    app: Optional[Literal["customer", "driver"]] = None,
+    fatal_only: bool = False,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    current=Depends(require_admin),
+):
+    q = {}
+    if app:
+        q["app"] = app
+    if fatal_only:
+        q["is_fatal"] = True
+    total = await db.client_errors.count_documents(q)
+    skip = (page - 1) * page_size
+    items = []
+    async for event in db.client_errors.find(q).sort("created_at", -1).skip(skip).limit(page_size):
+        items.append({
+            "id": str(event["_id"]),
+            "app": event.get("app"),
+            "message": event.get("message"),
+            "stack": event.get("stack"),
+            "is_fatal": bool(event.get("is_fatal")),
+            "platform": event.get("platform"),
+            "version": event.get("version"),
+            "route": event.get("route"),
+            "created_at": event.get("created_at").isoformat() if isinstance(event.get("created_at"), datetime) else event.get("created_at"),
+        })
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size if page_size else 1,
     }
 
 
