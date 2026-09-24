@@ -99,6 +99,8 @@ export default function RootLayout() {
             >
               <Stack.Screen name="index" />
               <Stack.Screen name="driver-login" />
+              <Stack.Screen name="forgot-password" />
+              <Stack.Screen name="reset-password/[token]" />
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
