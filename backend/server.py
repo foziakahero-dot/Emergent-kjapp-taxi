@@ -4603,6 +4603,251 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
     return {"drivers": drivers}
 
 
+@api.get("/fleet/live")
+async def fleet_live(current=Depends(require_fleet_owner)):
+    """Fleet-scoped realtime read model for the partner portal.
+
+    Returns only drivers and active trips that belong to the authenticated fleet owner.
+    """
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+
+    raw_drivers = []
+    driver_ids = []
+    async for u in db.users.find({"role": "driver", "fleet_id": fid}, {"password_hash": 0}):
+        uid = str(u["_id"])
+        driver_ids.append(uid)
+        raw_drivers.append((uid, u))
+
+    active_statuses = ["driver_on_way", "at_pickup", "in_trip"]
+    trips = []
+    active_by_driver = {}
+    if driver_ids:
+        async for t in db.trips.find({
+            "driver_id": {"$in": driver_ids},
+            "status": {"$in": active_statuses},
+        }).sort("created_at", -1).limit(200):
+            did = t.get("driver_id")
+            if did and did not in active_by_driver:
+                active_by_driver[did] = t
+            trips.append({
+                "trip_id": t.get("trip_id"),
+                "driver_id": did,
+                "status": t.get("status"),
+                "pickup_address": t.get("pickup_address"),
+                "dropoff_address": t.get("dropoff_address"),
+                "pickup_lat": t.get("pickup_lat"),
+                "pickup_lng": t.get("pickup_lng"),
+                "dropoff_lat": t.get("dropoff_lat"),
+                "dropoff_lng": t.get("dropoff_lng"),
+                "price": t.get("price"),
+                "created_at": t.get("created_at"),
+            })
+
+    drivers = []
+    for uid, u in raw_drivers:
+        online = bool(u.get("online"))
+        gps_fresh = bool(
+            online
+            and _fresh_driver_location(u.get("last_location_at"))
+            and u.get("last_lat") is not None
+            and u.get("last_lng") is not None
+        )
+        active_trip = active_by_driver.get(uid)
+        if not online:
+            operational_status = "offline"
+        elif not gps_fresh:
+            operational_status = "gps_stale"
+        elif active_trip:
+            operational_status = active_trip.get("status") or "in_trip"
+        else:
+            operational_status = "available"
+        drivers.append({
+            "id": uid,
+            "name": u.get("fullName") or u.get("full_name"),
+            "email": u.get("email"),
+            "phone": u.get("phone"),
+            "car": u.get("car"),
+            "plate": u.get("plate"),
+            "vehicle_type": u.get("vehicle_type"),
+            "approved": bool(u.get("approved")),
+            "online": online,
+            "gps_fresh": gps_fresh,
+            "operational_status": operational_status,
+            "lat": u.get("last_lat"),
+            "lng": u.get("last_lng"),
+            "heading": u.get("last_heading"),
+            "last_location_at": u.get("last_location_at"),
+            "rating": u.get("rating"),
+            "active_trip_id": (active_trip or {}).get("trip_id"),
+        })
+
+    return {
+        "drivers": drivers,
+        "trips": trips,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api.get("/fleet/vehicles")
+async def fleet_vehicles(current=Depends(require_fleet_owner)):
+    """Vehicle read model from the fleet's current driver/vehicle assignments."""
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    vehicles = []
+    async for u in db.users.find({
+        "role": "driver",
+        "fleet_id": fid,
+        "car": {"$exists": True, "$ne": None},
+    }, {"password_hash": 0}).sort("created_at", -1):
+        fresh = bool(
+            u.get("online")
+            and _fresh_driver_location(u.get("last_location_at"))
+            and u.get("last_lat") is not None
+            and u.get("last_lng") is not None
+        )
+        vehicles.append({
+            "id": str(u["_id"]),
+            "car": u.get("car"),
+            "plate": u.get("plate"),
+            "vehicle_type": u.get("vehicle_type"),
+            "driver_id": str(u["_id"]),
+            "driver_name": u.get("fullName") or u.get("full_name"),
+            "approved": bool(u.get("approved")),
+            "online": bool(u.get("online")),
+            "gps_fresh": fresh,
+            "last_location_at": u.get("last_location_at"),
+        })
+    return {"vehicles": vehicles}
+
+
+def _fleet_document_compliance(review_status, expiry):
+    today = datetime.now(timezone.utc).date().isoformat()
+    soon = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    if review_status == "rejected":
+        return "REJECTED"
+    if review_status != "valid":
+        return "PENDING"
+    if expiry and expiry < today:
+        return "EXPIRED"
+    if expiry and expiry <= soon:
+        return "EXPIRING"
+    return "VALID"
+
+
+@api.get("/fleet/documents")
+async def fleet_documents(current=Depends(require_fleet_owner)):
+    """Documents visible to this fleet only: its own application docs + its drivers' docs."""
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
+
+    driver_ids = []
+    driver_names = {}
+    async for u in db.users.find({"role": "driver", "fleet_id": fid}, {"fullName": 1, "full_name": 1}):
+        uid = str(u["_id"])
+        driver_ids.append(uid)
+        driver_names[uid] = u.get("fullName") or u.get("full_name") or "Sjåfør"
+
+    application = None
+    app_token = None
+    application_id = fleet.get("application_id")
+    if application_id:
+        try:
+            application = await db.fleet_applications.find_one({"_id": ObjectId(application_id)})
+        except Exception:
+            application = None
+        app_token = (application or {}).get("upload_token")
+
+    filters = []
+    if driver_ids:
+        filters.append({"scope": "driver-docs", "owner_user_id": {"$in": driver_ids}})
+    if app_token:
+        filters.append({"scope": "fleet-applications", "application_token": app_token})
+
+    docs = []
+    if filters:
+        async for d in db.uploaded_files.find({
+            "$or": filters,
+            "is_deleted": {"$ne": True},
+        }).sort("created_at", -1):
+            owner_id = d.get("owner_user_id")
+            rs = d.get("review_status") or "pending"
+            expiry = d.get("review_expiry")
+            docs.append({
+                "id": d.get("id") or str(d["_id"]),
+                "filename": d.get("original_filename"),
+                "content_type": d.get("content_type"),
+                "size": d.get("size"),
+                "scope": d.get("scope"),
+                "doc_type": d.get("doc_type"),
+                "created_at": d.get("created_at"),
+                "storage_path": d.get("storage_path"),
+                "owner_type": "driver" if d.get("scope") == "driver-docs" else "fleet",
+                "owner_id": owner_id,
+                "owner_name": driver_names.get(owner_id) if owner_id else fleet.get("name"),
+                "review_status": rs,
+                "expiry": expiry,
+                "compliance": _fleet_document_compliance(rs, expiry),
+            })
+
+    summary = {"VALID": 0, "EXPIRING": 0, "EXPIRED": 0, "PENDING": 0, "REJECTED": 0}
+    for d in docs:
+        summary[d["compliance"]] += 1
+    return {"documents": docs, "summary": summary}
+
+
+@api.get("/fleet/drivers/{driver_id}")
+async def fleet_driver_detail(driver_id: str, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        u = await db.users.find_one({"_id": ObjectId(driver_id), "role": "driver", "fleet_id": fid})
+    except Exception:
+        u = None
+    if not u:
+        raise HTTPException(404, "Fant ikke sjåfør i din flåte")
+
+    public = user_public(u)
+    completed = await db.trips.count_documents({
+        "driver_id": driver_id,
+        "status": {"$in": ["arrived", "completed", "rated"]},
+    })
+    active = await db.trips.find_one({
+        "driver_id": driver_id,
+        "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]},
+    }, sort=[("created_at", -1)])
+    docs = []
+    async for d in db.uploaded_files.find({
+        "scope": "driver-docs",
+        "owner_user_id": driver_id,
+        "is_deleted": {"$ne": True},
+    }).sort("created_at", -1):
+        rs = d.get("review_status") or "pending"
+        expiry = d.get("review_expiry")
+        docs.append({
+            "id": d.get("id") or str(d["_id"]),
+            "filename": d.get("original_filename"),
+            "doc_type": d.get("doc_type"),
+            "review_status": rs,
+            "expiry": expiry,
+            "compliance": _fleet_document_compliance(rs, expiry),
+        })
+    public["trips_completed"] = completed
+    public["active_trip"] = {
+        "trip_id": active.get("trip_id"),
+        "status": active.get("status"),
+        "pickup_address": active.get("pickup_address"),
+        "dropoff_address": active.get("dropoff_address"),
+    } if active else None
+    public["documents"] = docs
+    return public
+
+
 @api.get("/fleet/payouts")
 async def fleet_payouts(current=Depends(require_fleet_owner)):
     fid = await get_fleet_id_for(current)
@@ -6576,6 +6821,15 @@ async def download_file(path: str, current=Depends(get_current_user)):
         allowed = True
     elif rec.get("scope") == "fleet-applications" and role in ("admin",):
         allowed = True
+    elif rec.get("scope") == "fleet-applications" and role == "fleet_owner":
+        fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+        try:
+            fleet_doc = await db.fleets.find_one({"_id": ObjectId(fleet_id)}) if fleet_id else None
+            app_doc = await db.fleet_applications.find_one({"_id": ObjectId((fleet_doc or {}).get("application_id"))}) if (fleet_doc or {}).get("application_id") else None
+        except Exception:
+            app_doc = None
+        if app_doc and rec.get("application_token") == app_doc.get("upload_token"):
+            allowed = True
     elif rec.get("scope") == "driver-docs":
         if is_owner or role in ("admin", "superadmin"):
             allowed = True
