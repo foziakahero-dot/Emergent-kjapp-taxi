@@ -9,6 +9,7 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
+import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { driverApi } from '@/src/lib/api';
 import {
   normalizeDriverNotificationUrl,
@@ -81,6 +82,7 @@ function NativeRuntimeBridge() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts(FONT_ASSETS);
+  useEffect(() => installClientErrorMonitor(), []);
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.driverBg }} />;
 
   return (
