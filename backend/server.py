@@ -445,6 +445,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ClientErrorEvent(BaseModel):
+    app: Literal["customer", "driver"]
+    message: str = Field(min_length=1, max_length=1200)
+    stack: Optional[str] = Field(default=None, max_length=12000)
+    is_fatal: bool = False
+    platform: Optional[str] = Field(default=None, max_length=40)
+    version: Optional[str] = Field(default=None, max_length=40)
+    route: Optional[str] = Field(default=None, max_length=200)
+
+
 class TwoFAEnableRequest(BaseModel):
     code: str
 
@@ -998,6 +1008,9 @@ async def lifespan(app: FastAPI):
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
+    await db.rate_limit_buckets.create_index("expires_at", expireAfterSeconds=0)
+    await db.client_errors.create_index([("created_at", -1)])
+    await db.client_errors.create_index("expires_at", expireAfterSeconds=0)
     await db.password_reset_tokens.create_index("token")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.revoked_tokens.create_index("jti", unique=True)
@@ -1365,8 +1378,9 @@ async def reverse_geocode(lat: float, lng: float):
 
 
 @api.get("/places/search")
-async def search_places(q: str, limit: int = 8):
+async def search_places(q: str, request: Request, limit: int = 8):
     """Address search — MapTiler geocoding when MAPTILER_API_KEY is set, else Nominatim (OSM). Norway-biased."""
+    await _enforce_rate_limit(request, "places-search", 120, 60)
     q = (q or "").strip()
     if len(q) < 2:
         return {"results": []}
@@ -1530,8 +1544,57 @@ async def _clear_failed_logins(email: str, ip: str):
     await db.login_attempts.delete_many({"identifier": {"$in": [f"email:{email}", f"ip:{ip}"]}})
 
 
+async def _enforce_rate_limit(request: Request, scope: str, limit: int, window_seconds: int):
+    """Cross-process fixed-window limiter backed by MongoDB. Buckets expire automatically."""
+    now = datetime.now(timezone.utc)
+    ip = _client_ip(request)
+    bucket = int(now.timestamp()) // int(window_seconds)
+    key = f"{scope}:{ip}:{bucket}"
+    expires_at = now + timedelta(seconds=max(window_seconds * 2, 120))
+    await db.rate_limit_buckets.update_one(
+        {"_id": key},
+        {
+            "$inc": {"count": 1},
+            "$setOnInsert": {
+                "scope": scope,
+                "ip": ip,
+                "bucket": bucket,
+                "created_at": now,
+                "expires_at": expires_at,
+            },
+        },
+        upsert=True,
+    )
+    rec = await db.rate_limit_buckets.find_one({"_id": key}, {"count": 1})
+    if int((rec or {}).get("count") or 0) > int(limit):
+        raise HTTPException(
+            status_code=429,
+            detail="For mange forespørsler. Prøv igjen litt senere.",
+            headers={"Retry-After": str(window_seconds)},
+        )
+
+
+@api.post("/client-errors", status_code=202)
+async def ingest_client_error(body: ClientErrorEvent, request: Request):
+    await _enforce_rate_limit(request, "client-errors", 30, 60)
+    now = datetime.now(timezone.utc)
+    await db.client_errors.insert_one({
+        "app": body.app,
+        "message": body.message.strip()[:1200],
+        "stack": (body.stack or "")[:12000],
+        "is_fatal": bool(body.is_fatal),
+        "platform": (body.platform or "")[:40],
+        "version": (body.version or "")[:40],
+        "route": (body.route or "")[:200],
+        "created_at": now,
+        "expires_at": now + timedelta(days=30),
+    })
+    return {"ok": True}
+
+
 @api.post("/auth/register")
-async def register(body: RegisterRequest, response: Response):
+async def register(body: RegisterRequest, request: Request, response: Response):
+    await _enforce_rate_limit(request, "auth-register", 8, 3600)
     email = body.email.strip().lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
@@ -1733,6 +1796,7 @@ def email_password_reset_html(reset_url: str, fallback_url: Optional[str] = None
 @api.post("/auth/forgot-password")
 async def forgot_password(body: ForgotPasswordRequest, request: Request):
     """Always returns ok — never reveals whether the account exists."""
+    await _enforce_rate_limit(request, "auth-forgot", 10, 900)
     email = body.email.strip().lower()
     if not email:
         return {"ok": True}
@@ -2381,7 +2445,8 @@ class TranslateRequest(BaseModel):
 
 
 @api.post("/ai/translate")
-async def ai_translate(body: TranslateRequest, current=Depends(get_current_user)):
+async def ai_translate(body: TranslateRequest, request: Request, current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "ai-translate", 60, 60)
     """
     Auto-translate a chat message. Passenger + driver both use this from ChatModal
     (small "Oversett" button under each message). Cached per (text+target) in Mongo
@@ -2428,7 +2493,8 @@ class TranscribeRequest(BaseModel):
 
 
 @api.post("/ai/transcribe")
-async def ai_transcribe(body: TranscribeRequest, current=Depends(get_current_user)):
+async def ai_transcribe(body: TranscribeRequest, request: Request, current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "ai-transcribe", 20, 60)
     """
     Speech-to-text via OpenAI Whisper (via Emergent LLM key).
     Used by:
@@ -2612,7 +2678,8 @@ class CardSetupRequest(BaseModel):
 
 
 @api.post("/payments/card/setup")
-async def stripe_card_setup(body: CardSetupRequest, current=Depends(get_current_user)):
+async def stripe_card_setup(body: CardSetupRequest, request: Request, current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "payment-setup", 20, 900)
     """Start a Stripe Checkout Session in 'setup' mode to save a card for future use."""
     if not stripe.api_key:
         raise HTTPException(500, "Stripe er ikke konfigurert")
@@ -2753,7 +2820,8 @@ STRIKTE REGLER:
 
 
 @api.post("/ai/chat")
-async def ai_chat(body: ChatRequest, current=Depends(get_current_user)):
+async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "ai-chat", 30, 60)
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     session_id = body.session_id or f"user_{current['id']}"
@@ -4713,6 +4781,100 @@ async def admin_overview(current=Depends(require_admin)):
     }
 
 
+@api.get("/admin/beta-health")
+async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(require_admin)):
+    """Operational beta KPIs derived only from real trip/GPS/error records."""
+    now = datetime.now(timezone.utc)
+    cutoff_dt = now - timedelta(days=days)
+    cutoff = cutoff_dt.isoformat()
+    trip_filter = {
+        "created_at": {"$gte": cutoff},
+        "demo": {"$ne": True},
+        "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+        "dropoff_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    }
+    total = await db.trips.count_documents(trip_filter)
+    completed_filter = dict(trip_filter)
+    completed_filter["status"] = {"$in": ["arrived", "completed", "rated"]}
+    completed = await db.trips.count_documents(completed_filter)
+    assigned_filter = dict(trip_filter)
+    assigned_filter["driver_id"] = {"$exists": True, "$nin": [None, ""]}
+    assigned = await db.trips.count_documents(assigned_filter)
+    cancelled_filter = dict(trip_filter)
+    cancelled_filter["status"] = "cancelled"
+    cancelled = await db.trips.count_documents(cancelled_filter)
+
+    accept_seconds = []
+    async for trip in db.trips.find(
+        {**trip_filter, "driver_route_started_at": {"$exists": True, "$ne": None}},
+        {"created_at": 1, "driver_route_started_at": 1},
+    ):
+        try:
+            created = datetime.fromisoformat(str(trip.get("created_at")).replace("Z", "+00:00"))
+            accepted = datetime.fromisoformat(str(trip.get("driver_route_started_at")).replace("Z", "+00:00"))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if accepted.tzinfo is None:
+                accepted = accepted.replace(tzinfo=timezone.utc)
+            seconds = (accepted - created).total_seconds()
+            if 0 <= seconds <= 3600:
+                accept_seconds.append(seconds)
+        except Exception:
+            continue
+    accept_seconds.sort()
+
+    def percentile(values, p):
+        if not values:
+            return None
+        idx = min(len(values) - 1, max(0, math.ceil((p / 100) * len(values)) - 1))
+        return round(values[idx], 1)
+
+    online_total = 0
+    gps_fresh = 0
+    async for driver in db.users.find(
+        {"role": "driver", "approved": True, "online": True},
+        {"last_location_at": 1, "last_lat": 1, "last_lng": 1},
+    ):
+        online_total += 1
+        if (
+            _fresh_driver_location(driver.get("last_location_at"))
+            and driver.get("last_lat") is not None
+            and driver.get("last_lng") is not None
+        ):
+            gps_fresh += 1
+
+    client_errors = await db.client_errors.count_documents({"created_at": {"$gte": cutoff_dt}})
+    fatal_errors = await db.client_errors.count_documents({"created_at": {"$gte": cutoff_dt}, "is_fatal": True})
+
+    pct = lambda a, b: round((a / b) * 100, 1) if b else None
+    return {
+        "days": days,
+        "trips": {
+            "requested": total,
+            "completed": completed,
+            "cancelled": cancelled,
+            "completion_rate_pct": pct(completed, total),
+        },
+        "dispatch": {
+            "assigned": assigned,
+            "success_rate_pct": pct(assigned, total),
+            "accept_samples": len(accept_seconds),
+            "median_accept_seconds": percentile(accept_seconds, 50),
+            "p95_accept_seconds": percentile(accept_seconds, 95),
+        },
+        "gps": {
+            "online_drivers": online_total,
+            "fresh_drivers": gps_fresh,
+            "freshness_pct": pct(gps_fresh, online_total),
+        },
+        "client_errors": {
+            "total": client_errors,
+            "fatal": fatal_errors,
+        },
+        "as_of": now.isoformat(),
+    }
+
+
 async def _audit(admin, action, entity_type, entity_id, before=None, after=None, reason=None):
     await db.audit_events.insert_one({
         "admin_id": admin["id"], "admin_email": admin.get("email"),
@@ -5142,7 +5304,8 @@ async def _get_apple_keys():
 
 
 @api.post("/auth/apple")
-async def apple_signin(body: AppleSignInRequest, response: Response):
+async def apple_signin(body: AppleSignInRequest, request: Request, response: Response):
+    await _enforce_rate_limit(request, "auth-apple", 30, 900)
     """Verify Apple identity_token and log user in.
     Requires APPLE_CLIENT_ID env var to be set (App Store Service ID / Bundle ID)."""
     apple_client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
@@ -5513,7 +5676,8 @@ def _trusted_checkout_origin(requested: str) -> str:
 
 
 @api.post("/payments/checkout")
-async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
+async def create_trip_checkout(body: TripCheckoutRequest, request: Request, current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "payment-checkout", 20, 900)
     """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
     trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
     if not trip:
