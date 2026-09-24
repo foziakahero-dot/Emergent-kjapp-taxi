@@ -1256,7 +1256,7 @@ async def readiness():
         ),
         "expo_push_sender": True,
         "apple_native_auth_configured": (
-            (os.environ.get("APPLE_BUNDLE_ID") or "").strip() == "no.kjapp.app"
+            (os.environ.get("APPLE_BUNDLE_ID") or "").strip() == "no.nexorahub.kjapp.customer"
         ),
         "object_storage_configured": bool((EMERGENT_LLM_KEY or "").strip()),
         "service_area_enforced": OSLO_BETA_ENFORCE,
