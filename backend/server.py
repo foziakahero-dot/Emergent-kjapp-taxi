@@ -69,6 +69,12 @@ WEAK_ADMIN_PASSWORDS = {"admin123", "admin", "password", "passord", "kjapp123", 
 # Only trust X-Forwarded-For when running behind a known/controlled proxy.
 TRUST_PROXY = str(os.environ.get("TRUST_PROXY", "false")).strip().lower() in ("1", "true", "yes", "on")
 
+# Roll out Driver identity enforcement only after the selfie/review flow has passed physical QA.
+# The beta feature can collect/review selfies while this remains false.
+KJAPP_DRIVER_IDENTITY_REQUIRED = str(
+    os.environ.get("KJAPP_DRIVER_IDENTITY_REQUIRED", "false")
+).strip().lower() in ("1", "true", "yes", "on")
+
 # Known legacy seed/demo accounts that must be disabled (cannot authenticate) in production.
 LEGACY_DEMO_EMAILS = {
     "ola@kjapp.no", "sjafor@kjapp.no", "floteier1@kjapp.no",
@@ -2326,6 +2332,11 @@ async def require_driver(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
+    if KJAPP_DRIVER_IDENTITY_REQUIRED and current.get("identity_verification_status") != "verified":
+        raise HTTPException(
+            status_code=403,
+            detail="Fullfør KJAPP identitetskontroll før du går online eller håndterer turer",
+        )
     await _require_active_fleet(current.get("fleet_id"))
     return current
 
