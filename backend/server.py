@@ -4001,8 +4001,9 @@ class GoogleSessionRequest(BaseModel):
 
 
 @api.post("/auth/google/session")
-async def google_session(body: GoogleSessionRequest, response: Response):
+async def google_session(body: GoogleSessionRequest, request: Request, response: Response):
     """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+    await _enforce_rate_limit(request, "auth-google-session", 60, 900)
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
@@ -4114,9 +4115,10 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
 
 
 @api.post("/auth/google/code")
-async def google_oauth_code(body: GoogleCodeRequest, response: Response):
+async def google_oauth_code(body: GoogleCodeRequest, request: Request, response: Response):
     """Exchange a Google authorization code (PKCE) for a KJAPP session.
     Identity is taken ONLY from the cryptographically verified id_token — never from the client."""
+    await _enforce_rate_limit(request, "auth-google-code", 60, 900)
     if not google_oauth_configured():
         raise HTTPException(status_code=503, detail="Google-innlogging er ikke konfigurert ennå")
     client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
