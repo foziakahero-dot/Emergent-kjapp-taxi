@@ -5882,19 +5882,56 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
             "fleet_net": amount_nok - (fee_ore / 100),
             "settlement_model": "stripe_destination_charge",
         }
-    session = stripe.checkout.Session.create(**checkout_kwargs)
-    await db.payment_transactions.insert_one({
-        "session_id": session.id,
-        "trip_id": body.trip_id,
-        "user_id": current["id"],
-        "amount": amount_nok,
-        "currency": "nok",
-        "status": "initiated",
-        "payment_status": "pending",
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        **connect_fields,
-    })
+    # Serialize Checkout creation per trip so two simultaneous taps cannot create two
+    # independently payable Stripe sessions for the same fare.
+    checkout_lock = secrets.token_urlsafe(12)
+    lock_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
+    locked = await db.trips.update_one(
+        {
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "payment_status": {"$ne": "paid"},
+            "$or": [
+                {"payment_checkout_lock": {"$exists": False}},
+                {"payment_checkout_lock": None},
+                {"payment_checkout_locked_at": {"$lt": lock_cutoff}},
+            ],
+        },
+        {"$set": {
+            "payment_checkout_lock": checkout_lock,
+            "payment_checkout_locked_at": datetime.now(timezone.utc),
+        }},
+    )
+    if locked.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Betalingen opprettes allerede. Vent et øyeblikk og prøv igjen.")
+
+    session = None
+    try:
+        session = stripe.checkout.Session.create(**checkout_kwargs)
+        await db.payment_transactions.insert_one({
+            "session_id": session.id,
+            "trip_id": body.trip_id,
+            "user_id": current["id"],
+            "amount": amount_nok,
+            "currency": "nok",
+            "status": "initiated",
+            "payment_status": "pending",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+            **connect_fields,
+        })
+    except Exception:
+        if session is not None and getattr(session, "id", None):
+            try:
+                stripe.checkout.Session.expire(session.id)
+            except Exception:
+                pass
+        raise
+    finally:
+        await db.trips.update_one(
+            {"trip_id": body.trip_id, "user_id": current["id"], "payment_checkout_lock": checkout_lock},
+            {"$unset": {"payment_checkout_lock": "", "payment_checkout_locked_at": ""}},
+        )
     return {"checkout_url": session.url, "session_id": session.id}
 
 
