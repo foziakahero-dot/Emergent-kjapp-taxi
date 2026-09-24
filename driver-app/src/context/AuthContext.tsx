@@ -18,6 +18,7 @@ export type User = {
   phone?: string;
   role?: string;
   driver_id?: string;
+  approved?: boolean;
 } | null;
 
 type AuthCtx = {
