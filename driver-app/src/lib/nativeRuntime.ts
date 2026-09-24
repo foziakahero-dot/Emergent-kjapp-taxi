@@ -8,6 +8,7 @@ import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
+const LAST_BACKGROUND_PENDING_CHECK_KEY = 'kjapp_last_background_pending_check_at';
 let backgroundPermissionRequestedThisSession = false;
 let backgroundLocationMode: 'idle' | 'active' | null = null;
 
@@ -22,6 +23,11 @@ Notifications.setNotificationHandler({
 
 async function notifyPendingTripFromBackground() {
   try {
+    const now = Date.now();
+    const previousCheck = Number(await storage.getItem(LAST_BACKGROUND_PENDING_CHECK_KEY) || 0);
+    if (Number.isFinite(previousCheck) && now - previousCheck < 8000) return;
+    await storage.setItem(LAST_BACKGROUND_PENDING_CHECK_KEY, String(now));
+
     const response = await api.get('/driver/pending');
     const payload = response.data;
     const pending = payload?.trips || payload?.pending || (Array.isArray(payload) ? payload : []);
@@ -194,6 +200,7 @@ export async function stopDriverBackgroundLocation() {
   if (running) await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
   backgroundLocationMode = null;
   await storage.removeItem(LAST_BACKGROUND_OFFER_KEY);
+  await storage.removeItem(LAST_BACKGROUND_PENDING_CHECK_KEY);
 }
 
 export function normalizeDriverNotificationUrl(url: unknown) {
