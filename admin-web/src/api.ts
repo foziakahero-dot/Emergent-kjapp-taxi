@@ -55,6 +55,7 @@ export const api = {
 
   overview: () => http.get('/admin/overview').then((r) => r.data),
   betaHealth: (days = 7) => http.get('/admin/beta-health', { params: { days } }).then((r) => r.data),
+  clientErrors: (page_size = 8) => http.get('/admin/client-errors', { params: { page: 1, page_size } }).then((r) => r.data),
   live: () => http.get('/admin/live').then((r) => r.data),
   finance: (days = 30) => http.get('/admin/finance', { params: { days } }).then((r) => r.data),
 
