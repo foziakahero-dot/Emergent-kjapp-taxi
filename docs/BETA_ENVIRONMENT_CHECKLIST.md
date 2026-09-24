@@ -102,11 +102,19 @@ During initial QA:
 - Fleet owners see verification status only; they cannot open the raw identity selfie.
 
 After physical QA and privacy/retention validation:
-- set `KJAPP_DRIVER_IDENTITY_REQUIRED=true` to require status `verified` before operational Driver endpoints can be used.
+- set `KJAPP_DRIVER_IDENTITY_REQUIRED=true` to require status `verified` before Driver approval and operational Driver endpoints can be used.
+- set `KJAPP_IDENTITY_SELFIE_RETENTION_DAYS=30` (or the approved retention period, 1–365 days).
+
+Retention endpoints are superadmin-only:
+- `GET /api/admin/identity-verifications/retention` reports eligible/retained counts.
+- `POST /api/admin/identity-verifications/purge-expired` defaults to `{"dry_run": true}`; use dry-run first.
+- only terminal `verified`, `retry_required` and `superseded` records older than the configured period are eligible.
+- `pending_review` selfies are excluded.
+- database paths are removed only after the object-store delete call succeeds; audit/status metadata remains.
 
 The beta implementation does **not** make an automatic negative decision from face matching. `retry_required` requests another selfie/review without automatically suspending the Driver account.
 
-Before public release, implement and verify physical object deletion / retention for identity selfies in the object-storage layer. Database deletion alone must not be treated as physical image deletion.
+Before public release, verify one real dry-run and one controlled physical object deletion against the deployed Emergent object store. A successful database update alone must not be treated as proof that the image bytes were physically deleted.
 
 ## Mobile beta configuration
 
