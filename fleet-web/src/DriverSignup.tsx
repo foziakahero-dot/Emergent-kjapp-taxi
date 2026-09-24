@@ -39,6 +39,7 @@ export default function DriverSignup() {
   const [uploads, setUploads] = useState<Partial<Record<DocKey, Uploaded>>>({});
   const [uploading, setUploading] = useState<Partial<Record<DocKey, boolean>>>({});
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', password: '' });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   useEffect(() => {
     api.publicDriverInvite(token).then(setInvite).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
@@ -48,6 +49,9 @@ export default function DriverSignup() {
     e.preventDefault(); setErr('');
     if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim() || form.password.length < 6) {
       setErr('Fyll ut alle feltene. Passord må ha minst 6 tegn.'); return;
+    }
+    if (!acceptedTerms) {
+      setErr('Du må godta sjåførvilkår og personvern før du fortsetter.'); return;
     }
     setStep(2);
   };
@@ -68,6 +72,8 @@ export default function DriverSignup() {
       await api.acceptDriverInvite({
         token,
         ...form,
+        accepted_terms: true,
+        legal_version: '2026-09',
         drivers_license_path: uploads.drivers_license!.storage_path,
         taxi_license_path: uploads.taxi_license!.storage_path,
         profile_photo_path: uploads.profile_photo!.storage_path,
@@ -92,7 +98,10 @@ export default function DriverSignup() {
         <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
         <input type="tel" placeholder="Telefonnummer" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} required />
         <input type="password" placeholder="Passord · minst 6 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
-        <div className="driver-legal">Ved å fortsette godtar du KJAPPs sjåførvilkår og personvernerklæring.</div>
+        <label className="driver-legal">
+          <input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} />
+          <span>Jeg godtar <a href="https://kjappapp.no/vilkar" target="_blank" rel="noreferrer">KJAPPs sjåførvilkår</a> og har lest <a href="https://kjappapp.no/personvern" target="_blank" rel="noreferrer">personvernerklæringen</a>.</span>
+        </label>
         {err ? <div className="error-box">{err}</div> : null}
         <button className="primary-button">Neste · dokumenter</button>
       </form> : <div className="driver-signup-form">
