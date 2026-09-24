@@ -143,7 +143,7 @@ export default function PaymentMethods() {
               <View style={s.emptyCard}>
                 <Icon name="card" size={24} color={colors.accent} />
                 <Text style={s.emptyTitle}>Ingen verifisert betalingsmåte</Text>
-                <Text style={s.empty}>Legg til et kort via Stripe før du bestiller din første tur.</Text>
+                <Text style={s.empty}>Legg til et kort via Stripe før du bestiller din første tur. Når automatisk betaling aktiveres for betaen, kan avtalt turbeløp belastes etter fullført tur.</Text>
               </View>
             ) : null}
 
@@ -154,7 +154,7 @@ export default function PaymentMethods() {
 
             <View style={s.securityNote}>
               <Icon name="shield" size={15} color={colors.online} />
-              <Text style={s.note}>Kortopplysninger håndteres av Stripe. KJAPP lagrer ikke kortnummer eller CVC i appen.</Text>
+              <Text style={s.note}>Kortopplysninger håndteres av Stripe. KJAPP lagrer ikke kortnummer eller CVC. Hvis automatisk betaling er aktivert, forsøker KJAPP å belaste det avtalte turbeløpet når turen er ferdig; hvis banken krever ny godkjenning, får du beskjed og kan betale fra kvitteringen.</Text>
             </View>
             <Text style={s.vippsNote}>Vipps aktiveres først når produksjonsintegrasjonen er konfigurert og verifisert.</Text>
           </>
