@@ -667,7 +667,10 @@ def send_email(to_email: str, subject: str, html: str) -> bool:
     api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
     sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
     if not api_key:
-        print(f"[EMAIL/no-key] to={to_email} subj={subject}\n{html[:200]}")
+        # Never print HTML bodies: password-reset/invite emails can contain bearer-style
+        # one-time tokens. Missing email configuration should be observable without
+        # leaking those links into application logs.
+        print(f"[EMAIL/no-key] to={to_email} subj={subject} body=redacted")
         return False
     try:
         from sendgrid import SendGridAPIClient
