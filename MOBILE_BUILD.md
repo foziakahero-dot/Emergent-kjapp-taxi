@@ -180,6 +180,36 @@ npx eas-cli@latest submit --platform ios --profile production --latest
 
 Alternativt kan den manuelle GitHub-workflowen `KJAPP signed iOS EAS build` bygge Customer, Driver eller begge. Den krever GitHub-secret `EXPO_TOKEN`; selve Apple-signeringen må allerede være konfigurert i EAS.
 
+### Direkte EAS Workflows — anbefalt før merge
+
+Fordi de nye GitHub `workflow_dispatch`-filene først er fullt tilgjengelige fra default branch og GitHub Actions for tiden har et startup-problem, kan signert beta bygges **direkte i EAS** fra denne branchen etter at Apple/EAS credentials er konfigurert.
+
+Customer -> build + TestFlight:
+
+```bash
+cd frontend
+npx eas-cli@latest workflow:run .eas/workflows/testflight-beta.yml
+```
+
+Driver -> build + TestFlight:
+
+```bash
+cd driver-app
+npx eas-cli@latest workflow:run .eas/workflows/testflight-beta.yml
+```
+
+Disse workflowene bruker `testflight-beta`-profilen og den nåværende Emergent beta-API-en. De merger eller deployer ikke backend.
+
+Android APK kan på samme måte kjøres direkte i EAS:
+
+```bash
+cd frontend
+npx eas-cli@latest workflow:run .eas/workflows/customer-apk.yml
+
+cd ../driver-app
+npx eas-cli@latest workflow:run .eas/workflows/build-apk.yml
+```
+
 ## Automatisk betaling etter tur
 
 Kodebanen for Bolt/Uber-lignende automatisk kortbetaling er implementert, men er **av som standard**.
