@@ -97,6 +97,17 @@ Implemented without redesigning Customer or Driver:
 - Duplicate Customer TestFlight submit step was removed from the iOS release workflow.
 - The approved P0/P1 implementation pass is now code-complete on this branch; the remaining work is build/device/deployment verification, not a product redesign.
 
+## Final source-hardening additions
+
+- Canonical `kjappapp.no` sender/security contact defaults are used in active backend code.
+- Missing SendGrid configuration no longer logs email HTML bodies, preventing reset/invite one-time tokens from leaking into application logs.
+- Platform `demo_trips` now defaults to false and production demo seeding remains fail-closed.
+- `GET /api/ready` now treats real Oslo-beta dependencies as release blockers: production mode, demo-data disabled, admin identity, Stripe key/webhook, reset-email delivery, canonical public origin, native Apple bundle ID, Oslo service-area enforcement and booking availability. Auto-charge being enabled before its Stripe E2E is also reported as a blocker.
+- Beta Health completion now counts only `completed/rated` rides; `arrived` but unclosed rides are surfaced separately instead of inflating the completion KPI.
+- The beta CI backend gate uses `backend/requirements-ci.txt`, a portable dependency set that avoids private Emergent runtime wheels while still importing the core backend and running focused regression tests.
+- Customer and Driver settings expose their actual app version/build for physical-beta incident reporting.
+- `docs/BETA_ENVIRONMENT_CHECKLIST.md` is the canonical beta deployment environment/preflight checklist.
+
 ## External configuration still required
 
 ### Emergent backend
