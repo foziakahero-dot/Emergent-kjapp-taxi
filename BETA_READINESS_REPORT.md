@@ -25,6 +25,9 @@ Emergent production backend deployment: **not performed**
 - Webhook processing remains idempotent.
 - Verified payment no longer overwrites a later ride state such as `rated`.
 - Customer and driver receive payment-completed notifications.
+- Stripe return URLs are restricted to trusted KJAPP web origins and the marketing site bridges payment/setup callbacks back into the native Customer app.
+- Saved cards are explicitly provisioned for `off_session` use.
+- Optional automatic post-trip card charging is implemented behind `KJAPP_AUTO_CHARGE_ENABLED=false` by default, with deterministic Stripe idempotency and secure manual Checkout fallback when a bank requires customer action.
 
 ### Driver navigation / live ride
 - Driver app has native navigation launch to pickup and destination.
@@ -53,6 +56,8 @@ Before production deployment configure/verify:
 - MongoDB production connection
 - JWT secret
 - any email credentials used for receipts
+- `KJAPP_PUBLIC_WEB_ORIGIN=https://kjappapp.no`
+- keep `KJAPP_AUTO_CHARGE_ENABLED=false` until Stripe saved-card/Connect test E2E passes; only then enable it intentionally
 
 ### Apple / EAS
 One-time account work:
@@ -69,6 +74,16 @@ One-time account work:
 ## CI status
 
 GitHub is currently returning workflow conclusion `startup_failure` with **zero jobs started** on PR-triggered runs. This happens before repository build/test commands execute, so it is not evidence of a TypeScript, Python or Xcode compile failure. GitHub Actions account/repository execution must be restored before CI can certify the branch.
+
+## Backend ownership migration
+
+Do **not** combine the Oslo beta stabilization with an infrastructure cutover. The migration is planned separately in `BACKEND_MIGRATION_PLAN.md`.
+
+Release strategy:
+- TestFlight/internal beta may continue against the current Emergent API.
+- Establish `https://api.kjappapp.no` before long-lived App Store / Play production builds.
+- Initially it may route to the existing known-good backend.
+- After beta stabilization, migrate FastAPI/Mongo/storage/AI to KJAPP-controlled infrastructure behind the same hostname, so mobile apps do not need a new release just because the backend provider changes.
 
 ## Required verification before beta
 
