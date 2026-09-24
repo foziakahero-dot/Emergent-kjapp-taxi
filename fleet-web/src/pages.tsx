@@ -391,12 +391,26 @@ export function DriversPage() {
 
 function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onClose: () => void }) {
   const docs = driver.documents || [];
+  const [fleetActive, setFleetActive] = useState(driver.fleet_active !== false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const toggleFleetActive = async () => {
+    const next = !fleetActive;
+    if (!next && !window.confirm('Deaktivere denne sjåføren i din flåte? Sjåføren blir satt offline.')) return;
+    setBusy(true); setErr('');
+    try {
+      await api.setDriverActive(driver.id, next);
+      setFleetActive(next);
+    } catch (e) { setErr(apiError(e)); }
+    finally { setBusy(false); }
+  };
   return <div className="modal-backdrop" onClick={onClose}>
     <div className="modal-card detail-modal" onClick={(e) => e.stopPropagation()}>
       <div className="modal-head"><div><span className="eyebrow">SJÅFØR</span><h2>{nameOf(driver)}</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div>
       <div className="detail-grid">
         <InfoRow label="Status" value={<span className={driver.online ? 'status-green' : 'muted'}>{driver.online ? 'Pålogget' : 'Avlogget'}</span>} />
-        <InfoRow label="Godkjenning" value={driver.approved ? 'Godkjent' : 'Venter'} />
+        <InfoRow label="Flåtestatus" value={<span className={fleetActive ? 'status-green' : 'status-red'}>{fleetActive ? 'Aktiv' : 'Deaktivert'}</span>} />
+        <InfoRow label="KJAPP-godkjenning" value={driver.approved ? 'Godkjent' : 'Venter'} />
         <InfoRow label="Selfie ID" value={<span className={identityClass(driver.identity_verification_status)}>{identityLabel(driver.identity_verification_status)}</span>} />
         <InfoRow label="Bil" value={driver.car || '—'} />
         <InfoRow label="Skilt" value={driver.plate || '—'} />
@@ -406,33 +420,106 @@ function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onC
         <InfoRow label="Sist GPS" value={driver.last_location_at ? new Date(driver.last_location_at).toLocaleString('nb-NO') : '—'} />
       </div>
       {driver.active_trip ? <div className="detail-section"><span className="eyebrow green">AKTIV TUR</span><strong>{driver.active_trip.pickup_address || 'Hentested'} → {driver.active_trip.dropoff_address || 'Destinasjon'}</strong><small>{liveStatusLabel(driver.active_trip.status)}</small></div> : null}
+      <div className="detail-section">
+        <span className="eyebrow">FLÅTESTYRING</span>
+        <small>{fleetActive ? 'Sjåføren kan bruke flåten når øvrige KJAPP-krav er godkjent.' : 'Sjåføren er sperret av løyvehaver fra operativ bruk.'}</small>
+        <button className={fleetActive ? 'danger-outline-button' : 'primary-button'} disabled={busy || Boolean(driver.active_trip)} onClick={() => void toggleFleetActive()}>
+          {busy ? 'Lagrer…' : fleetActive ? 'Deaktiver i flåten' : 'Aktiver i flåten'}
+        </button>
+        {driver.active_trip ? <small>Kan ikke deaktiveres mens sjåføren har aktiv tur.</small> : null}
+        <ErrorBox message={err} />
+      </div>
       <div className="detail-section"><span className="eyebrow">DOKUMENTER</span>{docs.length ? docs.map((d) => <div className="detail-doc" key={d.id}><span>{d.doc_type || d.filename || 'Dokument'}</span><b className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</b></div>) : <small>Ingen dokumenter registrert.</small>}</div>
     </div>
   </div>;
 }
 
+function CreateVehicleModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [car, setCar] = useState('');
+  const [plate, setPlate] = useState('');
+  const [vehicleType, setVehicleType] = useState('ai-first');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true); setErr('');
+    try {
+      await api.createVehicle({ car, plate: plate.toUpperCase(), vehicle_type: vehicleType });
+      onDone();
+    } catch (e) { setErr(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  return <div className="modal-backdrop" onClick={onClose}>
+    <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <div className="modal-head"><div><span className="eyebrow">NYTT KJØRETØY</span><h2>Legg til bil</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div>
+      <p>Registrer bilen i din KJAPP-flåte. Sjåfør kan tildeles etterpå.</p>
+      <input placeholder="Bilmodell, f.eks. Mercedes EQE" value={car} onChange={(e) => setCar(e.target.value)} required />
+      <input placeholder="Skiltnummer" value={plate} onChange={(e) => setPlate(e.target.value)} required />
+      <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+        <option value="ai-first">Standard</option><option value="enkelt">Sparsom</option><option value="trygg">Komfort</option><option value="premium">Premium</option>
+      </select>
+      <ErrorBox message={err} />
+      <button className="primary-button" disabled={busy}>{busy ? 'Registrerer…' : 'Legg til bil'}</button>
+    </form>
+  </div>;
+}
+
 export function VehiclesPage() {
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [drivers, setDrivers] = useState<FleetDriver[]>([]);
   const [q, setQ] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => { api.vehicles().then((r) => setVehicles(r.vehicles || [])).catch((e) => setErr(apiError(e))); }, []);
-  const rows = vehicles.filter((v) => `${v.car || ''} ${v.plate || ''} ${v.driver_name || ''}`.toLowerCase().includes(q.toLowerCase()));
+  const [modal, setModal] = useState(false);
+  const [busy, setBusy] = useState('');
+  const load = () => Promise.all([api.vehicles(), api.drivers()])
+    .then(([v, d]) => { setVehicles(v.vehicles || []); setDrivers(d.drivers || []); })
+    .catch((e) => setErr(apiError(e)));
+  useEffect(() => { void load(); }, []);
+
+  const assign = async (vehicleId: string, driverId: string) => {
+    setBusy(vehicleId); setErr('');
+    try { await api.assignVehicleDriver(vehicleId, driverId || null); await load(); }
+    catch (e) { setErr(apiError(e)); }
+    finally { setBusy(''); }
+  };
+  const toggleVehicle = async (v: FleetVehicle) => {
+    setBusy(v.id); setErr('');
+    try { await api.updateVehicle(v.id, { active: v.active === false }); await load(); }
+    catch (e) { setErr(apiError(e)); }
+    finally { setBusy(''); }
+  };
+
+  const rows = vehicles.filter((v) => (String(v.car || '') + ' ' + String(v.plate || '') + ' ' + String(v.driver_name || '')).toLowerCase().includes(q.toLowerCase()));
   return <div className="page-content">
-    <PageHead title="Kjøretøy" sub="Biler registrert på sjåførene i din flåte" />
-    <div className="kpi-grid three">
+    <PageHead title="Kjøretøy" sub="Administrer biler og sjåførtildeling i din egen flåte" action={<button className="primary-button compact-button" onClick={() => setModal(true)}>+ Legg til bil</button>} />
+    <div className="kpi-grid four">
       <div className="kpi-card"><span>REGISTRERTE BILER</span><strong>{vehicles.length}</strong><small>i din flåte</small></div>
+      <div className="kpi-card"><span>AKTIVE BILER</span><strong>{vehicles.filter((v) => v.active !== false).length}</strong><small>kan brukes i drift</small></div>
       <div className="kpi-card"><span>PÅLOGGET</span><strong>{vehicles.filter((v) => v.online).length}</strong><small>sjåfører online</small></div>
       <div className="kpi-card"><span>FERSK GPS</span><strong>{vehicles.filter((v) => v.gps_fresh).length}</strong><small>aktive posisjoner</small></div>
     </div>
     <div className="table-card">
       <div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk bil, skilt eller sjåfør" /></div>
-      <div className="fleet-table vehicle-table">
-        <div className="tr th"><span>BIL</span><span>SKILT</span><span>SJÅFØR</span><span>STATUS</span><span>SIST GPS</span></div>
-        {rows.map((v) => <div className="tr" key={v.id}><span>{v.car || '—'}</span><span className="mono">{v.plate || '—'}</span><span>{v.driver_name || '—'}</span><span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>{v.online ? (v.gps_fresh ? 'Online' : 'GPS utløpt') : 'Offline'}</span><span className="muted">{v.last_location_at ? new Date(v.last_location_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—'}</span></div>)}
+      <div className="fleet-table vehicle-manage-table">
+        <div className="tr th"><span>BIL</span><span>SKILT</span><span>DRIFT</span><span>SJÅFØR</span><span>LIVE</span><span>SIST GPS</span><span /></div>
+        {rows.map((v) => <div className="tr" key={v.id}>
+          <span>{v.car || '—'}</span>
+          <span className="mono">{v.plate || '—'}</span>
+          <span className={v.active === false ? 'status-red' : 'status-green'}>{v.active === false ? 'Parkert' : 'Aktiv'}</span>
+          <span>
+            <select className="vehicle-driver-select" value={v.driver_id || ''} disabled={busy === v.id || Boolean(v.online)} onChange={(e) => void assign(v.id, e.target.value)}>
+              <option value="">Ingen sjåfør</option>
+              {drivers.filter((d) => d.fleet_active !== false).map((d) => <option key={d.id} value={d.id}>{nameOf(d)}{d.plate ? ' · ' + d.plate : ''}</option>)}
+            </select>
+          </span>
+          <span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>{v.online ? (v.gps_fresh ? 'Online' : 'GPS utløpt') : 'Offline'}</span>
+          <span className="muted">{v.last_location_at ? new Date(v.last_location_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+          <span><button className="table-action" disabled={busy === v.id || Boolean(v.online)} onClick={() => void toggleVehicle(v)}>{busy === v.id ? 'Lagrer…' : v.active === false ? 'Aktiver' : 'Parker'}</button></span>
+        </div>)}
         {!rows.length ? <div className="empty-state padded">Ingen kjøretøy funnet.</div> : null}
       </div>
     </div>
     <ErrorBox message={err} />
+    {modal ? <CreateVehicleModal onClose={() => setModal(false)} onDone={() => { setModal(false); void load(); }} /> : null}
   </div>;
 }
 
