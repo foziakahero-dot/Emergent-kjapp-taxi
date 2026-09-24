@@ -3598,7 +3598,7 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
     try:
         trip = await db.trips.find_one(
             {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
-            {"pickup_lat": 1, "pickup_lng": 1, "eta_updated_at": 1},
+            {"pickup_lat": 1, "pickup_lng": 1, "eta_updated_at": 1, "user_id": 1},
         )
         if not trip:
             return
@@ -3631,6 +3631,26 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
                 "eta_updated_at": now.isoformat(),
             }},
         )
+
+        # One useful approaching notification, never a stream of ETA spam.
+        if eta_min <= 3 and trip.get("user_id"):
+            notified = await db.trips.update_one(
+                {
+                    "trip_id": trip_id,
+                    "driver_id": driver_id,
+                    "status": "driver_on_way",
+                    "approaching_notified_at": {"$exists": False},
+                },
+                {"$set": {"approaching_notified_at": now.isoformat()}},
+            )
+            if notified.modified_count == 1:
+                await send_push_to_user(
+                    trip["user_id"],
+                    "Sjåføren er snart fremme",
+                    f"Ca. {eta_min} min til hentestedet.",
+                    f"/booking/{trip_id}",
+                    "driver_approaching",
+                )
     except Exception as exc:
         print(f"[driver_eta] refresh failed for {trip_id}: {type(exc).__name__}")
 
