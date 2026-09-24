@@ -76,6 +76,7 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
       - run: npx expo config --type public
 
   driver-app:
@@ -91,4 +92,5 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
       - run: npx expo config --type public
