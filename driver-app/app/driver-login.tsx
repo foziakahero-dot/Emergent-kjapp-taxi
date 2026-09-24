@@ -38,7 +38,12 @@ export default function DriverLogin() {
       }
       if (res?.role !== 'driver') {
         await logout();
-        setError('Denne kontoen er ikke godkjent som KJAPP-sjåfør.');
+        setError('Denne kontoen er ikke en KJAPP-sjåførkonto.');
+        return;
+      }
+      if (res?.approved !== true) {
+        await logout();
+        setError('Sjåførkontoen din venter fortsatt på godkjenning. Du får tilgang når dokumentene og kontoen er godkjent.');
         return;
       }
       router.replace('/(driver)/home');
