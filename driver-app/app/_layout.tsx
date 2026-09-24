@@ -26,11 +26,11 @@ function NativeRuntimeBridge() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user?.role === 'driver' && user?.approved === true) registerNativePush().catch(() => {});
-  }, [user?.id, user?.role, user?.approved]);
+    if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) registerNativePush().catch(() => {});
+  }, [user?.id, user?.role, user?.approved, user?.legal_accepted]);
 
   useEffect(() => {
-    if (user?.role !== 'driver' || user?.approved !== true) {
+    if (user?.role !== 'driver' || user?.approved !== true || user?.legal_accepted !== true) {
       stopDriverBackgroundLocation().catch(() => {});
       return;
     }
@@ -60,7 +60,7 @@ function NativeRuntimeBridge() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user?.id, user?.role, user?.approved]);
+  }, [user?.id, user?.role, user?.approved, user?.legal_accepted]);
 
   useEffect(() => {
     const open = (notification?: Notifications.Notification | null) => {
@@ -103,6 +103,7 @@ export default function RootLayout() {
               <Stack.Screen name="driver-login" />
               <Stack.Screen name="forgot-password" />
               <Stack.Screen name="reset-password/[token]" />
+              <Stack.Screen name="driver-legal-consent" />
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
