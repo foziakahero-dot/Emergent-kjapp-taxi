@@ -35,6 +35,16 @@ const complianceLabel = (s?: string) => ({
 const complianceClass = (s?: string) =>
   s === 'VALID' ? 'status-green' : s === 'EXPIRING' || s === 'PENDING' ? 'status-amber' : 'status-red';
 
+const identityLabel = (s?: string) => ({
+  verified: 'Verifisert',
+  pending_review: 'Til kontroll',
+  retry_required: 'Ny selfie',
+  not_submitted: 'Mangler',
+}[s || ''] || 'Mangler');
+
+const identityClass = (s?: string) =>
+  s === 'verified' ? 'status-green' : s === 'pending_review' ? 'status-amber' : 'status-red';
+
 function Loading() { return <div className="page-loading"><div className="spinner" /></div>; }
 function ErrorBox({ message }: { message: string }) { return message ? <div className="error-box">{message}</div> : null; }
 
@@ -241,12 +251,13 @@ export function DriversPage() {
     <div className="table-card">
       <div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk navn, skilt eller bil" /></div>
       <div className="fleet-table driver-table">
-        <div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>TURER I DAG</span><span>OMSETNING</span></div>
+        <div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>SELFIE ID</span><span>TURER I DAG</span><span>OMSETNING</span></div>
         {filtered.map((d) =>
           <button className="tr row-button" key={d.id} onClick={() => void openDriver(d.id)}>
             <span className="driver-name"><i className={`status-dot ${d.online ? 'on' : ''}`} />{nameOf(d)}</span>
             <span>{d.car || '—'}{d.plate ? ` · ${d.plate}` : ''}</span>
             <span className={d.online ? 'status-green' : 'muted'}>{d.online ? 'Pålogget' : 'Avlogget'}</span>
+            <span className={identityClass(d.identity_verification_status)}>{identityLabel(d.identity_verification_status)}</span>
             <span className="mono">{d.today_trips || 0}</span>
             <span className="mono">{fmtMoney(d.today_income || 0)}</span>
           </button>
@@ -273,6 +284,7 @@ function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onC
       <div className="detail-grid">
         <InfoRow label="Status" value={<span className={driver.online ? 'status-green' : 'muted'}>{driver.online ? 'Pålogget' : 'Avlogget'}</span>} />
         <InfoRow label="Godkjenning" value={driver.approved ? 'Godkjent' : 'Venter'} />
+        <InfoRow label="Selfie ID" value={<span className={identityClass(driver.identity_verification_status)}>{identityLabel(driver.identity_verification_status)}</span>} />
         <InfoRow label="Bil" value={driver.car || '—'} />
         <InfoRow label="Skilt" value={driver.plate || '—'} />
         <InfoRow label="Telefon" value={driver.phone || '—'} />
