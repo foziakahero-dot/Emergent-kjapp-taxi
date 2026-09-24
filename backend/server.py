@@ -563,6 +563,7 @@ OSLO_BETA_CENTER_LNG = float(os.environ.get("KJAPP_SERVICE_AREA_CENTER_LNG", "10
 OSLO_BETA_RADIUS_KM = float(os.environ.get("KJAPP_SERVICE_AREA_RADIUS_KM", "45"))
 OSLO_BETA_ENFORCE = str(os.environ.get("KJAPP_SERVICE_AREA_ENFORCE", "false")).strip().lower() in ("1", "true", "yes", "on")
 PICKUP_ARRIVAL_RADIUS_M = float(os.environ.get("KJAPP_PICKUP_ARRIVAL_RADIUS_M", "400"))
+DROPOFF_ARRIVAL_RADIUS_M = float(os.environ.get("KJAPP_DROPOFF_ARRIVAL_RADIUS_M", "800"))
 NO_SHOW_WAIT_MINUTES = float(os.environ.get("KJAPP_NO_SHOW_WAIT_MINUTES", "5"))
 DRIVER_ETA_REFRESH_SECONDS = float(os.environ.get("KJAPP_DRIVER_ETA_REFRESH_SECONDS", "20"))
 
@@ -3231,6 +3232,10 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
     trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
     if not trip:
         raise HTTPException(status_code=404, detail="Fant ikke turen")
+    if trip.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
+        return {"ok": True, "already_applied": True}
+    if trip.get("status") != "driver_on_way":
+        raise HTTPException(status_code=409, detail="Turen er ikke på vei til hentested")
 
     if not _fresh_driver_location(current.get("last_location_at")):
         raise HTTPException(status_code=409, detail="Oppdater GPS-posisjonen før du registrerer ankomst")
@@ -3338,15 +3343,36 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
 @api.post("/driver/trip/{trip_id}/arrive")
 async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     driver_id = current["id"]
+    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Fant ikke turen")
+    if trip.get("status") in ("arrived", "completed", "rated"):
+        return {"ok": True, "already_applied": True, "bonuses": []}
+    if trip.get("status") != "in_trip":
+        raise HTTPException(status_code=409, detail="Turen må være startet før den kan avsluttes")
+    if not _fresh_driver_location(current.get("last_location_at")):
+        raise HTTPException(status_code=409, detail="Oppdater GPS-posisjonen før du avslutter turen")
+
+    d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
+    if d_lat is None or d_lng is None:
+        raise HTTPException(status_code=409, detail="Mangler gyldig GPS-posisjon")
+    dropoff_distance_m = haversine_km(d_lat, d_lng, trip["dropoff_lat"], trip["dropoff_lng"]) * 1000
+    if dropoff_distance_m > DROPOFF_ARRIVAL_RADIUS_M:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Du er for langt fra destinasjonen til å avslutte turen ({int(round(dropoff_distance_m))} m)",
+        )
+
     result = await db.trips.update_one(
         {"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"},
-        {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {
+            "status": "arrived",
+            "arrived_at": datetime.now(timezone.utc).isoformat(),
+            "dropoff_arrival_distance_m": int(round(dropoff_distance_m)),
+        }},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
-        if existing and existing.get("status") in ("arrived", "completed", "rated"):
-            return {"ok": True, "already_applied": True, "bonuses": []}
-        raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
+        raise HTTPException(status_code=409, detail="Turen endret status før den kunne avsluttes")
     await db.users.update_one(
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
@@ -5697,7 +5723,7 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
     # erasure endpoint — they require a dedicated offboarding path. Regular users and drivers keep
     # their right to erasure.
     if current.get("role") in ("admin", "superadmin", "fleet_owner"):
-        raise HTTPException(status_code=400, detail="Denne kontotypen kan ikke slettes her. Kontakt support@kjappapp.com.")
+        raise HTTPException(status_code=400, detail="Denne kontotypen kan ikke slettes her. Kontakt support@kjappapp.no.")
     # Anonymize trips (keep for accounting/tax compliance in Norway) — replace user id
     anon_id = f"deleted_{uuid.uuid4().hex[:12]}"
     await db.trips.update_many({"user_id": uid}, {"$set": {"user_id": anon_id, "pickup_address": "[slettet]", "dropoff_address": "[slettet]"}})
