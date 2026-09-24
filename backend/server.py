@@ -3782,7 +3782,10 @@ async def google_session(body: GoogleSessionRequest, response: Response):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
+    session_user = await db.users.find_one({"_id": ObjectId(uid)})
+    if not session_user:
+        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
+    return {"token": token, "user": user_public(session_user)}
 
 
 # ============================================================
@@ -3918,7 +3921,10 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": phone, "role": role, "driver_id": driver_id}}
+    session_user = await db.users.find_one({"_id": ObjectId(uid)})
+    if not session_user:
+        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
+    return {"token": token, "user": user_public(session_user)}
 
 
 # ============================================================
@@ -5058,7 +5064,10 @@ async def apple_signin(body: AppleSignInRequest, response: Response):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": display_name, "phone": "", "role": role, "driver_id": driver_id}}
+    session_user = await db.users.find_one({"_id": ObjectId(uid)})
+    if not session_user:
+        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
+    return {"token": token, "user": user_public(session_user)}
 
 
 @api.get("/auth/apple/config")
