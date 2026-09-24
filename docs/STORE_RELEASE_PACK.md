@@ -122,6 +122,8 @@ Do not declare advertising/tracking unless production code actually introduces i
 
 ## iOS permission/capability checklist
 
+The first beta is intentionally phone-first. Both Expo configs set `ios.supportsTablet=false`; iPad-specific layout/support can be added later after dedicated QA instead of being implied by the first App Store/TestFlight build.
+
 Customer:
 - bundle ID `no.kjapp.app`
 - Push Notifications
