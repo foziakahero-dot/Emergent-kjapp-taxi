@@ -562,6 +562,8 @@ OSLO_BETA_CENTER_LAT = float(os.environ.get("KJAPP_SERVICE_AREA_CENTER_LAT", "59
 OSLO_BETA_CENTER_LNG = float(os.environ.get("KJAPP_SERVICE_AREA_CENTER_LNG", "10.7522"))
 OSLO_BETA_RADIUS_KM = float(os.environ.get("KJAPP_SERVICE_AREA_RADIUS_KM", "45"))
 OSLO_BETA_ENFORCE = str(os.environ.get("KJAPP_SERVICE_AREA_ENFORCE", "false")).strip().lower() in ("1", "true", "yes", "on")
+PICKUP_ARRIVAL_RADIUS_M = float(os.environ.get("KJAPP_PICKUP_ARRIVAL_RADIUS_M", "400"))
+NO_SHOW_WAIT_MINUTES = float(os.environ.get("KJAPP_NO_SHOW_WAIT_MINUTES", "5"))
 
 
 def _pickup_inside_launch_area(lat: float, lng: float) -> bool:
@@ -3195,9 +3197,29 @@ async def driver_current(current=Depends(require_driver)):
 async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
     """Driver has arrived at pickup and is waiting for passenger to board."""
     driver_id = current["id"]
+    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Fant ikke turen")
+
+    if not _fresh_driver_location(current.get("last_location_at")):
+        raise HTTPException(status_code=409, detail="Oppdater GPS-posisjonen før du registrerer ankomst")
+    d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
+    if d_lat is None or d_lng is None:
+        raise HTTPException(status_code=409, detail="Mangler gyldig GPS-posisjon")
+    pickup_distance_m = haversine_km(d_lat, d_lng, trip["pickup_lat"], trip["pickup_lng"]) * 1000
+    if pickup_distance_m > PICKUP_ARRIVAL_RADIUS_M:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Du er for langt fra hentestedet til å registrere ankomst ({int(round(pickup_distance_m))} m)",
+        )
+
     result = await db.trips.update_one(
         {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
-        {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {
+            "status": "at_pickup",
+            "at_pickup_at": datetime.now(timezone.utc).isoformat(),
+            "pickup_arrival_distance_m": int(round(pickup_distance_m)),
+        }},
     )
     if result.modified_count == 0:
         existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
@@ -3215,9 +3237,8 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
 @api.post("/driver/trip/{trip_id}/start")
 async def driver_start(trip_id: str, current=Depends(require_driver)):
     driver_id = current["id"]
-    # Accept both driver_on_way and at_pickup as valid transitions to in_trip
     result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup"]}},
+        {"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"},
         {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
@@ -3235,11 +3256,39 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
 
 @api.post("/driver/trip/{trip_id}/no-show")
 async def driver_no_show(trip_id: str, current=Depends(require_driver)):
-    """Passenger did not show up at pickup — driver cancels + gets small compensation."""
+    """Passenger did not show up after the configured pickup waiting period."""
     driver_id = current["id"]
+    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    if not trip:
+        raise HTTPException(status_code=404, detail="Fant ikke turen")
+    if trip.get("status") != "at_pickup":
+        raise HTTPException(status_code=409, detail="Registrer at du er fremme før no-show kan brukes")
+
+    try:
+        arrived_at = datetime.fromisoformat(str(trip.get("at_pickup_at")).replace("Z", "+00:00"))
+        if arrived_at.tzinfo is None:
+            arrived_at = arrived_at.replace(tzinfo=timezone.utc)
+    except Exception:
+        raise HTTPException(status_code=409, detail="Mangler gyldig ankomsttidspunkt")
+    waited_minutes = (datetime.now(timezone.utc) - arrived_at).total_seconds() / 60
+    if waited_minutes < NO_SHOW_WAIT_MINUTES:
+        remaining = max(1, int(math.ceil(NO_SHOW_WAIT_MINUTES - waited_minutes)))
+        raise HTTPException(status_code=409, detail=f"Vent minst {remaining} min til før no-show kan registreres")
+
+    pricing = trip.get("pricing_snapshot") or await active_pricing()
+    no_show_fee = int(round(float(
+        pricing.get("customer_no_show_fee", pricing.get("customer_cancellation_fee", 0)) or 0
+    )))
     result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup"]}},
-        {"$set": {"status": "cancelled", "cancelled_reason": "no_show", "cancelled_at": datetime.now(timezone.utc).isoformat()}},
+        {"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"},
+        {"$set": {
+            "status": "cancelled",
+            "cancelled_reason": "no_show",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "no_show_wait_minutes": round(waited_minutes, 2),
+            "cancellation_fee": no_show_fee,
+            "cancellation_fee_status": "pending" if no_show_fee > 0 else "not_applicable",
+        }},
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
@@ -3249,8 +3298,10 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     )
     t = await db.trips.find_one({"trip_id": trip_id})
     if t and t.get("user_id"):
-        await send_push_to_user(t["user_id"], "Turen ble avlyst", "Du dukket ikke opp — kort no-show-avgift kan bli belastet.", "/app")
-    return {"ok": True}
+        fee = int(t.get("cancellation_fee") or 0)
+        body = f"Du dukket ikke opp. No-show-avgift: {fee} kr." if fee > 0 else "Turen ble avsluttet som no-show."
+        await send_push_to_user(t["user_id"], "Turen ble avsluttet", body, "/app", "trip_no_show")
+    return {"ok": True, "cancellation_fee": int((t or {}).get("cancellation_fee") or 0), "currency": "NOK"}
 
 
 @api.post("/driver/trip/{trip_id}/arrive")
