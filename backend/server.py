@@ -2881,10 +2881,16 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
 
     if not nxt:
-        await db.trips.update_one(
-            {"trip_id": trip["trip_id"], "driver_id": None},
+        res = await db.trips.update_one(
+            {
+                "trip_id": trip["trip_id"],
+                "driver_id": None,
+                "status": {"$in": ["searching", "booking"]},
+            },
             {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
         )
+        if res.modified_count == 0:
+            return None
         for c in cands:  # everyone gets a last chance
             await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
         return None
