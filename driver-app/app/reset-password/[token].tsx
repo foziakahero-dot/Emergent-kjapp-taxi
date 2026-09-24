@@ -27,7 +27,7 @@ export default function DriverResetPassword() {
 
   const submit = async () => {
     setError('');
-    if (password.length < 6) return setError('Passord må ha minst 6 tegn.');
+    if (password.length < 8) return setError('Passord må ha minst 8 tegn.');
     if (password !== again) return setError('Passordene er ikke like.');
     setBusy(true);
     try {
