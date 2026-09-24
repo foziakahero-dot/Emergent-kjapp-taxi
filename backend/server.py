@@ -1370,7 +1370,7 @@ async def reverse_geocode(lat: float, lng: float):
             r = await client.get(
                 "https://nominatim.openstreetmap.org/reverse",
                 params={"lat": lat, "lon": lng, "format": "json", "zoom": 17, "addressdetails": 1, "accept-language": "no"},
-                headers={"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.com)"},
+                headers={"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.no)"},
             )
             data = r.json() if r.status_code == 200 else {}
     except Exception:
@@ -1456,7 +1456,7 @@ async def search_places(q: str, request: Request, limit: int = 8):
                     "q": q, "format": "json", "addressdetails": 1,
                     "limit": limit, "countrycodes": "no", "accept-language": "no",
                 },
-                headers={"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.com)"},
+                headers={"User-Agent": "KJAPP/1.0 (contact: support@kjappapp.no)"},
             )
             data = r.json() if r.status_code == 200 else []
     except Exception:
