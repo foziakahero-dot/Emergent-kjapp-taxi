@@ -1590,8 +1590,6 @@ async def logout(request: Request, response: Response):
                     {"_id": ObjectId(user_id)},
                     {"$set": {"tokens_valid_after": datetime.now(timezone.utc).timestamp()}},
                 )
-            if user_id:
-                await db.native_push_tokens.delete_many({"user_id": user_id})
         except (jwt.PyJWTError, InvalidId, TypeError, ValueError):
             pass
     response.delete_cookie("access_token", path="/")
@@ -3617,6 +3615,14 @@ async def push_native_subscribe(body: NativePushSubscribeRequest, current=Depend
     if body.provider == "expo" and not _is_expo_push_token(body.token):
         raise HTTPException(status_code=400, detail="Ugyldig Expo push-token")
     dev_id = body.device_id or body.token[-12:]
+
+    # A native token identifies one app installation. Rebind it to the currently
+    # authenticated account so a shared/reused phone cannot keep receiving another
+    # user's trip notifications after a new login.
+    await db.native_push_tokens.delete_many({
+        "token": body.token,
+        "user_id": {"$ne": current["id"]},
+    })
     await db.native_push_tokens.update_one(
         {"user_id": current["id"], "platform": body.platform, "device_id": dev_id},
         {"$set": {
@@ -3630,6 +3636,18 @@ async def push_native_subscribe(body: NativePushSubscribeRequest, current=Depend
         upsert=True,
     )
     return {"ok": True, "provider": body.provider}
+
+
+@api.post("/push/native-unsubscribe")
+async def push_native_unsubscribe(body: NativePushSubscribeRequest, current=Depends(get_current_user)):
+    """Remove only this app installation from the current user's push subscriptions."""
+    if not body.token:
+        raise HTTPException(status_code=400, detail="Mangler token")
+    result = await db.native_push_tokens.delete_many({
+        "user_id": current["id"],
+        "token": body.token,
+    })
+    return {"ok": True, "removed": result.deleted_count}
 
 
 # ============================================================
