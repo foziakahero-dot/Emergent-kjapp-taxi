@@ -6,8 +6,8 @@ Status: beta preparation. No app redesign is part of this pack.
 
 | App | Display name | Bundle / package | Expo project |
 | --- | --- | --- | --- |
-| Customer | KJAPP | `no.kjapp.app` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
-| Driver | KJAPP Driver | `no.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
+| Customer | KJAPP | Android `no.kjapp.app` / iOS `no.nexorahub.kjapp.customer` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
+| Driver | KJAPP Driver | Android `no.kjapp.driver` / iOS `no.nexorahub.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
 
 Canonical public URLs:
 - Support: https://kjappapp.no/help
@@ -126,7 +126,7 @@ Do not declare advertising/tracking unless production code actually introduces i
 The first beta is intentionally phone-first. Both Expo configs set `ios.supportsTablet=false`; iPad-specific layout/support can be added later after dedicated QA instead of being implied by the first App Store/TestFlight build.
 
 Customer:
-- bundle ID `no.kjapp.app`
+- bundle ID `no.nexorahub.kjapp.customer`
 - Push Notifications
 - Sign in with Apple
 - location while in use
@@ -134,7 +134,7 @@ Customer:
 - non-exempt encryption declaration already set false in Expo config
 
 Driver:
-- bundle ID `no.kjapp.driver`
+- bundle ID `no.nexorahub.kjapp.driver`
 - Push Notifications
 - background location
 - background remote notifications
