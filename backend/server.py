@@ -356,7 +356,9 @@ def user_public(user: dict) -> dict:
     if user.get("_id") is not None:
         result["id"] = str(user["_id"])
     result.setdefault("role", "user")
-    result["legal_accepted"] = bool(user.get("accepted_terms_at"))
+    # Preserve the derived flag when user_public() is called on an already-sanitized
+    # dependency result (for example /auth/me), otherwise derive it from the DB field.
+    result["legal_accepted"] = bool(user.get("legal_accepted") or user.get("accepted_terms_at"))
     return result
 
 
