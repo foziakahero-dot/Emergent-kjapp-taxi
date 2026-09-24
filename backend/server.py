@@ -2019,12 +2019,14 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
 
 
 async def require_driver(current=Depends(get_current_user)):
-    if current.get("role") not in ("driver", "admin"):
+    # Operational driver endpoints must only ever be callable by an approved driver.
+    # Admin/superadmin have dedicated /admin/* tools and must not be able to impersonate
+    # a driver in the live dispatch/trip state machine.
+    if current.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
-    if current.get("role") == "driver" and current.get("approved") is False:
+    if current.get("approved") is not True:
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
-    if current.get("role") == "driver":
-        await _require_active_fleet(current.get("fleet_id"))
+    await _require_active_fleet(current.get("fleet_id"))
     return current
 
 
