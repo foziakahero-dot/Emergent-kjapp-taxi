@@ -28,6 +28,8 @@ export default function DriverSettings() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportInfo, setExportInfo] = useState('');
 
   useEffect(() => {
     settingsApi.get().then((r) => setSettings(r.settings || r || {})).catch(() => setSettings({}));
@@ -38,6 +40,21 @@ export default function DriverSettings() {
     const next = { ...settings, [key]: !cur };
     setSettings(next);
     try { await settingsApi.update({ [key]: next[key] }); } catch {}
+  };
+
+  const exportData = async () => {
+    setExporting(true);
+    setExportInfo('');
+    try {
+      const data = await gdprApi.export();
+      const trips = (data?.trips || []).length;
+      const payments = (data?.payments || []).length;
+      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjappapp.no hvis du trenger kopi på e-post.`);
+    } catch {
+      setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const deleteAccount = async () => {
@@ -91,9 +108,10 @@ export default function DriverSettings() {
           <Text style={s.sectionTitle}>Personvern</Text>
           <View style={s.card}>
             <LinkRow icon="map-pin" label="Posisjonstilgang" onPress={() => Linking.openSettings()} s={s} testID="ds-location" />
-            <LinkRow icon="file-text" label="Last ned mine data" onPress={() => Linking.openURL('mailto:support@kjappapp.no?subject=Innsyn%20i%20data')} border s={s} testID="ds-gdpr" />
+            <LinkRow icon="file-text" label={exporting ? 'Henter data…' : 'Last ned mine data'} onPress={() => void exportData()} border s={s} testID="ds-gdpr" />
             <LinkRow icon="shield" label="Personvern" onPress={() => Linking.openURL('https://kjappapp.no/personvern')} border s={s} testID="ds-privacy" />
           </View>
+          {exportInfo ? <Text style={s.exportInfo} testID="ds-gdpr-info">{exportInfo}</Text> : null}
 
           <Text style={s.sectionTitle}>Hjelp</Text>
           <View style={s.card}>
@@ -177,6 +195,7 @@ const useStyles = makeStyles((c) => ({
   rowBorder: { borderTopWidth: 1, borderTopColor: c.line },
   rowLabel: { color: c.text, fontSize: 15 },
   rowSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
+  exportInfo: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 8, paddingHorizontal: 4 },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16 },
   linkIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   linkLabel: { color: c.text, fontSize: 15, flex: 1 },
