@@ -85,8 +85,14 @@ export default function DriverHome() {
                   normalized = refreshed?.trip || refreshed || normalized;
                   setCurrent(normalized);
                   setError('');
-                } catch {
-                  // Keep the queued action. A later poll retries after connectivity returns.
+                } catch (e: any) {
+                  if (e?.response) {
+                    // The server answered: this is a semantic/state/GPS rejection, not an
+                    // offline transport failure. Do not hammer the same invalid action forever.
+                    await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+                    setError(apiError(e));
+                  }
+                  // With no HTTP response we are still offline; keep the queued action.
                 } finally {
                   actionRetrying.current = false;
                 }
