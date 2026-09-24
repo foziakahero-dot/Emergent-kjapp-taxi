@@ -665,7 +665,7 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 def send_email(to_email: str, subject: str, html: str) -> bool:
     """Send email via SendGrid if configured, else log to console."""
     api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
-    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.com").strip()
+    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
     if not api_key:
         print(f"[EMAIL/no-key] to={to_email} subj={subject}\n{html[:200]}")
         return False
@@ -989,7 +989,7 @@ async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/ap
                 subscription_info=s["subscription"],
                 data=json.dumps(payload),
                 vapid_private_key=vapid["private_pem"],
-                vapid_claims={"sub": "mailto:security@kjappapp.com"},
+                vapid_claims={"sub": "mailto:security@kjappapp.no"},
             )
         except WebPushException as e:
             # if subscription is gone (410) remove it
