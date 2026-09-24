@@ -15,7 +15,9 @@ export default function Index() {
   const s = useStyles();
 
   useEffect(() => {
-    if (user && isCustomerRole(user.role)) router.replace('/(app)/home');
+    if (user && isCustomerRole(user.role)) {
+      router.replace(user.legal_accepted === true ? '/(app)/home' : '/legal-consent');
+    }
   }, [user, router]);
 
   if (user === undefined || (user && isCustomerRole(user.role))) {
