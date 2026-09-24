@@ -564,6 +564,7 @@ OSLO_BETA_RADIUS_KM = float(os.environ.get("KJAPP_SERVICE_AREA_RADIUS_KM", "45")
 OSLO_BETA_ENFORCE = str(os.environ.get("KJAPP_SERVICE_AREA_ENFORCE", "false")).strip().lower() in ("1", "true", "yes", "on")
 PICKUP_ARRIVAL_RADIUS_M = float(os.environ.get("KJAPP_PICKUP_ARRIVAL_RADIUS_M", "400"))
 NO_SHOW_WAIT_MINUTES = float(os.environ.get("KJAPP_NO_SHOW_WAIT_MINUTES", "5"))
+DRIVER_ETA_REFRESH_SECONDS = float(os.environ.get("KJAPP_DRIVER_ETA_REFRESH_SECONDS", "20"))
 
 
 def _pickup_inside_launch_area(lat: float, lng: float) -> bool:
@@ -3560,6 +3561,48 @@ class DriverLocationRequest(BaseModel):
     recorded_at: Optional[str] = None
 
 
+async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, lng: float):
+    """Best-effort throttled road ETA refresh while the driver is heading to pickup."""
+    try:
+        trip = await db.trips.find_one(
+            {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+            {"pickup_lat": 1, "pickup_lng": 1, "eta_updated_at": 1},
+        )
+        if not trip:
+            return
+
+        now = datetime.now(timezone.utc)
+        last = trip.get("eta_updated_at")
+        if last:
+            try:
+                last_dt = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                if (now - last_dt).total_seconds() < DRIVER_ETA_REFRESH_SECONDS:
+                    return
+            except (TypeError, ValueError):
+                pass
+
+        route = await osrm_route(lat, lng, trip["pickup_lat"], trip["pickup_lng"])
+        if route:
+            eta_min = max(1, int(round(float(route["duration_min"]))))
+            distance_km = round(float(route["distance_km"]), 2)
+        else:
+            distance_km = round(haversine_km(lat, lng, trip["pickup_lat"], trip["pickup_lng"]), 2)
+            eta_min = max(1, int(round(distance_km / 30 * 60)))
+
+        await db.trips.update_one(
+            {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+            {"$set": {
+                "eta_min": eta_min,
+                "driver_distance_to_pickup_km": distance_km,
+                "eta_updated_at": now.isoformat(),
+            }},
+        )
+    except Exception as exc:
+        print(f"[driver_eta] refresh failed for {trip_id}: {type(exc).__name__}")
+
+
 @api.post("/driver/location")
 async def driver_location(body: DriverLocationRequest, current=Depends(require_driver)):
     """Accept a fresh, physically plausible GPS sample from the driver device."""
@@ -3610,17 +3653,28 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
             "last_location_recorded_at": recorded.isoformat(),
         }},
     )
-    # If driver has active trip, also update trip.driver_lat/lng so passenger sees live position
-    await db.trips.update_one(
+    # If driver has an active trip, update canonical trip coordinates for the passenger map.
+    active_trip = await db.trips.find_one(
         {"driver_id": current["id"], "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
-        {"$set": {
-            "driver_lat": body.lat,
-            "driver_lng": body.lng,
-            "driver_heading": heading,
-            "driver_location_at": now_iso,
-            "driver_location_recorded_at": recorded.isoformat(),
-        }},
+        {"trip_id": 1, "status": 1},
+        sort=[("created_at", -1)],
     )
+    if active_trip:
+        await db.trips.update_one(
+            {"trip_id": active_trip["trip_id"], "driver_id": current["id"]},
+            {"$set": {
+                "driver_lat": body.lat,
+                "driver_lng": body.lng,
+                "driver_heading": heading,
+                "driver_location_at": now_iso,
+                "driver_location_recorded_at": recorded.isoformat(),
+            }},
+        )
+        if active_trip.get("status") == "driver_on_way":
+            asyncio.create_task(
+                _refresh_driver_pickup_eta(active_trip["trip_id"], current["id"], body.lat, body.lng)
+            )
+
     return {"ok": True, "recorded_at": recorded.isoformat(), "received_at": now_iso}
 
 
