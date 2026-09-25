@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -47,6 +47,7 @@ function actionCanRetry(action: CriticalTripAction, status?: string) {
 
 export default function DriverHome() {
   const insets = useSafeAreaInsets();
+  const { chat, trip_id } = useLocalSearchParams<{ chat?: string; trip_id?: string }>();
   const s = useStyles();
   const { user } = useAuth();
   const [online, setOnline] = useState(false);
@@ -125,6 +126,12 @@ export default function DriverHome() {
       if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (chat === '1' && current?.trip_id && (!trip_id || trip_id === current.trip_id)) {
+      setChatOpen(true);
+    }
+  }, [chat, trip_id, current?.trip_id]);
 
   useEffect(() => {
     if (!completedTrip) return;
