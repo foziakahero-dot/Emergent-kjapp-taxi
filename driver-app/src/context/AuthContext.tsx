@@ -20,6 +20,12 @@ export type User = {
   driver_id?: string;
   approved?: boolean;
   legal_accepted?: boolean;
+  identity_verification_status?: string;
+  identity_recheck_required?: boolean;
+  identity_recheck_reason?: string;
+  identity_recheck_trigger?: string;
+  next_identity_check_at?: string;
+  identity_verified_at?: string;
 } | null;
 
 type AuthCtx = {
@@ -33,6 +39,21 @@ type AuthCtx = {
 };
 
 const Ctx = createContext<AuthCtx>(null as any);
+
+const DRIVER_INSTALLATION_KEY = 'kjapp_driver_installation_id_v1';
+
+async function getDriverInstallationId(): Promise<string> {
+  const existing = await storage.getItem(DRIVER_INSTALLATION_KEY);
+  if (existing) return existing;
+  const id = [
+    'drv',
+    Date.now().toString(36),
+    Math.random().toString(36).slice(2, 12),
+    Math.random().toString(36).slice(2, 12),
+  ].join('_');
+  await storage.setItem(DRIVER_INSTALLATION_KEY, id);
+  return id;
+}
 
 function extractSessionId(url?: string | null): string | null {
   if (!url) return null;
@@ -110,7 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh, handleSessionId]);
 
   const login = async (email: string, password: string) => {
-    const res = await authApi.login({ email, password });
+    const device_id = await getDriverInstallationId();
+    const res = await authApi.login({ email, password, client: 'driver', device_id });
     if (res.twofa_required) return res;
     await storage.setItem(TOKEN_KEY, res.token);
     setUser(res.user);
