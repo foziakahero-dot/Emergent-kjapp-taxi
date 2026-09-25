@@ -7,7 +7,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host",
-        "KJAPP_REQUIRE_FIREBASE": "true"
+        "KJAPP_REQUIRE_FIREBASE": "false"
       },
       "android": {
         "buildType": "apk"
