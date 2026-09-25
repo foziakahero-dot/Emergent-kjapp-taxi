@@ -6441,8 +6441,10 @@ async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current
 # Driver invitation flow (fleet owner / admin invites drivers)
 # ============================================================
 class DriverInviteRequest(BaseModel):
-    car: str  # e.g. "Tesla Model Y"
-    plate: str  # e.g. "EL12345"
+    vehicle_id: Optional[str] = None
+    # Legacy display fields are accepted for old clients but are never canonical for fleet invites.
+    car: Optional[str] = ""
+    plate: Optional[str] = ""
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
@@ -6478,6 +6480,10 @@ def _invite_expired(invite: dict) -> bool:
 
 @api.post("/admin/driver-invites")
 async def create_driver_invite(body: DriverInviteRequest, request: Request, current=Depends(require_admin)):
+    raise HTTPException(
+        status_code=410,
+        detail="Sjåførinvitasjoner må opprettes fra en konkret løyvehaver/flåte med registrert kjøretøy",
+    )
     token = secrets.token_urlsafe(24)
     doc = {
         "token": token,
@@ -6529,12 +6535,22 @@ async def get_driver_invite(token: str):
         raise HTTPException(status_code=410, detail="Invitasjon allerede brukt")
     if _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon utløpt")
+    fleet = None
+    if inv.get("fleet_id"):
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(str(inv["fleet_id"]))}, {"name": 1, "org_number": 1})
+        except (InvalidId, TypeError):
+            fleet = None
     return {
         "token": inv["token"],
-        "car": inv.get("car"),
-        "plate": inv.get("plate"),
-        "vehicle_type": inv.get("vehicle_type", "ai-first"),
+        "vehicle_id": inv.get("vehicle_id"),
+        "vehicle_id": canonical_vehicle_id,
+        "car": canonical_car,
+        "plate": canonical_plate,
+        "vehicle_type": canonical_vehicle_type,
         "capabilities": inv.get("capabilities") or [],
+        "fleet_name": (fleet or {}).get("name"),
+        "fleet_org_number": (fleet or {}).get("org_number"),
         "note": inv.get("note", ""),
     }
 
@@ -6575,6 +6591,37 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
         verified_uploads[uploaded.get("storage_path")] = uploaded.get("doc_type")
     if any(verified_uploads.get(path) != doc_type for path, doc_type in expected_uploads.items()):
         raise HTTPException(status_code=400, detail="Dokumentene tilhører ikke denne invitasjonen")
+
+    fleet_id = inv.get("fleet_id")
+    if not fleet_id:
+        raise HTTPException(status_code=409, detail="Invitasjonen mangler løyvehaver og kan ikke brukes")
+    vehicle = None
+    if inv.get("vehicle_id"):
+        try:
+            vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(str(inv["vehicle_id"])),
+                "fleet_id": fleet_id,
+            })
+        except (InvalidId, TypeError):
+            vehicle = None
+    elif inv.get("plate"):
+        # Legacy fleet invite migration path: resolve the plate only if it already exists
+        # in the fleet vehicle registry. Never create a vehicle from free-text invite data.
+        vehicle = await db.fleet_vehicles.find_one({
+            "fleet_id": fleet_id,
+            "plate": str(inv.get("plate") or "").strip().upper(),
+        })
+    if not vehicle:
+        raise HTTPException(status_code=409, detail="Løyvehaver må knytte invitasjonen til en registrert bil")
+    if vehicle.get("active") is False:
+        raise HTTPException(status_code=409, detail="Den tildelte bilen er parkert")
+    if vehicle.get("assigned_driver_id"):
+        raise HTTPException(status_code=409, detail="Den tildelte bilen brukes allerede av en annen sjåfør")
+
+    canonical_vehicle_id = str(vehicle["_id"])
+    canonical_car = str(vehicle.get("car") or "")
+    canonical_plate = str(vehicle.get("plate") or "").upper()
+    canonical_vehicle_type = vehicle.get("vehicle_type") or "ai-first"
     doc = {
         "email": email,
         "password_hash": hash_password(body.password),
@@ -6597,10 +6644,28 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
         "profile_photo_path": body.profile_photo_path,
         "documents_uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
-    if inv.get("fleet_id"):
-        doc["fleet_id"] = inv["fleet_id"]
+    doc["fleet_id"] = fleet_id
     result = await db.users.insert_one(doc)
     uid = str(result.inserted_id)
+
+    # Vehicle assignment is atomic. If another request won the vehicle between validation
+    # and signup, roll back the newly created driver rather than leaving contradictory data.
+    assigned = await db.fleet_vehicles.update_one(
+        {
+            "_id": vehicle["_id"],
+            "fleet_id": fleet_id,
+            "active": {"$ne": False},
+            "assigned_driver_id": {"$in": [None, ""]},
+        },
+        {"$set": {
+            "assigned_driver_id": uid,
+            "assigned_driver_name": body.fullName,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    if assigned.modified_count != 1:
+        await db.users.delete_one({"_id": result.inserted_id})
+        raise HTTPException(status_code=409, detail="Bilen ble tildelt en annen sjåfør. Be løyvehaver sende en ny invitasjon")
     # Reassign uploaded docs to this driver's owner_user_id (they were uploaded before user existed)
     await db.uploaded_files.update_many(
         {"invite_token": body.token, "storage_path": {"$in": list(expected_uploads)}},
@@ -8524,14 +8589,41 @@ def _fleet_application_decision_html(company: str, approved: bool, notes: str, t
 @api.post("/fleet/driver-invites")
 async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request, current=Depends(require_fleet_owner)):
     fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
-    if not fleet_id and current.get("role") not in ("admin", "superadmin"):
+    if not fleet_id:
         raise HTTPException(status_code=400, detail="Du er ikke tilknyttet en flåte")
+    if not body.vehicle_id:
+        raise HTTPException(status_code=400, detail="Velg en registrert bil fra flåten før du inviterer sjåføren")
+    try:
+        vehicle_oid = ObjectId(str(body.vehicle_id))
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Ugyldig kjøretøy-id")
+    vehicle = await db.fleet_vehicles.find_one({"_id": vehicle_oid, "fleet_id": fleet_id})
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Bilen finnes ikke i din flåte")
+    if vehicle.get("active") is False:
+        raise HTTPException(status_code=409, detail="Bilen er parkert og kan ikke tildeles en ny sjåfør")
+    if vehicle.get("assigned_driver_id"):
+        raise HTTPException(status_code=409, detail="Bilen er allerede tildelt en sjåfør")
+    existing_invite = await db.driver_invites.find_one({
+        "fleet_id": fleet_id,
+        "vehicle_id": str(vehicle["_id"]),
+        "used": False,
+        "expires_at": {"$gt": datetime.now(timezone.utc).isoformat()},
+    })
+    if existing_invite:
+        raise HTTPException(status_code=409, detail="Det finnes allerede en aktiv sjåførinvitasjon for denne bilen")
+
     token = secrets.token_urlsafe(24)
+    canonical_car = str(vehicle.get("car") or "").strip()
+    canonical_plate = str(vehicle.get("plate") or "").strip().upper()
+    canonical_type = vehicle.get("vehicle_type") or "ai-first"
     doc = {
         "token": token,
-        "car": body.car.strip(),
-        "plate": body.plate.strip().upper(),
-        "vehicle_type": body.vehicle_type,
+        "vehicle_id": str(vehicle["_id"]),
+        "car": canonical_car,
+        "plate": canonical_plate,
+        "vehicle_type": canonical_type,
+        "capabilities": list(dict.fromkeys(body.capabilities)),
         "note": body.note or "",
         "email": (body.email or "").strip().lower() or None,
         "created_by": current["id"],
@@ -8549,7 +8641,7 @@ async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request
         ok = send_email(
             body.email,
             "Invitasjon: Bli sjåfør for KJAPP",
-            email_driver_invite_html(body.car, body.plate, invite_url, body.note or ""),
+            email_driver_invite_html(canonical_car, canonical_plate, invite_url, body.note or ""),
         )
         if ok:
             await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
