@@ -2,11 +2,12 @@ import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
+export const API_BASE = `${BACKEND}/api`;
 export const TOKEN_KEY = 'kjapp_token';
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
 export const api = axios.create({
-  baseURL: `${BACKEND}/api`,
+  baseURL: API_BASE,
   timeout: 30000,
 });
 
@@ -119,6 +120,11 @@ export const driverApi = {
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
+  profile: () => api.get('/driver/profile').then((r) => r.data),
+  selectVehicle: (vehicle_id: string) => api.post('/driver/vehicle/select', { vehicle_id }).then((r) => r.data),
+  uploadProfilePhoto: (form: FormData) => api.post('/driver/profile-photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data),
   payouts: () => api.get('/driver/payouts')
     .then((r) => normalizePayouts(r.data))
     .catch(() => normalizePayouts()),
