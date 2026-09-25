@@ -2,18 +2,14 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { api } from '@/src/lib/api';
 
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-} catch {
-  // Notification bridge initialization must never terminate app startup.
-}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export async function registerNativePush() {
   if (Platform.OS === 'web') return false;
