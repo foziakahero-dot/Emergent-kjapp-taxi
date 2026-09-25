@@ -5075,27 +5075,112 @@ async def stripe_webhook(request: Request):
 # ============================================================
 @api.get("/gdpr/export")
 async def gdpr_export(current=Depends(get_current_user)):
-    """Return all data we hold on this user (GDPR right of access)."""
+    """Machine-readable account export for customer and driver accounts.
+
+    Security credentials (password hashes, raw push tokens and push auth secrets) are intentionally
+    excluded. The export still includes the related account/device metadata so the user can see
+    what categories of data are stored.
+    """
     uid = current["id"]
     raw_user = await db.users.find_one({"_id": ObjectId(uid)})
     user = user_public(raw_user) if raw_user else None
-    trips = []
-    async for t in db.trips.find({"user_id": uid}).sort("created_at", -1):
-        t["id"] = str(t["_id"]); t.pop("_id", None); trips.append(t)
-    messages = []
-    async for m in db.chat_messages.find({"user_id": uid}).sort("created_at", 1):
-        m["id"] = str(m["_id"]); m.pop("_id", None); messages.append(m)
-    payments = []
-    async for p in db.payment_transactions.find({"user_id": uid}):
-        p["id"] = str(p["_id"]); p.pop("_id", None); payments.append(p)
-    return {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "user": user,
-        "trips": trips,
-        "ai_messages": messages,
-        "payments": payments,
+
+    async def export_many(collection, query, *, sort=None, projection=None, limit=5000):
+        out = []
+        cursor = collection.find(query, projection)
+        if sort:
+            cursor = cursor.sort(sort[0], sort[1])
+        async for doc in cursor.limit(limit):
+            if doc.get("_id") is not None:
+                doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+            out.append(doc)
+        return out
+
+    customer_trips = await export_many(
+        db.trips, {"user_id": uid}, sort=("created_at", -1)
+    )
+    driver_trips = await export_many(
+        db.trips, {"driver_id": uid}, sort=("created_at", -1)
+    )
+
+    participant_trip_ids = {
+        t.get("trip_id")
+        for t in [*customer_trips, *driver_trips]
+        if t.get("trip_id")
     }
 
+    ai_messages = await export_many(
+        db.chat_messages, {"user_id": uid}, sort=("created_at", 1)
+    )
+    sent_trip_messages = await export_many(
+        db.trip_messages, {"from_user_id": uid}, sort=("created_at", 1)
+    )
+    trip_messages = []
+    if participant_trip_ids:
+        trip_messages = await export_many(
+            db.trip_messages,
+            {"trip_id": {"$in": list(participant_trip_ids)}},
+            sort=("created_at", 1),
+        )
+
+    payments = await export_many(
+        db.payment_transactions, {"user_id": uid}, sort=("created_at", -1)
+    )
+    payment_methods = await export_many(
+        db.payment_methods,
+        {"user_id": uid},
+        sort=("created_at", -1),
+        projection={
+            "stripe_payment_method_id": 0,
+            "stripe_customer_id": 0,
+        },
+    )
+    settings = await export_many(db.settings, {"user_id": uid})
+    saved_places = await export_many(
+        db.user_places, {"user_id": uid}, sort=("created_at", 1)
+    )
+    safety_events = await export_many(
+        db.safety_events,
+        {"user_id": uid},
+        sort=("created_at", -1),
+    )
+    support_tickets = await export_many(
+        db.support_tickets,
+        {"$or": [{"user_id": uid}, {"email": current.get("email")}]},
+        sort=("created_at", -1),
+    )
+
+    native_push_registrations = await export_many(
+        db.native_push_tokens,
+        {"user_id": uid},
+        sort=("updated_at", -1),
+        projection={"token": 0},
+    )
+
+    return {
+        "format": "kjapp-gdpr-export",
+        "format_version": 2,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "account": user,
+        "customer_trips": customer_trips,
+        "driver_trips": driver_trips,
+        "trip_messages": trip_messages,
+        "messages_sent_by_account": sent_trip_messages,
+        "ai_messages": ai_messages,
+        "payments": payments,
+        "payment_methods": payment_methods,
+        "settings": settings,
+        "saved_places": saved_places,
+        "safety_events": safety_events,
+        "support_tickets": support_tickets,
+        "native_push_registrations": native_push_registrations,
+        "security_note": (
+            "Password hashes, raw native push tokens, web-push authentication keys and external "
+            "provider secrets are omitted because they are security credentials rather than "
+            "user-facing export content."
+        ),
+    }
 
 @api.delete("/gdpr/delete")
 async def gdpr_delete(current=Depends(get_current_user), response: Response = None):
