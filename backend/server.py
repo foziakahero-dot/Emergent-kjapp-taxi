@@ -1908,7 +1908,15 @@ async def request_trip(body: TripRequest, request: Request, current=Depends(get_
     e2e_run = (request.headers.get("X-KJAPP-E2E-Run") or "").strip()
     email = str(current.get("email") or "").strip().lower()
     known_demo_account = email in LEGACY_DEMO_EMAILS
-    synthetic = bool(e2e_run or known_demo_account)
+    pickup_marker = str(body.pickup_address or "").lstrip().upper().startswith(("TEST_", "TEST ", "TEST-"))
+    dropoff_marker = str(body.dropoff_address or "").lstrip().upper().startswith(("TEST_", "TEST ", "TEST-"))
+    synthetic_reason = (
+        "e2e" if e2e_run else
+        "demo_account" if known_demo_account else
+        "synthetic_address" if (pickup_marker or dropoff_marker) else
+        None
+    )
+    synthetic = synthetic_reason is not None
     if IS_PRODUCTION and synthetic:
         raise HTTPException(status_code=403, detail="Test/demo-turer er ikke tillatt i produksjon")
 
@@ -1951,7 +1959,7 @@ async def request_trip(body: TripRequest, request: Request, current=Depends(get_
         "status": "searching",
         "driver_id": None,
         "synthetic": synthetic,
-        "synthetic_reason": ("e2e" if e2e_run else "demo_account") if synthetic else None,
+        "synthetic_reason": synthetic_reason,
         "test_run_id": e2e_run or None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
