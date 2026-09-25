@@ -169,9 +169,20 @@ export default function Home() {
       });
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
+      // The request may have reached the server even if the response was lost.
+      // Reconcile against canonical backend state before presenting a failure or allowing another booking.
+      try {
+        const active = await tripsApi.active();
+        if (active?.trip_id) {
+          router.replace(`/booking/${active.trip_id}`);
+          return;
+        }
+      } catch {}
       if (e?.response?.status === 402) {
         setError('Legg til et betalingskort før du bestiller.');
         setTimeout(() => router.push('/payment-methods'), 700);
+      } else if (e?.response?.status === 409) {
+        setError('En bestilling behandles allerede. KJAPP sjekker den aktive turen automatisk.');
       } else {
         setError(apiError(e));
       }
