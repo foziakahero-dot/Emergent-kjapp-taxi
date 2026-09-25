@@ -1,0 +1,203 @@
+name: KJAPP Driver Current Android Runtime Smoke
+
+on:
+  pull_request:
+    branches: ['main']
+
+jobs:
+  driver_current_runtime:
+    name: Build and cold-launch current KJAPP Driver
+    image: sdk-57
+    runs_on: linux-large-nested-virtualization
+    env:
+      CI: '1'
+      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+    outputs:
+      result: ${{ steps.driver_runtime.outputs.result }}
+      code: ${{ steps.driver_runtime.outputs.code }}
+      summary: ${{ steps.driver_runtime.outputs.summary }}
+    steps:
+      - uses: eas/checkout
+
+      - id: driver_runtime
+        name: Build Driver APK and run Android cold-launch
+        run: |
+          set +e
+          rm -rf .driver-runtime
+          cp -R ../driver-app .driver-runtime
+          cd .driver-runtime
+
+          npm install --no-audit --no-fund > /tmp/driver-install.log 2>&1
+          if [ $? -ne 0 ]; then
+            set-output result failure
+            set-output code npm-install
+            set-output summary "$(tail -n 20 /tmp/driver-install.log | tr '\n' ' ' | cut -c1-4000)"
+            exit 0
+          fi
+
+          npx expo config --type public > /tmp/driver-config.log 2>&1
+          if [ $? -ne 0 ]; then
+            set-output result failure
+            set-output code expo-config
+            set-output summary "$(tail -n 20 /tmp/driver-config.log | tr '\n' ' ' | cut -c1-4000)"
+            exit 0
+          fi
+
+          npx expo prebuild --platform android --clean > /tmp/driver-prebuild.log 2>&1
+          if [ $? -ne 0 ]; then
+            set-output result failure
+            set-output code expo-prebuild
+            set-output summary "$(tail -n 30 /tmp/driver-prebuild.log | tr '\n' ' ' | cut -c1-5000)"
+            exit 0
+          fi
+
+          cd android
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace > /tmp/driver-gradle.log 2>&1
+          if [ $? -ne 0 ]; then
+            CODE=gradle-unknown
+            grep -Eqi 'react-native-reanimated|react-native-worklets|worklets' /tmp/driver-gradle.log && CODE=reanimated-worklets
+            grep -Eqi 'expo-task-manager|TaskManager' /tmp/driver-gradle.log && CODE=task-manager
+            grep -Eqi 'expo-location|LocationModule|LocationTask' /tmp/driver-gradle.log && CODE=location
+            grep -Eqi 'expo-notifications|Notifications' /tmp/driver-gradle.log && CODE=notifications
+            grep -Eqi 'bundleReleaseJsAndAssets|SyntaxError|BABEL_TRANSFORM_ERROR' /tmp/driver-gradle.log && CODE=js-bundle
+            set-output result failure
+            set-output code "$CODE"
+            set-output summary "$(grep -Ei 'FAILURE:|Execution failed|Caused by:|error:|Unable to resolve|Cannot find|worklet|reanimated|TaskManager|Location|Notifications' /tmp/driver-gradle.log | tail -n 30 | tr '\n' '|' | cut -c1-6000)"
+            exit 0
+          fi
+
+          APK="$PWD/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            set-output result failure
+            set-output code apk-output
+            set-output summary "Release APK missing after successful Gradle build"
+            exit 0
+          fi
+
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          IMAGE="system-images;android-35;google_apis;x86_64"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "$IMAGE" >/tmp/sdkmanager-driver.log 2>&1
+          if [ $? -ne 0 ]; then
+            IMAGE="system-images;android-35;default;x86_64"
+            sdkmanager "$IMAGE" >/tmp/sdkmanager-driver.log 2>&1
+          fi
+          if [ $? -ne 0 ]; then
+            set-output result failure
+            set-output code emulator-image
+            set-output summary "$(tail -n 30 /tmp/sdkmanager-driver.log | tr '\n' ' ' | cut -c1-5000)"
+            exit 0
+          fi
+
+          echo no | avdmanager create avd -n kjapp_driver_runtime -k "$IMAGE" --device "pixel_6" --force >/tmp/avd-driver.log 2>&1
+          emulator -avd kjapp_driver_runtime -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on >/tmp/emulator-driver.log 2>&1 &
+          EMU_PID=$!
+
+          adb wait-for-device
+          for i in $(seq 1 60); do
+            BOOT="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+            [ "$BOOT" = "1" ] && break
+            sleep 2
+          done
+          BOOT="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+          if [ "$BOOT" != "1" ]; then
+            set-output result failure
+            set-output code emulator-boot
+            set-output summary "$(tail -n 40 /tmp/emulator-driver.log | tr '\n' '|' | cut -c1-6000)"
+            kill $EMU_PID 2>/dev/null || true
+            exit 0
+          fi
+
+          adb install -r "$APK" >/tmp/driver-adb-install.log 2>&1
+          if [ $? -ne 0 ]; then
+            set-output result failure
+            set-output code adb-install
+            set-output summary "$(cat /tmp/driver-adb-install.log | tr '\n' ' ' | cut -c1-5000)"
+            kill $EMU_PID 2>/dev/null || true
+            exit 0
+          fi
+
+          adb logcat -c
+          adb shell pm clear no.kjapp.driver >/dev/null 2>&1 || true
+          adb shell monkey -p no.kjapp.driver -c android.intent.category.LAUNCHER 1 >/tmp/driver-launch.log 2>&1
+          sleep 12
+
+          PID="$(adb shell pidof no.kjapp.driver 2>/dev/null | tr -d '\r')"
+          TOP="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -n 2 | tr -d '\r')"
+          adb logcat -d -v threadtime > /tmp/kjapp-driver-current-logcat.txt 2>/dev/null
+          FATAL="$(grep -Ei 'FATAL EXCEPTION|JavascriptException|UnsatisfiedLinkError|dlopen failed|Unable to load script|ReactNativeJS.*(Error|Exception)|worklet.*(error|exception)|reanimated.*(error|exception)' /tmp/kjapp-driver-current-logcat.txt | tail -n 40)"
+          FOCUS="$(grep -Ei 'AndroidRuntime|ReactNativeJS|SoLoader|TaskManager|expo-notifications|expo-location|worklet|reanimated|no.kjapp.driver' /tmp/kjapp-driver-current-logcat.txt | tail -n 80)"
+
+          adb shell uiautomator dump /sdcard/kjapp-driver-window.xml >/dev/null 2>&1 || true
+          UI="$(adb shell cat /sdcard/kjapp-driver-window.xml 2>/dev/null | tr -d '\r' | grep -o 'Logg inn som sjåfør' | head -n 1)"
+
+          {
+            echo "APP_PID=$PID"
+            echo "TOP_ACTIVITY=$TOP"
+            echo "UI_MATCH=$UI"
+            echo "---- FATAL ----"
+            echo "$FATAL"
+            echo "---- FOCUSED ----"
+            echo "$FOCUS"
+          } > /tmp/kjapp-driver-current-runtime.txt
+
+          if [ -z "$PID" ]; then
+            set-output result failure
+            set-output code process-died
+            set-output summary "$(cat /tmp/kjapp-driver-current-runtime.txt | tr '\n' '|' | cut -c1-7000)"
+          elif [ -n "$FATAL" ]; then
+            set-output result failure
+            set-output code fatal-logcat
+            set-output summary "$(cat /tmp/kjapp-driver-current-runtime.txt | tr '\n' '|' | cut -c1-7000)"
+          elif ! echo "$TOP" | grep -q 'no.kjapp.driver'; then
+            set-output result failure
+            set-output code activity-not-resumed
+            set-output summary "$(cat /tmp/kjapp-driver-current-runtime.txt | tr '\n' '|' | cut -c1-7000)"
+          else
+            set-output result success
+            set-output code success
+            set-output summary "$(cat /tmp/kjapp-driver-current-runtime.txt | tr '\n' '|' | cut -c1-7000)"
+          fi
+
+          kill $EMU_PID 2>/dev/null || true
+
+      - uses: eas/upload_artifact
+        if: ${{ always() }}
+        with:
+          type: other
+          name: kjapp-driver-current-runtime
+          path: /tmp/kjapp-driver-current-runtime.txt
+          ignore_error: true
+
+  driver_runtime_success:
+    name: DRIVER CURRENT APK RUNTIME SUCCESS
+    needs: [driver_current_runtime]
+    if: ${{ needs.driver_current_runtime.outputs.result == 'success' }}
+    steps:
+      - run: echo "Current KJAPP Driver release APK cold-launch succeeded."
+
+  driver_runtime_failure:
+    name: DRIVER CURRENT APK RUNTIME FAILURE
+    needs: [driver_current_runtime]
+    if: ${{ needs.driver_current_runtime.outputs.result == 'failure' }}
+    steps:
+      - run: |
+          echo "Category: ${{ needs.driver_current_runtime.outputs.code }}"
+          echo "${{ needs.driver_current_runtime.outputs.summary }}"
+          exit 1
+
+  report_driver_current:
+    name: Report current Driver runtime
+    after: [driver_current_runtime]
+    type: github-comment
+    params:
+      payload: |
+        ## KJAPP Driver current Android runtime
+
+        **Result:** ${{ after.driver_current_runtime.outputs.result }}
+        **Category:** `${{ after.driver_current_runtime.outputs.code }}`
+
+        ```
+        ${{ after.driver_current_runtime.outputs.summary }}
+        ```
