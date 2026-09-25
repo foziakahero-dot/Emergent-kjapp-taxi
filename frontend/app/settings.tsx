@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -32,9 +32,13 @@ export default function Settings() {
       const d = await gdprApi.export();
       const trips = (d.trips || []).length;
       const payments = (d.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjapp.no for en full kopi på e-post.`);
+      await Share.share({
+        title: 'KJAPP dataeksport',
+        message: JSON.stringify(d, null, 2),
+      });
+      setExportInfo(`Dataeksport klar: ${trips} turer og ${payments} betalinger.`);
     } catch {
-      setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
+      setExportInfo('Kunne ikke eksportere data akkurat nå. Prøv igjen senere.');
     } finally {
       setExporting(false);
     }
@@ -107,7 +111,7 @@ export default function Settings() {
               <Pressable style={s.gdprRow} onPress={exportData} disabled={exporting} testID="gdpr-export">
                 <View style={s.gdprIcon}><Icon name="file-text" size={18} color={colors.accent} /></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.rowLabel}>Last ned mine data</Text>
+                  <Text style={s.rowLabel}>Eksporter mine data</Text>
                   <Text style={s.rowSub}>Få innsyn i dataene vi lagrer om deg (GDPR)</Text>
                 </View>
                 {exporting ? <Loader /> : <Icon name="chevron-right" size={18} color={colors.textMuted} />}
