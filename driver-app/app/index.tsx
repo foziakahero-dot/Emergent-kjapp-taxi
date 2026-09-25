@@ -13,10 +13,10 @@ export default function Index() {
   const s = useStyles();
 
   useEffect(() => {
-    if (user?.role === 'driver') router.replace('/(driver)/home');
+    if (user?.role === 'driver' && user?.approved === true) router.replace('/(driver)/home');
   }, [user, router]);
 
-  if (user === undefined || user?.role === 'driver') {
+  if (user === undefined || (user?.role === 'driver' && user?.approved === true)) {
     return (
       <View style={s.splash}>
         <BrandMark />
@@ -25,13 +25,19 @@ export default function Index() {
     );
   }
 
-  if (user && user.role !== 'driver') {
+  if (user) {
     return (
       <View style={[s.splash, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }]}>
         <View style={s.center}>
           <BrandMark />
-          <Text style={s.title}>Denne appen er kun for sjåfører</Text>
-          <Text style={s.subtitle}>Logg ut og bruk en godkjent KJAPP-sjåførkonto.</Text>
+          <Text style={s.title}>
+            {user.role === 'driver' ? 'Sjåførkontoen er ikke godkjent ennå' : 'Denne appen er kun for inviterte sjåfører'}
+          </Text>
+          <Text style={s.subtitle}>
+            {user.role === 'driver'
+              ? 'Kontoen må godkjennes før KJAPP Driver kan brukes.'
+              : 'Customer-, admin- og flåtekontoer har ikke tilgang til Driver-appen.'}
+          </Text>
         </View>
         <Button
           label="Logg ut"
@@ -50,7 +56,7 @@ export default function Index() {
       <View style={s.center}>
         <BrandMark />
         <Text style={s.tag}>DRIVER</Text>
-        <Text style={s.subtitle}>Turer, navigasjon og inntekt — samlet i én sjåførapp.</Text>
+        <Text style={s.subtitle}>Invite-only for godkjente KJAPP-sjåfører.</Text>
       </View>
       <Button label="Logg inn som sjåfør" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
     </View>
