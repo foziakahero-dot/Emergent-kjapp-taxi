@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, apiError } from './api';
 import { Btn, Drawer, Empty, ErrorBanner, KV, Loader, PageHead, Pagination, Pill, Route, fmtDate, fmtMoney } from './ui';
 import { useAuth } from './auth';
@@ -38,7 +39,8 @@ type Receipt = {
 
 export default function Receipts() {
   const { user } = useAuth();
-  const [q, setQ] = useState('');
+  const [searchParams] = useSearchParams();
+  const [q, setQ] = useState(searchParams.get('q') || '');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
