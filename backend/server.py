@@ -1250,10 +1250,13 @@ GPS_FRESH_SECONDS = 60  # a driver marker disappears when the GPS heartbeat is o
 
 @api.post("/cars/nearby")
 async def cars_nearby(body: NearbyCarsRequest):
-    """ONLY real, approved, on-duty drivers with a live GPS heartbeat (<60s) within ~10km.
-    Simulated/demo driver records are never returned — an empty list is an honest 'no cars' answer."""
+    """Only real approved/on-duty drivers with fresh GPS.
+
+    GPS coordinates are live device data. Driving ETA/distance comes from OSRM when available;
+    KJAPP never invents a road ETA from straight-line distance.
+    """
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
-    cars = []
+    candidates = []
     async for u in db.users.find({
         "role": "driver",
         "approved": True,
@@ -1268,11 +1271,21 @@ async def cars_nearby(body: NearbyCarsRequest):
         lng = u.get("last_lng")
         if lat is None or lng is None:
             continue
-        d_km = haversine_km(body.lat, body.lng, lat, lng)
-        if d_km > 10:
+        straight_km = haversine_km(body.lat, body.lng, lat, lng)
+        if straight_km > 10:
             continue
-        # driver "speed": approx 30 km/h in city -> eta = d/30*60 min, min 1 min
-        eta = max(1, int(round(d_km / 30 * 60)))
+        candidates.append((straight_km, u))
+
+    # Route only the nearest candidates for latency; straight-line distance is internal ranking only.
+    candidates.sort(key=lambda item: item[0])
+    candidates = candidates[:8]
+    routes = await asyncio.gather(*[
+        osrm_route(u.get("last_lat"), u.get("last_lng"), body.lat, body.lng)
+        for _, u in candidates
+    ]) if candidates else []
+
+    cars = []
+    for (straight_km, u), route in zip(candidates, routes):
         cars.append({
             "id": str(u["_id"]),
             "name": u.get("fullName") or "Sjåfør",
@@ -1280,14 +1293,23 @@ async def cars_nearby(body: NearbyCarsRequest):
             "plate": u.get("plate") or "",
             "rating": u.get("rating"),
             "type": u.get("vehicle_type") or "ai-first",
-            "lat": lat,
-            "lng": lng,
+            "lat": u.get("last_lat"),
+            "lng": u.get("last_lng"),
             "heading": u.get("last_heading") or 0,
-            "eta_min": eta,
-            "distance_km": round(d_km, 2),
+            "eta_min": route.get("duration_min") if route else None,
+            "distance_km": route.get("distance_km") if route else None,
+            "routing_source": "osrm" if route else None,
             "updated_at": u.get("last_location_at"),
+            "_sort_km": straight_km,
         })
-    cars.sort(key=lambda x: x["eta_min"])
+
+    cars.sort(key=lambda x: (
+        x["eta_min"] is None,
+        x["eta_min"] if x["eta_min"] is not None else x["_sort_km"],
+    ))
+    for car in cars:
+        car.pop("_sort_km", None)
+
     return {
         "cars": cars,
         "count": len(cars),
@@ -1295,7 +1317,6 @@ async def cars_nearby(body: NearbyCarsRequest):
         "gps_fresh_seconds": GPS_FRESH_SECONDS,
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
-
 
 @api.get("/places")
 async def list_places(featured_only: bool = False):
@@ -1488,13 +1509,11 @@ async def search_places(q: str, limit: int = 8):
 async def trip_estimate(body: EstimateRequest):
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
-    if route:
-        est = route["distance_km"]
-        duration = route["duration_min"]
-        geometry = route["geometry"]
-    else:
-        est, duration = fallback_route_points(points)
-        geometry = None
+    if not route:
+        raise HTTPException(status_code=503, detail="Kunne ikke beregne kjørerute akkurat nå. Prøv igjen.")
+    est = route["distance_km"]
+    duration = route["duration_min"]
+    geometry = route["geometry"]
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
@@ -1507,6 +1526,7 @@ async def trip_estimate(body: EstimateRequest):
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
+            "routing_source": "osrm",
             "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
@@ -1914,13 +1934,11 @@ async def request_trip(body: TripRequest, request: Request, current=Depends(get_
 
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
-    if route:
-        est = route["distance_km"]
-        eta_min = route["duration_min"]
-        geometry = route["geometry"]
-    else:
-        est, eta_min = fallback_route_points(points)
-        geometry = None
+    if not route:
+        raise HTTPException(status_code=503, detail="Kunne ikke bekrefte kjøreruten. Ingen tur ble opprettet. Prøv igjen.")
+    est = route["distance_km"]
+    eta_min = route["duration_min"]
+    geometry = route["geometry"]
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
@@ -1949,6 +1967,7 @@ async def request_trip(body: TripRequest, request: Request, current=Depends(get_
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
+        "routing_source": "osrm",
         "status": "searching",
         "driver_id": None,
         "synthetic": synthetic,
@@ -2002,11 +2021,9 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         raise HTTPException(400, "Destinasjonen kan bare endres på en aktiv tur")
     points = [(trip["pickup_lat"], trip["pickup_lng"])] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
-    if route:
-        distance_km, duration_min, geometry = route["distance_km"], route["duration_min"], route["geometry"]
-    else:
-        distance_km, duration_min = fallback_route_points(points)
-        geometry = None
+    if not route:
+        raise HTTPException(status_code=503, detail="Kunne ikke beregne ny kjørerute. Destinasjonen er ikke endret.")
+    distance_km, duration_min, geometry = route["distance_km"], route["duration_min"], route["geometry"]
     pricing = trip.get("pricing_snapshot") or await active_pricing()
     quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
     previous = {
@@ -2025,7 +2042,7 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         {"$set": {
             "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
             "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
-            "geometry": geometry, "price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
+            "geometry": geometry, "routing_source": "osrm", "price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
             "extra_stop_fee_total": quote["extra_stop_fee_total"], "updated_at": now_iso,
         }, "$push": {"destination_revisions": revision}},
     )
@@ -3152,10 +3169,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     }
     if d_lat is not None and d_lng is not None:
         route = await osrm_route(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"])
-        eta = route["duration_min"] if route else max(1, int(round(
-            haversine_km(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"]) / 30 * 60)))
+        eta = route["duration_min"] if route else None
         updates.update({
             "eta_min": eta,
+            "driver_pickup_route_source": "osrm" if route else None,
             "driver_start_lat": d_lat,
             "driver_start_lng": d_lng,
             "driver_lat": d_lat,
