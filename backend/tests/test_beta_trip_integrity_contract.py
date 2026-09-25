@@ -121,3 +121,30 @@ def test_driver_app_does_not_mask_money_failures_or_recompute_trip_earnings():
     assert "t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'" in DRIVER_TRIPS
     assert "t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'" in DRIVER_EARNINGS
     assert "KJAPP viser ikke 0 kr som fallback" in DRIVER_EARNINGS
+
+
+def test_customer_and_driver_roles_are_server_separated():
+    assert "def require_customer(current=Depends(get_current_user))" in SERVER
+    passenger_endpoints = [
+        "request_trip", "active_trip", "get_trip", "change_trip_destination",
+        "complete_trip", "rate_trip", "cancel_trip_preview", "cancel_trip",
+        "list_trips", "create_trip_checkout", "get_payment_status",
+    ]
+    for name in passenger_endpoints:
+        block = _block(SERVER, name)
+        assert "Depends(require_customer)" in block, name
+
+
+def test_driver_login_is_role_scoped_and_supports_email_or_phone():
+    login = _block(SERVER, "login")
+    assert 'body.client == "driver"' in login
+    assert '"role": "driver"' in login
+    assert '"phone": {"$regex": phone_pattern}' in login
+    assert 'lookup = {"role": "driver", "email": identifier.lower()}' in login
+
+
+def test_driver_profile_truth_comes_from_fleet_vehicle_assignment():
+    me = _block(SERVER, "me")
+    assert 'current["fleet_name"] = fleet.get("name")' in me
+    assert 'current["fleet_org_number"] = fleet.get("org_number")' in me
+    assert "await _assigned_fleet_vehicle(current, required=False)" in me
