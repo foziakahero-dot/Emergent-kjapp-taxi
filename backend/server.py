@@ -258,10 +258,12 @@ async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_pro
     return result
 
 
-async def disable_legacy_demo_users(db, is_production: bool, admin_email: str = "") -> int:
-    """In production, disable known seed/demo accounts so they cannot authenticate. Legitimate
-    production users are never touched. Returns the number of accounts disabled."""
-    if not is_production:
+async def disable_legacy_demo_users(db, enforce: bool, admin_email: str = "") -> int:
+    """Disable known seed/demo accounts whenever the deployment is not an explicit demo environment.
+
+    This applies to production and beta/staging with ENABLE_DEMO_DATA=false.
+    """
+    if not enforce:
         return 0
     admin_email = (admin_email or "").strip().lower()
     query = {
@@ -1157,10 +1159,11 @@ async def lifespan(app: FastAPI):
     if purged:
         print(f"[seed] purged synthetic data: {purged}")
 
-    # P0.1: in production, disable legacy seed/demo accounts so they can no longer authenticate
-    if IS_PRODUCTION:
-        disabled_n = await disable_legacy_demo_users(db, True, admin_email)
-        print(f"[seed] production: disabled {disabled_n} legacy demo account(s)")
+    # No-demo deployment rule: legacy demo accounts cannot authenticate in beta/staging either.
+    enforce_no_demo_accounts = IS_PRODUCTION or not ENABLE_DEMO_DATA
+    disabled_n = await disable_legacy_demo_users(db, enforce_no_demo_accounts, admin_email)
+    if enforce_no_demo_accounts:
+        print(f"[seed] no-demo mode: disabled {disabled_n} legacy demo account(s)")
 
     # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
     dispatch_task = asyncio.create_task(dispatch_loop())
@@ -4854,6 +4857,40 @@ def _fresh_driver_location(value, now=None) -> bool:
         return 0 <= age <= 120
     except (TypeError, ValueError):
         return False
+
+
+@api.get("/admin/data-integrity")
+async def admin_data_integrity(current=Depends(require_admin)):
+    """Read-only operational guardrail: confirm business dashboards are backed by real data only."""
+    synthetic_trip_query = {"$or": [
+        {"synthetic": True},
+        {"demo": True},
+        {"pickup_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
+        {"dropoff_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    ]}
+    synthetic_trips = await db.trips.count_documents(synthetic_trip_query)
+    legacy_demo_users = await db.users.count_documents({"$or": [
+        {"email": {"$in": list(LEGACY_DEMO_EMAILS)}},
+        {"demo": True},
+        {"is_demo": True},
+    ]})
+    enabled_demo_users = await db.users.count_documents({"$or": [
+        {"demo": True, "disabled": {"$ne": True}},
+        {"is_demo": True, "disabled": {"$ne": True}},
+        {"email": {"$in": list(LEGACY_DEMO_EMAILS)}, "disabled": {"$ne": True}},
+    ]})
+    real_trips = await db.trips.count_documents(_real_trip_filter())
+    return {
+        "ok": synthetic_trips == 0 and (ENABLE_DEMO_DATA or enabled_demo_users == 0),
+        "app_env": APP_ENV,
+        "demo_data_enabled": ENABLE_DEMO_DATA,
+        "synthetic_trips": synthetic_trips,
+        "real_trips": real_trips,
+        "legacy_demo_users_total": legacy_demo_users,
+        "enabled_demo_users": enabled_demo_users,
+        "operational_reads_filter_synthetic": True,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api.get("/admin/overview")
