@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -23,11 +23,14 @@ export default function DriverSettings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout, linkGoogle, refresh } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleMessage, setGoogleMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     settingsApi.get().then((r) => setSettings(r.settings || r || {})).catch(() => setSettings({}));
@@ -50,6 +53,37 @@ export default function DriverSettings() {
     } catch { setDeleting(false); }
   };
 
+  const connectGoogle = async () => {
+    setGoogleMessage('');
+    setGoogleBusy(true);
+    try {
+      const linked = await linkGoogle();
+      if (!linked) {
+        setGoogleMessage('Google-tilkoblingen ble avbrutt.');
+        return;
+      }
+      await refresh();
+      setGoogleMessage('Google-kontoen er koblet til sjåførkontoen.');
+    } catch (e: any) {
+      setGoogleMessage(e?.response?.data?.detail || 'Kunne ikke koble Google-kontoen.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  const exportMyData = async () => {
+    setExporting(true);
+    try {
+      const data = await gdprApi.export();
+      await Share.share({
+        title: 'KJAPP dataeksport',
+        message: JSON.stringify(data, null, 2),
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const version = Constants.expoConfig?.version || '1.0.0';
 
   return (
@@ -65,6 +99,28 @@ export default function DriverSettings() {
         <View style={{ paddingTop: 60 }}><Loader /></View>
       ) : (
         <View style={{ paddingHorizontal: 20 }}>
+          <Text style={s.sectionTitle}>Konto</Text>
+          <View style={s.card}>
+            <View style={s.accountRow}>
+              <View style={s.linkIcon}><Icon name="user" size={18} color={colors.accent} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.linkLabel}>Google-konto</Text>
+                <Text style={s.rowSub}>{user?.google_linked ? 'Tilkoblet' : 'Ikke tilkoblet'}</Text>
+              </View>
+              {user?.google_linked ? (
+                <View style={s.connectedBadge}>
+                  <Icon name="check" size={14} color={colors.online} />
+                  <Text style={s.connectedText}>Tilkoblet</Text>
+                </View>
+              ) : (
+                <Pressable style={s.connectBtn} onPress={connectGoogle} disabled={googleBusy} testID="ds-google-link">
+                  <Text style={s.connectBtnText}>{googleBusy ? 'Kobler…' : 'Koble til'}</Text>
+                </Pressable>
+              )}
+            </View>
+            {googleMessage ? <Text style={s.googleMessage}>{googleMessage}</Text> : null}
+          </View>
+
           <Text style={s.sectionTitle}>Varsler</Text>
           <View style={s.card}>
             {NOTIF.map((t, i) => (
@@ -91,7 +147,7 @@ export default function DriverSettings() {
           <Text style={s.sectionTitle}>Personvern</Text>
           <View style={s.card}>
             <LinkRow icon="map-pin" label="Posisjonstilgang" onPress={() => Linking.openSettings()} s={s} testID="ds-location" />
-            <LinkRow icon="file-text" label="Last ned mine data" onPress={() => Linking.openURL('mailto:support@kjapp.no?subject=Innsyn%20i%20data')} border s={s} testID="ds-gdpr" />
+            <LinkRow icon="file-text" label={exporting ? 'Eksporterer data…' : 'Eksporter mine data'} onPress={exportMyData} border s={s} testID="ds-gdpr" />
           </View>
 
           <Text style={s.sectionTitle}>Hjelp</Text>
@@ -172,6 +228,12 @@ const useStyles = makeStyles((c) => ({
   title: { fontFamily: font.display, fontSize: 26, color: c.text },
   sectionTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '600', marginTop: 22, marginBottom: 8 },
   card: { backgroundColor: c.driverCard, borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  connectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: c.onlineSoft },
+  connectedText: { color: c.online, fontSize: 11, fontWeight: '700' },
+  connectBtn: { minHeight: 34, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
+  connectBtnText: { color: c.text, fontSize: 12, fontWeight: '700' },
+  googleMessage: { color: c.textMuted, fontSize: 11, lineHeight: 16, paddingBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 16 },
   rowBorder: { borderTopWidth: 1, borderTopColor: c.line },
   rowLabel: { color: c.text, fontSize: 15 },
