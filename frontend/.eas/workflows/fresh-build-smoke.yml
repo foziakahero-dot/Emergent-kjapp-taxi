@@ -1,0 +1,24 @@
+name: KJAPP Customer Fresh APK + Runtime Smoke
+
+on:
+  push:
+    branches: ['diagnostic/fresh-customer-driver-builds']
+
+jobs:
+  build_customer_android:
+    name: Fresh KJAPP Customer Android APK
+    type: build
+    params:
+      platform: android
+      profile: apk
+
+  customer_runtime_smoke:
+    name: Cold-launch fresh KJAPP Customer APK
+    needs: [build_customer_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    params:
+      build_id: ${{ needs.build_customer_android.outputs.build_id }}
+      flow_path: ['.maestro/fresh-customer-startup-smoke.yml']
+      record_screen: true
+      retries: 0
