@@ -33,7 +33,7 @@ export default function Settings() {
     setExportInfo('');
     try {
       const d = await gdprApi.export();
-      const trips = (d.trips || []).length;
+      const trips = (d.customer_trips || d.trips || []).length;
       const payments = (d.payments || []).length;
       const exported = await shareJsonExport(d, 'kjapp-customer-gdpr');
       setExportInfo(`Dataeksport klar: ${trips} turer og ${payments} betalinger · ${exported.filename}`);
