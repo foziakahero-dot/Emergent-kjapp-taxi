@@ -131,8 +131,7 @@ export const driverApi = {
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
   payouts: () => api.get('/driver/payouts')
-    .then((r) => normalizePayouts(r.data))
-    .catch(() => normalizePayouts()),
+    .then((r) => normalizePayouts(r.data)),
   identityVerification: () => api.get('/driver/identity-verification').then((r) => r.data),
   submitIdentitySelfie: (uri: string) => {
     const form = new FormData();
