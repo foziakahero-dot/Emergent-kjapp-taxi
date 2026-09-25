@@ -2350,6 +2350,9 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    if trip.get("payment_status") == "paid" and not trip.get("receipt_id"):
+        await ensure_receipt_snapshot(trip_id)
+        trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]}) or trip
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -6641,11 +6644,17 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "backfilled": bool(backfilled),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.receipt_ledger.update_one(
-        {"trip_id": trip_id},
-        {"$setOnInsert": snapshot},
-        upsert=True,
-    )
+    try:
+        await db.receipt_ledger.update_one(
+            {"trip_id": trip_id},
+            {"$setOnInsert": snapshot},
+            upsert=True,
+        )
+    except Exception:
+        # A simultaneous webhook/poll may win the unique trip_id race. Only suppress
+        # the error when the canonical receipt now exists; otherwise propagate it.
+        if not await db.receipt_ledger.find_one({"trip_id": trip_id}, {"_id": 1}):
+            raise
     await db.trips.update_one(
         {"trip_id": trip_id},
         {"$set": {"receipt_id": receipt_number}},
