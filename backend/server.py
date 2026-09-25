@@ -5388,7 +5388,8 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "plate": inv.get("plate"),
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
         "capabilities": inv.get("capabilities") or [],
-        "rating": 5.0,
+        "rating": None,  # no fabricated starting score; populated only from real passenger ratings
+        "rating_count": 0,
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
