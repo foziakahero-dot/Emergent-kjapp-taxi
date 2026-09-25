@@ -268,6 +268,8 @@ export default function DriverHome() {
       await driverApi.accept(tripId);
       setTripMinimized(false);
       setCompletedTrip(null);
+      await storage.removeItem(MINIMIZED_ACTIVE_TRIP_KEY);
+      await storage.removeItem(DISMISSED_COMPLETED_TRIP_KEY);
       await poll();
     } catch (e) { setError(apiError(e)); }
     finally { setBusy(false); }
