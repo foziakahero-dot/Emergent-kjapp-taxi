@@ -83,11 +83,11 @@ export default function DriverSettings() {
               <View style={s.linkIcon}><Icon name="user" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.linkLabel}>Godkjent sjåførkonto</Text>
-                <Text style={s.rowSub}>{user?.email || user?.phone || 'KJAPP Driver'}</Text>
+                <Text style={s.rowSub}>{user?.email || user?.phone || 'KJAPP Driver'} · invite-only</Text>
               </View>
               <View style={s.connectedBadge}>
                 <Icon name="check" size={14} color={colors.online} />
-                <Text style={s.connectedText}>INVITERT</Text>
+                <Text style={s.connectedText}>GODKJENT</Text>
               </View>
             </View>
           </View>
