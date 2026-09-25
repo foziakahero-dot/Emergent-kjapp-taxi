@@ -5763,12 +5763,60 @@ async def fleet_driver_detail(driver_id: str, current=Depends(require_fleet_owne
 
 @api.get("/fleet/payouts")
 async def fleet_payouts(current=Depends(require_fleet_owner)):
+    """Return the fleet's actual Stripe Connect payouts when connected.
+
+    Destination charges already move each paid fare's net amount to the connected
+    fleet account. This endpoint is read-only and must never create a second payout.
+    """
     fid = await get_fleet_id_for(current)
-    if not fid: raise HTTPException(404, "Ingen flåte")
-    payouts = []
-    async for p in db.fleet_payouts.find({"fleet_id": fid}).sort("period_end", -1).limit(24):
-        p["id"] = str(p["_id"]); p.pop("_id", None); payouts.append(p)
-    return {"payouts": payouts}
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
+    account_id = fleet.get("stripe_account_id")
+    schedule = fleet.get("stripe_payout_schedule", "stripe_default")
+
+    if account_id and stripe.api_key:
+        try:
+            plist = await asyncio.to_thread(
+                stripe.Payout.list,
+                limit=24,
+                stripe_account=account_id,
+            )
+            payouts = []
+            for p in list(plist.data):
+                arrival = p.get("arrival_date")
+                created = p.get("created")
+                payouts.append({
+                    "id": p.get("id"),
+                    "amount": (p.get("amount") or 0) / 100,
+                    "currency": str(p.get("currency") or "nok").upper(),
+                    "status": p.get("status"),
+                    "arrival_date": datetime.fromtimestamp(arrival, tz=timezone.utc).isoformat() if arrival else None,
+                    "created": datetime.fromtimestamp(created, tz=timezone.utc).isoformat() if created else None,
+                    "source": "stripe",
+                })
+            return {
+                "payouts": payouts,
+                "source": "stripe",
+                "connected": True,
+                "payout_schedule": schedule,
+            }
+        except Exception:
+            # Do not invent payout rows when Stripe is temporarily unavailable.
+            return {
+                "payouts": [],
+                "source": "stripe",
+                "connected": True,
+                "payout_schedule": schedule,
+                "temporarily_unavailable": True,
+            }
+
+    return {
+        "payouts": [],
+        "source": "none",
+        "connected": False,
+        "payout_schedule": schedule,
+    }
 
 
 @api.get("/fleet/export/monthly")
@@ -7865,7 +7913,7 @@ async def driver_ratings(current=Depends(require_driver), limit: int = 20):
 
 @api.get("/driver/payouts")
 async def driver_payouts(current=Depends(require_driver)):
-    """Sjåførens siste + kommende utbetaling (basert på fullførte betalte turer)."""
+    """Driver earnings visibility; settlement itself belongs to the fleet Connect account."""
     driver_id = current["id"]
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
@@ -7888,10 +7936,26 @@ async def driver_payouts(current=Depends(require_driver)):
     async for p in db.driver_payouts.find({"driver_id": driver_id}).sort("period_end", -1).limit(10):
         p["id"] = str(p["_id"]); p.pop("_id", None)
         history.append(p)
-    # Estimate next payout date = next Monday
-    now = datetime.now(timezone.utc).date()
-    days_ahead = (7 - now.weekday()) % 7 or 7
-    next_payout = (now + timedelta(days=days_ahead)).isoformat()
+    fleet = {}
+    if current.get("fleet_id"):
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(str(current["fleet_id"]))}) or {}
+        except (InvalidId, TypeError):
+            fleet = {}
+    payout_schedule = fleet.get("stripe_payout_schedule", "stripe_default")
+    connect_ready = bool(
+        fleet.get("stripe_account_id")
+        and fleet.get("stripe_payouts_enabled") is True
+    )
+    # Stripe is configured to initiate connected-account payouts on Friday.
+    next_payout = None
+    if connect_ready and payout_schedule == "weekly_friday":
+        now = datetime.now(timezone.utc).date()
+        friday = 4
+        days_ahead = (friday - now.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        next_payout = (now + timedelta(days=days_ahead)).isoformat()
     commission = await _platform_commission()
     net = pending_net
     bonuses = []
@@ -7909,6 +7973,9 @@ async def driver_payouts(current=Depends(require_driver)):
         "bonuses": bonuses,
         "commission_pct": int(round(commission * 100)),
         "next_payout_date": next_payout,
+        "settlement_recipient": "fleet",
+        "stripe_connect_ready": connect_ready,
+        "payout_schedule": payout_schedule,
         "history": history,
     }
 
