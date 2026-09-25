@@ -367,6 +367,14 @@ class TestDriverSignupDocs:
         assert r2.json()["user"]["role"] == "driver"
         assert r2.json()["user"]["approved"] is False
 
+        # Invite accepted, but Driver app remains locked until admin approval.
+        r3 = requests.post(
+            f"{API}/auth/driver-login",
+            json={"identifier": email, "password": "test1234"},
+            timeout=15,
+        )
+        assert r3.status_code == 403, r3.text
+
 
 # =========================================================
 # Pending drivers endpoint
