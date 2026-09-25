@@ -2006,25 +2006,53 @@ async def register(body: RegisterRequest, request: Request, response: Response):
 
 @api.post("/auth/login")
 async def login(body: LoginRequest, request: Request, response: Response):
-    email = body.email.strip().lower()
+    identifier = body.email.strip()
+    login_key = identifier.lower()
     ip = _client_ip(request)
-    if await _login_blocked(email, ip):
+    if await _login_blocked(login_key, ip):
         raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
-    user = await db.users.find_one({"email": email})
+
+    if body.client == "driver":
+        # Driver app accepts either the invited email address or the driver's phone number.
+        # Restrict the lookup to role=driver so a passenger credential can never authenticate
+        # into the driver client, even before the client-side role gate runs.
+        if "@" in identifier:
+            lookup = {"role": "driver", "email": identifier.lower()}
+        else:
+            digits = re.sub(r"\D", "", identifier)
+            local = digits[-8:] if len(digits) >= 8 else digits
+            if len(local) != 8:
+                user = None
+            else:
+                sep = r"[\s().-]*"
+                local_pattern = sep.join(re.escape(ch) for ch in local)
+                phone_pattern = rf"^(?:(?:\+|00)?47{sep})?{local_pattern}$"
+                user = await db.users.find_one({
+                    "role": "driver",
+                    "phone": {"$regex": phone_pattern},
+                })
+            lookup = None
+        if lookup is not None:
+            user = await db.users.find_one(lookup)
+    else:
+        user = await db.users.find_one({"email": identifier.lower()})
+
     if not user or not verify_password(body.password, user["password_hash"]):
-        await _record_failed_login(email, ip)
-        raise HTTPException(status_code=401, detail="Feil e-post eller passord")
+        await _record_failed_login(login_key, ip)
+        raise HTTPException(status_code=401, detail="Feil innlogging")
     if user.get("disabled"):
         # Disabled/legacy-demo accounts return the SAME generic 401 as invalid credentials.
-        await _record_failed_login(email, ip)
-        raise HTTPException(status_code=401, detail="Feil e-post eller passord")
-    await _clear_failed_logins(email, ip)
+        await _record_failed_login(login_key, ip)
+        raise HTTPException(status_code=401, detail="Feil innlogging")
+
+    await _clear_failed_logins(login_key, ip)
     user = await _apply_driver_identity_risk(user, body.device_id, body.client, on_login=True)
     uid = str(user["_id"])
     if user.get("totp_enabled"):
         # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
-    token = create_access_token(uid, email)
+    account_email = str(user.get("email") or "").strip().lower()
+    token = create_access_token(uid, account_email)
     set_auth_cookie(response, token)
     return {"token": token, "user": user_public(user)}
 
