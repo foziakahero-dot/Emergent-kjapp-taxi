@@ -113,7 +113,8 @@ export default function Home() {
     }).then(setEstimate).catch(() => setEstimate(null));
   }, [dropoff, loc.lat, loc.lng, stops]);
 
-  const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
+  const routedEtas = cars.map((c) => c.eta_min).filter((v) => typeof v === 'number' && Number.isFinite(v));
+  const nearest = routedEtas.length ? Math.min(...routedEtas) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
@@ -193,8 +194,10 @@ export default function Home() {
           <View style={[s.dot, { backgroundColor: cars.length ? colors.online : colors.textMuted }]} />
           <Text style={s.carsText}>
             {cars.length
-              ? `${cars.length} biler i nærheten · nærmeste ${nearest} min`
-              : 'Søker etter ledige biler…'}
+              ? nearest != null
+                ? `${cars.length} biler i nærheten · nærmeste ca. ${nearest} min`
+                : `${cars.length} biler i nærheten · ETA utilgjengelig`
+              : 'Ingen ledige biler i nærheten akkurat nå'}
           </Text>
         </View>
 
@@ -313,7 +316,7 @@ export default function Home() {
             <View style={s.summary} testID="booking-price-summary">
               <View style={{ flex: 1 }}>
                 <Text style={s.summaryLeft}>
-                  {estimate ? `${estimate.distance_km} km · estimert kjøretid ${estimate.duration_min} min` : 'Beregner rute…'}
+                  {estimate ? `${estimate.distance_km} km · ca. ${estimate.duration_min} min via kjørerute` : 'Rute/pris ikke tilgjengelig ennå'}
                 </Text>
                 {estimate?.commission_rate != null ? (
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }} testID="booking-service-fee">
