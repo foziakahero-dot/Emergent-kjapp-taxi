@@ -92,9 +92,12 @@ export function listenForNativePushTokenChanges() {
 export function normalizeCustomerNotificationUrl(url: unknown) {
   if (typeof url !== 'string') return null;
   if (url === '/app' || url === '/' || url === '/home') return '/(app)/home';
-  if (url.startsWith('/trips/') || url.startsWith('/booking/')) {
-    const id = url.split('/').filter(Boolean).pop();
-    return id ? `/booking/${id}` : '/(app)/home';
-  }
+
+  const bookingMatch = url.match(/^(?:\/app)?\/booking\/([^?&#]+)(.*)$/);
+  if (bookingMatch) return `/booking/${bookingMatch[1]}${bookingMatch[2] || ''}`;
+
+  const tripMatch = url.match(/^\/trips\/([^?&#]+)(.*)$/);
+  if (tripMatch) return `/booking/${tripMatch[1]}${tripMatch[2] || ''}`;
+
   return url;
 }
