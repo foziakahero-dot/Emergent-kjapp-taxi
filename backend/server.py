@@ -2899,39 +2899,93 @@ def _vehicle_type_compatible(requested: Optional[str], active: Optional[str]) ->
     return active == requested
 
 
-async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, requested_vehicle_type: Optional[str] = None) -> list:
-    """Real, available drivers sorted by actual distance to pickup.
+async def _dispatch_candidates(
+    lat: float,
+    lng: float,
+    required_capabilities=None,
+    requested_vehicle_type: Optional[str] = None,
+) -> list:
+    """Real available drivers ranked by actual OSRM driving ETA/distance to pickup.
 
-    Equipment-bound needs (wheelchair/child seat) are hard requirements. Other needs are
-    communicated to the driver but do not silently exclude otherwise eligible cars.
+    Straight-line distance is used only as an internal prefilter to avoid routing every driver.
+    It is never exposed to the customer/driver as road distance or ETA.
     """
     if lat is None or lng is None:
         return []
+
     required = set(required_capabilities or [])
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
     busy = set()
-    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ACTIVE_TRIP_STATUSES}}), {"driver_id": 1}):
+    async for t in db.trips.find(
+        _real_trip_filter({"status": {"$in": ACTIVE_TRIP_STATUSES}}),
+        {"driver_id": 1},
+    ):
         if t.get("driver_id"):
             busy.add(t["driver_id"])
-    out = []
+
+    rough = []
     async for d in db.users.find(
-        {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True},
-         "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh},
-         "active_vehicle_id": {"$exists": True, "$nin": [None, ""]}},
-        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1,
-         "active_vehicle_id": 1, "vehicle_type": 1},
+        {
+            "role": "driver",
+            "approved": True,
+            "online": True,
+            "disabled": {"$ne": True},
+            "demo": {"$ne": True},
+            "is_demo": {"$ne": True},
+            "last_location_at": {"$gte": fresh},
+            "active_vehicle_id": {"$exists": True, "$nin": [None, ""]},
+        },
+        {
+            "last_lat": 1,
+            "last_lng": 1,
+            "fleet_id": 1,
+            "capabilities": 1,
+            "active_vehicle_id": 1,
+            "vehicle_type": 1,
+        },
     ):
         did = str(d["_id"])
-        if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
+        if did in busy or d.get("last_lat") is None or d.get("last_lng") is None:
+            continue
+        if await _fleet_is_suspended(d.get("fleet_id")):
             continue
         if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
         if not _vehicle_type_compatible(requested_vehicle_type, d.get("vehicle_type")):
             continue
-        out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
-    out.sort(key=lambda x: x["km"])
-    return out
 
+        rank_km = haversine_km(lat, lng, d["last_lat"], d["last_lng"])
+        rough.append({
+            "id": did,
+            "lat": d["last_lat"],
+            "lng": d["last_lng"],
+            "_rank_km": rank_km,
+        })
+
+    # Only route the geographically closest candidates; final ranking uses real road routing.
+    rough.sort(key=lambda x: x["_rank_km"])
+    rough = rough[:12]
+    if not rough:
+        return []
+
+    routes = await asyncio.gather(*[
+        osrm_route(cand["lat"], cand["lng"], lat, lng)
+        for cand in rough
+    ])
+
+    out = []
+    for cand, route in zip(rough, routes):
+        if not route:
+            continue
+        out.append({
+            "id": cand["id"],
+            "pickup_distance_km": route["distance_km"],
+            "pickup_eta_min": route["duration_min"],
+            "routing_source": "osrm",
+        })
+
+    out.sort(key=lambda x: (x["pickup_eta_min"], x["pickup_distance_km"]))
+    return out
 
 async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """Nearest-driver-first dispatch: offer the trip to the closest driver who has not seen it yet.
@@ -2964,16 +3018,26 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
     res = await db.trips.update_one(
         {"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
-        {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
-                  "offer_expires_at": expires.isoformat(), "offer_km": round(nxt["km"], 2)},
+        {"$set": {
+             "dispatch_mode": "sequential",
+             "offer_driver_id": nxt["id"],
+             "offer_expires_at": expires.isoformat(),
+             "offer_km": round(nxt["pickup_distance_km"], 2),
+             "offer_eta_min": int(nxt["pickup_eta_min"]),
+             "offer_routing_source": "osrm",
+         },
          "$addToSet": {"offer_history": nxt["id"]},
          "$inc": {"offer_seq": 1}},
     )
     if res.modified_count == 0:
         return None
     await send_push_to_user(
-        nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
-        "/driver", tag="kjapp-new-trip", require_interaction=True,
+        nxt["id"],
+        title,
+        f"{body} · ca. {int(nxt['pickup_eta_min'])} min / {round(nxt['pickup_distance_km'], 1)} km til henting",
+        "/driver",
+        tag="kjapp-new-trip",
+        require_interaction=True,
     )
     return nxt["id"]
 
