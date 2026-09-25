@@ -1,8 +1,8 @@
 name: KJAPP Customer Android Runtime Smoke
 
 on:
-  push:
-    branches: ['diagnostic/customer-runtime-smoke']
+  pull_request:
+    branches: ['main']
 
 jobs:
   get_customer_android:
@@ -20,6 +20,10 @@ jobs:
     needs: [get_customer_android]
     type: maestro
     runs_on: linux-large-nested-virtualization
+    outputs:
+      app_pid: ${{ steps.capture_runtime.outputs.app_pid }}
+      top_activity: ${{ steps.capture_runtime.outputs.top_activity }}
+      crash_focus: ${{ steps.capture_runtime.outputs.crash_focus }}
     params:
       build_id: ${{ needs.get_customer_android.outputs.build_id }}
       flow_path: ['.maestro/customer-startup-smoke.yml']
@@ -27,10 +31,35 @@ jobs:
       retries: 0
     hooks:
       after_maestro_tests:
-        - name: Capture KJAPP runtime diagnostics
+        - id: capture_runtime
+          name: Capture KJAPP runtime diagnostics
           run: |
-            mkdir -p "$MAESTRO_TESTS_DIR/runtime"
-            adb shell pidof no.kjapp.app > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-pid.txt" || true
-            adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity" > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-activity.txt" || true
-            adb logcat -d -v threadtime > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-logcat.txt" || true
-            grep -Ei "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|JavascriptException|UnsatisfiedLinkError|dlopen|worklet|reanimated|SoLoader|Unable to load|Caused by|no.kjapp.app" "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-logcat.txt" > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-crash-focus.txt" || true
+            PID="$(adb shell pidof no.kjapp.app 2>/dev/null | tr -d '\r' || true)"
+            TOP="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -n 2 | tr '\n' ' ' | tr -d '\r' | cut -c1-1000 || true)"
+            adb logcat -d -v threadtime > /tmp/kjapp-customer-logcat.txt 2>/dev/null || true
+            FOCUS="$(grep -Ei 'FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|JavascriptException|UnsatisfiedLinkError|dlopen failed|worklet|reanimated|SoLoader|Unable to load|Caused by|no.kjapp.app' /tmp/kjapp-customer-logcat.txt | tail -n 40 | tr '\n' '|' | tr -d '\r' | cut -c1-6000 || true)"
+            [ -n "$PID" ] || PID="NONE"
+            [ -n "$TOP" ] || TOP="NONE"
+            [ -n "$FOCUS" ] || FOCUS="NO_MATCHING_FATAL_LOG_LINES"
+            set-output app_pid "$PID"
+            set-output top_activity "$TOP"
+            set-output crash_focus "$FOCUS"
+
+  report_runtime:
+    name: Report Customer runtime diagnostics
+    after: [customer_runtime_smoke]
+    type: github-comment
+    params:
+      payload: |
+        ## KJAPP Customer Android runtime smoke
+
+        **Maestro status:** ${{ after.customer_runtime_smoke.status }}
+        **App PID after test:** `${{ after.customer_runtime_smoke.outputs.app_pid }}`
+        **Top activity:** `${{ after.customer_runtime_smoke.outputs.top_activity }}`
+
+        **Focused logcat**
+        ```
+        ${{ after.customer_runtime_smoke.outputs.crash_focus }}
+        ```
+
+        This diagnostic tests the already-successful Customer APK from main commit `66d85b8`.
