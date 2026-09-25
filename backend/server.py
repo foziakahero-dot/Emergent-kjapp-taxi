@@ -5117,6 +5117,60 @@ async def fleet_live(current=Depends(require_fleet_owner)):
     }
 
 
+@api.get("/fleet/trips")
+async def fleet_trip_history(
+    days: int = Query(default=90, ge=1, le=365),
+    limit: int = Query(default=1000, ge=1, le=2000),
+    current=Depends(require_fleet_owner),
+):
+    """Operational fleet trip history. Unlike accounting exports, this includes real unpaid
+    and cancelled rides so the fleet owner can trace what actually happened."""
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    driver_ids = [
+        str(d["_id"])
+        async for d in db.users.find({"role": "driver", "fleet_id": fid}, {"_id": 1})
+    ]
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    scope = {
+        "$or": [
+            {"fleet_id": fid},
+            {"fleet_id": {"$exists": False}, "driver_id": {"$in": driver_ids}},
+        ],
+        "created_at": {"$gte": since},
+    }
+    raw = []
+    ids = set()
+    async for t in db.trips.find(_real_trip_filter(scope)).sort("created_at", -1).limit(limit):
+        raw.append(t)
+        if t.get("driver_id"):
+            ids.add(t["driver_id"])
+    drivers = {}
+    for driver_id in ids:
+        try:
+            d = await db.users.find_one({"_id": ObjectId(driver_id)}, {"fullName": 1, "full_name": 1})
+        except (InvalidId, TypeError):
+            d = None
+        if d:
+            drivers[driver_id] = d.get("fullName") or d.get("full_name") or "Sjåfør"
+
+    return {"trips": [{
+        "trip_id": t.get("trip_id"),
+        "created_at": t.get("created_at"),
+        "status": t.get("status"),
+        "payment_status": t.get("payment_status"),
+        "price": t.get("price"),
+        "pickup_address": t.get("pickup_address"),
+        "dropoff_address": t.get("dropoff_address"),
+        "driver_id": t.get("driver_id"),
+        "driver_name": drivers.get(t.get("driver_id")) or (t.get("driver") or {}).get("name"),
+        "vehicle_id": t.get("vehicle_id"),
+        "vehicle_type": t.get("vehicle_type"),
+        "receipt_id": t.get("receipt_id"),
+    } for t in raw]}
+
+
 class FleetVehicleCreateRequest(BaseModel):
     car: str = Field(min_length=2, max_length=120)
     plate: str = Field(min_length=2, max_length=24)
