@@ -1911,15 +1911,26 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
 
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(get_current_user)):
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}},
-    )
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    """Passenger closes a ride after the driver has marked it arrived.
+
+    Idempotent for already-completed/rated rides and rejects premature completion so the
+    customer app cannot accidentally skip the driver lifecycle.
+    """
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
+
+    status = trip.get("status")
+    if status == "arrived":
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.trips.update_one(
+            {"_id": trip["_id"], "status": "arrived"},
+            {"$set": {"status": "completed", "completed_at": now_iso, "updated_at": now_iso}},
+        )
+        trip = await db.trips.find_one({"_id": trip["_id"]})
+    elif status not in ("completed", "rated"):
+        raise HTTPException(status_code=409, detail="Turen kan ikke fullføres før sjåføren har registrert ankomst")
+
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
