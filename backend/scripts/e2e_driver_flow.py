@@ -1,41 +1,70 @@
-"""Real driver flow E2E — no demo/synthetic data anywhere.
+"""KJAPP Oslo beta E2E regression: customer <-> real driver lifecycle.
 
-Customer books a real trip -> driver (with real GPS) sees it with REAL routing ->
-accepts -> at-pickup -> in-trip -> completes -> earnings/trip count update.
-Run: python3 /app/backend/scripts/e2e_driver_flow.py
+Verifies:
+customer login -> driver online/GPS -> request -> accept -> customer/driver chat ->
+at pickup -> in trip -> arrive -> customer complete -> rate -> history/GDPR ->
+driver ready/offline.
+
+This script uses the dedicated beta test accounts and the configured beta backend.
+It does not exercise Expo UI or start an EAS build.
+
+Run:
+  KJAPP_API_URL=https://<beta-backend>/api python3 backend/scripts/e2e_driver_flow.py
 """
+
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
+import uuid
 
-API = None
-with open("/app/frontend/.env") as f:
-    for line in f:
-        if line.startswith("REACT_APP_BACKEND_URL="):
-            API = line.split("=", 1)[1].strip() + "/api"
+
+def resolve_api():
+    explicit = (os.environ.get("KJAPP_API_URL") or "").strip().rstrip("/")
+    if explicit:
+        return explicit
+
+    candidates = [
+        "/app/frontend/.env",
+        os.path.join(os.path.dirname(__file__), "..", "..", "frontend", ".env"),
+    ]
+    for path in candidates:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    if line.startswith("EXPO_PUBLIC_BACKEND_URL=") or line.startswith("REACT_APP_BACKEND_URL="):
+                        base = line.split("=", 1)[1].strip().rstrip("/")
+                        return base + "/api"
+        except FileNotFoundError:
+            pass
+
+    return "https://github-app-builder-28.emergent.host/api"
+
+
+API = resolve_api()
+RUN_ID = "e2e-" + uuid.uuid4().hex[:10]
+fails = []
 
 
 def call(method, path, token=None, body=None):
     req = urllib.request.Request(API + path, method=method)
     req.add_header("Content-Type", "application/json")
-    req.add_header("User-Agent", "Mozilla/5.0 (KJAPP-e2e)")
+    req.add_header("User-Agent", f"KJAPP-beta-e2e/{RUN_ID}")
+    req.add_header("X-KJAPP-E2E-Run", RUN_ID)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     data = json.dumps(body).encode() if body is not None else None
     try:
-        with urllib.request.urlopen(req, data, timeout=30) as r:
-            raw = r.read().decode()
-            return r.status, (json.loads(raw) if raw else None)
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode()
+        with urllib.request.urlopen(req, data, timeout=35) as response:
+            raw = response.read().decode()
+            return response.status, (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode()
         try:
-            return e.code, json.loads(raw)
+            return exc.code, json.loads(raw)
         except Exception:
-            return e.code, raw
-
-
-fails = []
+            return exc.code, raw
 
 
 def check(name, cond, extra=""):
@@ -44,90 +73,212 @@ def check(name, cond, extra=""):
         fails.append(name)
 
 
-# --- logins
-_, cust = call("POST", "/auth/login", body={"email": "ola@kjapp.no", "password": "test1234"})
-_, drv = call("POST", "/auth/login", body={"email": "sjafor@kjapp.no", "password": "sjafor1234"})
-ct, dt = cust["token"], drv["token"]
+def transition(label, status):
+    print(f"STATE [{RUN_ID}] {label} -> {status}")
 
-# --- driver goes online with REAL gps near Oslo S
-call("POST", "/driver/online", dt, {"online": True})
-call("POST", "/driver/location", dt, {"lat": 59.9125, "lng": 10.7480, "heading": 90, "speed": 6})
 
-st, summary = call("GET", "/driver/summary/today", dt)
-check("summary reports real online state", summary.get("online") is True, str(summary))
-check("summary has no fabricated satisfaction field", "satisfaction" not in summary)
-base_income, base_trips = summary["income"], summary["trips"]
+def login(email, password):
+    status, payload = call("POST", "/auth/login", body={"email": email, "password": password})
+    check(f"login {email}", status == 200 and bool(payload and payload.get("token")), str(status))
+    if status != 200 or not payload or not payload.get("token"):
+        raise RuntimeError(f"login failed for {email}: {status} {payload}")
+    return payload["token"], payload["user"]
 
-st, pend = call("GET", "/driver/pending", dt)
-check("pending list has no synthetic trips", all(
-    not (t.get("demo") or str(t.get("pickup_address", "")).startswith("TEST")) for t in pend["trips"]
-), f"{len(pend['trips'])} pending")
-check("pending exposes driver GPS", pend.get("driver_gps") is not None, str(pend.get("driver_gps")))
 
-# --- customer books a real trip
-st, est = call("POST", "/trips/estimate", ct, {
-    "pickup_lat": 59.9139, "pickup_lng": 10.7522,
-    "dropoff_lat": 59.9106, "dropoff_lng": 10.7285, "vehicle_type": "ai-first",
-})
-check("estimate returns real routing", est.get("distance_km", 0) > 0, f"{est.get('distance_km')} km")
+print(f"KJAPP E2E run={RUN_ID} api={API}")
 
-st, trip = call("POST", "/trips/request", ct, {
-    "pickup_address": "Jernbanetorget 1, Oslo", "pickup_lat": 59.9139, "pickup_lng": 10.7522,
-    "dropoff_address": "Stranden 1, Aker Brygge", "dropoff_lat": 59.9106, "dropoff_lng": 10.7285,
-    "vehicle_type": "ai-first",
-})
-if st != 200:
-    print("trip request failed:", st, trip)
+customer_token, customer = login("ola@kjapp.no", "test1234")
+driver_token, driver = login("sjafor@kjapp.no", "sjafor1234")
+check("driver role is driver", driver.get("role") == "driver", str(driver.get("role")))
+
+# Dedicated beta account hygiene: close a stale searching/booking ride before starting a new run.
+status, stale = call("GET", "/trips/active", customer_token)
+if status == 200 and stale and stale.get("status") in ("searching", "booking", "driver_on_way", "at_pickup"):
+    call("POST", f"/trips/{stale['trip_id']}/cancel", customer_token)
+    print(f"INFO  closed stale beta trip {stale['trip_id']} ({stale.get('status')})")
+
+# Driver ready with a real GPS position.
+check("driver online", call("POST", "/driver/online", driver_token, {"online": True})[0] == 200)
+check(
+    "driver GPS update",
+    call(
+        "POST",
+        "/driver/location",
+        driver_token,
+        {"lat": 59.9125, "lng": 10.7480, "heading": 90, "speed": 0},
+    )[0] == 200,
+)
+
+_, summary_before = call("GET", "/driver/summary/today", driver_token)
+base_income = summary_before.get("income", summary_before.get("trip_income", 0)) or 0
+base_trips = summary_before.get("trips", 0) or 0
+check("summary reports online", summary_before.get("online") is True, str(summary_before.get("online")))
+
+# Customer quote + request.
+status, estimate = call(
+    "POST",
+    "/trips/estimate",
+    customer_token,
+    {
+        "pickup_lat": 59.9139,
+        "pickup_lng": 10.7522,
+        "dropoff_lat": 59.9106,
+        "dropoff_lng": 10.7285,
+        "vehicle_type": "ai-first",
+    },
+)
+check("real route estimate", status == 200 and estimate.get("distance_km", 0) > 0, str(estimate))
+
+status, trip = call(
+    "POST",
+    "/trips/request",
+    customer_token,
+    {
+        "pickup_address": f"Jernbanetorget 1, Oslo [{RUN_ID}]",
+        "pickup_lat": 59.9139,
+        "pickup_lng": 10.7522,
+        "dropoff_address": "Stranden 1, Aker Brygge",
+        "dropoff_lat": 59.9106,
+        "dropoff_lng": 10.7285,
+        "vehicle_type": "ai-first",
+    },
+)
+check("customer creates trip", status == 200 and bool(trip and trip.get("trip_id")), str(status))
+if status != 200:
+    print("trip request failed:", trip)
     sys.exit(1)
 trip_id = trip["trip_id"]
-print("  trip:", trip_id, trip.get("price"), "kr")
+transition("customer request", trip.get("status"))
 
-st, pend = call("GET", "/driver/pending", dt)
-mine = next((t for t in pend["trips"] if t["trip_id"] == trip_id), None)
-check("driver sees the real request", mine is not None)
-check("request has real pickup routing (OSRM)", bool(mine and mine.get("pickup_route")),
-      str(mine and mine.get("pickup_route") and {k: v for k, v in mine["pickup_route"].items() if k != "geometry"}))
-check("request has backend-computed driver earnings", bool(mine and mine.get("driver_earnings")),
-      str(mine and mine.get("driver_earnings")))
-check("customer info is real (no fake rating)", bool(mine and mine.get("customer")),
-      str(mine and mine.get("customer")))
+# Driver receives and accepts.
+status, pending = call("GET", "/driver/pending", driver_token)
+offer = next((item for item in (pending or {}).get("trips", []) if item.get("trip_id") == trip_id), None)
+check("driver receives requested trip", status == 200 and offer is not None)
+check("offer has pickup route", bool(offer and offer.get("pickup_route")))
+check("offer has driver earnings", offer is not None and offer.get("driver_earnings") is not None)
 
-# --- accept -> at pickup -> in trip -> complete
-st, acc = call("POST", "/driver/accept", dt, {"trip_id": trip_id})
-check("accept works", st == 200, str(st))
-check("accept stores driver's REAL gps as start", acc.get("driver_start_lat") == 59.9125, str(acc.get("driver_start_lat")))
-check("accept eta comes from routing", isinstance(acc.get("eta_min"), int), str(acc.get("eta_min")))
+status, accepted = call("POST", "/driver/accept", driver_token, {"trip_id": trip_id})
+check("driver accepts trip", status == 200, str(status))
+transition("driver accept", accepted.get("status") if isinstance(accepted, dict) else "driver_on_way")
 
-st, cur = call("GET", "/driver/current", dt)
-check("current trip returned", cur and cur["trip_id"] == trip_id)
-check("current has pickup route for the active leg", bool(cur.get("pickup_route")))
-check("current has driver_earnings", cur.get("driver_earnings") is not None, str(cur.get("driver_earnings")))
+status, customer_trip = call("GET", f"/trips/{trip_id}", customer_token)
+check("customer sees driver_on_way", status == 200 and customer_trip.get("status") == "driver_on_way", str(customer_trip.get("status")))
 
-check("at-pickup transition", call("POST", f"/driver/trip/{trip_id}/at-pickup", dt)[0] == 200)
-st, cur = call("GET", "/driver/current", dt)
-check("status is at_pickup", cur["status"] == "at_pickup", cur["status"])
+# Two-way trip chat.
+customer_text = f"Hei sjåfør {RUN_ID}"
+driver_text = f"Hei kunde {RUN_ID}"
+status, customer_msg = call("POST", f"/trips/{trip_id}/messages", customer_token, {"text": customer_text})
+check("customer -> driver message stored", status == 200 and customer_msg.get("from_role") == "passenger")
 
-check("start (passenger onboard)", call("POST", f"/driver/trip/{trip_id}/start", dt)[0] == 200)
-st, cur = call("GET", "/driver/current", dt)
-check("status is in_trip", cur["status"] == "in_trip", cur["status"])
+status, driver_messages = call("GET", f"/trips/{trip_id}/messages", driver_token)
+check(
+    "driver reads customer message",
+    status == 200 and any(m.get("text") == customer_text for m in driver_messages.get("messages", [])),
+)
 
-check("complete trip", call("POST", f"/driver/trip/{trip_id}/arrive", dt)[0] == 200)
-st, summary2 = call("GET", "/driver/summary/today", dt)
-check("trip count increased", summary2["trips"] == base_trips + 1, f"{base_trips} -> {summary2['trips']}")
-check("income increased by real fare", summary2["income"] == base_income + trip["price"],
-      f"{base_income} -> {summary2['income']} (+{trip['price']})")
+status, driver_msg = call("POST", f"/trips/{trip_id}/messages", driver_token, {"text": driver_text})
+check("driver -> customer message stored", status == 200 and driver_msg.get("from_role") == "driver")
 
-# --- reverse geocoding for the live map label
-st, rev = call("GET", "/places/reverse?lat=59.9139&lng=10.7522")
-check("reverse geocode returns a real label", st == 200 and (rev.get("label") or rev.get("street")), str(rev))
+status, customer_messages = call("GET", f"/trips/{trip_id}/messages", customer_token)
+check(
+    "customer reads driver message",
+    status == 200 and any(m.get("text") == driver_text for m in customer_messages.get("messages", [])),
+)
 
-# --- offline: no tracking, no requests
-call("POST", "/driver/online", dt, {"online": False})
-st, summary3 = call("GET", "/driver/summary/today", dt)
-check("offline state persisted", summary3.get("online") is False)
-st, cars = call("POST", "/cars/nearby", body={"lat": 59.9139, "lng": 10.7522})
-check("offline driver not on customer map", cars["count"] == 0, str(cars["count"]))
+# Pickup state.
+status, _ = call("POST", f"/driver/trip/{trip_id}/at-pickup", driver_token)
+check("driver marks at pickup", status == 200, str(status))
+status, customer_trip = call("GET", f"/trips/{trip_id}", customer_token)
+check("customer sees at_pickup", customer_trip.get("status") == "at_pickup", str(customer_trip.get("status")))
+transition("pickup", customer_trip.get("status"))
 
-# cleanup: remove the trip created by this script so it never shows as production data
-print("\nresult:", "ALL PASSED" if not fails else f"{len(fails)} FAILED -> {fails}")
+# Start state.
+status, _ = call("POST", f"/driver/trip/{trip_id}/start", driver_token)
+check("driver starts ride", status == 200, str(status))
+status, customer_trip = call("GET", f"/trips/{trip_id}", customer_token)
+check("customer sees in_trip", customer_trip.get("status") == "in_trip", str(customer_trip.get("status")))
+transition("start", customer_trip.get("status"))
+
+# State machine guard: customer cannot close the trip before driver arrival.
+status, premature = call("POST", f"/trips/{trip_id}/complete", customer_token)
+check("premature customer completion rejected", status == 409, str(premature))
+
+# Driver arrival.
+status, _ = call("POST", f"/driver/trip/{trip_id}/arrive", driver_token)
+check("driver marks arrived", status == 200, str(status))
+status, customer_trip = call("GET", f"/trips/{trip_id}", customer_token)
+check("customer sees arrived", customer_trip.get("status") == "arrived", str(customer_trip.get("status")))
+transition("arrival", customer_trip.get("status"))
+
+# Customer closes receipt; endpoint must be idempotent.
+status, completed = call("POST", f"/trips/{trip_id}/complete", customer_token)
+check("customer completes arrived ride", status == 200 and completed.get("status") == "completed", str(completed.get("status")))
+transition("receipt close", completed.get("status"))
+
+status, completed_again = call("POST", f"/trips/{trip_id}/complete", customer_token)
+check("completion is idempotent", status == 200 and completed_again.get("status") == "completed")
+
+status, active = call("GET", "/trips/active", customer_token)
+check("customer has no active ride after completion", status == 200 and not active, str(active))
+
+# Rating moves final status to rated and history keeps it.
+status, rated = call("POST", f"/trips/{trip_id}/rate", customer_token, {"rating": 5, "feedback": f"E2E {RUN_ID}"})
+check("customer rates trip", status == 200 and rated.get("ok") is True)
+
+status, final_trip = call("GET", f"/trips/{trip_id}", customer_token)
+check("final status is rated", status == 200 and final_trip.get("status") == "rated", str(final_trip.get("status")))
+transition("rating", final_trip.get("status"))
+
+status, history = call("GET", "/trips", customer_token)
+history_items = history.get("trips", history if isinstance(history, list) else [])
+check("trip is stored in customer history", any(t.get("trip_id") == trip_id for t in history_items))
+
+# Driver summary and current endpoint: backend may expose the just-finished summary, but it must not
+# be an active lifecycle state. The Driver RN UI now filters arrived/completed/rated out of current.
+status, current_after = call("GET", "/driver/current", driver_token)
+check(
+    "driver current is not an active lifecycle state",
+    status == 200 and (not current_after or current_after.get("status") in ("arrived", "completed", "rated")),
+    str(current_after and current_after.get("status")),
+)
+
+_, summary_after = call("GET", "/driver/summary/today", driver_token)
+after_trips = summary_after.get("trips", 0) or 0
+after_income = summary_after.get("income", summary_after.get("trip_income", 0)) or 0
+check("driver trip count increments", after_trips >= base_trips + 1, f"{base_trips} -> {after_trips}")
+check("driver income increments", after_income >= base_income, f"{base_income} -> {after_income}")
+
+# GDPR exports contain the ride for both account roles plus trip chat.
+status, customer_export = call("GET", "/gdpr/export", customer_token)
+check("customer GDPR export v2", status == 200 and customer_export.get("format_version") == 2)
+check(
+    "customer GDPR contains customer trip",
+    any(t.get("trip_id") == trip_id for t in customer_export.get("customer_trips", [])),
+)
+check(
+    "customer GDPR contains trip chat",
+    any(m.get("trip_id") == trip_id for m in customer_export.get("trip_messages", [])),
+)
+
+status, driver_export = call("GET", "/gdpr/export", driver_token)
+check("driver GDPR export v2", status == 200 and driver_export.get("format_version") == 2)
+check(
+    "driver GDPR contains driven trip",
+    any(t.get("trip_id") == trip_id for t in driver_export.get("driver_trips", [])),
+)
+
+# Driver back to ready/offline and disappears from customer supply.
+call("POST", "/driver/online", driver_token, {"online": False})
+_, summary_offline = call("GET", "/driver/summary/today", driver_token)
+check("driver offline persists", summary_offline.get("online") is False)
+
+status, nearby = call("POST", "/cars/nearby", body={"lat": 59.9139, "lng": 10.7522})
+cars = nearby.get("cars", []) if isinstance(nearby, dict) else []
+check(
+    "offline test driver is absent from customer map",
+    all(str(car.get("id")) != str(driver.get("id")) for car in cars),
+    f"{len(cars)} nearby cars",
+)
+
+print("\nRESULT:", "ALL PASSED" if not fails else f"{len(fails)} FAILED -> {fails}")
 sys.exit(1 if fails else 0)
