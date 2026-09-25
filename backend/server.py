@@ -443,6 +443,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class DriverLoginRequest(BaseModel):
+    identifier: str
+    password: str
+
+
 class TwoFAEnableRequest(BaseModel):
     code: str
 
@@ -1512,6 +1517,39 @@ async def _clear_failed_logins(email: str, ip: str):
     await db.login_attempts.delete_many({"identifier": {"$in": [f"email:{email}", f"ip:{ip}"]}})
 
 
+def _normalize_login_phone(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    has_plus = raw.startswith("+")
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if not digits:
+        return ""
+    if digits.startswith("0047"):
+        return "+" + digits[2:]
+    if has_plus:
+        return "+" + digits
+    if len(digits) == 8:
+        return "+47" + digits
+    return digits
+
+
+async def _find_driver_by_identifier(identifier: str):
+    value = (identifier or "").strip()
+    if not value:
+        return None
+    if "@" in value:
+        return await db.users.find_one({"email": value.lower()})
+
+    normalized = _normalize_login_phone(value)
+    candidates = {value, normalized}
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) == 8:
+        candidates.update({digits, f"+47{digits}"})
+    candidates.discard("")
+    return await db.users.find_one({"phone": {"$in": list(candidates)}})
+
+
 @api.post("/auth/register")
 async def register(body: RegisterRequest, response: Response):
     email = body.email.strip().lower()
@@ -1552,6 +1590,48 @@ async def login(body: LoginRequest, request: Request, response: Response):
     if user.get("totp_enabled"):
         # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": user_public(user)}
+
+
+@api.post("/auth/driver-login")
+async def driver_login(body: DriverLoginRequest, request: Request, response: Response):
+    """Invite-only Driver app login using e-mail or phone + password.
+
+    Customer/admin/fleet accounts are rejected server-side. Drivers must also be approved before
+    an app session is issued, so an accepted invite that is still pending approval cannot enter
+    active Driver mode.
+    """
+    identifier = body.identifier.strip()
+    rate_key = f"driver:{identifier.lower()}"
+    ip = _client_ip(request)
+
+    if await _login_blocked(rate_key, ip):
+        raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
+
+    user = await _find_driver_by_identifier(identifier)
+    if (
+        not user
+        or user.get("disabled")
+        or user.get("role") != "driver"
+        or not verify_password(body.password, user.get("password_hash", ""))
+    ):
+        await _record_failed_login(rate_key, ip)
+        raise HTTPException(status_code=401, detail="Feil e-post/telefon eller passord")
+
+    if user.get("approved") is not True:
+        await _clear_failed_logins(rate_key, ip)
+        raise HTTPException(status_code=403, detail="Sjåførkontoen venter på godkjenning før KJAPP Driver kan brukes")
+
+    await _require_active_fleet(user.get("fleet_id"))
+    await _clear_failed_logins(rate_key, ip)
+
+    uid = str(user["_id"])
+    if user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+
+    email = (user.get("email") or "").strip().lower()
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": user_public(user)}
@@ -3522,6 +3602,8 @@ async def google_session(body: GoogleSessionRequest, response: Response):
     else:
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
+        if user.get("role", "user") not in ("user", "customer"):
+            raise HTTPException(status_code=403, detail="Google-innlogging er kun tilgjengelig i KJAPP kundeappen")
         if not user.get("google_linked"):
             await db.users.update_one(
                 {"_id": user["_id"]},
@@ -3537,32 +3619,11 @@ async def google_session(body: GoogleSessionRequest, response: Response):
     return {"token": token, "user": user_public(user)}
 
 
-@api.post("/auth/google/driver-session")
-async def google_driver_session(body: GoogleSessionRequest, response: Response):
-    """Google sign-in for the Driver app. Never creates a new customer account."""
-    data = await _google_session_data(body.session_id)
-    email = data["email"]
-    user = await db.users.find_one({"email": email})
-    if not user or user.get("disabled") or user.get("role") != "driver" or user.get("approved") is False:
-        raise HTTPException(status_code=403, detail="Google-kontoen er ikke koblet til en godkjent KJAPP-sjåfør")
-    if user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(str(user["_id"]))}
-    if not user.get("google_linked"):
-        await db.users.update_one(
-            {"_id": user["_id"]},
-            {"$set": {"google_linked": True, "picture": data.get("picture"), "updated_at": datetime.now(timezone.utc).isoformat()}},
-        )
-        user["google_linked"] = True
-        user["picture"] = data.get("picture")
-    uid = str(user["_id"])
-    token = create_access_token(uid, email)
-    set_auth_cookie(response, token)
-    return {"token": token, "user": user_public(user)}
-
-
 @api.post("/auth/google/link")
 async def google_link_account(body: GoogleSessionRequest, current=Depends(get_current_user)):
-    """Link Google to the currently signed-in account without replacing the session."""
+    """Link Google to a signed-in customer account without replacing the session."""
+    if current.get("role", "user") not in ("user", "customer"):
+        raise HTTPException(status_code=403, detail="Google-kobling er kun tilgjengelig for kundekontoer")
     data = await _google_session_data(body.session_id)
     email = data["email"]
     if email != (current.get("email") or "").strip().lower():
@@ -3676,6 +3737,8 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
     if user:
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
+        if user.get("role", "user") not in ("user", "customer"):
+            raise HTTPException(status_code=403, detail="Google-innlogging er kun tilgjengelig i KJAPP kundeappen")
         uid = str(user["_id"])
         role = user.get("role", "user")
         driver_id = user.get("driver_id")
