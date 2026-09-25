@@ -5143,10 +5143,20 @@ async def get_driver_invite(token: str):
         raise HTTPException(status_code=410, detail="Invitasjon allerede brukt")
     if _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon utløpt")
+
+    fleet = None
+    if inv.get("fleet_id"):
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(inv["fleet_id"])})
+        except Exception:
+            fleet = None
+
     return {
         "token": inv["token"],
-        "car": inv.get("car"),
-        "plate": inv.get("plate"),
+        "fleet_name": (fleet or {}).get("name"),
+        "fleet_org_number": (fleet or {}).get("org_number"),
+        "car": inv.get("car") or None,
+        "plate": inv.get("plate") or None,
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
         "capabilities": inv.get("capabilities") or [],
         "note": inv.get("note", ""),
