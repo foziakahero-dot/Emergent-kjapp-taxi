@@ -23,7 +23,7 @@ const queryClient = new QueryClient({
 });
 
 function NativeRuntimeBridge() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
 
   useEffect(() => {
     if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) registerNativePush().catch(() => {});
@@ -61,6 +61,33 @@ function NativeRuntimeBridge() {
       clearInterval(timer);
     };
   }, [user?.id, user?.role, user?.approved, user?.legal_accepted]);
+
+  useEffect(() => {
+    if (user?.role !== 'driver' || user?.approved !== true || user?.legal_accepted !== true) return;
+
+    let alive = true;
+    const syncIdentityGate = async () => {
+      try {
+        const identity = await driverApi.identityVerification();
+        if (!alive) return;
+        const status = identity?.status || '';
+        if (['recheck_required', 'retry_required', 'pending_review'].includes(status)) {
+          await stopDriverBackgroundLocation().catch(() => {});
+          await refresh().catch(() => {});
+          if (alive) router.replace('/driver-identity');
+        }
+      } catch {
+        // A transient network failure must never manufacture an identity decision.
+      }
+    };
+
+    void syncIdentityGate();
+    const timer = setInterval(syncIdentityGate, 30000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [user?.id, user?.role, user?.approved, user?.legal_accepted, refresh]);
 
   useEffect(() => {
     const open = (notification?: Notifications.Notification | null) => {
