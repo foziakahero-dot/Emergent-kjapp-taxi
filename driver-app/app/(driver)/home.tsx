@@ -247,8 +247,26 @@ export default function DriverHome() {
 
   const accept = async (tripId: string) => {
     setBusy(true);
-    try { await driverApi.accept(tripId); await poll(); } catch (e) { setError(apiError(e)); }
-    finally { setBusy(false); }
+    setError('');
+    try {
+      await driverApi.accept(tripId);
+      await poll();
+    } catch (e) {
+      // If the accept reached the backend but the response was lost, /driver/current
+      // is canonical and prevents the app from showing a false failed-accept state.
+      try {
+        const confirmed = await driverApi.current();
+        if (confirmed?.trip_id === tripId) {
+          setCurrent(confirmed);
+          setPending([]);
+          return;
+        }
+      } catch {}
+      setError(apiError(e));
+      await poll().catch(() => {});
+    } finally {
+      setBusy(false);
+    }
   };
 
   const decline = async (tripId: string) => {
