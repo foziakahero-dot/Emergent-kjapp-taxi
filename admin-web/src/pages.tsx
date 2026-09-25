@@ -36,6 +36,7 @@ export function Dashboard() {
   const ov = useAsync(() => api.overview(), []);
   const fin = useAsync(() => api.finance(30), []);
   const live = useAsync(() => api.live(), []);
+  const integrity = useAsync(() => api.dataIntegrity(), []);
   const twofa = useAsync(() => api.twofaStatus(), []);
   if (ov.loading) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
@@ -49,6 +50,37 @@ export function Dashboard() {
       {twofa.data?.required && !twofa.data?.enabled && <div className="error-banner" role="alert">
         Administratorkontoen mangler totrinnsbekreftelse. <a href="#/settings" style={{ textDecoration: 'underline' }}>Aktiver 2FA i Innstillinger.</a>
       </div>}
+
+      <Card style={{
+        marginBottom: 18,
+        border: `1px solid ${integrity.data?.ok ? 'rgba(52,211,153,.38)' : 'rgba(242,109,109,.45)'}`,
+        background: integrity.data?.ok ? 'rgba(52,211,153,.05)' : 'rgba(242,109,109,.06)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <div className="dim" style={{ fontSize: 10, letterSpacing: 1.3, textTransform: 'uppercase' }}>Dataintegritet</div>
+            <div className="strong" style={{ fontSize: 17, marginTop: 5 }}>
+              {integrity.loading
+                ? 'Kontrollerer ekte data…'
+                : integrity.err
+                  ? 'Kunne ikke bekrefte dataintegritet'
+                  : integrity.data?.ok
+                    ? 'REAL DATA ONLY · OK'
+                    : 'ADVARSEL · syntetiske data funnet'}
+            </div>
+            {!integrity.loading && !integrity.err && (
+              <div className="dim" style={{ marginTop: 6, fontSize: 12 }}>
+                Syntetiske turer: <strong style={{ color: integrity.data?.synthetic_trips ? 'var(--red)' : 'var(--green)' }}>{integrity.data?.synthetic_trips ?? '—'}</strong>
+                {' · '}Aktive demo-brukere: <strong style={{ color: integrity.data?.enabled_demo_users ? 'var(--red)' : 'var(--green)' }}>{integrity.data?.enabled_demo_users ?? '—'}</strong>
+                {' · '}Ekte turer: <strong>{integrity.data?.real_trips ?? '—'}</strong>
+              </div>
+            )}
+          </div>
+          <span className={`pill ${integrity.data?.ok ? 'green' : integrity.loading ? 'gray' : 'red'}`}>
+            <span className="dot" />{integrity.data?.ok ? 'Verifisert' : integrity.loading ? 'Sjekker' : 'Krever tiltak'}
+          </span>
+        </div>
+      </Card>
 
       <Card style={{ marginBottom: 18, border: '1px solid rgba(45,212,191,.28)', boxShadow: '0 0 28px rgba(45,212,191,.08)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
