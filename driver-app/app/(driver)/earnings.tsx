@@ -60,6 +60,23 @@ export default function DriverEarnings() {
 
   const maxIncome = Math.max(1, ...days.map((d: any) => d.income || 0));
 
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.driverBg, alignItems: 'center', justifyContent: 'center' }}>
+        <Loader label="Henter bekreftede inntekter…" />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.driverBg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
+        <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 16, textAlign: 'center' }}>Kunne ikke hente inntektsdata</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>KJAPP viser ikke 0 kr som fallback. Prøv igjen når forbindelsen er tilbake.</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
       <Text style={s.title}>Inntekt</Text>
