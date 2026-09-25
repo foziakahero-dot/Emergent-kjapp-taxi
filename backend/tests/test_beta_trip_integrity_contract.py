@@ -187,3 +187,28 @@ def test_unresolved_checkout_cannot_escape_payment_state():
     payment_success = (ROOT / "frontend" / "app" / "payment" / "success.tsx").read_text(encoding="utf-8")
     assert "turen forblir åpen til serveren bekrefter betalingen" in payment_success
     assert "Tilbake til kvittering" in payment_success
+
+
+def test_booking_requires_verified_real_payment_method():
+    booking = _block(SERVER, "request_trip")
+    assert 'verified_count = await db.payment_methods.count_documents' in booking
+    assert '"verified": True' in booking
+    assert '"setup_status": "succeeded"' in booking
+    assert '"stripe_payment_method_id": {"$type": "string"}' in booking
+    assert "Kortet ditt må verifiseres før du kan bestille tur" in booking
+
+
+def test_busy_driver_never_receives_new_pending_offers():
+    pending = _block(SERVER, "driver_pending")
+    assert 'if current.get("active_trip_id")' in pending
+    assert '"busy": True' in pending
+    assert "_real_trip_filter" in pending
+
+
+def test_atomic_accept_requires_driver_still_online_and_releases_failed_claim():
+    accept = _block(SERVER, "driver_accept")
+    assert '"online": True' in accept
+    assert '"approved": True' in accept
+    assert '"active_trip_id": body.trip_id' in accept
+    assert 'if result.modified_count == 0' in accept
+    assert '"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}' in accept
