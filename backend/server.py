@@ -4489,8 +4489,10 @@ class DriverOnlineRequest(BaseModel):
 @api.post("/driver/online")
 async def driver_online(body: DriverOnlineRequest, current=Depends(require_driver)):
     now_iso = datetime.now(timezone.utc).isoformat()
+    driver_oid = ObjectId(current["id"])
     if body.online:
         await _assigned_fleet_vehicle(current, required=True)
+
     if not body.online:
         active = await db.trips.find_one(
             _real_trip_filter({"driver_id": current["id"], "status": {"$in": ACTIVE_TRIP_STATUSES}}),
@@ -4498,13 +4500,30 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
         )
         if active:
             raise HTTPException(status_code=409, detail="Fullfør eller avbryt aktiv tur før du går offline")
-    await db.users.update_one(
-        {"_id": ObjectId(current["id"])},
-        {"$set": {"online": body.online, "online_at": now_iso}},
-    )
+
+        # Atomic race guard against /driver/accept:
+        # accept sets active_trip_id while requiring online=True. Whichever write wins
+        # first determines the state; we never allow active_trip_id + online=False.
+        result = await db.users.update_one(
+            {
+                "_id": driver_oid,
+                "$or": [
+                    {"active_trip_id": {"$exists": False}},
+                    {"active_trip_id": None},
+                ],
+            },
+            {"$set": {"online": False, "online_at": now_iso}},
+        )
+        if result.matched_count != 1:
+            raise HTTPException(status_code=409, detail="En tur ble tildelt samtidig. Fullfør eller avbryt turen før du går offline")
+    else:
+        await db.users.update_one(
+            {"_id": driver_oid},
+            {"$set": {"online": True, "online_at": now_iso}},
+        )
+
     # Track online sessions for acceptance-rate + online-minutes-today
     if body.online:
-        # Start a new session (only if no open one already)
         open_session = await db.driver_sessions.find_one({"driver_id": current["id"], "ended_at": None})
         if not open_session:
             await db.driver_sessions.insert_one({
@@ -4513,7 +4532,6 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
                 "ended_at": None,
             })
     else:
-        # Close any open session
         await db.driver_sessions.update_many(
             {"driver_id": current["id"], "ended_at": None},
             {"$set": {"ended_at": now_iso}},
@@ -7474,6 +7492,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         _real_trip_filter({
             "trip_id": body.trip_id,
             "user_id": current["id"],
+            "price": amount_nok,
             "payment_status": {"$ne": "paid"},
             "$or": [
                 {"payment_checkout_lock": {"$exists": False}},
@@ -9206,14 +9225,29 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
             raise HTTPException(409, "Betalt tur kan ikke få omskrevet pris. Bruk refundering i stedet.")
         if trip.get("status") in ("cancelled", "cancelled_by_driver") and not trip.get("requires_manual_settlement"):
             raise HTTPException(409, "Avbrutt tur uten oppgjør kan ikke prisjusteres")
+        open_payment = await db.payment_transactions.find_one({
+            "trip_id": trip_id,
+            "payment_status": {"$ne": "paid"},
+            "status": {"$in": ["initiated", "awaiting_payment"]},
+        }, {"_id": 1})
+        if open_payment or trip.get("payment_checkout_lock"):
+            raise HTTPException(409, "Et betalingsforsøk pågår. Turprisen kan ikke endres før betalingsforsøket er avsluttet")
         previous_price = int(trip.get("price") or 0)
         new_price = int(body.price)
         adjustment = {
             "from": previous_price, "to": new_price, "reason": reason,
             "at": now_iso, "by": current.get("email") or current["id"],
         }
-        await db.trips.update_one(
-            _real_trip_filter({"trip_id": trip_id, "payment_status": {"$ne": "paid"}}),
+        price_result = await db.trips.update_one(
+            _real_trip_filter({
+                "trip_id": trip_id,
+                "price": previous_price,
+                "payment_status": {"$ne": "paid"},
+                "$or": [
+                    {"payment_checkout_lock": {"$exists": False}},
+                    {"payment_checkout_lock": None},
+                ],
+            }),
             {"$set": {
                 "price": new_price,
                 "manual_price_adjustment": adjustment,
@@ -9221,6 +9255,8 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
                 "requires_manual_settlement": False,
             }, "$push": {"operator_interventions": {"action": body.action, **adjustment}}},
         )
+        if price_result.modified_count != 1:
+            raise HTTPException(409, "Turen eller betalingsstatusen endret seg. Oppdater og prøv igjen")
         await _audit(current, "trip.adjust_price", "trip", trip_id,
                      {"price": previous_price}, {"price": new_price}, reason)
         if trip.get("user_id"):
@@ -9459,6 +9495,7 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
         raise HTTPException(400, "Kan bare refundere fullførte turer")
     if trip.get("payment_status") != "paid":
         raise HTTPException(409, "Turen er ikke betalt og kan derfor ikke refunderes")
+
     gross = int(trip.get("price") or 0)
     already = int(trip.get("refunded_total") or 0)
     eligible = gross - already
@@ -9467,77 +9504,130 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     amount = int(body.amount) if body.amount is not None else eligible
     if amount <= 0 or amount > eligible:
         raise HTTPException(400, f"Ugyldig beløp. Maks refunderbart: {eligible} kr")
-    # Resolve the actual captured Stripe payment from the transaction ledger first.
-    # This is the canonical location for Checkout PaymentIntent IDs.
-    provider, provider_ref, prov_status = "manual", None, "recorded"
-    payment_tx = await db.payment_transactions.find_one(
-        {"trip_id": body.trip_id, "payment_status": "paid"},
-        sort=[("updated_at", -1)],
-    )
-    pi = (
-        trip.get("stripe_payment_intent")
-        or trip.get("payment_intent_id")
-        or trip.get("charge_id")
-        or (payment_tx or {}).get("stripe_payment_intent_id")
-    )
-    if pi and stripe.api_key:
-        try:
-            kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
-            if str(pi).startswith("ch_"):
-                kwargs["charge"] = pi
-            else:
-                kwargs["payment_intent"] = pi
-            if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
-                # Reverse the fleet transfer and refund the proportional platform fee,
-                # otherwise the platform would carry the refund while the fleet kept funds.
-                kwargs["reverse_transfer"] = True
-                kwargs["refund_application_fee"] = True
-            sr = stripe.Refund.create(**kwargs)
-            provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
-        except stripe.error.StripeError as e:
-            raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
-    doc = {
-        "id": str(uuid.uuid4()),
-        "trip_id": body.trip_id, "user_id": trip.get("user_id"),
-        "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
-        "provider": provider, "provider_ref": provider_ref, "status": prov_status,
-        "fleet_id": (payment_tx or {}).get("fleet_id"),
-        "settlement_model": (payment_tx or {}).get("settlement_model"),
-        "admin_id": current["id"], "admin_email": current.get("email"),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.refunds.insert_one(dict(doc))
-    new_total = already + amount
-    await db.trips.update_one(_real_trip_filter({"trip_id": body.trip_id}), {"$set": {
-        "refunded_total": new_total,
-        "refund_status": "full" if new_total >= gross else "partial",
-    }})
-    await db.receipt_ledger.update_one(
-        {"trip_id": body.trip_id},
-        {
-            "$set": {
-                "refunded_total": new_total,
-                "refund_status": "full" if new_total >= gross else "partial",
-            },
-            "$push": {
-                "refunds": {
-                    "id": doc["id"],
-                    "amount": amount,
-                    "currency": doc["currency"],
-                    "reason": doc["reason"],
-                    "provider": provider,
-                    "provider_ref": provider_ref,
-                    "status": prov_status,
-                    "created_at": doc["created_at"],
-                }
-            },
-        },
-    )
-    await _audit(current, "refund.create", "trip", body.trip_id,
-                 {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
-                 body.reason.strip())
-    return doc
 
+    # Serialize refund creation per trip. Combined with the deterministic Stripe
+    # idempotency key, retries after network/process failures cannot double-refund.
+    refund_lock = secrets.token_urlsafe(12)
+    lock_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
+    refunded_total_guard = (
+        {"$or": [{"refunded_total": 0}, {"refunded_total": {"$exists": False}}]}
+        if already == 0 else {"refunded_total": already}
+    )
+    lock_result = await db.trips.update_one(
+        _real_trip_filter({
+            "trip_id": body.trip_id,
+            "payment_status": "paid",
+            "$and": [
+                refunded_total_guard,
+                {"$or": [
+                    {"refund_lock": {"$exists": False}},
+                    {"refund_lock": None},
+                    {"refund_locked_at": {"$lt": lock_cutoff}},
+                ]},
+            ],
+        }),
+        {"$set": {
+            "refund_lock": refund_lock,
+            "refund_locked_at": datetime.now(timezone.utc),
+        }},
+    )
+    if lock_result.matched_count != 1:
+        raise HTTPException(409, "En refundering behandles allerede, eller refundert beløp er endret. Oppdater og prøv igjen")
+
+    try:
+        provider, provider_ref, prov_status = "manual", None, "recorded"
+        payment_tx = await db.payment_transactions.find_one(
+            {"trip_id": body.trip_id, "payment_status": "paid"},
+            sort=[("updated_at", -1)],
+        )
+        pi = (
+            trip.get("stripe_payment_intent")
+            or trip.get("payment_intent_id")
+            or trip.get("charge_id")
+            or (payment_tx or {}).get("stripe_payment_intent_id")
+        )
+        if pi and stripe.api_key:
+            try:
+                kwargs = {"amount": amount * 100, "reason": "requested_by_customer"}
+                if str(pi).startswith("ch_"):
+                    kwargs["charge"] = pi
+                else:
+                    kwargs["payment_intent"] = pi
+                if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
+                    kwargs["reverse_transfer"] = True
+                    kwargs["refund_application_fee"] = True
+                sr = stripe.Refund.create(
+                    **kwargs,
+                    idempotency_key=f"kjapp-refund-{body.trip_id}-{already}-{amount}",
+                )
+                provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
+            except stripe.error.StripeError as e:
+                raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
+
+        doc = {
+            "id": provider_ref or str(uuid.uuid4()),
+            "trip_id": body.trip_id, "user_id": trip.get("user_id"),
+            "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
+            "provider": provider, "provider_ref": provider_ref, "status": prov_status,
+            "fleet_id": (payment_tx or {}).get("fleet_id"),
+            "settlement_model": (payment_tx or {}).get("settlement_model"),
+            "admin_id": current["id"], "admin_email": current.get("email"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if provider_ref:
+            await db.refunds.update_one(
+                {"provider_ref": provider_ref},
+                {"$setOnInsert": dict(doc)},
+                upsert=True,
+            )
+        else:
+            await db.refunds.insert_one(dict(doc))
+
+        new_total = already + amount
+        await ensure_receipt_snapshot(body.trip_id)
+        await db.receipt_ledger.update_one(
+            {"trip_id": body.trip_id},
+            {
+                "$set": {
+                    "refunded_total": new_total,
+                    "refund_status": "full" if new_total >= gross else "partial",
+                },
+                "$addToSet": {
+                    "refunds": {
+                        "id": doc["id"],
+                        "amount": amount,
+                        "currency": doc["currency"],
+                        "reason": doc["reason"],
+                        "provider": provider,
+                        "provider_ref": provider_ref,
+                        "status": prov_status,
+                        "created_at": doc["created_at"],
+                    }
+                },
+            },
+        )
+        trip_update = await db.trips.update_one(
+            _real_trip_filter({"trip_id": body.trip_id, "refund_lock": refund_lock, "payment_status": "paid"}),
+            {
+                "$set": {
+                    "refunded_total": new_total,
+                    "refund_status": "full" if new_total >= gross else "partial",
+                },
+                "$unset": {"refund_lock": "", "refund_locked_at": ""},
+            },
+        )
+        if trip_update.modified_count != 1:
+            raise HTTPException(409, "Refunderingen ble registrert, men turstatus må avstemmes av operatør")
+
+        await _audit(current, "refund.create", "trip", body.trip_id,
+                     {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
+                     body.reason.strip())
+        return doc
+    finally:
+        await db.trips.update_one(
+            _real_trip_filter({"trip_id": body.trip_id, "refund_lock": refund_lock}),
+            {"$unset": {"refund_lock": "", "refund_locked_at": ""}},
+        )
 
 # ---- Transactions ledger (derived from real records: trips / refunds / payouts) ----
 @api.get("/admin/transactions")
