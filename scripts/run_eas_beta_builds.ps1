@@ -63,6 +63,18 @@ try {
     }
   }
 
+  Run-Step "Mobile lockfiles" {
+    $missing = @()
+    foreach ($path in @("frontend\package-lock.json", "driver-app\package-lock.json")) {
+      if (-not (Test-Path (Join-Path $Root $path))) { $missing += $path }
+    }
+    if ($missing.Count -gt 0) {
+      Write-Error ("Missing committed mobile lockfile(s): " + ($missing -join ", "))
+      Write-Error "Run: powershell -ExecutionPolicy Bypass -File .\scripts\prepare_mobile_lockfiles.ps1"
+      exit 5
+    }
+  }
+
   Run-Step "Static beta policy" { python scripts/beta_static_policy.py }
   Run-Step "Expo authentication" { npx eas-cli@latest whoami }
 

@@ -46,6 +46,7 @@ export default function Home() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
@@ -209,8 +210,46 @@ export default function Home() {
         </Pressable>
       </View>
 
+      {sheetCollapsed ? (
+        <View style={[s.collapsedSheet, { paddingBottom: insets.bottom + 8 }]} testID="home-sheet-collapsed">
+          <Pressable
+            style={s.collapsedDestination}
+            onPress={() => setSheetCollapsed(false)}
+            testID="home-sheet-expand"
+            accessibilityRole="button"
+            accessibilityLabel="Utvid bestillingspanelet"
+          >
+            <View style={s.collapsedSearchIcon}><Icon name="search" size={18} color={colors.accent} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.collapsedTitle} numberOfLines={1}>{dropoff?.name || 'Hvor vil du?'}</Text>
+              <Text style={s.collapsedHint} numberOfLines={1}>{dropoff ? 'Trykk for turvalg og pris' : 'Søk adresse, sted eller flyplass'}</Text>
+            </View>
+            {!dropoff ? (
+              <Pressable
+                style={s.collapsedVoice}
+                onPress={(e: any) => { e.stopPropagation?.(); openVoice(); }}
+                testID="home-collapsed-voice"
+                accessibilityRole="button"
+                accessibilityLabel="Bestill med stemmen"
+              >
+                <Icon name="mic" size={19} color={colors.accent} />
+              </Pressable>
+            ) : null}
+            <Icon name="chevron-up" size={20} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : (
       <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
-        <View style={s.handle} />
+        <Pressable
+          style={s.sheetHandleButton}
+          onPress={() => setSheetCollapsed(true)}
+          testID="home-sheet-collapse"
+          accessibilityRole="button"
+          accessibilityLabel="Minimer bestillingspanelet"
+        >
+          <View style={s.handle} />
+          <Icon name="chevron-down" size={18} color={colors.textMuted} />
+        </Pressable>
 
         <View style={s.pickupRow} testID="home-pickup-row">
           <View style={s.beacon} />
@@ -431,10 +470,12 @@ export default function Home() {
           </>
         )}
       </View>
+      )}
 
       {searchOpen && (
         <SearchSheet
           onClose={() => setSearchOpen(false)}
+          onMinimize={() => { setSearchOpen(false); setSheetCollapsed(true); }}
           onVoice={openVoice}
           onSelect={(d: any) => {
             if (searchTarget === 'stop') {
@@ -453,7 +494,7 @@ export default function Home() {
   );
 }
 
-function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
+function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -506,6 +547,15 @@ function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
             </Pressable>
           )}
         </View>
+        <Pressable
+          onPress={onMinimize}
+          testID="search-minimize"
+          style={s.searchMinimize}
+          accessibilityRole="button"
+          accessibilityLabel="Minimer søk og vis kart"
+        >
+          <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+        </Pressable>
         <Pressable onPress={onClose} testID="search-close" style={s.searchClose}>
           <Text style={{ color: colors.accent, fontSize: 15 }}>Avbryt</Text>
         </Pressable>
@@ -551,9 +601,24 @@ const useStyles = makeStyles((c) => ({
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(9,17,25,0.97)', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 10,
+    borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 8,
   },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
+  sheetHandleButton: { alignSelf: 'center', minWidth: 72, minHeight: 34, alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong },
+  collapsedSheet: {
+    position: 'absolute', left: 14, right: 14, bottom: 0,
+    backgroundColor: 'rgba(9,17,25,0.96)', borderRadius: 22,
+    borderWidth: 1, borderColor: c.line, paddingHorizontal: 10, paddingTop: 10,
+  },
+  collapsedDestination: {
+    minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.lineStrong,
+    borderRadius: 18, paddingHorizontal: 12,
+  },
+  collapsedSearchIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  collapsedTitle: { color: c.text, fontSize: 15, fontWeight: '650' as any },
+  collapsedHint: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+  collapsedVoice: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
   pickupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 },
   beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.accent },
   pickupText: { color: c.text, fontSize: 14, flex: 1 },
@@ -627,6 +692,7 @@ const useStyles = makeStyles((c) => ({
   },
   searchInput: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
   searchVoice: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  searchMinimize: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   searchClose: { minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   searchPrompt: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12, paddingHorizontal: 2 },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, borderBottomWidth: 1, borderBottomColor: c.line },
