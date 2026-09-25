@@ -633,20 +633,25 @@ def send_email(to_email: str, subject: str, html: str) -> bool:
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
     note_html = f"<p style='color:#a1a7ab;font-size:13px'>Notat fra flåte-eier: {note}</p>" if note else ""
+    legacy_vehicle_html = ""
+    if (car or plate):
+        legacy_vehicle_html = f"""
+        <div style="background:#0e1113;border:1px solid #1c2124;border-radius:12px;padding:16px;margin:16px 0;">
+          <div style="color:#2fe08c;font-size:11px;letter-spacing:2px;text-transform:uppercase">Foreløpig bilreferanse</div>
+          <div style="color:#fff;font-size:16px;margin-top:4px">{car or 'Bil'} · {plate or '—'}</div>
+        </div>
+        """
     return f"""
     <div style="font-family:'Segoe UI',Arial,sans-serif;background:#050708;color:#e6ecef;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
       <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:#2fe08c">A</span>PP</div>
       <div style="font-size:11px;letter-spacing:4px;color:#2fe08c;text-transform:uppercase;margin-top:4px">Sjåfør-invitasjon</div>
       <h1 style="font-size:22px;color:#fff;margin-top:24px;line-height:1.3">Velkommen til KJAPP-flåten</h1>
       <p style="color:#a1a7ab;font-size:14px;line-height:1.6">
-        Du har blitt invitert til å kjøre for KJAPP. Bilen som er tildelt deg:
+        Du har blitt invitert som sjåfør. Fullfør registreringen og dokumentkontrollen. Flåteeieren tildeler biler separat i KJAPP Partner, og du velger aktiv tildelt bil i Driver-appen før du går online.
       </p>
-      <div style="background:#0e1113;border:1px solid #1c2124;border-radius:12px;padding:16px;margin:16px 0;">
-        <div style="color:#2fe08c;font-size:11px;letter-spacing:2px;text-transform:uppercase">Bil</div>
-        <div style="color:#fff;font-size:16px;margin-top:4px">{car} · {plate}</div>
-      </div>
+      {legacy_vehicle_html}
       {note_html}
-      <p style="color:#a1a7ab;font-size:14px;line-height:1.6">Klikk lenken under for å fullføre registreringen. Kontoen din må godkjennes før du kan motta turer.</p>
+      <p style="color:#a1a7ab;font-size:14px;line-height:1.6">Klikk lenken under for å fullføre registreringen. Kontoen må godkjennes før KJAPP Driver kan brukes.</p>
       <a href="{invite_url}" style="display:inline-block;background:#2fe08c;color:#04120a;padding:14px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:12px">Fullfør registrering</a>
       <p style="color:#5a6166;font-size:11px;margin-top:32px;line-height:1.5">
         Hvis du ikke forventet denne invitasjonen kan du trygt ignorere e-posten. Lenken utløper om 14 dager.
@@ -5019,8 +5024,10 @@ async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current
 # Driver invitation flow (fleet owner / admin invites drivers)
 # ============================================================
 class DriverInviteRequest(BaseModel):
-    car: str  # e.g. "Tesla Model Y"
-    plate: str  # e.g. "EL12345"
+    # Vehicle is assigned separately by the fleet owner. These legacy fields remain optional
+    # for backward compatibility with old admin/fleet clients.
+    car: str = ""
+    plate: str = ""
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
