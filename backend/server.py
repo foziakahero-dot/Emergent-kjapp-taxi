@@ -2701,7 +2701,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     """Driver rates the passenger 1-5 stars after trip completion."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
-    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("driver_rating"):
@@ -4046,7 +4046,7 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
 async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     """Passenger did not show up after the configured pickup waiting period."""
     driver_id = current["id"]
-    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Fant ikke turen")
     if trip.get("status") != "at_pickup":
@@ -4068,7 +4068,7 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
         pricing.get("customer_no_show_fee", pricing.get("customer_cancellation_fee", 0)) or 0
     )))
     result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"},
+        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"}),
         {"$set": {
             "status": "cancelled",
             "cancelled_reason": "no_show",
@@ -4084,7 +4084,7 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
     )
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if t and t.get("user_id"):
         fee = int(t.get("cancellation_fee") or 0)
         body = f"Du dukket ikke opp. No-show-avgift: {fee} kr." if fee > 0 else "Turen ble avsluttet som no-show."
@@ -4315,11 +4315,11 @@ class DeclineTripRequest(BaseModel):
 @api.post("/driver/decline")
 async def driver_decline(body: DeclineTripRequest, current=Depends(require_driver)):
     """Decline only a ride that is actually visible to this driver."""
-    trip = await db.trips.find_one({
+    trip = await db.trips.find_one(_real_trip_filter({
         "trip_id": body.trip_id,
         "status": {"$in": ["searching", "booking"]},
         "driver_id": None,
-    })
+    }))
     if not trip:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     if trip.get("dispatch_mode") == "sequential" and trip.get("offer_driver_id") != current["id"]:
@@ -4349,7 +4349,7 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
     """Best-effort throttled road ETA refresh while the driver is heading to pickup."""
     try:
         trip = await db.trips.find_one(
-            {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+            _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"}),
             {"pickup_lat": 1, "pickup_lng": 1, "eta_updated_at": 1, "user_id": 1},
         )
         if not trip:
@@ -5509,10 +5509,10 @@ async def fleet_set_driver_active(driver_id: str, body: FleetDriverActiveRequest
     if not driver:
         raise HTTPException(404, "Fant ikke sjåføren i din flåte")
     if body.active is False:
-        active_trip = await db.trips.find_one({
+        active_trip = await db.trips.find_one(_real_trip_filter({
             "driver_id": driver_id,
             "status": {"$in": ["accepted", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
-        })
+        }))
         if active_trip:
             raise HTTPException(409, "Sjåføren har en aktiv tur og kan ikke deaktiveres")
     before = driver.get("fleet_active", True)
@@ -7094,7 +7094,7 @@ async def _mark_trip_paid_and_complete(trip_id: str, user_id: str, paid_at: Opti
         {"trip_id": trip_id, "user_id": user_id, "status": "arrived"},
         {"$set": {"status": "completed", "completed_at": paid_at, "updated_at": paid_at}},
     )
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": user_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": user_id}))
     if trip and trip.get("driver_id"):
         bonus_gate = await db.trips.update_one(
             {
@@ -7551,7 +7551,7 @@ async def get_payment_status(session_id: str, current=Depends(require_customer))
                         f"/receipt/{paid_record['trip_id']}",
                         "trip_payment_paid",
                     )
-                    paid_trip = await db.trips.find_one({"trip_id": paid_record["trip_id"]})
+                    paid_trip = await db.trips.find_one(_real_trip_filter({"trip_id": paid_record["trip_id"]}))
                     if paid_trip and paid_trip.get("driver_id"):
                         await send_push_to_user(
                             paid_trip["driver_id"],
@@ -7610,7 +7610,7 @@ async def stripe_webhook(request: Request):
                     f"/receipt/{r['trip_id']}",
                     "trip_payment_paid",
                 )
-            trip = await db.trips.find_one({"trip_id": r["trip_id"]})
+            trip = await db.trips.find_one(_real_trip_filter({"trip_id": r["trip_id"]}))
             if trip and trip.get("driver_id"):
                 await send_push_to_user(
                     trip["driver_id"],
@@ -7722,11 +7722,11 @@ async def pricing_surge():
 async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
     driver_id = current["id"]
-    original = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    original = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
     pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
     penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
     result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}},
+        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}}),
         {"$set": {
             "status": "cancelled_by_driver",
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
@@ -7742,7 +7742,7 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
     )
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Turen ble avbrutt", "Sjåføren har avbrutt turen. Beklager!", "/app")
     return {"ok": True}
 
@@ -9082,7 +9082,7 @@ async def admin_receipts_backfill(
 
 @api.get("/admin/trips/{trip_id}/timeline")
 async def admin_trip_timeline(trip_id: str, current=Depends(require_admin)):
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not t: raise HTTPException(404, "Fant ikke turen")
     events = []
     def ev(label, at):
@@ -9106,7 +9106,7 @@ class TripInterventionRequest(BaseModel):
 
 @api.post("/admin/trips/{trip_id}/intervene")
 async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, current=Depends(require_admin)):
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     reason = body.reason.strip()
@@ -9191,7 +9191,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         if trip.get("user_id"):
             await send_push_to_user(trip["user_id"], "Vi finner en ny sjåfør",
                                     "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/booking/{trip_id}", "trip_reassigning")
-        refreshed = await db.trips.find_one({"trip_id": trip_id})
+        refreshed = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
         if refreshed:
             await offer_trip_to_next_driver(refreshed)
         return {"ok": True, "action": body.action, "status": "searching"}
@@ -9449,11 +9449,13 @@ async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: 
 async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
     if not (body.reason or "").strip():
         raise HTTPException(400, "Begrunnelse kreves")
-    trip = await db.trips.find_one({"trip_id": body.trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
     if not trip:
         raise HTTPException(404, "Fant ikke tur")
     if trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(400, "Kan bare refundere fullførte turer")
+    if trip.get("payment_status") != "paid":
+        raise HTTPException(409, "Turen er ikke betalt og kan derfor ikke refunderes")
     gross = int(trip.get("price") or 0)
     already = int(trip.get("refunded_total") or 0)
     eligible = gross - already
@@ -9503,7 +9505,7 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     }
     await db.refunds.insert_one(dict(doc))
     new_total = already + amount
-    await db.trips.update_one({"trip_id": body.trip_id}, {"$set": {
+    await db.trips.update_one(_real_trip_filter({"trip_id": body.trip_id}), {"$set": {
         "refunded_total": new_total,
         "refund_status": "full" if new_total >= gross else "partial",
     }})
