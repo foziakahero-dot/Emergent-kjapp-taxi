@@ -121,3 +121,52 @@ def test_late_stripe_expiry_cannot_downgrade_paid_transaction():
 def test_customer_destination_mutation_is_real_trip_only():
     block = _block("change_trip_destination", "complete_trip")
     assert "_real_trip_filter(" in block
+
+
+def test_driver_offline_cannot_race_active_trip_assignment():
+    block = _block("driver_online")
+    assert '"active_trip_id": {"$exists": False}' in block
+    assert '"active_trip_id": None' in block
+    assert "result.matched_count != 1" in block
+    assert "En tur ble tildelt samtidig" in block
+
+
+def test_checkout_lock_binds_to_price_snapshot():
+    block = _block("create_trip_checkout", "get_payment_status")
+    assert '"price": amount_nok' in block
+    assert '"payment_checkout_lock": checkout_lock' in block
+    assert '"payment_status": {"$ne": "paid"}' in block
+
+
+def test_admin_price_adjustment_cannot_race_payment():
+    block = _block("admin_trip_intervene")
+    assert 'status": {"$in": ["initiated", "awaiting_payment"]}' in block
+    assert 'trip.get("payment_checkout_lock")' in block
+    assert '"price": previous_price' in block
+    assert "price_result.modified_count != 1" in block
+
+
+def test_refund_is_paid_only_locked_and_stripe_idempotent():
+    block = _block("admin_create_refund", "admin_transactions")
+    required = [
+        'trip.get("payment_status") != "paid"',
+        '"refund_lock": refund_lock',
+        "lock_result.matched_count != 1",
+        'idempotency_key=f"kjapp-refund-{body.trip_id}-{already}-{amount}"',
+        '"refund_lock": refund_lock, "payment_status": "paid"',
+    ]
+    for marker in required:
+        assert marker in block, marker
+
+
+def test_mark_seen_requires_trip_membership():
+    block = _block("mark_messages_seen")
+    assert "await _load_trip_or_403(trip_id, current)" in block
+    assert "_real_trip_filter(" in block
+
+
+def test_admin_overview_finance_is_paid_real_trip_only():
+    block = _block("admin_overview", "admin_client_errors")
+    assert "_real_trip_filter(" in block
+    assert '"payment_status": "paid"' in block
+    assert 'rate = await _commission_for_trip(t)' in block
