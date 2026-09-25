@@ -1,0 +1,9 @@
+appId: no.kjapp.driver
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Logg inn som sjåfør"
+    timeout: 20000
+- assertVisible: "DRIVER"
+- takeScreenshot: driver-startup-ok
