@@ -752,13 +752,6 @@ def pricing_for_pickup(pricing: dict, lat: float, lng: float) -> tuple[dict, Opt
     return cfg, None
 
 
-def price_for(distance_km: float, vehicle_type: str, duration_min: float = None, when: datetime = None) -> int:
-    """Legacy-compatible fallback used by tests/helpers; live quotes use calculate_price + active_pricing."""
-    if duration_min is None:
-        duration_min = max(3, distance_km * 2.2)
-    return calculate_price(distance_km, vehicle_type, duration_min, DEFAULT_PRICING, when)["price"]
-
-
 def current_surge_info(when: datetime = None) -> dict:
     """Return current automatic time-based surge for Norway using DST-safe Europe/Oslo time."""
     now = (when or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Oslo"))
@@ -3454,13 +3447,27 @@ async def driver_demand(lat: Optional[float] = None, lng: Optional[float] = None
     scored.sort(key=lambda s: s["score"], reverse=True)
 
     commission = await _platform_commission()
+    top_zones = scored[:3]
+    zone_routes = []
+    if lat is not None and lng is not None and top_zones:
+        zone_routes = await asyncio.gather(*[
+            osrm_route(lat, lng, zone["lat"], zone["lng"])
+            for zone in top_zones
+        ])
+    else:
+        zone_routes = [None] * len(top_zones)
+
     zones = []
-    for s in scored[:3]:
+    for s, route in zip(top_zones, zone_routes):
         place = await reverse_geocode(s["lat"], s["lng"])
-        if lat is not None and lng is not None:
-            s = {**s, "distance_km": round(haversine_km(lat, lng, s["lat"], s["lng"]), 1)}
-        zones.append({
+        routed = {
             **s,
+            "distance_km": route["distance_km"] if route else None,
+            "duration_min": route["duration_min"] if route else None,
+            "routing_source": "osrm" if route else None,
+        }
+        zones.append({
+            **routed,
             "label": (place or {}).get("label"),
             "avg_earnings": int(round(s["avg_price"] * (1 - commission))) if s.get("avg_price") else None,
         })
