@@ -2506,7 +2506,7 @@ async def get_trip(trip_id: str, current=Depends(require_customer)):
 @api.patch("/trips/{trip_id}/destination")
 async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(require_customer)):
     """Change destination/stops while the ride is active, using the price snapshot captured at booking."""
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("driver_on_way", "at_pickup", "in_trip"):
@@ -2532,7 +2532,7 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
                 "price": quote["price"]},
     }
     await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
+        _real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}),
         {"$set": {
             "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
             "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
@@ -7609,12 +7609,14 @@ async def stripe_webhook(request: Request):
             {"$set": {"status": "awaiting_payment", "updated_at": datetime.now(timezone.utc)}},
         )
     elif t == "checkout.session.expired":
+        # Stripe webhooks are not guaranteed to arrive in chronological order.
+        # Never let a late "expired" event downgrade a transaction that is already paid.
         expired_record = await db.payment_transactions.find_one({"session_id": obj["id"]})
-        await db.payment_transactions.update_one(
-            {"session_id": obj["id"]},
+        expired_update = await db.payment_transactions.update_one(
+            {"session_id": obj["id"], "payment_status": {"$ne": "paid"}},
             {"$set": {"status": "expired", "payment_status": "expired", "updated_at": datetime.now(timezone.utc)}},
         )
-        if expired_record and expired_record.get("trip_id"):
+        if expired_update.modified_count and expired_record and expired_record.get("trip_id"):
             await db.trips.update_one(
                 {"trip_id": expired_record["trip_id"], "payment_status": {"$ne": "paid"}},
                 {"$set": {"payment_status": "expired"}},
