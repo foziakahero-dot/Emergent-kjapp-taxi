@@ -7480,7 +7480,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
                 {"payment_checkout_lock": None},
                 {"payment_checkout_locked_at": {"$lt": lock_cutoff}},
             ],
-        },
+        }),
         {"$set": {
             "payment_checkout_lock": checkout_lock,
             "payment_checkout_locked_at": datetime.now(timezone.utc),
