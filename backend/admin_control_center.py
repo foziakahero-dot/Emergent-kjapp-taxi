@@ -142,9 +142,7 @@ def install_admin_control_center(
 
     class FleetVehicleUpdate(BaseModel):
         driver_user_id: str
-        car: str
-        plate: str
-        vehicle_type: str = "ai-first"
+        vehicle_id: str
 
     def clean_permissions(values: list[str]) -> list[str]:
         unknown = sorted(set(values) - set(ADMIN_PERMISSIONS))
@@ -505,11 +503,53 @@ def install_admin_control_center(
         driver = await db.users.find_one({"_id": _oid(body.driver_user_id), "role": "driver", "fleet_id": fleet_id})
         if not driver:
             raise HTTPException(404, "Sjåføren tilhører ikke denne løyvehaveren")
-        before = {"car": driver.get("car"), "plate": driver.get("plate"), "vehicle_type": driver.get("vehicle_type")}
-        after = {"car": body.car.strip(), "plate": body.plate.strip().upper(), "vehicle_type": body.vehicle_type}
-        await db.users.update_one({"_id": driver["_id"]}, {"$set": after})
-        await audit(current, "fleet.vehicle_update", "fleet", fleet_id, before, after)
-        return {"ok": True}
+        if driver.get("online"):
+            raise HTTPException(409, "Sjåføren må gå offline før bilbytte")
+        vehicle = await db.fleet_vehicles.find_one({"_id": _oid(body.vehicle_id), "fleet_id": fleet_id})
+        if not vehicle:
+            raise HTTPException(404, "Bilen finnes ikke hos denne løyvehaveren")
+        if vehicle.get("active") is False:
+            raise HTTPException(409, "Bilen er parkert")
+        previous_driver_id = vehicle.get("assigned_driver_id")
+        if previous_driver_id and previous_driver_id != body.driver_user_id:
+            previous_driver = await db.users.find_one({"_id": _oid(previous_driver_id), "role": "driver", "fleet_id": fleet_id})
+            if previous_driver and previous_driver.get("online"):
+                raise HTTPException(409, "Nåværende sjåfør må gå offline før bilen kan omfordeles")
+        else:
+            previous_driver = None
+
+        before = {
+            "driver_vehicle_id": driver.get("vehicle_id"),
+            "target_vehicle_id": body.vehicle_id,
+            "target_previous_driver_id": previous_driver_id,
+        }
+        now = _now()
+        await db.fleet_vehicles.update_many(
+            {"fleet_id": fleet_id, "assigned_driver_id": body.driver_user_id, "_id": {"$ne": vehicle["_id"]}},
+            {"$unset": {"assigned_driver_id": "", "assigned_driver_name": ""}, "$set": {"updated_at": now}},
+        )
+        await db.fleet_vehicles.update_one(
+            {"_id": vehicle["_id"], "fleet_id": fleet_id},
+            {"$set": {
+                "assigned_driver_id": body.driver_user_id,
+                "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
+                "updated_at": now,
+            }},
+        )
+        after = {
+            "vehicle_id": str(vehicle["_id"]),
+            "car": vehicle.get("car"),
+            "plate": vehicle.get("plate"),
+            "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        }
+        await db.users.update_one({"_id": driver["_id"], "fleet_id": fleet_id}, {"$set": after})
+        if previous_driver:
+            await db.users.update_one(
+                {"_id": previous_driver["_id"], "fleet_id": fleet_id},
+                {"$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}, "$set": {"online": False}},
+            )
+        await audit(current, "fleet.vehicle_assign", "fleet", fleet_id, before, {**after, "driver_user_id": body.driver_user_id})
+        return {"ok": True, **after}
 
     # ---------------- Communications ----------------
     async def recipient_users(audience: str, fleet_id: Optional[str]):
