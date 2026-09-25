@@ -175,8 +175,12 @@ jobs:
 
           PID="$(adb shell pidof no.kjapp.driver 2>/dev/null | tr -d '\r')"
           TOP="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -n 2 | tr -d '\r')"
-          adb logcat -d -v threadtime > /tmp/kjapp-driver-current-logcat.txt 2>/dev/null
-          FATAL="$(grep -Ei 'FATAL EXCEPTION|JavascriptException|UnsatisfiedLinkError|dlopen failed|Unable to load script|ReactNativeJS.*(Error|Exception)|worklet.*(error|exception)|reanimated.*(error|exception)' /tmp/kjapp-driver-current-logcat.txt | tail -n 50)"
+          if [ -n "$PID" ]; then
+            adb logcat -d -v threadtime --pid="$PID" > /tmp/kjapp-driver-current-logcat.txt 2>/dev/null
+          else
+            adb logcat -d -v threadtime > /tmp/kjapp-driver-current-logcat.txt 2>/dev/null
+          fi
+          FATAL="$(grep -Ei 'FATAL EXCEPTION|JavascriptException|UnsatisfiedLinkError|Unable to load script|ReactNativeJS.*(Error|Exception)|worklet.*(error|exception)|reanimated.*(error|exception)' /tmp/kjapp-driver-current-logcat.txt | tail -n 50)"
           FOCUS="$(grep -Ei 'AndroidRuntime|ReactNativeJS|SoLoader|TaskManager|expo-notifications|expo-location|worklet|reanimated|no.kjapp.driver' /tmp/kjapp-driver-current-logcat.txt | tail -n 90)"
 
           adb shell uiautomator dump /sdcard/kjapp-driver-window.xml >/dev/null 2>&1 || true
