@@ -64,8 +64,10 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     try:
         driver = await db.users.find_one({"_id": ObjectId(str(driver_id)), "role": "driver"})
     except Exception:
-        return None
-    fleet_id = (driver or {}).get("fleet_id")
+        driver = None
+    # The trip-time fleet snapshot is canonical. A later driver transfer must never
+    # redirect an old fare to the driver's new fleet.
+    fleet_id = trip.get("fleet_id") or (driver or {}).get("fleet_id")
     if not fleet_id:
         return None
     try:
@@ -92,7 +94,9 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     )
     if not snap["ready"]:
         return None
-    rate = float((fleet or {}).get("commission_rate", 0.10) or 0.10)
+    # Preserve the commission agreed/snapshotted on the ride. Changing fleet pricing
+    # after booking must not change settlement for an already accepted trip.
+    rate = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
