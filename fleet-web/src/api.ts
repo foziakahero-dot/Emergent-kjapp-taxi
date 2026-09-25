@@ -122,6 +122,7 @@ export type PublicDriverInvite = {
   plate?: string;
   vehicle_type?: string;
   fleet_name?: string;
+  fleet_org_number?: string;
   expires_at?: string;
 };
 
