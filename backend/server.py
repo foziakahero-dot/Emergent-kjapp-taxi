@@ -4139,14 +4139,19 @@ async def driver_summary(current=Depends(require_driver)):
     driver_id = current["id"]
     today = datetime.now(timezone.utc).date().isoformat()
     total = 0
+    gross_total = 0
     trips = 0
     async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
         "created_at": {"$gte": today},
         "status": {"$in": ["arrived", "completed", "rated"]},
+        "payment_status": "paid",
     })):
         trips += 1
-        total += t.get("price", 0)
+        gross = int(t.get("price", 0) or 0)
+        rate = await _commission_for_trip(t)
+        gross_total += gross
+        total += int(round(gross * (1 - rate)))
 
     # Online minutes today — sum of online sessions
     online_minutes = 0
@@ -4180,6 +4185,7 @@ async def driver_summary(current=Depends(require_driver)):
     return {
         "income": total + bonus,
         "trip_income": total,
+        "gross_trip_income": gross_total,
         "bonus": bonus,
         "trips": trips,
         "online": bool(u.get("online")),
@@ -4886,26 +4892,32 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
     # Today/Week income
     today = datetime.now(timezone.utc).date().isoformat()
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
-    today_gross = 0; today_trips = 0
-    week_gross = 0; week_trips = 0
+    today_gross = 0; today_net = 0; today_trips = 0
+    week_gross = 0; week_net = 0; week_trips = 0
     if drivers_ids:
         async for t in db.trips.find(_real_trip_filter({
-            "driver_id": {"$in": drivers_ids},
+            "$or": [
+                {"fleet_id": fid},
+                {"fleet_id": {"$exists": False}, "driver_id": {"$in": drivers_ids}},
+            ],
             "status": {"$in": ["arrived", "completed", "rated"]},
+            "payment_status": "paid",
             "created_at": {"$gte": week_start},
         })):
-            price = t.get("price", 0)
-            week_gross += price; week_trips += 1
+            price = int(t.get("price", 0) or 0)
+            rate = await _commission_for_trip(t)
+            trip_net = int(round(price * (1 - rate)))
+            week_gross += price; week_net += trip_net; week_trips += 1
             if t.get("created_at", "") >= today:
-                today_gross += price; today_trips += 1
+                today_gross += price; today_net += trip_net; today_trips += 1
     online_count = await db.users.count_documents({"role": "driver", "fleet_id": fid, "online": True})
     fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
     commission = float(fleet.get("commission_rate", 0.10))
     return {
         "drivers_total": len(drivers_ids),
         "drivers_online": online_count,
-        "today": {"gross": today_gross, "trips": today_trips, "net": int(round(today_gross * (1 - commission)))},
-        "week": {"gross": week_gross, "trips": week_trips, "net": int(round(week_gross * (1 - commission)))},
+        "today": {"gross": today_gross, "trips": today_trips, "net": today_net},
+        "week": {"gross": week_gross, "trips": week_trips, "net": week_net},
         "commission_pct": int(commission * 100),
     }
 
@@ -4919,10 +4931,19 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
         d = user_public(d)
         # Today income
         today = datetime.now(timezone.utc).date().isoformat()
-        income = 0; trips = 0
-        async for t in db.trips.find(_real_trip_filter({"driver_id": d["id"], "created_at": {"$gte": today}, "status": {"$in": ["arrived","completed","rated"]}})):
-            income += t.get("price", 0); trips += 1
-        d["today_income"] = income; d["today_trips"] = trips
+        income = 0; gross_income = 0; trips = 0
+        async for t in db.trips.find(_real_trip_filter({
+            "driver_id": d["id"],
+            "created_at": {"$gte": today},
+            "status": {"$in": ["arrived","completed","rated"]},
+            "payment_status": "paid",
+        })):
+            gross = int(t.get("price", 0) or 0)
+            rate = await _commission_for_trip(t)
+            gross_income += gross
+            income += int(round(gross * (1 - rate)))
+            trips += 1
+        d["today_income"] = income; d["today_gross"] = gross_income; d["today_trips"] = trips
         drivers.append(d)
     return {"drivers": drivers}
 
@@ -5608,6 +5629,8 @@ async def fleet_export_monthly(
             "car": d.get("car", ""),
             "trips": 0,
             "gross": 0,
+            "commission": 0,
+            "net": 0,
         }
     driver_ids = list(drivers_map.keys())
 
@@ -5615,19 +5638,28 @@ async def fleet_export_monthly(
     trips = []
     if driver_ids:
         async for t in db.trips.find(_real_trip_filter({
-            "driver_id": {"$in": driver_ids},
+            "$or": [
+                {"fleet_id": fid},
+                {"fleet_id": {"$exists": False}, "driver_id": {"$in": driver_ids}},
+            ],
             "status": {"$in": ["arrived", "completed", "rated"]},
+            "payment_status": "paid",
             "created_at": {"$gte": start_iso, "$lt": end_iso},
         })):
             trips.append(t)
             did = t.get("driver_id")
             if did in drivers_map:
+                gross = int(t.get("price", 0) or 0)
+                rate = float(t.get("commission_rate", commission) or commission)
+                fee = int(round(gross * rate))
                 drivers_map[did]["trips"] += 1
-                drivers_map[did]["gross"] += t.get("price", 0)
+                drivers_map[did]["gross"] += gross
+                drivers_map[did]["commission"] += fee
+                drivers_map[did]["net"] += gross - fee
 
-    total_gross = sum(t.get("price", 0) for t in trips)
+    total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
     total_trips = len(trips)
-    total_commission = int(round(total_gross * commission))
+    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -5663,8 +5695,7 @@ async def fleet_export_monthly(
     for c in ws2[1]:
         c.font = thin_hdr; c.fill = hdr_fill; c.alignment = Alignment(horizontal="center")
     for d in sorted(drivers_map.values(), key=lambda x: -x["gross"]):
-        d_com = int(round(d["gross"] * commission))
-        ws2.append([_csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]), d["trips"], d["gross"], d_com, d["gross"] - d_com])
+        ws2.append([_csv_safe(d["name"]), _csv_safe(d["email"]), _csv_safe(d["car"]), _csv_safe(d["plate"]), d["trips"], d["gross"], d["commission"], d["net"]])
     # Totals row
     ws2.append([])
     ws2.append(["TOTAL", "", "", "", total_trips, total_gross, total_commission, total_net])
@@ -7441,6 +7472,12 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
             "arrived_at": t.get("arrived_at"),
             "vehicle_type": t.get("vehicle_type"),
             "commission_rate": t.get("commission_rate"),
+            "payment_status": t.get("payment_status"),
+            "receipt_id": t.get("receipt_id"),
+            "driver_earnings": (
+                int(round(int(t.get("price", 0) or 0) * (1 - float(t.get("commission_rate", 0.10) or 0.10))))
+                if t.get("payment_status") == "paid" else None
+            ),
             "pickup_address": _driver_history_area(t.get("pickup_address")),
             "dropoff_address": _driver_history_area(t.get("dropoff_address")),
         })
@@ -7460,9 +7497,12 @@ async def driver_history_weekly(current=Depends(require_driver)):
             "driver_id": driver_id,
             "created_at": {"$gte": day.isoformat(), "$lt": (day + timedelta(days=1)).isoformat()},
             "status": {"$in": ["arrived", "completed", "rated"]},
+            "payment_status": "paid",
         })):
             trips += 1
-            total += t.get("price", 0)
+            gross = int(t.get("price", 0) or 0)
+            rate = await _commission_for_trip(t)
+            total += int(round(gross * (1 - rate)))
         days.append({"date": day.isoformat(), "day_label": day.strftime("%a"), "income": total, "trips": trips})
     return {"days": days}
 
@@ -7505,6 +7545,7 @@ async def driver_payouts(current=Depends(require_driver)):
     async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": ["arrived", "completed", "rated"]},
+        "payment_status": "paid",
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
     })):
@@ -8865,21 +8906,31 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
     days = max(1, min(days, 180))
     since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).date().isoformat()
     daily = {}
-    total_gmv, total_trips = 0, 0
+    total_gmv, total_trips, platform_revenue = 0, 0, 0
     fleet_gmv = {}
     driver_fleet = {}
+    default_rate = await _platform_commission()
     async for u in db.users.find({"role": "driver", "fleet_id": {"$exists": True, "$ne": None}}, {"fleet_id": 1}):
         driver_fleet[str(u["_id"])] = u["fleet_id"]
-    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": since}}), {"price": 1, "created_at": 1, "driver_id": 1}):
-        price = t.get("price", 0) or 0
+    async for t in db.trips.find(
+        _real_trip_filter({
+            "status": {"$in": ["arrived", "completed", "rated"]},
+            "payment_status": "paid",
+            "created_at": {"$gte": since},
+        }),
+        {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
+    ):
+        price = int(t.get("price", 0) or 0)
+        rate = float(t.get("commission_rate", default_rate) or default_rate)
+        fee = int(round(price * rate))
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
         d["gmv"] += price; d["trips"] += 1
-        total_gmv += price; total_trips += 1
-        fid = driver_fleet.get(t.get("driver_id"))
+        total_gmv += price; total_trips += 1; platform_revenue += fee
+        fid = t.get("fleet_id") or driver_fleet.get(t.get("driver_id"))
         if fid:
-            fg = fleet_gmv.setdefault(fid, {"gmv": 0, "trips": 0})
-            fg["gmv"] += price; fg["trips"] += 1
+            fg = fleet_gmv.setdefault(fid, {"gmv": 0, "trips": 0, "commission": 0})
+            fg["gmv"] += price; fg["trips"] += 1; fg["commission"] += fee
     series = []
     for i in range(days):
         day = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).date().isoformat()
@@ -8888,20 +8939,19 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
     fleets_out = []
     async for f in db.fleets.find({}):
         fid = str(f["_id"])
-        fg = fleet_gmv.get(fid, {"gmv": 0, "trips": 0})
+        fg = fleet_gmv.get(fid, {"gmv": 0, "trips": 0, "commission": 0})
         rate = f.get("commission_rate", 0.10)
         fleets_out.append({
             "id": fid, "name": f.get("name"), "status": f.get("status", "active"),
             "trips": fg["trips"], "gmv": fg["gmv"],
-            "commission_rate": rate, "commission_amount": round(fg["gmv"] * rate),
+            "commission_rate": rate, "commission_amount": fg["commission"],
         })
     fleets_out.sort(key=lambda x: -x["gmv"])
-    _rate = await _platform_commission()
     return {
         "days": days,
         "totals": {
             "gmv": total_gmv, "trips": total_trips,
-            "kjapp_revenue": round(total_gmv * _rate),
+            "kjapp_revenue": platform_revenue,
             "avg_price": round(total_gmv / total_trips) if total_trips else 0,
         },
         "series": series,
@@ -8920,12 +8970,12 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
     w = _csv.writer(buf, delimiter=";")
     _rate = await _platform_commission()
     w.writerow(["dato", "trip_id", "status", "pris_kr", "distanse_km", "sjåfør", "passasjer_id", "kjapp_provisjon_kr"])
-    async for t in db.trips.find(_real_trip_filter({"created_at": {"$gte": since}})).sort("created_at", -1).limit(5000):
+    async for t in db.trips.find(_real_trip_filter({"created_at": {"$gte": since}, "payment_status": "paid"})).sort("created_at", -1).limit(5000):
         price = t.get("price", 0) or 0
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * _rate) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -9160,8 +9210,12 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
     want = (type or "").upper()
     rows = []
     if want in ("", "FARE"):
-        async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": lo, "$lte": hi}})):
-            fid = driver_fleet.get(t.get("driver_id"))
+        async for t in db.trips.find(_real_trip_filter({
+            "status": {"$in": ["arrived", "completed", "rated"]},
+            "payment_status": "paid",
+            "created_at": {"$gte": lo, "$lte": hi},
+        })):
+            fid = t.get("fleet_id") or driver_fleet.get(t.get("driver_id"))
             if fleet_id and fid != fleet_id: continue
             price = int(t.get("price") or 0)
             rows.append({
@@ -9170,7 +9224,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "amount": price,
                 "commission": round(price * float(t.get("commission_rate", commission) or commission)),
                 "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
-                "provider": t.get("payment_method") or "card", "status": t.get("payment_status") or "captured",
+                "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
     if want in ("", "REFUND"):
