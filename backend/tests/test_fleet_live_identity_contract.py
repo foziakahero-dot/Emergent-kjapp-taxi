@@ -83,6 +83,9 @@ def test_vehicle_compliance_documents_are_scoped_and_admin_reviewable():
     assert 'owner_type = "vehicle" if scope_name == "fleet-vehicle-docs"' in source
     assert 'vehicle_names.get(vehicle_id)' in source
     assert '/admin/documents/{file_id}/review' in source
+    assert '"document_compliance": document_compliance' in source
+    assert '"missing_document_types": missing_document_types' in source
+    assert 'FLEET_VEHICLE_DOC_TYPES - set(document_statuses)' in source
 
     tree = ast.parse(source)
     upload = next(
