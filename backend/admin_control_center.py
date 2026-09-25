@@ -137,9 +137,7 @@ def install_admin_control_center(
 
     class FleetDriverInvite(BaseModel):
         email: str
-        car: str
-        plate: str
-        vehicle_type: str = "ai-first"
+        vehicle_id: str
         note: Optional[str] = ""
 
     class FleetVehicleUpdate(BaseModel):
@@ -443,13 +441,35 @@ def install_admin_control_center(
     @api.post("/admin/control/fleets/{fleet_id}/driver-invites")
     async def invite_driver_for_fleet(fleet_id: str, body: FleetDriverInvite, current=Depends(require_admin)):
         fleet = await fleet_or_404(fleet_id)
+        try:
+            vehicle = await db.fleet_vehicles.find_one({"_id": ObjectId(str(body.vehicle_id)), "fleet_id": fleet_id})
+        except Exception:
+            vehicle = None
+        if not vehicle:
+            raise HTTPException(404, "Bilen finnes ikke hos denne løyvehaveren")
+        if vehicle.get("active") is False:
+            raise HTTPException(409, "Bilen er parkert")
+        if vehicle.get("assigned_driver_id"):
+            raise HTTPException(409, "Bilen er allerede tildelt en sjåfør")
+        if await db.driver_invites.find_one({
+            "fleet_id": fleet_id,
+            "vehicle_id": str(vehicle["_id"]),
+            "used": False,
+            "expires_at": {"$gt": _now()},
+        }):
+            raise HTTPException(409, "Det finnes allerede en aktiv invitasjon for denne bilen")
+
         token = secrets.token_urlsafe(24)
         email = body.email.strip().lower()
+        canonical_car = str(vehicle.get("car") or "").strip()
+        canonical_plate = str(vehicle.get("plate") or "").strip().upper()
+        canonical_type = vehicle.get("vehicle_type") or "ai-first"
         doc = {
             "token": token,
-            "car": body.car.strip(),
-            "plate": body.plate.strip().upper(),
-            "vehicle_type": body.vehicle_type,
+            "vehicle_id": str(vehicle["_id"]),
+            "car": canonical_car,
+            "plate": canonical_plate,
+            "vehicle_type": canonical_type,
             "note": body.note or "",
             "email": email,
             "created_by": current["id"],
@@ -463,8 +483,8 @@ def install_admin_control_center(
         base = os.getenv("KJAPP_PUBLIC_URL", "https://kjappapp.no").rstrip("/")
         invite_url = f"{base}/driver-signup/{token}"
         safe_name = html.escape(str(fleet.get("name") or "KJAPP-flåten"))
-        safe_car = html.escape(body.car)
-        safe_plate = html.escape(body.plate.upper())
+        safe_car = html.escape(canonical_car)
+        safe_plate = html.escape(canonical_plate)
         mail = (
             "<div style='font-family:Arial,sans-serif;background:#071015;color:#e9edf1;padding:28px'>"
             "<h2 style='color:#72dce8'>KJAPP sjåførinvitasjon</h2>"
@@ -476,7 +496,7 @@ def install_admin_control_center(
         sent = await asyncio.to_thread(send_email, email, "Invitasjon: Bli sjåfør for KJAPP", mail)
         if sent:
             await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
-        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {"email": email, "plate": body.plate.upper()})
+        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {"email": email, "vehicle_id": str(vehicle["_id"]), "plate": canonical_plate})
         return {"ok": True, "email_sent": bool(sent), "expires_at": doc["expires_at"]}
 
     @api.post("/admin/control/fleets/{fleet_id}/vehicle")
