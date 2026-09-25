@@ -216,19 +216,27 @@ export default function DriverHome() {
 
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         if (!active) return;
-        const p: Loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, heading: pos.coords.heading || 0 };
+        const p: Loc = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading: pos.coords.heading ?? undefined,
+        };
         gpsBlocked.current = false;
         setLoc(p);
         setError('');
-        driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
+        driverApi.location(p.lat, p.lng, p.heading, pos.coords.speed ?? undefined).catch(() => {});
 
         const subscription = await Location.watchPositionAsync(
           { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
           (u) => {
             if (!active) return;
-            const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
+            const np: Loc = {
+              lat: u.coords.latitude,
+              lng: u.coords.longitude,
+              heading: u.coords.heading ?? undefined,
+            };
             setLoc(np);
-            driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
+            driverApi.location(np.lat, np.lng, np.heading, u.coords.speed ?? undefined).catch(() => {});
           },
         );
         if (!active) subscription.remove();
