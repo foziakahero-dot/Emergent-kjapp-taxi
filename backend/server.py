@@ -3656,6 +3656,27 @@ async def driver_pending(current=Depends(require_driver)):
             "commission": await _platform_commission(),
             "driver_gps": None,
         }
+    if current.get("active_trip_id"):
+        active = await db.trips.find_one(
+            _real_trip_filter({
+                "trip_id": current["active_trip_id"],
+                "driver_id": current["id"],
+                "status": {"$in": ACTIVE_TRIP_STATUSES},
+            }),
+            {"trip_id": 1},
+        )
+        if active:
+            return {
+                "trips": [],
+                "busy": True,
+                "active_trip_id": current["active_trip_id"],
+                "commission": await _platform_commission(),
+                "driver_gps": {
+                    "lat": current.get("last_lat"),
+                    "lng": current.get("last_lng"),
+                    "at": current.get("last_location_at"),
+                },
+            }
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
     commission = await _platform_commission()
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
@@ -3802,6 +3823,9 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     lock = await db.users.update_one(
         {
             "_id": driver_oid,
+            "role": "driver",
+            "approved": True,
+            "online": True,
             "$or": [
                 {"active_trip_id": {"$exists": False}},
                 {"active_trip_id": None},
@@ -3816,7 +3840,11 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         locked_trip = None
         if locked_trip_id:
             locked_trip = await db.trips.find_one(
-                {"trip_id": locked_trip_id, "driver_id": driver_id, "status": {"$in": ACTIVE_TRIP_STATUSES}},
+                _real_trip_filter({
+                    "trip_id": locked_trip_id,
+                    "driver_id": driver_id,
+                    "status": {"$in": ACTIVE_TRIP_STATUSES},
+                }),
                 {"_id": 1},
             )
         if locked_trip:
@@ -3828,6 +3856,9 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         lock = await db.users.update_one(
             {
                 "_id": driver_oid,
+                "role": "driver",
+                "approved": True,
+                "online": True,
                 "$or": [
                     {"active_trip_id": {"$exists": False}},
                     {"active_trip_id": None},
