@@ -7532,6 +7532,7 @@ async def driver_history_weekly(current=Depends(require_driver)):
     for i in range(6, -1, -1):
         day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
         total = 0
+        gross_total = 0
         trips = 0
         async for t in db.trips.find(_real_trip_filter({
             "driver_id": driver_id,
@@ -7542,8 +7543,15 @@ async def driver_history_weekly(current=Depends(require_driver)):
             trips += 1
             gross = int(t.get("price", 0) or 0)
             rate = await _commission_for_trip(t)
+            gross_total += gross
             total += int(round(gross * (1 - rate)))
-        days.append({"date": day.isoformat(), "day_label": day.strftime("%a"), "income": total, "trips": trips})
+        days.append({
+            "date": day.isoformat(),
+            "day_label": day.strftime("%a"),
+            "income": total,
+            "gross_income": gross_total,
+            "trips": trips,
+        })
     return {"days": days}
 
 
