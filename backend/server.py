@@ -2834,7 +2834,14 @@ ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
-async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None) -> list:
+def _vehicle_type_compatible(requested: Optional[str], active: Optional[str]) -> bool:
+    # ai-first and enkelt are both the standard 4-seat KJAPP product in the current mobile UI.
+    if requested in (None, "", "ai-first", "enkelt"):
+        return active in ("ai-first", "enkelt")
+    return active == requested
+
+
+async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, requested_vehicle_type: Optional[str] = None) -> list:
     """Real, available drivers sorted by actual distance to pickup.
 
     Equipment-bound needs (wheelchair/child seat) are hard requirements. Other needs are
@@ -2861,6 +2868,8 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
             continue
         if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
+        if not _vehicle_type_compatible(requested_vehicle_type, d.get("vehicle_type")):
+            continue
         out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
     out.sort(key=lambda x: x["km"])
     return out
@@ -2874,8 +2883,10 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(
-        trip.get("pickup_lat"), trip.get("pickup_lng"),
+        trip.get("pickup_lat"),
+        trip.get("pickup_lng"),
         _required_driver_capabilities(trip.get("special_needs")),
+        trip.get("vehicle_type"),
     )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
@@ -2999,6 +3010,8 @@ async def driver_pending(current=Depends(require_driver)):
         if t["trip_id"] in declined:
             continue
         if not _driver_supports_special_needs(current, t.get("special_needs")):
+            continue
+        if not _vehicle_type_compatible(t.get("vehicle_type"), current.get("vehicle_type")):
             continue
         t["id"] = str(t["_id"])
         t.pop("_id", None)
