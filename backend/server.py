@@ -1971,7 +1971,7 @@ async def request_trip(body: TripRequest, request: Request, current=Depends(get_
 @api.get("/trips/active")
 async def active_trip(current=Depends(get_current_user)):
     trip = await db.trips.find_one(
-        {"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}},
+        _real_trip_filter({"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}),
         sort=[("created_at", -1)],
     )
     if not trip:
@@ -1983,7 +1983,7 @@ async def active_trip(current=Depends(get_current_user)):
 
 @api.get("/trips/{trip_id}")
 async def get_trip(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     trip["id"] = str(trip["_id"])
@@ -2222,7 +2222,7 @@ class TripMessageRequest(BaseModel):
 
 
 async def _load_trip_or_403(trip_id: str, current: dict):
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
     is_passenger = trip.get("user_id") == current["id"]
@@ -5625,7 +5625,7 @@ class TripCheckoutRequest(BaseModel):
 @api.post("/payments/checkout")
 async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
     """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
-    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
