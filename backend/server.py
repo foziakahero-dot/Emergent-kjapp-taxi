@@ -2054,7 +2054,7 @@ async def complete_trip(trip_id: str, current=Depends(get_current_user)):
             {"_id": trip["_id"], "status": "arrived"},
             {"$set": {"status": "completed", "completed_at": now_iso, "updated_at": now_iso}},
         )
-        trip = await db.trips.find_one({"_id": trip["_id"]})
+        trip = await db.trips.find_one(_real_trip_filter({"_id": trip["_id"]}))
     elif status not in ("completed", "rated"):
         raise HTTPException(status_code=409, detail="Turen kan ikke fullføres før sjåføren har registrert ankomst")
 
@@ -3232,7 +3232,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
-    t = await db.trips.find_one({"trip_id": body.trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
     await send_push_to_user(
         t["user_id"], "Sjåfør på vei",
         f"{driver['name']} kommer om {eta} min." if eta else f"{driver['name']} er på vei til deg.",
@@ -3300,11 +3300,11 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
     return {"ok": True}
 
@@ -3318,11 +3318,11 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
     return {"ok": True}
 
@@ -3337,7 +3337,7 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if t and t.get("user_id"):
         await send_push_to_user(t["user_id"], "Turen ble avlyst", "Du dukket ikke opp — kort no-show-avgift kan bli belastet.", "/app")
     return {"ok": True}
@@ -3351,11 +3351,11 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True, "bonuses": []}
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
     bonuses = await award_driver_bonuses(driver_id)
     return {"ok": True, "bonuses": bonuses}
@@ -5963,7 +5963,7 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke avbryte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Turen ble avbrutt", "Sjåføren har avbrutt turen. Beklager!", "/app")
     return {"ok": True}
 
