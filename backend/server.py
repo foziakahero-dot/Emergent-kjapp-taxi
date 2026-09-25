@@ -418,7 +418,7 @@ def _twofa_required_role(role: str) -> bool:
 
 
 USER_RESPONSE_FIELDS = frozenset({
-    "id", "email", "fullName", "full_name", "phone", "role", "driver_id", "fleet_id",
+    "id", "email", "fullName", "full_name", "phone", "role", "driver_id", "fleet_id", "vehicle_id",
     "picture", "photo", "avatar", "car", "plate", "vehicle_type", "rating", "trip_count",
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
@@ -476,8 +476,9 @@ async def _session_is_revoked(payload: dict) -> bool:
 
 
 async def _fleet_is_suspended(fleet_id) -> bool:
+    # A live KJAPP driver must always belong to a real fleet/løyvehaver.
     if not fleet_id:
-        return False
+        return True
     try:
         fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id)}, {"status": 1})
     except (InvalidId, TypeError):
@@ -487,7 +488,79 @@ async def _fleet_is_suspended(fleet_id) -> bool:
 
 async def _require_active_fleet(fleet_id):
     if await _fleet_is_suspended(fleet_id):
-        raise HTTPException(status_code=403, detail="Flåten er suspendert eller utilgjengelig")
+        raise HTTPException(status_code=403, detail="Flåten er suspendert, mangler eller er utilgjengelig")
+
+
+async def _assigned_fleet_vehicle(driver: dict, *, required: bool = True) -> Optional[dict]:
+    """Resolve the fleet-owned vehicle that is actually assigned to this driver.
+
+    Driver user fields (car/plate/vehicle_type) are compatibility mirrors only; fleet_vehicles
+    is canonical for live dispatch. This prevents stale profile data from selecting a ride.
+    """
+    driver_id = driver.get("id")
+    if not driver_id and driver.get("_id") is not None:
+        driver_id = str(driver["_id"])
+    fleet_id = driver.get("fleet_id")
+    if not driver_id or not fleet_id:
+        if required:
+            raise HTTPException(status_code=403, detail="Sjåføren må være tilknyttet en aktiv løyvehaver")
+        return None
+
+    vehicle = None
+    vehicle_id = driver.get("vehicle_id")
+    if vehicle_id:
+        try:
+            vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(str(vehicle_id)),
+                "fleet_id": fleet_id,
+            })
+        except (InvalidId, TypeError):
+            vehicle = None
+        if vehicle and vehicle.get("assigned_driver_id") not in (None, "", driver_id):
+            vehicle = None
+
+    if not vehicle:
+        vehicle = await db.fleet_vehicles.find_one({
+            "fleet_id": fleet_id,
+            "assigned_driver_id": driver_id,
+        })
+
+    if not vehicle:
+        if required:
+            raise HTTPException(status_code=403, detail="Ingen aktiv bil er tildelt deg av løyvehaver")
+        return None
+    if vehicle.get("active") is False:
+        if required:
+            raise HTTPException(status_code=403, detail="Bilen din er parkert av løyvehaver")
+        return None
+
+    canonical_id = str(vehicle["_id"])
+    canonical = {
+        "vehicle_id": canonical_id,
+        "car": vehicle.get("car") or "",
+        "plate": vehicle.get("plate") or "",
+        "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+    }
+    # Repair compatibility mirrors only when the canonical fleet assignment is known.
+    if vehicle.get("assigned_driver_id") in (None, ""):
+        await db.fleet_vehicles.update_one(
+            {"_id": vehicle["_id"], "fleet_id": fleet_id, "assigned_driver_id": {"$in": [None, ""]}},
+            {"$set": {
+                "assigned_driver_id": driver_id,
+                "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+    if any(driver.get(k) != v for k, v in canonical.items()):
+        try:
+            await db.users.update_one(
+                {"_id": ObjectId(driver_id), "role": "driver", "fleet_id": fleet_id},
+                {"$set": canonical},
+            )
+        except (InvalidId, TypeError):
+            pass
+    vehicle.update(canonical)
+    return vehicle
 
 
 def _parse_iso_utc(value) -> Optional[datetime]:
@@ -2233,10 +2306,10 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     _require_launch_pickup(body.pickup_lat, body.pickup_lng)
     # Server-side duplicate guard: one passenger cannot create overlapping active rides.
     existing_active = await db.trips.find_one(
-        {
+        _real_trip_filter({
             "user_id": current["id"],
             "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
-        },
+        }),
         {"trip_id": 1, "status": 1},
     )
     if existing_active:
@@ -2275,10 +2348,10 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     # Re-check after acquiring the lock in case another request inserted a trip just
     # before this request obtained the lock.
     existing_after_lock = await db.trips.find_one(
-        {
+        _real_trip_filter({
             "user_id": current["id"],
             "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
-        },
+        }),
         {"trip_id": 1},
     )
     if existing_after_lock:
@@ -3392,9 +3465,12 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         did = str(d["_id"])
         if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
             continue
+        assigned_vehicle = await _assigned_fleet_vehicle(d, required=False)
+        if not assigned_vehicle:
+            continue
         if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
-        driver_vehicle_type = d.get("vehicle_type") or "ai-first"
+        driver_vehicle_type = assigned_vehicle.get("vehicle_type") or "ai-first"
         if vehicle_type and driver_vehicle_type != vehicle_type:
             continue
         out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
@@ -3525,6 +3601,7 @@ async def driver_pending(current=Depends(require_driver)):
             "commission": await _platform_commission(),
             "driver_gps": None,
         }
+    assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
     commission = await _platform_commission()
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     # A request the driver just declined must not bounce straight back on the next poll.
@@ -3549,6 +3626,8 @@ async def driver_pending(current=Depends(require_driver)):
         **REAL_TRIPS_ONLY,
     }).sort("created_at", 1).limit(10):
         if t["trip_id"] in declined:
+            continue
+        if (t.get("vehicle_type") or "ai-first") != (assigned_vehicle.get("vehicle_type") or "ai-first"):
             continue
         if not _driver_supports_special_needs(current, t.get("special_needs")):
             continue
@@ -3590,10 +3669,17 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     if current.get("online") is not True:
         raise HTTPException(status_code=409, detail="Gå online før du godtar en tur")
     driver_id = current["id"]  # driver's user id is the driver_id now
+    assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
+    fleet = await db.fleets.find_one({"_id": ObjectId(current["fleet_id"])}) or {}
     driver = {
         "name": current.get("fullName") or "Sjåfør",
-        "car": current.get("car") or "",
-        "plate": current.get("plate") or "",
+        "car": assigned_vehicle.get("car") or "",
+        "plate": assigned_vehicle.get("plate") or "",
+        "vehicle_id": str(assigned_vehicle["_id"]),
+        "vehicle_type": assigned_vehicle.get("vehicle_type") or "ai-first",
+        "fleet_id": current.get("fleet_id"),
+        "fleet_name": fleet.get("name"),
+        "fleet_org_number": fleet.get("org_number"),
         "rating": current.get("rating"),
         "photo": (current.get("fullName") or "S")[:2].upper(),
     }
@@ -3601,6 +3687,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    if (trip_pre.get("vehicle_type") or "ai-first") != (assigned_vehicle.get("vehicle_type") or "ai-first"):
+        raise HTTPException(status_code=409, detail="Turen krever en annen kjøretøyklasse enn bilen du er tildelt")
     if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
         raise HTTPException(status_code=403, detail="Turen krever utstyr som ikke er registrert på denne sjåføren")
     if trip_pre.get("dispatch_mode") == "sequential":
@@ -3631,6 +3719,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         "driver": driver,
         "driver_id": driver_id,
         "driver_user_id": current["id"],
+        "vehicle_id": str(assigned_vehicle["_id"]),
+        "fleet_id": current.get("fleet_id"),
+        "fleet_name": fleet.get("name"),
+        "fleet_org_number": fleet.get("org_number"),
         "driver_route_started_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -4278,6 +4370,8 @@ class DriverOnlineRequest(BaseModel):
 @api.post("/driver/online")
 async def driver_online(body: DriverOnlineRequest, current=Depends(require_driver)):
     now_iso = datetime.now(timezone.utc).isoformat()
+    if body.online:
+        await _assigned_fleet_vehicle(current, required=True)
     if not body.online:
         active = await db.trips.find_one(
             {"driver_id": current["id"], "status": {"$in": ACTIVE_TRIP_STATUSES}},
@@ -6593,7 +6687,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         {"trip_id": trip_id, "payment_status": "paid"},
         sort=[("updated_at", -1)],
     )
-    fleet_id = (payment or {}).get("fleet_id") or (driver or {}).get("fleet_id")
+    fleet_id = trip.get("fleet_id") or (payment or {}).get("fleet_id") or (driver or {}).get("fleet_id")
     if fleet_id:
         try:
             fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id)})
@@ -6625,8 +6719,8 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "driver_id": trip.get("driver_id"),
         "driver_name": (driver or {}).get("fullName") or (driver or {}).get("full_name") or (trip.get("driver") or {}).get("name"),
         "driver_email": (driver or {}).get("email"),
-        "driver_car": (driver or {}).get("car") or (trip.get("driver") or {}).get("car"),
-        "driver_plate": (driver or {}).get("plate") or (trip.get("driver") or {}).get("plate"),
+        "driver_car": (trip.get("driver") or {}).get("car") or (driver or {}).get("car"),
+        "driver_plate": (trip.get("driver") or {}).get("plate") or (driver or {}).get("plate"),
         "fleet_id": str(fleet["_id"]) if fleet else fleet_id,
         "fleet_name": (fleet or {}).get("name"),
         "fleet_org_number": (fleet or {}).get("org_number"),
