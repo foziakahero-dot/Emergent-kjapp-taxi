@@ -767,14 +767,11 @@ def current_surge_info(when: datetime = None) -> dict:
 
 FCM_APP = None
 FCM_INIT_TRIED = False
+APNS_JWT_CACHE = {"token": None, "issued_at": 0}
 
 
 def _fcm_app():
-    """Lazily initialise Firebase Admin for native push (FCM for Android, APNs via FCM for iOS).
-
-    Key-optional: without FCM_SERVICE_ACCOUNT_JSON / FCM_SERVICE_ACCOUNT_FILE the app runs
-    normally and native push is simply reported as "not configured".
-    """
+    """Lazily initialise Firebase Admin for Android FCM delivery."""
     global FCM_APP, FCM_INIT_TRIED
     if FCM_APP is not None or FCM_INIT_TRIED:
         return FCM_APP
@@ -796,7 +793,7 @@ def _fcm_app():
 
 
 def _fcm_send(tokens: list, title: str, body: str, data: dict):
-    """Blocking FCM call — run through asyncio.to_thread. Returns tokens that are dead."""
+    """Blocking Android FCM call — run through asyncio.to_thread. Returns dead tokens."""
     from firebase_admin import messaging
     msg_data = {k: str(v) for k, v in (data or {}).items()}
     dead = []
@@ -810,13 +807,9 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict):
                     android=messaging.AndroidConfig(
                         priority="high",
                         notification=messaging.AndroidNotification(
-                            channel_id="kjapp_trips", sound="default", default_vibrate_timings=True,
-                        ),
-                    ),
-                    apns=messaging.APNSConfig(
-                        headers={"apns-priority": "10", "apns-push-type": "alert"},
-                        payload=messaging.APNSPayload(
-                            aps=messaging.Aps(sound="default", badge=1, content_available=True)
+                            channel_id="kjapp_trips",
+                            sound="default",
+                            default_vibrate_timings=True,
                         ),
                     ),
                 ),
@@ -831,23 +824,140 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict):
     return dead
 
 
+def _apns_private_key():
+    raw = (os.environ.get("APNS_PRIVATE_KEY") or "").strip()
+    path = (os.environ.get("APNS_PRIVATE_KEY_FILE") or "").strip()
+    if raw:
+        return raw.replace("\\n", "\n")
+    if path:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except Exception as e:
+            print(f"APNs key read failed: {e}")
+    return None
+
+
+def _apns_configured():
+    return bool(
+        (os.environ.get("APNS_KEY_ID") or "").strip()
+        and (os.environ.get("APNS_TEAM_ID") or "").strip()
+        and _apns_private_key()
+    )
+
+
+def _apns_auth_token():
+    now = int(datetime.now(timezone.utc).timestamp())
+    cached = APNS_JWT_CACHE.get("token")
+    issued_at = int(APNS_JWT_CACHE.get("issued_at") or 0)
+    if cached and now - issued_at < 3000:
+        return cached
+
+    key_id = (os.environ.get("APNS_KEY_ID") or "").strip()
+    team_id = (os.environ.get("APNS_TEAM_ID") or "").strip()
+    private_key = _apns_private_key()
+    if not key_id or not team_id or not private_key:
+        return None
+
+    token = jwt.encode(
+        {"iss": team_id, "iat": now},
+        private_key,
+        algorithm="ES256",
+        headers={"kid": key_id},
+    )
+    APNS_JWT_CACHE.update({"token": token, "issued_at": now})
+    return token
+
+
+def _apns_bundle_id(app_role: str):
+    if app_role == "driver":
+        return (os.environ.get("APNS_BUNDLE_ID_DRIVER") or "no.kjapp.driver").strip()
+    return (os.environ.get("APNS_BUNDLE_ID_CUSTOMER") or "no.kjapp.app").strip()
+
+
+async def _apns_send(devices: list, title: str, body: str, data: dict):
+    """Send directly to APNs because expo-notifications returns a native APNs token on iOS."""
+    auth_token = _apns_auth_token()
+    if not auth_token:
+        return []
+
+    dead = []
+    payload = {
+        "aps": {
+            "alert": {"title": title, "body": body},
+            "sound": "default",
+            "badge": 1,
+        },
+        **{k: str(v) for k, v in (data or {}).items()},
+    }
+
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+        for device in devices:
+            token = device.get("token")
+            if not token:
+                continue
+            app_role = device.get("app_role") or "customer"
+            bundle_id = device.get("bundle_id") or _apns_bundle_id(app_role)
+            environment = device.get("environment") or "production"
+            host = "https://api.sandbox.push.apple.com" if environment == "development" else "https://api.push.apple.com"
+            try:
+                response = await client.post(
+                    f"{host}/3/device/{token}",
+                    headers={
+                        "authorization": f"bearer {auth_token}",
+                        "apns-topic": bundle_id,
+                        "apns-push-type": "alert",
+                        "apns-priority": "10",
+                    },
+                    json=payload,
+                )
+                if response.status_code == 200:
+                    continue
+                try:
+                    reason = (response.json() or {}).get("reason", "")
+                except Exception:
+                    reason = ""
+                if response.status_code == 410 or reason in {
+                    "BadDeviceToken",
+                    "DeviceTokenNotForTopic",
+                    "Unregistered",
+                }:
+                    dead.append(token)
+                else:
+                    print(f"APNs send error: HTTP {response.status_code} {reason}")
+            except Exception as e:
+                print(f"APNs send error: {type(e).__name__}: {e}")
+    return dead
+
+
 async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None):
-    """Push to the user's real mobile devices (locked screen) via FCM/APNs."""
-    if not _fcm_app():
+    """Deliver locked-screen push: Android via Firebase/FCM, iOS directly via APNs."""
+    devices = []
+    async for device in db.native_push_tokens.find({"user_id": user_id}):
+        if device.get("token"):
+            devices.append(device)
+    if not devices:
         return
-    tokens = []
-    async for t in db.native_push_tokens.find({"user_id": user_id}, {"token": 1}):
-        if t.get("token"):
-            tokens.append(t["token"])
-    if not tokens:
-        return
-    try:
-        dead = await asyncio.to_thread(_fcm_send, tokens, title, body, {"url": url, "tag": tag or ""})
-    except Exception as e:
-        print(f"send_native_push failed: {e}")
-        return
+
+    data = {"url": url, "tag": tag or ""}
+    dead = []
+
+    android_tokens = [d["token"] for d in devices if d.get("platform") == "android"]
+    if android_tokens and _fcm_app():
+        try:
+            dead.extend(await asyncio.to_thread(_fcm_send, android_tokens, title, body, data))
+        except Exception as e:
+            print(f"send_native_push FCM failed: {e}")
+
+    ios_devices = [d for d in devices if d.get("platform") == "ios"]
+    if ios_devices and _apns_configured():
+        try:
+            dead.extend(await _apns_send(ios_devices, title, body, data))
+        except Exception as e:
+            print(f"send_native_push APNs failed: {e}")
+
     if dead:
-        await db.native_push_tokens.delete_many({"token": {"$in": dead}})
+        await db.native_push_tokens.delete_many({"token": {"$in": list(set(dead))}})
 
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
@@ -896,6 +1006,11 @@ async def lifespan(app: FastAPI):
     await db.trips.create_index("trip_id", unique=True)
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
+    await db.native_push_tokens.create_index(
+        [("user_id", 1), ("platform", 1), ("device_id", 1), ("app_role", 1)],
+        unique=True,
+    )
+    await db.native_push_tokens.create_index("token")
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
@@ -3283,44 +3398,70 @@ async def push_test(current=Depends(get_current_user)):
 
 
 class NativePushSubscribeRequest(BaseModel):
-    platform: Literal["ios", "android", "web"]
+    platform: Literal["ios", "android"]
+    provider: Optional[Literal["fcm", "apns"]] = None
     token: str
     device_id: Optional[str] = None
+    app_role: Optional[Literal["customer", "driver"]] = None
+    bundle_id: Optional[str] = None
+    environment: Optional[Literal["development", "production"]] = "production"
 
 
 @api.get("/push/native-config")
 async def push_native_config():
-    """Tells the app whether native (locked-screen) push is configured on this environment."""
-    ready = _fcm_app() is not None
+    """Expose readiness per native push transport without returning any secret material."""
+    android_ready = _fcm_app() is not None
+    ios_ready = _apns_configured()
     return {
-        "enabled": ready,
-        "provider": "fcm",
-        "message": None if ready else "Native push er ikke konfigurert ennå — legg inn FCM_SERVICE_ACCOUNT_JSON i backend-miljøet",
+        "enabled": android_ready or ios_ready,
+        "provider": "fcm+apns",
+        "android": {"enabled": android_ready, "provider": "fcm"},
+        "ios": {"enabled": ios_ready, "provider": "apns"},
+        "message": None if (android_ready and ios_ready) else "Native push mangler credentials for én eller flere plattformer",
     }
 
 
 @api.post("/push/native-subscribe")
 async def push_native_subscribe(body: NativePushSubscribeRequest, current=Depends(get_current_user)):
-    """
-    Store a native push token (APNs for iOS or FCM for Android) so backend can push notifications
-    to the mobile app. Actual APNs/FCM sender is added later (server key required).
-    Composite key is (user_id, platform, device_id) so multi-device users don't overwrite each other.
-    """
-    if not body.token:
+    """Store one native token per signed-in user/device/app, replacing rotated tokens safely."""
+    token = (body.token or "").strip()
+    if not token:
         raise HTTPException(status_code=400, detail="Mangler token")
-    dev_id = body.device_id or body.token[-12:]  # fallback so key is stable per token
+
+    expected_provider = "fcm" if body.platform == "android" else "apns"
+    if body.provider and body.provider != expected_provider:
+        raise HTTPException(status_code=400, detail="Provider matcher ikke plattform")
+
+    role = body.app_role or ("driver" if current.get("role") == "driver" else "customer")
+    if role == "driver" and current.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Driver-token krever sjåførkonto")
+    if role == "customer" and current.get("role") == "driver":
+        raise HTTPException(status_code=403, detail="Kunde-token kan ikke registreres fra sjåførkonto")
+
+    bundle_id = None
+    if body.platform == "ios":
+        expected_bundle = _apns_bundle_id(role)
+        if body.bundle_id and body.bundle_id != expected_bundle:
+            raise HTTPException(status_code=400, detail="Ugyldig bundle-id for push-token")
+        bundle_id = expected_bundle
+
+    dev_id = (body.device_id or token[-12:]).strip()
     await db.native_push_tokens.update_one(
-        {"user_id": current["id"], "platform": body.platform, "device_id": dev_id},
+        {"user_id": current["id"], "platform": body.platform, "device_id": dev_id, "app_role": role},
         {"$set": {
             "user_id": current["id"],
             "platform": body.platform,
+            "provider": expected_provider,
             "device_id": dev_id,
-            "token": body.token,
+            "app_role": role,
+            "bundle_id": bundle_id,
+            "environment": body.environment if body.platform == "ios" else None,
+            "token": token,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
         upsert=True,
     )
-    return {"ok": True}
+    return {"ok": True, "provider": expected_provider}
 
 
 # ============================================================
