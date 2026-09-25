@@ -26,14 +26,14 @@ function NativeRuntimeBridge() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user?.role !== 'driver') return;
+    if (user?.role !== 'driver' || user?.approved !== true) return;
     registerNativePush().catch(() => {});
     const tokenSub = listenForNativePushTokenChanges();
     return () => tokenSub.remove();
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
-    if (user?.role !== 'driver') {
+    if (user?.role !== 'driver' || user?.approved !== true) {
       stopDriverBackgroundLocation().catch(() => {});
       return;
     }
@@ -56,10 +56,10 @@ function NativeRuntimeBridge() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
-    if (user?.role !== 'driver') return;
+    if (user?.role !== 'driver' || user?.approved !== true) return;
 
     let active = true;
     let sub: { remove: () => void } | undefined;
@@ -87,7 +87,7 @@ function NativeRuntimeBridge() {
       active = false;
       sub?.remove();
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   return null;
 }
