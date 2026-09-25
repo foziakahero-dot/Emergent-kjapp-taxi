@@ -25,9 +25,12 @@ jobs:
       flow_path: ['.maestro/customer-startup-smoke.yml']
       record_screen: true
       retries: 0
+      device_identifier: 'pixel_6'
+      android_system_image_package: 'system-images;android-35-ext15;google_apis_playstore;x86_64'
     hooks:
       after_maestro_tests:
         - name: Capture KJAPP runtime diagnostics
+          if: ${{ always() }}
           run: |
             PID="$(adb shell pidof no.kjapp.app 2>/dev/null | tr -d '\r' || true)"
             TOP="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -n 2 | tr -d '\r' || true)"
