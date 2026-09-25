@@ -15,6 +15,8 @@ DRIVER = {"email": "sjafor@kjapp.no", "password": "sjafor1234"}
 FLEET = {"email": "floteier1@kjapp.no", "password": "fleet1234"}
 
 MINI_PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+# Minimal PNG signature/body is enough for storage/MIME-path tests; image decoding is a mobile UI concern.
+MINI_PNG = b"\x89PNG\r\n\x1a\nTEST_KJAPP_PROFILE_IMAGE"
 
 
 def _login(email, password):
@@ -426,6 +428,17 @@ class TestDriverSignupDocs:
                           data={"invite_token": "bogus-xxx", "doc_type": "drivers_license"}, timeout=15)
         assert r.status_code == 403
 
+    def test_profile_photo_rejects_pdf(self, sa_token):
+        tok = self._create_invite(sa_token)
+        files = {"file": ("profile.pdf", io.BytesIO(MINI_PDF), "application/pdf")}
+        r = requests.post(
+            f"{API}/upload/driver-doc",
+            files=files,
+            data={"invite_token": tok, "doc_type": "profile_photo"},
+            timeout=15,
+        )
+        assert r.status_code == 415, r.text
+
     def test_accept_requires_all_three_paths(self, sa_token):
         tok = self._create_invite(sa_token)
         email = f"TEST_drv_{uuid.uuid4().hex[:6]}@kjapp.no"
@@ -440,7 +453,10 @@ class TestDriverSignupDocs:
         tok = self._create_invite(sa_token)
         paths = {}
         for dt in ["drivers_license", "taxi_license", "profile_photo"]:
-            files = {"file": (f"{dt}.pdf", io.BytesIO(MINI_PDF), "application/pdf")}
+            if dt == "profile_photo":
+                files = {"file": ("profile.png", io.BytesIO(MINI_PNG), "image/png")}
+            else:
+                files = {"file": (f"{dt}.pdf", io.BytesIO(MINI_PDF), "application/pdf")}
             r = requests.post(f"{API}/upload/driver-doc", files=files,
                               data={"invite_token": tok, "doc_type": dt}, timeout=30)
             assert r.status_code == 200, r.text
