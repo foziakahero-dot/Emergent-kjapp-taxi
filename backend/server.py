@@ -3983,6 +3983,363 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
     }
 
 
+class FleetVehicleCreateRequest(BaseModel):
+    car: str = Field(min_length=2, max_length=120)
+    plate: str = Field(min_length=2, max_length=20)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    color: Optional[str] = Field(default="", max_length=40)
+    year: Optional[int] = Field(default=None, ge=1990, le=2100)
+
+
+class FleetVehicleUpdateRequest(BaseModel):
+    car: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    plate: Optional[str] = Field(default=None, min_length=2, max_length=20)
+    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium"]] = None
+    color: Optional[str] = Field(default=None, max_length=40)
+    year: Optional[int] = Field(default=None, ge=1990, le=2100)
+    active: Optional[bool] = None
+
+
+class FleetDriverVehicleAssignmentRequest(BaseModel):
+    vehicle_ids: List[str] = Field(default_factory=list, max_length=50)
+
+
+class DriverVehicleSelectRequest(BaseModel):
+    vehicle_id: str
+
+
+def _fleet_vehicle_public(v: dict) -> dict:
+    return {
+        "id": str(v["_id"]),
+        "fleet_id": v.get("fleet_id"),
+        "car": v.get("car", ""),
+        "plate": v.get("plate", ""),
+        "vehicle_type": v.get("vehicle_type", "ai-first"),
+        "color": v.get("color") or "",
+        "year": v.get("year"),
+        "active": v.get("active", True),
+        "assigned_driver_ids": list(v.get("assigned_driver_ids") or []),
+        "created_at": v.get("created_at"),
+        "updated_at": v.get("updated_at"),
+    }
+
+
+async def _backfill_fleet_vehicles(fleet_id: str):
+    """Migrate existing driver-level car fields into the fleet vehicle registry once.
+
+    This preserves existing real assignments while moving the product to fleet-owned vehicles.
+    """
+    if not fleet_id:
+        return
+    async for driver in db.users.find({
+        "role": "driver",
+        "fleet_id": fleet_id,
+        "plate": {"$exists": True, "$nin": [None, ""]},
+    }):
+        plate = str(driver.get("plate") or "").strip().upper()
+        car = str(driver.get("car") or "").strip()
+        if not plate or not car:
+            continue
+        vehicle = await db.fleet_vehicles.find_one({"fleet_id": fleet_id, "plate": plate})
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if not vehicle:
+            res = await db.fleet_vehicles.insert_one({
+                "fleet_id": fleet_id,
+                "car": car,
+                "plate": plate,
+                "vehicle_type": driver.get("vehicle_type") or "ai-first",
+                "color": "",
+                "year": None,
+                "active": True,
+                "assigned_driver_ids": [str(driver["_id"])],
+                "source": "legacy-driver-backfill",
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            })
+            vehicle_id = str(res.inserted_id)
+        else:
+            vehicle_id = str(vehicle["_id"])
+            await db.fleet_vehicles.update_one(
+                {"_id": vehicle["_id"]},
+                {"$addToSet": {"assigned_driver_ids": str(driver["_id"])}, "$set": {"updated_at": now_iso}},
+            )
+        if not driver.get("active_vehicle_id"):
+            await db.users.update_one(
+                {"_id": driver["_id"]},
+                {"$set": {"active_vehicle_id": vehicle_id}},
+            )
+
+
+@api.get("/fleet/vehicles")
+async def fleet_vehicles(current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    await _backfill_fleet_vehicles(fid)
+    out = []
+    async for v in db.fleet_vehicles.find({"fleet_id": fid}).sort("plate", 1):
+        out.append(_fleet_vehicle_public(v))
+    return {"vehicles": out}
+
+
+@api.post("/fleet/vehicles")
+async def fleet_create_vehicle(body: FleetVehicleCreateRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    plate = body.plate.strip().upper()
+    if await db.fleet_vehicles.find_one({"plate": plate, "active": {"$ne": False}}):
+        raise HTTPException(status_code=409, detail="Skiltnummeret er allerede registrert")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "fleet_id": fid,
+        "car": body.car.strip(),
+        "plate": plate,
+        "vehicle_type": body.vehicle_type,
+        "color": (body.color or "").strip(),
+        "year": body.year,
+        "active": True,
+        "assigned_driver_ids": [],
+        "created_by": current["id"],
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    res = await db.fleet_vehicles.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return _fleet_vehicle_public(doc)
+
+
+@api.patch("/fleet/vehicles/{vehicle_id}")
+async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    try:
+        oid = ObjectId(vehicle_id)
+    except Exception:
+        raise HTTPException(400, "Ugyldig kjøretøy-ID")
+    vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    if not vehicle:
+        raise HTTPException(404, "Fant ikke kjøretøyet")
+    updates = {}
+    if body.car is not None:
+        updates["car"] = body.car.strip()
+    if body.plate is not None:
+        plate = body.plate.strip().upper()
+        existing = await db.fleet_vehicles.find_one({"plate": plate, "_id": {"$ne": oid}, "active": {"$ne": False}})
+        if existing:
+            raise HTTPException(409, "Skiltnummeret er allerede registrert")
+        updates["plate"] = plate
+    if body.vehicle_type is not None:
+        updates["vehicle_type"] = body.vehicle_type
+    if body.color is not None:
+        updates["color"] = body.color.strip()
+    if body.year is not None:
+        updates["year"] = body.year
+    if body.active is not None:
+        updates["active"] = body.active
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.fleet_vehicles.update_one({"_id": oid}, {"$set": updates})
+
+    if body.active is False:
+        assigned = list(vehicle.get("assigned_driver_ids") or [])
+        if assigned:
+            oids = []
+            for did in assigned:
+                try:
+                    oids.append(ObjectId(did))
+                except Exception:
+                    pass
+            if oids:
+                await db.users.update_many(
+                    {"_id": {"$in": oids}, "active_vehicle_id": vehicle_id},
+                    {"$unset": {"active_vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}, "$set": {"online": False}},
+                )
+
+    updated = await db.fleet_vehicles.find_one({"_id": oid})
+    return _fleet_vehicle_public(updated)
+
+
+@api.put("/fleet/drivers/{driver_id}/vehicles")
+async def fleet_assign_driver_vehicles(driver_id: str, body: FleetDriverVehicleAssignmentRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    try:
+        driver_oid = ObjectId(driver_id)
+    except Exception:
+        raise HTTPException(400, "Ugyldig sjåfør-ID")
+    driver = await db.users.find_one({"_id": driver_oid, "role": "driver", "fleet_id": fid})
+    if not driver:
+        raise HTTPException(404, "Fant ikke sjåføren i denne flåten")
+
+    requested_ids = list(dict.fromkeys(body.vehicle_ids))
+    vehicle_oids = []
+    for vid in requested_ids:
+        try:
+            vehicle_oids.append(ObjectId(vid))
+        except Exception:
+            raise HTTPException(400, "Ugyldig kjøretøy-ID")
+
+    vehicles = []
+    if vehicle_oids:
+        async for v in db.fleet_vehicles.find({"_id": {"$in": vehicle_oids}, "fleet_id": fid, "active": {"$ne": False}}):
+            vehicles.append(v)
+        if len(vehicles) != len(vehicle_oids):
+            raise HTTPException(400, "Ett eller flere kjøretøy tilhører ikke denne flåten")
+
+    await db.fleet_vehicles.update_many(
+        {"fleet_id": fid},
+        {"$pull": {"assigned_driver_ids": driver_id}},
+    )
+    if vehicle_oids:
+        await db.fleet_vehicles.update_many(
+            {"_id": {"$in": vehicle_oids}},
+            {"$addToSet": {"assigned_driver_ids": driver_id}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    current_vehicle_id = driver.get("active_vehicle_id")
+    allowed_ids = {str(v["_id"]) for v in vehicles}
+    user_update = {"$set": {"online": False}}
+    if current_vehicle_id and current_vehicle_id not in allowed_ids:
+        user_update["$unset"] = {"active_vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}
+    elif not current_vehicle_id and len(vehicles) == 1:
+        v = vehicles[0]
+        user_update["$set"].update({
+            "active_vehicle_id": str(v["_id"]),
+            "car": v.get("car", ""),
+            "plate": v.get("plate", ""),
+            "vehicle_type": v.get("vehicle_type", "ai-first"),
+        })
+    await db.users.update_one({"_id": driver_oid}, user_update)
+    return {"ok": True, "driver_id": driver_id, "vehicle_ids": requested_ids}
+
+
+@api.get("/driver/profile")
+async def driver_profile(current=Depends(require_driver)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user:
+        raise HTTPException(404, "Sjåfør ikke funnet")
+    fid = user.get("fleet_id")
+    fleet = None
+    assigned_vehicles = []
+    if fid:
+        await _backfill_fleet_vehicles(fid)
+        try:
+            fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)})
+        except Exception:
+            fleet_doc = None
+        if fleet_doc:
+            fleet = {
+                "id": fid,
+                "name": fleet_doc.get("name") or "",
+                "org_number": fleet_doc.get("org_number") or "",
+            }
+        async for v in db.fleet_vehicles.find({
+            "fleet_id": fid,
+            "active": {"$ne": False},
+            "assigned_driver_ids": current["id"],
+        }).sort("plate", 1):
+            assigned_vehicles.append(_fleet_vehicle_public(v))
+
+    active_vehicle_id = user.get("active_vehicle_id")
+    active_vehicle = next((v for v in assigned_vehicles if v["id"] == active_vehicle_id), None)
+    return {
+        "driver": user_public(user),
+        "fleet": fleet,
+        "assigned_vehicles": assigned_vehicles,
+        "active_vehicle_id": active_vehicle_id,
+        "active_vehicle": active_vehicle,
+        "has_profile_photo": bool(user.get("profile_photo_path")),
+    }
+
+
+@api.post("/driver/vehicle/select")
+async def driver_select_vehicle(body: DriverVehicleSelectRequest, current=Depends(require_driver)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user:
+        raise HTTPException(404, "Sjåfør ikke funnet")
+    if user.get("online"):
+        raise HTTPException(409, "Gå offline før du bytter bil")
+    active_trip = await db.trips.find_one({
+        "driver_id": current["id"],
+        "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]},
+    })
+    if active_trip:
+        raise HTTPException(409, "Du kan ikke bytte bil under en aktiv tur")
+    try:
+        oid = ObjectId(body.vehicle_id)
+    except Exception:
+        raise HTTPException(400, "Ugyldig kjøretøy-ID")
+    vehicle = await db.fleet_vehicles.find_one({
+        "_id": oid,
+        "fleet_id": user.get("fleet_id"),
+        "active": {"$ne": False},
+        "assigned_driver_ids": current["id"],
+    })
+    if not vehicle:
+        raise HTTPException(403, "Denne bilen er ikke tildelt deg av løyvehaveren")
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "active_vehicle_id": body.vehicle_id,
+            "car": vehicle.get("car", ""),
+            "plate": vehicle.get("plate", ""),
+            "vehicle_type": vehicle.get("vehicle_type", "ai-first"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"ok": True, "active_vehicle": _fleet_vehicle_public(vehicle)}
+
+
+@api.post("/driver/profile-photo")
+async def driver_upload_profile_photo(file: UploadFile = File(...), current=Depends(require_driver)):
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
+        raise HTTPException(status_code=415, detail="Profilbildet må være JPG, PNG, WEBP eller HEIC")
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("profile", current["id"], file.filename or "profile.jpg", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "profile",
+        "is_deleted": False,
+        "created_at": now_iso,
+    }
+    await db.uploaded_files.insert_one(doc)
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"])},
+        {"$set": {"profile_photo_path": result["path"], "updated_at": now_iso}},
+    )
+    return {"ok": True, "profile_photo_path": result["path"]}
+
+
+@api.get("/driver/profile-photo")
+async def driver_profile_photo(current=Depends(require_driver)):
+    path = current.get("profile_photo_path")
+    if not path:
+        raise HTTPException(404, "Profilbilde er ikke registrert")
+    data, ct = storage_get(path)
+    return FastResponse(content=data, media_type=ct, headers={"Cache-Control": "private, max-age=60"})
+
+
+@api.get("/trips/{trip_id}/driver-photo")
+async def trip_driver_photo(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip or not trip.get("driver_id"):
+        raise HTTPException(404, "Sjåførbilde ikke tilgjengelig")
+    try:
+        driver = await db.users.find_one({"_id": ObjectId(trip["driver_id"])})
+    except Exception:
+        driver = None
+    path = (driver or {}).get("profile_photo_path")
+    if not path:
+        raise HTTPException(404, "Sjåførbilde ikke registrert")
+    data, ct = storage_get(path)
+    return FastResponse(content=data, media_type=ct, headers={"Cache-Control": "private, max-age=60"})
+
+
 @api.get("/fleet/drivers")
 async def fleet_drivers(current=Depends(require_fleet_owner)):
     fid = await get_fleet_id_for(current)
