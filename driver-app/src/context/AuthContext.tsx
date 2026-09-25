@@ -37,7 +37,7 @@ export type User = {
 
 type AuthCtx = {
   user: User | undefined; // undefined = loading, null = signed out
-  login: (email: string, password: string) => Promise<any>;
+  login: (identifier: string, password: string) => Promise<any>;
   register: (data: any) => Promise<any>;
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
@@ -137,9 +137,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { sub && sub.remove(); };
   }, [refresh, handleSessionId]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     const device_id = await getDriverInstallationId();
-    const res = await authApi.login({ email, password, client: 'driver', device_id });
+    const res = await authApi.login({ email: identifier, password, client: 'driver', device_id });
     if (res.twofa_required) return res;
     await storage.setItem(TOKEN_KEY, res.token);
     setUser(res.user);
