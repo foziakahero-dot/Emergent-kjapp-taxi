@@ -169,3 +169,21 @@ def test_orphan_generic_admin_driver_invites_are_disabled():
     invite = _block(SERVER, "create_driver_invite")
     assert "status_code=410" in invite
     assert "konkret løyvehaver/flåte" in invite
+
+
+def test_fleet_operational_history_is_separate_from_paid_accounting():
+    fleet_trips = _block(SERVER, "fleet_trip_history")
+    assert "_real_trip_filter(scope)" in fleet_trips
+    assert '"payment_status": "paid"' not in fleet_trips
+    assert '"payment_status": t.get("payment_status")' in fleet_trips
+
+    export = _block(SERVER, "fleet_export_monthly")
+    assert '"payment_status": "paid"' in export
+
+
+def test_unresolved_checkout_cannot_escape_payment_state():
+    receipt_source = CUSTOMER_RECEIPT
+    assert "Vurdering åpnes når betalingen er bekreftet." in receipt_source
+    payment_success = (ROOT / "frontend" / "app" / "payment" / "success.tsx").read_text(encoding="utf-8")
+    assert "turen forblir åpen til serveren bekrefter betalingen" in payment_success
+    assert "Tilbake til kvittering" in payment_success
