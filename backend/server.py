@@ -3027,12 +3027,31 @@ async def driver_pending(current=Depends(require_driver)):
 @api.post("/driver/accept")
 async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)):
     driver_id = current["id"]  # driver's user id is the driver_id now
+    live_driver = await db.users.find_one({"_id": ObjectId(driver_id)}) or current
+    vehicle = None
+    try:
+        vehicle_id = live_driver.get("active_vehicle_id")
+        if vehicle_id:
+            vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(vehicle_id),
+                "fleet_id": live_driver.get("fleet_id"),
+                "active": {"$ne": False},
+                "assigned_driver_ids": driver_id,
+            })
+    except Exception:
+        vehicle = None
+    if not vehicle:
+        raise HTTPException(status_code=409, detail="Velg en tildelt bil før du aksepterer turer")
+
     driver = {
-        "name": current.get("fullName") or "Sjåfør",
-        "car": current.get("car") or "",
-        "plate": current.get("plate") or "",
-        "rating": current.get("rating"),
-        "photo": (current.get("fullName") or "S")[:2].upper(),
+        "name": live_driver.get("fullName") or "Sjåfør",
+        "car": vehicle.get("car") or "",
+        "plate": vehicle.get("plate") or "",
+        "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        "vehicle_id": str(vehicle["_id"]),
+        "rating": live_driver.get("rating"),
+        "photo": (live_driver.get("fullName") or "S")[:2].upper(),
+        "has_profile_photo": bool(live_driver.get("profile_photo_path")),
     }
     # Pick up trip first so we know pickup coords
     trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
@@ -3428,6 +3447,39 @@ class DriverOnlineRequest(BaseModel):
 @api.post("/driver/online")
 async def driver_online(body: DriverOnlineRequest, current=Depends(require_driver)):
     now_iso = datetime.now(timezone.utc).isoformat()
+
+    if body.online:
+        user = await db.users.find_one({"_id": ObjectId(current["id"])})
+        if not user:
+            raise HTTPException(404, "Sjåfør ikke funnet")
+        if user.get("fleet_id"):
+            await _backfill_fleet_vehicles(user["fleet_id"])
+            user = await db.users.find_one({"_id": user["_id"]})
+        vehicle_id = (user or {}).get("active_vehicle_id")
+        try:
+            vehicle_oid = ObjectId(vehicle_id) if vehicle_id else None
+        except Exception:
+            vehicle_oid = None
+        vehicle = await db.fleet_vehicles.find_one({
+            "_id": vehicle_oid,
+            "fleet_id": (user or {}).get("fleet_id"),
+            "active": {"$ne": False},
+            "assigned_driver_ids": current["id"],
+        }) if vehicle_oid else None
+        if not vehicle:
+            raise HTTPException(
+                status_code=409,
+                detail="Velg en bil som løyvehaveren har tildelt deg før du går online",
+            )
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "car": vehicle.get("car", ""),
+                "plate": vehicle.get("plate", ""),
+                "vehicle_type": vehicle.get("vehicle_type", "ai-first"),
+            }},
+        )
+
     await db.users.update_one(
         {"_id": ObjectId(current["id"])},
         {"$set": {"online": body.online, "online_at": now_iso}},
