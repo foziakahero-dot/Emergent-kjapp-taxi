@@ -17,7 +17,7 @@ import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
-  const { login, logout } = useAuth();
+  const { login, logout, signInWithGoogle } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -25,6 +25,7 @@ export default function DriverLogin() {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async () => {
@@ -46,6 +47,28 @@ export default function DriverLogin() {
       setError(apiError(e));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitGoogle = async () => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const res = await signInWithGoogle();
+      if (!res) {
+        setError('Google-innlogging ble avbrutt eller kunne ikke fullføres.');
+        return;
+      }
+      if (res.role !== 'driver') {
+        await logout();
+        setError('Google-kontoen er ikke koblet til en godkjent KJAPP-sjåfør.');
+        return;
+      }
+      router.replace('/(driver)/home');
+    } catch (e) {
+      setError(apiError(e));
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -105,6 +128,30 @@ export default function DriverLogin() {
 
         <Button label="Logg inn som sjåfør" onPress={submit} loading={loading} testID="driver-login-submit" style={{ marginTop: 12 }} />
 
+        <View style={s.dividerRow}>
+          <View style={s.dividerLine} />
+          <Text style={s.dividerText}>eller</Text>
+          <View style={s.dividerLine} />
+        </View>
+
+        <Pressable
+          style={s.googleBtn}
+          onPress={submitGoogle}
+          disabled={googleLoading || loading}
+          testID="driver-login-google"
+          accessibilityRole="button"
+          accessibilityLabel="Fortsett med Google"
+        >
+          {googleLoading ? (
+            <Text style={s.googleBtnText}>Kobler til Google…</Text>
+          ) : (
+            <>
+              <Text style={s.googleMark}>G</Text>
+              <Text style={s.googleBtnText}>Fortsett med Google</Text>
+            </>
+          )}
+        </Pressable>
+
         <View style={s.note}>
           <Icon name="shield" size={17} color={colors.online} />
           <Text style={s.noteText}>Kun godkjente sjåførkontoer får tilgang til turer og posisjonsdeling.</Text>
@@ -129,6 +176,15 @@ const useStyles = makeStyles((c) => ({
   input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 10 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 18 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: c.line },
+  dividerText: { color: c.textMuted, fontSize: 12 },
+  googleBtn: {
+    minHeight: 54, marginTop: 14, borderRadius: 14, borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.driverCard, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  googleMark: { color: c.text, fontSize: 18, fontWeight: '800' },
+  googleBtnText: { color: c.text, fontSize: 15, fontWeight: '650' as any },
   note: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.onlineSoft, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 18 },
   noteText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },
 }));
