@@ -18,6 +18,13 @@ export type User = {
   phone?: string;
   role?: string;
   driver_id?: string;
+  fleet_id?: string;
+  fleet_name?: string;
+  fleet_org_number?: string;
+  vehicle_id?: string;
+  car?: string;
+  plate?: string;
+  vehicle_type?: string;
   approved?: boolean;
   legal_accepted?: boolean;
   identity_verification_status?: string;
