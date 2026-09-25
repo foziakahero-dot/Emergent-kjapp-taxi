@@ -24,7 +24,7 @@ export default function History() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['trips'],
     queryFn: tripsApi.list,
   });
@@ -38,6 +38,14 @@ export default function History() {
       </View>
       {isLoading ? (
         <View style={s.center}><Loader label="Henter turer…" /></View>
+      ) : isError ? (
+        <View style={s.center} testID="history-load-error">
+          <Icon name="history" size={40} color={colors.textMuted} />
+          <Text style={s.emptyText}>Kunne ikke hente turhistorikken.</Text>
+          <Pressable style={s.retry} onPress={() => refetch()} testID="history-retry">
+            <Text style={s.retryText}>Prøv igjen</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={trips}
@@ -51,12 +59,15 @@ export default function History() {
             </View>
           }
           renderItem={({ item }) => {
-            const done = ['completed', 'rated', 'arrived'].includes(item.status);
+            const receiptState = ['completed', 'rated', 'arrived'].includes(item.status);
+            const statusLabel = item.status === 'arrived' && item.payment_status !== 'paid'
+              ? 'Betaling gjenstår'
+              : STATUS_LABEL[item.status] || item.status;
             return (
               <Pressable
                 style={s.row}
                 testID={`trip-${item.trip_id}`}
-                onPress={() => done && router.push(`/receipt/${item.trip_id}`)}
+                onPress={() => receiptState && router.push(`/receipt/${item.trip_id}`)}
               >
                 <View style={s.rowIcon}>
                   <Icon name="navigation" size={18} color={colors.accent} />
@@ -64,7 +75,7 @@ export default function History() {
                 <View style={{ flex: 1 }}>
                   <Text style={s.rowTitle} numberOfLines={1}>{item.dropoff_address}</Text>
                   <Text style={s.rowSub} numberOfLines={1}>
-                    {new Date(item.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })} · {STATUS_LABEL[item.status] || item.status}
+                    {new Date(item.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })} · {statusLabel}
                   </Text>
                 </View>
                 <Text style={s.rowPrice}>{kr(item.price)}</Text>
@@ -81,7 +92,9 @@ const useStyles = makeStyles((c) => ({
   header: { paddingHorizontal: 20, paddingBottom: 12 },
   title: { fontFamily: font.display, fontSize: 28, color: c.text },
   center: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { color: c.textMuted, fontSize: 14 },
+  emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
+  retry: { minHeight: 44, borderRadius: 12, backgroundColor: c.accent, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  retryText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: c.line,
