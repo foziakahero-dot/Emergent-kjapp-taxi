@@ -20,7 +20,7 @@ export default function DriverProfile() {
   const u = { ...(user || {}), ...(me || {}) } as any;
 
   const initials = (u.fullName || 'S').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase();
-  const vName = vehicleMeta(u.vehicle_type || 'ai-first').name;
+  const vName = u.vehicle_type ? vehicleMeta(u.vehicle_type).name : 'Ikke registrert';
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
@@ -44,9 +44,9 @@ export default function DriverProfile() {
 
       <Text style={s.section}>Kjøretøy</Text>
       <View style={s.infoCard}>
-        <Info label="Bil" value={u.car || '—'} s={s} />
-        <Info label="Skilt" value={u.plate || '—'} s={s} border />
-        <Info label="Klasse" value={vName} s={s} border />
+        <Info label="Bil" value={u.car || 'Ikke registrert'} s={s} testID="driver-profile-car" />
+        <Info label="Skilt" value={u.plate || 'Ikke registrert'} s={s} border testID="driver-profile-plate" />
+        <Info label="Klasse" value={vName} s={s} border testID="driver-profile-class" />
         <Info label="Status" value="Aktiv" valueColor={colors.online} s={s} border />
       </View>
 
@@ -70,11 +70,11 @@ export default function DriverProfile() {
   );
 }
 
-function Info({ label, value, valueColor, border, s }: any) {
+function Info({ label, value, valueColor, border, s, testID }: any) {
   return (
     <View style={[s.infoRow, border && s.infoBorder]}>
       <Text style={s.infoLabel}>{label}</Text>
-      <Text style={[s.infoValue, valueColor && { color: valueColor }]}>{value}</Text>
+      <Text style={[s.infoValue, valueColor && { color: valueColor }]} testID={testID}>{value}</Text>
     </View>
   );
 }
