@@ -1554,7 +1554,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
+    return {"token": token, "user": user_public(user)}
 
 
 @api.post("/auth/logout")
@@ -3506,7 +3506,7 @@ async def google_session(body: GoogleSessionRequest, response: Response):
     name = data.get("name") or email
     user = await db.users.find_one({"email": email})
     if not user:
-        result = await db.users.insert_one({
+        doc = {
             "email": email,
             "password_hash": hash_password(secrets.token_hex(16)),  # random password, unused
             "fullName": name,
@@ -3515,23 +3515,26 @@ async def google_session(body: GoogleSessionRequest, response: Response):
             "role": "user",
             "google_linked": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        uid = str(result.inserted_id)
-        role = "user"
-        driver_id = None
+        }
+        result = await db.users.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        user = doc
     else:
-        uid = str(user["_id"])
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
-        role = user.get("role", "user")
-        driver_id = user.get("driver_id")
         if not user.get("google_linked"):
-            await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
-    if user and user.get("totp_enabled"):
+            await db.users.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"google_linked": True, "picture": data.get("picture"), "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            user["google_linked"] = True
+            user["picture"] = data.get("picture")
+    uid = str(user["_id"])
+    if user.get("totp_enabled"):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
+    return {"token": token, "user": user_public(user)}
 
 
 @api.post("/auth/google/driver-session")
