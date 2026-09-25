@@ -36,7 +36,7 @@ export default function Index() {
           <Text style={s.subtitle}>
             {user.role === 'driver'
               ? 'Kontoen må godkjennes før KJAPP Driver kan brukes.'
-              : 'Customer-, admin- og flåtekontoer har ikke tilgang til Driver-appen.'}
+              : 'Kunde-, admin- og flåtekontoer har ikke tilgang til Driver-appen.'}
           </Text>
         </View>
         <Button
