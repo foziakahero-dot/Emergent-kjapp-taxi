@@ -3248,14 +3248,14 @@ async def driver_current(current=Depends(require_driver)):
     # An ACTIVE trip always wins over a just-finished one. A completed ("arrived") trip is only
     # returned for 15 minutes so the driver can see the summary — after that it is history.
     t = await db.trips.find_one(
-        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
+        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
         sort=[("created_at", -1)],
     )
     if not t:
         # Just-finished trip: keep the summary visible for 15 minutes. "completed"/"rated" appear
         # as soon as the passenger's app closes the trip, so they must be included here too.
         t = await db.trips.find_one(
-            {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated"]}},
+            _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated"]}}),
             sort=[("created_at", -1)],
         )
         if not t:
@@ -5565,7 +5565,7 @@ async def apple_config():
 
 async def send_trip_receipts(trip_id: str):
     """Send customer + driver receipts once after verified payment capture."""
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip or trip.get("receipt_emailed_at") or trip.get("payment_status") != "paid":
         return
     passenger = None
@@ -6796,7 +6796,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
 
 @api.get("/admin/trips/{trip_id}/timeline")
 async def admin_trip_timeline(trip_id: str, current=Depends(require_admin)):
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not t: raise HTTPException(404, "Fant ikke turen")
     events = []
     def ev(label, at):
@@ -6820,7 +6820,7 @@ class TripInterventionRequest(BaseModel):
 
 @api.post("/admin/trips/{trip_id}/intervene")
 async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, current=Depends(require_admin)):
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     reason = body.reason.strip()
@@ -6886,7 +6886,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         if trip.get("user_id"):
             await send_push_to_user(trip["user_id"], "Vi finner en ny sjåfør",
                                     "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/app/booking/{trip_id}")
-        refreshed = await db.trips.find_one({"trip_id": trip_id})
+        refreshed = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
         if refreshed:
             await offer_trip_to_next_driver(refreshed)
         return {"ok": True, "action": body.action, "status": "searching"}
@@ -7106,7 +7106,7 @@ async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: 
 async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
     if not (body.reason or "").strip():
         raise HTTPException(400, "Begrunnelse kreves")
-    trip = await db.trips.find_one({"trip_id": body.trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
     if not trip:
         raise HTTPException(404, "Fant ikke tur")
     if trip.get("status") not in ("arrived", "completed", "rated"):
