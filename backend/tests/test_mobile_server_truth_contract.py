@@ -8,10 +8,8 @@ RECEIPT = (ROOT / "frontend" / "app" / "receipt" / "[tripId].tsx").read_text(enc
 
 
 def test_customer_reopens_canonical_active_trip_on_start():
-    assert "tripsApi.active()" in CUSTOMER_HOME
-    assert "router.replace(\`/booking/\${t.trip_id}\`)" not in CUSTOMER_HOME
-    assert "router.replace(\`/booking/\${active.trip_id}\`)" not in CUSTOMER_HOME
-    assert "router.replace(`/booking/${t.trip_id}`)" in CUSTOMER_HOME or "router.replace(`/booking/${active.trip_id}`)" in CUSTOMER_HOME
+    assert "tripsApi.active().then((t) => {" in CUSTOMER_HOME
+    assert "if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);" in CUSTOMER_HOME
 
 
 def test_uncertain_customer_booking_reconciles_with_server():
