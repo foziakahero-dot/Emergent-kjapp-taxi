@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
-import { driverApi, KJAPP_DEFAULT_COMMISSION_PCT } from '@/src/lib/api';
+import { driverApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 type Period = 'today' | 'week' | 'month';
@@ -24,32 +24,39 @@ export default function DriverEarnings() {
   const router = useRouter();
   const [period, setPeriod] = useState<Period>('today');
 
-  const { data: summary } = useQuery({ queryKey: ['driver-summary'], queryFn: driverApi.summary });
-  const { data: weekly } = useQuery({ queryKey: ['driver-weekly'], queryFn: driverApi.weekly });
-  const { data: payouts } = useQuery({ queryKey: ['driver-payouts'], queryFn: driverApi.payouts });
-  const { data: hist, isLoading } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
+  const summaryQ = useQuery({ queryKey: ['driver-summary'], queryFn: driverApi.summary });
+  const weeklyQ = useQuery({ queryKey: ['driver-weekly'], queryFn: driverApi.weekly });
+  const payoutsQ = useQuery({ queryKey: ['driver-payouts'], queryFn: driverApi.payouts });
+  const historyQ = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
 
+  const summary = summaryQ.data;
+  const weekly = weeklyQ.data;
+  const payouts = payoutsQ.data;
+  const hist = historyQ.data;
+  const isLoading = summaryQ.isLoading || weeklyQ.isLoading || payoutsQ.isLoading || historyQ.isLoading;
+  const isError = summaryQ.isError || weeklyQ.isError || payoutsQ.isError || historyQ.isError;
   const trips = hist?.trips || hist?.history || (Array.isArray(hist) ? hist : []);
   const days = weekly?.days || [];
-  const commissionPct = payouts?.commission_pct ?? KJAPP_DEFAULT_COMMISSION_PCT;
-  const commission = commissionPct / 100;
 
   const period_data = useMemo(() => {
     if (period === 'today') {
-      const gross = summary?.trip_income ?? 0;
-      const bonus = summary?.bonus ?? 0;
-      return { gross, bonus, trips: summary?.trips ?? 0, minutes: summary?.online_minutes ?? 0, net: Math.round(gross * (1 - commission)) + bonus };
+      const gross = Number(summary?.gross_trip_income || 0);
+      const tripNet = Number(summary?.trip_income || 0);
+      const bonus = Number(summary?.bonus || 0);
+      return { gross, bonus, fee: Math.max(0, gross - tripNet), trips: summary?.trips ?? 0, minutes: summary?.online_minutes ?? 0, net: tripNet + bonus };
     }
     if (period === 'week') {
-      const gross = days.reduce((a: number, d: any) => a + (d.income || 0), 0);
-      const t = days.reduce((a: number, d: any) => a + (d.trips || 0), 0);
-      return { gross, bonus: 0, trips: t, minutes: null, net: Math.round(gross * (1 - commission)) };
+      const gross = days.reduce((sum: number, d: any) => sum + Number(d.gross_income || 0), 0);
+      const net = days.reduce((sum: number, d: any) => sum + Number(d.income || 0), 0);
+      const t = days.reduce((sum: number, d: any) => sum + Number(d.trips || 0), 0);
+      return { gross, bonus: 0, fee: Math.max(0, gross - net), trips: t, minutes: null, net };
     }
     const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();
-    const mt = trips.filter((t: any) => (t.created_at || '') >= monthAgo && ['arrived', 'completed', 'rated'].includes(t.status));
-    const gross = mt.reduce((a: number, t: any) => a + (t.price || 0), 0);
-    return { gross, bonus: 0, trips: mt.length, minutes: null, net: Math.round(gross * (1 - commission)) };
-  }, [period, summary, days, trips, commission]);
+    const mt = trips.filter((t: any) => (t.created_at || '') >= monthAgo && t.payment_status === 'paid' && t.driver_earnings != null);
+    const gross = mt.reduce((sum: number, t: any) => sum + Number(t.price || 0), 0);
+    const net = mt.reduce((sum: number, t: any) => sum + Number(t.driver_earnings || 0), 0);
+    return { gross, bonus: 0, fee: Math.max(0, gross - net), trips: mt.length, minutes: null, net };
+  }, [period, summary, days, trips]);
 
   const maxIncome = Math.max(1, ...days.map((d: any) => d.income || 0));
 
@@ -80,7 +87,7 @@ export default function DriverEarnings() {
 
       <View style={s.card}>
         <BreakRow label="Bruttoinntekt" value={kr(period_data.gross)} s={s} />
-        <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.round(period_data.gross * commission))}`} muted s={s} />
+        <BreakRow label="KJAPP serviceavgift" value={`− ${kr(period_data.fee)}`} muted s={s} />
         {period_data.bonus ? <BreakRow label="Bonus" value={`+ ${kr(period_data.bonus)}`} accentGreen s={s} /> : null}
         <View style={s.breakDivider} />
         <BreakRow label="Netto" value={kr(period_data.net)} bold s={s} />
@@ -119,6 +126,8 @@ export default function DriverEarnings() {
       </View>
       {isLoading ? (
         <View style={{ paddingTop: 30 }}><Loader /></View>
+      ) : isError ? (
+        <Text style={s.empty}>Kunne ikke hente oppdaterte inntektsdata. Tall skjules til serveren svarer.</Text>
       ) : trips.length ? (
         trips.slice(0, 6).map((t: any, i: number) => (
           <View key={t.trip_id || i} style={s.row}>
@@ -128,7 +137,7 @@ export default function DriverEarnings() {
               <Text style={s.rowSub}>{t.distance_km} km · {t.duration_min} min</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={s.rowPrice}>{kr(Math.round((t.price || 0) * (1 - commission)))}</Text>
+              <Text style={s.rowPrice}>{t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'}</Text>
               <Text style={s.rowGross}>{kr(t.price)}</Text>
             </View>
           </View>
