@@ -1,15 +1,11 @@
-"""KJAPP Oslo beta E2E regression: customer <-> real driver lifecycle.
+"""LEGACY isolated KJAPP lifecycle test.
 
-Verifies:
-customer login -> driver online/GPS -> request -> accept -> customer/driver chat ->
-at pickup -> in trip -> arrive -> customer complete -> rate -> history/GDPR ->
-driver ready/offline.
+IMPORTANT:
+This script is intentionally blocked from beta/live. KJAPP no longer creates synthetic
+rides against operational driver supply. Use it only after wiring an isolated test backend
+and database specifically for synthetic lifecycle testing.
 
-This script uses the dedicated beta test accounts and the configured beta backend.
 It does not exercise Expo UI or start an EAS build.
-
-Run:
-  KJAPP_API_URL=https://<beta-backend>/api python3 backend/scripts/e2e_driver_flow.py
 """
 
 import json
@@ -18,6 +14,19 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+
+
+def _truthy(value):
+    return str(value or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+if not _truthy(os.environ.get("KJAPP_E2E_ISOLATED")):
+    print(
+        "BLOCKED: e2e_driver_flow.py may not run against beta/live. "
+        "Synthetic trips are isolated from operational supply by design. "
+        "Use a dedicated isolated test backend/database and set KJAPP_E2E_ISOLATED=true."
+    )
+    sys.exit(2)
 
 
 def resolve_api():
