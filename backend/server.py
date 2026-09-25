@@ -7924,7 +7924,6 @@ async def driver_payouts(current=Depends(require_driver)):
         "status": {"$in": ["arrived", "completed", "rated"]},
         "payment_status": "paid",
         "created_at": {"$gte": week_start},
-        "payout_paid": {"$ne": True},
     })):
         gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
@@ -7965,6 +7964,11 @@ async def driver_payouts(current=Depends(require_driver)):
         bonus_total += b.get("amount", 0)
         bonuses.append(b)
     return {
+        # Canonical naming: earnings from paid trips. Legacy pending_* aliases remain
+        # temporarily for older mobile builds, but do not imply KJAPP pays the driver directly.
+        "earned_gross_7d": pending,
+        "earned_net_7d": net,
+        "paid_trips_7d": trips_count,
         "pending_gross": pending,
         "pending_trips": trips_count,
         "pending_net": net + bonus_total,
