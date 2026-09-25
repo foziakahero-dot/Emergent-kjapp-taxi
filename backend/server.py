@@ -4196,6 +4196,21 @@ async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest,
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.fleet_vehicles.update_one({"_id": oid}, {"$set": updates})
 
+    # Keep active drivers' cached vehicle identity synchronized with the fleet registry.
+    identity_updates = {}
+    if "car" in updates:
+        identity_updates["car"] = updates["car"]
+    if "plate" in updates:
+        identity_updates["plate"] = updates["plate"]
+    if "vehicle_type" in updates:
+        identity_updates["vehicle_type"] = updates["vehicle_type"]
+    if identity_updates:
+        identity_updates["updated_at"] = updates["updated_at"]
+        await db.users.update_many(
+            {"fleet_id": fid, "active_vehicle_id": vehicle_id},
+            {"$set": identity_updates},
+        )
+
     if body.active is False:
         assigned = list(vehicle.get("assigned_driver_ids") or [])
         if assigned:
