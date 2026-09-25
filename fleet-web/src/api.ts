@@ -197,6 +197,7 @@ export type FleetPayout = {
 export type DriverInvite = {
   id?: string;
   token: string;
+  vehicle_id?: string;
   car?: string;
   plate?: string;
   vehicle_type?: string;
@@ -208,10 +209,12 @@ export type DriverInvite = {
 };
 
 export type PublicDriverInvite = {
+  vehicle_id?: string;
   car?: string;
   plate?: string;
   vehicle_type?: string;
   fleet_name?: string;
+  fleet_org_number?: string;
   expires_at?: string;
 };
 
@@ -252,7 +255,7 @@ export const api = {
   },
   payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
-  createInvite: (body: { car: string; plate: string; vehicle_type: string; email?: string; note?: string }) =>
+  createInvite: (body: { vehicle_id: string; email?: string; note?: string }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
