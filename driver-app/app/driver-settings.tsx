@@ -24,13 +24,11 @@ export default function DriverSettings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { user, logout, linkGoogle, refresh } = useAuth();
+  const { user, logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [googleBusy, setGoogleBusy] = useState(false);
-  const [googleMessage, setGoogleMessage] = useState('');
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -52,24 +50,6 @@ export default function DriverSettings() {
       await logout();
       router.replace('/');
     } catch { setDeleting(false); }
-  };
-
-  const connectGoogle = async () => {
-    setGoogleMessage('');
-    setGoogleBusy(true);
-    try {
-      const linked = await linkGoogle();
-      if (!linked) {
-        setGoogleMessage('Google-tilkoblingen ble avbrutt.');
-        return;
-      }
-      await refresh();
-      setGoogleMessage('Google-kontoen er koblet til sjåførkontoen.');
-    } catch (e: any) {
-      setGoogleMessage(e?.response?.data?.detail || 'Kunne ikke koble Google-kontoen.');
-    } finally {
-      setGoogleBusy(false);
-    }
   };
 
   const exportMyData = async () => {
@@ -102,21 +82,14 @@ export default function DriverSettings() {
             <View style={s.accountRow}>
               <View style={s.linkIcon}><Icon name="user" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
-                <Text style={s.linkLabel}>Google-konto</Text>
-                <Text style={s.rowSub}>{user?.google_linked ? user.email : 'Ikke tilkoblet'}</Text>
+                <Text style={s.linkLabel}>Godkjent sjåførkonto</Text>
+                <Text style={s.rowSub}>{user?.email || user?.phone || 'KJAPP Driver'}</Text>
               </View>
-              {user?.google_linked ? (
-                <View style={s.connectedBadge}>
-                  <Icon name="check" size={14} color={colors.online} />
-                  <Text style={s.connectedText}>Tilkoblet</Text>
-                </View>
-              ) : (
-                <Pressable style={s.connectBtn} onPress={connectGoogle} disabled={googleBusy} testID="ds-google-link">
-                  <Text style={s.connectBtnText}>{googleBusy ? 'Kobler…' : 'Koble til'}</Text>
-                </Pressable>
-              )}
+              <View style={s.connectedBadge}>
+                <Icon name="check" size={14} color={colors.online} />
+                <Text style={s.connectedText}>INVITERT</Text>
+              </View>
             </View>
-            {googleMessage ? <Text style={s.googleMessage}>{googleMessage}</Text> : null}
           </View>
 
           <Text style={s.sectionTitle}>Varsler</Text>
@@ -229,9 +202,6 @@ const useStyles = makeStyles((c) => ({
   accountRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
   connectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: c.onlineSoft },
   connectedText: { color: c.online, fontSize: 11, fontWeight: '700' },
-  connectBtn: { minHeight: 34, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
-  connectBtnText: { color: c.text, fontSize: 12, fontWeight: '700' },
-  googleMessage: { color: c.textMuted, fontSize: 11, lineHeight: 16, paddingBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 16 },
   rowBorder: { borderTopWidth: 1, borderTopColor: c.line },
   rowLabel: { color: c.text, fontSize: 15 },
