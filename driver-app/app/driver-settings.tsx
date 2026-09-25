@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -8,6 +8,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
+import { shareJsonExport } from '@/src/lib/gdprExport';
 
 const NOTIF: { key: string; label: string; sub: string }[] = [
   { key: 'notif_requests', label: 'Turforespørsler', sub: 'Varsel når en ny tur er tilgjengelig' },
@@ -75,10 +76,7 @@ export default function DriverSettings() {
     setExporting(true);
     try {
       const data = await gdprApi.export();
-      await Share.share({
-        title: 'KJAPP dataeksport',
-        message: JSON.stringify(data, null, 2),
-      });
+      await shareJsonExport(data, 'kjapp-driver-gdpr');
     } finally {
       setExporting(false);
     }
