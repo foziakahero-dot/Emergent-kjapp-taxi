@@ -312,6 +312,96 @@ class TestFleetOwnerInvites:
 
 
 # =========================================================
+# Fleet vehicle registry + driver assignments
+# =========================================================
+class TestFleetVehicles:
+    @pytest.fixture(scope="class")
+    def vehicle_ctx(self, fleet_token):
+        plate = f"TV{uuid.uuid4().hex[:5].upper()}"
+        r = requests.post(
+            f"{API}/fleet/vehicles",
+            json={
+                "car": "TEST Tesla Model Y",
+                "plate": plate,
+                "vehicle_type": "ai-first",
+                "color": "Svart",
+                "year": 2026,
+            },
+            headers=_hdr(fleet_token),
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def test_fleet_owner_can_create_and_list_vehicle(self, fleet_token, vehicle_ctx):
+        r = requests.get(f"{API}/fleet/vehicles", headers=_hdr(fleet_token), timeout=15)
+        assert r.status_code == 200, r.text
+        rows = r.json()["vehicles"]
+        match = next((v for v in rows if v["id"] == vehicle_ctx["id"]), None)
+        assert match is not None
+        assert match["plate"] == vehicle_ctx["plate"]
+        assert match["car"] == "TEST Tesla Model Y"
+
+    def test_regular_customer_cannot_manage_fleet_vehicles(self, user_token):
+        r = requests.get(f"{API}/fleet/vehicles", headers=_hdr(user_token), timeout=15)
+        assert r.status_code in (401, 403), r.text
+
+    def test_fleet_owner_can_assign_vehicle_to_own_driver(self, fleet_token, vehicle_ctx):
+        drivers = requests.get(f"{API}/fleet/drivers", headers=_hdr(fleet_token), timeout=15)
+        assert drivers.status_code == 200, drivers.text
+        rows = drivers.json().get("drivers", [])
+        if not rows:
+            pytest.skip("Test fleet has no driver to assign")
+        driver_id = rows[0]["id"]
+
+        existing = requests.get(f"{API}/fleet/vehicles", headers=_hdr(fleet_token), timeout=15).json()["vehicles"]
+        current_ids = [v["id"] for v in existing if driver_id in (v.get("assigned_driver_ids") or [])]
+        desired = list(dict.fromkeys([*current_ids, vehicle_ctx["id"]]))
+
+        r = requests.put(
+            f"{API}/fleet/drivers/{driver_id}/vehicles",
+            json={"vehicle_ids": desired},
+            headers=_hdr(fleet_token),
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+
+        after = requests.get(f"{API}/fleet/vehicles", headers=_hdr(fleet_token), timeout=15).json()["vehicles"]
+        assigned = next(v for v in after if v["id"] == vehicle_ctx["id"])
+        assert driver_id in assigned["assigned_driver_ids"]
+
+    def test_driver_profile_is_real_data_shape(self, driver_token):
+        r = requests.get(f"{API}/driver/profile", headers=_hdr(driver_token), timeout=15)
+        assert r.status_code in (200, 403), r.text
+        if r.status_code == 403:
+            pytest.skip("Seed driver is not attached to an active fleet in this environment")
+        data = r.json()
+        assert "driver" in data
+        assert "fleet" in data
+        assert "assigned_vehicles" in data
+        assert "active_vehicle_id" in data
+        assert "active_vehicle" in data
+        if data.get("fleet"):
+            assert "name" in data["fleet"]
+            assert "org_number" in data["fleet"]
+
+    def test_driver_cannot_select_unassigned_vehicle(self, driver_token, vehicle_ctx):
+        r = requests.post(
+            f"{API}/driver/vehicle/select",
+            json={"vehicle_id": vehicle_ctx["id"]},
+            headers=_hdr(driver_token),
+            timeout=15,
+        )
+        # Unless the seed driver belongs to this exact fleet and got assigned above, it must be denied.
+        if r.status_code == 200:
+            profile = requests.get(f"{API}/driver/profile", headers=_hdr(driver_token), timeout=15).json()
+            ids = {v["id"] for v in profile.get("assigned_vehicles", [])}
+            assert vehicle_ctx["id"] in ids
+        else:
+            assert r.status_code in (403, 409), r.text
+
+
+# =========================================================
 # Driver signup w/ docs
 # =========================================================
 class TestDriverSignupDocs:
