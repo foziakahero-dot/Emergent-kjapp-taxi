@@ -37,6 +37,8 @@ def test_receipt_snapshot_preserves_accounting_fields():
         '"backfilled": bool(backfilled)',
         'db.receipt_ledger.create_index("trip_id", unique=True)',
         'db.receipt_ledger.create_index("receipt_number", unique=True)',
+        'if trip.get("payment_status") == "paid" and not trip.get("receipt_id")',
+        'await ensure_receipt_snapshot(trip_id)',
     ):
         assert marker in source
 
