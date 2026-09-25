@@ -197,6 +197,8 @@ export async function stopDriverBackgroundLocation() {
 export function normalizeDriverNotificationUrl(url: unknown) {
   if (typeof url !== 'string') return null;
   if (url === '/driver' || url === '/app' || url === '/') return '/(driver)/home';
+  if (url.startsWith('/driver?')) return `/(driver)/home${url.slice('/driver'.length)}`;
+  if (url.startsWith('/driver/trip')) return '/(driver)/home';
   if (url.startsWith('/driver/trips')) return '/driver-trips';
   if (url.startsWith('/driver/settings')) return '/driver-settings';
   return url;
