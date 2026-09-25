@@ -22,6 +22,8 @@ export const authApi = {
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
+  googleDriverSession: (session_id: string) => api.post('/auth/google/driver-session', { session_id }).then((r) => r.data),
+  googleLink: (session_id: string) => api.post('/auth/google/link', { session_id }).then((r) => r.data),
 };
 
 export const tripsApi = {
