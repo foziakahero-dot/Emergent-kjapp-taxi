@@ -5,20 +5,23 @@ on:
     branches: ['diagnostic/customer-runtime-smoke']
 
 jobs:
-  build_customer_android:
-    name: Build KJAPP Customer APK for runtime smoke
-    type: build
+  get_customer_android:
+    name: Get latest successful KJAPP Customer APK
+    type: get-build
     params:
       platform: android
       profile: apk
+      distribution: internal
+      git_commit_hash: 66d85b847b4054c3eb9d118f92f6bd750fbfbc91
+      wait_for_in_progress: false
 
   customer_runtime_smoke:
     name: Cold-launch KJAPP Customer on Android
-    needs: [build_customer_android]
+    needs: [get_customer_android]
     type: maestro
     runs_on: linux-large-nested-virtualization
     params:
-      build_id: ${{ needs.build_customer_android.outputs.build_id }}
+      build_id: ${{ needs.get_customer_android.outputs.build_id }}
       flow_path: ['.maestro/customer-startup-smoke.yml']
       record_screen: true
       retries: 0
