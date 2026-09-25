@@ -16,6 +16,7 @@ export default function PaymentSuccess() {
   const s = useStyles();
   const [state, setState] = useState<'checking' | 'failed'>('checking');
   const [message, setMessage] = useState('Bekrefter betalingen…');
+  const [tripId, setTripId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -31,9 +32,10 @@ export default function PaymentSuccess() {
         try {
           const status = await paymentApi.checkoutStatus(session_id);
           if (!active) return;
+          if (status?.trip_id) setTripId(status.trip_id);
           if (status?.payment_status === 'paid') {
-            const tripId = status?.trip_id;
-            router.replace(tripId ? `/receipt/${tripId}` : '/(app)/home');
+            const paidTripId = status?.trip_id;
+            router.replace(paidTripId ? `/receipt/${paidTripId}` : '/(app)/home');
             return;
           }
           if (status?.payment_status === 'failed' || status?.payment_status === 'expired') {
@@ -46,7 +48,7 @@ export default function PaymentSuccess() {
       }
 
       if (active) {
-        setMessage('Betalingen er ikke bekreftet ennå. Du kan gå tilbake til kvitteringen og sjekke på nytt.');
+        setMessage('Betalingen er ikke bekreftet ennå. Gå tilbake til kvitteringen og sjekk på nytt — turen forblir åpen til serveren bekrefter betalingen.');
         setState('failed');
       }
     };
@@ -67,8 +69,12 @@ export default function PaymentSuccess() {
           <View style={s.icon}><Icon name="card" size={28} color={colors.accent} /></View>
           <Text style={s.title}>Betaling</Text>
           <Text style={s.sub}>{message}</Text>
-          <Pressable style={s.button} onPress={() => router.replace('/(app)/home')} testID="payment-success-home">
-            <Text style={s.buttonText}>Til hjem</Text>
+          <Pressable
+            style={s.button}
+            onPress={() => router.replace(tripId ? `/receipt/${tripId}` : '/(app)/home')}
+            testID="payment-success-back"
+          >
+            <Text style={s.buttonText}>{tripId ? 'Tilbake til kvittering' : 'Til hjem'}</Text>
           </Pressable>
         </>
       )}
