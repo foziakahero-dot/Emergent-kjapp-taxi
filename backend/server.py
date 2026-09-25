@@ -1035,6 +1035,14 @@ async def lifespan(app: FastAPI):
     await db.revoked_tokens.create_index("jti", unique=True)
     await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
     await ensure_marketing_waitlist_indexes(db)
+
+    # Permanent migration: legacy platform setting can never re-enable fabricated demo trips.
+    await db.platform_settings.update_one(
+        {"_id": "singleton"},
+        {"$set": {"features.demo_trips": False}},
+        upsert=True,
+    )
+
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
@@ -7277,7 +7285,7 @@ DEFAULT_PLATFORM_SETTINGS = {
         "trygg":    {"label": "Komfort",  "multiplier": 1.25, "enabled": True},
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
-    "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+    "features": {"surge": True, "ai_chat": True, "demo_trips": False, "vipps": False},
     "compliance": {
         "legal_review_completed": False,
         "transport_requirements_verified": False,
@@ -7339,6 +7347,11 @@ async def admin_get_settings(current=Depends(require_admin)):
         return {**DEFAULT_PLATFORM_SETTINGS, "updated_at": None}
     s.pop("_id", None)
     merged = {**DEFAULT_PLATFORM_SETTINGS, **s}
+    merged["features"] = {
+        **DEFAULT_PLATFORM_SETTINGS["features"],
+        **(s.get("features") or {}),
+        "demo_trips": False,
+    }
     return merged
 
 
@@ -7357,7 +7370,20 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         next_pricing["version"] = int(previous_pricing.get("version", 1)) + 1
         sets["pricing"] = next_pricing
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
-    if body.features is not None: sets["features"] = body.features
+    if body.features is not None:
+        if body.features.get("demo_trips") is True:
+            raise HTTPException(400, "Demo-turer er permanent deaktivert i KJAPP beta/drift")
+        allowed_features = set(DEFAULT_PLATFORM_SETTINGS["features"].keys())
+        unknown_features = set(body.features.keys()) - allowed_features
+        if unknown_features:
+            raise HTTPException(400, f"Ukjente funksjonsflagg: {', '.join(sorted(unknown_features))}")
+        if any(not isinstance(v, bool) for v in body.features.values()):
+            raise HTTPException(400, "Funksjonsflagg må være true/false")
+        sets["features"] = {
+            **DEFAULT_PLATFORM_SETTINGS["features"],
+            **body.features,
+            "demo_trips": False,
+        }
     if body.compliance is not None:
         allowed = set(DEFAULT_PLATFORM_SETTINGS["compliance"].keys())
         unknown = set(body.compliance.keys()) - allowed
