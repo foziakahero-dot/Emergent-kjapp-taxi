@@ -394,7 +394,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .9; }
 
 
 /* ---------- Fleet management controls ---------- */
-.vehicle-manage-table .tr { grid-template-columns: 1.15fr .72fr .72fr 1.35fr .78fr .78fr .58fr; gap: 12px; }
+.vehicle-manage-table .tr { grid-template-columns: 1.15fr .72fr .72fr 1.35fr .78fr .78fr .78fr .58fr; gap: 12px; }
 .vehicle-driver-select { width: 100%; min-width: 150px; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); color: var(--soft); font-size: 10px; outline: 0; }
 .vehicle-driver-select:disabled { opacity: .55; cursor: not-allowed; }
 .danger-outline-button { min-height: 42px; padding: 0 18px; border: 1px solid rgba(239,100,100,.42); border-radius: 999px; background: rgba(239,100,100,.07); color: #f0a4a4; font-size: 11px; font-weight: 600; }
