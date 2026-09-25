@@ -148,3 +148,24 @@ def test_driver_profile_truth_comes_from_fleet_vehicle_assignment():
     assert 'current["fleet_name"] = fleet.get("name")' in me
     assert 'current["fleet_org_number"] = fleet.get("org_number")' in me
     assert "await _assigned_fleet_vehicle(current, required=False)" in me
+
+
+def test_driver_invites_are_bound_to_registered_fleet_vehicle():
+    invite = _block(SERVER, "fleet_create_driver_invite")
+    assert "if not body.vehicle_id" in invite
+    assert 'db.fleet_vehicles.find_one({"_id": vehicle_oid, "fleet_id": fleet_id})' in invite
+    assert '"vehicle_id": str(vehicle["_id"])' in invite
+    assert "Bilen er allerede tildelt en sjåfør" in invite
+
+    accept = _block(SERVER, "accept_driver_invite")
+    assert "canonical_vehicle_id" in accept
+    assert '"vehicle_id": canonical_vehicle_id' in accept
+    assert '"assigned_driver_id": uid' in accept
+    assert "assigned.modified_count != 1" in accept
+    assert "await db.users.delete_one" in accept
+
+
+def test_orphan_generic_admin_driver_invites_are_disabled():
+    invite = _block(SERVER, "create_driver_invite")
+    assert "status_code=410" in invite
+    assert "konkret løyvehaver/flåte" in invite
