@@ -3,6 +3,7 @@ import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native'
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
@@ -27,6 +28,7 @@ type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
 type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
 const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
 const DISMISSED_COMPLETED_TRIP_KEY = 'kjapp_driver_dismissed_completed_trip_v1';
+const MINIMIZED_ACTIVE_TRIP_KEY = 'kjapp_driver_minimized_active_trip_v1';
 
 async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
   if (action === 'at_pickup') return driverApi.atPickup(tripId);
@@ -136,6 +138,19 @@ export default function DriverHome() {
     }
   }, [chat, trip_id, current?.trip_id]);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!current?.trip_id) {
+        if (mounted) setTripMinimized(false);
+        return;
+      }
+      const minimizedId = await storage.getItem(MINIMIZED_ACTIVE_TRIP_KEY);
+      if (mounted) setTripMinimized(minimizedId === current.trip_id);
+    })();
+    return () => { mounted = false; };
+  }, [current?.trip_id]);
+
   const dismissCompletedTrip = useCallback(async () => {
     if (completedTrip?.trip_id) {
       await storage.setItem(DISMISSED_COMPLETED_TRIP_KEY, String(completedTrip.trip_id));
@@ -241,6 +256,7 @@ export default function DriverHome() {
     try {
       await driverApi.online(next);
       setOnline(next);
+      await Haptics.selectionAsync().catch(() => {});
       if (next) poll();
     } catch (e) { setError(apiError(e)); }
     finally { setBusy(false); }
@@ -279,6 +295,7 @@ export default function DriverHome() {
         setCompletedTrip({ ...current, status: 'arrived' });
         setCurrent(null);
         setTripMinimized(false);
+        await storage.removeItem(MINIMIZED_ACTIVE_TRIP_KEY);
       }
       await poll();
     } catch (e: any) {
@@ -359,6 +376,8 @@ export default function DriverHome() {
           accessibilityRole="switch"
           accessibilityState={{ checked: online, disabled: busy }}
           accessibilityLabel={online ? 'Gå offline' : 'Gå online'}
+          accessibilityHint="Endrer om du kan motta nye turer"
+          hitSlop={6}
         >
           {busy ? (
             <ActivityIndicator color={online ? colors.online : colors.text} />
@@ -391,7 +410,10 @@ export default function DriverHome() {
               <Text style={s.minimizedTripText} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
             <Text style={s.tripPrice}>{kr(current.price)}</Text>
-            <Pressable style={s.minimizeBtn} onPress={() => setTripMinimized(false)} testID="driver-trip-expand" accessibilityLabel="Åpne aktiv tur">
+            <Pressable style={s.minimizeBtn} onPress={async () => {
+              setTripMinimized(false);
+              await storage.removeItem(MINIMIZED_ACTIVE_TRIP_KEY);
+            }} testID="driver-trip-expand" accessibilityLabel="Åpne aktiv tur">
               <Icon name="chevron-up" size={18} color={colors.text} />
             </Pressable>
           </View>
@@ -402,7 +424,10 @@ export default function DriverHome() {
                 <Text style={s.overlineOnline}>AKTIV TUR</Text>
                 <Text style={s.tripPrice}>{kr(current.price)}</Text>
               </View>
-              <Pressable style={s.minimizeBtn} onPress={() => setTripMinimized(true)} testID="driver-trip-minimize" accessibilityLabel="Minimer aktiv tur">
+              <Pressable style={s.minimizeBtn} onPress={async () => {
+                setTripMinimized(true);
+                if (current?.trip_id) await storage.setItem(MINIMIZED_ACTIVE_TRIP_KEY, String(current.trip_id));
+              }} testID="driver-trip-minimize" accessibilityLabel="Minimer aktiv tur">
                 <Icon name="chevron-down" size={18} color={colors.text} />
               </Pressable>
             </View>
@@ -539,7 +564,7 @@ const useStyles = makeStyles((c) => ({
   productLabel: { color: c.online, fontSize: 10, lineHeight: 13, letterSpacing: 1.6, fontWeight: '700' },
   driverName: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any, maxWidth: 140 },
   onlineControl: {
-    minWidth: 86, minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minWidth: 86, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     backgroundColor: 'rgba(3,6,7,0.91)', borderRadius: 12, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 10,
   },
