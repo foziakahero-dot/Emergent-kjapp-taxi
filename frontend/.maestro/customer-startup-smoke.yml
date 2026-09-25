@@ -1,0 +1,9 @@
+appId: no.kjapp.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "NORDIC TAXI"
+    timeout: 20000
+- assertVisible: "Kom i gang"
+- takeScreenshot: customer-startup-ok
