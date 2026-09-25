@@ -67,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     processed.current.add(sid);
     try {
       const res = await authApi.googleDriverSession(sid);
+      if (!res?.token || !res?.user) return null;
       await storage.setItem(TOKEN_KEY, res.token);
       setUser(res.user);
       return res.user;
