@@ -79,6 +79,9 @@ export type FleetDriver = {
   today_income?: number;
   today_trips?: number;
   identity_verification_status?: string;
+  document_compliance?: 'VALID' | 'EXPIRING' | 'EXPIRED' | 'PENDING' | 'REJECTED' | 'MISSING';
+  document_statuses?: Record<string, 'VALID' | 'EXPIRING' | 'EXPIRED' | 'PENDING' | 'REJECTED'>;
+  missing_document_types?: string[];
 };
 
 export type FleetLiveDriver = {
