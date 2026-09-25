@@ -114,7 +114,7 @@ export const driverApi = {
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
-  location: (lat: number, lng: number, heading = 0, speed = 0) =>
+  location: (lat: number, lng: number, heading?: number | null, speed?: number | null) =>
     api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
