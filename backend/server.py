@@ -2450,6 +2450,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "searching",
+        "payment_status": "unpaid",
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -2561,7 +2562,7 @@ async def complete_trip(trip_id: str, current=Depends(require_customer)):
     This endpoint is intentionally idempotent and never allows a passenger to skip
     ahead in the canonical ride state machine.
     """
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
 
@@ -2580,7 +2581,7 @@ async def complete_trip(trip_id: str, current=Depends(require_customer)):
         )
         transitioned = result.modified_count == 1
 
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
 
@@ -6620,22 +6621,47 @@ async def get_driver_invite(token: str):
         raise HTTPException(status_code=410, detail="Invitasjon allerede brukt")
     if _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon utløpt")
-    fleet = None
-    if inv.get("fleet_id"):
+
+    fleet_id = inv.get("fleet_id")
+    if not fleet_id:
+        raise HTTPException(status_code=409, detail="Invitasjonen mangler løyvehaver")
+    try:
+        fleet = await db.fleets.find_one({"_id": ObjectId(str(fleet_id))}, {"name": 1, "org_number": 1, "active": 1})
+    except (InvalidId, TypeError):
+        fleet = None
+    if not fleet or fleet.get("active") is False:
+        raise HTTPException(status_code=409, detail="Løyvehaveren er ikke aktiv")
+
+    vehicle = None
+    if inv.get("vehicle_id"):
         try:
-            fleet = await db.fleets.find_one({"_id": ObjectId(str(inv["fleet_id"]))}, {"name": 1, "org_number": 1})
+            vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(str(inv["vehicle_id"])),
+                "fleet_id": fleet_id,
+            })
         except (InvalidId, TypeError):
-            fleet = None
+            vehicle = None
+    elif inv.get("plate"):
+        vehicle = await db.fleet_vehicles.find_one({
+            "fleet_id": fleet_id,
+            "plate": str(inv.get("plate") or "").strip().upper(),
+        })
+    if not vehicle:
+        raise HTTPException(status_code=409, detail="Invitasjonen er ikke lenger knyttet til en registrert bil")
+    if vehicle.get("active") is False:
+        raise HTTPException(status_code=409, detail="Den tildelte bilen er parkert")
+    if vehicle.get("assigned_driver_id"):
+        raise HTTPException(status_code=409, detail="Den tildelte bilen brukes allerede av en annen sjåfør")
+
     return {
         "token": inv["token"],
-        "vehicle_id": inv.get("vehicle_id"),
-        "vehicle_id": canonical_vehicle_id,
-        "car": canonical_car,
-        "plate": canonical_plate,
-        "vehicle_type": canonical_vehicle_type,
+        "vehicle_id": str(vehicle["_id"]),
+        "car": str(vehicle.get("car") or ""),
+        "plate": str(vehicle.get("plate") or "").upper(),
+        "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
         "capabilities": inv.get("capabilities") or [],
-        "fleet_name": (fleet or {}).get("name"),
-        "fleet_org_number": (fleet or {}).get("org_number"),
+        "fleet_name": fleet.get("name"),
+        "fleet_org_number": fleet.get("org_number"),
         "note": inv.get("note", ""),
     }
 
@@ -6713,9 +6739,11 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
         "fullName": body.fullName,
         "phone": body.phone,
         "role": "driver",
-        "car": inv.get("car"),
-        "plate": inv.get("plate"),
-        "vehicle_type": inv.get("vehicle_type", "ai-first"),
+        # Compatibility fields mirror the fleet vehicle registry; the registry remains canonical.
+        "vehicle_id": canonical_vehicle_id,
+        "car": canonical_car,
+        "plate": canonical_plate,
+        "vehicle_type": canonical_vehicle_type,
         "capabilities": inv.get("capabilities") or [],
         "rating": 5.0,
         "approved": False,  # requires admin approval before pending trips visible
@@ -7351,7 +7379,7 @@ def _trusted_checkout_origin(requested: str) -> str:
 async def create_trip_checkout(body: TripCheckoutRequest, request: Request, current=Depends(require_customer)):
     await _enforce_rate_limit(request, "payment-checkout", 20, 900)
     """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
-    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
