@@ -2517,6 +2517,8 @@ async def complete_trip(trip_id: str, current=Depends(get_current_user)):
     status = trip.get("status")
     if status not in ("arrived", "completed", "rated"):
         raise HTTPException(status_code=409, detail="Turen kan ikke fullføres i denne statusen")
+    if status == "arrived" and trip.get("payment_status") != "paid":
+        raise HTTPException(status_code=409, detail="Betalingen må være bekreftet før turen kan fullføres")
 
     transitioned = False
     if status == "arrived":
@@ -2555,6 +2557,8 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
         raise HTTPException(400, "Du har allerede rangert denne turen")
+    if trip.get("payment_status") != "paid":
+        raise HTTPException(409, "Betalingen må være bekreftet før turen kan vurderes")
     if trip.get("status") not in ("arrived", "completed"):
         raise HTTPException(409, "Turen må være avsluttet før den kan vurderes")
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -6690,7 +6694,7 @@ async def apple_config():
 
 async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Optional[dict]:
     """Create the immutable accounting snapshot for a paid trip exactly once."""
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip or trip.get("payment_status") != "paid":
         return None
 
@@ -6801,9 +6805,28 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
     return stored
 
 
+async def _mark_trip_paid_and_complete(trip_id: str, user_id: str, paid_at: Optional[str] = None) -> Optional[dict]:
+    """Canonical payment success transition.
+
+    A ride remains status=arrived while money is unresolved, so the passenger cannot
+    escape an unpaid fare by returning home/rating. Stripe success atomically makes
+    the fare paid and then closes the physical ride to completed.
+    """
+    paid_at = paid_at or datetime.now(timezone.utc).isoformat()
+    await db.trips.update_one(
+        {"trip_id": trip_id, "user_id": user_id},
+        {"$set": {"payment_status": "paid", "paid_at": paid_at, "updated_at": paid_at}},
+    )
+    await db.trips.update_one(
+        {"trip_id": trip_id, "user_id": user_id, "status": "arrived"},
+        {"$set": {"status": "completed", "completed_at": paid_at, "updated_at": paid_at}},
+    )
+    return await db.trips.find_one({"trip_id": trip_id, "user_id": user_id})
+
+
 async def send_trip_receipts(trip_id: str):
     """Persist receipt snapshot and deliver customer/driver email receipts idempotently."""
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip or trip.get("payment_status") != "paid":
         return None
 
@@ -7003,10 +7026,7 @@ async def _attempt_trip_auto_charge(trip: dict) -> dict:
             }, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
             upsert=True,
         )
-        await db.trips.update_one(
-            {"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}},
-            {"$set": {"payment_status": "paid", "paid_at": paid_at}},
-        )
+        await _mark_trip_paid_and_complete(trip_id, user_id, paid_at)
         await send_push_to_user(
             user_id,
             "Betalingen er gjennomført",
@@ -7237,10 +7257,7 @@ async def get_payment_status(session_id: str, current=Depends(get_current_user))
                 )
                 if paid_record and paid_record.get("trip_id"):
                     paid_at = datetime.now(timezone.utc).isoformat()
-                    await db.trips.update_one(
-                        {"trip_id": paid_record["trip_id"], "user_id": current["id"]},
-                        {"$set": {"payment_status": "paid", "paid_at": paid_at}},
-                    )
+                    await _mark_trip_paid_and_complete(paid_record["trip_id"], current["id"], paid_at)
                     await send_push_to_user(
                         current["id"],
                         "Betalingen er gjennomført",
@@ -7298,10 +7315,7 @@ async def stripe_webhook(request: Request):
         )
         if r and r.get("trip_id"):
             paid_at = datetime.now(timezone.utc).isoformat()
-            await db.trips.update_one(
-                {"trip_id": r["trip_id"], "user_id": r.get("user_id")},
-                {"$set": {"payment_status": "paid", "paid_at": paid_at}},
-            )
+            await _mark_trip_paid_and_complete(r["trip_id"], r.get("user_id"), paid_at)
             if r.get("user_id"):
                 await send_push_to_user(
                     r["user_id"],
