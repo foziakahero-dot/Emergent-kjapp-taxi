@@ -103,7 +103,7 @@ export default function DriverSettings() {
               <View style={s.linkIcon}><Icon name="user" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.linkLabel}>Google-konto</Text>
-                <Text style={s.rowSub}>{user?.google_linked ? 'Tilkoblet' : 'Ikke tilkoblet'}</Text>
+                <Text style={s.rowSub}>{user?.google_linked ? user.email : 'Ikke tilkoblet'}</Text>
               </View>
               {user?.google_linked ? (
                 <View style={s.connectedBadge}>
