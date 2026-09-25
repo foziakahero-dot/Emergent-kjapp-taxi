@@ -116,6 +116,8 @@ export default function Home() {
   const routedEtas = cars.map((c) => c.eta_min).filter((v) => typeof v === 'number' && Number.isFinite(v));
   const nearest = routedEtas.length ? Math.min(...routedEtas) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
+  const quotedPrice = priceFor(selType);
+  const routeReady = Boolean(estimate?.routing_source === 'osrm' && quotedPrice != null);
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
   const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
@@ -127,6 +129,10 @@ export default function Home() {
 
   const book = async () => {
     if (!dropoff) return;
+    if (!routeReady) {
+      setError('Kjørerute og pris er ikke bekreftet ennå. Prøv igjen om et øyeblikk.');
+      return;
+    }
     setError('');
     setBooking(true);
     try {
@@ -383,15 +389,17 @@ export default function Home() {
             {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
 
             <Pressable
-              style={[s.confirm, booking && { opacity: 0.6 }]}
+              style={[s.confirm, (!routeReady || booking) && { opacity: 0.55 }]}
               onPress={book}
-              disabled={booking}
+              disabled={booking || !routeReady}
               testID="booking-confirm"
             >
               {booking ? (
                 <ActivityIndicator color={colors.accentOn} />
               ) : (
-                <Text style={s.confirmText}>Bekreft KJAPP · {kr(priceFor(selType))}</Text>
+                <Text style={s.confirmText}>
+                  {routeReady ? `Bekreft KJAPP · ${kr(quotedPrice)}` : 'Venter på bekreftet rute og pris'}
+                </Text>
               )}
             </Pressable>
           </>
