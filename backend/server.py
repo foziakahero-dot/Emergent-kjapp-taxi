@@ -110,11 +110,17 @@ LEGACY_DEMO_EMAILS = {
 
 
 def demo_data_enabled(app_env: str, flag) -> bool:
-    """Demo seeds and demo background jobs are NEVER allowed in production."""
-    if (app_env or "").strip().lower() == "production":
+    """Demo data is opt-in and only permitted in explicitly local/dev/test environments.
+
+    Shared beta/staging deployments must never create fabricated users, drivers,
+    payment methods or background demo state because APP_ENV was omitted or mistyped.
+    """
+    env = (app_env or "").strip().lower()
+    allowed_envs = {"development", "dev", "test", "local"}
+    if env not in allowed_envs:
         return False
     if flag is None:
-        return True
+        return False
     return str(flag).strip().lower() in ("1", "true", "yes", "on")
 
 
@@ -1358,8 +1364,8 @@ async def lifespan(app: FastAPI):
     # seed places
     if await db.places.count_documents({}) == 0:
         await db.places.insert_many([
-            {"slug": "karl-johans", "name": "Karl Johans gate 1", "lat": 59.9127, "lng": 10.7461, "label": "Hjem", "icon": "home", "featured": True},
-            {"slug": "aker-brygge", "name": "Aker Brygge", "lat": 59.9106, "lng": 10.7285, "label": "Jobb", "icon": "briefcase", "featured": True},
+            {"slug": "karl-johans", "name": "Karl Johans gate 1", "lat": 59.9127, "lng": 10.7461, "label": "Karl Johan", "icon": "map-pin", "featured": True},
+            {"slug": "aker-brygge", "name": "Aker Brygge", "lat": 59.9106, "lng": 10.7285, "label": "Aker Brygge", "icon": "map-pin", "featured": True},
             {"slug": "oslo-s", "name": "Oslo S", "lat": 59.9110, "lng": 10.7530, "label": "Sentralstasjon", "icon": "map-pin", "featured": True},
             {"slug": "vigelandsparken", "name": "Vigelandsparken", "lat": 59.9268, "lng": 10.7005, "label": "Park", "icon": "map-pin", "featured": False},
             {"slug": "grunerlokka", "name": "Grünerløkka", "lat": 59.9250, "lng": 10.7580, "label": "Restauranter", "icon": "map-pin", "featured": False},
@@ -1402,6 +1408,8 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Nordmann",
             "phone": "+4791234567",
             "role": "user",
+            "demo": True,
+            "is_demo": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         # seed default payment methods for test user
@@ -1420,6 +1428,8 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Sjåfør",
             "phone": "+4790000001",
             "role": "driver",
+            "demo": True,
+            "is_demo": True,
             "car": "Tesla Model Y",
             "plate": "EL12345",
             "vehicle_type": "ai-first",
