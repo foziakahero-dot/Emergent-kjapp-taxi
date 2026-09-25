@@ -5,7 +5,7 @@ import {
   FleetLiveDriver, FleetMe, FleetOverview, FleetPayout, FleetTrip, FleetVehicle,
 } from './api';
 import { useAuth } from './auth';
-import { FleetWorkbook, FleetWorkbookTrip, loadFleetWorkbook } from './xlsx';
+import { FleetWorkbook, loadFleetWorkbook } from './xlsx';
 import { Brand } from './App';
 import { FleetMap } from './FleetMap';
 
