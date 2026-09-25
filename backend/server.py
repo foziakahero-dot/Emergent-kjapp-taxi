@@ -78,12 +78,14 @@ LEGACY_DEMO_EMAILS = {
 
 
 def demo_data_enabled(app_env: str, flag) -> bool:
-    """Demo seeds and demo background jobs are NEVER allowed in production."""
+    """Demo/test seeds are opt-in only and are NEVER allowed in production.
+
+    Missing ENABLE_DEMO_DATA means False. This prevents a beta/staging deployment from
+    silently becoming a demo environment just because an env var was omitted.
+    """
     if (app_env or "").strip().lower() == "production":
         return False
-    if flag is None:
-        return True
-    return str(flag).strip().lower() in ("1", "true", "yes", "on")
+    return str(flag or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 ENABLE_DEMO_DATA = demo_data_enabled(APP_ENV, os.environ.get("ENABLE_DEMO_DATA"))
@@ -284,6 +286,7 @@ async def purge_synthetic_data(db) -> dict:
     """Delete fabricated trips and simulated accounts so the driver/customer apps only ever
     render real data. Safe to run on every boot — it only matches synthetic markers."""
     trips = await db.trips.delete_many({"$or": [
+        {"synthetic": True},
         {"demo": True},
         {"pickup_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
         {"dropoff_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
@@ -1101,6 +1104,8 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Nordmann",
             "phone": "+4791234567",
             "role": "user",
+            "demo": True,
+            "is_demo": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         # seed default payment methods for test user
@@ -1119,6 +1124,8 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Sjåfør",
             "phone": "+4790000001",
             "role": "driver",
+            "demo": True,
+            "is_demo": True,
             "car": "Tesla Model Y",
             "plate": "EL12345",
             "vehicle_type": "ai-first",
@@ -1864,7 +1871,7 @@ async def me(current=Depends(get_current_user)):
 
 # ---- Trips ----
 @api.post("/trips/request")
-async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+async def request_trip(body: TripRequest, request: Request, current=Depends(get_current_user)):
     # Payment gate: user must have at least one VERIFIED payment method to book
     pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
     if pm_count == 0:
@@ -1873,6 +1880,15 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     if verified_count == 0:
         raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
     trip_id = str(uuid.uuid4())
+
+    # Test traffic is explicitly marked and isolated. It must never masquerade as live demand.
+    e2e_run = (request.headers.get("X-KJAPP-E2E-Run") or "").strip()
+    email = str(current.get("email") or "").strip().lower()
+    known_demo_account = email in LEGACY_DEMO_EMAILS
+    synthetic = bool(e2e_run or known_demo_account)
+    if IS_PRODUCTION and synthetic:
+        raise HTTPException(status_code=403, detail="Test/demo-turer er ikke tillatt i produksjon")
+
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
     if route:
@@ -1912,16 +1928,20 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "geometry": geometry,
         "status": "searching",
         "driver_id": None,
+        "synthetic": synthetic,
+        "synthetic_reason": ("e2e" if e2e_run else "demo_account") if synthetic else None,
+        "test_run_id": e2e_run or None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.trips.insert_one(trip)
-    # Trip stays in "searching" — a real driver must accept via /api/driver/accept.
-    # Nearest-driver-first: offer it to the closest available driver, forward automatically on timeout.
-    try:
-        await offer_trip_to_next_driver(trip)
-    except Exception as e:
-        print(f"dispatch on request failed: {e}")
+    # Trip stays in "searching" until a real driver accepts it.
+    # Synthetic test traffic is NEVER offered to live supply.
+    if not synthetic:
+        try:
+            await offer_trip_to_next_driver(trip)
+        except Exception as e:
+            print(f"dispatch on request failed: {e}")
     trip.pop("_id", None)
     return trip
 
@@ -2826,9 +2846,21 @@ def customer_public(u: dict) -> dict:
 
 # Never serve fabricated/demo/test trips to a driver
 REAL_TRIPS_ONLY = {
+    "synthetic": {"$ne": True},
     "demo": {"$ne": True},
     "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    "dropoff_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
 }
+
+
+def _real_trip_filter(extra: Optional[dict] = None) -> dict:
+    """One canonical filter for every operational read/metric/export.
+
+    Test/demo records may exist in an isolated test database, but they must never leak into
+    dispatch, histories, ratings, payouts, demand, fleet reporting or admin business metrics.
+    """
+    return {"$and": [dict(REAL_TRIPS_ONLY), extra or {}]}
+
 
 ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
