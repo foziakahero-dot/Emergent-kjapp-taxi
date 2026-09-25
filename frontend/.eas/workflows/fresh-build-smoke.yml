@@ -1,8 +1,7 @@
 name: KJAPP Customer Fresh APK + Runtime Smoke
 
 on:
-  push:
-    branches: ['diagnostic/fresh-customer-driver-builds']
+  workflow_dispatch:
 
 jobs:
   build_customer_android:
