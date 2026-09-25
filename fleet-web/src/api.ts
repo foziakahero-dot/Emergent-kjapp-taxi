@@ -146,7 +146,7 @@ export const api = {
     http.put(`/fleet/drivers/${driverId}/vehicles`, { vehicle_ids }).then((r) => r.data),
   payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
-  createInvite: (body: { car: string; plate: string; vehicle_type: string; email?: string; note?: string }) =>
+  createInvite: (body: { email?: string; note?: string; car?: string; plate?: string; vehicle_type?: string }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
