@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, apiError, FleetDriver, FleetMe, FleetOverview, FleetPayout } from './api';
+import { api, apiError, FleetDriver, FleetMe, FleetOverview, FleetPayout, FleetVehicle } from './api';
 import { useAuth } from './auth';
 import { FleetWorkbook, FleetWorkbookTrip, loadFleetWorkbook } from './xlsx';
 import { Brand } from './App';
@@ -117,11 +117,30 @@ function LiveFleet({ drivers }: { drivers: FleetDriver[] }) {
 }
 
 export function OverviewPage() {
-  const [me, setMe] = useState<FleetMe | null>(null); const [ov, setOv] = useState<FleetOverview | null>(null); const [drivers, setDrivers] = useState<FleetDriver[]>([]); const [book, setBook] = useState<FleetWorkbook | null>(null); const [err, setErr] = useState('');
+  const [me, setMe] = useState<FleetMe | null>(null);
+  const [ov, setOv] = useState<FleetOverview | null>(null);
+  const [drivers, setDrivers] = useState<FleetDriver[]>([]);
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [book, setBook] = useState<FleetWorkbook | null>(null);
+  const [err, setErr] = useState('');
+
   useEffect(() => {
     const now = new Date();
-    Promise.all([api.fleetMe(), api.overview(), api.drivers(), loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1)])
-      .then(([m, o, d, b]) => { setMe(m); setOv(o); setDrivers(d.drivers || []); setBook(b); }).catch((e) => setErr(apiError(e)));
+    Promise.all([
+      api.fleetMe(),
+      api.overview(),
+      api.drivers(),
+      api.vehicles(),
+      loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1),
+    ])
+      .then(([m, o, d, v, b]) => {
+        setMe(m);
+        setOv(o);
+        setDrivers(d.drivers || []);
+        setVehicles(v.vehicles || []);
+        setBook(b);
+      })
+      .catch((e) => setErr(apiError(e)));
   }, []);
   if (!me || !ov) return err ? <ErrorBox message={err} /> : <Loading />;
   const recent = [...(book?.trips || [])].reverse().slice(0, 4);
@@ -131,7 +150,7 @@ export function OverviewPage() {
       <div className="kpi-card"><span>TURER I DAG</span><strong>{ov.today.trips}</strong><small>{fmtMoney(ov.today.gross)} brutto</small></div>
       <div className="kpi-card"><span>SJÅFØRER</span><strong>{ov.drivers_online} / {ov.drivers_total}</strong><small>pålogget nå</small></div>
       <div className="kpi-card desktop-kpi-extra"><span>UKE NETTO</span><strong>{fmtMoney(ov.week.net)}</strong><small>etter {ov.commission_pct}% provisjon</small></div>
-      <div className="kpi-card desktop-kpi-extra"><span>BILER PÅLOGGET</span><strong>{drivers.filter((d) => d.online).length}</strong><small>av {drivers.length} registrerte</small></div>
+      <div className="kpi-card desktop-kpi-extra"><span>BILER I FLÅTEN</span><strong>{vehicles.filter((v) => v.active).length}</strong><small>{vehicles.length} registrert totalt</small></div>
     </div>
     <div className="overview-grid"><LiveFleet drivers={drivers} /><div className="recent-card"><div className="eyebrow">SISTE TURER</div>{recent.length ? recent.map((t, i) => <div className="recent-row" key={`${t.tripId}-${i}`}><div><strong>{t.from || '—'} → {t.to || '—'}</strong><span>{t.driver}</span></div><b>{fmtMoney(t.price)}</b></div>) : <div className="empty-state">Ingen fullførte turer denne måneden.</div>}</div></div>
     <div className="mobile-week"><span>Denne uken</span><strong>{fmtMoney(ov.week.net)}</strong><small>{ov.week.trips} turer · netto etter provisjon</small></div>
