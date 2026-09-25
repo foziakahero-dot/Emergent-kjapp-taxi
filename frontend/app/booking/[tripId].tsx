@@ -132,7 +132,7 @@ export default function BookingFlow() {
   }
 
   const meta = META[trip.status] || META.searching;
-  const route = trip.geometry?.coordinates || [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
+  const route = trip.geometry?.coordinates || null;
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
@@ -204,8 +204,8 @@ export default function BookingFlow() {
                   <Icon name="navigation" size={22} color={colors.accent} />
                 ) : (
                   <>
-                    <Text style={s.etaNum}>{trip.eta_min || 2}</Text>
-                    <Text style={s.etaMin}>MIN</Text>
+                    <Text style={s.etaNum}>{trip.eta_min != null ? trip.eta_min : '—'}</Text>
+                    <Text style={s.etaMin}>{trip.eta_min != null ? 'MIN' : 'ETA'}</Text>
                   </>
                 )}
               </View>
@@ -223,9 +223,9 @@ export default function BookingFlow() {
               ) : null}
               <View style={{ flex: 1 }}>
                 <Text style={s.overline}>{meta.title}</Text>
-                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
+                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Sjåførinfo utilgjengelig'}</Text>
                 <Text style={s.driverCar} numberOfLines={1}>
-                  {(trip.driver?.car || 'Bil')} · {trip.driver?.plate || ''}
+                  {[trip.driver?.car, trip.driver?.plate].filter(Boolean).join(' · ') || 'Kjøretøyinfo utilgjengelig'}
                 </Text>
                 {trip.driver?.rating != null ? (
                   <View style={s.ratingRow}>
