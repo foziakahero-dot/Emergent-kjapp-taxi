@@ -1,6 +1,7 @@
-"""Portable KJAPP Oslo beta dispatch E2E.
+"""Portable KJAPP dispatch lifecycle E2E for an ISOLATED backend/database.
 
-Uses real API accounts supplied through environment variables; no credentials are stored in Git.
+This script creates real API records and therefore MUST NOT be pointed at the shared
+Oslo beta/production database. No credentials are stored in Git.
 
 Required:
   KJAPP_E2E_CUSTOMER_EMAIL
@@ -28,6 +29,23 @@ API = (
 ).rstrip("/")
 UA = {"User-Agent": "KJAPP-beta-e2e/1.0", "Content-Type": "application/json"}
 FAILS = []
+
+# This script creates and advances a ride. It must never run accidentally against
+# the shared Oslo beta/production database. Use release_smoke.py for live systems.
+ALLOW_MUTATION = (os.environ.get("KJAPP_E2E_ALLOW_MUTATION") or "").strip().lower() in {"1", "true", "yes", "on"}
+ISOLATED = (os.environ.get("KJAPP_E2E_ISOLATED") or "").strip().lower() in {"1", "true", "yes", "on"}
+LIVE_HOSTS = {
+    "https://github-app-builder-28.emergent.host",
+    "https://api.kjappapp.no",
+}
+
+if API in LIVE_HOSTS and not (ALLOW_MUTATION and ISOLATED):
+    print(
+        "REFUSED: lifecycle E2E creates trip data and cannot run against the shared KJAPP beta/production backend. "
+        "Use release_smoke.py for live checks, or point KJAPP_E2E_API to an isolated test backend/database and set "
+        "KJAPP_E2E_ISOLATED=true plus KJAPP_E2E_ALLOW_MUTATION=true."
+    )
+    sys.exit(3)
 
 
 def required(name: str) -> str:
