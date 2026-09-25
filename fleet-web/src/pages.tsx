@@ -2,7 +2,7 @@ import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   api, apiError, FleetDocument, FleetDriver, FleetDriverDetail, FleetLive,
-  FleetLiveDriver, FleetMe, FleetOverview, FleetPayout, FleetVehicle,
+  FleetLiveDriver, FleetMe, FleetOverview, FleetPayout, FleetTrip, FleetVehicle,
 } from './api';
 import { useAuth } from './auth';
 import { FleetWorkbook, FleetWorkbookTrip, loadFleetWorkbook } from './xlsx';
@@ -205,7 +205,7 @@ export function OverviewPage() {
   return <div className="page-content">
     <PageHead title={`God kveld, ${me.name}`} sub="Live oversikt over egen virksomhet" />
     <div className="kpi-grid four">
-      <div className="kpi-card"><span>TURER I DAG</span><strong>{ov.today.trips}</strong><small>{fmtMoney(ov.today.gross)} brutto</small></div>
+      <div className="kpi-card"><span>BETALTE TURER I DAG</span><strong>{ov.today.trips}</strong><small>{fmtMoney(ov.today.gross)} betalt brutto</small></div>
       <div className="kpi-card"><span>SJÅFØRER ONLINE</span><strong>{online} / {ov.drivers_total}</strong><small>{available} ledige nå</small></div>
       <div className="kpi-card desktop-kpi-extra"><span>AKTIVE TURER</span><strong>{active}</strong><small>på vei / hentested / i tur</small></div>
       <div className="kpi-card desktop-kpi-extra"><span>UKE NETTO</span><strong>{fmtMoney(ov.week.net)}</strong><small>etter {ov.commission_pct}% provisjon</small></div>
@@ -389,7 +389,7 @@ export function DriversPage() {
     <div className="table-card">
       <div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk navn, skilt eller bil" /></div>
       <div className="fleet-table driver-table">
-        <div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>SELFIE ID</span><span>TURER I DAG</span><span>OMSETNING</span></div>
+        <div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>SELFIE ID</span><span>BETALTE TURER</span><span>NETTO I DAG</span></div>
         {filtered.map((d) =>
           <button className="tr row-button" key={d.id} onClick={() => void openDriver(d.id)}>
             <span className="driver-name"><i className={`status-dot ${d.online ? 'on' : ''}`} />{nameOf(d)}</span>
@@ -670,21 +670,81 @@ type Range = 'today' | 'week' | 'month';
 function localDateKey(d = new Date()) { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; }
 function weekStart() { const d = new Date(); const day = d.getDay() || 7; d.setDate(d.getDate() - day + 1); d.setHours(0,0,0,0); return d; }
 
+function fleetTripStatus(t: FleetTrip) {
+  if (t.status === 'arrived' && t.payment_status !== 'paid') return { label: 'Betaling gjenstår', cls: 'status-amber' };
+  if (t.status === 'completed' || t.status === 'rated') return { label: 'Fullført', cls: 'status-green' };
+  if (t.status === 'cancelled' || t.status === 'cancelled_by_driver') return { label: 'Avbrutt', cls: 'status-red' };
+  if (t.status === 'in_trip') return { label: 'På tur', cls: 'status-green' };
+  if (t.status === 'at_pickup') return { label: 'Ved hentested', cls: 'status-amber' };
+  if (t.status === 'driver_on_way') return { label: 'På vei til kunde', cls: 'status-amber' };
+  if (t.status === 'searching' || t.status === 'booking') return { label: 'Søker sjåfør', cls: 'muted' };
+  return { label: t.status || 'Ukjent', cls: 'muted' };
+}
+
+function fleetPaymentLabel(t: FleetTrip) {
+  if (t.payment_status === 'paid') return { label: 'Betalt', cls: 'status-green' };
+  if (t.payment_status === 'failed' || t.payment_status === 'requires_action') return { label: 'Må betales', cls: 'status-red' };
+  if (t.status === 'cancelled' || t.status === 'cancelled_by_driver') return { label: '—', cls: 'muted' };
+  return { label: 'Venter', cls: 'status-amber' };
+}
+
 export function TripsPage() {
-  const [trips, setTrips] = useState<FleetWorkbookTrip[]>([]); const [range, setRange] = useState<Range>('today'); const [q, setQ] = useState(''); const [err, setErr] = useState(''); const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const now = new Date(); const current = loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1); const ws = weekStart();
-    const needsPrev = ws.getMonth() !== now.getMonth();
-    const previous = needsPrev ? loadFleetWorkbook(ws.getFullYear(), ws.getMonth() + 1) : Promise.resolve(null);
-    Promise.all([current, previous]).then(([c, p]) => setTrips([...(p?.trips || []), ...c.trips])).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
-  }, []);
+  const [trips, setTrips] = useState<FleetTrip[]>([]);
+  const [range, setRange] = useState<Range>('today');
+  const [q, setQ] = useState('');
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    setErr('');
+    return api.trips(90)
+      .then((r) => setTrips(r.trips || []))
+      .catch((e) => setErr(apiError(e)))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { void load(); }, []);
+
   const rows = useMemo(() => {
-    const today = localDateKey(); const ws = localDateKey(weekStart()); const month = today.slice(0, 7);
-    return [...trips].filter((t) => range === 'today' ? t.date === today : range === 'week' ? t.date >= ws : t.date.startsWith(month)).filter((t) => `${t.tripId} ${t.driver} ${t.from} ${t.to}`.toLowerCase().includes(q.toLowerCase())).reverse();
+    const today = localDateKey();
+    const ws = localDateKey(weekStart());
+    const month = today.slice(0, 7);
+    const query = q.toLowerCase();
+    return trips.filter((t) => {
+      const date = (t.created_at || '').slice(0, 10);
+      const inRange = range === 'today' ? date === today : range === 'week' ? date >= ws : date.startsWith(month);
+      if (!inRange) return false;
+      return `${t.trip_id} ${t.driver_name || ''} ${t.pickup_address || ''} ${t.dropoff_address || ''} ${t.status || ''} ${t.payment_status || ''}`.toLowerCase().includes(query);
+    });
   }, [trips, range, q]);
-  return <div className="page-content"><PageHead title="Turer" sub="Fullførte turer utført av sjåførene i din flåte" />
-    <div className="trip-filter"><input placeholder="Søk etter tur, adresse eller sjåfør" value={q} onChange={(e) => setQ(e.target.value)} /><div>{(['today','week','month'] as Range[]).map((r) => <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>{r === 'today' ? 'I dag' : r === 'week' ? 'Denne uken' : 'Denne måneden'}</button>)}</div></div>
-    <div className="table-card no-tools"><div className="fleet-table trip-table"><div className="tr th"><span>DATO</span><span>SJÅFØR</span><span>FRA → TIL</span><span>STATUS</span><span>PRIS</span></div>{loading ? <Loading /> : rows.map((t, i) => <div className="tr" key={`${t.tripId}-${i}`}><span className="mono muted">{t.date.slice(5)}</span><span>{t.driver}</span><span>{t.from || '—'} → {t.to || '—'}</span><span className={statusDone(t.status) ? 'status-green' : 'muted'}>{statusDone(t.status) ? 'Fullført' : t.status}</span><span className="mono">{fmtMoney(t.price)}</span></div>)}{!loading && !rows.length ? <div className="empty-state padded">Ingen fullførte turer i valgt periode.</div> : null}</div></div><ErrorBox message={err} />
+
+  return <div className="page-content">
+    <PageHead title="Turer" sub="Operativ historikk for ekte turer i din flåte · betaling vises separat" />
+    <div className="trip-filter">
+      <input placeholder="Søk etter tur, adresse eller sjåfør" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div>{(['today','week','month'] as Range[]).map((r) => <button key={r} className={range === r ? 'active' : ''} onClick={() => setRange(r)}>{r === 'today' ? 'I dag' : r === 'week' ? 'Denne uken' : 'Denne måneden'}</button>)}</div>
+    </div>
+    {err ? <div className="table-card no-tools"><div className="empty-state padded">Kunne ikke hente turhistorikken. <button className="table-action" onClick={() => void load()}>Prøv igjen</button></div></div> : (
+      <div className="table-card no-tools">
+        <div className="fleet-table trip-table">
+          <div className="tr th"><span>DATO</span><span>SJÅFØR</span><span>FRA → TIL</span><span>STATUS</span><span>BETALING</span><span>PRIS</span></div>
+          {loading ? <Loading /> : rows.map((t) => {
+            const status = fleetTripStatus(t);
+            const payment = fleetPaymentLabel(t);
+            return <div className="tr" key={t.trip_id}>
+              <span className="mono muted">{(t.created_at || '').slice(5, 10) || '—'}</span>
+              <span>{t.driver_name || 'Ikke tildelt'}</span>
+              <span>{t.pickup_address || '—'} → {t.dropoff_address || '—'}</span>
+              <span className={status.cls}>{status.label}</span>
+              <span className={payment.cls}>{payment.label}</span>
+              <span className="mono">{fmtMoney(t.price)}</span>
+            </div>;
+          })}
+          {!loading && !rows.length ? <div className="empty-state padded">Ingen ekte turer i valgt periode.</div> : null}
+        </div>
+      </div>
+    )}
   </div>;
 }
 
