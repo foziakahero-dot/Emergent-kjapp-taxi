@@ -64,7 +64,12 @@ export default function Home() {
       loadMethods();
       loadPlaces();
       tripsApi.active().then((t) => {
-        if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
+        if (!active || !t?.trip_id) return;
+        if (t.status === 'arrived') {
+          router.replace(`/receipt/${t.trip_id}`);
+          return;
+        }
+        router.replace(`/booking/${t.trip_id}`);
       }).catch(() => {});
       return () => { active = false; };
     }, [loadMethods, loadPlaces, router]),
