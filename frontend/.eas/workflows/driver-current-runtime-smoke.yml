@@ -8,7 +8,7 @@ jobs:
   driver_build:
     name: Build current KJAPP Driver APK
     image: sdk-57
-    runs_on: linux-large
+    runs_on: linux-medium
     env:
       CI: '1'
       EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
