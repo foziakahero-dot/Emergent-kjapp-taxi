@@ -2521,7 +2521,13 @@ async def require_driver(current=Depends(get_current_user)):
             raise HTTPException(status_code=403, detail="Tildelt kjøretøy er parkert av løyvehaver")
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
-    if KJAPP_DRIVER_IDENTITY_REQUIRED and current.get("identity_verification_status") != "verified":
+    identity_status = current.get("identity_verification_status") or "not_submitted"
+    # Once KJAPP has explicitly requested a re-check, it is a hard next-shift gate even while
+    # first-time onboarding enforcement is still being rolled out behind the feature flag.
+    recheck_gate = identity_status in ("recheck_required", "retry_required") or (
+        identity_status == "pending_review" and bool(current.get("identity_verified_at"))
+    )
+    if recheck_gate or (KJAPP_DRIVER_IDENTITY_REQUIRED and identity_status != "verified"):
         raise HTTPException(
             status_code=403,
             detail="Fullfør KJAPP identitetskontroll før du går online eller håndterer turer",
