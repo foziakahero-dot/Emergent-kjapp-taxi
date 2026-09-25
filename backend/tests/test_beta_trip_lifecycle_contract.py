@@ -109,3 +109,15 @@ def test_driver_and_fleet_money_views_require_paid_trips():
     for name in ("driver_summary", "driver_payouts", "fleet_overview", "fleet_drivers", "fleet_export_monthly", "admin_finance"):
         block = _block(name)
         assert '"payment_status": "paid"' in block, name
+
+
+def test_late_stripe_expiry_cannot_downgrade_paid_transaction():
+    block = _block("stripe_webhook")
+    expiry = block[block.index('elif t == "checkout.session.expired"'):]
+    assert '"payment_status": {"$ne": "paid"}' in expiry
+    assert "expired_update.modified_count" in expiry
+
+
+def test_customer_destination_mutation_is_real_trip_only():
+    block = _block("change_trip_destination", "complete_trip")
+    assert "_real_trip_filter(" in block
