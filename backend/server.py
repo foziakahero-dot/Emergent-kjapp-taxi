@@ -3883,7 +3883,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
             {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
         )
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
-    t = await db.trips.find_one({"trip_id": body.trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
     await send_push_to_user(
         t["user_id"],
         "Sjåfør på vei",
@@ -3959,7 +3959,7 @@ async def driver_current(current=Depends(require_driver)):
 async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
     """Driver has arrived at pickup and is waiting for passenger to board."""
     driver_id = current["id"]
-    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Fant ikke turen")
     if trip.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
@@ -3980,7 +3980,7 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
         )
 
     result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"}),
         {"$set": {
             "status": "at_pickup",
             "at_pickup_at": datetime.now(timezone.utc).isoformat(),
@@ -3988,11 +3988,11 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
         }},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(
         t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.",
         f"/booking/{trip_id}", "driver_at_pickup",
@@ -4034,7 +4034,7 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen endret status før den kunne startes")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(
         t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.",
         f"/booking/{trip_id}", "trip_started",
@@ -4095,7 +4095,7 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
 @api.post("/driver/trip/{trip_id}/arrive")
 async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     driver_id = current["id"]
-    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Fant ikke turen")
     if trip.get("status") in ("arrived", "completed", "rated"):
@@ -4116,7 +4116,7 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         )
 
     result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"},
+        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"}),
         {"$set": {
             "status": "arrived",
             "arrived_at": datetime.now(timezone.utc).isoformat(),
@@ -4129,7 +4129,7 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
     )
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(
         t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
         f"/receipt/{trip_id}", "trip_arrived",
