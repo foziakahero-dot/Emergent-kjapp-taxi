@@ -107,10 +107,16 @@ const safeNumber = (value: any, fallback = 0) => {
 const normalizePayouts = (data: any = {}) => ({
   ...data,
   commission_pct: safeNumber(data?.commission_pct, KJAPP_DEFAULT_COMMISSION_PCT),
+  earned_gross_7d: safeNumber(data?.earned_gross_7d ?? data?.pending_gross),
+  earned_net_7d: safeNumber(data?.earned_net_7d ?? data?.pending_trip_net ?? data?.pending_net),
+  paid_trips_7d: safeNumber(data?.paid_trips_7d ?? data?.pending_trips),
   pending_gross: safeNumber(data?.pending_gross),
   pending_net: safeNumber(data?.pending_net),
   pending_trips: safeNumber(data?.pending_trips),
   next_payout_date: data?.next_payout_date || data?.next_payout || null,
+  settlement_recipient: data?.settlement_recipient || 'fleet',
+  stripe_connect_ready: data?.stripe_connect_ready === true,
+  payout_schedule: data?.payout_schedule || 'stripe_default',
   history: Array.isArray(data?.history) ? data.history : [],
 });
 
