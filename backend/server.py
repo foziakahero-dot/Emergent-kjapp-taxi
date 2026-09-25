@@ -4835,6 +4835,37 @@ async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
         and driver.get("last_lat") is not None
         and driver.get("last_lng") is not None
     )
+
+    document_statuses = {}
+    async for d in db.uploaded_files.find({
+        "scope": "fleet-vehicle-docs",
+        "fleet_id": fid,
+        "vehicle_id": str(vehicle["_id"]),
+        "is_deleted": {"$ne": True},
+    }).sort("created_at", -1):
+        doc_type = d.get("doc_type")
+        if doc_type in FLEET_VEHICLE_DOC_TYPES and doc_type not in document_statuses:
+            document_statuses[doc_type] = _fleet_document_compliance(
+                d.get("review_status") or "pending",
+                d.get("review_expiry"),
+            )
+        if len(document_statuses) == len(FLEET_VEHICLE_DOC_TYPES):
+            break
+    missing_document_types = sorted(FLEET_VEHICLE_DOC_TYPES - set(document_statuses))
+    compliance_values = set(document_statuses.values())
+    if "REJECTED" in compliance_values:
+        document_compliance = "REJECTED"
+    elif "EXPIRED" in compliance_values:
+        document_compliance = "EXPIRED"
+    elif missing_document_types:
+        document_compliance = "MISSING"
+    elif "PENDING" in compliance_values:
+        document_compliance = "PENDING"
+    elif "EXPIRING" in compliance_values:
+        document_compliance = "EXPIRING"
+    else:
+        document_compliance = "VALID"
+
     return {
         "id": str(vehicle["_id"]),
         "car": vehicle.get("car"),
@@ -4849,6 +4880,9 @@ async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
         "gps_fresh": fresh,
         "last_location_at": driver.get("last_location_at") if driver else None,
         "identity_verification_status": driver.get("identity_verification_status") if driver else None,
+        "document_compliance": document_compliance,
+        "document_statuses": document_statuses,
+        "missing_document_types": missing_document_types,
     }
 
 
