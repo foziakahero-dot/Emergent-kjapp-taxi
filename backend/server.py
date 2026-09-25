@@ -707,6 +707,13 @@ def set_auth_cookie(response: Response, token: str):
     )
 
 
+def require_customer(current=Depends(get_current_user)):
+    """Passenger-only dependency. Driver/admin/fleet identities use their dedicated surfaces."""
+    if current.get("role") not in (None, "user", "customer"):
+        raise HTTPException(status_code=403, detail="Denne handlingen er kun tilgjengelig i KJAPP kundeappen")
+    return current
+
+
 # ------------------ Models ------------------
 class RegisterRequest(BaseModel):
     fullName: str
@@ -2312,7 +2319,7 @@ async def me(current=Depends(get_current_user)):
 
 # ---- Trips ----
 @api.post("/trips/request")
-async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+async def request_trip(body: TripRequest, current=Depends(require_customer)):
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta vilkår og personvern før du bestiller tur")
     settings = await db.platform_settings.find_one({"_id": "singleton"}, {"features": 1}) or {}
@@ -2442,7 +2449,7 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
 
 
 @api.get("/trips/active")
-async def active_trip(current=Depends(get_current_user)):
+async def active_trip(current=Depends(require_customer)):
     trip = await db.trips.find_one(
         _real_trip_filter({"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}),
         sort=[("created_at", -1)],
@@ -2455,7 +2462,7 @@ async def active_trip(current=Depends(get_current_user)):
 
 
 @api.get("/trips/{trip_id}")
-async def get_trip(trip_id: str, current=Depends(get_current_user)):
+async def get_trip(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
@@ -2468,7 +2475,7 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
 
 
 @api.patch("/trips/{trip_id}/destination")
-async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(get_current_user)):
+async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(require_customer)):
     """Change destination/stops while the ride is active, using the price snapshot captured at booking."""
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
@@ -2520,7 +2527,7 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
 
 
 @api.post("/trips/{trip_id}/complete")
-async def complete_trip(trip_id: str, current=Depends(get_current_user)):
+async def complete_trip(trip_id: str, current=Depends(require_customer)):
     """Passenger closes a ride after the driver has reached the destination.
 
     This endpoint is intentionally idempotent and never allows a passenger to skip
@@ -2564,7 +2571,7 @@ async def complete_trip(trip_id: str, current=Depends(get_current_user)):
 
 
 @api.post("/trips/{trip_id}/rate")
-async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_current_user)):
+async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(require_customer)):
     """Passenger rates the driver + trip (1-5 stars + optional feedback)."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
@@ -2705,7 +2712,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
 
 
 @api.get("/trips/{trip_id}/cancel-preview")
-async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
+async def cancel_trip_preview(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
@@ -2727,7 +2734,7 @@ async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
 
 
 @api.post("/trips/{trip_id}/cancel")
-async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
+async def cancel_trip(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
@@ -2786,7 +2793,7 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
 
 
 @api.get("/trips")
-async def list_trips(current=Depends(get_current_user)):
+async def list_trips(current=Depends(require_customer)):
     cursor = db.trips.find(_real_trip_filter({"user_id": current["id"]})).sort("created_at", -1).limit(50)
     trips = []
     async for t in cursor:
@@ -3114,7 +3121,7 @@ async def list_trip_messages(trip_id: str, current=Depends(get_current_user)):
 
 # ---- Payment methods ----
 @api.get("/payment-methods")
-async def list_payment_methods(current=Depends(get_current_user)):
+async def list_payment_methods(current=Depends(require_customer)):
     cursor = db.payment_methods.find({"user_id": current["id"]})
     methods = []
     async for m in cursor:
@@ -3126,7 +3133,7 @@ async def list_payment_methods(current=Depends(get_current_user)):
 
 
 @api.post("/payment-methods")
-async def add_payment_method(body: PaymentMethodRequest, current=Depends(get_current_user)):
+async def add_payment_method(body: PaymentMethodRequest, current=Depends(require_customer)):
     # User-entered details never prove a payment instrument, including Vipps.
     verified = False
     doc = {
@@ -3145,7 +3152,7 @@ async def add_payment_method(body: PaymentMethodRequest, current=Depends(get_cur
 
 
 @api.delete("/payment-methods/{pm_id}")
-async def delete_payment_method(pm_id: str, current=Depends(get_current_user)):
+async def delete_payment_method(pm_id: str, current=Depends(require_customer)):
     from bson.errors import InvalidId
     try:
         oid = ObjectId(pm_id)
@@ -3227,7 +3234,7 @@ class CardSetupRequest(BaseModel):
 
 
 @api.post("/payments/card/setup")
-async def stripe_card_setup(body: CardSetupRequest, request: Request, current=Depends(get_current_user)):
+async def stripe_card_setup(body: CardSetupRequest, request: Request, current=Depends(require_customer)):
     await _enforce_rate_limit(request, "payment-setup", 20, 900)
     """Start a Stripe Checkout Session in 'setup' mode to save a card for future use."""
     if not stripe.api_key:
@@ -3253,7 +3260,7 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
 
 
 @api.get("/payments/card/setup/{session_id}")
-async def stripe_card_setup_status(session_id: str, current=Depends(get_current_user)):
+async def stripe_card_setup_status(session_id: str, current=Depends(require_customer)):
     """After Stripe redirects back, fetch the saved payment method and store it in Mongo."""
     try:
         s = stripe.checkout.Session.retrieve(session_id, expand=["setup_intent"])
@@ -3425,7 +3432,7 @@ async def ai_history(session_id: Optional[str] = None, current=Depends(get_curre
 
 # ---- Daily summary (driver-style stub) ----
 @api.get("/summary/today")
-async def summary_today(current=Depends(get_current_user)):
+async def summary_today(current=Depends(require_customer)):
     today = datetime.now(timezone.utc).date().isoformat()
     cursor = db.trips.find(_real_trip_filter({"user_id": current["id"], "created_at": {"$gte": today}}))
     trips = 0
@@ -7163,7 +7170,7 @@ def _trusted_checkout_origin(requested: str) -> str:
 
 
 @api.post("/payments/checkout")
-async def create_trip_checkout(body: TripCheckoutRequest, request: Request, current=Depends(get_current_user)):
+async def create_trip_checkout(body: TripCheckoutRequest, request: Request, current=Depends(require_customer)):
     await _enforce_rate_limit(request, "payment-checkout", 20, 900)
     """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
     trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
@@ -7290,7 +7297,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
 
 
 @api.get("/payments/status/{session_id}")
-async def get_payment_status(session_id: str, current=Depends(get_current_user)):
+async def get_payment_status(session_id: str, current=Depends(require_customer)):
     record = await db.payment_transactions.find_one({"session_id": session_id, "user_id": current["id"]})
     if not record:
         raise HTTPException(status_code=404, detail="Betaling ikke funnet")
