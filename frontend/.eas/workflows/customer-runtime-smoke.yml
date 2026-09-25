@@ -1,7 +1,7 @@
 name: KJAPP Customer Android Runtime Smoke
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   get_customer_android:
