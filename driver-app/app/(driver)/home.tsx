@@ -344,7 +344,10 @@ export default function DriverHome() {
   const mapDropoff = current && current.status === 'in_trip'
     ? { lat: current.dropoff_lat, lng: current.dropoff_lng }
     : (current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null);
-  const mapRoute = current?.geometry?.coordinates;
+  // Before pickup, show the real driver->pickup OSRM route. During the ride, show the booked road route.
+  const mapRoute = current?.status === 'in_trip'
+    ? (current?.geometry?.coordinates || null)
+    : (current?.pickup_route?.geometry?.coordinates || current?.pickup_route?.geometry || null);
 
   const gpsLabel = !online ? 'GPS pauset' : loc ? 'GPS aktiv' : 'Finner GPS…';
   const operationalLabel = current
@@ -475,7 +478,11 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
             </View>
-            <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min estimert</Text>
+            {firstOffer.distance_km != null && firstOffer.duration_min != null ? (
+              <Text style={s.offerMeta}>{firstOffer.distance_km} km · ca. {firstOffer.duration_min} min kjørerute</Text>
+            ) : (
+              <Text style={s.offerMeta}>Rutedata er ikke tilgjengelig akkurat nå</Text>
+            )}
             {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
             {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
