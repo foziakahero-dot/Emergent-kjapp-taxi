@@ -4712,10 +4712,13 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon ugyldig")
     email = body.email.strip().lower()
+    phone = _normalize_login_phone(body.phone) or body.phone.strip()
     if inv.get("email") and inv["email"] != email:
         raise HTTPException(status_code=403, detail="Invitasjonen er knyttet til en annen e-postadresse")
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
+    if phone and await db.users.find_one({"role": "driver", "phone": phone}):
+        raise HTTPException(status_code=400, detail="Telefonnummer er allerede knyttet til en sjåførkonto")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
     # Require all three documents
@@ -4743,7 +4746,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "email": email,
         "password_hash": hash_password(body.password),
         "fullName": body.fullName,
-        "phone": body.phone,
+        "phone": phone,
         "role": "driver",
         "car": inv.get("car"),
         "plate": inv.get("plate"),
@@ -4772,7 +4775,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     set_auth_cookie(response, token)
     return {
         "token": token,
-        "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": body.phone, "role": "driver", "approved": False},
+        "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": phone, "role": "driver", "approved": False},
         "pending_approval": True,
     }
 
