@@ -423,7 +423,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
-    "approved_at", "approved_by", "fleet_name", "fleet_active", "today_income", "today_trips", "status", "capabilities",
+    "approved_at", "approved_by", "fleet_name", "fleet_org_number", "fleet_active", "today_income", "today_trips", "status", "capabilities",
     "identity_verification_status", "identity_verification_updated_at", "identity_verified_at",
     "next_identity_check_at", "identity_recheck_reason", "identity_recheck_trigger",
     "identity_recheck_pending_reason", "identity_recheck_pending_trigger",
@@ -2291,6 +2291,22 @@ async def accept_legal(body: AcceptLegalRequest, current=Depends(get_current_use
 
 @api.get("/auth/me")
 async def me(current=Depends(get_current_user)):
+    if current.get("role") == "driver":
+        fleet_id = current.get("fleet_id")
+        if fleet_id:
+            try:
+                fleet = await db.fleets.find_one({"_id": ObjectId(str(fleet_id))}, {"name": 1, "org_number": 1})
+            except (InvalidId, TypeError):
+                fleet = None
+            if fleet:
+                current["fleet_name"] = fleet.get("name")
+                current["fleet_org_number"] = fleet.get("org_number")
+        vehicle = await _assigned_fleet_vehicle(current, required=False)
+        if vehicle:
+            current["vehicle_id"] = str(vehicle["_id"])
+            current["car"] = vehicle.get("car")
+            current["plate"] = vehicle.get("plate")
+            current["vehicle_type"] = vehicle.get("vehicle_type") or "ai-first"
     return user_public(current)
 
 
