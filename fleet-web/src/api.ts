@@ -181,6 +181,21 @@ export type FleetDriverDetail = FleetDriver & {
   }>;
 };
 
+export type FleetTrip = {
+  trip_id: string;
+  created_at?: string;
+  status?: string;
+  payment_status?: string;
+  price?: number;
+  pickup_address?: string;
+  dropoff_address?: string;
+  driver_id?: string;
+  driver_name?: string;
+  vehicle_id?: string;
+  vehicle_type?: string;
+  receipt_id?: string;
+};
+
 export type FleetPayout = {
   id?: string;
   period_start?: string;
@@ -253,6 +268,7 @@ export const api = {
     const encoded = storagePath.split('/').map(encodeURIComponent).join('/');
     return http.get(`/files/${encoded}`, { responseType: 'blob' }).then((r) => r.data as Blob);
   },
+  trips: (days = 90): Promise<{ trips: FleetTrip[] }> => http.get('/fleet/trips', { params: { days } }).then((r) => r.data),
   payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
   createInvite: (body: { vehicle_id: string; email?: string; note?: string }) =>
