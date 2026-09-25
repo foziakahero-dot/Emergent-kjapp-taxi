@@ -137,6 +137,8 @@ if not active_vehicle:
 
 check("driver has fleet company", bool(driver_profile.get("fleet")), str(driver_profile.get("fleet")))
 check("driver has active assigned vehicle", bool(active_vehicle and active_vehicle.get("plate")), str(active_vehicle))
+ride_vehicle_type = active_vehicle.get("vehicle_type") or "ai-first"
+print(f"INFO  E2E will request vehicle_type={ride_vehicle_type} using {active_vehicle.get('car')} {active_vehicle.get('plate')}")
 
 # Dedicated beta account hygiene: close a stale searching/booking ride before starting a new run.
 status, stale = call("GET", "/trips/active", customer_token)
@@ -176,7 +178,7 @@ status, estimate = call(
         "pickup_lng": 10.7522,
         "dropoff_lat": 59.9106,
         "dropoff_lng": 10.7285,
-        "vehicle_type": "ai-first",
+        "vehicle_type": ride_vehicle_type,
     },
 )
 check("real route estimate", status == 200 and estimate.get("distance_km", 0) > 0, str(estimate))
