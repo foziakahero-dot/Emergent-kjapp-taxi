@@ -2387,7 +2387,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
                 {"booking_request_lock": None},
                 {"booking_request_locked_at": {"$lt": lock_cutoff}},
             ],
-        },
+        }),
         {"$set": {
             "booking_request_lock": trip_id,
             "booking_request_locked_at": datetime.now(timezone.utc),
@@ -2576,7 +2576,7 @@ async def complete_trip(trip_id: str, current=Depends(require_customer)):
     if status == "arrived":
         now_iso = datetime.now(timezone.utc).isoformat()
         result = await db.trips.update_one(
-            {"trip_id": trip_id, "user_id": current["id"], "status": "arrived"},
+            _real_trip_filter({"trip_id": trip_id, "user_id": current["id"], "status": "arrived"}),
             {"$set": {"status": "completed", "completed_at": now_iso, "updated_at": now_iso}},
         )
         transitioned = result.modified_count == 1
@@ -2625,12 +2625,12 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(require
     if not trip.get("completed_at"):
         update["completed_at"] = now_iso
     result = await db.trips.update_one(
-        {
+        _real_trip_filter({
             "trip_id": trip_id,
             "user_id": current["id"],
             "status": {"$in": ["arrived", "completed"]},
             "passenger_rating": {"$exists": False},
-        },
+        }),
         {"$set": update},
     )
     if result.modified_count != 1:
@@ -2639,7 +2639,7 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(require
     if trip.get("driver_id"):
         recent = []
         async for r in db.trips.find(
-            {"driver_id": trip["driver_id"], "passenger_rating": {"$exists": True, "$ne": None}},
+            _real_trip_filter({"driver_id": trip["driver_id"], "passenger_rating": {"$exists": True, "$ne": None}}),
             {"passenger_rating": 1},
         ).sort("rated_at", -1).limit(50):
             recent.append(r.get("passenger_rating"))
@@ -2709,12 +2709,12 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     if trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(409, "Turen må være avsluttet før kunden kan vurderes")
     result = await db.trips.update_one(
-        {
+        _real_trip_filter({
             "trip_id": trip_id,
             "driver_id": current["id"],
             "status": {"$in": ["arrived", "completed", "rated"]},
             "driver_rating": {"$exists": False},
-        },
+        }),
         {"$set": {
             "driver_rating": body.rating,
             "driver_feedback": body.feedback,
@@ -2727,7 +2727,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     if trip.get("user_id"):
         recent = []
         async for r in db.trips.find(
-            {"user_id": trip["user_id"], "driver_rating": {"$exists": True, "$ne": None}},
+            _real_trip_filter({"user_id": trip["user_id"], "driver_rating": {"$exists": True, "$ne": None}}),
             {"driver_rating": 1},
         ).sort("driver_rated_at", -1).limit(50):
             recent.append(r.get("driver_rating"))
@@ -2783,11 +2783,11 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
             fee = int(round(float(pricing.get("customer_cancellation_fee", 0) or 0)))
     now_iso = datetime.now(timezone.utc).isoformat()
     result = await db.trips.update_one(
-        {
+        _real_trip_filter({
             "trip_id": trip_id,
             "user_id": current["id"],
             "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup"]},
-        },
+        }),
         {"$set": {
             "status": "cancelled", "cancelled_at": now_iso, "cancelled_by": "customer",
             "cancellation_fee": fee, "cancellation_fee_status": "pending" if fee > 0 else "not_applicable",
@@ -2799,7 +2799,7 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
     # Re-read after the atomic transition. A driver may have been assigned between the
     # initial read and cancellation; cleanup must use canonical post-update ownership.
     cancelled_trip = await db.trips.find_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
+        _real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}),
         {"driver_id": 1},
     )
     assigned_driver_id = (cancelled_trip or {}).get("driver_id")
@@ -3555,11 +3555,11 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
 
     if not nxt:
         res = await db.trips.update_one(
-            {
+            _real_trip_filter({
                 "trip_id": trip["trip_id"],
                 "driver_id": None,
                 "status": {"$in": ["searching", "booking"]},
-            },
+            }),
             {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
         )
         if res.modified_count == 0:
@@ -3570,7 +3570,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
 
     expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
     res = await db.trips.update_one(
-        {"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+        _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
         {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
                   "offer_expires_at": expires.isoformat(), "offer_km": round(nxt["km"], 2)},
          "$addToSet": {"offer_history": nxt["id"]},
@@ -3605,7 +3605,7 @@ async def dispatch_loop():
                     expired = False
                 if expired:
                     res = await db.trips.update_one(
-                        {"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+                        _real_trip_filter({"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
                         {"$set": {"status": "cancelled", "cancelled_at": now_iso,
                                   "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
                     )
@@ -3629,7 +3629,7 @@ async def dispatch_loop():
                 if not expired:
                     continue
                 res = await db.trips.update_one(
-                    {"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
+                    _real_trip_filter({"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
                     {"$set": {"status": "cancelled", "cancelled_at": now_iso,
                               "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
                 )
@@ -4376,7 +4376,7 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
             eta_min = max(1, int(round(distance_km / 30 * 60)))
 
         await db.trips.update_one(
-            {"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"},
+            _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "driver_on_way"}),
             {"$set": {
                 "eta_min": eta_min,
                 "driver_distance_to_pickup_km": distance_km,
@@ -4387,12 +4387,12 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
         # One useful approaching notification, never a stream of ETA spam.
         if eta_min <= 3 and trip.get("user_id"):
             notified = await db.trips.update_one(
-                {
+                _real_trip_filter({
                     "trip_id": trip_id,
                     "driver_id": driver_id,
                     "status": "driver_on_way",
                     "approaching_notified_at": {"$exists": False},
-                },
+                }),
                 {"$set": {"approaching_notified_at": now.isoformat()}},
             )
             if notified.modified_count == 1:
@@ -4465,7 +4465,7 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
     )
     if active_trip:
         await db.trips.update_one(
-            {"trip_id": active_trip["trip_id"], "driver_id": current["id"]},
+            _real_trip_filter({"trip_id": active_trip["trip_id"], "driver_id": current["id"]}),
             {"$set": {
                 "driver_lat": body.lat,
                 "driver_lng": body.lng,
@@ -7068,7 +7068,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         if not await db.receipt_ledger.find_one({"trip_id": trip_id}, {"_id": 1}):
             raise
     await db.trips.update_one(
-        {"trip_id": trip_id},
+        _real_trip_filter({"trip_id": trip_id}),
         {"$set": {"receipt_id": receipt_number}},
     )
     stored = await db.receipt_ledger.find_one({"trip_id": trip_id})
@@ -7087,22 +7087,22 @@ async def _mark_trip_paid_and_complete(trip_id: str, user_id: str, paid_at: Opti
     """
     paid_at = paid_at or datetime.now(timezone.utc).isoformat()
     await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": user_id},
+        _real_trip_filter({"trip_id": trip_id, "user_id": user_id}),
         {"$set": {"payment_status": "paid", "paid_at": paid_at, "updated_at": paid_at}},
     )
     await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": user_id, "status": "arrived"},
+        _real_trip_filter({"trip_id": trip_id, "user_id": user_id, "status": "arrived"}),
         {"$set": {"status": "completed", "completed_at": paid_at, "updated_at": paid_at}},
     )
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": user_id}))
     if trip and trip.get("driver_id"):
         bonus_gate = await db.trips.update_one(
-            {
+            _real_trip_filter({
                 "trip_id": trip_id,
                 "user_id": user_id,
                 "payment_status": "paid",
                 "bonus_evaluated_at": {"$exists": False},
-            },
+            }),
             {"$set": {"bonus_evaluated_at": paid_at}},
         )
         if bonus_gate.modified_count == 1:
@@ -7153,7 +7153,7 @@ async def send_trip_receipts(trip_id: str):
         )
         if sent:
             delivery_updates["customer_email_sent_at"] = now_iso
-            await db.trips.update_one({"trip_id": trip_id}, {"$set": {"receipt_emailed_at": now_iso}})
+            await db.trips.update_one(_real_trip_filter({"trip_id": trip_id}), {"$set": {"receipt_emailed_at": now_iso}})
 
     if driver and driver.get("email") and not receipt.get("driver_email_sent_at"):
         sent = await asyncio.to_thread(
@@ -7167,7 +7167,7 @@ async def send_trip_receipts(trip_id: str):
         )
         if sent:
             delivery_updates["driver_email_sent_at"] = now_iso
-            await db.trips.update_one({"trip_id": trip_id}, {"$set": {"driver_receipt_emailed_at": now_iso}})
+            await db.trips.update_one(_real_trip_filter({"trip_id": trip_id}), {"$set": {"driver_receipt_emailed_at": now_iso}})
 
     if delivery_updates:
         await db.receipt_ledger.update_one({"trip_id": trip_id}, {"$set": delivery_updates})
@@ -7283,7 +7283,7 @@ async def _attempt_trip_auto_charge(trip: dict) -> dict:
                 upsert=True,
             )
             await db.trips.update_one(
-                {"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}},
+                _real_trip_filter({"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}}),
                 {"$set": {"payment_status": "requires_action"}},
             )
             await send_push_to_user(
@@ -7357,7 +7357,7 @@ async def _attempt_trip_auto_charge(trip: dict) -> dict:
             upsert=True,
         )
         await db.trips.update_one(
-            {"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}},
+            _real_trip_filter({"trip_id": trip_id, "user_id": user_id, "payment_status": {"$ne": "paid"}}),
             {"$set": {"payment_status": "failed"}},
         )
         await send_push_to_user(
@@ -7471,7 +7471,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
     checkout_lock = secrets.token_urlsafe(12)
     lock_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
     locked = await db.trips.update_one(
-        {
+        _real_trip_filter({
             "trip_id": body.trip_id,
             "user_id": current["id"],
             "payment_status": {"$ne": "paid"},
@@ -7513,7 +7513,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         raise
     finally:
         await db.trips.update_one(
-            {"trip_id": body.trip_id, "user_id": current["id"], "payment_checkout_lock": checkout_lock},
+            _real_trip_filter({"trip_id": body.trip_id, "user_id": current["id"], "payment_checkout_lock": checkout_lock}),
             {"$unset": {"payment_checkout_lock": "", "payment_checkout_locked_at": ""}},
         )
     return {"checkout_url": session.url, "session_id": session.id}
@@ -7635,7 +7635,7 @@ async def stripe_webhook(request: Request):
         )
         if expired_update.modified_count and expired_record and expired_record.get("trip_id"):
             await db.trips.update_one(
-                {"trip_id": expired_record["trip_id"], "payment_status": {"$ne": "paid"}},
+                _real_trip_filter({"trip_id": expired_record["trip_id"], "payment_status": {"$ne": "paid"}}),
                 {"$set": {"payment_status": "expired"}},
             )
             if expired_record.get("user_id"):
@@ -7904,7 +7904,7 @@ async def unread_message_count(current=Depends(get_current_user)):
     q = {"driver_id" if role == "driver" else "user_id": user_id,
          "status": {"$in": ["driver_on_way", "at_pickup", "in_trip", "arrived"]}}
     n = 0
-    async for t in db.trips.find(q):
+    async for t in db.trips.find(_real_trip_filter(q)):
         seen_key = f"{my_role_in_chat}_last_seen_msg_at"
         last_seen = t.get(seen_key) or "1970-01-01"
         c = await db.trip_messages.count_documents({
@@ -7919,13 +7919,16 @@ async def unread_message_count(current=Depends(get_current_user)):
 
 @api.post("/messages/mark-seen/{trip_id}")
 async def mark_messages_seen(trip_id: str, current=Depends(get_current_user)):
+    await _load_trip_or_403(trip_id, current)
     role = current.get("role", "user")
     my_role_in_chat = "driver" if role == "driver" else "passenger"
     seen_key = f"{my_role_in_chat}_last_seen_msg_at"
-    await db.trips.update_one(
-        {"trip_id": trip_id},
+    result = await db.trips.update_one(
+        _real_trip_filter({"trip_id": trip_id}),
         {"$set": {seen_key: datetime.now(timezone.utc).isoformat()}},
     )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=409, detail="Kunne ikke oppdatere meldingsstatus")
     return {"ok": True}
 
 
@@ -9127,7 +9130,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         if trip.get("status") == "in_trip":
             updates["requires_manual_settlement"] = True
         result = await db.trips.update_one(
-            {"trip_id": trip_id, "status": trip.get("status")},
+            _real_trip_filter({"trip_id": trip_id, "status": trip.get("status")}),
             {"$set": updates, "$push": {"operator_interventions": {
                 "action": body.action, "reason": reason, "at": now_iso, "by": current.get("email") or current["id"],
             }}},
@@ -9165,7 +9168,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
             "offer_expires_at": "", "dispatch_mode": "",
         }
         result = await db.trips.update_one(
-            {"trip_id": trip_id, "driver_id": old_driver_id, "status": trip.get("status")},
+            _real_trip_filter({"trip_id": trip_id, "driver_id": old_driver_id, "status": trip.get("status")}),
             {
                 "$set": {"status": "searching", "updated_at": now_iso, "operator_reassigned_at": now_iso},
                 "$unset": unset,
@@ -9210,7 +9213,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
             "at": now_iso, "by": current.get("email") or current["id"],
         }
         await db.trips.update_one(
-            {"trip_id": trip_id, "payment_status": {"$ne": "paid"}},
+            _real_trip_filter({"trip_id": trip_id, "payment_status": {"$ne": "paid"}}),
             {"$set": {
                 "price": new_price,
                 "manual_price_adjustment": adjustment,
