@@ -7,12 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "kjapp",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070B0E"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "no.nexorahub.kjapp.customer",
@@ -65,7 +59,16 @@
         }
       ],
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#070B0E"
+        }
+      ]
     ],
     "extra": {
       "appRole": "customer",

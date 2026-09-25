@@ -7,12 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "kjapp-driver",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070B0E"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "no.nexorahub.kjapp.driver",
@@ -73,6 +67,14 @@
         {
           "cameraPermission": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll.",
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#070B0E"
         }
       ]
     ],

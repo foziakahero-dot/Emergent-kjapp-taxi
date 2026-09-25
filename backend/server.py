@@ -798,6 +798,9 @@ NO_SHOW_WAIT_MINUTES = float(os.environ.get("KJAPP_NO_SHOW_WAIT_MINUTES", "5"))
 DRIVER_ETA_REFRESH_SECONDS = float(os.environ.get("KJAPP_DRIVER_ETA_REFRESH_SECONDS", "20"))
 
 
+api = APIRouter(prefix="/api")
+
+
 def _pickup_inside_launch_area(lat: float, lng: float) -> bool:
     if not OSLO_BETA_ENFORCE:
         return True
@@ -1405,9 +1408,6 @@ async def request_id_middleware(request: Request, call_next):
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": "Intern serverfeil", "request_id": rid})
 
-api = APIRouter(prefix="/api")
-
-
 # ------------------ Routes ------------------
 @api.get("/")
 async def root():
@@ -1843,10 +1843,10 @@ async def _enforce_rate_limit(request: Request, scope: str, limit: int, window_s
 def _redact_client_error_text(value: str) -> str:
     """Remove common secrets/PII from beta diagnostic text before persistence."""
     text = str(value or "")
-    text = re.sub(r"(?i)(authorization\\s*[:=]\\s*bearer\\s+)[A-Za-z0-9._~+/=-]+", r"\\1[REDACTED]", text)
-    text = re.sub(r"(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]{20,}", r"\\1[REDACTED]", text)
-    text = re.sub(r"(?i)(token|access_token|refresh_token|api[_-]?key|secret)(\\s*[:=]\\s*)[^\\s&,;]+", r"\\1\\2[REDACTED]", text)
-    text = re.sub(r"(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b", "[REDACTED_EMAIL]", text)
+    text = re.sub(r"(?i)(authorization\s*[:=]\s*bearer\s+)[A-Za-z0-9._~+/=-]+", r"\1[REDACTED]", text)
+    text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{20,}", r"\1[REDACTED]", text)
+    text = re.sub(r"(?i)(token|access_token|refresh_token|api[_-]?key|secret)(\s*[:=]\s*)[^\s&,;]+", r"\1\2[REDACTED]", text)
+    text = re.sub(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[REDACTED_EMAIL]", text)
     return text
 
 
