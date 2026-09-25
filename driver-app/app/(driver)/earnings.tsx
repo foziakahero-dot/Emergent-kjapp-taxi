@@ -120,19 +120,23 @@ export default function DriverEarnings() {
         </View>
       </View>
 
-      <Text style={s.section}>Utbetaling</Text>
+      <Text style={s.section}>Oppgjør via flåte</Text>
       <View style={s.card}>
         <View style={s.payTop}>
           <View>
-            <Text style={s.payLabel}>Til utbetaling</Text>
-            <Text style={s.payValue}>{kr(payouts?.pending_net ?? 0)}</Text>
+            <Text style={s.payLabel}>Din netto · siste 7 dager</Text>
+            <Text style={s.payValue}>{kr(payouts?.earned_net_7d ?? 0)}</Text>
           </View>
           <View style={s.payBadge}>
             <Icon name="clock" size={14} color={colors.online} />
-            <Text style={s.payBadgeText}>{payouts?.pending_trips ?? 0} turer</Text>
+            <Text style={s.payBadgeText}>{payouts?.paid_trips_7d ?? 0} betalte turer</Text>
           </View>
         </View>
-        <Text style={s.payHint}>Brutto {kr(payouts?.pending_gross ?? 0)} · utbetales ukentlig{(payouts?.next_payout_date || payouts?.next_payout) ? ` · neste ${new Date(payouts.next_payout_date || payouts.next_payout).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}` : ''}</Text>
+        <Text style={s.payHint}>
+          {payouts?.stripe_connect_ready
+            ? `Brutto ${kr(payouts?.earned_gross_7d ?? 0)} · går til løyvehaverens Stripe Connect-konto${payouts?.payout_schedule === 'weekly_friday' ? ' · Stripe utbetaler ukentlig fredag' : ''}${payouts?.next_payout_date ? ` · neste ${new Date(payouts.next_payout_date).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })}` : ''}`
+            : `Brutto ${kr(payouts?.earned_gross_7d ?? 0)} · oppgjør håndteres av løyvehaveren. Stripe Connect er ikke bekreftet aktivt ennå.`}
+        </Text>
       </View>
 
       <View style={s.recentHead}>
