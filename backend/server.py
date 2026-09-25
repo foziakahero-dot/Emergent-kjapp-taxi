@@ -2864,7 +2864,7 @@ async def public_trip_share(token: str):
     share = await db.trip_share_tokens.find_one({"token_hash": token_hash})
     if not share or share.get("expires_at") is None or share["expires_at"] <= datetime.now(timezone.utc):
         raise HTTPException(404, "Delingslenken er utløpt eller ugyldig")
-    trip = await db.trips.find_one({"trip_id": share["trip_id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": share["trip_id"]}))
     if not trip:
         raise HTTPException(404, "Turen finnes ikke")
     driver = trip.get("driver") or {}
@@ -5426,14 +5426,14 @@ async def fleet_driver_detail(driver_id: str, current=Depends(require_fleet_owne
         raise HTTPException(404, "Fant ikke sjåfør i din flåte")
 
     public = user_public(u)
-    completed = await db.trips.count_documents({
+    completed = await db.trips.count_documents(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": ["arrived", "completed", "rated"]},
-    })
-    active = await db.trips.find_one({
+    }))
+    active = await db.trips.find_one(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]},
-    }, sort=[("created_at", -1)])
+    }), sort=[("created_at", -1)])
     docs = []
     async for d in db.uploaded_files.find({
         "scope": "driver-docs",
@@ -5520,11 +5520,11 @@ async def fleet_export_monthly(
     # Trips in month
     trips = []
     if driver_ids:
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": {"$in": driver_ids},
             "status": {"$in": ["arrived", "completed", "rated"]},
             "created_at": {"$gte": start_iso, "$lt": end_iso},
-        }):
+        })):
             trips.append(t)
             did = t.get("driver_id")
             if did in drivers_map:
@@ -5915,12 +5915,7 @@ async def admin_beta_health(days: int = Query(7, ge=1, le=90), current=Depends(r
     now = datetime.now(timezone.utc)
     cutoff_dt = now - timedelta(days=days)
     cutoff = cutoff_dt.isoformat()
-    trip_filter = {
-        "created_at": {"$gte": cutoff},
-        "demo": {"$ne": True},
-        "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
-        "dropoff_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
-    }
+    trip_filter = _real_trip_filter({"created_at": {"$gte": cutoff}})
     total = await db.trips.count_documents(trip_filter)
     completed_filter = dict(trip_filter)
     completed_filter["status"] = {"$in": ["completed", "rated"]}
@@ -8582,7 +8577,7 @@ async def admin_receipt_detail(receipt_or_trip: str, current=Depends(require_adm
         "$or": [{"receipt_number": receipt_or_trip}, {"trip_id": receipt_or_trip}],
     })
     if not receipt:
-        trip = await db.trips.find_one({"trip_id": receipt_or_trip, "payment_status": "paid"})
+        trip = await db.trips.find_one(_real_trip_filter({"trip_id": receipt_or_trip, "payment_status": "paid"}))
         if trip:
             receipt = await ensure_receipt_snapshot(receipt_or_trip, backfilled=True)
     if not receipt:
@@ -8599,7 +8594,7 @@ async def admin_receipts_backfill(
 ):
     created = 0
     scanned = 0
-    async for trip in db.trips.find({"payment_status": "paid"}).sort("paid_at", -1).limit(limit):
+    async for trip in db.trips.find(_real_trip_filter({"payment_status": "paid"})).sort("paid_at", -1).limit(limit):
         scanned += 1
         trip_id = trip.get("trip_id")
         if not trip_id or await db.receipt_ledger.find_one({"trip_id": trip_id}, {"_id": 1}):
