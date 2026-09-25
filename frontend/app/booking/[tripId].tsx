@@ -22,7 +22,7 @@ const META: Record<string, { title: string; sub: string }> = {
 };
 
 export default function BookingFlow() {
-  const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const { tripId, chat } = useLocalSearchParams<{ tripId: string; chat?: string }>();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
@@ -33,6 +33,10 @@ export default function BookingFlow() {
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const nav = useRef(false);
+
+  useEffect(() => {
+    if (chat === '1') setChatOpen(true);
+  }, [chat]);
 
   useEffect(() => {
     let mounted = true;
