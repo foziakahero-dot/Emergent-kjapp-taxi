@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -7,6 +7,7 @@ import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
+import { shareJsonExport } from '@/src/lib/gdprExport';
 
 const TOGGLES: { key: string; label: string; sub: string }[] = [
   { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til KJAPP-turen din' },
@@ -34,11 +35,8 @@ export default function Settings() {
       const d = await gdprApi.export();
       const trips = (d.trips || []).length;
       const payments = (d.payments || []).length;
-      await Share.share({
-        title: 'KJAPP dataeksport',
-        message: JSON.stringify(d, null, 2),
-      });
-      setExportInfo(`Dataeksport klar: ${trips} turer og ${payments} betalinger.`);
+      const exported = await shareJsonExport(d, 'kjapp-customer-gdpr');
+      setExportInfo(`Dataeksport klar: ${trips} turer og ${payments} betalinger · ${exported.filename}`);
     } catch {
       setExportInfo('Kunne ikke eksportere data akkurat nå. Prøv igjen senere.');
     } finally {
