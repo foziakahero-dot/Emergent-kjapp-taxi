@@ -2,6 +2,16 @@ name: KJAPP Beta Gate
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - beta/oslo-production-ready
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'driver-app/**'
+      - 'admin-web/**'
+      - 'marketing-web/**'
+      - '.github/workflows/beta-gate.yml'
   pull_request:
     branches:
       - main
@@ -38,8 +48,13 @@ jobs:
         run: python -m compileall -q backend
       - name: Run static beta release policy
         run: python scripts/beta_static_policy.py
-      - name: Run beta security regressions
-        run: python -m pytest -q backend/tests/test_security_regressions_unit.py backend/tests/test_receipt_identity_recheck_contract.py
+      - name: Run beta security + ride-integrity regressions
+        run: >-
+          python -m pytest -q
+          backend/tests/test_security_regressions_unit.py
+          backend/tests/test_receipt_identity_recheck_contract.py
+          backend/tests/test_real_trip_integrity_contract.py
+          backend/tests/test_beta_trip_integrity_contract.py
 
   admin-web:
     name: Admin web build
