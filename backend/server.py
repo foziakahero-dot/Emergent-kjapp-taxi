@@ -3471,21 +3471,28 @@ class GoogleSessionRequest(BaseModel):
     session_id: str
 
 
-@api.post("/auth/google/session")
-async def google_session(body: GoogleSessionRequest, response: Response):
-    """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+async def _google_session_data(session_id: str) -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": body.session_id},
+            headers={"X-Session-ID": session_id},
         )
         if r.status_code != 200:
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
         data = r.json()
     email = (data.get("email") or "").strip().lower()
-    name = data.get("name") or email
     if not email:
         raise HTTPException(status_code=400, detail="Ingen e-post fra Google")
+    data["email"] = email
+    return data
+
+
+@api.post("/auth/google/session")
+async def google_session(body: GoogleSessionRequest, response: Response):
+    """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+    data = await _google_session_data(body.session_id)
+    email = data["email"]
+    name = data.get("name") or email
     user = await db.users.find_one({"email": email})
     if not user:
         result = await db.users.insert_one({
@@ -3514,6 +3521,43 @@ async def google_session(body: GoogleSessionRequest, response: Response):
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
+
+
+@api.post("/auth/google/driver-session")
+async def google_driver_session(body: GoogleSessionRequest, response: Response):
+    """Google sign-in for the Driver app. Never creates a new customer account."""
+    data = await _google_session_data(body.session_id)
+    email = data["email"]
+    user = await db.users.find_one({"email": email})
+    if not user or user.get("disabled") or user.get("role") != "driver" or user.get("approved") is False:
+        raise HTTPException(status_code=403, detail="Google-kontoen er ikke koblet til en godkjent KJAPP-sjåfør")
+    if user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(str(user["_id"]))}
+    if not user.get("google_linked"):
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"google_linked": True, "picture": data.get("picture"), "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        user["google_linked"] = True
+        user["picture"] = data.get("picture")
+    uid = str(user["_id"])
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": user_public(user)}
+
+
+@api.post("/auth/google/link")
+async def google_link_account(body: GoogleSessionRequest, current=Depends(get_current_user)):
+    """Link Google to the currently signed-in account without replacing the session."""
+    data = await _google_session_data(body.session_id)
+    email = data["email"]
+    if email != (current.get("email") or "").strip().lower():
+        raise HTTPException(status_code=409, detail="Google-kontoen må bruke samme e-post som KJAPP-kontoen")
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"])},
+        {"$set": {"google_linked": True, "picture": data.get("picture"), "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"linked": True, "email": email}
 
 
 # ============================================================
