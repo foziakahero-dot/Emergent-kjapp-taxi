@@ -14,6 +14,7 @@ jobs:
     type: testflight
     params:
       build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: testflight-beta
       changelog: |
         KJAPP Driver Oslo beta: sequential dispatch, background GPS, native push,
         hentested/destinasjon-validering, navigasjon, recovery og inntektsflyt.

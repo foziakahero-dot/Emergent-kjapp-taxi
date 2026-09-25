@@ -70,7 +70,7 @@ def main() -> int:
     ok &= check("Apple auth endpoint", status == 200, apple)
     ok &= check(
         "native Apple auth configured",
-        apple.get("enabled") is True and apple.get("bundle_id") == "no.kjapp.app",
+        apple.get("enabled") is True and apple.get("bundle_id") == "no.nexorahub.kjapp.customer",
         apple,
         required=STRICT,
     )
