@@ -35,6 +35,8 @@ def test_receipt_snapshot_preserves_accounting_fields():
         '"stripe_payment_intent_id"',
         '"paid_at": paid_at',
         '"backfilled": bool(backfilled)',
+        'db.receipt_ledger.create_index("trip_id", unique=True)',
+        'db.receipt_ledger.create_index("receipt_number", unique=True)',
     ):
         assert marker in source
 
@@ -62,6 +64,7 @@ def test_identity_verification_schedules_next_check_and_never_auto_onlines_drive
     assert "next_check_at = _schedule_identity_recheck_at()" in source
     assert '"identity_verified_at": now' in source
     assert 'user_set["online"] = False' in source
+    assert 'recheck_gate = identity_status in ("recheck_required", "retry_required")' in source
     assert '"online": False if body.status != "verified" else True' not in source
 
 
