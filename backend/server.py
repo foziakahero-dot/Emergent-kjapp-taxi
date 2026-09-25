@@ -2604,7 +2604,7 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(require
     """Passenger rates the driver + trip (1-5 stars + optional feedback)."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
@@ -2742,7 +2742,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
 
 @api.get("/trips/{trip_id}/cancel-preview")
 async def cancel_trip_preview(trip_id: str, current=Depends(require_customer)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
@@ -2764,7 +2764,7 @@ async def cancel_trip_preview(trip_id: str, current=Depends(require_customer)):
 
 @api.post("/trips/{trip_id}/cancel")
 async def cancel_trip(trip_id: str, current=Depends(require_customer)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
@@ -4459,7 +4459,7 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
     )
     # If driver has an active trip, update canonical trip coordinates for the passenger map.
     active_trip = await db.trips.find_one(
-        {"driver_id": current["id"], "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
+        _real_trip_filter({"driver_id": current["id"], "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
         {"trip_id": 1, "status": 1},
         sort=[("created_at", -1)],
     )
@@ -4493,7 +4493,7 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
         await _assigned_fleet_vehicle(current, required=True)
     if not body.online:
         active = await db.trips.find_one(
-            {"driver_id": current["id"], "status": {"$in": ACTIVE_TRIP_STATUSES}},
+            _real_trip_filter({"driver_id": current["id"], "status": {"$in": ACTIVE_TRIP_STATUSES}}),
             {"trip_id": 1},
         )
         if active:
@@ -6137,20 +6137,37 @@ async def admin_overview(current=Depends(require_admin)):
     async for driver in db.users.find({"role": "driver", "online": True}, {"last_location_at": 1, "last_lat": 1, "last_lng": 1}):
         if _fresh_driver_location(driver.get("last_location_at")) and driver.get("last_lat") is not None and driver.get("last_lng") is not None:
             drivers_online += 1
-    active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}})
-    stale_active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}, "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()}})
-    trips_today = await count(db.trips, {"created_at": {"$gte": today}})
-    trips_yday = await count(db.trips, {"created_at": {"$gte": yday, "$lt": today}})
-    completed_today = await count(db.trips, {"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}})
-    cancelled_today = await count(db.trips, {"status": "cancelled", "created_at": {"$gte": today}})
+    active_trips = await count(db.trips, _real_trip_filter({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}}))
+    stale_active_trips = await count(db.trips, _real_trip_filter({
+        "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]},
+        "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()},
+    }))
+    trips_today = await count(db.trips, _real_trip_filter({"created_at": {"$gte": today}}))
+    trips_yday = await count(db.trips, _real_trip_filter({"created_at": {"$gte": yday, "$lt": today}}))
+    completed_today = await count(db.trips, _real_trip_filter({
+        "status": {"$in": ["completed", "rated"]},
+        "payment_status": "paid",
+        "created_at": {"$gte": today},
+    }))
+    cancelled_today = await count(db.trips, _real_trip_filter({
+        "status": {"$in": ["cancelled", "cancelled_by_driver"]},
+        "created_at": {"$gte": today},
+    }))
 
     gmv_today = 0
     kjapp_revenue_today = 0
-    _rate = await _platform_commission()
-    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}), {"price": 1}):
-        price = t.get("price", 0) or 0
+    async for t in db.trips.find(
+        _real_trip_filter({
+            "status": {"$in": ["completed", "rated"]},
+            "payment_status": "paid",
+            "created_at": {"$gte": today},
+        }),
+        {"price": 1, "commission_rate": 1},
+    ):
+        price = int(t.get("price", 0) or 0)
+        rate = await _commission_for_trip(t)
         gmv_today += price
-        kjapp_revenue_today += round(price * _rate)
+        kjapp_revenue_today += int(round(price * rate))
 
     pending_payouts = await count(db.fleet_payouts, {"status": {"$in": ["pending", "processing", "on_hold"]}})
     open_support = await count(db.support_tickets, {"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
