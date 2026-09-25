@@ -1124,7 +1124,8 @@ async def lifespan(app: FastAPI):
             "car": "Tesla Model Y",
             "plate": "EL12345",
             "vehicle_type": "ai-first",
-            "rating": 4.9,
+            "rating": None,
+            "rating_count": 0,
             "approved": True,
             "online": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1138,7 +1139,7 @@ async def lifespan(app: FastAPI):
             )
             await db.users.update_one(
                 {"email": driver_email, "role": "driver", "$or": [{"car": {"$exists": False}}, {"car": None}]},
-                {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
+                {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": None, "rating_count": 0, "approved": True}},
             )
 
     # ---- Simulated "cruising" demo drivers are PERMANENTLY REMOVED ----
