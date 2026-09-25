@@ -232,8 +232,8 @@ export function Trips() {
           <option value="completed">Fullførte</option><option value="cancelled">Avbrutte</option>
         </select>
         <select className="select" value={pay} onChange={(e) => setPay(e.target.value)}>
-          <option value="">Alle betalinger</option><option value="captured">Betalt</option>
-          <option value="pending">Venter</option><option value="failed">Feilet</option>
+          <option value="">Alle betalinger</option><option value="paid">Betalt</option>
+          <option value="pending">Venter</option><option value="requires_action">Krever handling</option><option value="failed">Feilet</option>
         </select>
         <input className="input" type="date" value={df} onChange={(e) => setDf(e.target.value)} />
         <input className="input" type="date" value={dt} onChange={(e) => setDt(e.target.value)} />
@@ -241,19 +241,25 @@ export function Trips() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Tur</th><th>Rute</th><th>Kunde</th><th>Sjåfør</th><th>Status</th><th className="right">Pris</th><th>Tid</th></tr></thead>
+          <thead><tr><th>Tur</th><th>Rute</th><th>Kunde</th><th>Sjåfør</th><th>Status</th><th>Betaling</th><th className="right">Pris</th><th>Tid</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
+            {loading ? <tr><td colSpan={8}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
               <tr key={t.trip_id} className="click" onClick={() => setSel(t)}>
                 <td className="mono dim">{String(t.trip_id).slice(0, 6)}</td>
                 <td><div>{t.pickup_address}</div><div className="cell-sub">→ {t.dropoff_address}</div></td>
                 <td>{t.passenger_name || '—'}</td>
                 <td>{t.driver_name || <span className="dim">—</span>}</td>
                 <td><Pill status={t.status} /></td>
+                <td><Pill status={t.payment_status || 'pending'} label={
+                  t.payment_status === 'paid' ? 'Betalt'
+                  : t.payment_status === 'requires_action' ? 'Krever handling'
+                  : t.payment_status === 'failed' ? 'Feilet'
+                  : 'Venter'
+                } /></td>
                 <td className="right mono">{fmtMoney(t.price)}</td>
                 <td className="dim nowrap">{fmtDate(t.created_at)}</td>
               </tr>
-            )) : <tr><td colSpan={7}><Empty title="Ingen turer funnet" /></td></tr>}
+            )) : <tr><td colSpan={8}><Empty title="Ingen turer funnet" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
@@ -326,7 +332,11 @@ function TripDrawer({ trip, onClose, onChanged }: any) {
       <div style={{ marginBottom: 14 }}><Pill status={trip.status} /></div>
       <Card style={{ marginBottom: 16 }}><RouteView from={trip.pickup_address} to={trip.dropoff_address} /></Card>
       <KV k="Pris" v={<span className="mono">{fmtMoney(trip.price)}</span>} />
-      <KV k="Sjåførandel" v={<span className="mono">{fmtMoney(trip.driver_earnings)}</span>} />
+      <KV k="Sjåførandel" v={
+        trip.driver_earnings != null
+          ? <span className="mono">{fmtMoney(trip.driver_earnings)}</span>
+          : <span className="dim">{isPaid ? 'Ikke beregnet' : 'Venter på betaling'}</span>
+      } />
       <KV k="Distanse / tid" v={`${trip.distance_km ?? '—'} km · ${trip.duration_min ?? '—'} min`} />
       <KV k="Kunde" v={trip.passenger_name} />
       <KV k="Sjåfør" v={trip.driver_name ? `${trip.driver_name} · ${trip.driver_car || ''} ${trip.driver_plate || ''}` : '—'} />
@@ -335,7 +345,7 @@ function TripDrawer({ trip, onClose, onChanged }: any) {
         <Btn variant="sm" onClick={() => { window.location.hash = `/receipts?q=${encodeURIComponent(trip.receipt_id)}`; }}>
           {trip.receipt_id}
         </Btn>
-      ) : (isPaid ? 'Opprettes ved betalingsbekreftelse' : '—')} />
+      ) : (isPaid ? 'Kvittering mangler · undersøk' : 'Venter på betaling')} />
       <KV k="Kjøretøyklasse" v={trip.vehicle_type} />
       <KV k="Prisversjon" v={trip.pricing_version ?? '—'} />
       <KV k="Serviceavgift" v={trip.commission_rate != null ? `${Math.round(Number(trip.commission_rate) * 1000) / 10}%` : '—'} />
