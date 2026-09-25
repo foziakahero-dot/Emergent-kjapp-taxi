@@ -19,18 +19,26 @@ type Verification = {
   profile_photo_path?: string;
   drivers_license_path?: string;
   taxi_license_path?: string;
+  driver_identity_status?: string;
+  identity_verified_at?: string;
+  next_identity_check_at?: string;
+  identity_recheck_reason?: string;
+  identity_recheck_trigger?: string;
+  identity_recheck_deferred?: boolean;
 };
 
 const statusLabel = (status?: string) => ({
   pending_review: 'Til kontroll',
   verified: 'Verifisert',
   retry_required: 'Ny selfie kreves',
+  recheck_required: 'Ny kontroll kreves',
   superseded: 'Erstattet',
 }[status || ''] || status || 'Ukjent');
 
 const statusPill = (status?: string) => {
   if (status === 'verified') return <Pill status="VALID" label="Verifisert" />;
   if (status === 'retry_required') return <Pill status="REJECTED" label="Ny selfie" />;
+  if (status === 'recheck_required') return <Pill status="REJECTED" label="Ny kontroll" />;
   if (status === 'superseded') return <Pill status="gray" label="Erstattet" />;
   return <Pill status="pending" label="Til kontroll" />;
 };
@@ -134,6 +142,25 @@ export default function IdentityVerifications() {
     }
   };
 
+  const requestRecheck = async (v: Verification) => {
+    const reason = window.prompt('Hvorfor skal sjåføren ta ny Selfie ID?', 'Periodisk sikkerhetskontroll') || '';
+    if (reason.trim().length < 3) return;
+    if (!window.confirm(`Kreve ny Selfie ID fra ${v.driver_name || 'sjåføren'}?`)) return;
+    setBusy(`recheck-${v.driver_id}`); setErr('');
+    try {
+      const result = await api.requestIdentityRecheck(v.driver_id, reason.trim());
+      setSelected(null);
+      await load();
+      if (result?.deferred) {
+        window.alert('Kontrollen er registrert og aktiveres etter sjåførens pågående tur.');
+      }
+    } catch (e) {
+      setErr(apiError(e));
+    } finally {
+      setBusy('');
+    }
+  };
+
   return (
     <>
       <PageHead
@@ -190,7 +217,11 @@ export default function IdentityVerifications() {
               <tr key={v.id} className="click" onClick={() => setSelected(v)}>
                 <td><div className="strong">{v.driver_name || 'Sjåfør'}</div><div className="cell-sub">{v.driver_email || '—'}</div></td>
                 <td>{v.car || '—'} <span className="mono dim">{v.plate || ''}</span></td>
-                <td>{statusPill(v.status)}</td>
+                <td>
+                  {statusPill(v.driver_identity_status || v.status)}
+                  {v.next_identity_check_at ? <div className="cell-sub">Neste: {fmtDate(v.next_identity_check_at)}</div> : null}
+                  {v.identity_recheck_deferred ? <div className="cell-sub">Aktiveres etter aktiv tur</div> : null}
+                </td>
                 <td className="dim nowrap">{fmtDate(v.submitted_at)}</td>
                 <td>
                   <div className="inline-actions">
@@ -223,7 +254,7 @@ export default function IdentityVerifications() {
               <button className="x" onClick={() => setSelected(null)}>✕</button>
             </div>
             <div className="drawer-body">
-              <div style={{ marginBottom: 16 }}>{statusPill(selected.status)}</div>
+              <div style={{ marginBottom: 16 }}>{statusPill(selected.driver_identity_status || selected.status)}</div>
               <div className="card" style={{ marginBottom: 16 }}>
                 <div className="section-title" style={{ marginTop: 0 }}>Vis dokumenter</div>
                 <div className="fleet-actions">
@@ -237,7 +268,20 @@ export default function IdentityVerifications() {
               <div className="kv"><div className="k">Bil</div><div className="v">{selected.car || '—'} {selected.plate || ''}</div></div>
               <div className="kv"><div className="k">Sendt inn</div><div className="v">{fmtDate(selected.submitted_at)}</div></div>
               <div className="kv"><div className="k">Sist vurdert</div><div className="v">{fmtDate(selected.reviewed_at)}</div></div>
+              <div className="kv"><div className="k">Neste planlagte kontroll</div><div className="v">{fmtDate(selected.next_identity_check_at)}</div></div>
+              <div className="kv"><div className="k">Re-check trigger</div><div className="v">{selected.identity_recheck_trigger || '—'}</div></div>
+              {selected.identity_recheck_reason ? <div className="info-banner" style={{ marginTop: 14 }}>Ny kontroll: {selected.identity_recheck_reason}{selected.identity_recheck_deferred ? ' · aktiveres etter aktiv tur' : ''}</div> : null}
               {selected.review_reason ? <div className="error-banner" style={{ marginTop: 14 }}>{selected.review_reason}</div> : null}
+
+              {(selected.driver_identity_status || selected.status) === 'verified' ? (
+                <>
+                  <div className="section-title">Risikobasert kontroll</div>
+                  <div className="info-banner">
+                    KJAPP planlegger automatisk ny Selfie ID etter 30–90 dager. Ny appinstallasjon, lengre inaktivitet eller manuell vurdering kan kreve kontroll tidligere.
+                  </div>
+                  <Btn disabled={busy === `recheck-${selected.driver_id}`} onClick={() => void requestRecheck(selected)}>Krev ny Selfie ID</Btn>
+                </>
+              ) : null}
 
               {selected.status === 'pending_review' ? (
                 <>

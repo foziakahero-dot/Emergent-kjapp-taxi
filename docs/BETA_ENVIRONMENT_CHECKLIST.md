@@ -241,3 +241,19 @@ After signed mobile builds are installed:
 9. Mark PR #44 ready for review.
 10. Merge to `main`.
 11. Keep the separately planned backend-ownership migration for the post-beta phase.
+
+
+## Receipt Ledger / Driver identity re-check defaults
+
+Receipt Ledger requires no new secret. Paid trips create one immutable accounting snapshot keyed by unique `trip_id` and `receipt_number`.
+
+Recommended controlled-beta Driver identity values:
+
+```
+KJAPP_IDENTITY_RECHECK_MIN_DAYS=30
+KJAPP_IDENTITY_RECHECK_MAX_DAYS=90
+KJAPP_IDENTITY_INACTIVITY_DAYS=30
+KJAPP_IDENTITY_SELFIE_RETENTION_DAYS=30
+```
+
+`KJAPP_DRIVER_IDENTITY_REQUIRED` remains the rollout gate for first-time onboarding. Once KJAPP explicitly requests a re-check for a previously verified Driver, that re-check is a hard next-shift gate even during staged rollout. Active trips must never be interrupted by a new identity requirement.

@@ -6,6 +6,7 @@ import { Loader } from './ui';
 import Login from './Login';
 import FleetApplications from './FleetApplications';
 import IdentityVerifications from './IdentityVerifications';
+import Receipts from './Receipts';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
@@ -30,6 +31,7 @@ const NAV = [
   ]},
   { group: 'Økonomi', items: [
     { to: '/finance', label: 'Økonomi', ic: '≣', perm: 'finance' },
+    { to: '/receipts', label: 'Kvitteringer', ic: '▧', perm: 'finance' },
     { to: '/payments', label: 'Betaling & oppgjør', ic: '₭', perm: 'finance' },
     { to: '/pricing', label: 'Prissetting', ic: '◈', perm: 'system' },
   ]},
@@ -169,6 +171,7 @@ function Shell() {
             <Route path="/vehicles" element={gate('operations', <Vehicles />)} />
             <Route path="/documents" element={gate('operations', <Documents />)} />
             <Route path="/finance" element={gate('finance', <Finance />)} />
+            <Route path="/receipts" element={gate('finance', <Receipts />)} />
             <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
             <Route path="/pricing" element={gate('system', <Settings />)} />
             <Route path="/communications" element={gate('communications', <Communications />)} />

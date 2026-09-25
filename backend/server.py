@@ -83,6 +83,22 @@ try:
 except (TypeError, ValueError):
     KJAPP_IDENTITY_SELFIE_RETENTION_DAYS = 30
 
+try:
+    KJAPP_IDENTITY_RECHECK_MIN_DAYS = max(7, min(365, int(os.environ.get("KJAPP_IDENTITY_RECHECK_MIN_DAYS", "30"))))
+except (TypeError, ValueError):
+    KJAPP_IDENTITY_RECHECK_MIN_DAYS = 30
+try:
+    KJAPP_IDENTITY_RECHECK_MAX_DAYS = max(
+        KJAPP_IDENTITY_RECHECK_MIN_DAYS,
+        min(365, int(os.environ.get("KJAPP_IDENTITY_RECHECK_MAX_DAYS", "90"))),
+    )
+except (TypeError, ValueError):
+    KJAPP_IDENTITY_RECHECK_MAX_DAYS = max(KJAPP_IDENTITY_RECHECK_MIN_DAYS, 90)
+try:
+    KJAPP_IDENTITY_INACTIVITY_DAYS = max(7, min(365, int(os.environ.get("KJAPP_IDENTITY_INACTIVITY_DAYS", "30"))))
+except (TypeError, ValueError):
+    KJAPP_IDENTITY_INACTIVITY_DAYS = 30
+
 # Known legacy seed/demo accounts that must be disabled (cannot authenticate) in production.
 LEGACY_DEMO_EMAILS = {
     "ola@kjapp.no", "sjafor@kjapp.no", "floteier1@kjapp.no",
@@ -388,7 +404,9 @@ USER_RESPONSE_FIELDS = frozenset({
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "fleet_active", "today_income", "today_trips", "status", "capabilities",
-    "identity_verification_status", "identity_verification_updated_at",
+    "identity_verification_status", "identity_verification_updated_at", "identity_verified_at",
+    "next_identity_check_at", "identity_recheck_reason", "identity_recheck_trigger",
+    "identity_recheck_pending_reason", "identity_recheck_pending_trigger",
     "legal_version",
 })
 
@@ -410,6 +428,10 @@ def user_public(user: dict) -> dict:
     result["legal_accepted"] = legal_accepted
     result["legal_version"] = accepted_version
     result["current_legal_version"] = CURRENT_LEGAL_VERSION
+    result["identity_recheck_required"] = (
+        result.get("role") == "driver"
+        and result.get("identity_verification_status") in ("recheck_required", "retry_required")
+    )
     return result
 
 
@@ -448,6 +470,113 @@ async def _require_active_fleet(fleet_id):
         raise HTTPException(status_code=403, detail="Flåten er suspendert eller utilgjengelig")
 
 
+def _parse_iso_utc(value) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _schedule_identity_recheck_at(now: Optional[datetime] = None) -> str:
+    now = now or datetime.now(timezone.utc)
+    span = max(0, KJAPP_IDENTITY_RECHECK_MAX_DAYS - KJAPP_IDENTITY_RECHECK_MIN_DAYS)
+    days = KJAPP_IDENTITY_RECHECK_MIN_DAYS + (secrets.randbelow(span + 1) if span else 0)
+    return (now + timedelta(days=days)).isoformat()
+
+
+async def _apply_driver_identity_risk(
+    user: dict,
+    device_id: Optional[str] = None,
+    client: Optional[str] = None,
+    on_login: bool = False,
+) -> dict:
+    """Apply privacy-preserving Driver re-verification signals.
+
+    Scheduled expiry, long inactivity, a changed app-installation ID, or an Admin request
+    can require a new selfie. An active trip is never interrupted: the re-check is deferred
+    until the driver has no active trip.
+    """
+    if not user or user.get("role") != "driver" or user.get("_id") is None:
+        return user
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    status = user.get("identity_verification_status") or "not_submitted"
+    active_trip = bool(user.get("active_trip_id"))
+    risk_reason = None
+    risk_trigger = None
+
+    pending_reason = user.get("identity_recheck_pending_reason")
+    pending_trigger = user.get("identity_recheck_pending_trigger")
+    if status == "verified" and pending_reason and not active_trip:
+        risk_reason = pending_reason
+        risk_trigger = pending_trigger or "deferred"
+
+    if status == "verified" and not risk_reason:
+        due = _parse_iso_utc(user.get("next_identity_check_at"))
+        if due and due <= now:
+            risk_reason = "Planlagt periodisk identitetskontroll"
+            risk_trigger = "scheduled"
+
+    if status == "verified" and on_login and str(client or "").strip().lower() == "driver":
+        last_login = _parse_iso_utc(user.get("last_driver_login_at"))
+        if last_login and (now - last_login) >= timedelta(days=KJAPP_IDENTITY_INACTIVITY_DAYS):
+            risk_reason = "Ny kontroll etter lengre inaktivitet"
+            risk_trigger = "long_inactivity"
+
+        clean_device_id = str(device_id or "").strip()[:128]
+        previous_device_id = str(user.get("last_driver_device_id") or "").strip()
+        if clean_device_id and previous_device_id and clean_device_id != previous_device_id:
+            risk_reason = "Ny appinstallasjon eller enhet registrert"
+            risk_trigger = "new_device"
+
+    updates = {}
+    unsets = {}
+    if risk_reason and status == "verified":
+        if active_trip:
+            updates.update({
+                "identity_recheck_pending_reason": risk_reason,
+                "identity_recheck_pending_trigger": risk_trigger,
+                "identity_recheck_pending_at": now_iso,
+            })
+            user.update(updates)
+        else:
+            updates.update({
+                "identity_verification_status": "recheck_required",
+                "identity_verification_updated_at": now_iso,
+                "identity_recheck_reason": risk_reason,
+                "identity_recheck_trigger": risk_trigger,
+                "online": False,
+            })
+            unsets.update({
+                "identity_recheck_pending_reason": "",
+                "identity_recheck_pending_trigger": "",
+                "identity_recheck_pending_at": "",
+            })
+            user.update(updates)
+            for key in unsets:
+                user.pop(key, None)
+
+    if on_login and str(client or "").strip().lower() == "driver":
+        clean_device_id = str(device_id or "").strip()[:128]
+        updates["last_driver_login_at"] = now_iso
+        if clean_device_id:
+            updates["last_driver_device_id"] = clean_device_id
+        user.update(updates)
+
+    if updates or unsets:
+        change = {}
+        if updates:
+            change["$set"] = updates
+        if unsets:
+            change["$unset"] = unsets
+        await db.users.update_one({"_id": user["_id"]}, change)
+    return user
+
+
 async def get_current_user(request: Request) -> dict:
     token = _auth_token_from_request(request)
     if not token:
@@ -465,6 +594,7 @@ async def get_current_user(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
         if await _session_is_revoked(payload):
             raise HTTPException(status_code=401, detail="Logg inn på nytt")
+        user = await _apply_driver_identity_risk(user)
         return user_public(user)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token utløpt")
@@ -497,6 +627,8 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    client: Optional[str] = Field(default=None, max_length=24)
+    device_id: Optional[str] = Field(default=None, max_length=128)
 
 
 class AcceptLegalRequest(BaseModel):
@@ -1075,6 +1207,9 @@ async def lifespan(app: FastAPI):
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.receipt_ledger.create_index("trip_id", unique=True)
+    await db.receipt_ledger.create_index("receipt_number", unique=True)
+    await db.receipt_ledger.create_index([("paid_at", -1)])
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.rate_limit_buckets.create_index("expires_at", expireAfterSeconds=0)
@@ -1303,6 +1438,8 @@ async def readiness():
             os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no").rstrip("/") == "https://kjappapp.no"
         ),
         "expo_push_sender": True,
+        "identity_recheck_policy_days": [KJAPP_IDENTITY_RECHECK_MIN_DAYS, KJAPP_IDENTITY_RECHECK_MAX_DAYS],
+        "identity_inactivity_days": KJAPP_IDENTITY_INACTIVITY_DAYS,
         "apple_native_auth_configured": True,
         "apple_bundle_env_matches": (
             (os.environ.get("APPLE_BUNDLE_ID") or "").strip() in ("", APPLE_NATIVE_BUNDLE_ID)
@@ -1782,6 +1919,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         await _record_failed_login(email, ip)
         raise HTTPException(status_code=401, detail="Feil e-post eller passord")
     await _clear_failed_logins(email, ip)
+    user = await _apply_driver_identity_risk(user, body.device_id, body.client, on_login=True)
     uid = str(user["_id"])
     if user.get("totp_enabled"):
         # Password verified, but 2FA is enabled — issue a short-lived challenge, not a session yet.
@@ -2212,6 +2350,9 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
+    if trip.get("payment_status") == "paid" and not trip.get("receipt_id"):
+        await ensure_receipt_snapshot(trip_id)
+        trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]}) or trip
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -2386,7 +2527,13 @@ async def require_driver(current=Depends(get_current_user)):
             raise HTTPException(status_code=403, detail="Tildelt kjøretøy er parkert av løyvehaver")
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
-    if KJAPP_DRIVER_IDENTITY_REQUIRED and current.get("identity_verification_status") != "verified":
+    identity_status = current.get("identity_verification_status") or "not_submitted"
+    # Once KJAPP has explicitly requested a re-check, it is a hard next-shift gate even while
+    # first-time onboarding enforcement is still being rolled out behind the feature flag.
+    recheck_gate = identity_status in ("recheck_required", "retry_required") or (
+        identity_status == "pending_review" and bool(current.get("identity_verified_at"))
+    )
+    if recheck_gate or (KJAPP_DRIVER_IDENTITY_REQUIRED and identity_status != "verified"):
         raise HTTPException(
             status_code=403,
             detail="Fullfør KJAPP identitetskontroll før du går online eller håndterer turer",
@@ -6406,11 +6553,129 @@ async def apple_config():
     }
 
 
-async def send_trip_receipts(trip_id: str):
-    """Send customer + driver receipts once after verified payment capture."""
+async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Optional[dict]:
+    """Create the immutable accounting snapshot for a paid trip exactly once."""
     trip = await db.trips.find_one({"trip_id": trip_id})
-    if not trip or trip.get("receipt_emailed_at") or trip.get("payment_status") != "paid":
-        return
+    if not trip or trip.get("payment_status") != "paid":
+        return None
+
+    existing = await db.receipt_ledger.find_one({"trip_id": trip_id})
+    if existing:
+        existing["id"] = str(existing["_id"])
+        existing.pop("_id", None)
+        return existing
+
+    passenger = None
+    driver = None
+    fleet = None
+    try:
+        if trip.get("user_id"):
+            passenger = await db.users.find_one({"_id": ObjectId(trip["user_id"])})
+    except Exception:
+        passenger = None
+    try:
+        if trip.get("driver_id"):
+            driver = await db.users.find_one({"_id": ObjectId(trip["driver_id"])})
+    except Exception:
+        driver = None
+
+    payment = await db.payment_transactions.find_one(
+        {"trip_id": trip_id, "payment_status": "paid"},
+        sort=[("updated_at", -1)],
+    )
+    fleet_id = (payment or {}).get("fleet_id") or (driver or {}).get("fleet_id")
+    if fleet_id:
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(fleet_id)})
+        except Exception:
+            fleet = None
+
+    price = int(trip.get("price") or 0)
+    commission = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
+    platform_fee = int(round(price * commission))
+    paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
+    paid_day = str(paid_at)[:10].replace("-", "")
+    clean_trip = re.sub(r"[^A-Za-z0-9]", "", str(trip_id)).upper()
+    receipt_number = f"KJAPP-{paid_day}-{(clean_trip[:12] or uuid.uuid4().hex[:12].upper())}"
+    payment_kind = (payment or {}).get("kind")
+    payment_method = (
+        "saved_card" if payment_kind == "auto_charge"
+        else "stripe_checkout" if (payment or {}).get("session_id")
+        else (trip.get("payment_method") or "card")
+    )
+
+    snapshot = {
+        "receipt_number": receipt_number,
+        "snapshot_version": 1,
+        "trip_id": trip_id,
+        "trip_status_at_capture": trip.get("status"),
+        "user_id": trip.get("user_id"),
+        "customer_name": (passenger or {}).get("fullName") or (passenger or {}).get("full_name"),
+        "customer_email": (passenger or {}).get("email"),
+        "driver_id": trip.get("driver_id"),
+        "driver_name": (driver or {}).get("fullName") or (driver or {}).get("full_name") or (trip.get("driver") or {}).get("name"),
+        "driver_email": (driver or {}).get("email"),
+        "driver_car": (driver or {}).get("car") or (trip.get("driver") or {}).get("car"),
+        "driver_plate": (driver or {}).get("plate") or (trip.get("driver") or {}).get("plate"),
+        "fleet_id": str(fleet["_id"]) if fleet else fleet_id,
+        "fleet_name": (fleet or {}).get("name"),
+        "fleet_org_number": (fleet or {}).get("org_number"),
+        "pickup_address": trip.get("pickup_address"),
+        "dropoff_address": trip.get("dropoff_address"),
+        "distance_km": trip.get("distance_km"),
+        "duration_min": trip.get("duration_min"),
+        "vehicle_type": trip.get("vehicle_type"),
+        "gross_amount": price,
+        "currency": str((payment or {}).get("currency") or "NOK").upper(),
+        "commission_rate": commission,
+        "platform_fee": platform_fee,
+        "fleet_net": max(0, price - platform_fee),
+        "payment_status": "paid",
+        "payment_method": payment_method,
+        "stripe_session_id": (payment or {}).get("session_id"),
+        "stripe_payment_intent_id": (payment or {}).get("stripe_payment_intent_id"),
+        "settlement_model": (payment or {}).get("settlement_model"),
+        "paid_at": paid_at,
+        "refunded_total": int(trip.get("refunded_total") or 0),
+        "refund_status": trip.get("refund_status"),
+        "refunds": [],
+        "customer_email_sent_at": trip.get("receipt_emailed_at"),
+        "driver_email_sent_at": trip.get("driver_receipt_emailed_at"),
+        "backfilled": bool(backfilled),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.receipt_ledger.update_one(
+            {"trip_id": trip_id},
+            {"$setOnInsert": snapshot},
+            upsert=True,
+        )
+    except Exception:
+        # A simultaneous webhook/poll may win the unique trip_id race. Only suppress
+        # the error when the canonical receipt now exists; otherwise propagate it.
+        if not await db.receipt_ledger.find_one({"trip_id": trip_id}, {"_id": 1}):
+            raise
+    await db.trips.update_one(
+        {"trip_id": trip_id},
+        {"$set": {"receipt_id": receipt_number}},
+    )
+    stored = await db.receipt_ledger.find_one({"trip_id": trip_id})
+    if stored:
+        stored["id"] = str(stored["_id"])
+        stored.pop("_id", None)
+    return stored
+
+
+async def send_trip_receipts(trip_id: str):
+    """Persist receipt snapshot and deliver customer/driver email receipts idempotently."""
+    trip = await db.trips.find_one({"trip_id": trip_id})
+    if not trip or trip.get("payment_status") != "paid":
+        return None
+
+    receipt = await ensure_receipt_snapshot(trip_id)
+    if not receipt:
+        return None
+
     passenger = None
     driver = None
     try:
@@ -6424,37 +6689,46 @@ async def send_trip_receipts(trip_id: str):
     except Exception:
         driver = None
 
-    price = int(trip.get("price") or 0)
-    commission = float(trip.get("commission_rate", 0.10) or 0.10)
-    fee = int(round(price * commission))
-    driver_net = max(0, price - fee)
-    route = f"{trip.get('pickup_address','')} → {trip.get('dropoff_address','')}"
-    paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
+    price = int(receipt.get("gross_amount") or trip.get("price") or 0)
+    fee = int(receipt.get("platform_fee") or 0)
+    driver_net = int(receipt.get("fleet_net") or max(0, price - fee))
+    commission = float(receipt.get("commission_rate") or 0)
+    route = f"{receipt.get('pickup_address','')} → {receipt.get('dropoff_address','')}"
+    paid_at = receipt.get("paid_at") or datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    delivery_updates = {}
 
-    jobs = []
-    if passenger and passenger.get("email"):
-        jobs.append(asyncio.to_thread(
+    if passenger and passenger.get("email") and not receipt.get("customer_email_sent_at"):
+        sent = await asyncio.to_thread(
             send_email,
             passenger["email"],
             f"KJAPP-kvittering · {price} kr",
-            f"<h2>Takk for turen</h2><p>{route}</p><p><strong>Total: {price} kr</strong></p>"
+            f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
+            f"<p>{route}</p><p><strong>Total: {price} kr</strong></p>"
             f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
-        ))
-    if driver and driver.get("email"):
-        jobs.append(asyncio.to_thread(
+        )
+        if sent:
+            delivery_updates["customer_email_sent_at"] = now_iso
+            await db.trips.update_one({"trip_id": trip_id}, {"$set": {"receipt_emailed_at": now_iso}})
+
+    if driver and driver.get("email") and not receipt.get("driver_email_sent_at"):
+        sent = await asyncio.to_thread(
             send_email,
             driver["email"],
             f"KJAPP sjåførkvittering · {driver_net} kr",
-            f"<h2>Tur fullført og betalt</h2><p>{route}</p><p>Turpris: {price} kr</p>"
+            f"<h2>Tur fullført og betalt</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
+            f"<p>{route}</p><p>Turpris: {price} kr</p>"
             f"<p>KJAPP serviceavgift: {fee} kr ({round(commission*100, 2)}%)</p>"
             f"<p><strong>Til sjåfør/flåte: {driver_net} kr</strong></p><p>Tur-ID: {trip_id}</p>",
-        ))
-    if jobs:
-        await asyncio.gather(*jobs, return_exceptions=True)
-    await db.trips.update_one(
-        {"trip_id": trip_id, "receipt_emailed_at": {"$exists": False}},
-        {"$set": {"receipt_emailed_at": datetime.now(timezone.utc).isoformat()}},
-    )
+        )
+        if sent:
+            delivery_updates["driver_email_sent_at"] = now_iso
+            await db.trips.update_one({"trip_id": trip_id}, {"$set": {"driver_receipt_emailed_at": now_iso}})
+
+    if delivery_updates:
+        await db.receipt_ledger.update_one({"trip_id": trip_id}, {"$set": delivery_updates})
+        receipt.update(delivery_updates)
+    return receipt
 
 
 AUTO_CHARGE_ENABLED = str(os.environ.get("KJAPP_AUTO_CHARGE_ENABLED", "false")).strip().lower() in ("1", "true", "yes", "on")
@@ -6977,6 +7251,14 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
     # Anonymize trips (keep for accounting/tax compliance in Norway) — replace user id
     anon_id = f"deleted_{uuid.uuid4().hex[:12]}"
     await db.trips.update_many({"user_id": uid}, {"$set": {"user_id": anon_id, "pickup_address": "[slettet]", "dropoff_address": "[slettet]"}})
+    await db.receipt_ledger.update_many(
+        {"user_id": uid},
+        {"$set": {
+            "user_id": anon_id,
+            "customer_name": "[slettet]",
+            "customer_email": None,
+        }},
+    )
     # Delete personal data
     await db.chat_messages.delete_many({"user_id": uid})
     await db.trip_messages.update_many(
@@ -7236,19 +7518,19 @@ async def driver_identity_verification_status(current=Depends(_require_driver_id
         {"driver_user_id": current["id"]},
         sort=[("created_at", -1)],
     )
-    if not latest:
-        return {
-            "status": current.get("identity_verification_status") or "not_submitted",
-            "submitted_at": None,
-            "reviewed_at": None,
-            "review_reason": None,
-        }
+    current_status = current.get("identity_verification_status") or (latest or {}).get("status") or "not_submitted"
     return {
-        "id": latest.get("id") or str(latest["_id"]),
-        "status": latest.get("status") or "pending_review",
-        "submitted_at": latest.get("created_at"),
-        "reviewed_at": latest.get("reviewed_at"),
-        "review_reason": latest.get("review_reason"),
+        "id": ((latest or {}).get("id") or str((latest or {}).get("_id"))) if latest else None,
+        "status": current_status,
+        "verification_record_status": (latest or {}).get("status"),
+        "submitted_at": (latest or {}).get("created_at"),
+        "reviewed_at": (latest or {}).get("reviewed_at"),
+        "review_reason": (latest or {}).get("review_reason"),
+        "recheck_reason": current.get("identity_recheck_reason") or current.get("identity_recheck_pending_reason"),
+        "recheck_trigger": current.get("identity_recheck_trigger") or current.get("identity_recheck_pending_trigger"),
+        "next_identity_check_at": current.get("next_identity_check_at"),
+        "identity_verified_at": current.get("identity_verified_at"),
+        "recheck_deferred_until_trip_end": bool(current.get("identity_recheck_pending_reason")),
     }
 
 
@@ -7299,6 +7581,8 @@ async def driver_identity_verification_selfie(
         "selfie_file_id": upload_id,
         "selfie_storage_path": result["path"],
         "status": "pending_review",
+        "trigger_reason": current.get("identity_recheck_reason") or current.get("identity_recheck_pending_reason"),
+        "trigger": current.get("identity_recheck_trigger") or current.get("identity_recheck_pending_trigger") or "onboarding",
         "created_at": now,
     })
     await db.users.update_one(
@@ -7306,6 +7590,11 @@ async def driver_identity_verification_selfie(
         {"$set": {
             "identity_verification_status": "pending_review",
             "identity_verification_updated_at": now,
+            "online": False,
+        }, "$unset": {
+            "identity_recheck_pending_reason": "",
+            "identity_recheck_pending_trigger": "",
+            "identity_recheck_pending_at": "",
         }},
     )
     return {
@@ -7358,6 +7647,12 @@ async def admin_identity_verifications(
             "profile_photo_path": driver.get("profile_photo_path"),
             "drivers_license_path": driver.get("drivers_license_path"),
             "taxi_license_path": driver.get("taxi_license_path"),
+            "driver_identity_status": driver.get("identity_verification_status") or "not_submitted",
+            "identity_verified_at": driver.get("identity_verified_at"),
+            "next_identity_check_at": driver.get("next_identity_check_at"),
+            "identity_recheck_reason": driver.get("identity_recheck_reason") or driver.get("identity_recheck_pending_reason"),
+            "identity_recheck_trigger": driver.get("identity_recheck_trigger") or driver.get("identity_recheck_pending_trigger"),
+            "identity_recheck_deferred": bool(driver.get("identity_recheck_pending_reason")),
         })
     return _paged(rows, total, page, page_size, "verifications")
 
@@ -7386,13 +7681,41 @@ async def admin_review_identity_verification(
         }},
     )
     driver_id = verification.get("driver_user_id")
+    next_check_at = _schedule_identity_recheck_at() if body.status == "verified" else None
     try:
+        user_set = {
+            "identity_verification_status": body.status,
+            "identity_verification_updated_at": now,
+        }
+        if body.status != "verified":
+            user_set["online"] = False
+        user_unset = {
+            "identity_recheck_pending_reason": "",
+            "identity_recheck_pending_trigger": "",
+            "identity_recheck_pending_at": "",
+        }
+        if body.status == "verified":
+            user_set.update({
+                "identity_verified_at": now,
+                "next_identity_check_at": next_check_at,
+            })
+            user_unset.update({
+                "identity_recheck_reason": "",
+                "identity_recheck_trigger": "",
+            })
+        else:
+            user_set.update({
+                "identity_recheck_reason": (body.reason or "").strip() or "KJAPP trenger en ny identitetsselfie",
+                "identity_recheck_trigger": "admin_review",
+            })
+            user_unset["next_identity_check_at"] = ""
         await db.users.update_one(
             {"_id": ObjectId(driver_id)},
-            {"$set": {
-                "identity_verification_status": body.status,
-                "identity_verification_updated_at": now,
-            }},
+            {"$set": user_set, "$unset": user_unset},
+        )
+        await db.driver_identity_verifications.update_one(
+            {"_id": verification["_id"]},
+            {"$set": {"next_identity_check_at": next_check_at}},
         )
     except Exception:
         pass
@@ -7405,7 +7728,61 @@ async def admin_review_identity_verification(
         {"status": body.status},
         body.reason,
     )
-    return {"ok": True, "status": body.status, "reviewed_at": now}
+    return {"ok": True, "status": body.status, "reviewed_at": now, "next_identity_check_at": next_check_at}
+
+
+class DriverIdentityRecheckRequest(BaseModel):
+    reason: str = Field(default="Manuell sikkerhetskontroll", min_length=3, max_length=500)
+
+
+@api.post("/admin/drivers/{driver_id}/identity-recheck")
+async def admin_request_driver_identity_recheck(
+    driver_id: str,
+    body: DriverIdentityRecheckRequest,
+    current=Depends(require_admin),
+):
+    try:
+        driver = await db.users.find_one({"_id": ObjectId(driver_id), "role": "driver"})
+    except Exception:
+        driver = None
+    if not driver:
+        raise HTTPException(404, "Fant ikke sjåfør")
+
+    now = datetime.now(timezone.utc).isoformat()
+    reason = body.reason.strip()
+    deferred = bool(driver.get("active_trip_id"))
+    if deferred:
+        update = {
+            "identity_recheck_pending_reason": reason,
+            "identity_recheck_pending_trigger": "admin_requested",
+            "identity_recheck_pending_at": now,
+        }
+    else:
+        update = {
+            "identity_verification_status": "recheck_required",
+            "identity_verification_updated_at": now,
+            "identity_recheck_reason": reason,
+            "identity_recheck_trigger": "admin_requested",
+            "online": False,
+        }
+    await db.users.update_one({"_id": driver["_id"]}, {"$set": update})
+    await _audit(
+        current,
+        "driver.identity_recheck_requested",
+        "driver",
+        driver_id,
+        {"status": driver.get("identity_verification_status")},
+        {"deferred": deferred, "reason": reason},
+        reason,
+    )
+    await send_push_to_user(
+        driver_id,
+        "KJAPP trenger en ny Selfie ID",
+        "Fullfør identitetskontrollen før neste skift." if not deferred else "Fullfør identitetskontrollen når den aktive turen er avsluttet.",
+        "/driver-identity",
+        "driver_identity_recheck",
+    )
+    return {"ok": True, "deferred": deferred, "reason": reason}
 
 
 class IdentityRetentionPurgeRequest(BaseModel):
@@ -8133,6 +8510,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "pricing_version": t.get("pricing_version"), "commission_rate": t.get("commission_rate"),
             "requires_manual_settlement": t.get("requires_manual_settlement", False),
             "refunded_total": t.get("refunded_total", 0),
+            "receipt_id": t.get("receipt_id"),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
@@ -8144,6 +8522,76 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "passenger_rating": t.get("passenger_rating"),
         })
     return _paged(out, total, page, page_size, "trips")
+
+
+@api.get("/admin/receipts")
+async def admin_receipts(
+    q: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    current=Depends(require_admin),
+):
+    filt = {}
+    if date_from or date_to:
+        paid = {}
+        if date_from:
+            paid["$gte"] = date_from
+        if date_to:
+            paid["$lte"] = date_to + "T23:59:59.999Z"
+        filt["paid_at"] = paid
+    if payment_method:
+        filt["payment_method"] = payment_method
+    if q:
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        filt["$or"] = [
+            {"receipt_number": rx}, {"trip_id": rx}, {"customer_name": rx},
+            {"customer_email": rx}, {"driver_name": rx}, {"fleet_name": rx},
+        ]
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.receipt_ledger.count_documents(filt)
+    rows = []
+    async for r in db.receipt_ledger.find(filt).sort("paid_at", -1).skip(skip).limit(page_size):
+        r["id"] = str(r["_id"])
+        r.pop("_id", None)
+        rows.append(r)
+    return _paged(rows, total, page, page_size, "receipts")
+
+
+@api.get("/admin/receipts/{receipt_or_trip}")
+async def admin_receipt_detail(receipt_or_trip: str, current=Depends(require_admin)):
+    receipt = await db.receipt_ledger.find_one({
+        "$or": [{"receipt_number": receipt_or_trip}, {"trip_id": receipt_or_trip}],
+    })
+    if not receipt:
+        trip = await db.trips.find_one({"trip_id": receipt_or_trip, "payment_status": "paid"})
+        if trip:
+            receipt = await ensure_receipt_snapshot(receipt_or_trip, backfilled=True)
+    if not receipt:
+        raise HTTPException(404, "Fant ikke kvittering")
+    receipt["id"] = str(receipt["_id"]) if receipt.get("_id") else receipt.get("id")
+    receipt.pop("_id", None)
+    return receipt
+
+
+@api.post("/admin/receipts/backfill")
+async def admin_receipts_backfill(
+    limit: int = Query(default=500, ge=1, le=2000),
+    current=Depends(require_superadmin),
+):
+    created = 0
+    scanned = 0
+    async for trip in db.trips.find({"payment_status": "paid"}).sort("paid_at", -1).limit(limit):
+        scanned += 1
+        trip_id = trip.get("trip_id")
+        if not trip_id or await db.receipt_ledger.find_one({"trip_id": trip_id}, {"_id": 1}):
+            continue
+        if await ensure_receipt_snapshot(trip_id, backfilled=True):
+            created += 1
+    await _audit(current, "receipt.backfill", "receipt_ledger", "batch", None, {"scanned": scanned, "created": created})
+    return {"ok": True, "scanned": scanned, "created": created}
 
 
 @api.get("/admin/trips/{trip_id}/timeline")
@@ -8564,6 +9012,27 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
         "refunded_total": new_total,
         "refund_status": "full" if new_total >= gross else "partial",
     }})
+    await db.receipt_ledger.update_one(
+        {"trip_id": body.trip_id},
+        {
+            "$set": {
+                "refunded_total": new_total,
+                "refund_status": "full" if new_total >= gross else "partial",
+            },
+            "$push": {
+                "refunds": {
+                    "id": doc["id"],
+                    "amount": amount,
+                    "currency": doc["currency"],
+                    "reason": doc["reason"],
+                    "provider": provider,
+                    "provider_ref": provider_ref,
+                    "status": prov_status,
+                    "created_at": doc["created_at"],
+                }
+            },
+        },
+    )
     await _audit(current, "refund.create", "trip", body.trip_id,
                  {"refunded_total": already}, {"refunded_total": new_total, "amount": amount, "provider": provider},
                  body.reason.strip())

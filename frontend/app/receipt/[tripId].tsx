@@ -152,6 +152,12 @@ export default function Receipt() {
           <Row label="Varighet" value={`${trip.duration_min} min`} />
           <View style={s.sep} />
           <Row label="Kjøretøy" value={v.name} />
+          {trip.receipt_id ? (
+            <>
+              <View style={s.sep} />
+              <Row label="Kvittering" value={trip.receipt_id} />
+            </>
+          ) : null}
         </View>
 
         {!isPaid ? (

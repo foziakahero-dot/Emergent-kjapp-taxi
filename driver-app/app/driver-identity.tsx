@@ -7,12 +7,18 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { apiError, driverApi } from '@/src/lib/api';
+import { useAuth } from '@/src/context/AuthContext';
 
 type Verification = {
   status?: 'not_submitted' | 'pending_review' | 'verified' | 'retry_required' | string;
   submitted_at?: string | null;
   reviewed_at?: string | null;
   review_reason?: string | null;
+  recheck_reason?: string | null;
+  recheck_trigger?: string | null;
+  next_identity_check_at?: string | null;
+  identity_verified_at?: string | null;
+  recheck_deferred_until_trip_end?: boolean;
 };
 
 const STATUS: Record<string, { title: string; body: string; tone: 'good' | 'warn' | 'neutral' }> = {
@@ -36,10 +42,16 @@ const STATUS: Record<string, { title: string; body: string; tone: 'good' | 'warn
     body: 'KJAPP trenger en ny selfie før kontrollen kan fullføres.',
     tone: 'warn',
   },
+  recheck_required: {
+    title: 'Ny identitetskontroll kreves',
+    body: 'Ta en ny Selfie ID før neste skift. Dette kan være en planlagt kontroll eller et sikkerhetssignal.',
+    tone: 'warn',
+  },
 };
 
 export default function DriverIdentity() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const camera = useRef<any>(null);
@@ -100,6 +112,7 @@ export default function DriverIdentity() {
         status: result?.status || 'pending_review',
         submitted_at: result?.submitted_at || new Date().toISOString(),
       });
+      await refresh();
       setPhoto('');
     } catch (e) {
       setErr(apiError(e));
@@ -140,6 +153,11 @@ export default function DriverIdentity() {
                 <Text style={s.statusTitle}>{meta.title}</Text>
                 <Text style={s.statusBody}>{meta.body}</Text>
                 {verification.review_reason ? <Text style={s.reason}>KJAPP: {verification.review_reason}</Text> : null}
+                {verification.recheck_reason ? <Text style={s.reason}>Kontrollårsak: {verification.recheck_reason}</Text> : null}
+                {verification.recheck_deferred_until_trip_end ? <Text style={s.reason}>Kontrollen aktiveres når den aktive turen er avsluttet.</Text> : null}
+                {verification.next_identity_check_at && status === 'verified' ? (
+                  <Text style={s.nextCheck}>Neste planlagte kontroll: {new Date(verification.next_identity_check_at).toLocaleDateString('no-NO')}</Text>
+                ) : null}
               </View>
             </View>
 
@@ -171,7 +189,7 @@ export default function DriverIdentity() {
               </View>
             ) : status !== 'pending_review' ? (
               <Button
-                label={status === 'verified' ? 'Ta ny identitetsselfie' : 'Åpne frontkamera'}
+                label={status === 'verified' ? 'Ta ny identitetsselfie' : status === 'recheck_required' ? 'Ta Selfie ID nå' : 'Åpne frontkamera'}
                 onPress={() => void openCamera()}
                 testID="driver-identity-camera"
               />
@@ -204,6 +222,7 @@ const useStyles = makeStyles((c) => ({
   statusTitle: { color: c.text, fontFamily: font.display, fontSize: 19 },
   statusBody: { color: c.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 5 },
   reason: { color: c.accent, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  nextCheck: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 8 },
   infoCard: { padding: 18, borderRadius: 18, borderWidth: 1, borderColor: c.line, backgroundColor: c.driverCard, marginBottom: 18 },
   infoTitle: { color: c.text, fontSize: 15, fontWeight: '600', marginBottom: 10 },
   rule: { color: c.textSecondary, fontSize: 13, lineHeight: 21 },
