@@ -334,7 +334,25 @@ async def disable_legacy_demo_users(db, is_production: bool, admin_email: str = 
 # Synthetic records that must never be shown as real data in the app (fabricated demo trips,
 # automated-test artifacts and simulated driver/passenger accounts).
 SYNTHETIC_ADDRESS_RE = r"^\s*TEST[_\s-]"
+SYNTHETIC_TRIP_ID_RE = r"(?i)^\s*(TEST|DEMO)[_\s-]"
 SYNTHETIC_EMAIL_RE = r"^(demo\d+@|demo_p_|test_|TEST_)"
+
+# One canonical read filter for every operational trip surface. Startup purge is defence-in-depth,
+# not the primary guarantee: stale synthetic records must remain invisible even if they still exist.
+REAL_TRIPS_ONLY = {
+    "demo": {"$ne": True},
+    "is_demo": {"$ne": True},
+    "trip_id": {"$not": {"$regex": SYNTHETIC_TRIP_ID_RE}},
+    "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    "dropoff_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+}
+
+
+def _real_trip_filter(extra: Optional[dict] = None) -> dict:
+    """Combine a normal trip query with the non-synthetic invariant."""
+    if not extra:
+        return dict(REAL_TRIPS_ONLY)
+    return {"$and": [dict(REAL_TRIPS_ONLY), extra]}
 
 
 async def purge_synthetic_data(db) -> dict:
@@ -342,6 +360,8 @@ async def purge_synthetic_data(db) -> dict:
     render real data. Safe to run on every boot — it only matches synthetic markers."""
     trips = await db.trips.delete_many({"$or": [
         {"demo": True},
+        {"is_demo": True},
+        {"trip_id": {"$regex": SYNTHETIC_TRIP_ID_RE}},
         {"pickup_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
         {"dropoff_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
     ]})
@@ -2674,7 +2694,7 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
 
 @api.get("/trips")
 async def list_trips(current=Depends(get_current_user)):
-    cursor = db.trips.find({"user_id": current["id"]}).sort("created_at", -1).limit(50)
+    cursor = db.trips.find(_real_trip_filter({"user_id": current["id"]})).sort("created_at", -1).limit(50)
     trips = []
     async for t in cursor:
         t["id"] = str(t["_id"])
@@ -2689,7 +2709,7 @@ class TripMessageRequest(BaseModel):
 
 
 async def _load_trip_or_403(trip_id: str, current: dict):
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
     is_passenger = trip.get("user_id") == current["id"]
@@ -3343,11 +3363,6 @@ def customer_public(u: dict) -> dict:
 
 
 # Never serve fabricated/demo/test trips to a driver
-REAL_TRIPS_ONLY = {
-    "demo": {"$ne": True},
-    "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
-}
-
 ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
@@ -4780,11 +4795,11 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
     today_gross = 0; today_trips = 0
     week_gross = 0; week_trips = 0
     if drivers_ids:
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": {"$in": drivers_ids},
             "status": {"$in": ["arrived", "completed", "rated"]},
             "created_at": {"$gte": week_start},
-        }):
+        })):
             price = t.get("price", 0)
             week_gross += price; week_trips += 1
             if t.get("created_at", "") >= today:
@@ -4811,7 +4826,7 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
         # Today income
         today = datetime.now(timezone.utc).date().isoformat()
         income = 0; trips = 0
-        async for t in db.trips.find({"driver_id": d["id"], "created_at": {"$gte": today}, "status": {"$in": ["arrived","completed","rated"]}}):
+        async for t in db.trips.find(_real_trip_filter({"driver_id": d["id"], "created_at": {"$gte": today}, "status": {"$in": ["arrived","completed","rated"]}})):
             income += t.get("price", 0); trips += 1
         d["today_income"] = income; d["today_trips"] = trips
         drivers.append(d)
@@ -4839,10 +4854,10 @@ async def fleet_live(current=Depends(require_fleet_owner)):
     trips = []
     active_by_driver = {}
     if driver_ids:
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": {"$in": driver_ids},
             "status": {"$in": active_statuses},
-        }).sort("created_at", -1).limit(200):
+        })).sort("created_at", -1).limit(200):
             did = t.get("driver_id")
             if did and did not in active_by_driver:
                 active_by_driver[did] = t
@@ -6187,7 +6202,7 @@ async def admin_drivers(current=Depends(require_admin)):
 @api.get("/admin/trips")
 async def admin_trips(current=Depends(require_admin), limit: int = 100):
     out = []
-    async for t in db.trips.find({}).sort("created_at", -1).limit(limit):
+    async for t in db.trips.find(_real_trip_filter()).sort("created_at", -1).limit(limit):
         t["id"] = str(t["_id"])
         t.pop("_id", None)
         out.append(t)
@@ -7325,7 +7340,7 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
     driver_id = current["id"]
     trips = []
     async for t in db.trips.find(
-        {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}}
+        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}})
     ).sort("created_at", -1).limit(limit):
         trips.append({
             "trip_id": t.get("trip_id"),
@@ -7352,11 +7367,11 @@ async def driver_history_weekly(current=Depends(require_driver)):
         day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
         total = 0
         trips = 0
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": driver_id,
             "created_at": {"$gte": day.isoformat(), "$lt": (day + timedelta(days=1)).isoformat()},
             "status": {"$in": ["arrived", "completed", "rated"]},
-        }):
+        })):
             trips += 1
             total += t.get("price", 0)
         days.append({"date": day.isoformat(), "day_label": day.strftime("%a"), "income": total, "trips": trips})
@@ -7371,7 +7386,7 @@ async def driver_ratings(current=Depends(require_driver), limit: int = 20):
     count = 0
     breakdown = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
     recent = []
-    async for t in db.trips.find({"driver_id": driver_id, "rating": {"$gt": 0}}).sort("created_at", -1):
+    async for t in db.trips.find(_real_trip_filter({"driver_id": driver_id, "rating": {"$gt": 0}})).sort("created_at", -1):
         r = int(t.get("rating") or 0)
         if r < 1 or r > 5: continue
         total += r
@@ -7398,12 +7413,12 @@ async def driver_payouts(current=Depends(require_driver)):
     pending = 0
     pending_net = 0
     trips_count = 0
-    async for t in db.trips.find({
+    async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": ["arrived", "completed", "rated"]},
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
-    }):
+    })):
         gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
         pending += gross
