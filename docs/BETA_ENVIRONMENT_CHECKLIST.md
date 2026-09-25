@@ -92,6 +92,39 @@ Configure only if the feature is enabled for the beta:
 
 A non-critical AI outage must not block booking, dispatch, GPS or payment state.
 
+Before any signed mobile build, generate and commit deterministic mobile lockfiles:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare_mobile_lockfiles.ps1
+```
+
+Both `frontend/package-lock.json` and `driver-app/package-lock.json` must be committed. The signed-build helper refuses to continue without them.
+
+## Driver identity verification
+
+The Driver selfie-ID flow is staged behind an enforcement flag.
+
+During initial QA:
+- `KJAPP_DRIVER_IDENTITY_REQUIRED=false`
+- Driver can submit a fresh front-camera selfie.
+- KJAPP Admin reviews the selfie against existing profile/driver ID material.
+- Fleet owners see verification status only; they cannot open the raw identity selfie.
+
+After physical QA and privacy/retention validation:
+- set `KJAPP_DRIVER_IDENTITY_REQUIRED=true` to require status `verified` before Driver approval and operational Driver endpoints can be used.
+- set `KJAPP_IDENTITY_SELFIE_RETENTION_DAYS=30` (or the approved retention period, 1–365 days).
+
+Retention endpoints are superadmin-only:
+- `GET /api/admin/identity-verifications/retention` reports eligible/retained counts.
+- `POST /api/admin/identity-verifications/purge-expired` defaults to `{"dry_run": true}`; use dry-run first.
+- only terminal `verified`, `retry_required` and `superseded` records older than the configured period are eligible.
+- `pending_review` selfies are excluded.
+- database paths are removed only after the object-store delete call succeeds; audit/status metadata remains.
+
+The beta implementation does **not** make an automatic negative decision from face matching. `retry_required` requests another selfie/review without automatically suspending the Driver account.
+
+Before public release, verify one real dry-run and one controlled physical object deletion against the deployed Emergent object store. A successful database update alone must not be treated as proof that the image bytes were physically deleted.
+
 ## Mobile beta configuration
 
 Customer:
@@ -129,14 +162,6 @@ Never commit:
 - Expo access token
 
 ## Direct EAS beta artifact path
-
-Before any signed mobile build, generate and commit deterministic mobile lockfiles:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\prepare_mobile_lockfiles.ps1
-```
-
-Both `frontend/package-lock.json` and `driver-app/package-lock.json` must be committed. The signed-build helper refuses to continue without them.
 
 GitHub Actions currently fails before jobs start, so signed artifacts can be launched directly through EAS Workflows from the reviewed branch.
 

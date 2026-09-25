@@ -6,18 +6,24 @@ import DriverSignup from './DriverSignup';
 import {
   BedriftPage,
   DriversPage,
+  DocumentsPage,
   FinancePage,
   ForgotPasswordPage,
   LoginPage,
+  LiveOpsPage,
   OverviewPage,
   ResetPasswordPage,
   TripsPage,
+  VehiclesPage,
 } from './pages';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true },
+  { to: '/live', label: 'Live drift' },
   { to: '/sjaforer', label: 'Sjåfører' },
+  { to: '/kjoretoy', label: 'Kjøretøy' },
   { to: '/turer', label: 'Turer' },
+  { to: '/dokumenter', label: 'Dokumenter' },
   { to: '/okonomi', label: 'Økonomi' },
   { to: '/bedrift', label: 'Bedrift' },
 ];
@@ -86,8 +92,11 @@ function PortalShell() {
       <main className="portal-main">
         <Routes>
           <Route path="/" element={<OverviewPage />} />
+          <Route path="/live" element={<LiveOpsPage />} />
           <Route path="/sjaforer" element={<DriversPage />} />
+          <Route path="/kjoretoy" element={<VehiclesPage />} />
           <Route path="/turer" element={<TripsPage />} />
+          <Route path="/dokumenter" element={<DocumentsPage />} />
           <Route path="/okonomi" element={<FinancePage />} />
           <Route path="/bedrift" element={<BedriftPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

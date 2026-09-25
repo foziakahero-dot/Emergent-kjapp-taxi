@@ -609,7 +609,7 @@ export function Documents() {
             {loading ? <tr><td colSpan={6}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
                 <td>{d.filename || '—'}</td>
-                <td className="dim">{d.scope}</td>
+                <td className="dim">{d.owner_type === 'vehicle' ? `Kjøretøy · ${({ registration: 'Vognkort', insurance: 'Forsikring', inspection: 'EU-kontroll' } as any)[d.doc_type] || d.doc_type || 'Dokument'}` : d.scope}</td>
                 <td>{d.owner_name || d.owner_email || '—'}</td>
                 <td className="dim nowrap">{d.expiry ? fmtDay(d.expiry) : '—'}</td>
                 <td><Pill status={d.compliance} /></td>
@@ -636,9 +636,27 @@ function ReviewModal({ doc, onClose, onDone }: any) {
     try { await api.reviewDoc(doc.id, { status, expiry: expiry || null, reason: reason || null }); onDone(); }
     catch (e: any) { setErr(e?.response?.data?.detail || 'Feil'); setBusy(false); }
   };
+  const openDocument = async () => {
+    if (!doc.storage_path) return;
+    const popup = window.open('', '_blank');
+    try {
+      const blob = await api.secureFile(doc.storage_path);
+      const url = URL.createObjectURL(blob);
+      if (popup) popup.location.href = url;
+      else {
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      if (popup) popup.close();
+      setErr(apiError(e));
+    }
+  };
   return (
-    <Modal title="Vurder dokument" sub={doc.filename} onClose={onClose}>
+    <Modal title="Vurder dokument" sub={doc.owner_type === 'vehicle' ? `${doc.owner_name || 'Kjøretøy'} · ${doc.filename || ''}` : doc.filename} onClose={onClose}>
       {err && <div className="error-banner">{err}</div>}
+      {doc.storage_path ? <div style={{ marginBottom: 12 }}><Btn variant="sm" onClick={() => void openDocument()}>Åpne dokument</Btn></div> : null}
       <div className="field"><label className="label">Status</label>
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="valid">Godkjenn (gyldig)</option>

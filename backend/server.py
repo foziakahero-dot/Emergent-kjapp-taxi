@@ -70,6 +70,19 @@ WEAK_ADMIN_PASSWORDS = {"admin123", "admin", "password", "passord", "kjapp123", 
 # Only trust X-Forwarded-For when running behind a known/controlled proxy.
 TRUST_PROXY = str(os.environ.get("TRUST_PROXY", "false")).strip().lower() in ("1", "true", "yes", "on")
 
+# Roll out Driver identity enforcement only after the selfie/review flow has passed physical QA.
+# The beta feature can collect/review selfies while this remains false.
+KJAPP_DRIVER_IDENTITY_REQUIRED = str(
+    os.environ.get("KJAPP_DRIVER_IDENTITY_REQUIRED", "false")
+).strip().lower() in ("1", "true", "yes", "on")
+
+try:
+    KJAPP_IDENTITY_SELFIE_RETENTION_DAYS = max(
+        1, min(365, int(os.environ.get("KJAPP_IDENTITY_SELFIE_RETENTION_DAYS", "30")))
+    )
+except (TypeError, ValueError):
+    KJAPP_IDENTITY_SELFIE_RETENTION_DAYS = 30
+
 # Known legacy seed/demo accounts that must be disabled (cannot authenticate) in production.
 LEGACY_DEMO_EMAILS = {
     "ola@kjapp.no", "sjafor@kjapp.no", "floteier1@kjapp.no",
@@ -194,6 +207,31 @@ def storage_get(path: str) -> tuple[bytes, str]:
         )
     r.raise_for_status()
     return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+def storage_delete(path: str) -> None:
+    """Physically delete an object. Metadata is only tombstoned after this succeeds."""
+    key = init_storage()
+    if not key:
+        raise RuntimeError("Objektlager utilgjengelig")
+    r = http_requests.delete(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key},
+        timeout=60,
+    )
+    if r.status_code == 404:
+        # Treat already-missing objects as deleted; retry once only when the storage key may have expired.
+        key = init_storage(force=True)
+        retry = http_requests.delete(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key or ""},
+            timeout=60,
+        )
+        if retry.status_code not in (200, 202, 204, 404):
+            retry.raise_for_status()
+        return
+    if r.status_code not in (200, 202, 204):
+        r.raise_for_status()
 
 
 ALLOWED_UPLOAD_MIME = {
@@ -349,7 +387,8 @@ USER_RESPONSE_FIELDS = frozenset({
     "approved", "online", "disabled", "created_at", "updated_at", "last_lat", "last_lng",
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
-    "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
+    "approved_at", "approved_by", "fleet_name", "fleet_active", "today_income", "today_trips", "status", "capabilities",
+    "identity_verification_status", "identity_verification_updated_at",
     "legal_version",
 })
 
@@ -1041,6 +1080,14 @@ async def lifespan(app: FastAPI):
     await db.rate_limit_buckets.create_index("expires_at", expireAfterSeconds=0)
     await db.client_errors.create_index([("created_at", -1)])
     await db.client_errors.create_index("expires_at", expireAfterSeconds=0)
+    await db.driver_identity_verifications.create_index([("driver_user_id", 1), ("created_at", -1)])
+    await db.driver_identity_verifications.create_index([("status", 1), ("created_at", -1)])
+    await db.driver_identity_verifications.create_index([("status", 1), ("reviewed_at", 1)])
+    await db.driver_identity_verifications.create_index("purged_at")
+    await db.uploaded_files.create_index([("scope", 1), ("storage_path", 1)])
+    await db.uploaded_files.create_index([("scope", 1), ("fleet_id", 1), ("vehicle_id", 1)])
+    await db.fleet_vehicles.create_index([("fleet_id", 1), ("plate", 1)], unique=True)
+    await db.fleet_vehicles.create_index([("fleet_id", 1), ("assigned_driver_id", 1)])
     await db.password_reset_tokens.create_index("token")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.revoked_tokens.create_index("jti", unique=True)
@@ -2323,8 +2370,27 @@ async def require_driver(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+    if current.get("fleet_active") is False:
+        raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
+    if current.get("vehicle_id"):
+        try:
+            assigned_vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(current["vehicle_id"]),
+                "fleet_id": current.get("fleet_id"),
+            })
+        except (InvalidId, TypeError):
+            assigned_vehicle = None
+        if not assigned_vehicle:
+            raise HTTPException(status_code=403, detail="Tildelt kjøretøy finnes ikke lenger i flåten")
+        if assigned_vehicle.get("active") is False:
+            raise HTTPException(status_code=403, detail="Tildelt kjøretøy er parkert av løyvehaver")
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
+    if KJAPP_DRIVER_IDENTITY_REQUIRED and current.get("identity_verification_status") != "verified":
+        raise HTTPException(
+            status_code=403,
+            detail="Fullfør KJAPP identitetskontroll før du går online eller håndterer turer",
+        )
     await _require_active_fleet(current.get("fleet_id"))
     return current
 
@@ -4605,6 +4671,634 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
     return {"drivers": drivers}
 
 
+@api.get("/fleet/live")
+async def fleet_live(current=Depends(require_fleet_owner)):
+    """Fleet-scoped realtime read model for the partner portal.
+
+    Returns only drivers and active trips that belong to the authenticated fleet owner.
+    """
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+
+    raw_drivers = []
+    driver_ids = []
+    async for u in db.users.find({"role": "driver", "fleet_id": fid}, {"password_hash": 0}):
+        uid = str(u["_id"])
+        driver_ids.append(uid)
+        raw_drivers.append((uid, u))
+
+    active_statuses = ["driver_on_way", "at_pickup", "in_trip"]
+    trips = []
+    active_by_driver = {}
+    if driver_ids:
+        async for t in db.trips.find({
+            "driver_id": {"$in": driver_ids},
+            "status": {"$in": active_statuses},
+        }).sort("created_at", -1).limit(200):
+            did = t.get("driver_id")
+            if did and did not in active_by_driver:
+                active_by_driver[did] = t
+            trips.append({
+                "trip_id": t.get("trip_id"),
+                "driver_id": did,
+                "status": t.get("status"),
+                "pickup_address": t.get("pickup_address"),
+                "dropoff_address": t.get("dropoff_address"),
+                "pickup_lat": t.get("pickup_lat"),
+                "pickup_lng": t.get("pickup_lng"),
+                "dropoff_lat": t.get("dropoff_lat"),
+                "dropoff_lng": t.get("dropoff_lng"),
+                "price": t.get("price"),
+                "created_at": t.get("created_at"),
+            })
+
+    drivers = []
+    for uid, u in raw_drivers:
+        online = bool(u.get("online"))
+        gps_fresh = bool(
+            online
+            and _fresh_driver_location(u.get("last_location_at"))
+            and u.get("last_lat") is not None
+            and u.get("last_lng") is not None
+        )
+        active_trip = active_by_driver.get(uid)
+        if not online:
+            operational_status = "offline"
+        elif not gps_fresh:
+            operational_status = "gps_stale"
+        elif active_trip:
+            operational_status = active_trip.get("status") or "in_trip"
+        else:
+            operational_status = "available"
+        drivers.append({
+            "id": uid,
+            "name": u.get("fullName") or u.get("full_name"),
+            "email": u.get("email"),
+            "phone": u.get("phone"),
+            "car": u.get("car"),
+            "plate": u.get("plate"),
+            "vehicle_type": u.get("vehicle_type"),
+            "approved": bool(u.get("approved")),
+            "online": online,
+            "gps_fresh": gps_fresh,
+            "operational_status": operational_status,
+            "lat": u.get("last_lat"),
+            "lng": u.get("last_lng"),
+            "heading": u.get("last_heading"),
+            "last_location_at": u.get("last_location_at"),
+            "rating": u.get("rating"),
+            "active_trip_id": (active_trip or {}).get("trip_id"),
+            "identity_verification_status": u.get("identity_verification_status") or "not_submitted",
+        })
+
+    return {
+        "drivers": drivers,
+        "trips": trips,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+class FleetVehicleCreateRequest(BaseModel):
+    car: str = Field(min_length=2, max_length=120)
+    plate: str = Field(min_length=2, max_length=24)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+
+
+class FleetVehicleUpdateRequest(BaseModel):
+    car: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    plate: Optional[str] = Field(default=None, min_length=2, max_length=24)
+    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium"]] = None
+    active: Optional[bool] = None
+
+
+class FleetVehicleAssignmentRequest(BaseModel):
+    driver_id: Optional[str] = None
+
+
+class FleetDriverActiveRequest(BaseModel):
+    active: bool
+
+
+def _fleet_plate(value: str) -> str:
+    return "".join(str(value or "").strip().upper().split())
+
+
+async def _sync_fleet_vehicle_records(fid: str):
+    """One-way compatibility sync for vehicles that historically lived only on Driver user rows."""
+    async for d in db.users.find({
+        "role": "driver",
+        "fleet_id": fid,
+        "plate": {"$exists": True, "$nin": [None, ""]},
+    }, {"fullName": 1, "full_name": 1, "car": 1, "plate": 1, "vehicle_type": 1, "created_at": 1}):
+        plate = _fleet_plate(d.get("plate"))
+        if not plate:
+            continue
+        now = datetime.now(timezone.utc).isoformat()
+        await db.fleet_vehicles.update_one(
+            {"fleet_id": fid, "plate": plate},
+            {
+                "$setOnInsert": {
+                    "fleet_id": fid,
+                    "plate": plate,
+                    "car": d.get("car") or "KJAPP-kjøretøy",
+                    "vehicle_type": d.get("vehicle_type") or "ai-first",
+                    "active": True,
+                    "created_at": d.get("created_at") or now,
+                },
+                "$set": {
+                    "assigned_driver_id": str(d["_id"]),
+                    "assigned_driver_name": d.get("fullName") or d.get("full_name"),
+                    "updated_at": now,
+                },
+            },
+            upsert=True,
+        )
+
+
+async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
+    driver = None
+    driver_id = vehicle.get("assigned_driver_id")
+    if driver_id:
+        try:
+            driver = await db.users.find_one({
+                "_id": ObjectId(driver_id),
+                "role": "driver",
+                "fleet_id": fid,
+            }, {"password_hash": 0})
+        except (InvalidId, TypeError):
+            driver = None
+    fresh = bool(
+        driver
+        and driver.get("online")
+        and _fresh_driver_location(driver.get("last_location_at"))
+        and driver.get("last_lat") is not None
+        and driver.get("last_lng") is not None
+    )
+
+    document_statuses = {}
+    async for d in db.uploaded_files.find({
+        "scope": "fleet-vehicle-docs",
+        "fleet_id": fid,
+        "vehicle_id": str(vehicle["_id"]),
+        "is_deleted": {"$ne": True},
+    }).sort("created_at", -1):
+        doc_type = d.get("doc_type")
+        if doc_type in FLEET_VEHICLE_DOC_TYPES and doc_type not in document_statuses:
+            document_statuses[doc_type] = _fleet_document_compliance(
+                d.get("review_status") or "pending",
+                d.get("review_expiry"),
+            )
+        if len(document_statuses) == len(FLEET_VEHICLE_DOC_TYPES):
+            break
+    missing_document_types = sorted(FLEET_VEHICLE_DOC_TYPES - set(document_statuses))
+    compliance_values = set(document_statuses.values())
+    if "REJECTED" in compliance_values:
+        document_compliance = "REJECTED"
+    elif "EXPIRED" in compliance_values:
+        document_compliance = "EXPIRED"
+    elif missing_document_types:
+        document_compliance = "MISSING"
+    elif "PENDING" in compliance_values:
+        document_compliance = "PENDING"
+    elif "EXPIRING" in compliance_values:
+        document_compliance = "EXPIRING"
+    else:
+        document_compliance = "VALID"
+
+    return {
+        "id": str(vehicle["_id"]),
+        "car": vehicle.get("car"),
+        "plate": vehicle.get("plate"),
+        "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        "active": vehicle.get("active", True),
+        "driver_id": str(driver["_id"]) if driver else driver_id,
+        "driver_name": (driver.get("fullName") or driver.get("full_name")) if driver else vehicle.get("assigned_driver_name"),
+        "approved": bool(driver.get("approved")) if driver else False,
+        "fleet_active": driver.get("fleet_active", True) if driver else None,
+        "online": bool(driver.get("online")) if driver else False,
+        "gps_fresh": fresh,
+        "last_location_at": driver.get("last_location_at") if driver else None,
+        "identity_verification_status": driver.get("identity_verification_status") if driver else None,
+        "document_compliance": document_compliance,
+        "document_statuses": document_statuses,
+        "missing_document_types": missing_document_types,
+    }
+
+
+@api.get("/fleet/vehicles")
+async def fleet_vehicles(current=Depends(require_fleet_owner)):
+    """Fleet-owned vehicle inventory plus current Driver assignment/runtime state."""
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    await _sync_fleet_vehicle_records(fid)
+    vehicles = []
+    async for v in db.fleet_vehicles.find({"fleet_id": fid}).sort("created_at", -1):
+        vehicles.append(await _fleet_vehicle_public(v, fid))
+    return {"vehicles": vehicles}
+
+
+@api.post("/fleet/vehicles", status_code=201)
+async def fleet_create_vehicle(body: FleetVehicleCreateRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    plate = _fleet_plate(body.plate)
+    if not plate:
+        raise HTTPException(400, "Ugyldig skiltnummer")
+    if await db.fleet_vehicles.find_one({"fleet_id": fid, "plate": plate}):
+        raise HTTPException(409, "Denne bilen finnes allerede i flåten")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "fleet_id": fid,
+        "car": body.car.strip(),
+        "plate": plate,
+        "vehicle_type": body.vehicle_type,
+        "active": True,
+        "created_at": now,
+        "updated_at": now,
+        "created_by": current["id"],
+    }
+    result = await db.fleet_vehicles.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    await _audit(current, "fleet.vehicle_create", "vehicle", str(result.inserted_id), None, {
+        "fleet_id": fid, "car": doc["car"], "plate": plate, "vehicle_type": body.vehicle_type,
+    })
+    return await _fleet_vehicle_public(doc, fid)
+
+
+@api.patch("/fleet/vehicles/{vehicle_id}")
+async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        oid = ObjectId(vehicle_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(400, "Ugyldig kjøretøy-id")
+    vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    if not vehicle:
+        raise HTTPException(404, "Fant ikke bilen i din flåte")
+    assigned_driver = None
+    if vehicle.get("assigned_driver_id"):
+        try:
+            assigned_driver = await db.users.find_one({"_id": ObjectId(vehicle["assigned_driver_id"]), "fleet_id": fid, "role": "driver"})
+        except (InvalidId, TypeError):
+            assigned_driver = None
+    if assigned_driver and assigned_driver.get("online") and (
+        any(v is not None for v in (body.car, body.plate, body.vehicle_type))
+        or body.active is False
+    ):
+        raise HTTPException(409, "Sjåføren må gå offline før bilen endres eller parkeres")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.car is not None:
+        update["car"] = body.car.strip()
+    if body.plate is not None:
+        plate = _fleet_plate(body.plate)
+        duplicate = await db.fleet_vehicles.find_one({"fleet_id": fid, "plate": plate, "_id": {"$ne": oid}})
+        if duplicate:
+            raise HTTPException(409, "Skiltnummeret er allerede registrert i flåten")
+        update["plate"] = plate
+    if body.vehicle_type is not None:
+        update["vehicle_type"] = body.vehicle_type
+    if body.active is not None:
+        update["active"] = body.active
+    await db.fleet_vehicles.update_one({"_id": oid, "fleet_id": fid}, {"$set": update})
+    if assigned_driver:
+        driver_update = {}
+        for key in ("car", "plate", "vehicle_type"):
+            if key in update:
+                driver_update[key] = update[key]
+        if driver_update:
+            await db.users.update_one({"_id": assigned_driver["_id"], "fleet_id": fid}, {"$set": driver_update})
+    after = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    await _audit(current, "fleet.vehicle_update", "vehicle", vehicle_id, {
+        "car": vehicle.get("car"), "plate": vehicle.get("plate"), "vehicle_type": vehicle.get("vehicle_type"), "active": vehicle.get("active", True)
+    }, update)
+    return await _fleet_vehicle_public(after, fid)
+
+
+@api.post("/fleet/vehicles/{vehicle_id}/assign-driver")
+async def fleet_assign_vehicle_driver(vehicle_id: str, body: FleetVehicleAssignmentRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        oid = ObjectId(vehicle_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(400, "Ugyldig kjøretøy-id")
+    vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    if not vehicle:
+        raise HTTPException(404, "Fant ikke bilen i din flåte")
+    if vehicle.get("active") is False and body.driver_id:
+        raise HTTPException(409, "Aktiver bilen før du tildeler en sjåfør")
+
+    previous_driver_id = vehicle.get("assigned_driver_id")
+    previous_driver = None
+    if previous_driver_id:
+        try:
+            previous_driver = await db.users.find_one({"_id": ObjectId(previous_driver_id), "role": "driver", "fleet_id": fid})
+        except (InvalidId, TypeError):
+            previous_driver = None
+    if previous_driver and previous_driver.get("online"):
+        raise HTTPException(409, "Nåværende sjåfør må gå offline før bilen kan omfordeles")
+
+    driver = None
+    if body.driver_id:
+        try:
+            driver = await db.users.find_one({"_id": ObjectId(body.driver_id), "role": "driver", "fleet_id": fid})
+        except (InvalidId, TypeError):
+            driver = None
+        if not driver:
+            raise HTTPException(404, "Fant ikke sjåføren i din flåte")
+        if driver.get("online"):
+            raise HTTPException(409, "Sjåføren må gå offline før bilbytte")
+        if driver.get("fleet_active") is False:
+            raise HTTPException(409, "Aktiver sjåføren før bilen tildeles")
+        await db.fleet_vehicles.update_many(
+            {"fleet_id": fid, "assigned_driver_id": body.driver_id, "_id": {"$ne": oid}},
+            {"$unset": {"assigned_driver_id": "", "assigned_driver_name": ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    if driver:
+        await db.fleet_vehicles.update_one({"_id": oid, "fleet_id": fid}, {"$set": {
+            "assigned_driver_id": body.driver_id,
+            "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
+            "updated_at": now,
+        }})
+        await db.users.update_one({"_id": driver["_id"], "fleet_id": fid}, {"$set": {
+            "vehicle_id": vehicle_id,
+            "car": vehicle.get("car"),
+            "plate": vehicle.get("plate"),
+            "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        }})
+    else:
+        await db.fleet_vehicles.update_one({"_id": oid, "fleet_id": fid}, {
+            "$unset": {"assigned_driver_id": "", "assigned_driver_name": ""},
+            "$set": {"updated_at": now},
+        })
+
+    if previous_driver and (not driver or str(previous_driver["_id"]) != str(driver["_id"])):
+        await db.users.update_one({"_id": previous_driver["_id"], "fleet_id": fid}, {
+            "$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""},
+            "$set": {"online": False},
+        })
+
+    after = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    await _audit(current, "fleet.vehicle_assign", "vehicle", vehicle_id,
+                 {"driver_id": previous_driver_id}, {"driver_id": body.driver_id})
+    return await _fleet_vehicle_public(after, fid)
+
+
+@api.post("/fleet/drivers/{driver_id}/set-active")
+async def fleet_set_driver_active(driver_id: str, body: FleetDriverActiveRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        oid = ObjectId(driver_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(400, "Ugyldig sjåfør-id")
+    driver = await db.users.find_one({"_id": oid, "role": "driver", "fleet_id": fid})
+    if not driver:
+        raise HTTPException(404, "Fant ikke sjåføren i din flåte")
+    if body.active is False:
+        active_trip = await db.trips.find_one({
+            "driver_id": driver_id,
+            "status": {"$in": ["accepted", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
+        })
+        if active_trip:
+            raise HTTPException(409, "Sjåføren har en aktiv tur og kan ikke deaktiveres")
+    before = driver.get("fleet_active", True)
+    update = {"fleet_active": body.active}
+    if not body.active:
+        update["online"] = False
+    await db.users.update_one({"_id": oid, "role": "driver", "fleet_id": fid}, {"$set": update})
+    await _audit(current, "fleet.driver_activate" if body.active else "fleet.driver_deactivate", "driver", driver_id,
+                 {"fleet_active": before}, {"fleet_active": body.active})
+    return {"ok": True, "active": body.active}
+
+
+
+FLEET_VEHICLE_DOC_TYPES = {"registration", "insurance", "inspection"}
+
+
+@api.post("/fleet/vehicles/{vehicle_id}/documents", status_code=201)
+async def fleet_upload_vehicle_document(
+    vehicle_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    doc_type: str = Form(...),
+    expiry: Optional[str] = Form(None),
+    current=Depends(require_fleet_owner),
+):
+    """Upload a compliance document for one vehicle owned by the authenticated fleet."""
+    await _enforce_rate_limit(request, "fleet-vehicle-doc-upload", 120, 3600)
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        oid = ObjectId(vehicle_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(400, "Ugyldig kjøretøy-id")
+    vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    if not vehicle:
+        raise HTTPException(404, "Fant ikke bilen i din flåte")
+    doc_type = str(doc_type or "").strip().lower()
+    if doc_type not in FLEET_VEHICLE_DOC_TYPES:
+        raise HTTPException(400, "Ugyldig dokumenttype")
+    if expiry:
+        try:
+            datetime.fromisoformat(str(expiry)[:10])
+        except ValueError:
+            raise HTTPException(400, "Ugyldig utløpsdato")
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("fleet-vehicle-docs", vehicle_id, file.filename or "file", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "fleet-vehicle-docs",
+        "fleet_id": fid,
+        "vehicle_id": vehicle_id,
+        "doc_type": doc_type,
+        "review_status": "pending",
+        "review_expiry": str(expiry)[:10] if expiry else None,
+        "is_deleted": False,
+        "created_at": now,
+    }
+    await db.uploaded_files.insert_one(doc)
+    await _audit(current, "fleet.vehicle_document_upload", "vehicle", vehicle_id, None, {
+        "doc_type": doc_type,
+        "filename": doc["original_filename"],
+        "expiry": doc["review_expiry"],
+    })
+    doc.pop("_id", None)
+    return {
+        "id": doc["id"],
+        "filename": doc["original_filename"],
+        "content_type": doc["content_type"],
+        "size": doc["size"],
+        "scope": doc["scope"],
+        "doc_type": doc_type,
+        "created_at": now,
+        "storage_path": doc["storage_path"],
+        "owner_type": "vehicle",
+        "owner_id": vehicle_id,
+        "owner_name": vehicle.get("plate") or vehicle.get("car"),
+        "review_status": "pending",
+        "expiry": doc["review_expiry"],
+        "compliance": _fleet_document_compliance("pending", doc["review_expiry"]),
+    }
+
+
+def _fleet_document_compliance(review_status, expiry):
+    today = datetime.now(timezone.utc).date().isoformat()
+    soon = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+    if review_status == "rejected":
+        return "REJECTED"
+    if review_status != "valid":
+        return "PENDING"
+    if expiry and expiry < today:
+        return "EXPIRED"
+    if expiry and expiry <= soon:
+        return "EXPIRING"
+    return "VALID"
+
+
+@api.get("/fleet/documents")
+async def fleet_documents(current=Depends(require_fleet_owner)):
+    """Documents visible to this fleet only: its own application docs + its drivers' docs."""
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    fleet = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
+
+    driver_ids = []
+    driver_names = {}
+    async for u in db.users.find({"role": "driver", "fleet_id": fid}, {"fullName": 1, "full_name": 1}):
+        uid = str(u["_id"])
+        driver_ids.append(uid)
+        driver_names[uid] = u.get("fullName") or u.get("full_name") or "Sjåfør"
+
+    vehicle_names = {}
+    async for v in db.fleet_vehicles.find({"fleet_id": fid}, {"plate": 1, "car": 1}):
+        vehicle_names[str(v["_id"])] = v.get("plate") or v.get("car") or "Kjøretøy"
+
+    application = None
+    app_token = None
+    application_id = fleet.get("application_id")
+    if application_id:
+        try:
+            application = await db.fleet_applications.find_one({"_id": ObjectId(application_id)})
+        except Exception:
+            application = None
+        app_token = (application or {}).get("upload_token")
+
+    filters = []
+    if driver_ids:
+        filters.append({"scope": "driver-docs", "owner_user_id": {"$in": driver_ids}})
+    filters.append({"scope": "fleet-vehicle-docs", "fleet_id": fid})
+    if app_token:
+        filters.append({"scope": "fleet-applications", "application_token": app_token})
+
+    docs = []
+    if filters:
+        async for d in db.uploaded_files.find({
+            "$or": filters,
+            "is_deleted": {"$ne": True},
+        }).sort("created_at", -1):
+            owner_id = d.get("owner_user_id")
+            rs = d.get("review_status") or "pending"
+            expiry = d.get("review_expiry")
+            scope = d.get("scope")
+            vehicle_id = d.get("vehicle_id")
+            owner_type = "driver" if scope == "driver-docs" else "vehicle" if scope == "fleet-vehicle-docs" else "fleet"
+            owner_name = (
+                driver_names.get(owner_id)
+                if owner_type == "driver"
+                else vehicle_names.get(vehicle_id)
+                if owner_type == "vehicle"
+                else fleet.get("name")
+            )
+            docs.append({
+                "id": d.get("id") or str(d["_id"]),
+                "filename": d.get("original_filename"),
+                "content_type": d.get("content_type"),
+                "size": d.get("size"),
+                "scope": scope,
+                "doc_type": d.get("doc_type"),
+                "created_at": d.get("created_at"),
+                "storage_path": d.get("storage_path"),
+                "owner_type": owner_type,
+                "owner_id": vehicle_id if owner_type == "vehicle" else owner_id,
+                "owner_name": owner_name,
+                "review_status": rs,
+                "expiry": expiry,
+                "compliance": _fleet_document_compliance(rs, expiry),
+            })
+
+    summary = {"VALID": 0, "EXPIRING": 0, "EXPIRED": 0, "PENDING": 0, "REJECTED": 0}
+    for d in docs:
+        summary[d["compliance"]] += 1
+    return {"documents": docs, "summary": summary}
+
+
+@api.get("/fleet/drivers/{driver_id}")
+async def fleet_driver_detail(driver_id: str, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    try:
+        u = await db.users.find_one({"_id": ObjectId(driver_id), "role": "driver", "fleet_id": fid})
+    except Exception:
+        u = None
+    if not u:
+        raise HTTPException(404, "Fant ikke sjåfør i din flåte")
+
+    public = user_public(u)
+    completed = await db.trips.count_documents({
+        "driver_id": driver_id,
+        "status": {"$in": ["arrived", "completed", "rated"]},
+    })
+    active = await db.trips.find_one({
+        "driver_id": driver_id,
+        "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]},
+    }, sort=[("created_at", -1)])
+    docs = []
+    async for d in db.uploaded_files.find({
+        "scope": "driver-docs",
+        "owner_user_id": driver_id,
+        "is_deleted": {"$ne": True},
+    }).sort("created_at", -1):
+        rs = d.get("review_status") or "pending"
+        expiry = d.get("review_expiry")
+        docs.append({
+            "id": d.get("id") or str(d["_id"]),
+            "filename": d.get("original_filename"),
+            "doc_type": d.get("doc_type"),
+            "review_status": rs,
+            "expiry": expiry,
+            "compliance": _fleet_document_compliance(rs, expiry),
+        })
+    public["trips_completed"] = completed
+    public["active_trip"] = {
+        "trip_id": active.get("trip_id"),
+        "status": active.get("status"),
+        "pickup_address": active.get("pickup_address"),
+        "dropoff_address": active.get("dropoff_address"),
+    } if active else None
+    public["documents"] = docs
+    return public
+
+
 @api.get("/fleet/payouts")
 async def fleet_payouts(current=Depends(require_fleet_owner)):
     fid = await get_fleet_id_for(current)
@@ -5357,11 +6051,21 @@ class ApproveDriverRequest(BaseModel):
     approved: bool = True
 
 
+def _enforce_identity_before_driver_approval(driver: dict, approving: bool) -> None:
+    """When rollout enforcement is enabled, Admin cannot approve an unverified driver."""
+    if approving and KJAPP_DRIVER_IDENTITY_REQUIRED and driver.get("identity_verification_status") != "verified":
+        raise HTTPException(
+            status_code=409,
+            detail="Sjåføren må ha verifisert Selfie ID før kontoen kan godkjennes",
+        )
+
+
 @api.post("/admin/drivers/{user_id}/approve")
 async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current=Depends(require_admin)):
     try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    _enforce_identity_before_driver_approval(u, body.approved)
     prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
@@ -5519,6 +6223,7 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
         "capabilities": inv.get("capabilities") or [],
         "rating": 5.0,
         "approved": False,  # requires admin approval before pending trips visible
+        "fleet_active": True,
         "online": False,
         "accepted_terms_at": datetime.now(timezone.utc).isoformat(),
         "legal_version": CURRENT_LEGAL_VERSION,
@@ -6514,6 +7219,312 @@ def _mk_upload_path(scope: str, subject_id: str, filename: str, content_type: st
     ext = (ext or "bin").replace("/", "").replace(".", "")
     return f"{STORAGE_APP}/{scope}/{subject_id}/{uuid.uuid4()}.{ext}"
 
+_IDENTITY_IMAGE_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
+
+
+async def _require_driver_identity_user(current=Depends(get_current_user)):
+    if current.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Kun for sjåfører")
+    if current.get("disabled"):
+        raise HTTPException(status_code=403, detail="Sjåførkontoen er deaktivert")
+    return current
+
+
+@api.get("/driver/identity-verification")
+async def driver_identity_verification_status(current=Depends(_require_driver_identity_user)):
+    latest = await db.driver_identity_verifications.find_one(
+        {"driver_user_id": current["id"]},
+        sort=[("created_at", -1)],
+    )
+    if not latest:
+        return {
+            "status": current.get("identity_verification_status") or "not_submitted",
+            "submitted_at": None,
+            "reviewed_at": None,
+            "review_reason": None,
+        }
+    return {
+        "id": latest.get("id") or str(latest["_id"]),
+        "status": latest.get("status") or "pending_review",
+        "submitted_at": latest.get("created_at"),
+        "reviewed_at": latest.get("reviewed_at"),
+        "review_reason": latest.get("review_reason"),
+    }
+
+
+@api.post("/driver/identity-verification/selfie", status_code=201)
+async def driver_identity_verification_selfie(
+    request: Request,
+    file: UploadFile = File(...),
+    current=Depends(_require_driver_identity_user),
+):
+    """Accept a fresh front-camera selfie for manual identity review.
+
+    The beta flow deliberately does not run an automatic face-match decision.
+    Raw selfie access is restricted to the driver and KJAPP admins.
+    """
+    await _enforce_rate_limit(request, "driver-identity-selfie", 10, 3600)
+    if file.content_type not in _IDENTITY_IMAGE_MIME:
+        raise HTTPException(status_code=415, detail="Selfie må være et bilde")
+    data = await _read_uploaded_file(file)
+    now = datetime.now(timezone.utc).isoformat()
+    storage_path = _mk_upload_path(
+        "driver-identity-selfie",
+        current["id"],
+        file.filename or "selfie.jpg",
+        file.content_type,
+    )
+    result = storage_put(storage_path, data, file.content_type)
+    upload_id = str(uuid.uuid4())
+    await db.uploaded_files.insert_one({
+        "id": upload_id,
+        "storage_path": result["path"],
+        "original_filename": file.filename or "selfie.jpg",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "driver-identity-selfie",
+        "is_deleted": False,
+        "created_at": now,
+    })
+
+    await db.driver_identity_verifications.update_many(
+        {"driver_user_id": current["id"], "status": "pending_review"},
+        {"$set": {"status": "superseded", "superseded_at": now}},
+    )
+    verification_id = str(uuid.uuid4())
+    await db.driver_identity_verifications.insert_one({
+        "id": verification_id,
+        "driver_user_id": current["id"],
+        "selfie_file_id": upload_id,
+        "selfie_storage_path": result["path"],
+        "status": "pending_review",
+        "created_at": now,
+    })
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"])},
+        {"$set": {
+            "identity_verification_status": "pending_review",
+            "identity_verification_updated_at": now,
+        }},
+    )
+    return {
+        "id": verification_id,
+        "status": "pending_review",
+        "submitted_at": now,
+    }
+
+
+class DriverIdentityReviewRequest(BaseModel):
+    status: Literal["verified", "retry_required"]
+    reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+@api.get("/admin/identity-verifications")
+async def admin_identity_verifications(
+    status: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    current=Depends(require_admin),
+):
+    q = {}
+    if status and status != "all":
+        q["status"] = status
+    page, page_size, skip = _page_params(page, page_size)
+    total = await db.driver_identity_verifications.count_documents(q)
+    rows = []
+    async for v in db.driver_identity_verifications.find(q).sort("created_at", -1).skip(skip).limit(page_size):
+        driver = None
+        try:
+            driver = await db.users.find_one({"_id": ObjectId(v.get("driver_user_id"))})
+        except Exception:
+            driver = None
+        if not driver:
+            continue
+        rows.append({
+            "id": v.get("id") or str(v["_id"]),
+            "status": v.get("status"),
+            "submitted_at": v.get("created_at"),
+            "reviewed_at": v.get("reviewed_at"),
+            "reviewed_by": v.get("reviewed_by"),
+            "review_reason": v.get("review_reason"),
+            "selfie_storage_path": v.get("selfie_storage_path"),
+            "driver_id": str(driver["_id"]),
+            "driver_name": driver.get("fullName") or driver.get("full_name"),
+            "driver_email": driver.get("email"),
+            "fleet_id": driver.get("fleet_id"),
+            "car": driver.get("car"),
+            "plate": driver.get("plate"),
+            "profile_photo_path": driver.get("profile_photo_path"),
+            "drivers_license_path": driver.get("drivers_license_path"),
+            "taxi_license_path": driver.get("taxi_license_path"),
+        })
+    return _paged(rows, total, page, page_size, "verifications")
+
+
+@api.post("/admin/identity-verifications/{verification_id}/review")
+async def admin_review_identity_verification(
+    verification_id: str,
+    body: DriverIdentityReviewRequest,
+    current=Depends(require_admin),
+):
+    verification = await db.driver_identity_verifications.find_one({"id": verification_id})
+    if not verification:
+        raise HTTPException(404, "Fant ikke identitetskontrollen")
+    if verification.get("status") == "superseded":
+        raise HTTPException(409, "Denne selfien er erstattet av en nyere innsending")
+
+    now = datetime.now(timezone.utc).isoformat()
+    previous = verification.get("status")
+    await db.driver_identity_verifications.update_one(
+        {"_id": verification["_id"]},
+        {"$set": {
+            "status": body.status,
+            "review_reason": (body.reason or "").strip() or None,
+            "reviewed_at": now,
+            "reviewed_by": current.get("id"),
+        }},
+    )
+    driver_id = verification.get("driver_user_id")
+    try:
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id)},
+            {"$set": {
+                "identity_verification_status": body.status,
+                "identity_verification_updated_at": now,
+            }},
+        )
+    except Exception:
+        pass
+    await _audit(
+        current,
+        "driver.identity_review",
+        "driver",
+        driver_id,
+        {"status": previous},
+        {"status": body.status},
+        body.reason,
+    )
+    return {"ok": True, "status": body.status, "reviewed_at": now}
+
+
+class IdentityRetentionPurgeRequest(BaseModel):
+    dry_run: bool = True
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+def _identity_retention_cutoff() -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=KJAPP_IDENTITY_SELFIE_RETENTION_DAYS)
+
+
+def _identity_terminal_at(v: dict) -> Optional[datetime]:
+    value = v.get("reviewed_at") or v.get("superseded_at") or v.get("created_at")
+    if not value:
+        return None
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+@api.get("/admin/identity-verifications/retention")
+async def admin_identity_retention(current=Depends(require_superadmin)):
+    """Return privacy-retention status without exposing selfie bytes."""
+    cutoff = _identity_retention_cutoff()
+    eligible = 0
+    retained = 0
+    pending = 0
+    async for v in db.driver_identity_verifications.find({}):
+        if v.get("status") == "pending_review":
+            pending += 1
+            continue
+        if not v.get("selfie_storage_path") or v.get("purged_at"):
+            continue
+        terminal_at = _identity_terminal_at(v)
+        if terminal_at and terminal_at <= cutoff:
+            eligible += 1
+        else:
+            retained += 1
+    return {
+        "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS,
+        "cutoff": cutoff.isoformat(),
+        "eligible_for_purge": eligible,
+        "retained_terminal": retained,
+        "pending_review_excluded": pending,
+    }
+
+
+@api.post("/admin/identity-verifications/purge-expired")
+async def admin_purge_identity_selfies(body: IdentityRetentionPurgeRequest, current=Depends(require_superadmin)):
+    """Purge aged terminal selfie objects while retaining minimal audit metadata.
+
+    Pending reviews are never purged. Physical object deletion must succeed before DB paths are removed.
+    Use dry_run=true first in beta to validate eligibility before destructive execution.
+    """
+    cutoff = _identity_retention_cutoff()
+    candidates = []
+    async for v in db.driver_identity_verifications.find({
+        "status": {"$in": ["verified", "retry_required", "superseded"]},
+        "selfie_storage_path": {"$exists": True, "$ne": None},
+        "purged_at": {"$exists": False},
+    }).sort("created_at", 1).limit(body.limit):
+        terminal_at = _identity_terminal_at(v)
+        if terminal_at and terminal_at <= cutoff:
+            candidates.append(v)
+
+    if body.dry_run:
+        return {
+            "dry_run": True,
+            "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS,
+            "eligible": len(candidates),
+            "verification_ids": [(v.get("id") or str(v["_id"])) for v in candidates],
+        }
+
+    purged = []
+    failed = []
+    now = datetime.now(timezone.utc).isoformat()
+    for v in candidates:
+        verification_id = v.get("id") or str(v["_id"])
+        path = v.get("selfie_storage_path")
+        try:
+            if path:
+                storage_delete(path)
+            await db.uploaded_files.update_many(
+                {"storage_path": path, "scope": "driver-identity-selfie"},
+                {"$set": {"is_deleted": True, "deleted_at": now, "deleted_reason": "identity_retention"}},
+            )
+            await db.driver_identity_verifications.update_one(
+                {"_id": v["_id"]},
+                {
+                    "$set": {
+                        "purged_at": now,
+                        "purged_by": current.get("id"),
+                        "selfie_purged": True,
+                    },
+                    "$unset": {"selfie_storage_path": "", "selfie_file_id": ""},
+                },
+            )
+            purged.append(verification_id)
+        except Exception as exc:
+            failed.append({"verification_id": verification_id, "error": type(exc).__name__})
+
+    await _audit(
+        current,
+        "identity.retention_purge",
+        "identity_verification",
+        "batch",
+        None,
+        {"purged": len(purged), "failed": len(failed), "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS},
+    )
+    return {
+        "dry_run": False,
+        "retention_days": KJAPP_IDENTITY_SELFIE_RETENTION_DAYS,
+        "purged": purged,
+        "failed": failed,
+    }
+
+
 
 @api.post("/upload")
 async def upload_auth(file: UploadFile = File(...), scope: str = Form("misc"), current=Depends(get_current_user)):
@@ -6577,6 +7588,25 @@ async def download_file(path: str, current=Depends(get_current_user)):
         allowed = True
     elif rec.get("scope") == "fleet-applications" and role in ("admin",):
         allowed = True
+    elif rec.get("scope") == "fleet-applications" and role == "fleet_owner":
+        fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+        try:
+            fleet_doc = await db.fleets.find_one({"_id": ObjectId(fleet_id)}) if fleet_id else None
+            app_doc = await db.fleet_applications.find_one({"_id": ObjectId((fleet_doc or {}).get("application_id"))}) if (fleet_doc or {}).get("application_id") else None
+        except Exception:
+            app_doc = None
+        if app_doc and rec.get("application_token") == app_doc.get("upload_token"):
+            allowed = True
+    elif rec.get("scope") == "fleet-vehicle-docs":
+        if role in ("admin", "superadmin"):
+            allowed = True
+        elif role == "fleet_owner":
+            fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+            allowed = bool(fleet_id and rec.get("fleet_id") == fleet_id)
+    elif rec.get("scope") == "driver-identity-selfie":
+        # Raw identity selfies are intentionally not exposed to fleet owners.
+        if is_owner or role in ("admin", "superadmin"):
+            allowed = True
     elif rec.get("scope") == "driver-docs":
         if is_owner or role in ("admin", "superadmin"):
             allowed = True
@@ -7019,6 +8049,7 @@ async def admin_set_driver_status(user_id: str, body: ApproveDriverRequest, curr
     try: u = await db.users.find_one({"_id": ObjectId(user_id), "role": "driver"})
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
+    _enforce_identity_before_driver_approval(u, body.approved)
     prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"approved": body.approved}})
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
@@ -7359,16 +8390,29 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
         filt["$or"] = [{"original_filename": rx}, {"scope": rx}]
     page, page_size, skip = _page_params(page, page_size)
     total = await db.uploaded_files.count_documents(filt)
-    raw, owner_ids, app_tokens = [], [], []
+    raw, owner_ids, app_tokens, vehicle_ids = [], [], [], []
     async for f in db.uploaded_files.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         raw.append(f)
         owner_ids.append(f.get("owner_user_id"))
         if f.get("application_token"): app_tokens.append(f["application_token"])
+        if f.get("vehicle_id"): vehicle_ids.append(f["vehicle_id"])
     owners = await _users_by_ids(owner_ids)
     app_names = {}
     if app_tokens:
         async for a in db.fleet_applications.find({"upload_token": {"$in": list(set(app_tokens))}}, {"company_name": 1, "upload_token": 1}):
             app_names[a.get("upload_token")] = a.get("company_name")
+    vehicle_names = {}
+    if vehicle_ids:
+        vehicle_object_ids = []
+        for vehicle_id in set(vehicle_ids):
+            try:
+                vehicle_object_ids.append(ObjectId(vehicle_id))
+            except (InvalidId, TypeError):
+                continue
+        if vehicle_object_ids:
+            async for v in db.fleet_vehicles.find({"_id": {"$in": vehicle_object_ids}}, {"plate": 1, "car": 1}):
+                vehicle_names[str(v["_id"])] = v.get("plate") or v.get("car") or "Kjøretøy"
+
     out = []
     scopes = set()
     today = datetime.now(timezone.utc).date().isoformat()
@@ -7386,13 +8430,19 @@ async def admin_documents(scope: Optional[str] = None, q: Optional[str] = None, 
         o = owners.get(f.get("owner_user_id")) or {}
         rs = f.get("review_status") or "pending"
         exp = f.get("review_expiry")
+        scope_name = f.get("scope")
+        vehicle_id = f.get("vehicle_id")
+        owner_type = "vehicle" if scope_name == "fleet-vehicle-docs" else "driver" if scope_name == "driver-docs" else "fleet" if scope_name == "fleet-applications" else "user"
+        owner_name = vehicle_names.get(vehicle_id) if owner_type == "vehicle" else (o.get("name") or app_names.get(f.get("application_token")))
         out.append({
             "id": f.get("id") or str(f["_id"]),
             "filename": f.get("original_filename"), "content_type": f.get("content_type"),
-            "size": f.get("size"), "scope": f.get("scope"), "created_at": f.get("created_at"),
+            "size": f.get("size"), "scope": scope_name, "created_at": f.get("created_at"),
             "storage_path": f.get("storage_path"),
-            "owner_name": o.get("name") or app_names.get(f.get("application_token")),
-            "owner_email": o.get("email"),
+            "doc_type": f.get("doc_type"), "vehicle_id": vehicle_id, "fleet_id": f.get("fleet_id"),
+            "owner_type": owner_type,
+            "owner_name": owner_name,
+            "owner_email": o.get("email") if owner_type != "vehicle" else None,
             "review_status": rs, "expiry": exp, "compliance": _compliance(rs, exp),
             "reviewed_by": f.get("reviewed_by"), "reviewed_at": f.get("reviewed_at"),
         })

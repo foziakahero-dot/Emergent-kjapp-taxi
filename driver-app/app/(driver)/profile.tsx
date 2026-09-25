@@ -58,7 +58,8 @@ export default function DriverProfile() {
       </View>
 
       <View style={[s.infoCard, { marginTop: 20 }]}>
-        <MenuRow icon="history" label="Mine turer" onPress={() => router.push('/driver-trips')} s={s} testID="profile-trips" />
+        <MenuRow icon="shield" label="Identitetskontroll" onPress={() => router.push('/driver-identity')} s={s} testID="profile-identity" />
+        <MenuRow icon="history" label="Mine turer" onPress={() => router.push('/driver-trips')} s={s} border testID="profile-trips" />
         <MenuRow icon="settings" label="Innstillinger" onPress={() => router.push('/driver-settings')} s={s} border testID="profile-settings" />
       </View>
 

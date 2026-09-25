@@ -5,6 +5,12 @@ const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-buil
 export const TOKEN_KEY = 'kjapp_token';
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
+export const apiError = (e: any) => {
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  return e?.message || 'Noe gikk galt';
+};
+
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
   timeout: 30000,
@@ -127,4 +133,14 @@ export const driverApi = {
   payouts: () => api.get('/driver/payouts')
     .then((r) => normalizePayouts(r.data))
     .catch(() => normalizePayouts()),
+  identityVerification: () => api.get('/driver/identity-verification').then((r) => r.data),
+  submitIdentitySelfie: (uri: string) => {
+    const form = new FormData();
+    form.append('file', {
+      uri,
+      name: `kjapp-selfie-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+    } as any);
+    return api.post('/driver/identity-verification/selfie', form).then((r) => r.data);
+  },
 };
