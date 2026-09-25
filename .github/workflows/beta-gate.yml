@@ -56,6 +56,7 @@ jobs:
           backend/tests/test_real_trip_integrity_contract.py
           backend/tests/test_beta_trip_integrity_contract.py
           backend/tests/test_beta_trip_lifecycle_contract.py
+          backend/tests/test_mobile_server_truth_contract.py
 
   admin-web:
     name: Admin web build
