@@ -42,13 +42,20 @@ export default function DriverProfile() {
         </View>
       </View>
 
-      <Text style={s.section}>Kjøretøy</Text>
-      <View style={s.infoCard}>
-        <Info label="Bil" value={u.car || '—'} s={s} />
-        <Info label="Skilt" value={u.plate || '—'} s={s} border />
-        <Info label="Klasse" value={vName} s={s} border />
-        <Info label="Status" value="Aktiv" valueColor={colors.online} s={s} border />
+      <Text style={s.section}>Løyvehaver</Text>
+      <View style={s.infoCard} testID="driver-fleet-card">
+        <Info label="Firma" value={u.fleet_name || 'Ikke tilknyttet'} s={s} />
+        <Info label="Org.nr." value={u.fleet_org_number || '—'} s={s} border />
       </View>
+
+      <Text style={s.section}>Tildelt kjøretøy</Text>
+      <View style={s.infoCard} testID="driver-assigned-vehicle-card">
+        <Info label="Bil" value={u.car || 'Ingen bil tildelt'} s={s} />
+        <Info label="Skilt" value={u.plate || '—'} s={s} border />
+        <Info label="Klasse" value={u.vehicle_id ? vName : '—'} s={s} border />
+        <Info label="Tildeling" value={u.vehicle_id ? 'Tildelt av løyvehaver' : 'Mangler tildeling'} valueColor={u.vehicle_id ? colors.online : colors.danger} s={s} border />
+      </View>
+      <Text style={s.vehicleHint}>Bil og kjøretøyklasse styres av løyvehaveren. KJAPP bruker denne tildelingen i dispatch og på kvitteringen.</Text>
 
       <Text style={s.section}>Personlig</Text>
       <View style={s.infoCard}>
@@ -101,6 +108,7 @@ const useStyles = makeStyles((c) => ({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accentSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   badgeText: { color: c.accent, fontSize: 12 },
   section: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 26, marginBottom: 8 },
+  vehicleHint: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 8, paddingHorizontal: 4 },
   infoCard: { backgroundColor: c.driverCard, borderRadius: 20, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16 },
   infoBorder: { borderTopWidth: 1, borderTopColor: c.line },
