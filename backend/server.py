@@ -4052,8 +4052,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         f"/receipt/{trip_id}", "trip_arrived",
     )
     payment = await _attempt_trip_auto_charge(t)
-    bonuses = await award_driver_bonuses(driver_id)
-    return {"ok": True, "bonuses": bonuses, "payment": payment}
+    # Bonus evaluation happens only from the canonical payment-success transition.
+    return {"ok": True, "bonuses": [], "payment": payment}
 
 
 @api.get("/driver/demand")
@@ -5820,11 +5820,12 @@ def _oslo_window(campaign: dict, now: datetime = None):
 async def _campaign_progress(driver_id: str, campaign: dict):
     """Real number of trips this driver finished inside today's window + payouts already earned."""
     start_iso, end_iso, local_date = _oslo_window(campaign)
-    trips = await db.trips.count_documents({
+    trips = await db.trips.count_documents(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": FINISHED_TRIP_STATUSES},
+        "payment_status": "paid",
         "arrived_at": {"$gte": start_iso, "$lt": end_iso},
-    })
+    }))
     paid = await db.bonus_payouts.count_documents({
         "driver_id": driver_id, "campaign_id": campaign["id"], "local_date": local_date,
     })
@@ -6847,7 +6848,20 @@ async def _mark_trip_paid_and_complete(trip_id: str, user_id: str, paid_at: Opti
         {"trip_id": trip_id, "user_id": user_id, "status": "arrived"},
         {"$set": {"status": "completed", "completed_at": paid_at, "updated_at": paid_at}},
     )
-    return await db.trips.find_one({"trip_id": trip_id, "user_id": user_id})
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": user_id})
+    if trip and trip.get("driver_id"):
+        bonus_gate = await db.trips.update_one(
+            {
+                "trip_id": trip_id,
+                "user_id": user_id,
+                "payment_status": "paid",
+                "bonus_evaluated_at": {"$exists": False},
+            },
+            {"$set": {"bonus_evaluated_at": paid_at}},
+        )
+        if bonus_gate.modified_count == 1:
+            await award_driver_bonuses(trip["driver_id"])
+    return trip
 
 
 async def send_trip_receipts(trip_id: str):
