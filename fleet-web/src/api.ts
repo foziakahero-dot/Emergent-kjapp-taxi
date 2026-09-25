@@ -207,6 +207,10 @@ export type FleetPayout = {
   amount?: number;
   status?: string;
   paid_at?: string;
+  arrival_date?: string;
+  created?: string;
+  currency?: string;
+  source?: string;
 };
 
 export type DriverInvite = {
@@ -269,7 +273,8 @@ export const api = {
     return http.get(`/files/${encoded}`, { responseType: 'blob' }).then((r) => r.data as Blob);
   },
   trips: (days = 90): Promise<{ trips: FleetTrip[] }> => http.get('/fleet/trips', { params: { days } }).then((r) => r.data),
-  payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
+  payouts: (): Promise<{ payouts: FleetPayout[]; source?: string; connected?: boolean; payout_schedule?: string; temporarily_unavailable?: boolean }> =>
+    http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
   createInvite: (body: { vehicle_id: string; email?: string; note?: string }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
