@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      run_isolated_lifecycle:
+        description: Run mutating lifecycle test only when api points to an isolated test database
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -36,6 +41,8 @@ jobs:
       KJAPP_E2E_DRIVER_A_PASSWORD: ${{ secrets.KJAPP_E2E_DRIVER_A_PASSWORD }}
       KJAPP_E2E_DRIVER_B_EMAIL: ${{ secrets.KJAPP_E2E_DRIVER_B_EMAIL }}
       KJAPP_E2E_DRIVER_B_PASSWORD: ${{ secrets.KJAPP_E2E_DRIVER_B_PASSWORD }}
+      KJAPP_E2E_ISOLATED: ${{ inputs.run_isolated_lifecycle }}
+      KJAPP_E2E_ALLOW_MUTATION: ${{ inputs.run_isolated_lifecycle }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,11 +50,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Verify E2E secrets exist
+      - name: Non-destructive backend smoke
+        run: python backend/scripts/release_smoke.py
+
+      - name: Verify isolated lifecycle secrets exist
+        if: ${{ inputs.run_isolated_lifecycle }}
         shell: bash
         run: |
           set -euo pipefail
-          for name in             KJAPP_E2E_CUSTOMER_EMAIL KJAPP_E2E_CUSTOMER_PASSWORD             KJAPP_E2E_DRIVER_A_EMAIL KJAPP_E2E_DRIVER_A_PASSWORD             KJAPP_E2E_DRIVER_B_EMAIL KJAPP_E2E_DRIVER_B_PASSWORD
+          for name in KJAPP_E2E_CUSTOMER_EMAIL KJAPP_E2E_CUSTOMER_PASSWORD KJAPP_E2E_DRIVER_A_EMAIL KJAPP_E2E_DRIVER_A_PASSWORD KJAPP_E2E_DRIVER_B_EMAIL KJAPP_E2E_DRIVER_B_PASSWORD
           do
             if [ -z "${!name:-}" ]; then
               echo "Missing GitHub secret: $name"
@@ -55,8 +66,11 @@ jobs:
             fi
           done
 
-      - name: Non-destructive backend smoke
-        run: python backend/scripts/release_smoke.py
-
-      - name: Controlled dispatch/trip lifecycle E2E
-        run: python backend/scripts/e2e_dispatch.py
+      - name: Isolated dispatch/trip lifecycle E2E
+        if: ${{ inputs.run_isolated_lifecycle }}
+        run: |
+          if [ "$KJAPP_E2E_API" = "https://github-app-builder-28.emergent.host" ] || [ "$KJAPP_E2E_API" = "https://api.kjappapp.no" ]; then
+            echo "Refusing mutating lifecycle E2E against shared live beta/production API"
+            exit 1
+          fi
+          python backend/scripts/e2e_dispatch.py
