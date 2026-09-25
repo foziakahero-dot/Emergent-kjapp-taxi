@@ -331,6 +331,11 @@ function TripDrawer({ trip, onClose, onChanged }: any) {
       <KV k="Kunde" v={trip.passenger_name} />
       <KV k="Sjåfør" v={trip.driver_name ? `${trip.driver_name} · ${trip.driver_car || ''} ${trip.driver_plate || ''}` : '—'} />
       <KV k="Betaling" v={<Pill status={trip.payment_status || 'pending'} />} />
+      <KV k="Kvittering" v={trip.receipt_id ? (
+        <Btn variant="sm" onClick={() => { window.location.hash = `/receipts?q=${encodeURIComponent(trip.receipt_id)}`; }}>
+          {trip.receipt_id}
+        </Btn>
+      ) : (isPaid ? 'Opprettes ved betalingsbekreftelse' : '—')} />
       <KV k="Kjøretøyklasse" v={trip.vehicle_type} />
       <KV k="Prisversjon" v={trip.pricing_version ?? '—'} />
       <KV k="Serviceavgift" v={trip.commission_rate != null ? `${Math.round(Number(trip.commission_rate) * 1000) / 10}%` : '—'} />
