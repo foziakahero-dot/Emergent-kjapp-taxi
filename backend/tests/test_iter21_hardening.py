@@ -72,12 +72,14 @@ def test_production_rejects_default_admin_password():
     validate_production_config({"JWT_SECRET": strong_secret, "ADMIN_EMAIL": "a@b.no", "ADMIN_PASSWORD": "Sup3r-Str0ng-Passw0rd!"})
 
 
-def test_demo_data_never_enabled_in_production():
+def test_demo_data_is_opt_in_and_never_enabled_in_production():
     from server import demo_data_enabled
     assert demo_data_enabled("production", "true") is False
     assert demo_data_enabled("production", None) is False
-    assert demo_data_enabled("development", None) is True
+    assert demo_data_enabled("development", None) is False
     assert demo_data_enabled("development", "false") is False
+    assert demo_data_enabled("development", "true") is True
+    assert demo_data_enabled("staging", None) is False
     assert demo_data_enabled("staging", "true") is True
 
 
@@ -85,6 +87,12 @@ def test_server_source_has_no_hardcoded_admin_password():
     src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server.py")).read()
     assert 'os.environ.get("ADMIN_PASSWORD", "admin123")' not in src
     assert 'allow_origins=["*"]' not in src
+
+
+def test_demo_trips_feature_is_permanently_disabled():
+    from server import DEFAULT_PLATFORM_SETTINGS
+    assert DEFAULT_PLATFORM_SETTINGS["features"]["demo_trips"] is False
+
 
 
 # ---------- 2. Brute-force protection (live server) ----------
@@ -196,9 +204,13 @@ def test_fleet_owner_cannot_access_admin_or_other_fleets():
 
 def test_superadmin_access_still_works():
     h = auth_headers("admin@kjapp.no", "admin123")
-    for ep in ["/admin/overview", "/admin/fleets-full", "/admin/settings", "/admin/audit-log"]:
+    for ep in ["/admin/overview", "/admin/fleets-full", "/admin/settings", "/admin/audit-log", "/admin/data-integrity"]:
         r = requests.get(f"{BASE}{ep}", headers=h, timeout=15)
         assert r.status_code == 200, f"{ep} should be 200 for superadmin, got {r.status_code}"
+    integrity = requests.get(f"{BASE}/admin/data-integrity", headers=h, timeout=15).json()
+    assert integrity["operational_reads_filter_synthetic"] is True
+    assert "synthetic_trips" in integrity
+    assert "real_trips" in integrity
 
 
 # ---------- 4. Runtime hygiene ----------
@@ -209,9 +221,16 @@ def test_request_id_header_present():
     assert r.headers.get("X-Request-ID"), "X-Request-ID header missing"
 
 
-def test_demo_data_active_in_dev_environment():
-    """In this dev environment ENABLE_DEMO_DATA=true — demo drivers must exist (control test)."""
-    from server import ENABLE_DEMO_DATA, APP_ENV
-    assert APP_ENV == "development"
-    assert ENABLE_DEMO_DATA is True
-    assert mdb.users.count_documents({"demo": True, "role": "driver"}) >= 1
+def test_demo_data_runtime_matches_explicit_flag():
+    """Demo accounts exist only when the test environment explicitly opted in."""
+    from server import ENABLE_DEMO_DATA
+    if ENABLE_DEMO_DATA:
+        assert mdb.users.count_documents({"demo": True, "role": "driver"}) >= 1
+    else:
+        enabled_legacy = mdb.users.count_documents({
+            "$or": [
+                {"demo": True, "disabled": {"$ne": True}},
+                {"is_demo": True, "disabled": {"$ne": True}},
+            ]
+        })
+        assert enabled_legacy == 0
