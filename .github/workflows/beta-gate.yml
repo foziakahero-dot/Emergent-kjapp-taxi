@@ -3,7 +3,7 @@ name: KJAPP Beta Gate
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, 'beta/oslo-production-ready']
     paths:
       - 'backend/**'
       - 'frontend/**'
