@@ -26,6 +26,7 @@ const FINISHED_TRIP_STATUSES = new Set(['arrived', 'completed', 'rated']);
 type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
 type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
 const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
+const DISMISSED_COMPLETED_TRIP_KEY = 'kjapp_driver_dismissed_completed_trip_v1';
 
 async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
   if (action === 'at_pickup') return driverApi.atPickup(tripId);
@@ -69,7 +70,8 @@ export default function DriverHome() {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
       if (normalized && FINISHED_TRIP_STATUSES.has(normalized.status)) {
-        setCompletedTrip(normalized);
+        const dismissedId = await storage.getItem(DISMISSED_COMPLETED_TRIP_KEY);
+        setCompletedTrip(dismissedId === normalized.trip_id ? null : normalized);
         setCurrent(null);
         setTripMinimized(false);
       } else {
@@ -95,7 +97,8 @@ export default function DriverHome() {
                   const refreshed = await driverApi.current();
                   normalized = refreshed?.trip || refreshed || normalized;
                   if (normalized && FINISHED_TRIP_STATUSES.has(normalized.status)) {
-                    setCompletedTrip(normalized);
+                    const dismissedId = await storage.getItem(DISMISSED_COMPLETED_TRIP_KEY);
+                    setCompletedTrip(dismissedId === normalized.trip_id ? null : normalized);
                     setCurrent(null);
                     setTripMinimized(false);
                   } else {
@@ -133,11 +136,18 @@ export default function DriverHome() {
     }
   }, [chat, trip_id, current?.trip_id]);
 
+  const dismissCompletedTrip = useCallback(async () => {
+    if (completedTrip?.trip_id) {
+      await storage.setItem(DISMISSED_COMPLETED_TRIP_KEY, String(completedTrip.trip_id));
+    }
+    setCompletedTrip(null);
+  }, [completedTrip?.trip_id]);
+
   useEffect(() => {
     if (!completedTrip) return;
-    const timer = setTimeout(() => setCompletedTrip(null), 8000);
+    const timer = setTimeout(() => { void dismissCompletedTrip(); }, 8000);
     return () => clearTimeout(timer);
-  }, [completedTrip?.trip_id]);
+  }, [completedTrip?.trip_id, dismissCompletedTrip]);
 
   useFocusEffect(
     useCallback(() => {
@@ -457,7 +467,7 @@ export default function DriverHome() {
               <Text style={s.waitTitle}>Tur fullført</Text>
               <Text style={s.waitSub}>{kr(completedTrip.driver_earnings ?? completedTrip.price)} · klar for neste tur</Text>
             </View>
-            <Pressable style={s.minimizeBtn} onPress={() => setCompletedTrip(null)} testID="driver-trip-completed-dismiss" accessibilityLabel="Lukk fullført tur">
+            <Pressable style={s.minimizeBtn} onPress={() => { void dismissCompletedTrip(); }} testID="driver-trip-completed-dismiss" accessibilityLabel="Lukk fullført tur">
               <Icon name="x" size={17} color={colors.textMuted} />
             </Pressable>
           </View>
