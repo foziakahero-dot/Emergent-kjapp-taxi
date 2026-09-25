@@ -3476,6 +3476,14 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
                 status_code=409,
                 detail="Velg en bil som løyvehaveren har tildelt deg før du går online",
             )
+        in_use = await db.users.find_one({
+            "role": "driver",
+            "_id": {"$ne": user["_id"]},
+            "active_vehicle_id": vehicle_id,
+            "online": True,
+        })
+        if in_use:
+            raise HTTPException(status_code=409, detail="Bilen er allerede i bruk av en annen sjåfør")
         await db.users.update_one(
             {"_id": user["_id"]},
             {"$set": {
@@ -4347,6 +4355,14 @@ async def driver_select_vehicle(body: DriverVehicleSelectRequest, current=Depend
     })
     if not vehicle:
         raise HTTPException(403, "Denne bilen er ikke tildelt deg av løyvehaveren")
+    in_use = await db.users.find_one({
+        "role": "driver",
+        "_id": {"$ne": user["_id"]},
+        "active_vehicle_id": body.vehicle_id,
+        "online": True,
+    })
+    if in_use:
+        raise HTTPException(409, "Bilen er allerede i bruk av en annen sjåfør")
     await db.users.update_one(
         {"_id": user["_id"]},
         {"$set": {
