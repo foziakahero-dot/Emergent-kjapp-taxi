@@ -30,6 +30,7 @@ const complianceLabel = (s?: string) => ({
   EXPIRED: 'Utløpt',
   PENDING: 'Til vurdering',
   REJECTED: 'Avvist',
+  MISSING: 'Mangler',
 }[s || ''] || s || 'Ukjent');
 
 const complianceClass = (s?: string) =>
@@ -569,7 +570,7 @@ export function VehiclesPage() {
     <div className="table-card">
       <div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk bil, skilt eller sjåfør" /></div>
       <div className="fleet-table vehicle-manage-table">
-        <div className="tr th"><span>BIL</span><span>SKILT</span><span>DRIFT</span><span>SJÅFØR</span><span>LIVE</span><span>SIST GPS</span><span /></div>
+        <div className="tr th"><span>BIL</span><span>SKILT</span><span>DRIFT</span><span>SJÅFØR</span><span>LIVE</span><span>DOK.</span><span>SIST GPS</span><span /></div>
         {rows.map((v) => <div className="tr" key={v.id}>
           <span>{v.car || '—'}</span>
           <span className="mono">{v.plate || '—'}</span>
@@ -581,6 +582,10 @@ export function VehiclesPage() {
             </select>
           </span>
           <span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>{v.online ? (v.gps_fresh ? 'Online' : 'GPS utløpt') : 'Offline'}</span>
+          <span
+            className={complianceClass(v.document_compliance)}
+            title={v.missing_document_types?.length ? `Mangler: ${v.missing_document_types.join(', ')}` : undefined}
+          >{complianceLabel(v.document_compliance)}</span>
           <span className="muted">{v.last_location_at ? new Date(v.last_location_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
           <span className="vehicle-actions">
             <button className="table-action" onClick={() => setDocVehicle(v)}>Dok.</button>
