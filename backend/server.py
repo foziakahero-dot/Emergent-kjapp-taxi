@@ -2144,7 +2144,7 @@ async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depe
             other_user_id,
             f"Melding fra {'kunde' if is_passenger else trip.get('driver', {}).get('name', 'sjåfør')}",
             text[:140],
-            f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
+            "/driver/trip" if is_passenger else f"/app/booking/{trip_id}",
         )
     return msg
 
