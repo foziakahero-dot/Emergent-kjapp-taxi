@@ -79,17 +79,64 @@ def transition(label, status):
 
 def login(email, password):
     status, payload = call("POST", "/auth/login", body={"email": email, "password": password})
-    check(f"login {email}", status == 200 and bool(payload and payload.get("token")), str(status))
+    check(f"customer login {email}", status == 200 and bool(payload and payload.get("token")), str(status))
     if status != 200 or not payload or not payload.get("token"):
-        raise RuntimeError(f"login failed for {email}: {status} {payload}")
+        raise RuntimeError(f"customer login failed for {email}: {status} {payload}")
+    return payload["token"], payload["user"]
+
+
+def driver_login(identifier, password):
+    status, payload = call(
+        "POST",
+        "/auth/driver-login",
+        body={"identifier": identifier, "password": password},
+    )
+    check(
+        f"driver login {identifier}",
+        status == 200 and bool(payload and payload.get("token")),
+        str(status),
+    )
+    if status != 200 or not payload or not payload.get("token"):
+        raise RuntimeError(f"driver login failed for {identifier}: {status} {payload}")
     return payload["token"], payload["user"]
 
 
 print(f"KJAPP E2E run={RUN_ID} api={API}")
 
 customer_token, customer = login("ola@kjapp.no", "test1234")
-driver_token, driver = login("sjafor@kjapp.no", "sjafor1234")
+driver_token, driver = driver_login("sjafor@kjapp.no", "sjafor1234")
 check("driver role is driver", driver.get("role") == "driver", str(driver.get("role")))
+check("driver is approved", driver.get("approved") is True, str(driver.get("approved")))
+
+# A beta lifecycle test is only valid with a real fleet assignment and selected vehicle.
+status, driver_profile = call("GET", "/driver/profile", driver_token)
+check("driver profile available", status == 200 and bool(driver_profile), str(status))
+if status != 200:
+    print("PRECONDITION FAILED: driver profile is unavailable:", driver_profile)
+    sys.exit(2)
+
+assigned = driver_profile.get("assigned_vehicles") or []
+active_vehicle = driver_profile.get("active_vehicle")
+if not active_vehicle:
+    if len(assigned) == 1:
+        status, selected = call(
+            "POST",
+            "/driver/vehicle/select",
+            driver_token,
+            {"vehicle_id": assigned[0]["id"]},
+        )
+        check("select sole assigned fleet vehicle", status == 200, str(selected))
+        if status == 200:
+            active_vehicle = selected.get("active_vehicle")
+    if not active_vehicle:
+        print(
+            "PRECONDITION FAILED: beta driver has no active fleet-assigned vehicle. "
+            "Assign a vehicle in Fleet Web and select it in Driver before running E2E."
+        )
+        sys.exit(2)
+
+check("driver has fleet company", bool(driver_profile.get("fleet")), str(driver_profile.get("fleet")))
+check("driver has active assigned vehicle", bool(active_vehicle and active_vehicle.get("plate")), str(active_vehicle))
 
 # Dedicated beta account hygiene: close a stale searching/booking ride before starting a new run.
 status, stale = call("GET", "/trips/active", customer_token)
@@ -97,8 +144,13 @@ if status == 200 and stale and stale.get("status") in ("searching", "booking", "
     call("POST", f"/trips/{stale['trip_id']}/cancel", customer_token)
     print(f"INFO  closed stale beta trip {stale['trip_id']} ({stale.get('status')})")
 
-# Driver ready with a real GPS position.
-check("driver online", call("POST", "/driver/online", driver_token, {"online": True})[0] == 200)
+# Driver ready with a real GPS position and a fleet-assigned active vehicle.
+online_status, online_payload = call("POST", "/driver/online", driver_token, {"online": True})
+check("driver online", online_status == 200, str(online_payload))
+if online_status != 200:
+    print("Cannot continue lifecycle without a valid online driver:", online_payload)
+    sys.exit(1)
+
 check(
     "driver GPS update",
     call(
@@ -159,6 +211,10 @@ check("offer has driver earnings", offer is not None and offer.get("driver_earni
 
 status, accepted = call("POST", "/driver/accept", driver_token, {"trip_id": trip_id})
 check("driver accepts trip", status == 200, str(status))
+if status == 200:
+    snap = (accepted or {}).get("driver") or {}
+    check("trip snapshots active fleet vehicle", snap.get("plate") == active_vehicle.get("plate"), str(snap))
+    check("trip snapshots driver identity", bool(snap.get("name")), str(snap))
 transition("driver accept", accepted.get("status") if isinstance(accepted, dict) else "driver_on_way")
 
 status, customer_trip = call("GET", f"/trips/{trip_id}", customer_token)
