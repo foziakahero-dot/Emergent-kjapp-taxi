@@ -1255,7 +1255,7 @@ async def cars_nearby(body: NearbyCarsRequest):
             "name": u.get("fullName") or "Sjåfør",
             "car": u.get("car") or "",
             "plate": u.get("plate") or "",
-            "rating": u.get("rating") or 4.9,
+            "rating": u.get("rating"),
             "type": u.get("vehicle_type") or "ai-first",
             "lat": lat,
             "lng": lng,
@@ -2822,7 +2822,7 @@ async def summary_today(current=Depends(get_current_user)):
     async for t in cursor:
         trips += 1
         total += t.get("price", 0)
-    return {"trips": trips, "spent": total, "satisfaction": 98}
+    return {"trips": trips, "spent": total, "satisfaction": None}
 
 
 # ---- Driver endpoints ----
