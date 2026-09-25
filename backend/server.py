@@ -555,7 +555,7 @@ class SettingsUpdate(BaseModel):
     theme: Optional[str] = None
 
 
-# ------------------ Trip simulator ------------------
+# ------------------ Routing utilities ------------------
 
 
 def haversine_km(lat1, lng1, lat2, lng2):
@@ -608,14 +608,6 @@ async def osrm_route_points(points: list[tuple[float, float]]):
             }
     except Exception:
         return None
-
-
-def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int]:
-    distance = 0.0
-    for idx in range(len(points) - 1):
-        distance += haversine_km(points[idx][0], points[idx][1], points[idx + 1][0], points[idx + 1][1])
-    distance = round(distance, 1)
-    return distance, max(3, int(distance * 2.2))
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
@@ -1008,12 +1000,6 @@ async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/ap
             pass
 
 
-async def progress_trip(trip_id: str):
-    """DEPRECATED — trips now progress ONLY when a real driver acts.
-    Kept for compatibility (no-op)."""
-    return
-
-
 # ------------------ Lifespan ------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1295,7 +1281,7 @@ async def cars_nearby(body: NearbyCarsRequest):
             "type": u.get("vehicle_type") or "ai-first",
             "lat": u.get("last_lat"),
             "lng": u.get("last_lng"),
-            "heading": u.get("last_heading") or 0,
+            "heading": u.get("last_heading"),
             "eta_min": route.get("duration_min") if route else None,
             "distance_km": route.get("distance_km") if route else None,
             "routing_source": "osrm" if route else None,
