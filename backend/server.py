@@ -1373,6 +1373,16 @@ async def lifespan(app: FastAPI):
             {"slug": "gardermoen", "name": "Gardermoen (OSL)", "lat": 60.1975, "lng": 11.1004, "label": "Flyplass", "icon": "map-pin", "featured": False},
             {"slug": "sandvika", "name": "Sandvika", "lat": 59.8909, "lng": 10.5245, "label": "Kjøpesenter", "icon": "map-pin", "featured": False},
         ])
+    # One-time migration for databases seeded before the beta integrity rule:
+    # public featured places are locations, never pretend user-specific Home/Work.
+    await db.places.update_one(
+        {"slug": "karl-johans", "label": "Hjem"},
+        {"$set": {"label": "Karl Johan", "icon": "map-pin"}},
+    )
+    await db.places.update_one(
+        {"slug": "aker-brygge", "label": "Jobb"},
+        {"$set": {"label": "Aker Brygge", "icon": "map-pin"}},
+    )
     # seed admin (upgrade to superadmin) — no hardcoded password fallback
     admin_email = (os.environ.get("ADMIN_EMAIL", "admin@kjapp.no") or "").strip().lower()
     admin_password = os.environ.get("ADMIN_PASSWORD")
@@ -1461,10 +1471,13 @@ async def lifespan(app: FastAPI):
     if purged:
         print(f"[seed] purged synthetic data: {purged}")
 
-    # P0.1: in production, disable legacy seed/demo accounts so they can no longer authenticate
-    if IS_PRODUCTION:
+    # Shared beta/staging/prod must never leave legacy seed/demo accounts usable.
+    # The helper's production=True argument means "perform the destructive disable",
+    # not that APP_ENV itself must be production.
+    if not ENABLE_DEMO_DATA:
         disabled_n = await disable_legacy_demo_users(db, True, admin_email)
-        print(f"[seed] production: disabled {disabled_n} legacy demo account(s)")
+        if disabled_n:
+            print(f"[seed] disabled {disabled_n} legacy demo account(s) because demo data is off")
 
     # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
     dispatch_task = asyncio.create_task(dispatch_loop())
