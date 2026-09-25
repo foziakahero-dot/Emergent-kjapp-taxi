@@ -5,6 +5,8 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { colors, font } from '@/src/theme';
 import { useAuth } from '@/src/context/AuthContext';
 
+const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
+
 function tab(name: IconName) {
   const TabIcon = ({ color, size }: { color: ColorValue; size: number }) => (
     <Icon name={name} size={size ?? 22} color={color as string} />
@@ -19,10 +21,11 @@ export default function CustomerTabsLayout() {
 
   useEffect(() => {
     if (user === null) router.replace('/login');
+    else if (user && !isCustomerRole(user.role)) router.replace('/');
     else if (user && user.legal_accepted !== true) router.replace('/legal-consent');
   }, [user, router]);
 
-  if (!user || user.legal_accepted !== true) return null;
+  if (!user || !isCustomerRole(user.role) || user.legal_accepted !== true) return null;
 
   return (
     <Tabs
