@@ -45,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | undefined>(undefined);
   const processed = useRef<Set<string>>(new Set());
   const lastUrl = useRef<string | null>(null);
+  const googleError = useRef('');
 
   const refresh = useCallback(async () => {
     const token = await storage.getItem(TOKEN_KEY);
@@ -66,12 +67,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (processed.current.has(sid)) return null;
     processed.current.add(sid);
     try {
+      googleError.current = '';
       const res = await authApi.googleDriverSession(sid);
-      if (!res?.token || !res?.user) return null;
+      if (res?.twofa_required) {
+        googleError.current = 'Kontoen krever tofaktor. Bruk e-post og passord for å fullføre innloggingen.';
+        return null;
+      }
+      if (!res?.token || !res?.user) {
+        googleError.current = 'Google-kontoen ga ingen gyldig KJAPP Driver-session.';
+        return null;
+      }
       await storage.setItem(TOKEN_KEY, res.token);
       setUser(res.user);
       return res.user;
-    } catch {
+    } catch (e: any) {
+      googleError.current = e?.response?.data?.detail || e?.message || 'Google-innloggingen feilet.';
       return null;
     }
   }, []);
@@ -143,7 +153,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!url) url = lastUrl.current || (await Linking.getInitialURL());
     const sid = extractSessionId(url);
     if (!sid) return null;
-    return await handleSessionId(sid);
+    const linkedUser = await handleSessionId(sid);
+    if (!linkedUser && googleError.current) throw new Error(googleError.current);
+    return linkedUser;
   };
 
   const linkGoogle = async (): Promise<boolean> => {
