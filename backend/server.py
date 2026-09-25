@@ -1117,7 +1117,13 @@ async def lifespan(app: FastAPI):
             {"user_id": str(uid.inserted_id), "type": "mastercard", "label": "Mastercard", "last4": "8888", "is_default": False, "created_at": datetime.now(timezone.utc).isoformat()},
         ])
 
-    # seed driver user (demo only) — real driver with car info stored on user record
+    if ENABLE_DEMO_DATA:
+        await db.users.update_one(
+            {"email": test_email, "role": "user"},
+            {"$set": {"demo": True, "is_demo": True}},
+        )
+
+    # seed driver user (demo only) — isolated test driver, never live supply
     driver_email = "sjafor@kjapp.no"
     if ENABLE_DEMO_DATA and not await db.users.find_one({"email": driver_email}):
         await db.users.insert_one({
@@ -1137,8 +1143,12 @@ async def lifespan(app: FastAPI):
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     else:
-        # backfill car/plate on existing driver user (demo/dev only)
+        # Existing explicit demo driver stays clearly marked as demo in isolated test mode.
         if ENABLE_DEMO_DATA:
+            await db.users.update_one(
+                {"email": driver_email, "role": "driver"},
+                {"$set": {"demo": True, "is_demo": True}},
+            )
             await db.users.update_one(
                 {"email": driver_email, "role": "driver", "$or": [{"car": {"$exists": False}}, {"car": None}]},
                 {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
@@ -1154,10 +1164,12 @@ async def lifespan(app: FastAPI):
     if stale_demo.modified_count:
         print(f"[seed] forced {stale_demo.modified_count} simulated demo driver(s) offline (never shown on customer map)")
 
-    # PRODUCTION RULE: no fabricated trips/accounts may ever reach the driver or customer app.
-    purged = await purge_synthetic_data(db)
-    if purged:
-        print(f"[seed] purged synthetic data: {purged}")
+    # No-demo deployment rule: fabricated/test records are purged from beta/production.
+    # An explicitly isolated demo environment keeps its own marked demo records for testing only.
+    if not ENABLE_DEMO_DATA:
+        purged = await purge_synthetic_data(db)
+        if purged:
+            print(f"[seed] purged synthetic data: {purged}")
 
     # No-demo deployment rule: legacy demo accounts cannot authenticate in beta/staging either.
     enforce_no_demo_accounts = IS_PRODUCTION or not ENABLE_DEMO_DATA
