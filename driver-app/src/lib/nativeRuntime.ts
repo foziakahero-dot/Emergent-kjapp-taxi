@@ -9,18 +9,14 @@ export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
 let backgroundPermissionRequestedThisSession = false;
 
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-} catch {
-  // Notification bridge initialization must never terminate app startup.
-}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 async function notifyPendingTripFromBackground() {
   try {
