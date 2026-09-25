@@ -24,7 +24,13 @@ function UploadRow({ item, value, busy, onFile, onRemove }: {
     <div className={`driver-doc-mark ${value ? 'done' : ''}`}>{value ? '✓' : '□'}</div>
     <div className="driver-doc-copy"><strong>{item.label}</strong><span>{value?.original_filename || item.sub}</span></div>
     {value ? <button type="button" className="driver-doc-action" onClick={onRemove}>Fjern</button> : <button type="button" className="driver-doc-action" disabled={busy} onClick={() => ref.current?.click()}>{busy ? 'Laster…' : 'Last opp'}</button>}
-    <input ref={ref} type="file" accept="image/*,application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+    <input
+      ref={ref}
+      type="file"
+      accept={item.key === 'profile_photo' ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'image/*,application/pdf'}
+      hidden
+      onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+    />
   </div>;
 }
 
