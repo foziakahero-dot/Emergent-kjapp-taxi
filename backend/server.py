@@ -4999,18 +4999,22 @@ async def admin_overview(current=Depends(require_admin)):
     active_fleets = await count(db.fleets, {"status": {"$ne": "suspended"}})
     suspended_fleets = await count(db.fleets, {"status": "suspended"})
     pending_applications = await count(db.fleet_applications, {"status": {"$in": ["submitted", "under_review", "documents_required"]}})
-    approved_drivers = await count(db.users, {"role": "driver", "approved": True})
-    pending_drivers = await count(db.users, {"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
+    real_driver_filter = {"role": "driver", "demo": {"$ne": True}, "is_demo": {"$ne": True}, "disabled": {"$ne": True}}
+    approved_drivers = await count(db.users, {**real_driver_filter, "approved": True})
+    pending_drivers = await count(db.users, {**real_driver_filter, "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
     drivers_online = 0
-    async for driver in db.users.find({"role": "driver", "online": True}, {"last_location_at": 1, "last_lat": 1, "last_lng": 1}):
+    async for driver in db.users.find(
+        {**real_driver_filter, "online": True, "active_vehicle_id": {"$exists": True, "$nin": [None, ""]}},
+        {"last_location_at": 1, "last_lat": 1, "last_lng": 1},
+    ):
         if _fresh_driver_location(driver.get("last_location_at")) and driver.get("last_lat") is not None and driver.get("last_lng") is not None:
             drivers_online += 1
-    active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}})
-    stale_active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}, "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()}})
-    trips_today = await count(db.trips, {"created_at": {"$gte": today}})
-    trips_yday = await count(db.trips, {"created_at": {"$gte": yday, "$lt": today}})
-    completed_today = await count(db.trips, {"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}})
-    cancelled_today = await count(db.trips, {"status": "cancelled", "created_at": {"$gte": today}})
+    active_trips = await count(db.trips, _real_trip_filter({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}}))
+    stale_active_trips = await count(db.trips, _real_trip_filter({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}, "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()}}))
+    trips_today = await count(db.trips, _real_trip_filter({"created_at": {"$gte": today}}))
+    trips_yday = await count(db.trips, _real_trip_filter({"created_at": {"$gte": yday, "$lt": today}}))
+    completed_today = await count(db.trips, _real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}))
+    cancelled_today = await count(db.trips, _real_trip_filter({"status": "cancelled", "created_at": {"$gte": today}}))
 
     gmv_today = 0
     kjapp_revenue_today = 0
@@ -6582,7 +6586,15 @@ async def admin_live(current=Depends(require_admin)):
     drivers = []
     stale_drivers = []
     fleet_names = await _fleet_names()
-    async for u in db.users.find({"role": "driver", "online": True}, {"password_hash": 0}):
+    async for u in db.users.find({
+        "role": "driver",
+        "online": True,
+        "approved": True,
+        "disabled": {"$ne": True},
+        "demo": {"$ne": True},
+        "is_demo": {"$ne": True},
+        "active_vehicle_id": {"$exists": True, "$nin": [None, ""]},
+    }, {"password_hash": 0}):
         row = {
             "id": str(u["_id"]),
             "name": u.get("fullName"),
