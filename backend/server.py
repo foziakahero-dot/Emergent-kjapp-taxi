@@ -1994,7 +1994,7 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
 @api.patch("/trips/{trip_id}/destination")
 async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(get_current_user)):
     """Change destination/stops while the ride is active, using the price snapshot captured at booking."""
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("driver_on_way", "at_pickup", "in_trip"):
@@ -2043,7 +2043,7 @@ async def complete_trip(trip_id: str, current=Depends(get_current_user)):
     Idempotent for already-completed/rated rides and rejects premature completion so the
     customer app cannot accidentally skip the driver lifecycle.
     """
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
 
@@ -2068,7 +2068,7 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
     """Passenger rates the driver + trip (1-5 stars + optional feedback)."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
@@ -2121,7 +2121,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     """Driver rates the passenger 1-5 stars after trip completion."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
-    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("driver_rating"):
@@ -2153,7 +2153,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
 
 @api.get("/trips/{trip_id}/cancel-preview")
 async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
@@ -2175,7 +2175,7 @@ async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
 
 @api.post("/trips/{trip_id}/cancel")
 async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
@@ -2372,7 +2372,7 @@ async def public_trip_share(token: str):
     share = await db.trip_share_tokens.find_one({"token_hash": token_hash})
     if not share or share.get("expires_at") is None or share["expires_at"] <= datetime.now(timezone.utc):
         raise HTTPException(404, "Delingslenken er utløpt eller ugyldig")
-    trip = await db.trips.find_one({"trip_id": share["trip_id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": share["trip_id"]}))
     if not trip:
         raise HTTPException(404, "Turen finnes ikke")
     driver = trip.get("driver") or {}
@@ -3191,7 +3191,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         "has_profile_photo": bool(live_driver.get("profile_photo_path")),
     }
     # Pick up trip first so we know pickup coords
-    trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
+    trip_pre = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}))
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
@@ -3550,7 +3550,7 @@ async def driver_decline(body: DeclineTripRequest, current=Depends(require_drive
         "trip_id": body.trip_id,
         "declined_at": datetime.now(timezone.utc).isoformat(),
     })
-    trip = await db.trips.find_one({"trip_id": body.trip_id, "driver_id": None})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "driver_id": None}))
     if trip and trip.get("offer_driver_id") == current["id"]:
         await offer_trip_to_next_driver(trip)
     return {"ok": True}
@@ -4483,10 +4483,10 @@ async def driver_select_vehicle(body: DriverVehicleSelectRequest, current=Depend
         raise HTTPException(404, "Sjåfør ikke funnet")
     if user.get("online"):
         raise HTTPException(409, "Gå offline før du bytter bil")
-    active_trip = await db.trips.find_one({
+    active_trip = await db.trips.find_one(_real_trip_filter({
         "driver_id": current["id"],
         "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]},
-    })
+    }))
     if active_trip:
         raise HTTPException(409, "Du kan ikke bytte bil under en aktiv tur")
     try:
@@ -4560,7 +4560,7 @@ async def driver_profile_photo(current=Depends(require_driver)):
 
 @api.get("/trips/{trip_id}/driver-photo")
 async def trip_driver_photo(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip or not trip.get("driver_id"):
         raise HTTPException(404, "Sjåførbilde ikke tilgjengelig")
     try:
@@ -5943,7 +5943,7 @@ async def pricing_surge():
 async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
     driver_id = current["id"]
-    original = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    original = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
     pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
     penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
     result = await db.trips.update_one(
