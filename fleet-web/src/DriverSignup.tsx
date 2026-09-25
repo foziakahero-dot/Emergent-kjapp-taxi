@@ -86,7 +86,11 @@ export default function DriverSignup() {
     <div className="driver-signup-card">
       <span className="driver-signup-kicker">SJÅFØRREGISTRERING · STEG {step}/2</span>
       <h1>{step === 1 ? 'Velkommen til KJAPP.' : 'Dokumentasjon.'}</h1>
-      <div className="assigned-car"><span>BIL TILDELT</span><strong>{invite.car || 'KJAPP-bil'}{invite.plate ? ` · ${invite.plate}` : ''}</strong>{invite.fleet_name ? <small>{invite.fleet_name}</small> : null}</div>
+      <div className="assigned-car">
+        <span>INVITERT AV</span>
+        <strong>{invite.fleet_name || 'KJAPP Partner'}</strong>
+        <small>{invite.fleet_org_number ? `Org.nr. ${invite.fleet_org_number}` : 'Bil tildeles separat av løyvehaveren etter godkjenning.'}</small>
+      </div>
       {step === 1 ? <form onSubmit={next} className="driver-signup-form">
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
         <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
