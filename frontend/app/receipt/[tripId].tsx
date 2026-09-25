@@ -46,6 +46,20 @@ export default function Receipt() {
   }, [loadTrip]);
 
   useEffect(() => {
+    if (!tripId || trip?.payment_status !== 'paid' || trip?.status !== 'arrived') return;
+    // Payment success normally closes the ride server-side. This is a safe fallback
+    // for a legacy/in-flight record that became paid before the new transition existed.
+    let cancelled = false;
+    (async () => {
+      try {
+        await tripsApi.complete(tripId);
+        if (!cancelled) await loadTrip();
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [tripId, trip?.payment_status, trip?.status, loadTrip]);
+
+  useEffect(() => {
     if (!tripId || trip?.payment_status === 'paid') return;
     const timer = setInterval(() => {
       loadTrip();
@@ -54,11 +68,14 @@ export default function Receipt() {
   }, [tripId, trip?.payment_status, loadTrip]);
 
   const submitRating = async (stars: number) => {
+    if (!tripId || trip?.payment_status !== 'paid') return;
     setRating(stars);
     try {
-      await tripsApi.rate(tripId!, { rating: stars, feedback: '' });
+      await tripsApi.rate(tripId, { rating: stars, feedback: '' });
       setRated(true);
-    } catch {}
+    } catch {
+      await loadTrip();
+    }
   };
 
   const verifyCheckout = async (sessionId: string) => {
@@ -196,17 +213,25 @@ export default function Receipt() {
 
         <View style={[s.card, { marginTop: 16, alignItems: 'center' }]}>
           <Text style={s.overline}>{rated ? 'DIN VURDERING' : 'VURDER TUREN'}</Text>
-          <View style={s.stars}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
-                <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
-              </Pressable>
-            ))}
-          </View>
-          {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
+          {isPaid ? (
+            <>
+              <View style={s.stars}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
+                    <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
+                  </Pressable>
+                ))}
+              </View>
+              {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
+            </>
+          ) : (
+            <Text style={s.thanks}>Vurdering åpnes når betalingen er bekreftet.</Text>
+          )}
         </View>
 
-        <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
+        {isPaid ? (
+          <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
+        ) : null}
       </View>
     </ScrollView>
   );
