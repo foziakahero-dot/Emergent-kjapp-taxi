@@ -1,0 +1,86 @@
+name: KJAPP Driver Android Runtime Smoke
+
+on:
+  pull_request:
+    branches: ['main']
+
+jobs:
+  get_driver_android:
+    name: Get latest successful KJAPP Driver APK
+    type: get-build
+    params:
+      platform: android
+      profile: apk
+      distribution: internal
+      wait_for_in_progress: false
+
+  driver_runtime_smoke:
+    name: Cold-launch KJAPP Driver on Android
+    needs: [get_driver_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    params:
+      build_id: ${{ needs.get_driver_android.outputs.build_id }}
+      flow_path: ['.maestro/driver-startup-smoke.yml']
+      record_screen: true
+      retries: 0
+      device_identifier: 'pixel_6'
+      android_system_image_package: 'system-images;android-35-ext15;google_apis_playstore;x86_64'
+    hooks:
+      after_maestro_tests:
+        - name: Capture KJAPP Driver runtime diagnostics
+          if: ${{ always() }}
+          run: |
+            PID="$(adb shell pidof no.kjapp.driver 2>/dev/null | tr -d '\r' || true)"
+            TOP="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -n 2 | tr -d '\r' || true)"
+            adb logcat -d -v threadtime > /tmp/kjapp-driver-logcat.txt 2>/dev/null || true
+            {
+              echo "APP_PID=$PID"
+              echo "TOP_ACTIVITY=$TOP"
+              echo "---- FOCUSED LOGCAT ----"
+              grep -Ei 'FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|JavascriptException|UnsatisfiedLinkError|dlopen failed|worklet|reanimated|SoLoader|Unable to load|Caused by|TaskManager|expo-notifications|no.kjapp.driver' /tmp/kjapp-driver-logcat.txt | tail -n 100 || true
+            } > /tmp/kjapp-driver-runtime-diagnostics.txt
+        - uses: eas/upload_artifact
+          if: ${{ always() }}
+          with:
+            type: other
+            name: kjapp-driver-runtime-diagnostics
+            path: /tmp/kjapp-driver-runtime-diagnostics.txt
+            ignore_error: true
+
+  collect_driver_runtime:
+    name: Collect Driver runtime diagnostics
+    after: [driver_runtime_smoke]
+    outputs:
+      summary: ${{ steps.collect.outputs.summary }}
+    steps:
+      - uses: eas/download_artifact
+        id: download_diag
+        with:
+          name: kjapp-driver-runtime-diagnostics
+      - id: collect
+        name: Summarize Driver runtime diagnostics
+        run: |
+          P="${{ steps.download_diag.outputs.artifact_path }}"
+          if [ -d "$P" ]; then F="$(find "$P" -type f | head -n 1)"; else F="$P"; fi
+          if [ -f "$F" ]; then
+            SUMMARY="$(cat "$F" | tr '\n' '|' | tr -d '\r' | cut -c1-7000)"
+          else
+            SUMMARY="DIAGNOSTIC_ARTIFACT_NOT_FOUND"
+          fi
+          set-output summary "$SUMMARY"
+
+  report_driver_runtime:
+    name: Report Driver runtime diagnostics
+    after: [driver_runtime_smoke, collect_driver_runtime]
+    type: github-comment
+    params:
+      payload: |
+        ## KJAPP Driver Android runtime smoke
+
+        **Maestro status:** ${{ after.driver_runtime_smoke.status }}
+
+        **Runtime diagnostics**
+        ```
+        ${{ after.collect_driver_runtime.outputs.summary }}
+        ```
