@@ -5174,6 +5174,9 @@ async def gdpr_export(current=Depends(get_current_user)):
         "format_version": 2,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "account": user,
+        # Backwards-compatible aliases retained for existing mobile clients/tests.
+        "user": user,
+        "trips": driver_trips if current.get("role") == "driver" else customer_trips,
         "customer_trips": customer_trips,
         "driver_trips": driver_trips,
         "trip_messages": trip_messages,
