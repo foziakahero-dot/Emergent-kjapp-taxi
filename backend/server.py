@@ -8723,7 +8723,10 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_name": (t.get("driver") or {}).get("name"),
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
-            "driver_earnings": int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission)))) if finished else None,
+            "driver_earnings": (
+                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
+                if finished and t.get("payment_status") == "paid" else None
+            ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
             "accepted_at": t.get("driver_route_started_at"),
             "completed_at": t.get("arrived_at") or t.get("completed_at"),
