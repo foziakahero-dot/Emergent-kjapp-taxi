@@ -3688,7 +3688,11 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         "photo": (current.get("fullName") or "S")[:2].upper(),
     }
     # Pick up trip first so we know pickup coords
-    trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
+    trip_pre = await db.trips.find_one(_real_trip_filter({
+        "trip_id": body.trip_id,
+        "status": {"$in": ["searching", "booking"]},
+        "driver_id": None,
+    }))
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     if (trip_pre.get("vehicle_type") or "ai-first") != (assigned_vehicle.get("vehicle_type") or "ai-first"):
@@ -3787,7 +3791,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     if trip_pre.get("dispatch_mode") == "sequential":
         claim["offer_driver_id"] = trip_pre.get("offer_driver_id")
     result = await db.trips.update_one(
-        claim,
+        _real_trip_filter(claim),
         {"$set": updates, "$unset": {"offer_driver_id": "", "offer_expires_at": ""}},
     )
     if result.modified_count == 0:
@@ -3916,15 +3920,37 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
 @api.post("/driver/trip/{trip_id}/start")
 async def driver_start(trip_id: str, current=Depends(require_driver)):
     driver_id = current["id"]
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"},
-        {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
-    )
-    if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    trip = await db.trips.find_one(_real_trip_filter({
+        "trip_id": trip_id,
+        "driver_id": driver_id,
+        "status": "at_pickup",
+    }))
+    if not trip:
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
-        raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
+        raise HTTPException(status_code=409, detail="Turen er ikke klar til å startes")
+    if not _fresh_driver_location(current.get("last_location_at")):
+        raise HTTPException(status_code=409, detail="Oppdater GPS-posisjonen før du starter turen")
+    d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
+    if d_lat is None or d_lng is None:
+        raise HTTPException(status_code=409, detail="Mangler gyldig GPS-posisjon")
+    pickup_distance_m = haversine_km(d_lat, d_lng, trip["pickup_lat"], trip["pickup_lng"]) * 1000
+    if pickup_distance_m > PICKUP_ARRIVAL_RADIUS_M:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Du er for langt fra hentestedet til å starte turen ({int(round(pickup_distance_m))} m)",
+        )
+    result = await db.trips.update_one(
+        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"}),
+        {"$set": {
+            "status": "in_trip",
+            "trip_started_at": datetime.now(timezone.utc).isoformat(),
+            "trip_start_distance_from_pickup_m": int(round(pickup_distance_m)),
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=409, detail="Turen endret status før den kunne startes")
     t = await db.trips.find_one({"trip_id": trip_id})
     await send_push_to_user(
         t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.",
