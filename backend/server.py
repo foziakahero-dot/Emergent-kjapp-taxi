@@ -7668,8 +7668,9 @@ async def admin_review_identity_verification(
         user_set = {
             "identity_verification_status": body.status,
             "identity_verification_updated_at": now,
-            "online": False if body.status != "verified" else True,
         }
+        if body.status != "verified":
+            user_set["online"] = False
         user_unset = {
             "identity_recheck_pending_reason": "",
             "identity_recheck_pending_trigger": "",
