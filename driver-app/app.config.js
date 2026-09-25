@@ -1,8 +1,9 @@
 module.exports = ({ config }) => {
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
   const requireFirebase = process.env.KJAPP_REQUIRE_FIREBASE === 'true';
+  const isAndroidBuild = process.env.EAS_BUILD_PLATFORM === 'android';
 
-  if (requireFirebase && !googleServicesFile) {
+  if (requireFirebase && isAndroidBuild && !googleServicesFile) {
     throw new Error(
       'KJAPP Firebase config missing: configure GOOGLE_SERVICES_JSON as an EAS secret file.'
     );
