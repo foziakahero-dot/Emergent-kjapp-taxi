@@ -1,0 +1,33 @@
+name: KJAPP Customer Android Runtime Smoke
+
+on:
+  push:
+    branches: ['diagnostic/customer-runtime-smoke']
+
+jobs:
+  build_customer_android:
+    name: Build KJAPP Customer APK for runtime smoke
+    type: build
+    params:
+      platform: android
+      profile: apk
+
+  customer_runtime_smoke:
+    name: Cold-launch KJAPP Customer on Android
+    needs: [build_customer_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    params:
+      build_id: ${{ needs.build_customer_android.outputs.build_id }}
+      flow_path: ['.maestro/customer-startup-smoke.yml']
+      record_screen: true
+      retries: 0
+    hooks:
+      after_maestro_tests:
+        - name: Capture KJAPP runtime diagnostics
+          run: |
+            mkdir -p "$MAESTRO_TESTS_DIR/runtime"
+            adb shell pidof no.kjapp.app > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-pid.txt" || true
+            adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity" > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-activity.txt" || true
+            adb logcat -d -v threadtime > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-logcat.txt" || true
+            grep -Ei "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|JavascriptException|UnsatisfiedLinkError|dlopen|worklet|reanimated|SoLoader|Unable to load|Caused by|no.kjapp.app" "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-logcat.txt" > "$MAESTRO_TESTS_DIR/runtime/kjapp-customer-crash-focus.txt" || true
