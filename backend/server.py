@@ -347,6 +347,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
+    "active_vehicle_id",
 })
 
 
@@ -5242,6 +5243,8 @@ async def upload_driver_doc(file: UploadFile = File(...), invite_token: str = Fo
     """Public upload used inside the driver-signup flow. Validated by invite token."""
     if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
         raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
+    if doc_type == "profile_photo" and file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
+        raise HTTPException(status_code=415, detail="Profilbildet må være et bilde (JPG, PNG, WEBP eller HEIC)")
     inv = await db.driver_invites.find_one({"token": invite_token})
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=403, detail="Ugyldig invitasjon")
@@ -6495,26 +6498,73 @@ async def admin_set_driver_capabilities(user_id: str, body: DriverCapabilitiesRe
 
 
 @api.get("/admin/vehicles")
-async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
-    filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
-    if vehicle_type and vehicle_type != "all": filt["vehicle_type"] = vehicle_type
+async def admin_vehicles(
+    q: Optional[str] = None,
+    vehicle_type: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    current=Depends(require_admin),
+):
+    """Canonical vehicle inventory from fleet_vehicles.
+
+    Legacy driver car/plate values are backfilled into the fleet registry when a fleet is known,
+    but this endpoint never treats a driver account as the vehicle record.
+    """
+    async for fleet in db.fleets.find({}, {"_id": 1}):
+        await _backfill_fleet_vehicles(str(fleet["_id"]))
+
+    filt = {}
+    if vehicle_type and vehicle_type != "all":
+        filt["vehicle_type"] = vehicle_type
     if q:
         rx = {"$regex": q, "$options": "i"}
-        filt["$or"] = [{"car": rx}, {"plate": rx}, {"fullName": rx}]
+        filt["$or"] = [{"car": rx}, {"plate": rx}, {"color": rx}]
+
     page, page_size, skip = _page_params(page, page_size)
-    total = await db.users.count_documents(filt)
+    total = await db.fleet_vehicles.count_documents(filt)
     fleet_names = await _fleet_names()
     out = []
-    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
-        out.append({
-            "id": str(u["_id"]), "car": u.get("car"), "plate": u.get("plate"),
-            "vehicle_type": u.get("vehicle_type"), "driver_name": u.get("fullName"),
-            "fleet_name": fleet_names.get(u.get("fleet_id")),
-            "online": u.get("online", False), "approved": u.get("approved", False),
-            "last_location_at": u.get("last_location_at"),
-        })
-    return _paged(out, total, page, page_size, "vehicles")
 
+    async for vehicle in db.fleet_vehicles.find(filt).sort("updated_at", -1).skip(skip).limit(page_size):
+        assigned_ids = list(vehicle.get("assigned_driver_ids") or [])
+        assigned = []
+        assigned_oids = []
+        for driver_id in assigned_ids:
+            try:
+                assigned_oids.append(ObjectId(driver_id))
+            except Exception:
+                pass
+        if assigned_oids:
+            async for driver in db.users.find(
+                {"_id": {"$in": assigned_oids}, "role": "driver"},
+                {"fullName": 1, "online": 1, "active_vehicle_id": 1, "last_location_at": 1},
+            ):
+                assigned.append({
+                    "id": str(driver["_id"]),
+                    "name": driver.get("fullName") or "Sjåfør",
+                    "online": bool(driver.get("online")),
+                    "is_active_vehicle": driver.get("active_vehicle_id") == str(vehicle["_id"]),
+                    "last_location_at": driver.get("last_location_at"),
+                })
+
+        row = _fleet_vehicle_public(vehicle)
+        row.update({
+            "fleet_name": fleet_names.get(vehicle.get("fleet_id")),
+            "assigned_drivers": assigned,
+            "assigned_driver_count": len(assigned),
+            "online_driver_count": sum(1 for d in assigned if d["online"] and d["is_active_vehicle"]),
+            # Backward-compatible fields used by older admin UI.
+            "driver_name": next((d["name"] for d in assigned if d["is_active_vehicle"]), None),
+            "online": any(d["online"] and d["is_active_vehicle"] for d in assigned),
+            "approved": True,
+            "last_location_at": next(
+                (d["last_location_at"] for d in assigned if d["online"] and d["is_active_vehicle"]),
+                None,
+            ),
+        })
+        out.append(row)
+
+    return _paged(out, total, page, page_size, "vehicles")
 
 @api.get("/admin/trips-full")
 async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, payment_status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
