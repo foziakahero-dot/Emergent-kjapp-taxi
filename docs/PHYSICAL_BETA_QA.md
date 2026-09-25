@@ -243,3 +243,27 @@ Only after build validation + physical QA + deployment smoke:
 5. mark PR #44 ready for review
 6. merge to `main`
 7. then proceed with the separately planned backend-ownership migration
+
+
+## Receipt Ledger + payment evidence
+
+- [ ] complete one real Customer → Driver beta ride and reach the Customer receipt automatically
+- [ ] after verified payment, Customer receipt shows the same official `KJAPP-...` receipt number stored in Super Admin
+- [ ] Customer can reopen the receipt from **Dine turer**
+- [ ] Super Admin → **Kvitteringer** shows the immutable gross amount, service fee, fleet net, route, paid time and Stripe references for the same trip
+- [ ] Super Admin → **Turer** links the paid trip to its receipt ledger entry
+- [ ] customer and driver receipt e-mails are sent at most once when SendGrid is configured
+- [ ] a controlled partial refund adds a refund adjustment while the original paid snapshot remains unchanged
+- [ ] Super Admin receipt backfill creates missing ledger entries for historical paid beta trips without duplicates
+
+## Driver Selfie ID re-check
+
+- [ ] approved Driver with verified Selfie ID shows a future planned re-check date
+- [ ] Admin can request **Krev ny Selfie ID** and Driver is routed to the identity screen before the next shift
+- [ ] if Admin requests a re-check during an active trip, the active trip continues and the re-check activates only after that trip ends
+- [ ] after an active re-check is required, Driver cannot go online or handle a new trip until verification is complete
+- [ ] reinstall/new app installation signal can require a new Selfie ID without using a hardware device identifier
+- [ ] long inactivity can require a new Selfie ID
+- [ ] a new selfie becomes `pending_review`; Admin can verify or request another selfie
+- [ ] Fleet owner sees verification status only; raw selfie remains available only to Driver/KJAPP Admin
+- [ ] verified/rejected/superseded raw selfies follow the configured retention window; pending review selfies are never purged
