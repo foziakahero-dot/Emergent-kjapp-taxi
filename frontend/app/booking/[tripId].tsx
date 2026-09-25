@@ -42,9 +42,10 @@ export default function BookingFlow() {
         if (!mounted) return;
         setTrip(t);
         setNetworkIssue(false);
-        if (t.status === 'arrived' && !nav.current) {
+        if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
           nav.current = true;
-          try { await tripsApi.complete(tripId!); } catch {}
+          // Server state is canonical. "arrived" means the physical ride ended but
+          // payment may still be unresolved; the receipt screen handles real payment.
           router.replace(`/receipt/${tripId}`);
         }
       } catch {
