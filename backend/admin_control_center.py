@@ -271,8 +271,22 @@ def install_admin_control_center(
                     "configured": stripe_key,
                 },
                 {
-                    "id": "fcm", "name": "Firebase push", "status": "operational" if (os.getenv("FCM_SERVICE_ACCOUNT_JSON") or os.getenv("FCM_SERVICE_ACCOUNT_FILE")) else "warning",
-                    "detail": "Native push til Customer/Driver", "configured": bool(os.getenv("FCM_SERVICE_ACCOUNT_JSON") or os.getenv("FCM_SERVICE_ACCOUNT_FILE")),
+                    "id": "fcm", "name": "Firebase / FCM (Android)",
+                    "status": "operational" if (os.getenv("FCM_SERVICE_ACCOUNT_JSON") or os.getenv("FCM_SERVICE_ACCOUNT_FILE")) else "warning",
+                    "detail": "Låst-skjerm push til Customer og Driver på Android",
+                    "configured": bool(os.getenv("FCM_SERVICE_ACCOUNT_JSON") or os.getenv("FCM_SERVICE_ACCOUNT_FILE")),
+                },
+                {
+                    "id": "apns", "name": "Apple Push / APNs (iOS)",
+                    "status": "operational" if (
+                        os.getenv("APNS_KEY_ID") and os.getenv("APNS_TEAM_ID")
+                        and (os.getenv("APNS_PRIVATE_KEY") or os.getenv("APNS_PRIVATE_KEY_FILE"))
+                    ) else "warning",
+                    "detail": "Låst-skjerm push til Customer og Driver på iPhone",
+                    "configured": bool(
+                        os.getenv("APNS_KEY_ID") and os.getenv("APNS_TEAM_ID")
+                        and (os.getenv("APNS_PRIVATE_KEY") or os.getenv("APNS_PRIVATE_KEY_FILE"))
+                    ),
                 },
                 {
                     "id": "sendgrid", "name": "SendGrid e-post", "status": "operational" if os.getenv("SENDGRID_API_KEY") else "warning",
