@@ -54,6 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const u = await authApi.me();
+      if (u?.role !== 'user') {
+        await storage.removeItem(TOKEN_KEY);
+        setUser(null);
+        return;
+      }
       setUser(u);
     } catch {
       await storage.removeItem(TOKEN_KEY);
@@ -67,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     processed.current.add(sid);
     try {
       const res = await authApi.googleSession(sid);
+      if (res?.user?.role !== 'user') return null;
       await storage.setItem(TOKEN_KEY, res.token);
       setUser(res.user);
       return res.user;
@@ -111,8 +117,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh, handleSessionId]);
 
   const login = async (email: string, password: string) => {
-    const res = await authApi.login({ email, password });
+    const res = await authApi.login({ email, password, client: 'customer' });
     if (res.twofa_required) return res;
+    if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
     await storage.setItem(TOKEN_KEY, res.token);
     setUser(res.user);
     return res.user;
@@ -120,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (data: any) => {
     const res = await authApi.register(data);
+    if (res?.user?.role !== 'user') throw new Error('Kun kundekonto kan registreres i kundeappen.');
     await storage.setItem(TOKEN_KEY, res.token);
     setUser(res.user);
     return res.user;
@@ -176,6 +184,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.twofa_required) {
         throw new Error('Kontoen krever tofaktor — logg inn via web-portalen.');
       }
+      if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
       await storage.setItem(TOKEN_KEY, res.token);
       setUser(res.user);
       return res.user;
