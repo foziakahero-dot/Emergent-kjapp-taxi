@@ -62,9 +62,21 @@ def check(name, cond, extra=""):
         fails.append(name)
 
 
-# --- logins
-_, cust = call("POST", "/auth/login", body={"email": "ola@kjapp.no", "password": "test1234"})
-_, drv = call("POST", "/auth/login", body={"email": "sjafor@kjapp.no", "password": "sjafor1234"})
+def required(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if not value:
+        print(f"Missing required environment variable: {name}")
+        sys.exit(2)
+    return value
+
+
+# --- isolated test-account logins (never stored in source)
+customer_email = required("KJAPP_E2E_CUSTOMER_EMAIL")
+customer_password = required("KJAPP_E2E_CUSTOMER_PASSWORD")
+driver_email = required("KJAPP_E2E_DRIVER_A_EMAIL")
+driver_password = required("KJAPP_E2E_DRIVER_A_PASSWORD")
+_, cust = call("POST", "/auth/login", body={"email": customer_email, "password": customer_password, "client": "customer"})
+_, drv = call("POST", "/auth/login", body={"email": driver_email, "password": driver_password, "client": "driver"})
 ct, dt = cust["token"], drv["token"]
 
 # --- driver goes online with REAL gps near Oslo S
