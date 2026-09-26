@@ -1157,7 +1157,8 @@ def _fcm_app():
     return FCM_APP
 
 
-def _fcm_send(tokens: list, title: str, body: str, data: dict):
+def _fcm_send(tokens: list, title: str, body: str, data: dict,
+              sound: bool = True, vibrate: bool = True, channel_id: str = "kjapp_trips"):
     """Blocking FCM call — run through asyncio.to_thread. Returns tokens that are dead."""
     from firebase_admin import messaging
     msg_data = {k: str(v) for k, v in (data or {}).items()}
@@ -1172,13 +1173,14 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict):
                     android=messaging.AndroidConfig(
                         priority="high",
                         notification=messaging.AndroidNotification(
-                            channel_id="kjapp_trips", sound="default", default_vibrate_timings=True,
+                            channel_id=channel_id, sound="default" if sound else None,
+                             default_vibrate_timings=vibrate,
                         ),
                     ),
                     apns=messaging.APNSConfig(
                         headers={"apns-priority": "10", "apns-push-type": "alert"},
                         payload=messaging.APNSPayload(
-                            aps=messaging.Aps(sound="default", badge=1, content_available=True)
+                            aps=messaging.Aps(sound="default" if sound else None, badge=1, content_available=True)
                         ),
                     ),
                 ),
@@ -1280,7 +1282,8 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
 
     if legacy_fcm_tokens and _fcm_app():
         try:
-            dead.extend(await asyncio.to_thread(_fcm_send, legacy_fcm_tokens, title, body, data))
+            dead.extend(await asyncio.to_thread(_fcm_send, legacy_fcm_tokens, title, body, data,
+                                                sound_enabled, vibrate_enabled, channel_id))
         except Exception as e:
             print(f"FCM legacy push failed: {type(e).__name__}: {e}")
 
@@ -1290,6 +1293,10 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
     """Deliver a notification to every channel the user has: real mobile app (FCM/APNs) + web push."""
+    if tag == "kjapp-new-trip":
+        preferences = await db.settings.find_one({"user_id": user_id}) or {}
+        if preferences.get("notif_requests") is False:
+            return
     await send_native_push(user_id, title, body, url, tag)
     if not PUSH_AVAILABLE:
         return
