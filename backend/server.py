@@ -10176,6 +10176,11 @@ async def admin_get_settings(current=Depends(require_admin)):
         return {**DEFAULT_PLATFORM_SETTINGS, "updated_at": None}
     s.pop("_id", None)
     merged = {**DEFAULT_PLATFORM_SETTINGS, **s}
+    features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(s.get("features") or {})}
+    # Runtime demo trips are permanently disabled for beta/production control surfaces,
+    # even if an old database snapshot still contains demo_trips=true.
+    features["demo_trips"] = False
+    merged["features"] = features
     return merged
 
 
@@ -10194,7 +10199,20 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         next_pricing["version"] = int(previous_pricing.get("version", 1)) + 1
         sets["pricing"] = next_pricing
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
-    if body.features is not None: sets["features"] = body.features
+    if body.features is not None:
+        allowed_features = set(DEFAULT_PLATFORM_SETTINGS["features"].keys())
+        unknown_features = set(body.features.keys()) - allowed_features
+        if unknown_features:
+            raise HTTPException(400, f"Ukjente feature-flagg: {', '.join(sorted(unknown_features))}")
+        if any(not isinstance(v, bool) for v in body.features.values()):
+            raise HTTPException(400, "Feature-flagg må være true/false")
+        next_features = {
+            **DEFAULT_PLATFORM_SETTINGS["features"],
+            **(prev.get("features") or {}),
+            **body.features,
+        }
+        next_features["demo_trips"] = False
+        sets["features"] = next_features
     if body.compliance is not None:
         allowed = set(DEFAULT_PLATFORM_SETTINGS["compliance"].keys())
         unknown = set(body.compliance.keys()) - allowed
