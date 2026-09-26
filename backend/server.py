@@ -5373,35 +5373,60 @@ def _fleet_plate(value: str) -> str:
 
 
 async def _sync_fleet_vehicle_records(fid: str):
-    """One-way compatibility sync for vehicles that historically lived only on Driver user rows."""
+    """One-way migration for legacy vehicles without changing live fleet assignments.
+
+    Driver user rows used to be the vehicle source of truth. They are now only
+    compatibility mirrors. Opening the Fleet vehicle list must therefore never
+    steal/reassign a vehicle based on a stale driver plate.
+    """
     async for d in db.users.find({
         "role": "driver",
         "fleet_id": fid,
         "plate": {"$exists": True, "$nin": [None, ""]},
-    }, {"fullName": 1, "full_name": 1, "car": 1, "plate": 1, "vehicle_type": 1, "created_at": 1}):
+    }, {"fullName": 1, "full_name": 1, "car": 1, "plate": 1, "vehicle_type": 1, "created_at": 1, "vehicle_id": 1}):
         plate = _fleet_plate(d.get("plate"))
         if not plate:
             continue
         now = datetime.now(timezone.utc).isoformat()
-        await db.fleet_vehicles.update_one(
+        driver_id = str(d["_id"])
+        existing = await db.fleet_vehicles.find_one(
             {"fleet_id": fid, "plate": plate},
-            {
-                "$setOnInsert": {
+            {"_id": 1, "assigned_driver_id": 1},
+        )
+        if not existing:
+            # Legacy-only row: create the canonical vehicle once with its legacy owner.
+            await db.fleet_vehicles.update_one(
+                {"fleet_id": fid, "plate": plate},
+                {"$setOnInsert": {
                     "fleet_id": fid,
                     "plate": plate,
                     "car": d.get("car") or "KJAPP-kjøretøy",
                     "vehicle_type": d.get("vehicle_type") or "ai-first",
                     "active": True,
+                    "assigned_driver_id": driver_id,
+                    "assigned_driver_name": d.get("fullName") or d.get("full_name"),
                     "created_at": d.get("created_at") or now,
+                    "updated_at": now,
+                }},
+                upsert=True,
+            )
+            continue
+
+        # Existing canonical assignment always wins. We may only fill a genuinely
+        # unassigned legacy vehicle, never overwrite another driver's assignment.
+        if existing.get("assigned_driver_id") in (None, ""):
+            await db.fleet_vehicles.update_one(
+                {
+                    "_id": existing["_id"],
+                    "fleet_id": fid,
+                    "assigned_driver_id": {"$in": [None, ""]},
                 },
-                "$set": {
-                    "assigned_driver_id": str(d["_id"]),
+                {"$set": {
+                    "assigned_driver_id": driver_id,
                     "assigned_driver_name": d.get("fullName") or d.get("full_name"),
                     "updated_at": now,
-                },
-            },
-            upsert=True,
-        )
+                }},
+            )
 
 
 async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
