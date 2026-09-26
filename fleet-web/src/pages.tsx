@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  api, apiError, FleetDocument, FleetDriver, FleetDriverDetail, FleetLive,
+  api, apiError, DriverInvite, FleetDocument, FleetDriver, FleetDriverDetail, FleetLive,
   FleetLiveDriver, FleetMe, FleetOverview, FleetPayout, FleetTrip, FleetVehicle,
 } from './api';
 import { useAuth } from './auth';
@@ -359,7 +359,7 @@ function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; 
 
 export function DriversPage() {
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
-  const [invites, setInvites] = useState<any[]>([]);
+  const [invites, setInvites] = useState<DriverInvite[]>([]);
   const [copiedInvite, setCopiedInvite] = useState('');
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
   const [q, setQ] = useState('');
