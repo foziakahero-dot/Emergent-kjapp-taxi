@@ -370,3 +370,16 @@ def test_driver_current_never_books_unpaid_fare_as_earned_income():
     block = _block(SERVER, "driver_current")
     assert 't["estimated_driver_earnings"] = estimated_net' in block
     assert 't["driver_earnings"] = estimated_net if t.get("payment_status") == "paid" else None' in block
+
+
+def test_manual_pseudo_payment_methods_are_disabled():
+    block = _block(SERVER, "add_payment_method")
+    assert "status_code=410" in block
+    assert "verifiser kort via Stripe" in block
+    assert "db.payment_methods.insert_one" not in block
+
+    customer_api = (ROOT / "frontend" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
+    payment_api = customer_api[customer_api.index("export const paymentApi"):customer_api.index("export const messagesApi")]
+    assert "add:" not in payment_api
+    assert "cardSetup:" in payment_api
+    assert "cardSetupStatus:" in payment_api
