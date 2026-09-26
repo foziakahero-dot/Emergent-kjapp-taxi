@@ -3326,21 +3326,15 @@ async def list_payment_methods(current=Depends(require_customer)):
 
 @api.post("/payment-methods")
 async def add_payment_method(body: PaymentMethodRequest, current=Depends(require_customer)):
-    # User-entered details never prove a payment instrument, including Vipps.
-    verified = False
-    doc = {
-        "user_id": current["id"],
-        "type": body.type,
-        "label": body.label,
-        "last4": body.last4,
-        "verified": verified,
-        "is_default": bool(body.is_default) and verified,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    res = await db.payment_methods.insert_one(doc)
-    doc["id"] = str(res.inserted_id)
-    doc.pop("_id", None)
-    return doc
+    """Legacy route kept only to fail closed for older app builds.
+
+    A user-entered brand/last4 is not a payment instrument. All beta cards must be
+    created by Stripe SetupIntent/Checkout and cryptographically tied to the customer.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="Manuell registrering av betalingsmåte er deaktivert. Legg til og verifiser kort via Stripe.",
+    )
 
 
 @api.delete("/payment-methods/{pm_id}")
