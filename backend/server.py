@@ -520,6 +520,7 @@ async def _assigned_fleet_vehicle(driver: dict, *, required: bool = True) -> Opt
                 "_id": ObjectId(str(vehicle_id)),
                 "fleet_id": fleet_id,
                 "assigned_driver_id": driver_id,
+                "active": {"$ne": False},
             })
         except (InvalidId, TypeError):
             vehicle = None
@@ -5550,13 +5551,11 @@ async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest,
     if body.active is not None:
         update["active"] = body.active
     await db.fleet_vehicles.update_one({"_id": oid, "fleet_id": fid}, {"$set": update})
-    if assigned_driver:
-        driver_update = {}
-        for key in ("car", "plate", "vehicle_type"):
-            if key in update:
-                driver_update[key] = update[key]
-        if driver_update:
-            await db.users.update_one({"_id": assigned_driver["_id"], "fleet_id": fid}, {"$set": driver_update})
+    if assigned_driver and str(assigned_driver.get("vehicle_id") or "") == vehicle_id:
+        # Re-resolve canonical selected vehicle after edits. If this vehicle was parked,
+        # _assigned_fleet_vehicle will select another active fleet-assigned vehicle or clear mirrors.
+        assigned_driver.update(update)
+        await _assigned_fleet_vehicle(assigned_driver, required=False)
     after = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
     await _audit(current, "fleet.vehicle_update", "vehicle", vehicle_id, {
         "car": vehicle.get("car"), "plate": vehicle.get("plate"), "vehicle_type": vehicle.get("vehicle_type"), "active": vehicle.get("active", True)
