@@ -364,3 +364,9 @@ def test_fleet_ui_distinguishes_selected_from_extra_assigned_cars():
     assert "selected_for_shift?: boolean" in fleet_api
     assert "Valgt bil · offline" in fleet_pages
     assert "Tildelt · ikke valgt" in fleet_pages
+
+
+def test_driver_current_never_books_unpaid_fare_as_earned_income():
+    block = _block(SERVER, "driver_current")
+    assert 't["estimated_driver_earnings"] = estimated_net' in block
+    assert 't["driver_earnings"] = estimated_net if t.get("payment_status") == "paid" else None' in block
