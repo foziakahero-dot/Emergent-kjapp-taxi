@@ -39,11 +39,16 @@ LIVE_HOSTS = {
     "https://api.kjappapp.no",
 }
 
-if API in LIVE_HOSTS and not (ALLOW_MUTATION and ISOLATED):
+if API in LIVE_HOSTS:
     print(
-        "REFUSED: lifecycle E2E creates trip data and cannot run against the shared KJAPP beta/production backend. "
-        "Use release_smoke.py for live checks, or point KJAPP_E2E_API to an isolated test backend/database and set "
-        "KJAPP_E2E_ISOLATED=true plus KJAPP_E2E_ALLOW_MUTATION=true."
+        "REFUSED: lifecycle E2E can never mutate the shared KJAPP beta/production backend. "
+        "Use release_smoke.py for live checks."
+    )
+    sys.exit(3)
+if not (ALLOW_MUTATION and ISOLATED):
+    print(
+        "REFUSED: lifecycle E2E requires an isolated backend/database plus "
+        "KJAPP_E2E_ISOLATED=true and KJAPP_E2E_ALLOW_MUTATION=true."
     )
     sys.exit(3)
 
