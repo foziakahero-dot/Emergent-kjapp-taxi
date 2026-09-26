@@ -8,7 +8,7 @@ import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
-import { driverApi, safetyApi } from '@/src/lib/api';
+import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 import { storage } from '@/src/utils/storage';
 
@@ -23,6 +23,10 @@ function hoursLabel(min?: number) {
 type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
 type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
 const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
+const MINIMIZED_TRIP_KEY = 'kjapp_driver_minimized_active_trip_v1';
+const DISMISSED_FINISHED_KEY = 'kjapp_driver_dismissed_finished_trip_v1';
+const ACTIVE_STATUSES = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
+const FINISHED_STATUSES = new Set(['arrived', 'completed', 'rated']);
 
 async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
   if (action === 'at_pickup') return driverApi.atPickup(tripId);
@@ -49,6 +53,8 @@ export default function DriverHome() {
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>(null);
+  const [completedTrip, setCompletedTrip] = useState<any>(null);
+  const [tripMinimized, setTripMinimized] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [busy, setBusy] = useState(false);
@@ -63,7 +69,13 @@ export default function DriverHome() {
     try {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
-      setCurrent(normalized);
+      if (normalized && FINISHED_STATUSES.has(normalized.status)) {
+        const dismissed = await storage.getItem(DISMISSED_FINISHED_KEY);
+        setCompletedTrip(dismissed === normalized.trip_id ? null : normalized);
+      } else if (normalized && ACTIVE_STATUSES.has(normalized.status)) {
+        setCompletedTrip(null);
+      }
+      setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
 
       if (!actionRetrying.current) {
         const raw = await storage.getItem(QUEUED_TRIP_ACTION_KEY);
@@ -83,7 +95,11 @@ export default function DriverHome() {
                   await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
                   const refreshed = await driverApi.current();
                   normalized = refreshed?.trip || refreshed || normalized;
-                  setCurrent(normalized);
+                  if (normalized && FINISHED_STATUSES.has(normalized.status)) {
+                    const dismissed = await storage.getItem(DISMISSED_FINISHED_KEY);
+                    setCompletedTrip(dismissed === normalized.trip_id ? null : normalized);
+                  }
+                  setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
                   setError('');
                 } catch (e: any) {
                   if (e?.response) {
@@ -317,6 +333,24 @@ export default function DriverHome() {
     await execute();
   };
 
+  useEffect(() => {
+    let active = true;
+    if (!current?.trip_id) { setTripMinimized(false); return; }
+    storage.getItem(MINIMIZED_TRIP_KEY).then((id) => {
+      if (active) setTripMinimized(id === current.trip_id);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [current?.trip_id]);
+
+  useEffect(() => {
+    if (!completedTrip?.trip_id) return;
+    const timer = setTimeout(() => {
+      void storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
+      setCompletedTrip(null);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [completedTrip?.trip_id]);
+
   const noShow = async () => {
     if (!current || current.status !== 'at_pickup' || busy) return;
     Alert.alert(
@@ -377,11 +411,12 @@ export default function DriverHome() {
       `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
       (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '') +
       '&travelmode=driving';
-    const native = validStops.length
-      ? fallback
-      : Platform.OS === 'ios'
-        ? `maps://?daddr=${lat},${lng}&dirflg=d`
-        : `google.navigation:q=${lat},${lng}&mode=d`;
+    const preferred = await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app || 'google').catch(() => 'google');
+    const native = validStops.length ? fallback
+      : preferred === 'waze' ? `waze://?ll=${lat},${lng}&navigate=yes`
+      : preferred === 'apple' && Platform.OS === 'ios' ? `maps://?daddr=${lat},${lng}&dirflg=d`
+      : Platform.OS === 'android' ? `google.navigation:q=${lat},${lng}&mode=d`
+      : fallback;
 
     try {
       const supported = await Linking.canOpenURL(native);
@@ -490,11 +525,28 @@ export default function DriverHome() {
         <View style={s.handle} />
         {error ? <Text style={s.error} testID="driver-error">{error}</Text> : null}
 
-        {current ? (
+        {current && tripMinimized ? (
+          <Pressable testID="driver-active-trip-minimized" onPress={async () => {
+            setTripMinimized(false);
+            await storage.removeItem(MINIMIZED_TRIP_KEY);
+          }} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.overlineOnline}>AKTIV TUR · TRYKK FOR Å ÅPNE</Text>
+              <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
+            </View>
+            <Icon name="chevron-up" size={20} color={colors.text} />
+          </Pressable>
+        ) : current ? (
           <View testID="driver-active-trip">
             <View style={s.sectionHeading}>
               <Text style={s.overlineOnline}>AKTIV TUR</Text>
               <Text style={s.tripPrice}>{kr(current.price)}</Text>
+              <Pressable testID="driver-trip-minimize" accessibilityLabel="Minimer turkort" onPress={async () => {
+                setTripMinimized(true);
+                await storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id);
+              }} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="chevron-down" size={20} color={colors.text} />
+              </Pressable>
             </View>
             <View style={[s.epRow, { marginTop: 12 }]}>
               <View style={s.beacon} />
@@ -505,6 +557,12 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
+            <Text style={s.offerMeta} testID="driver-current-customer">{current.customer?.name || 'Kundenavn utilgjengelig'}</Text>
+            {current.customer?.phone ? (
+              <Pressable testID="driver-call-customer" onPress={() => Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))}>
+                <Text style={s.navBtnText}>Ring kunde · {current.customer.phone}</Text>
+              </Pressable>
+            ) : null}
             {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
             {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
             {['driver_on_way', 'in_trip'].includes(current.status) ? (
@@ -561,6 +619,7 @@ export default function DriverHome() {
                 ? (offerExpired ? 'Tilbudet sendes videre…' : `Sendes videre om ${offerRemaining} sek`)
                 : 'Åpen for alle ledige sjåfører'}
             </Text>
+            <Text style={s.offerMeta} testID="driver-offer-customer">{firstOffer.customer?.name || 'Kundenavn utilgjengelig'}</Text>
             {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
             {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
@@ -577,6 +636,14 @@ export default function DriverHome() {
               </Pressable>
             </View>
           </View>
+        ) : completedTrip ? (
+          <Pressable testID="driver-trip-completed" onPress={async () => {
+            await storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
+            setCompletedTrip(null);
+          }} style={{ paddingVertical: 16 }}>
+            <Text style={s.overlineOnline}>TUR FULLFØRT</Text>
+            <Text style={s.epText}>Klar for neste tur · {kr(completedTrip.driver_earnings ?? completedTrip.price)}</Text>
+          </Pressable>
         ) : (
           <View>
             <View style={s.summaryRow}>
@@ -616,7 +683,7 @@ export default function DriverHome() {
           role="driver"
           visible={chatOpen}
           onClose={() => setChatOpen(false)}
-          peerName="Kunde"
+          peerName={current.customer?.name || 'Kunde'}
         />
       ) : null}
     </View>

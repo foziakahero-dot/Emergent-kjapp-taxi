@@ -859,6 +859,10 @@ class SettingsUpdate(BaseModel):
     price_alerts: Optional[bool] = None
     language: Optional[str] = None
     theme: Optional[str] = None
+    notif_requests: Optional[bool] = None
+    req_sound: Optional[bool] = None
+    req_vibrate: Optional[bool] = None
+    navigation_app: Optional[Literal["google", "apple", "waze"]] = None
 
 
 # ------------------ Trip simulator ------------------
@@ -1193,7 +1197,8 @@ def _is_expo_push_token(token: str) -> bool:
     return isinstance(token, str) and token.startswith(("ExpoPushToken[", "ExponentPushToken["))
 
 
-async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> list[str]:
+async def _expo_send(tokens: list[str], title: str, body: str, data: dict,
+                     *, sound: bool = True, channel_id: str = "kjapp_trips") -> list[str]:
     """Send real native notifications through Expo Push -> APNs/FCM.
 
     Expo tokens are preferred for the React Native apps because getDevicePushTokenAsync()
@@ -1205,9 +1210,9 @@ async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> li
         "to": token,
         "title": title,
         "body": body,
-        "sound": "default",
+        "sound": "default" if sound else None,
         "priority": "high",
-        "channelId": "kjapp_trips",
+        "channelId": channel_id,
         "data": {k: str(v) for k, v in (data or {}).items()},
     } for token in tokens]
     dead = []
@@ -1256,9 +1261,22 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
     ]
     dead = []
     data = {"url": url, "tag": tag or ""}
+    request_settings = {}
+    if tag == "kjapp-new-trip":
+        request_settings = await db.settings.find_one({"user_id": user_id}) or {}
+        if request_settings.get("notif_requests") is False:
+            return
+    sound_enabled = request_settings.get("req_sound") is not False
+    vibrate_enabled = request_settings.get("req_vibrate") is not False
+    channel_id = (
+        "kjapp_trips" if sound_enabled and vibrate_enabled else
+        "kjapp_trips_sound" if sound_enabled else
+        "kjapp_trips_vibrate" if vibrate_enabled else "kjapp_trips_quiet"
+    ) if tag == "kjapp-new-trip" else "kjapp_trips"
 
     if expo_tokens:
-        dead.extend(await _expo_send(expo_tokens, title, body, data))
+        dead.extend(await _expo_send(expo_tokens, title, body, data,
+                                     sound=sound_enabled, channel_id=channel_id))
 
     if legacy_fcm_tokens and _fcm_app():
         try:
@@ -3641,14 +3659,14 @@ class AcceptTripRequest(BaseModel):
     trip_id: str
 
 
-def customer_public(u: dict) -> dict:
+def customer_public(u: dict, *, include_phone: bool = False) -> dict:
     """Minimal, real customer info a driver is allowed to see. No fabricated values —
     missing rating stays None so the UI can show a neutral state instead of a fake number."""
     name = u.get("fullName") or u.get("full_name") or "Kunde"
     rating = u.get("rating")
     return {
         "name": name,
-        "phone": u.get("phone") or "",
+        "phone": (u.get("phone") or "") if include_phone else "",
         "rating": round(float(rating), 1) if isinstance(rating, (int, float)) else None,
         "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
         "trip_count": int(u.get("trip_count") or 0),
@@ -4127,7 +4145,7 @@ async def driver_current(current=Depends(require_driver)):
             u = await db.users.find_one({"_id": ObjectId(t["user_id"])}, {"password_hash": 0})
         except Exception:
             u = None
-    t["customer"] = customer_public(u) if u else None
+    t["customer"] = customer_public(u, include_phone=True) if u else None
     # Real routing for the leg the driver is actually on (driver's live GPS -> pickup)
     t["pickup_route"] = None
     if t["status"] in ("driver_on_way", "at_pickup") and current.get("last_lat") is not None:

@@ -12,14 +12,22 @@ const LAST_BACKGROUND_PENDING_CHECK_KEY = 'kjapp_last_background_pending_check_a
 let backgroundPermissionRequestedThisSession = false;
 let backgroundLocationMode: 'idle' | 'active' | null = null;
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async (notification) => {
+      const isOffer = notification.request.content.data?.tag === 'kjapp-new-trip';
+      const sound = !isOffer || (await storage.getItem('driver_req_sound')) !== 'false';
+      return {
+        shouldPlaySound: sound,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    },
+  });
+} catch {
+  // A notification module error must not crash Driver startup.
+}
 
 async function notifyPendingTripFromBackground() {
   try {
@@ -28,6 +36,7 @@ async function notifyPendingTripFromBackground() {
     if (Number.isFinite(previousCheck) && now - previousCheck < 8000) return;
     await storage.setItem(LAST_BACKGROUND_PENDING_CHECK_KEY, String(now));
 
+    if ((await storage.getItem('driver_notif_requests')) === 'false') return;
     const response = await api.get('/driver/pending');
     const payload = response.data;
     const pending = payload?.trips || payload?.pending || (Array.isArray(payload) ? payload : []);
@@ -45,14 +54,17 @@ async function notifyPendingTripFromBackground() {
     const pickup = offer.pickup_address || 'Henting';
     const dropoff = offer.dropoff_address || 'destinasjon';
 
+    const sound = (await storage.getItem('driver_req_sound')) !== 'false';
+    const vibrate = (await storage.getItem('driver_req_vibrate')) !== 'false';
+    const channelId = offerChannel(sound, vibrate);
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `Ny tur · ${price}`,
         body: `${pickup} → ${dropoff}`,
-        sound: true,
+        sound: sound ? 'default' : false,
         data: { url: '/driver', trip_id: offer.trip_id, source: 'background-poll' },
       },
-      trigger: null,
+      trigger: Platform.OS === 'android' ? { channelId } : null,
     });
     await storage.setItem(LAST_BACKGROUND_OFFER_KEY, String(offer.trip_id));
   } catch {
@@ -88,17 +100,31 @@ async function getExpoPushTokenData() {
   return expoToken.data || null;
 }
 
+function offerChannel(sound: boolean, vibrate: boolean) {
+  return sound && vibrate ? 'kjapp_trips' : sound ? 'kjapp_trips_sound'
+    : vibrate ? 'kjapp_trips_vibrate' : 'kjapp_trips_quiet';
+}
+
 export async function registerNativePush() {
   if (Platform.OS === 'web') return false;
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('kjapp_trips', {
-      name: 'KJAPP turer',
-      description: 'Nye turer og viktige oppdateringer mens du er på skift.',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 180, 250],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    });
+    for (const [id, sound, vibrate] of [
+      ['kjapp_trips', true, true],
+      ['kjapp_trips_sound', true, false],
+      ['kjapp_trips_vibrate', false, true],
+      ['kjapp_trips_quiet', false, false],
+    ] as const) {
+      await Notifications.setNotificationChannelAsync(id, {
+        name: 'KJAPP turer',
+        description: 'Turforespørsler når du er på skift.',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: sound ? 'default' : null,
+        enableVibrate: vibrate,
+        vibrationPattern: vibrate ? [0, 250, 180, 250] : null,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+    }
   }
 
   const existing = await Notifications.getPermissionsAsync();

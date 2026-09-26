@@ -3,16 +3,19 @@
     "apk": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host",
+        "KJAPP_REQUIRE_FIREBASE": "true"
       },
       "android": {
         "buildType": "apk",
         "image": "latest"
-      }
+      },
+      "environment": "preview"
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "KJAPP_REQUIRE_FIREBASE": "true"
       },
       "android": {
         "image": "latest"
@@ -20,7 +23,8 @@
       "ios": {
         "image": "latest"
       },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production"
     },
     "ios-simulator": {
       "distribution": "internal",

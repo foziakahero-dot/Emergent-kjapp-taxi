@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -8,6 +8,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
+import { storage } from '@/src/utils/storage';
 
 const NOTIF: { key: string; label: string; sub: string }[] = [
   { key: 'notif_requests', label: 'Turforespørsler', sub: 'Varsel når en ny tur er tilgjengelig' },
@@ -32,14 +33,27 @@ export default function DriverSettings() {
   const [exportInfo, setExportInfo] = useState('');
 
   useEffect(() => {
-    settingsApi.get().then((r) => setSettings(r.settings || r || {})).catch(() => setSettings({}));
+    settingsApi.get().then(async (r) => {
+      const data = r.settings || r || {};
+      setSettings(data);
+      for (const key of ['notif_requests', 'req_sound', 'req_vibrate']) {
+        await storage.setItem(`driver_${key}`, String(data[key] !== false));
+      }
+    }).catch(() => setSettings({}));
   }, []);
 
   const toggle = async (key: string, def = true) => {
     const cur = settings[key] === undefined ? def : settings[key];
     const next = { ...settings, [key]: !cur };
     setSettings(next);
-    try { await settingsApi.update({ [key]: next[key] }); } catch {}
+    try {
+      await settingsApi.update({ [key]: next[key] });
+      if (['notif_requests', 'req_sound', 'req_vibrate'].includes(key)) {
+        await storage.setItem(`driver_${key}`, String(next[key]));
+      }
+    } catch {
+      setSettings(settings);
+    }
   };
 
   const exportData = async () => {
@@ -95,8 +109,29 @@ export default function DriverSettings() {
 
           <Text style={s.sectionTitle}>Kjøring</Text>
           <View style={s.card}>
-            {DRIVE.map((t, i) => (
+            {DRIVE.filter((t) => Platform.OS === 'android' || t.key !== 'req_vibrate').map((t, i) => (
               <ToggleRow key={t.key} t={t} on={settings[t.key] !== false} onToggle={() => toggle(t.key, true)} border={i > 0} s={s} />
+            ))}
+          </View>
+
+          <Text style={s.sectionTitle}>Navigasjon</Text>
+          <View style={s.card}>
+            {([
+              ['google', 'Google Maps'],
+              ['waze', 'Waze'],
+              ...(Platform.OS === 'ios' ? [['apple', 'Apple Kart']] : []),
+            ] as string[][]).map(([key, label], i) => (
+              <Pressable key={key} testID={`driver-navigation-${key}`}
+                style={[s.row, i > 0 && s.rowBorder]}
+                onPress={() => { void (async () => {
+                  const previous = settings;
+                  setSettings({ ...settings, navigation_app: key });
+                  try { await settingsApi.update({ navigation_app: key }); }
+                  catch { setSettings(previous); }
+                })(); }}>
+                <Text style={s.rowLabel}>{label}</Text>
+                <Text style={[s.rowSub, { marginLeft: 'auto' }]}>{(settings.navigation_app || 'google') === key ? 'Valgt' : ''}</Text>
+              </Pressable>
             ))}
           </View>
 
