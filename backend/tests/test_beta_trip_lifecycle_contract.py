@@ -170,3 +170,15 @@ def test_admin_overview_finance_is_paid_real_trip_only():
     assert "_real_trip_filter(" in block
     assert '"payment_status": "paid"' in block
     assert 'rate = await _commission_for_trip(t)' in block
+
+
+def test_receipt_email_delivery_is_atomically_serialized_per_recipient():
+    block = _block("send_trip_receipts", "_attempt_trip_auto_charge")
+    assert "async def deliver_once" in block
+    assert 'lock_field = f"{kind}_email_delivery_lock"' in block
+    assert 'lock_at_field = f"{kind}_email_delivery_locked_at"' in block
+    assert "claim.modified_count != 1" in block
+    assert '{"$set": {sent_field: now_iso}' in block
+    assert '"$unset": {lock_field: "", lock_at_field: ""}' in block
+    assert 'await deliver_once(\n        "customer"' in block
+    assert 'await deliver_once(\n        "driver"' in block
