@@ -79,3 +79,73 @@ def test_driver_login_supports_privacy_safe_installation_signal():
     )
     annotated = {node.target.id for node in login_model.body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)}
     assert {"email", "password", "client", "device_id"}.issubset(annotated)
+
+
+def test_paid_receipt_preserves_booked_zero_and_promo_commission():
+    """Exercise the real snapshot function with an in-memory paid trip."""
+    import asyncio
+    import datetime
+    import re
+    import typing
+    import uuid
+
+    source = _source()
+    tree = ast.parse(source)
+    function = next(
+        node for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "ensure_receipt_snapshot"
+    )
+    namespace = {
+        "Optional": typing.Optional,
+        "ObjectId": str,
+        "_real_trip_filter": lambda query: query,
+        "datetime": datetime.datetime,
+        "timezone": datetime.timezone,
+        "re": re,
+        "uuid": uuid,
+    }
+
+    async def platform_commission():
+        return 0.10
+
+    namespace["_platform_commission"] = platform_commission
+    exec(compile(ast.Module(body=[function], type_ignores=[]), str(SERVER), "exec"), namespace)
+
+    class Collection:
+        def __init__(self, document=None):
+            self.document = document
+
+        async def find_one(self, *args, **kwargs):
+            return dict(self.document) if self.document else None
+
+        async def update_one(self, query, update, **kwargs):
+            if "$setOnInsert" in update and not self.document:
+                self.document = {"_id": "receipt-1", **update["$setOnInsert"]}
+            if "$set" in update and self.document:
+                self.document.update(update["$set"])
+
+    class Database:
+        pass
+
+    async def check(booked_rate, expected_fee):
+        db = Database()
+        db.trips = Collection({
+            "_id": "trip-1", "trip_id": "trip-1", "status": "completed",
+            "payment_status": "paid", "price": 200, "fleet_id": "fleet-1",
+            "commission_rate": booked_rate, "paid_at": "2026-09-26T18:00:00+00:00",
+        })
+        db.receipt_ledger = Collection()
+        db.users = Collection()
+        db.payment_transactions = Collection()
+        db.fleets = Collection({"_id": "fleet-1", "commission_rate": 0.15})
+        namespace["db"] = db
+
+        first = await namespace["ensure_receipt_snapshot"]("trip-1")
+        second = await namespace["ensure_receipt_snapshot"]("trip-1")
+        assert first["platform_fee"] == expected_fee
+        assert first["fleet_net"] == 200 - expected_fee
+        assert second["receipt_number"] == first["receipt_number"]
+        assert db.trips.document["receipt_id"] == first["receipt_number"]
+
+    for booked_rate, expected_fee in ((0, 0), (0.05, 10), (None, 30)):
+        asyncio.run(check(booked_rate, expected_fee))
