@@ -17,6 +17,7 @@ export type User = {
   car?: string;
   plate?: string;
   vehicle_type?: string;
+  profile_photo_path?: string;
   approved?: boolean;
   legal_accepted?: boolean;
   identity_verification_status?: string;
