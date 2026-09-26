@@ -6284,7 +6284,8 @@ async def fleet_export_monthly(
     if not fid: raise HTTPException(404, "Ingen flåte")
 
     fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = float(fleet_doc.get("commission_rate", 0.20))
+    commission = (float(fleet_doc["commission_rate"]) if fleet_doc.get("commission_rate") is not None
+                  else await _platform_commission())
     fleet_name = fleet_doc.get("name", "Flåte")
 
     # Date range
@@ -6327,7 +6328,7 @@ async def fleet_export_monthly(
             did = t.get("driver_id")
             if did in drivers_map:
                 gross = int(t.get("price", 0) or 0)
-                rate = float(t.get("commission_rate", commission) or commission)
+                rate = float(t["commission_rate"]) if t.get("commission_rate") is not None else commission
                 fee = int(round(gross * rate))
                 drivers_map[did]["trips"] += 1
                 drivers_map[did]["gross"] += gross
@@ -6336,7 +6337,9 @@ async def fleet_export_monthly(
 
     total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
     total_trips = len(trips)
-    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
+    total_commission = sum(int(round(int(t.get("price", 0) or 0) *
+                               (float(t["commission_rate"]) if t.get("commission_rate") is not None else commission)))
+                           for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -6355,7 +6358,7 @@ async def fleet_export_monthly(
     for k, v in [
         ("Antall turer", total_trips),
         ("Brutto omsetning (NOK)", total_gross),
-        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
+        ("KJAPP-provisjon (NOK)", total_commission),
         ("Netto til flåte (NOK)", total_net),
         ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
     ]:
@@ -7541,7 +7544,10 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
             fleet = None
 
     price = int(trip.get("price") or 0)
-    commission = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
+    default_commission = (fleet or {}).get("commission_rate")
+    if default_commission is None:
+        default_commission = await _platform_commission()
+    commission = float(trip["commission_rate"] if trip.get("commission_rate") is not None else default_commission)
     platform_fee = int(round(price * commission))
     paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
     paid_day = str(paid_at)[:10].replace("-", "")
@@ -9613,7 +9619,8 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
             "driver_earnings": (
-                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
+                int(round((t.get("price") or 0) *
+                          (1 - (float(t["commission_rate"]) if t.get("commission_rate") is not None else commission))))
                 if finished and t.get("payment_status") == "paid" else None
             ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
@@ -9892,7 +9899,7 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
         {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
     ):
         price = int(t.get("price", 0) or 0)
-        rate = float(t.get("commission_rate", default_rate) or default_rate)
+        rate = float(t["commission_rate"]) if t.get("commission_rate") is not None else default_rate
         fee = int(round(price * rate))
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
@@ -9946,7 +9953,8 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * (float(t["commission_rate"]) if t.get("commission_rate") is not None else _rate))
+            if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
