@@ -3673,7 +3673,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         {"role": "driver", "approved": True, "accepted_terms_at": {"$exists": True, "$ne": None},
          "online": True, "disabled": {"$ne": True},
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
-        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_type": 1},
+        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1},
     ):
         did = str(d["_id"])
         if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
