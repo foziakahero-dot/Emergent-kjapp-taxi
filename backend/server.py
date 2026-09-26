@@ -8354,6 +8354,7 @@ def _driver_history_area(address: Optional[str]) -> str:
 async def driver_history(current=Depends(require_driver), limit: int = 30):
     """Driver history deliberately omits exact coordinates and exact customer addresses."""
     driver_id = current["id"]
+    default_commission = await _platform_commission()
     trips = []
     async for t in db.trips.find(
         _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}})
@@ -8371,7 +8372,8 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
             "payment_status": t.get("payment_status"),
             "receipt_id": t.get("receipt_id"),
             "driver_earnings": (
-                int(round(int(t.get("price", 0) or 0) * (1 - float(t.get("commission_rate", 0.10) or 0.10))))
+                int(round(int(t.get("price", 0) or 0) *
+                          (1 - (float(t["commission_rate"]) if t.get("commission_rate") is not None else default_commission))))
                 if t.get("payment_status") == "paid" else None
             ),
             "pickup_address": _driver_history_area(t.get("pickup_address")),
@@ -10302,12 +10304,13 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
             fid = t.get("fleet_id") or driver_fleet.get(t.get("driver_id"))
             if fleet_id and fid != fleet_id: continue
             price = int(t.get("price") or 0)
+            rate = float(t["commission_rate"]) if t.get("commission_rate") is not None else commission
             rows.append({
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price,
-                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
-                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
+                "commission": round(price * rate),
+                "driver_net": round(price * (1 - rate)),
                 "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
