@@ -327,3 +327,40 @@ def test_dispatch_and_accept_use_selected_canonical_vehicle():
     assert '"vehicle_id": str(assigned_vehicle["_id"])' in accept
     assert '"car": assigned_vehicle.get("car")' in accept
     assert '"plate": assigned_vehicle.get("plate")' in accept
+
+
+def test_fleet_vehicle_live_state_only_follows_selected_car():
+    block = SERVER[SERVER.index("async def _fleet_vehicle_public"):SERVER.index("@api.get(\"/fleet/vehicles\")")]
+    assert "selected_for_shift = bool(" in block
+    assert 'driver.get("vehicle_id")' in block
+    assert '"selected_for_shift": selected_for_shift' in block
+    assert '"online": bool(selected_for_shift and driver and driver.get("online"))' in block
+    assert 'last_location_at") if selected_for_shift and driver else None' in block
+
+
+def test_customer_driver_photo_is_scoped_to_owned_active_trip():
+    block = _block(SERVER, "customer_driver_photo")
+    assert "Depends(require_customer)" in block
+    assert '"user_id": current["id"]' in block
+    assert '"driver_id": 1' in block
+    assert '"scope": "driver-docs"' in block
+    assert '"doc_type": "profile_photo"' in block
+    assert '"owner_user_id": str(trip["driver_id"])' in block
+    assert '"Cache-Control": "private, max-age=60"' in block
+
+
+def test_customer_booking_shows_real_driver_photo_with_initials_fallback():
+    booking = (ROOT / "frontend" / "app" / "booking" / "[tripId].tsx").read_text(encoding="utf-8")
+    customer_api = (ROOT / "frontend" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
+    assert "tripDriverPhotoSource" in customer_api
+    assert "/driver-photo" in customer_api
+    assert 'testID="customer-driver-photo"' in booking
+    assert "trip.driver?.photo || 'SJ'" in booking
+
+
+def test_fleet_ui_distinguishes_selected_from_extra_assigned_cars():
+    fleet_api = (ROOT / "fleet-web" / "src" / "api.ts").read_text(encoding="utf-8")
+    fleet_pages = (ROOT / "fleet-web" / "src" / "pages.tsx").read_text(encoding="utf-8")
+    assert "selected_for_shift?: boolean" in fleet_api
+    assert "Valgt bil · offline" in fleet_pages
+    assert "Tildelt · ikke valgt" in fleet_pages
