@@ -4,6 +4,14 @@ import { storage } from '@/src/utils/storage';
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
 
+export const tripDriverPhotoSource = async (tripId: string) => {
+  const token = await storage.getItem(TOKEN_KEY);
+  return {
+    uri: `${BACKEND}/api/trips/${encodeURIComponent(tripId)}/driver-photo`,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  } as any;
+};
+
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
   timeout: 30000,
