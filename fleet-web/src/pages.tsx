@@ -360,6 +360,7 @@ function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; 
 export function DriversPage() {
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
+  const [copiedInvite, setCopiedInvite] = useState('');
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
   const [q, setQ] = useState('');
   const [modal, setModal] = useState(false);
@@ -405,7 +406,26 @@ export function DriversPage() {
     </div>
     <section className="invites-section">
       <h2>Invitasjoner</h2><p>Opprett en invitasjon og send den til ny sjåfør.</p>
-      {invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => <span key={i.token}>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : i.email_sent ? 'Sendt' : 'Venter'}</span>)}</div> : null}
+      {invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => {
+        const expired = !!i.expires_at && new Date(i.expires_at).getTime() <= Date.now();
+        const active = !i.used && !expired;
+        const inviteUrl = `${window.location.origin}/driver-signup/${encodeURIComponent(i.token)}`;
+        return <div className="invite-chip" key={i.token}>
+          <span>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : expired ? 'Utløpt' : i.email_sent ? 'E-post sendt' : 'Lenke må deles'}</span>
+          {active ? <>
+            <button type="button" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(inviteUrl);
+                setCopiedInvite(i.token);
+                setErr('');
+              } catch {
+                setErr('Nettleseren kunne ikke kopiere lenken. Åpne invitasjonen og kopier adressen derfra.');
+              }
+            }}>{copiedInvite === i.token ? 'Kopiert' : 'Kopier lenke'}</button>
+            <a href={inviteUrl} target="_blank" rel="noreferrer">Åpne</a>
+          </> : null}
+        </div>;
+      })}</div> : null}
     </section>
     <ErrorBox message={err} />
     {modal ? <InviteModal vehicles={availableVehicles} onClose={() => setModal(false)} onDone={() => { setModal(false); load(); }} /> : null}
