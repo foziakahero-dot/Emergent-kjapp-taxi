@@ -27,7 +27,7 @@ Admin and superadmin remain in `admin.kjappapp.no`; customers and drivers use th
 
 ## Commercial rule
 
-New approved løyvehavere use the locked KJAPP onboarding commission of **12%**. The portal reads the stored fleet-specific `commission_rate`; it does not invent or override financial data.
+The default onboarding commission in the current backend is **10%**. Admin can set a fleet-specific `commission_rate`; trips retain the rate captured when booked, including a 0% campaign rate. The portal reads the stored rate and does not invent or override financial data.
 
 ## Real data only
 
