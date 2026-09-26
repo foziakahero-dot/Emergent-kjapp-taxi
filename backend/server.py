@@ -5478,8 +5478,12 @@ async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
             }, {"password_hash": 0})
         except (InvalidId, TypeError):
             driver = None
+    selected_for_shift = bool(
+        driver and str(driver.get("vehicle_id") or "") == str(vehicle["_id"])
+    )
     fresh = bool(
-        driver
+        selected_for_shift
+        and driver
         and driver.get("online")
         and _fresh_driver_location(driver.get("last_location_at"))
         and driver.get("last_lat") is not None
@@ -5526,9 +5530,10 @@ async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
         "driver_name": (driver.get("fullName") or driver.get("full_name")) if driver else vehicle.get("assigned_driver_name"),
         "approved": bool(driver.get("approved")) if driver else False,
         "fleet_active": driver.get("fleet_active", True) if driver else None,
-        "online": bool(driver.get("online")) if driver else False,
+        "selected_for_shift": selected_for_shift,
+        "online": bool(selected_for_shift and driver and driver.get("online")),
         "gps_fresh": fresh,
-        "last_location_at": driver.get("last_location_at") if driver else None,
+        "last_location_at": driver.get("last_location_at") if selected_for_shift and driver else None,
         "identity_verification_status": driver.get("identity_verification_status") if driver else None,
         "document_compliance": document_compliance,
         "document_statuses": document_statuses,
