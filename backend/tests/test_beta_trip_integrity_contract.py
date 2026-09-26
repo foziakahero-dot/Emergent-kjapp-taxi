@@ -212,3 +212,44 @@ def test_atomic_accept_requires_driver_still_online_and_releases_failed_claim():
     assert '"active_trip_id": body.trip_id' in accept
     assert 'if result.modified_count == 0' in accept
     assert '"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}' in accept
+
+
+def test_customer_login_and_social_auth_cannot_cross_into_driver_or_admin_roles():
+    login = _block(SERVER, "login")
+    assert 'body.client == "customer"' in login
+    assert '{"role": "user", "email": identifier.lower()}' in login
+
+    google_legacy = _block(SERVER, "google_session")
+    assert 'user.get("role", "user") != "user"' in google_legacy
+
+    google_pkce = _block(SERVER, "google_oauth_code")
+    assert 'user.get("role", "user") != "user"' in google_pkce
+
+    apple = _block(SERVER, "apple_signin")
+    assert 'existing.get("role", "user") != "user"' in apple
+
+
+def test_driver_bundle_contains_no_google_or_self_registration_auth_path():
+    driver_auth = (ROOT / "driver-app" / "src" / "context" / "AuthContext.tsx").read_text(encoding="utf-8")
+    driver_api = (ROOT / "driver-app" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
+    driver_login = (ROOT / "driver-app" / "app" / "driver-login.tsx").read_text(encoding="utf-8")
+
+    for forbidden in (
+        "signInWithGoogle",
+        "googleSession",
+        "authApi.register",
+        "WebBrowser.openAuthSessionAsync",
+        "auth.emergentagent.com",
+    ):
+        assert forbidden not in driver_auth
+    assert "register:" not in driver_api
+    assert "googleSession:" not in driver_api
+    assert "E-post eller telefonnummer" in driver_login
+
+
+def test_customer_and_driver_apps_fail_closed_on_wrong_restored_role():
+    customer_auth = (ROOT / "frontend" / "src" / "context" / "AuthContext.tsx").read_text(encoding="utf-8")
+    driver_auth = (ROOT / "driver-app" / "src" / "context" / "AuthContext.tsx").read_text(encoding="utf-8")
+    assert "u?.role !== 'user'" in customer_auth
+    assert "client: 'customer'" in customer_auth
+    assert "u?.role !== 'driver' || u?.approved !== true" in driver_auth
