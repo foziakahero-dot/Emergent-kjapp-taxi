@@ -406,12 +406,11 @@ html {
 }
 
 .mk-destination-field button,
-.mk-voice-field button {
+.mk-voice-field > span:last-child {
   border: 0;
   display: grid;
   place-items: center;
   background: var(--mk-accent);
-  cursor: pointer;
 }
 
 .mk-destination-field button {
@@ -658,7 +657,7 @@ html {
   font-weight: 650;
 }
 
-.mk-voice-field button {
+.mk-voice-field > span:last-child {
   width: 38px;
   height: 38px;
   border-radius: 11px;

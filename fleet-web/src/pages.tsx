@@ -72,8 +72,8 @@ export function LoginPage() {
     <div className="login-copy">
       <Brand />
       <div className="login-copy-main">
-        <h1>Kontroll uten støy.</h1>
-        <p>Administrer sjåfører, turer og oppgjør fra ett sted.</p>
+        <h1>Oversikt over flåten din.</h1>
+        <p>Følg sjåførene, se turene og finn oppgjørene dine her.</p>
       </div>
       <div className="login-domain">fleet.kjappapp.no</div>
     </div>
