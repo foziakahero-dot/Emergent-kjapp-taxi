@@ -150,7 +150,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .9; }
 .invites-section h2 { margin: 0; font: 400 17px var(--serif); }
 .invites-section p { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
 .invite-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.invite-chips span { padding: 8px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--card-deep); font-size: 10px; }
+.invite-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: var(--card-deep); font-size: 11px; }
+.invite-chip button, .invite-chip a { border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; color: var(--accent); background: transparent; font: inherit; cursor: pointer; text-decoration: none; }
+.invite-chip button:hover, .invite-chip a:hover { border-color: var(--accent); }
 
 /* ---------- Trips ---------- */
 .trip-filter { min-height: 56px; margin-top: 38px; padding: 0 17px; border: 1px solid var(--line); border-radius: 16px; background: var(--card-deep); display: flex; align-items: center; gap: 20px; }
