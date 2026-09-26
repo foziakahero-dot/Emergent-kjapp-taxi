@@ -5,6 +5,16 @@ const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-buil
 export const TOKEN_KEY = 'kjapp_token';
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
+export const authenticatedFileSource = async (path?: string | null) => {
+  if (!path) return null;
+  const token = await storage.getItem(TOKEN_KEY);
+  const encoded = path.split('/').map(encodeURIComponent).join('/');
+  return {
+    uri: `${BACKEND}/api/files/${encoded}`,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  } as any;
+};
+
 export const apiError = (e: any) => {
   const detail = e?.response?.data?.detail;
   if (typeof detail === 'string') return detail;
@@ -136,6 +146,17 @@ export const driverApi = {
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
   payouts: () => api.get('/driver/payouts')
     .then((r) => normalizePayouts(r.data)),
+  vehicles: () => api.get('/driver/vehicles').then((r) => r.data),
+  selectVehicle: (vehicle_id: string) => api.post(`/driver/vehicles/${vehicle_id}/select`).then((r) => r.data),
+  updateProfilePhoto: (uri: string) => {
+    const form = new FormData();
+    form.append('file', {
+      uri,
+      name: `kjapp-profile-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+    } as any);
+    return api.post('/driver/profile-photo', form).then((r) => r.data);
+  },
   identityVerification: () => api.get('/driver/identity-verification').then((r) => r.data),
   submitIdentitySelfie: (uri: string) => {
     const form = new FormData();
