@@ -4096,7 +4096,9 @@ async def driver_current(current=Depends(require_driver)):
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
     commission = await _commission_for_trip(t)
-    t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - commission)))
+    estimated_net = int(round((t.get("price") or 0) * (1 - commission)))
+    t["estimated_driver_earnings"] = estimated_net
+    t["driver_earnings"] = estimated_net if t.get("payment_status") == "paid" else None
     t["commission_rate"] = commission
     u = None
     if t.get("user_id"):
