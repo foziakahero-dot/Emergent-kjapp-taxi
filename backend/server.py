@@ -2583,6 +2583,43 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
     }
 
 
+@api.get("/trips/{trip_id}/driver-photo")
+async def customer_driver_photo(trip_id: str, current=Depends(require_customer)):
+    """Serve the assigned driver's current profile photo only to this trip's passenger."""
+    trip = await db.trips.find_one(_real_trip_filter({
+        "trip_id": trip_id,
+        "user_id": current["id"],
+        "status": {"$in": ["driver_on_way", "at_pickup", "in_trip", "arrived"]},
+    }), {"driver_id": 1})
+    if not trip or not trip.get("driver_id"):
+        raise HTTPException(status_code=404, detail="Sjåførbilde ikke tilgjengelig")
+    try:
+        driver = await db.users.find_one(
+            {"_id": ObjectId(str(trip["driver_id"])), "role": "driver"},
+            {"profile_photo_path": 1},
+        )
+    except (InvalidId, TypeError):
+        driver = None
+    path = (driver or {}).get("profile_photo_path")
+    if not path:
+        raise HTTPException(status_code=404, detail="Sjåføren har ikke profilbilde")
+    rec = await db.uploaded_files.find_one({
+        "storage_path": path,
+        "owner_user_id": str(trip["driver_id"]),
+        "scope": "driver-docs",
+        "doc_type": "profile_photo",
+        "is_deleted": {"$ne": True},
+    })
+    if not rec:
+        raise HTTPException(status_code=404, detail="Sjåførbilde ikke tilgjengelig")
+    data, ct = storage_get(path)
+    return FastResponse(
+        content=data,
+        media_type=rec.get("content_type") or ct,
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(require_customer)):
     """Passenger closes a ride after the driver has reached the destination.
