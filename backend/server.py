@@ -2422,7 +2422,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
                 {"booking_request_lock": None},
                 {"booking_request_locked_at": {"$lt": lock_cutoff}},
             ],
-        }),
+        },
         {"$set": {
             "booking_request_lock": trip_id,
             "booking_request_locked_at": datetime.now(timezone.utc),
