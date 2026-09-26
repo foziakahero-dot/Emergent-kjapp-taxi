@@ -2783,6 +2783,8 @@ async def driver_select_vehicle(vehicle_id: str, current=Depends(require_driver)
 @api.post("/driver/profile-photo")
 async def driver_update_profile_photo(file: UploadFile = File(...), current=Depends(require_driver)):
     """Replace the driver's profile photo with a private, authenticated driver-doc."""
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
+        raise HTTPException(status_code=415, detail="Profilbildet må være et bilde")
     data = await _read_uploaded_file(file)
     path = _mk_upload_path("driver-docs", current["id"], file.filename or "profile.jpg", file.content_type)
     stored = storage_put(path, data, file.content_type)
@@ -7029,6 +7031,8 @@ async def upload_driver_doc(request: Request, file: UploadFile = File(...), invi
     await _enforce_rate_limit(request, "driver-public-upload", 120, 3600)
     if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
         raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
+    if doc_type == "profile_photo" and file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
+        raise HTTPException(status_code=415, detail="Profilbildet må være et bilde")
     inv = await db.driver_invites.find_one({"token": invite_token})
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=403, detail="Ugyldig invitasjon")
