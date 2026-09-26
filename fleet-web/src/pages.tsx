@@ -605,7 +605,9 @@ export function VehiclesPage() {
               {drivers.filter((d) => d.fleet_active !== false).map((d) => <option key={d.id} value={d.id}>{nameOf(d)}{d.plate ? ' · ' + d.plate : ''}</option>)}
             </select>
           </span>
-          <span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>{v.online ? (v.gps_fresh ? 'Online' : 'GPS utløpt') : 'Offline'}</span>
+          <span className={v.online && v.gps_fresh ? 'status-green' : v.online ? 'status-amber' : 'muted'}>
+            {v.online ? (v.gps_fresh ? 'Online · valgt bil' : 'GPS utløpt · valgt bil') : v.selected_for_shift ? 'Valgt bil · offline' : v.driver_id ? 'Tildelt · ikke valgt' : '—'}
+          </span>
           <span
             className={complianceClass(v.document_compliance)}
             title={v.missing_document_types?.length ? `Mangler: ${v.missing_document_types.join(', ')}` : undefined}
