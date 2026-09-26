@@ -7390,7 +7390,7 @@ async def _mark_trip_paid_and_complete(trip_id: str, user_id: str, paid_at: Opti
 
 
 async def send_trip_receipts(trip_id: str):
-    """Persist receipt snapshot and deliver customer/driver email receipts idempotently."""
+    """Persist the receipt snapshot and deliver each email once across concurrent paid callbacks."""
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip or trip.get("payment_status") != "paid":
         return None
@@ -7418,41 +7418,90 @@ async def send_trip_receipts(trip_id: str):
     commission = float(receipt.get("commission_rate") or 0)
     route = f"{receipt.get('pickup_address','')} → {receipt.get('dropoff_address','')}"
     paid_at = receipt.get("paid_at") or datetime.now(timezone.utc).isoformat()
-    now_iso = datetime.now(timezone.utc).isoformat()
-    delivery_updates = {}
 
-    if passenger and passenger.get("email") and not receipt.get("customer_email_sent_at"):
-        sent = await asyncio.to_thread(
-            send_email,
-            passenger["email"],
-            f"KJAPP-kvittering · {price} kr",
-            f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
-            f"<p>{route}</p><p><strong>Total: {price} kr</strong></p>"
-            f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
+    async def deliver_once(kind: str, recipient: Optional[str], subject: str, html: str) -> Optional[str]:
+        if not recipient:
+            return None
+        sent_field = f"{kind}_email_sent_at"
+        lock_field = f"{kind}_email_delivery_lock"
+        lock_at_field = f"{kind}_email_delivery_locked_at"
+        lock_token = secrets.token_urlsafe(12)
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        cutoff = (now - timedelta(minutes=5)).isoformat()
+        claim = await db.receipt_ledger.update_one(
+            {
+                "trip_id": trip_id,
+                "$and": [
+                    {"$or": [
+                        {sent_field: {"$exists": False}},
+                        {sent_field: None},
+                        {sent_field: ""},
+                    ]},
+                    {"$or": [
+                        {lock_field: {"$exists": False}},
+                        {lock_field: None},
+                        {lock_at_field: {"$lt": cutoff}},
+                    ]},
+                ],
+            },
+            {"$set": {lock_field: lock_token, lock_at_field: now_iso}},
         )
-        if sent:
-            delivery_updates["customer_email_sent_at"] = now_iso
-            await db.trips.update_one(_real_trip_filter({"trip_id": trip_id}), {"$set": {"receipt_emailed_at": now_iso}})
+        if claim.modified_count != 1:
+            return None
+        try:
+            sent = await asyncio.to_thread(send_email, recipient, subject, html)
+            if not sent:
+                return None
+            await db.receipt_ledger.update_one(
+                {"trip_id": trip_id, lock_field: lock_token},
+                {
+                    "$set": {sent_field: now_iso},
+                    "$unset": {lock_field: "", lock_at_field: ""},
+                },
+            )
+            return now_iso
+        finally:
+            # Clear a failed/raised delivery attempt so a later callback/manual retry can try again.
+            await db.receipt_ledger.update_one(
+                {"trip_id": trip_id, lock_field: lock_token, sent_field: {"$in": [None, ""]}},
+                {"$unset": {lock_field: "", lock_at_field: ""}},
+            )
 
-    if driver and driver.get("email") and not receipt.get("driver_email_sent_at"):
-        sent = await asyncio.to_thread(
-            send_email,
-            driver["email"],
-            f"KJAPP sjåførkvittering · {driver_net} kr",
-            f"<h2>Tur fullført og betalt</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
-            f"<p>{route}</p><p>Turpris: {price} kr</p>"
-            f"<p>KJAPP serviceavgift: {fee} kr ({round(commission*100, 2)}%)</p>"
-            f"<p><strong>Til sjåfør/flåte: {driver_net} kr</strong></p><p>Tur-ID: {trip_id}</p>",
+    customer_sent_at = await deliver_once(
+        "customer",
+        (passenger or {}).get("email"),
+        f"KJAPP-kvittering · {price} kr",
+        f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
+        f"<p>{route}</p><p><strong>Total: {price} kr</strong></p>"
+        f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
+    )
+    if customer_sent_at:
+        await db.trips.update_one(
+            _real_trip_filter({"trip_id": trip_id}),
+            {"$set": {"receipt_emailed_at": customer_sent_at}},
         )
-        if sent:
-            delivery_updates["driver_email_sent_at"] = now_iso
-            await db.trips.update_one(_real_trip_filter({"trip_id": trip_id}), {"$set": {"driver_receipt_emailed_at": now_iso}})
 
-    if delivery_updates:
-        await db.receipt_ledger.update_one({"trip_id": trip_id}, {"$set": delivery_updates})
-        receipt.update(delivery_updates)
-    return receipt
+    driver_sent_at = await deliver_once(
+        "driver",
+        (driver or {}).get("email"),
+        f"KJAPP sjåførkvittering · {driver_net} kr",
+        f"<h2>Tur fullført og betalt</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
+        f"<p>{route}</p><p>Turpris: {price} kr</p>"
+        f"<p>KJAPP serviceavgift: {fee} kr ({round(commission*100, 2)}%)</p>"
+        f"<p><strong>Til sjåfør/flåte: {driver_net} kr</strong></p><p>Tur-ID: {trip_id}</p>",
+    )
+    if driver_sent_at:
+        await db.trips.update_one(
+            _real_trip_filter({"trip_id": trip_id}),
+            {"$set": {"driver_receipt_emailed_at": driver_sent_at}},
+        )
 
+    stored = await db.receipt_ledger.find_one({"trip_id": trip_id})
+    if stored:
+        stored["id"] = str(stored["_id"])
+        stored.pop("_id", None)
+    return stored
 
 AUTO_CHARGE_ENABLED = str(os.environ.get("KJAPP_AUTO_CHARGE_ENABLED", "false")).strip().lower() in ("1", "true", "yes", "on")
 
