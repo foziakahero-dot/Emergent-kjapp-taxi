@@ -416,7 +416,7 @@ export default function DriverHome() {
       : preferred === 'waze' ? `waze://?ll=${lat},${lng}&navigate=yes`
       : preferred === 'apple' && Platform.OS === 'ios' ? `maps://?daddr=${lat},${lng}&dirflg=d`
       : Platform.OS === 'android' ? `google.navigation:q=${lat},${lng}&mode=d`
-      : fallback;
+      : `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
 
     try {
       const supported = await Linking.canOpenURL(native);
@@ -641,8 +641,13 @@ export default function DriverHome() {
             await storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
             setCompletedTrip(null);
           }} style={{ paddingVertical: 16 }}>
-            <Text style={s.overlineOnline}>TUR FULLFØRT</Text>
-            <Text style={s.epText}>Klar for neste tur · {kr(completedTrip.driver_earnings ?? completedTrip.price)}</Text>
+            <Text style={s.overlineOnline}>TUR AVSLUTTET</Text>
+            <Text style={s.epText}>Klar for neste tur</Text>
+            <Text style={s.offerMeta}>{completedTrip.payment_status === 'paid'
+              ? `Din opptjening · ${kr(completedTrip.driver_earnings)}`
+              : completedTrip.estimated_driver_earnings != null
+                ? `Estimert opptjening · ${kr(completedTrip.estimated_driver_earnings)} · betaling avventer`
+                : 'Betaling avventer'}</Text>
           </Pressable>
         ) : (
           <View>
