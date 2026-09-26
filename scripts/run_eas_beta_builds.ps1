@@ -5,13 +5,13 @@ param(
   [ValidateSet("android","ios","all")]
   [string]$Platform = "all",
 
-  [switch]$Wait
+  [switch]$Wait,
+  [ValidateSet("beta/oslo-production-ready","fix/beta-mobile-firebase-ops-20260926")]
+  [string]$ExpectedBranch = "beta/oslo-production-ready"
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$ExpectedBranch = "beta/oslo-production-ready"
-
 function Run-Step([string]$Name, [scriptblock]$Action) {
   Write-Host ""
   Write-Host "=== $Name ===" -ForegroundColor Cyan
