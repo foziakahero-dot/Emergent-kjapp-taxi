@@ -3744,7 +3744,17 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     commission = await _commission_for_trip(trip)
     earnings = int(round((trip.get("price") or 0) * (1 - commission)))
     title = f"Ny tur · {earnings} kr til deg"
-    body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
+    passenger = None
+    try:
+        if trip.get("user_id"):
+            passenger = await db.users.find_one(
+                {"_id": ObjectId(trip["user_id"])},
+                {"fullName": 1, "full_name": 1},
+            )
+    except (InvalidId, TypeError):
+        passenger = None
+    passenger_name = (passenger or {}).get("fullName") or (passenger or {}).get("full_name") or "Kunde"
+    body = f"{passenger_name} · {trip.get('pickup_address')} → {trip.get('dropoff_address')}"
 
     if not nxt:
         res = await db.trips.update_one(
