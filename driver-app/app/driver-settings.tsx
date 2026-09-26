@@ -36,6 +36,7 @@ export default function DriverSettings() {
     settingsApi.get().then(async (r) => {
       const data = r.settings || r || {};
       setSettings(data);
+      await storage.setItem('driver_navigation_app', data.navigation_app || 'google');
       for (const key of ['notif_requests', 'req_sound', 'req_vibrate']) {
         await storage.setItem(`driver_${key}`, String(data[key] !== false));
       }
@@ -135,8 +136,10 @@ export default function DriverSettings() {
                 onPress={() => { void (async () => {
                   const previous = settings;
                   setSettings({ ...settings, navigation_app: key });
-                  try { await settingsApi.update({ navigation_app: key }); }
-                  catch { setSettings(previous); }
+                  try {
+                    await settingsApi.update({ navigation_app: key });
+                    await storage.setItem('driver_navigation_app', key);
+                  } catch { setSettings(previous); }
                 })(); }}>
                 <Text style={s.rowLabel}>{label}</Text>
                 <Text style={[s.rowSub, { marginLeft: 'auto' }]}>{(settings.navigation_app || 'google') === key ? 'Valgt' : ''}</Text>
