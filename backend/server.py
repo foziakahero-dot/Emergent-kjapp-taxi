@@ -1626,6 +1626,13 @@ async def cars_nearby(body: NearbyCarsRequest):
         lng = u.get("last_lng")
         if lat is None or lng is None or await _fleet_is_suspended(u.get("fleet_id")):
             continue
+        assigned_vehicle = await _assigned_fleet_vehicle(u, required=False)
+        if not assigned_vehicle:
+            continue
+        compliance = await _driver_shift_compliance(u, assigned_vehicle)
+        if not compliance.get("operational"):
+            await _block_driver_new_work(str(u["_id"]), compliance["message"])
+            continue
         d_km = haversine_km(body.lat, body.lng, lat, lng)
         if d_km > 10:
             continue
@@ -1634,10 +1641,10 @@ async def cars_nearby(body: NearbyCarsRequest):
         cars.append({
             "id": str(u["_id"]),
             "name": u.get("fullName") or "Sjåfør",
-            "car": u.get("car") or "",
-            "plate": u.get("plate") or "",
+            "car": assigned_vehicle.get("car") or "",
+            "plate": assigned_vehicle.get("plate") or "",
             "rating": round(float(u["rating"]), 1) if isinstance(u.get("rating"), (int, float)) else None,
-            "type": u.get("vehicle_type") or "ai-first",
+            "type": assigned_vehicle.get("vehicle_type") or "ai-first",
             "lat": lat,
             "lng": lng,
             "heading": u.get("last_heading") or 0,
@@ -3681,6 +3688,10 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         assigned_vehicle = await _assigned_fleet_vehicle(d, required=False)
         if not assigned_vehicle:
             continue
+        compliance = await _driver_shift_compliance(d, assigned_vehicle)
+        if not compliance.get("operational"):
+            await _block_driver_new_work(did, compliance["message"])
+            continue
         if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
         driver_vehicle_type = assigned_vehicle.get("vehicle_type") or "ai-first"
@@ -3836,6 +3847,18 @@ async def driver_pending(current=Depends(require_driver)):
                 },
             }
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
+    compliance = await _driver_shift_compliance(current, assigned_vehicle)
+    if not compliance.get("operational"):
+        forced_offline = await _block_driver_new_work(current["id"], compliance["message"])
+        return {
+            "trips": [],
+            "offline": forced_offline,
+            "compliance_blocked": True,
+            "compliance": compliance,
+            "message": compliance["message"],
+            "commission": await _platform_commission(),
+            "driver_gps": None,
+        }
     commission = await _platform_commission()
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
     # A request the driver just declined must not bounce straight back on the next poll.
@@ -3904,6 +3927,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         raise HTTPException(status_code=409, detail="Gå online før du godtar en tur")
     driver_id = current["id"]  # driver's user id is the driver_id now
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
+    compliance = await _driver_shift_compliance(current, assigned_vehicle)
+    if not compliance.get("operational"):
+        await _block_driver_new_work(driver_id, compliance["message"])
+        raise HTTPException(status_code=409, detail=compliance["message"])
     fleet = await db.fleets.find_one({"_id": ObjectId(current["fleet_id"])}) or {}
     driver = {
         "name": current.get("fullName") or "Sjåfør",
@@ -4650,7 +4677,12 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
     now_iso = datetime.now(timezone.utc).isoformat()
     driver_oid = ObjectId(current["id"])
     if body.online:
-        await _assigned_fleet_vehicle(current, required=True)
+        assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
+        compliance = await _driver_shift_compliance(current, assigned_vehicle)
+        if not compliance.get("operational"):
+            await _block_driver_new_work(current["id"], compliance["message"])
+            raise HTTPException(status_code=409, detail=compliance["message"])
+        await _clear_driver_compliance_block(current["id"])
 
     if not body.online:
         active = await db.trips.find_one(
@@ -5846,6 +5878,172 @@ def _fleet_document_compliance(review_status, expiry):
     return "VALID"
 
 
+DRIVER_OPERATIONAL_DOC_TYPES = {"drivers_license", "taxi_license"}
+OPERATIONAL_DOCUMENT_STATES = {"VALID", "EXPIRING"}
+DOCUMENT_LABELS = {
+    "drivers_license": "førerkort",
+    "taxi_license": "kjøreseddel",
+    "registration": "vognkort",
+    "insurance": "forsikring",
+    "inspection": "kjøretøykontroll",
+}
+
+
+async def _required_document_compliance(base_filter: dict, required_types: set) -> dict:
+    """Resolve real, current compliance without letting a newer pending upload hide an older valid doc."""
+    statuses = {}
+    async for doc in db.uploaded_files.find({
+        **base_filter,
+        "doc_type": {"$in": list(required_types)},
+        "is_deleted": {"$ne": True},
+    }).sort("created_at", -1):
+        doc_type = doc.get("doc_type")
+        if doc_type not in required_types:
+            continue
+        state = _fleet_document_compliance(
+            doc.get("review_status") or "pending",
+            doc.get("review_expiry"),
+        )
+        previous = statuses.get(doc_type)
+        if previous is None or (
+            previous not in OPERATIONAL_DOCUMENT_STATES
+            and state in OPERATIONAL_DOCUMENT_STATES
+        ):
+            statuses[doc_type] = state
+
+    missing = sorted(required_types - set(statuses))
+    operational = (
+        not missing
+        and all(statuses.get(doc_type) in OPERATIONAL_DOCUMENT_STATES for doc_type in required_types)
+    )
+    return {
+        "operational": operational,
+        "statuses": statuses,
+        "missing": missing,
+    }
+
+
+async def _driver_document_compliance(driver_id: str) -> dict:
+    return await _required_document_compliance(
+        {"scope": "driver-docs", "owner_user_id": driver_id},
+        DRIVER_OPERATIONAL_DOC_TYPES,
+    )
+
+
+async def _vehicle_document_compliance(fleet_id: str, vehicle_id: str) -> dict:
+    return await _required_document_compliance(
+        {"scope": "fleet-vehicle-docs", "fleet_id": fleet_id, "vehicle_id": vehicle_id},
+        FLEET_VEHICLE_DOC_TYPES,
+    )
+
+
+def _compliance_message(result: dict) -> str:
+    problems = []
+    for doc_type in result.get("driver", {}).get("missing", []):
+        problems.append(f"mangler {DOCUMENT_LABELS.get(doc_type, doc_type)}")
+    for doc_type, state in result.get("driver", {}).get("statuses", {}).items():
+        if state not in OPERATIONAL_DOCUMENT_STATES:
+            problems.append(f"{DOCUMENT_LABELS.get(doc_type, doc_type)}: {state.lower()}")
+    for doc_type in result.get("vehicle", {}).get("missing", []):
+        problems.append(f"mangler {DOCUMENT_LABELS.get(doc_type, doc_type)}")
+    for doc_type, state in result.get("vehicle", {}).get("statuses", {}).items():
+        if state not in OPERATIONAL_DOCUMENT_STATES:
+            problems.append(f"{DOCUMENT_LABELS.get(doc_type, doc_type)}: {state.lower()}")
+    if not result.get("profile_photo_ok", False):
+        problems.append("mangler profilbilde")
+    return "Dokumentkontroll: " + (", ".join(problems) if problems else "ikke godkjent")
+
+
+async def _driver_shift_compliance(driver: dict, assigned_vehicle: Optional[dict] = None) -> dict:
+    driver_id = str(driver.get("id") or driver.get("_id") or "")
+    fleet_id = str(driver.get("fleet_id") or "")
+    vehicle = assigned_vehicle or await _assigned_fleet_vehicle(driver, required=False)
+
+    driver_docs = await _driver_document_compliance(driver_id) if driver_id else {
+        "operational": False, "statuses": {}, "missing": sorted(DRIVER_OPERATIONAL_DOC_TYPES),
+    }
+    if vehicle and fleet_id:
+        vehicle_docs = await _vehicle_document_compliance(fleet_id, str(vehicle["_id"]))
+    else:
+        vehicle_docs = {
+            "operational": False,
+            "statuses": {},
+            "missing": sorted(FLEET_VEHICLE_DOC_TYPES),
+        }
+
+    profile_photo_ok = False
+    photo_path = driver.get("profile_photo_path")
+    if photo_path and driver_id:
+        profile_photo_ok = bool(await db.uploaded_files.find_one({
+            "storage_path": photo_path,
+            "owner_user_id": driver_id,
+            "scope": "driver-docs",
+            "doc_type": "profile_photo",
+            "is_deleted": {"$ne": True},
+        }, {"_id": 1}))
+
+    result = {
+        "operational": bool(
+            driver_docs.get("operational")
+            and vehicle_docs.get("operational")
+            and profile_photo_ok
+            and vehicle
+        ),
+        "driver": driver_docs,
+        "vehicle": vehicle_docs,
+        "profile_photo_ok": profile_photo_ok,
+        "vehicle_id": str(vehicle["_id"]) if vehicle else None,
+    }
+    result["message"] = _compliance_message(result)
+    return result
+
+
+async def _block_driver_new_work(driver_id: str, reason: str) -> bool:
+    """Block new work immediately, but never break GPS/state handling for an active ride.
+
+    Returns True when the driver was forced fully offline, False when an active ride
+    required keeping the online transport/GPS session alive until physical completion.
+    """
+    active = await db.trips.find_one(
+        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ACTIVE_TRIP_STATUSES}}),
+        {"trip_id": 1},
+    )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update = {
+        "compliance_blocked": True,
+        "compliance_block_reason": reason,
+        "compliance_blocked_at": now_iso,
+    }
+    if active:
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id), "role": "driver"},
+            {"$set": update},
+        )
+        return False
+
+    update["online"] = False
+    await db.users.update_one(
+        {"_id": ObjectId(driver_id), "role": "driver"},
+        {"$set": update},
+    )
+    await db.driver_sessions.update_many(
+        {"driver_id": driver_id, "ended_at": None},
+        {"$set": {"ended_at": now_iso, "ended_reason": "document_compliance"}},
+    )
+    return True
+
+
+async def _clear_driver_compliance_block(driver_id: str):
+    await db.users.update_one(
+        {"_id": ObjectId(driver_id), "role": "driver"},
+        {"$unset": {
+            "compliance_blocked": "",
+            "compliance_block_reason": "",
+            "compliance_blocked_at": "",
+        }},
+    )
+
+
 @api.get("/fleet/documents")
 async def fleet_documents(current=Depends(require_fleet_owner)):
     """Documents visible to this fleet only: its own application docs + its drivers' docs."""
@@ -6810,6 +7008,32 @@ async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current
     except Exception: raise HTTPException(400, "Ugyldig id")
     if not u: raise HTTPException(404, "Fant ikke sjåfør")
     _enforce_identity_before_driver_approval(u, body.approved)
+    if body.approved:
+        driver_docs = await _driver_document_compliance(user_id)
+        photo_ok = bool(
+            u.get("profile_photo_path")
+            and await db.uploaded_files.find_one({
+                "storage_path": u.get("profile_photo_path"),
+                "owner_user_id": user_id,
+                "scope": "driver-docs",
+                "doc_type": "profile_photo",
+                "is_deleted": {"$ne": True},
+            }, {"_id": 1})
+        )
+        if not driver_docs.get("operational") or not photo_ok:
+            missing = [DOCUMENT_LABELS.get(x, x) for x in driver_docs.get("missing", [])]
+            invalid = [
+                f"{DOCUMENT_LABELS.get(k, k)} ({v.lower()})"
+                for k, v in driver_docs.get("statuses", {}).items()
+                if v not in OPERATIONAL_DOCUMENT_STATES
+            ]
+            if not photo_ok:
+                missing.append("profilbilde")
+            details = ", ".join(missing + invalid) or "dokumentkontroll"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Sjåføren kan ikke godkjennes før dokumentene er gyldige: {details}",
+            )
     prev = u.get("approved", False)
     await db.users.update_one({"_id": ObjectId(user_id), "role": "driver"}, {"$set": {"approved": body.approved}})
     await _audit(current, "driver.approve" if body.approved else "driver.suspend", "driver", user_id,
@@ -9784,17 +10008,66 @@ async def admin_document_review(file_id: str, body: DocumentReviewRequest, curre
         except Exception: doc = None
     if not doc:
         raise HTTPException(404, "Fant ikke dokument")
+    if body.expiry:
+        try:
+            parsed_expiry = datetime.fromisoformat(str(body.expiry)[:10]).date().isoformat()
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Ugyldig utløpsdato")
+    else:
+        parsed_expiry = None
     prev = {"review_status": doc.get("review_status"), "expiry": doc.get("review_expiry")}
     await db.uploaded_files.update_one({"_id": doc["_id"]}, {"$set": {
         "review_status": body.status,
-        "review_expiry": body.expiry,
+        "review_expiry": parsed_expiry,
         "review_reason": body.reason,
         "reviewed_by": current.get("email"),
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
     }})
+
+    affected_driver_id = None
+    if doc.get("scope") == "driver-docs" and doc.get("doc_type") in DRIVER_OPERATIONAL_DOC_TYPES:
+        affected_driver_id = doc.get("owner_user_id")
+    elif doc.get("scope") == "fleet-vehicle-docs" and doc.get("doc_type") in FLEET_VEHICLE_DOC_TYPES:
+        vehicle_id = doc.get("vehicle_id")
+        try:
+            vehicle = await db.fleet_vehicles.find_one(
+                {"_id": ObjectId(str(vehicle_id)), "fleet_id": doc.get("fleet_id")},
+                {"assigned_driver_id": 1},
+            )
+        except (InvalidId, TypeError):
+            vehicle = None
+        affected_driver_id = (vehicle or {}).get("assigned_driver_id")
+
+    compliance = None
+    forced_offline = False
+    if affected_driver_id:
+        try:
+            affected_driver = await db.users.find_one(
+                {"_id": ObjectId(str(affected_driver_id)), "role": "driver"}
+            )
+        except (InvalidId, TypeError):
+            affected_driver = None
+        if affected_driver:
+            compliance = await _driver_shift_compliance(affected_driver)
+            if compliance.get("operational"):
+                await _clear_driver_compliance_block(str(affected_driver_id))
+            else:
+                forced_offline = await _block_driver_new_work(
+                    str(affected_driver_id),
+                    compliance["message"],
+                )
+
     await _audit(current, "document.review", "document", doc.get("id") or str(doc["_id"]),
-                 prev, {"review_status": body.status, "expiry": body.expiry}, body.reason)
-    return {"ok": True, "review_status": body.status}
+                 prev, {"review_status": body.status, "expiry": parsed_expiry,
+                        "driver_compliance": (compliance or {}).get("operational"),
+                        "forced_offline": forced_offline}, body.reason)
+    return {
+        "ok": True,
+        "review_status": body.status,
+        "expiry": parsed_expiry,
+        "driver_compliance": compliance,
+        "forced_offline": forced_offline,
+    }
 
 
 # ---- Refunds (finance, audited, idempotent) ----
