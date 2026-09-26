@@ -114,6 +114,14 @@ export default function DriverSettings() {
             ))}
           </View>
 
+          <Text style={s.sectionTitle}>Mine biler</Text>
+          <View style={s.card}>
+            <LinkRow icon="car" label={user?.car && user?.plate ? `${user.car} · ${user.plate}` : 'Velg bil fra flåten'}
+              onPress={() => router.push('/driver-vehicles')} s={s} testID="ds-vehicles" />
+            <LinkRow icon="shield" label="Identitetskontroll" onPress={() => router.push('/driver-identity')}
+              border s={s} testID="ds-identity" />
+          </View>
+
           <Text style={s.sectionTitle}>Navigasjon</Text>
           <View style={s.card}>
             {([
