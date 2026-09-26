@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
+import { Alert, AppState, Image, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -7,7 +7,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
-import { safetyApi, tripsApi } from '@/src/lib/api';
+import { safetyApi, tripDriverPhotoSource, tripsApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
@@ -32,6 +32,7 @@ export default function BookingFlow() {
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
   const nav = useRef(false);
 
   useEffect(() => {
@@ -63,6 +64,21 @@ export default function BookingFlow() {
       appStateSub.remove();
     };
   }, [tripId, retryKey, router]);
+
+  useEffect(() => {
+    let mounted = true;
+    const activeDriver = trip?.driver_id && ['driver_on_way', 'at_pickup', 'in_trip', 'arrived'].includes(trip?.status);
+    if (!activeDriver) {
+      setDriverPhotoSource(null);
+      return () => { mounted = false; };
+    }
+    void tripDriverPhotoSource(tripId!).then((source) => {
+      if (mounted) setDriverPhotoSource(source);
+    }).catch(() => {
+      if (mounted) setDriverPhotoSource(null);
+    });
+    return () => { mounted = false; };
+  }, [trip?.driver_id, trip?.status, tripId]);
 
   const cancel = async () => {
     try {
@@ -230,6 +246,19 @@ export default function BookingFlow() {
                   </>
                 )}
               </View>
+              <View style={s.driverAvatar}>
+                {driverPhotoSource ? (
+                  <Image
+                    source={driverPhotoSource}
+                    style={s.driverAvatarImage}
+                    resizeMode="cover"
+                    onError={() => setDriverPhotoSource(null)}
+                    testID="customer-driver-photo"
+                  />
+                ) : (
+                  <Text style={s.driverAvatarText}>{trip.driver?.photo || 'SJ'}</Text>
+                )}
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.overline}>{meta.title}</Text>
                 <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
@@ -368,7 +397,10 @@ const useStyles = makeStyles((c) => ({
   recoveryCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
   homeBtn: { marginTop: 20, minHeight: 52, backgroundColor: c.accent, borderRadius: 14, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
   homeBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  driverAvatarImage: { width: 48, height: 48, borderRadius: 24 },
+  driverAvatarText: { color: c.accent, fontFamily: font.bold, fontSize: 13 },
   etaBadge: { width: 74, height: 74, borderRadius: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
   etaNum: { color: c.text, fontFamily: font.display, fontSize: 26 },
   etaMin: { color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 2, marginTop: 2 },
