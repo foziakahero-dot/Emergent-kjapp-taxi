@@ -1,6 +1,8 @@
 param(
   [switch]$SkipInstall,
-  [switch]$SkipExpoDoctor
+  [switch]$SkipExpoDoctor,
+  [ValidateSet("beta/oslo-production-ready","fix/beta-mobile-firebase-ops-20260926")]
+  [string]$ExpectedBranch = "beta/oslo-production-ready"
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,8 +47,8 @@ try {
   Step "Git branch" {
     $branch = git branch --show-current
     Write-Host "Branch: $branch"
-    if ($branch -ne "beta/oslo-production-ready") {
-      Write-Error "Run this gate from beta/oslo-production-ready. Current: $branch"
+    if ($branch -ne $ExpectedBranch) {
+      Write-Error "Run this gate from $ExpectedBranch. Current: $branch"
       exit 2
     }
   }
