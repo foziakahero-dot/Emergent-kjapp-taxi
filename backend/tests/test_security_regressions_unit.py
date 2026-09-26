@@ -125,6 +125,9 @@ def test_oslo_service_area_helper_can_fail_closed(monkeypatch):
 def test_demo_data_is_always_disabled_in_production():
     assert server.demo_data_enabled("production", "true") is False
     assert server.demo_data_enabled("production", None) is False
+    assert server.demo_data_enabled("staging", "true") is False
+    assert server.demo_data_enabled("beta", "true") is False
+    assert server.demo_data_enabled("development", None) is False
     assert server.demo_data_enabled("development", "true") is True
     assert server.demo_data_enabled("development", "false") is False
 
