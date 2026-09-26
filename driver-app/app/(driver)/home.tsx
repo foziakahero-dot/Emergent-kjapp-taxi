@@ -411,7 +411,8 @@ export default function DriverHome() {
       `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
       (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '') +
       '&travelmode=driving';
-    const preferred = await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app || 'google').catch(() => 'google');
+    const preferred = (await storage.getItem('driver_navigation_app').catch(() => null)) ||
+      (await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app || 'google').catch(() => 'google'));
     const native = validStops.length ? fallback
       : preferred === 'waze' ? `waze://?ll=${lat},${lng}&navigate=yes`
       : preferred === 'apple' && Platform.OS === 'ios' ? `maps://?daddr=${lat},${lng}&dirflg=d`
