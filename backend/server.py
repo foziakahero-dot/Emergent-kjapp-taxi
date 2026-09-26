@@ -519,19 +519,29 @@ async def _assigned_fleet_vehicle(driver: dict, *, required: bool = True) -> Opt
             vehicle = await db.fleet_vehicles.find_one({
                 "_id": ObjectId(str(vehicle_id)),
                 "fleet_id": fleet_id,
+                "assigned_driver_id": driver_id,
             })
         except (InvalidId, TypeError):
-            vehicle = None
-        if vehicle and vehicle.get("assigned_driver_id") not in (None, "", driver_id):
             vehicle = None
 
     if not vehicle:
         vehicle = await db.fleet_vehicles.find_one({
             "fleet_id": fleet_id,
             "assigned_driver_id": driver_id,
+            "active": {"$ne": False},
         })
 
     if not vehicle:
+        # Clear stale compatibility mirrors. A driver may only use a vehicle that
+        # the fleet owner explicitly assigned in fleet_vehicles.
+        if driver.get("vehicle_id"):
+            try:
+                await db.users.update_one(
+                    {"_id": ObjectId(driver_id), "role": "driver", "fleet_id": fleet_id},
+                    {"$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}},
+                )
+            except (InvalidId, TypeError):
+                pass
         if required:
             raise HTTPException(status_code=403, detail="Ingen aktiv bil er tildelt deg av løyvehaver")
         return None
@@ -547,16 +557,6 @@ async def _assigned_fleet_vehicle(driver: dict, *, required: bool = True) -> Opt
         "plate": vehicle.get("plate") or "",
         "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
     }
-    # Repair compatibility mirrors only when the canonical fleet assignment is known.
-    if vehicle.get("assigned_driver_id") in (None, ""):
-        await db.fleet_vehicles.update_one(
-            {"_id": vehicle["_id"], "fleet_id": fleet_id, "assigned_driver_id": {"$in": [None, ""]}},
-            {"$set": {
-                "assigned_driver_id": driver_id,
-                "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }},
-        )
     if any(driver.get(k) != v for k, v in canonical.items()):
         try:
             await db.users.update_one(
@@ -2689,18 +2689,6 @@ async def require_driver(current=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
-    if current.get("vehicle_id"):
-        try:
-            assigned_vehicle = await db.fleet_vehicles.find_one({
-                "_id": ObjectId(current["vehicle_id"]),
-                "fleet_id": current.get("fleet_id"),
-            })
-        except (InvalidId, TypeError):
-            assigned_vehicle = None
-        if not assigned_vehicle:
-            raise HTTPException(status_code=403, detail="Tildelt kjøretøy finnes ikke lenger i flåten")
-        if assigned_vehicle.get("active") is False:
-            raise HTTPException(status_code=403, detail="Tildelt kjøretøy er parkert av løyvehaver")
     if current.get("legal_accepted") is not True:
         raise HTTPException(status_code=403, detail="Godta sjåførvilkår og personvern før du går online eller håndterer turer")
     identity_status = current.get("identity_verification_status") or "not_submitted"
@@ -2716,6 +2704,114 @@ async def require_driver(current=Depends(get_current_user)):
         )
     await _require_active_fleet(current.get("fleet_id"))
     return current
+
+
+@api.get("/driver/vehicles")
+async def driver_assigned_vehicles(current=Depends(require_driver)):
+    """Vehicles explicitly assigned by the driver's fleet owner.
+
+    Multiple vehicles may be assigned, but exactly one is selected for the next shift.
+    """
+    fleet_id = current.get("fleet_id")
+    driver_id = current["id"]
+    selected_id = str(current.get("vehicle_id") or "")
+    vehicles = []
+    async for vehicle in db.fleet_vehicles.find({
+        "fleet_id": fleet_id,
+        "assigned_driver_id": driver_id,
+    }).sort("created_at", -1):
+        vid = str(vehicle["_id"])
+        vehicles.append({
+            "id": vid,
+            "car": vehicle.get("car") or "",
+            "plate": vehicle.get("plate") or "",
+            "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+            "active": vehicle.get("active") is not False,
+            "selected": vid == selected_id,
+        })
+    return {"vehicles": vehicles, "selected_vehicle_id": selected_id or None}
+
+
+@api.post("/driver/vehicles/{vehicle_id}/select")
+async def driver_select_vehicle(vehicle_id: str, current=Depends(require_driver)):
+    """Select one fleet-assigned vehicle for the next shift.
+
+    Vehicle changes are intentionally blocked while online or while a ride is active.
+    """
+    if current.get("online") is True:
+        raise HTTPException(status_code=409, detail="Gå offline før du bytter bil")
+    active_trip = await db.trips.find_one(
+        _real_trip_filter({"driver_id": current["id"], "status": {"$in": ACTIVE_TRIP_STATUSES}}),
+        {"trip_id": 1},
+    )
+    if active_trip:
+        raise HTTPException(status_code=409, detail="Fullfør eller avbryt aktiv tur før du bytter bil")
+    try:
+        oid = ObjectId(vehicle_id)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Ugyldig kjøretøy-id")
+    vehicle = await db.fleet_vehicles.find_one({
+        "_id": oid,
+        "fleet_id": current.get("fleet_id"),
+        "assigned_driver_id": current["id"],
+        "active": {"$ne": False},
+    })
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Bilen er ikke aktiv eller ikke tildelt deg av løyvehaver")
+    before = {
+        "vehicle_id": current.get("vehicle_id"),
+        "car": current.get("car"),
+        "plate": current.get("plate"),
+    }
+    canonical = {
+        "vehicle_id": str(vehicle["_id"]),
+        "car": vehicle.get("car") or "",
+        "plate": vehicle.get("plate") or "",
+        "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+    }
+    result = await db.users.update_one(
+        {"_id": ObjectId(current["id"]), "role": "driver", "fleet_id": current.get("fleet_id"), "online": {"$ne": True}},
+        {"$set": canonical},
+    )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Sjåførstatusen endret seg. Oppdater og prøv igjen")
+    await _audit(current, "driver.vehicle_select", "vehicle", vehicle_id, before, canonical)
+    return {**canonical, "selected": True}
+
+
+@api.post("/driver/profile-photo")
+async def driver_update_profile_photo(file: UploadFile = File(...), current=Depends(require_driver)):
+    """Replace the driver's profile photo with a private, authenticated driver-doc."""
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("driver-docs", current["id"], file.filename or "profile.jpg", file.content_type)
+    stored = storage_put(path, data, file.content_type)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    old_path = current.get("profile_photo_path")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": stored["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": stored.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "driver-docs",
+        "doc_type": "profile_photo",
+        "is_deleted": False,
+        "created_at": now_iso,
+    }
+    await db.uploaded_files.insert_one(doc)
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"]), "role": "driver"},
+        {"$set": {"profile_photo_path": stored["path"], "profile_photo_updated_at": now_iso}},
+    )
+    if old_path and old_path != stored["path"]:
+        await db.uploaded_files.update_many(
+            {"owner_user_id": current["id"], "storage_path": old_path, "doc_type": "profile_photo"},
+            {"$set": {"is_deleted": True, "deleted_at": now_iso}},
+        )
+    await _audit(current, "driver.profile_photo_update", "driver", current["id"],
+                 {"profile_photo_path": old_path}, {"profile_photo_path": stored["path"]})
+    return {"profile_photo_path": stored["path"], "updated_at": now_iso}
 
 
 class DriverRatePassengerRequest(BaseModel):
@@ -5505,10 +5601,6 @@ async def fleet_assign_vehicle_driver(vehicle_id: str, body: FleetVehicleAssignm
             raise HTTPException(409, "Sjåføren må gå offline før bilbytte")
         if driver.get("fleet_active") is False:
             raise HTTPException(409, "Aktiver sjåføren før bilen tildeles")
-        await db.fleet_vehicles.update_many(
-            {"fleet_id": fid, "assigned_driver_id": body.driver_id, "_id": {"$ne": oid}},
-            {"$unset": {"assigned_driver_id": "", "assigned_driver_name": ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
-        )
 
     now = datetime.now(timezone.utc).isoformat()
     if driver:
@@ -5517,12 +5609,24 @@ async def fleet_assign_vehicle_driver(vehicle_id: str, body: FleetVehicleAssignm
             "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
             "updated_at": now,
         }})
-        await db.users.update_one({"_id": driver["_id"], "fleet_id": fid}, {"$set": {
-            "vehicle_id": vehicle_id,
-            "car": vehicle.get("car"),
-            "plate": vehicle.get("plate"),
-            "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
-        }})
+        selected_vehicle = None
+        if driver.get("vehicle_id"):
+            try:
+                selected_vehicle = await db.fleet_vehicles.find_one({
+                    "_id": ObjectId(str(driver["vehicle_id"])),
+                    "fleet_id": fid,
+                    "assigned_driver_id": body.driver_id,
+                    "active": {"$ne": False},
+                })
+            except (InvalidId, TypeError):
+                selected_vehicle = None
+        if not selected_vehicle:
+            await db.users.update_one({"_id": driver["_id"], "fleet_id": fid}, {"$set": {
+                "vehicle_id": vehicle_id,
+                "car": vehicle.get("car"),
+                "plate": vehicle.get("plate"),
+                "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+            }})
     else:
         await db.fleet_vehicles.update_one({"_id": oid, "fleet_id": fid}, {
             "$unset": {"assigned_driver_id": "", "assigned_driver_name": ""},
@@ -5530,10 +5634,26 @@ async def fleet_assign_vehicle_driver(vehicle_id: str, body: FleetVehicleAssignm
         })
 
     if previous_driver and (not driver or str(previous_driver["_id"]) != str(driver["_id"])):
-        await db.users.update_one({"_id": previous_driver["_id"], "fleet_id": fid}, {
-            "$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""},
-            "$set": {"online": False},
-        })
+        if str(previous_driver.get("vehicle_id") or "") == vehicle_id:
+            replacement = await db.fleet_vehicles.find_one({
+                "fleet_id": fid,
+                "assigned_driver_id": str(previous_driver["_id"]),
+                "_id": {"$ne": oid},
+                "active": {"$ne": False},
+            })
+            if replacement:
+                await db.users.update_one({"_id": previous_driver["_id"], "fleet_id": fid}, {"$set": {
+                    "vehicle_id": str(replacement["_id"]),
+                    "car": replacement.get("car") or "",
+                    "plate": replacement.get("plate") or "",
+                    "vehicle_type": replacement.get("vehicle_type") or "ai-first",
+                    "online": False,
+                }})
+            else:
+                await db.users.update_one({"_id": previous_driver["_id"], "fleet_id": fid}, {
+                    "$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""},
+                    "$set": {"online": False},
+                })
 
     after = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
     await _audit(current, "fleet.vehicle_assign", "vehicle", vehicle_id,
