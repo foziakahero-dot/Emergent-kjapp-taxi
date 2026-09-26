@@ -2057,7 +2057,11 @@ async def login(body: LoginRequest, request: Request, response: Response):
             lookup = None
         if lookup is not None:
             user = await db.users.find_one(lookup)
+    elif body.client == "customer":
+        # Customer app may authenticate passenger/customer accounts only.
+        user = await db.users.find_one({"role": "user", "email": identifier.lower()})
     else:
+        # Generic web login is retained for admin/fleet portals.
         user = await db.users.find_one({"email": identifier.lower()})
 
     if not user or not verify_password(body.password, user["password_hash"]):
@@ -4704,10 +4708,10 @@ async def google_session(body: GoogleSessionRequest, request: Request, response:
         driver_id = None
     else:
         uid = str(user["_id"])
-        if user.get("disabled"):
+        if user.get("disabled") or user.get("role", "user") != "user":
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
-        role = user.get("role", "user")
-        driver_id = user.get("driver_id")
+        role = "user"
+        driver_id = None
         if not user.get("google_linked"):
             await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
     if user and user.get("totp_enabled"):
@@ -4821,11 +4825,11 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
     name = claims.get("name") or email.split("@")[0]
     user = await db.users.find_one({"google_sub": google_sub}) or await db.users.find_one({"email": email})
     if user:
-        if user.get("disabled"):
+        if user.get("disabled") or user.get("role", "user") != "user":
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
         uid = str(user["_id"])
-        role = user.get("role", "user")
-        driver_id = user.get("driver_id")
+        role = "user"
+        driver_id = None
         display_name = user.get("fullName") or name
         await db.users.update_one({"_id": user["_id"]}, {"$set": {
             "google_sub": google_sub, "google_linked": True, "picture": claims.get("picture"),
@@ -7002,12 +7006,12 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
         existing = await db.users.find_one({"email": verified_email})
 
     if existing:
-        if existing.get("disabled"):
+        if existing.get("disabled") or existing.get("role", "user") != "user":
             raise HTTPException(status_code=401, detail="Ugyldig Apple-økt")
         uid = str(existing["_id"])
         email = existing["email"]
-        role = existing.get("role", "user")
-        driver_id = existing.get("driver_id")
+        role = "user"
+        driver_id = None
         display_name = existing.get("fullName", "")
         if not existing.get("apple_sub"):
             await db.users.update_one({"_id": existing["_id"]}, {"$set": {"apple_sub": apple_sub, "apple_linked": True}})
