@@ -63,6 +63,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const u = await authApi.me();
+      if (u?.role !== 'driver' || u?.approved !== true) {
+        await storage.removeItem(TOKEN_KEY);
+        setUser(null);
+        return;
+      }
       setUser(u);
     } catch {
       await storage.removeItem(TOKEN_KEY);
