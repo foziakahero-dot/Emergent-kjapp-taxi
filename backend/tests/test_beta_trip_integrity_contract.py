@@ -253,3 +253,54 @@ def test_customer_and_driver_apps_fail_closed_on_wrong_restored_role():
     assert "u?.role !== 'user'" in customer_auth
     assert "client: 'customer'" in customer_auth
     assert "u?.role !== 'driver' || u?.approved !== true" in driver_auth
+
+
+def test_driver_can_select_only_explicit_fleet_assignments():
+    resolver = SOURCE = SERVER
+    block = SOURCE[SOURCE.index("async def _assigned_fleet_vehicle"):SOURCE.index("def _parse_iso_utc")]
+    assert '"assigned_driver_id": driver_id' in block
+    assert '"assigned_driver_id": {"$in": [None, ""]}' not in block
+    assert "Clear stale compatibility mirrors" in block
+
+    listing = _block(SERVER, "driver_assigned_vehicles")
+    assert '"assigned_driver_id": driver_id' in listing
+    assert '"selected": vid == selected_id' in listing
+
+    select = _block(SERVER, "driver_select_vehicle")
+    assert 'current.get("online") is True' in select
+    assert "ACTIVE_TRIP_STATUSES" in select
+    assert '"assigned_driver_id": current["id"]' in select
+    assert '"active": {"$ne": False}' in select
+
+
+def test_fleet_can_assign_multiple_vehicles_without_forcing_selected_car():
+    block = _block(SERVER, "fleet_assign_vehicle_driver")
+    assert 'assigned_driver_id": body.driver_id' in block
+    assert 'selected_vehicle = await db.fleet_vehicles.find_one' in block
+    assert 'if not selected_vehicle:' in block
+    assert 'db.fleet_vehicles.update_many(\n            {"fleet_id": fid, "assigned_driver_id": body.driver_id' not in block
+
+
+def test_driver_profile_photo_is_private_driver_doc_and_replaceable():
+    block = _block(SERVER, "driver_update_profile_photo")
+    assert '"scope": "driver-docs"' in block
+    assert '"doc_type": "profile_photo"' in block
+    assert '"owner_user_id": current["id"]' in block
+    assert '"profile_photo_path": stored["path"]' in block
+    assert '"is_deleted": True' in block
+
+
+def test_driver_app_exposes_vehicle_selector_and_profile_photo_without_redesign():
+    profile = (ROOT / "driver-app" / "app" / "(driver)" / "profile.tsx").read_text(encoding="utf-8")
+    vehicles = (ROOT / "driver-app" / "app" / "driver-vehicles.tsx").read_text(encoding="utf-8")
+    photo = (ROOT / "driver-app" / "app" / "driver-profile-photo.tsx").read_text(encoding="utf-8")
+    api = (ROOT / "driver-app" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
+
+    assert 'label="Mine biler"' in profile
+    assert "authenticatedFileSource" in profile
+    assert "Kun biler tildelt av løyvehaveren" in vehicles
+    assert "selectVehicle" in vehicles
+    assert "CameraView" in photo
+    assert "updateProfilePhoto" in photo
+    assert "api.get('/driver/vehicles')" in api
+    assert "api.post('/driver/profile-photo'" in api
