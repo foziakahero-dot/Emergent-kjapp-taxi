@@ -18,7 +18,12 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll."
+        "NSCameraUsageDescription": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll.",
+        "LSApplicationQueriesSchemes": [
+          "waze",
+          "comgooglemaps",
+          "maps"
+        ]
       }
     },
     "android": {
