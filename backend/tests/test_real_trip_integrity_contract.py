@@ -47,3 +47,33 @@ def test_startup_purge_catches_flagged_and_prefixed_synthetic_trips():
     purge = SOURCE[SOURCE.index("async def purge_synthetic_data"):SOURCE.index("def create_access_token")]
     for marker in required:
         assert marker in purge, marker
+
+
+def test_demo_data_is_opt_in_and_never_defaults_on():
+    block = SOURCE[SOURCE.index("def demo_data_enabled"):SOURCE.index("def compute_cors_origins")]
+    assert 'allowed_envs = {"development", "dev", "test", "local"}' in block
+    assert "if env not in allowed_envs:" in block
+    assert "if flag is None:\n        return False" in block
+    assert 'return str(flag).strip().lower() in ("1", "true", "yes", "on")' in block
+
+
+def test_shared_runtime_disables_legacy_demo_accounts_when_demo_mode_is_off():
+    startup = SOURCE[SOURCE.index("# Shared beta/staging/prod"):SOURCE.index("# Nearest-driver-first dispatch")]
+    assert "if not ENABLE_DEMO_DATA:" in startup
+    assert "disable_legacy_demo_users(db, True, admin_email)" in startup
+
+
+def test_public_seed_places_never_impersonate_user_home_or_work():
+    startup = SOURCE[SOURCE.index("# seed places"):SOURCE.index("# seed admin")]
+    assert '"label": "Hjem"' not in startup
+    assert '"label": "Jobb"' not in startup
+    assert '{"slug": "karl-johans", "label": "Hjem"}' in startup
+    assert '{"slug": "aker-brygge", "label": "Jobb"}' in startup
+    assert '"label": "Karl Johan"' in startup
+    assert '"label": "Aker Brygge"' in startup
+
+
+def test_dev_seed_accounts_are_explicitly_marked_demo():
+    startup = SOURCE[SOURCE.index("# seed test user (demo only)"):SOURCE.index("# ---- Simulated")]
+    assert startup.count('"demo": True') >= 2
+    assert startup.count('"is_demo": True') >= 2
