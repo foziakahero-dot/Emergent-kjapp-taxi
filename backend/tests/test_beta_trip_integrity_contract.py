@@ -304,3 +304,26 @@ def test_driver_app_exposes_vehicle_selector_and_profile_photo_without_redesign(
     assert "updateProfilePhoto" in photo
     assert "api.get('/driver/vehicles')" in api
     assert "api.post('/driver/profile-photo'" in api
+
+
+def test_legacy_vehicle_sync_never_steals_existing_assignment():
+    block = SERVER[SERVER.index("async def _sync_fleet_vehicle_records"):SERVER.index("async def _fleet_vehicle_public")]
+    assert 'existing = await db.fleet_vehicles.find_one' in block
+    assert 'if not existing:' in block
+    assert 'if existing.get("assigned_driver_id") in (None, ""):' in block
+    assert '"assigned_driver_id": {"$in": [None, ""]}' in block
+    # Assignment may exist in insert/empty-claim branches only, never as an
+    # unconditional update against an already-owned canonical vehicle.
+    assert '"$setOnInsert"' in block
+    assert "Existing canonical assignment always wins" in block
+
+
+def test_dispatch_and_accept_use_selected_canonical_vehicle():
+    pending = _block(SERVER, "driver_pending")
+    accept = _block(SERVER, "driver_accept")
+    for block in (pending, accept):
+        assert "assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)" in block
+        assert 'assigned_vehicle.get("vehicle_type")' in block
+    assert '"vehicle_id": str(assigned_vehicle["_id"])' in accept
+    assert '"car": assigned_vehicle.get("car")' in accept
+    assert '"plate": assigned_vehicle.get("plate")' in accept
