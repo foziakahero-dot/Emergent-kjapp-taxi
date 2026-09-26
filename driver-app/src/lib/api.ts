@@ -23,7 +23,6 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
-  register: (data: any) => api.post('/auth/register', data).then((r) => r.data),
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'driver' }).then((r) => r.data),
   checkResetToken: (token: string) => api.get(`/auth/reset-password/${token}`).then((r) => r.data),
@@ -31,7 +30,6 @@ export const authApi = {
   acceptLegal: (legal_version = '2026-09') => api.post('/auth/accept-legal', { accepted_terms: true, legal_version }).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
-  googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
 };
 
 export const tripsApi = {
