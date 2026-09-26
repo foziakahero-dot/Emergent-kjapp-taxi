@@ -5,13 +5,29 @@ completes real trips and the bonus must be awarded exactly once, shown in today'
 in the pending payout — paid by KJAPP, so the passenger price is untouched.
 """
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-API = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split()[0]
+API = (os.environ.get("KJAPP_E2E_API") or "").strip().rstrip("/")
+if not API:
+    API = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split()[0].rstrip("/")
+ALLOW_MUTATION = (os.environ.get("KJAPP_E2E_ALLOW_MUTATION") or "").strip().lower() in {"1", "true", "yes", "on"}
+ISOLATED = (os.environ.get("KJAPP_E2E_ISOLATED") or "").strip().lower() in {"1", "true", "yes", "on"}
+LIVE_APIS = {
+    "https://github-app-builder-28.emergent.host",
+    "https://api.kjappapp.no",
+}
+if API in LIVE_APIS:
+    print("REFUSED: e2e_bonus.py may never mutate the shared KJAPP beta/production API.")
+    sys.exit(3)
+if not (ALLOW_MUTATION and ISOLATED):
+    print("REFUSED: e2e_bonus.py requires an isolated backend/database and explicit mutation flags.")
+    sys.exit(3)
+
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 fails = []
 
