@@ -65,7 +65,6 @@ export const placesApi = {
 
 export const paymentApi = {
   list: () => api.get('/payment-methods').then((r) => r.data),
-  add: (data: any) => api.post('/payment-methods', data).then((r) => r.data),
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
   cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
   cardSetupStatus: (session_id: string) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),
