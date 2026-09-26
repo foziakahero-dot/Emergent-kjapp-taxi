@@ -60,7 +60,7 @@ async function notifyPendingTripFromBackground() {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: `Ny tur · ${price}`,
-        body: `${pickup} → ${dropoff}`,
+        body: `${offer.customer?.name ? `${offer.customer.name} · ` : ''}${pickup} → ${dropoff}`,
         sound: sound ? 'default' : false,
         data: { url: '/driver', trip_id: offer.trip_id, source: 'background-poll' },
       },
