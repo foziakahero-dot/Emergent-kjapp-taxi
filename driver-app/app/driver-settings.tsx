@@ -130,6 +130,7 @@ export default function DriverSettings() {
               ...(Platform.OS === 'ios' ? [['apple', 'Apple Kart']] : []),
             ] as string[][]).map(([key, label], i) => (
               <Pressable key={key} testID={`driver-navigation-${key}`}
+                accessibilityRole="radio" accessibilityState={{ selected: (settings.navigation_app || 'google') === key }}
                 style={[s.row, i > 0 && s.rowBorder]}
                 onPress={() => { void (async () => {
                   const previous = settings;
