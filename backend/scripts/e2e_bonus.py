@@ -58,9 +58,17 @@ def login(email, pw):
     return d["token"]
 
 
-admin = login("admin@kjapp.no", "admin123")
-cust = login("ola@kjapp.no", "test1234")
-drv = login("sjafor@kjapp.no", "sjafor1234")
+def required(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if not value:
+        print(f"Missing required environment variable: {name}")
+        sys.exit(2)
+    return value
+
+
+admin = login(required("KJAPP_E2E_ADMIN_EMAIL"), required("KJAPP_E2E_ADMIN_PASSWORD"))
+cust = login(required("KJAPP_E2E_CUSTOMER_EMAIL"), required("KJAPP_E2E_CUSTOMER_PASSWORD"))
+drv = login(required("KJAPP_E2E_DRIVER_A_EMAIL"), required("KJAPP_E2E_DRIVER_A_PASSWORD"))
 
 # A window that definitely contains "now" in Oslo local time
 hour = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Oslo")).hour
