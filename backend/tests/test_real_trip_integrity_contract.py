@@ -77,3 +77,36 @@ def test_dev_seed_accounts_are_explicitly_marked_demo():
     startup = SOURCE[SOURCE.index("# seed test user (demo only)"):SOURCE.index("# ---- Simulated")]
     assert startup.count('"demo": True') >= 2
     assert startup.count('"is_demo": True') >= 2
+
+
+def test_admin_settings_can_never_reenable_demo_trips():
+    source = SERVER
+    get_block = source[source.index("async def admin_get_settings"):source.index("async def admin_update_settings")]
+    update_block = source[source.index("async def admin_update_settings"):source.index("class PricingTestRequest")]
+    assert 'features["demo_trips"] = False' in get_block
+    assert 'next_features["demo_trips"] = False' in update_block
+    assert "allowed_features" in update_block
+    assert "Feature-flagg må være true/false" in update_block
+
+
+def test_all_mutating_e2e_scripts_refuse_shared_beta_and_require_isolation():
+    paths = [
+        ROOT / "backend" / "scripts" / "e2e_dispatch.py",
+        ROOT / "backend" / "scripts" / "e2e_driver_flow.py",
+        ROOT / "backend" / "scripts" / "e2e_bonus.py",
+    ]
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        assert "github-app-builder-28.emergent.host" in source
+        assert "api.kjappapp.no" in source
+        assert "KJAPP_E2E_ISOLATED" in source
+        assert "KJAPP_E2E_ALLOW_MUTATION" in source
+        assert "sys.exit(3)" in source
+
+
+def test_mutating_e2e_scripts_do_not_store_legacy_passwords():
+    for rel in ("e2e_driver_flow.py", "e2e_bonus.py"):
+        source = (ROOT / "backend" / "scripts" / rel).read_text(encoding="utf-8")
+        assert "admin123" not in source
+        assert "test1234" not in source
+        assert "sjafor1234" not in source
