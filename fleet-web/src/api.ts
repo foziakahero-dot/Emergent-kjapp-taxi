@@ -132,6 +132,7 @@ export type FleetVehicle = {
   driver_name?: string;
   approved?: boolean;
   fleet_active?: boolean | null;
+  selected_for_shift?: boolean;
   online?: boolean;
   gps_fresh?: boolean;
   last_location_at?: string;
