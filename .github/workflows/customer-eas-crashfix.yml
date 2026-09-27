@@ -1,0 +1,59 @@
+name: KJAPP Customer EAS crash-fix APK
+
+on:
+  push:
+    branches:
+      - fix/beta-mobile-firebase-ops-20260926
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kjapp-customer-crashfix-apk
+  cancel-in-progress: false
+
+jobs:
+  customer-apk:
+    name: Build Customer crash-fix APK
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[customer-apk]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+    steps:
+      - name: Checkout exact crash-fix commit
+        uses: actions/checkout@v4
+
+      - name: Show source commit
+        run: git rev-parse HEAD
+        working-directory: .
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require Expo token
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "Missing GitHub secret EXPO_TOKEN"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Validate Expo config
+        run: npx expo config --type public
+
+      - name: Build Customer APK on EAS
+        run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
