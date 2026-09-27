@@ -10,7 +10,8 @@
         "buildType": "apk",
         "image": "latest"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "autoIncrement": true
     },
     "production": {
       "env": {
