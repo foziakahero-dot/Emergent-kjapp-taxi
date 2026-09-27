@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - beta/oslo-production-ready
-      - fix/beta-mobile-firebase-ops-20260926
     paths:
       - 'backend/**'
       - 'frontend/**'
