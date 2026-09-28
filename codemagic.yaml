@@ -12,7 +12,7 @@ workflows:
           source: true
     environment:
       vars:
-        EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+        EXPO_PUBLIC_BACKEND_URL: https://kjapp-beta-api.onrender.com
     scripts:
       - name: Build Customer + Driver APKs
         script: |
