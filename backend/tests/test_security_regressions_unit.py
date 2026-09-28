@@ -213,3 +213,20 @@ def test_legal_consent_requires_current_server_version():
     missing.pop("legal_version")
     assert server.user_public(missing)["legal_accepted"] is False
 
+
+
+def test_admin_control_surfaces_require_2fa():
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        server._enforce_admin_2fa({"role": "admin", "totp_enabled": False})
+    assert exc.value.status_code == 403
+    assert "2FA" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        server._enforce_admin_2fa({"role": "superadmin"})
+    assert exc.value.status_code == 403
+
+    assert server._enforce_admin_2fa({"role": "admin", "totp_enabled": True})["role"] == "admin"
+    assert server._enforce_admin_2fa({"role": "user", "totp_enabled": False})["role"] == "user"
