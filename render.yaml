@@ -33,6 +33,8 @@ services:
         value: https://kjappapp-no.netlify.app,https://kjapp-admin.netlify.app,https://kjapp-fleet.netlify.app
       - key: KJAPP_RUN_LEGACY_DRIVER_CLEANUP
         value: "false"
+      - key: KJAPP_STORAGE_BACKEND
+        value: mongo
       - key: MONGO_URL
         sync: false
       - key: JWT_SECRET
