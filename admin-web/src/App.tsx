@@ -8,7 +8,7 @@ import FleetApplications from './FleetApplications';
 import IdentityVerifications from './IdentityVerifications';
 import Receipts from './Receipts';
 import {
-  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
+  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings, TwoFactorCard,
 } from './pages';
 import {
   FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
@@ -190,8 +190,17 @@ function Shell() {
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   if (user === undefined) return <div className="auth-wrap"><Loader /></div>;
   if (!user) return <Login />;
+  if (!user.totp_enabled) return (
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-sub">Aktiver totrinnsbekreftelse før du åpner kontrollsenteret.</div>
+        <TwoFactorCard onContinue={() => window.location.reload()} />
+        <button className="btn ghost" onClick={logout}>Logg ut</button>
+      </div>
+    </div>
+  );
   return <Shell />;
 }

@@ -949,7 +949,7 @@ export function Audit() {
 }
 
 /* ----------------------------- Settings ----------------------------- */
-function TwoFactorCard() {
+export function TwoFactorCard({ onContinue }: { onContinue?: () => void } = {}) {
   const status = useAsync(() => api.twofaStatus(), []);
   const [setup, setSetup] = useState<any>(null);
   const [code, setCode] = useState('');
@@ -987,10 +987,16 @@ function TwoFactorCard() {
   return (
     <Card style={{ gridColumn: '1 / -1' }}>
       <div className="section-title" style={{ marginTop: 0 }}>Kontosikkerhet</div>
-      {status.loading ? <Loader /> : status.data?.enabled ? (
+      {status.err ? <ErrorBanner msg={status.err} /> : null}
+      {status.loading ? <Loader /> : status.err ? (
+        <Btn onClick={status.reload}>Prøv igjen</Btn>
+      ) : status.data?.enabled ? (
         <>
           <Pill status="completed" label="Totrinnsbekreftelse aktiv" />
           <div className="dim" style={{ margin: '12px 0' }}>Passord, autentiseringskode og engangskoder beskytter administratorkontoen.</div>
+          {status.data.required ? (
+            <div className="dim" style={{ margin: '12px 0' }}>Totrinnsbekreftelse er obligatorisk for administratorer.</div>
+          ) : <>
           <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 620 }}>
             <div className="field"><label className="label">Nåværende passord</label>
               <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
@@ -998,6 +1004,7 @@ function TwoFactorCard() {
               <input className="input mono" inputMode="numeric" autoComplete="one-time-code" value={code} maxLength={9} onChange={(e) => setCode(e.target.value)} /></div>
           </div>
           <Btn onClick={disable} disabled={busy || !password || !code}>{busy ? 'Arbeider…' : 'Deaktiver 2FA'}</Btn>
+          </>}
         </>
       ) : setup ? (
         <>
@@ -1019,6 +1026,9 @@ function TwoFactorCard() {
         <div className="strong">Reservekoder – vises bare nå</div>
         <div className="mono" style={{ marginTop: 8, lineHeight: 1.8 }}>{backupCodes.join('  ·  ')}</div>
       </div>}
+      {onContinue && status.data?.enabled && !status.loading && !status.err ? (
+        <Btn variant="primary" onClick={onContinue} style={{ marginTop: 18 }}>Fortsett til kontrollsenteret</Btn>
+      ) : null}
       {msg && <div className={msg.includes('aktivert') || msg.includes('deaktivert') ? 'dim' : 'error-banner'} style={{ marginTop: 12 }}>{msg}</div>}
     </Card>
   );

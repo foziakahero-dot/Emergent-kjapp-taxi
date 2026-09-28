@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
+import pytest
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 
@@ -230,3 +232,75 @@ def test_admin_control_surfaces_require_2fa():
 
     assert server._enforce_admin_2fa({"role": "admin", "totp_enabled": True})["role"] == "admin"
     assert server._enforce_admin_2fa({"role": "user", "totp_enabled": False})["role"] == "user"
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin"])
+@pytest.mark.parametrize("enabled", [None, False])
+@pytest.mark.parametrize("path", [
+    "/api/admin/overview",
+    "/api/superadmin/fleet-applications",
+    "/api/fleet/driver-invites",
+    "/api/trips/other-customer-trip/messages",
+    "/api/files/other-driver-document",
+])
+def test_admin_routes_deny_access_before_loading_sensitive_data(monkeypatch, role, enabled, path):
+    class ForbiddenDatabase:
+        def __getattr__(self, name):
+            raise AssertionError("Access must be rejected before reading the database")
+
+    current = {"id": "507f1f77bcf86cd799439011", "role": role}
+    if enabled is not None:
+        current["totp_enabled"] = enabled
+    monkeypatch.setattr(server, "db", ForbiddenDatabase())
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: current)
+    response = TestClient(server.app).get(path)
+    assert response.status_code == 403
+    if not (role == "admin" and path.startswith("/api/superadmin/")):
+        assert "2FA" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin"])
+def test_admin_2fa_status_stays_reachable_for_enrollment(monkeypatch, role):
+    current = {"id": "507f1f77bcf86cd799439011", "role": role}
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: current)
+    response = TestClient(server.app).get("/api/auth/2fa/status")
+    assert response.status_code == 200
+    assert response.json() == {"enabled": False, "required": True}
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin"])
+def test_admin_cannot_disable_mandatory_2fa(monkeypatch, role):
+    current = {"id": "507f1f77bcf86cd799439011", "role": role, "totp_enabled": True}
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: current)
+    response = TestClient(server.app).post("/api/auth/2fa/disable", json={"password": "test-password", "code": "123456"})
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin", "fleet_owner"])
+def test_fleet_dependency_preserves_authorized_access(monkeypatch, role):
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    active_fleet = AsyncMock()
+    monkeypatch.setattr(server, "_require_active_fleet", active_fleet)
+    current = {"id": "507f1f77bcf86cd799439011", "role": role, "fleet_id": "fleet-1", "totp_enabled": role != "fleet_owner"}
+    assert asyncio.run(server.require_fleet_owner(current)) == current
+    if role == "fleet_owner":
+        active_fleet.assert_awaited_once_with("fleet-1")
+    else:
+        active_fleet.assert_not_awaited()
+
+
+@pytest.mark.parametrize("role", ["user", "driver", "admin", "superadmin"])
+def test_trip_access_preserves_passenger_driver_and_enrolled_admin(monkeypatch, role):
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    current = {"id": "507f1f77bcf86cd799439011", "role": role, "totp_enabled": role in ("admin", "superadmin")}
+    trip = {"trip_id": "real-trip", "user_id": current["id"] if role == "user" else "customer", "driver_user_id": current["id"] if role == "driver" else "driver"}
+    monkeypatch.setattr(server, "db", SimpleNamespace(trips=SimpleNamespace(find_one=AsyncMock(return_value=trip))))
+    loaded, passenger, driver = asyncio.run(server._load_trip_or_403("real-trip", current))
+    assert loaded == trip
+    assert passenger == (role == "user")
+    assert driver == (role == "driver")

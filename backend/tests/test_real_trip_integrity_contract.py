@@ -1,7 +1,8 @@
 from pathlib import Path
 import ast
 
-SERVER = Path(__file__).resolve().parents[1] / "server.py"
+ROOT = Path(__file__).resolve().parents[2]
+SERVER = ROOT / "backend" / "server.py"
 SOURCE = SERVER.read_text(encoding="utf-8")
 
 
@@ -28,12 +29,24 @@ def test_operational_trip_surfaces_use_real_trip_filter():
         'cursor = db.trips.find(_real_trip_filter({"user_id": current["id"]}))',
         'db.trips.find(_real_trip_filter({"driver_id": driver_id, "rating": {"$gt": 0}}))',
         'async for t in db.trips.find(_real_trip_filter({\n        "driver_id": driver_id,',
-        'async for t in db.trips.find(_real_trip_filter({\n            "driver_id": {"$in": drivers_ids},',
-        'async for t in db.trips.find(_real_trip_filter({\n            "driver_id": {"$in": driver_ids},',
         'async for t in db.trips.find(_real_trip_filter()).sort("created_at", -1).limit(limit)',
     ]
     for marker in required:
         assert marker in SOURCE, marker
+
+    # Fleet ownership now uses the booking-time fleet snapshot plus a legacy
+    # driver fallback. Check every trip query without tying the guard to the
+    # first dictionary key or its indentation.
+    functions = {node.name: node for node in ast.parse(SOURCE).body if isinstance(node, ast.AsyncFunctionDef)}
+    for name in ("fleet_overview", "fleet_live", "fleet_trip_history", "fleet_export_monthly"):
+        queries = [node for node in ast.walk(functions[name]) if isinstance(node, ast.Call)
+                   and isinstance(node.func, ast.Attribute)
+                   and node.func.attr == "find"
+                   and ast.unparse(node.func.value) == "db.trips"]
+        assert queries, name
+        for query in queries:
+            assert isinstance(query.args[0], ast.Call), name
+            assert ast.unparse(query.args[0].func) == "_real_trip_filter", name
 
 
 def test_startup_purge_catches_flagged_and_prefixed_synthetic_trips():
@@ -65,8 +78,17 @@ def test_shared_runtime_disables_legacy_demo_accounts_when_demo_mode_is_off():
 
 def test_public_seed_places_never_impersonate_user_home_or_work():
     startup = SOURCE[SOURCE.index("# seed places"):SOURCE.index("# seed admin")]
-    assert '"label": "Hjem"' not in startup
-    assert '"label": "Jobb"' not in startup
+    # Old labels must be present in the migration selector, but never in
+    # inserted public places or the migration's replacement labels.
+    import textwrap
+    calls = [node for node in ast.walk(ast.parse(textwrap.dedent(startup.partition("\n")[2]))) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Attribute)
+             and ast.unparse(node.func.value) == "db.places"]
+    inserted = [ast.literal_eval(call.args[0]) for call in calls if call.func.attr == "insert_many"]
+    updates = [ast.literal_eval(call.args[1]) for call in calls if call.func.attr == "update_one"]
+    assert inserted and updates
+    assert all(place["label"] not in ("Hjem", "Jobb") for batch in inserted for place in batch)
+    assert all(change["$set"]["label"] not in ("Hjem", "Jobb") for change in updates)
     assert '{"slug": "karl-johans", "label": "Hjem"}' in startup
     assert '{"slug": "aker-brygge", "label": "Jobb"}' in startup
     assert '"label": "Karl Johan"' in startup
@@ -80,7 +102,7 @@ def test_dev_seed_accounts_are_explicitly_marked_demo():
 
 
 def test_admin_settings_can_never_reenable_demo_trips():
-    source = SERVER
+    source = SOURCE
     get_block = source[source.index("async def admin_get_settings"):source.index("async def admin_update_settings")]
     update_block = source[source.index("async def admin_update_settings"):source.index("class PricingTestRequest")]
     assert 'features["demo_trips"] = False' in get_block
