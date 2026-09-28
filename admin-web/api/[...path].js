@@ -1,4 +1,4 @@
-const BACKEND_ORIGIN = 'https://github-app-builder-28.emergent.host';
+const BACKEND_ORIGIN = 'https://api.kjappapp.no';
 
 export default async function handler(req, res) {
   try {
