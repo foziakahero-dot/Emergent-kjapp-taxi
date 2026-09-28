@@ -76,8 +76,8 @@ for path in ("frontend/eas.json", "driver-app/eas.json"):
     cfg = read_json(path)
     beta_url = cfg.get("build", {}).get("testflight-beta", {}).get("env", {}).get("EXPO_PUBLIC_BACKEND_URL")
     prod_url = cfg.get("build", {}).get("production", {}).get("env", {}).get("EXPO_PUBLIC_BACKEND_URL")
-    if beta_url != "https://github-app-builder-28.emergent.host":
-        fail(f"{path}: TestFlight beta must target the currently controlled beta backend")
+    if beta_url != "https://api.kjappapp.no":
+        fail(f"{path}: TestFlight beta must target the KJAPP-owned API hostname")
     if prod_url != "https://api.kjappapp.no":
         fail(f"{path}: production profile must target the KJAPP-owned API hostname")
     if cfg.get("cli", {}).get("appVersionSource") != "remote":

@@ -178,7 +178,8 @@ def test_receipt_email_delivery_is_atomically_serialized_per_recipient():
     assert 'lock_field = f"{kind}_email_delivery_lock"' in block
     assert 'lock_at_field = f"{kind}_email_delivery_locked_at"' in block
     assert "claim.modified_count != 1" in block
-    assert '{"$set": {sent_field: now_iso}' in block
+    # Ignore formatting between the outer update document and its $set key.
+    assert '"$set":{sent_field:now_iso}' in "".join(block.split())
     assert '"$unset": {lock_field: "", lock_at_field: ""}' in block
     assert 'await deliver_once(\n        "customer"' in block
     assert 'await deliver_once(\n        "driver"' in block
