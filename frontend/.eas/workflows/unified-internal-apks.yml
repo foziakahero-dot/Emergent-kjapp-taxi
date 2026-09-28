@@ -1,0 +1,56 @@
+name: KJAPP Unified Customer + Driver Internal APKs
+
+on:
+  push:
+    branches:
+      - fix/beta-mobile-firebase-ops-20260926
+
+jobs:
+  build_both_android:
+    name: Build Customer + Driver internal APKs
+    environment: preview
+    image: sdk-57
+    steps:
+      - uses: eas/checkout
+
+      - name: Install Customer dependencies
+        working_directory: .
+        run: npm ci
+
+      - name: Prebuild Customer Android
+        working_directory: .
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build Customer debug APK
+        working_directory: ./android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Install Driver dependencies
+        working_directory: ../driver-app
+        run: npm ci
+
+      - name: Prebuild Driver Android
+        working_directory: ../driver-app
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build Driver debug APK
+        working_directory: ../driver-app/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Customer APK
+        uses: eas/upload_artifact
+        with:
+          type: other
+          name: kjapp-customer-internal-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Driver APK
+        uses: eas/upload_artifact
+        with:
+          type: other
+          name: kjapp-driver-internal-apk
+          path: ../driver-app/android/app/build/outputs/apk/debug/app-debug.apk
