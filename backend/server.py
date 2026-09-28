@@ -1384,7 +1384,8 @@ async def lifespan(app: FastAPI):
         await db.vapid.insert_one({"_id": "keys", "private_pem": priv_pem, "public_key": pub_b64})
 
     # Clean up legacy fake fleet drivers (from earlier seed) — one-time migration
-    if str(os.environ.get("KJAPP_RUN_LEGACY_DRIVER_CLEANUP", "")).strip().lower() in ("1", "true", "yes", "on"):\n        await db.drivers.delete_many({})
+    if str(os.environ.get("KJAPP_RUN_LEGACY_DRIVER_CLEANUP", "")).strip().lower() in ("1", "true", "yes", "on"):\n        if str(os.environ.get("KJAPP_RUN_LEGACY_DRIVER_CLEANUP", "")).strip().lower() in ("1", "true", "yes", "on"):
+        await db.drivers.delete_many({})
 
     # No more fake seed drivers — only real drivers who accept invites will populate db.users {role: driver}
     # Legacy `drivers` collection kept ONLY as fallback for orphaned invites; new invites reference user directly.
