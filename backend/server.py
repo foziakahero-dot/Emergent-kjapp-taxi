@@ -860,6 +860,8 @@ class SettingsUpdate(BaseModel):
     language: Optional[str] = None
     theme: Optional[str] = None
     notif_requests: Optional[bool] = None
+    notif_messages: Optional[bool] = None
+    notif_payouts: Optional[bool] = None
     req_sound: Optional[bool] = None
     req_vibrate: Optional[bool] = None
     navigation_app: Optional[Literal["google", "apple", "waze"]] = None
