@@ -24,7 +24,7 @@ export default function DriverSettings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
