@@ -199,14 +199,19 @@ def init_storage(force: bool = False) -> Optional[str]:
     return _storage_key
 
 
+_mongo_blob_client = None
+
+
 def _mongo_blob_collection():
     """Synchronous small-object storage used only when explicitly enabled.
 
     KJAPP uploads are capped at 8 MB, safely below MongoDB's 16 MB document limit.
     The public API contract remains unchanged; this is a provider swap for beta portability.
     """
-    client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=10000)
-    return client[DB_NAME]["stored_objects"]
+    global _mongo_blob_client
+    if _mongo_blob_client is None:
+        _mongo_blob_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=10000)
+    return _mongo_blob_client[DB_NAME]["stored_objects"]
 
 
 def storage_put(path: str, data: bytes, content_type: str) -> dict:
@@ -1655,6 +1660,7 @@ async def readiness():
         "email_configured",
         "public_web_origin_configured",
         "apple_native_auth_configured",
+        "object_storage_configured",
         "service_area_enforced",
         "booking_enabled",
     )
