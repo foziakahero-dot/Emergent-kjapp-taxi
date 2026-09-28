@@ -423,6 +423,13 @@ def _twofa_required_role(role: str) -> bool:
     return role in ("admin", "superadmin")
 
 
+def _enforce_admin_2fa(current: dict) -> dict:
+    """Fail closed for every admin control surface until mandatory TOTP is enabled."""
+    if _twofa_required_role(current.get("role", "user")) and not current.get("totp_enabled"):
+        raise HTTPException(status_code=403, detail="2FA må aktiveres før administratortilgang")
+    return current
+
+
 USER_RESPONSE_FIELDS = frozenset({
     "id", "email", "fullName", "full_name", "phone", "role", "driver_id", "fleet_id", "vehicle_id",
     "picture", "photo", "avatar", "car", "plate", "vehicle_type", "rating", "trip_count",
@@ -2185,6 +2192,8 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
 
 @api.post("/auth/2fa/disable")
 async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_user)):
+    if _twofa_required_role(current.get("role", "user")):
+        raise HTTPException(status_code=403, detail="2FA er obligatorisk for administratorer")
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
@@ -5086,6 +5095,7 @@ ADMIN_PERMISSION_PREFIXES = (
 def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
+    _enforce_admin_2fa(current)
     if current.get("role") == "admin":
         permissions = current.get("permissions", None)
         if permissions is not None:
@@ -5098,6 +5108,7 @@ def require_admin(request: Request, current=Depends(get_current_user)):
 def require_superadmin(current=Depends(get_current_user)):
     if current.get("role") != "superadmin":
         raise HTTPException(status_code=403, detail="Kun for superadmin")
+    _enforce_admin_2fa(current)
     return current
 
 
