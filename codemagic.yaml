@@ -1,0 +1,23 @@
+workflows:
+  kjapp-internal-apks:
+    name: KJAPP Customer + Driver Internal APKs
+    instance_type: linux_x2
+    max_build_duration: 60
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: fix/beta-mobile-firebase-ops-20260926
+          include: true
+          source: true
+    environment:
+      vars:
+        EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+    scripts:
+      - name: Build Customer + Driver APKs
+        script: |
+          chmod +x mobile-build/build-both-android.sh
+          ./mobile-build/build-both-android.sh
+    artifacts:
+      - frontend/android/app/build/outputs/apk/debug/app-debug.apk
+      - driver-app/android/app/build/outputs/apk/debug/app-debug.apk
