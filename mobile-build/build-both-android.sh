@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-API_URL="${EXPO_PUBLIC_BACKEND_URL:-https://github-app-builder-28.emergent.host}"
+API_URL="${EXPO_PUBLIC_BACKEND_URL:-https://kjapp-beta-api.onrender.com}"
 
 build_app() {
   local label="$1"
