@@ -3,7 +3,7 @@
     "apk": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host",
+        "EXPO_PUBLIC_BACKEND_URL": "https://kjapp-beta-api.onrender.com",
         "KJAPP_REQUIRE_FIREBASE": "true"
       },
       "android": {
