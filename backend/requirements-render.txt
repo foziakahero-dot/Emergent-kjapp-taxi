@@ -1,0 +1,9 @@
+# Render staging dependencies for the existing KJAPP FastAPI backend.
+# Deliberately excludes Emergent-only/private packages so the core taxi API
+# can run outside Emergent without changing the application architecture.
+-r requirements-ci.txt
+uvicorn==0.32.1
+pywebpush==2.0.1
+cryptography==49.0.0
+firebase_admin==7.5.0
+sendgrid==6.12.5
