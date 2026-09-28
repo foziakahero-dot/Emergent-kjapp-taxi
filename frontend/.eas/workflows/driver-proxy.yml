@@ -11,8 +11,8 @@ jobs:
     environment: preview
     steps:
       - uses: eas/checkout
-      - name: Verify Expo authentication
-        run: npx --yes eas-cli@latest whoami
       - name: Start Driver internal APK build
         working_directory: ../driver-app
+        env:
+          CI: "1"
         run: npx --yes eas-cli@latest build --platform android --profile apk --non-interactive --no-wait
