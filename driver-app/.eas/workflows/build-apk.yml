@@ -3,7 +3,7 @@ name: KJAPP Driver Android APK
 on:
   push:
     branches:
-      - main
+      - fix/beta-mobile-firebase-ops-20260926
 
 jobs:
   build_driver_android_apk:
