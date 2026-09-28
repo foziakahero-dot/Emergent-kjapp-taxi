@@ -140,6 +140,15 @@ def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
     fu = (frontend_url or "").strip().rstrip("/")
     if fu and fu != "*" and fu.startswith("http"):
         origins.append(fu)
+
+    extra_origins = (os.environ.get("KJAPP_EXTRA_CORS_ORIGINS") or "").strip()
+    for raw_origin in extra_origins.split(","):
+        origin = raw_origin.strip().rstrip("/")
+        if origin and origin != "*" and origin.startswith("http"):
+            origins.append(origin)
+
+    origins = list(dict.fromkeys(origins))
+    if fu or extra_origins:
         return origins
     # Development fallback when preview origin is unknown (auth uses Bearer header, not cookies)
     return ["*"]
