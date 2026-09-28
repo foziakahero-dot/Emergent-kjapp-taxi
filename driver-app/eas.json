@@ -44,6 +44,17 @@
       "ios": {
         "image": "latest"
       }
+    },
+    "testflight-staging": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://kjapp-beta-api.onrender.com"
+      },
+      "ios": {
+        "image": "latest"
+      }
     }
   },
   "submit": {
@@ -54,6 +65,12 @@
       }
     },
     "testflight-beta": {
+      "ios": {
+        "appleTeamId": "KUPTFG8BZ2",
+        "ascAppId": "6815872647"
+      }
+    },
+    "testflight-staging": {
       "ios": {
         "appleTeamId": "KUPTFG8BZ2",
         "ascAppId": "6815872647"

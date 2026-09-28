@@ -46,6 +46,17 @@
       "ios": {
         "image": "latest"
       }
+    },
+    "testflight-staging": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://kjapp-beta-api.onrender.com"
+      },
+      "ios": {
+        "image": "latest"
+      }
     }
   },
   "cli": {
@@ -59,6 +70,11 @@
       }
     },
     "testflight-beta": {
+      "ios": {
+        "ascAppId": "6815866825"
+      }
+    },
+    "testflight-staging": {
       "ios": {
         "ascAppId": "6815866825"
       }
