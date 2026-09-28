@@ -1,0 +1,18 @@
+name: KJAPP Driver Android APK Proxy
+
+on:
+  push:
+    branches:
+      - build/driver-apk-proxy-20260928
+
+jobs:
+  driver_apk:
+    name: Start KJAPP Driver Android APK
+    environment: preview
+    steps:
+      - uses: eas/checkout
+      - name: Verify Expo authentication
+        run: npx --yes eas-cli@latest whoami
+      - name: Start Driver internal APK build
+        working_directory: ../driver-app
+        run: npx --yes eas-cli@latest build --platform android --profile apk --non-interactive --no-wait
