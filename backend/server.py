@@ -315,6 +315,11 @@ db = client[DB_NAME]
 # Stripe setup
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_KEY = (stripe.api_key or "").strip()
+STRIPE_IS_TEST = STRIPE_KEY.startswith("sk_test_")
+STRIPE_IS_LIVE = STRIPE_KEY.startswith("sk_live_")
+if APP_ENV in ("staging", "development", "dev", "test", "local") and STRIPE_IS_LIVE:
+    raise RuntimeError("Stripe live key is forbidden outside APP_ENV=production")
 
 
 # ------------------ Utils ------------------
@@ -1628,10 +1633,15 @@ async def readiness():
     checks = {
         "database": db_ok,
         "production_mode": IS_PRODUCTION,
+        "staging_mode": APP_ENV == "staging",
+        "runtime_mode_allowed": APP_ENV in ("production", "staging"),
         "demo_data_disabled": not ENABLE_DEMO_DATA,
         "jwt_configured": bool((JWT_SECRET or "").strip()),
         "admin_identity_configured": bool((os.environ.get("ADMIN_EMAIL") or "").strip()),
-        "stripe_key_configured": bool((stripe.api_key or "").strip()),
+        "stripe_key_configured": bool(STRIPE_KEY),
+        "stripe_test_mode": STRIPE_IS_TEST,
+        "stripe_live_mode": STRIPE_IS_LIVE,
+        "stripe_mode_safe": STRIPE_IS_LIVE if IS_PRODUCTION else STRIPE_IS_TEST,
         "stripe_webhook_configured": bool((STRIPE_WEBHOOK_SECRET or "").strip()),
         "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
         "public_web_origin_configured": (
@@ -1651,11 +1661,12 @@ async def readiness():
     }
     required_keys = (
         "database",
-        "production_mode",
+        "runtime_mode_allowed",
         "demo_data_disabled",
         "jwt_configured",
         "admin_identity_configured",
         "stripe_key_configured",
+        "stripe_mode_safe",
         "stripe_webhook_configured",
         "email_configured",
         "public_web_origin_configured",
