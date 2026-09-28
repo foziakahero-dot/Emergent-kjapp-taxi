@@ -1,9 +1,11 @@
 name: KJAPP Unified Customer + Driver Internal APKs
 
+# Disabled for branch pushes. Customer and Driver are separate Expo projects
+# with separate Firebase client configs, so beta APKs build independently.
 on:
   push:
     branches:
-      - fix/beta-mobile-firebase-ops-20260926
+      - __disabled_unified_internal_apks__
 
 jobs:
   build_both_android:
@@ -13,46 +15,5 @@ jobs:
     steps:
       - uses: eas/checkout
 
-      - name: Build both Android APKs from repository root
-        env:
-          CI: "1"
-          EXPO_PUBLIC_BACKEND_URL: https://kjapp-beta-api.onrender.com
-        run: |
-          set -euo pipefail
-          ROOT="$(git rev-parse --show-toplevel)"
-          echo "Repository root: $ROOT"
-          test -f "$ROOT/frontend/package.json"
-          test -f "$ROOT/driver-app/package.json"
-
-          cd "$ROOT/frontend"
-          npm ci
-          npx expo prebuild --platform android --clean --no-install
-          cd android
-          chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
-
-          cd "$ROOT/driver-app"
-          npm ci
-          npx expo prebuild --platform android --clean --no-install
-          cd android
-          chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
-
-          mkdir -p "$ROOT/frontend/artifacts"
-          cp "$ROOT/frontend/android/app/build/outputs/apk/debug/app-debug.apk" "$ROOT/frontend/artifacts/kjapp-customer-internal.apk"
-          cp "$ROOT/driver-app/android/app/build/outputs/apk/debug/app-debug.apk" "$ROOT/frontend/artifacts/kjapp-driver-internal.apk"
-          ls -lh "$ROOT/frontend/artifacts"
-
-      - name: Upload Customer APK
-        uses: eas/upload_artifact
-        with:
-          type: other
-          name: kjapp-customer-internal-apk
-          path: artifacts/kjapp-customer-internal.apk
-
-      - name: Upload Driver APK
-        uses: eas/upload_artifact
-        with:
-          type: other
-          name: kjapp-driver-internal-apk
-          path: artifacts/kjapp-driver-internal.apk
+      - name: Unified workflow intentionally disabled
+        run: echo "Use the separate Customer and Driver APK workflows."
