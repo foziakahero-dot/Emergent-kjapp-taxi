@@ -21,6 +21,18 @@ services:
         value: "false"
       - key: KJAPP_DRIVER_IDENTITY_REQUIRED
         value: "false"
+      - key: KJAPP_SERVICE_AREA_ENFORCE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: KJAPP_PUBLIC_WEB_ORIGIN
+        value: https://kjappapp.no
+      - key: FRONTEND_URL
+        value: https://kjappapp-no.netlify.app
+      - key: KJAPP_EXTRA_CORS_ORIGINS
+        value: https://kjappapp-no.netlify.app,https://kjapp-admin.netlify.app,https://kjapp-fleet.netlify.app
+      - key: KJAPP_RUN_LEGACY_DRIVER_CLEANUP
+        value: "false"
       - key: MONGO_URL
         sync: false
       - key: JWT_SECRET
