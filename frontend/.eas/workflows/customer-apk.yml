@@ -1,8 +1,10 @@
 name: KJAPP Customer Android APK
 
+# Current Customer build already started. Disable additional push-triggered duplicates.
 on:
   push:
-    branches: ['main']
+    branches:
+      - __disabled_customer_apk_duplicate__
 
 jobs:
   build_customer_android:

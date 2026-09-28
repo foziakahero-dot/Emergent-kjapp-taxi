@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
-const productionBackend = 'https://github-app-builder-28.emergent.host/api';
+const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
 const isProductionFleetHost = host === 'fleet.kjappapp.no';
 const isVercelPreviewHost = host.endsWith('.vercel.app');

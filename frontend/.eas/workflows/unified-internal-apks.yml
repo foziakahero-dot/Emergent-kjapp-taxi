@@ -1,0 +1,19 @@
+name: KJAPP Unified Customer + Driver Internal APKs
+
+# Disabled for branch pushes. Customer and Driver are separate Expo projects
+# with separate Firebase client configs, so beta APKs build independently.
+on:
+  push:
+    branches:
+      - __disabled_unified_internal_apks__
+
+jobs:
+  build_both_android:
+    name: Build Customer + Driver internal APKs
+    environment: preview
+    image: sdk-57
+    steps:
+      - uses: eas/checkout
+
+      - name: Unified workflow intentionally disabled
+        run: echo "Use the separate Customer and Driver APK workflows."

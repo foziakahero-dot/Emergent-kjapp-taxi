@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: kjapp-beta-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: fix/beta-mobile-firebase-ops-20260926
+    rootDir: backend
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: ENABLE_DEMO_DATA
+        value: "false"
+      - key: DB_NAME
+        value: kjapp_beta_staging
+      - key: KJAPP_AUTO_CHARGE_ENABLED
+        value: "false"
+      - key: KJAPP_DRIVER_IDENTITY_REQUIRED
+        value: "false"
+      - key: KJAPP_SERVICE_AREA_ENFORCE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: KJAPP_PUBLIC_WEB_ORIGIN
+        value: https://kjappapp.no
+      - key: FRONTEND_URL
+        value: https://kjappapp-no.netlify.app
+      - key: KJAPP_EXTRA_CORS_ORIGINS
+        value: https://kjappapp-no.netlify.app,https://kjapp-admin.netlify.app,https://kjapp-fleet.netlify.app
+      - key: KJAPP_RUN_LEGACY_DRIVER_CLEANUP
+        value: "false"
+      - key: KJAPP_STORAGE_BACKEND
+        value: mongo
+      - key: MONGO_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@kjapp.no
+      - key: ADMIN_PASSWORD
+        sync: false

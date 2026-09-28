@@ -1,0 +1,54 @@
+name: KJAPP Driver Local Internal APK
+
+on:
+  push:
+    branches:
+      - fix/beta-mobile-firebase-ops-20260926
+
+jobs:
+  build_driver_local:
+    name: Build KJAPP Driver internal APK locally
+    environment: preview
+    image: sdk-57
+    steps:
+      - uses: eas/checkout
+
+      - name: Verify Driver app source
+        working_directory: ../driver-app
+        run: |
+          pwd
+          test -f package.json
+          test -f app.json
+          test -f eas.json
+
+      - name: Install Driver dependencies
+        working_directory: ../driver-app
+        run: npm ci
+
+      - name: Generate Driver Android project
+        working_directory: ../driver-app
+        env:
+          CI: "1"
+          EXPO_PUBLIC_BACKEND_URL: https://kjapp-beta-api.onrender.com
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build Driver debug APK
+        working_directory: ../driver-app/android
+        env:
+          CI: "1"
+          EXPO_PUBLIC_BACKEND_URL: https://kjapp-beta-api.onrender.com
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Collect Driver APK
+        run: |
+          mkdir -p artifacts
+          cp ../driver-app/android/app/build/outputs/apk/debug/app-debug.apk artifacts/kjapp-driver-internal.apk
+          ls -lh artifacts/kjapp-driver-internal.apk
+
+      - uses: eas/upload_artifact
+        with:
+          type: other
+          name: kjapp-driver-internal-apk
+          path: artifacts/kjapp-driver-internal.apk

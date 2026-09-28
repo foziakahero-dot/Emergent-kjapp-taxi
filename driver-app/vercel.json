@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://github-app-builder-28.emergent.host/api/:path*"
+      "destination": "https://api.kjappapp.no/api/:path*"
     }
   ]
 }
