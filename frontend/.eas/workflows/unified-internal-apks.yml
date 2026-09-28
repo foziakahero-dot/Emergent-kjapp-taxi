@@ -13,44 +13,46 @@ jobs:
     steps:
       - uses: eas/checkout
 
-      - name: Install Customer dependencies
-        working_directory: .
-        run: npm ci
-
-      - name: Prebuild Customer Android
-        working_directory: .
-        run: npx expo prebuild --platform android --clean --no-install
-
-      - name: Build Customer debug APK
-        working_directory: ./android
+      - name: Build both Android APKs from repository root
+        env:
+          CI: "1"
+          EXPO_PUBLIC_BACKEND_URL: https://kjapp-beta-api.onrender.com
         run: |
+          set -euo pipefail
+          ROOT="$(git rev-parse --show-toplevel)"
+          echo "Repository root: $ROOT"
+          test -f "$ROOT/frontend/package.json"
+          test -f "$ROOT/driver-app/package.json"
+
+          cd "$ROOT/frontend"
+          npm ci
+          npx expo prebuild --platform android --clean --no-install
+          cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Install Driver dependencies
-        working_directory: ../driver-app
-        run: npm ci
-
-      - name: Prebuild Driver Android
-        working_directory: ../driver-app
-        run: npx expo prebuild --platform android --clean --no-install
-
-      - name: Build Driver debug APK
-        working_directory: ../driver-app/android
-        run: |
+          cd "$ROOT/driver-app"
+          npm ci
+          npx expo prebuild --platform android --clean --no-install
+          cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
+
+          mkdir -p "$ROOT/frontend/artifacts"
+          cp "$ROOT/frontend/android/app/build/outputs/apk/debug/app-debug.apk" "$ROOT/frontend/artifacts/kjapp-customer-internal.apk"
+          cp "$ROOT/driver-app/android/app/build/outputs/apk/debug/app-debug.apk" "$ROOT/frontend/artifacts/kjapp-driver-internal.apk"
+          ls -lh "$ROOT/frontend/artifacts"
 
       - name: Upload Customer APK
         uses: eas/upload_artifact
         with:
           type: other
           name: kjapp-customer-internal-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: artifacts/kjapp-customer-internal.apk
 
       - name: Upload Driver APK
         uses: eas/upload_artifact
         with:
           type: other
           name: kjapp-driver-internal-apk
-          path: ../driver-app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: artifacts/kjapp-driver-internal.apk
