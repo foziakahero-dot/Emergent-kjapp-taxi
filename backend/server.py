@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
 from bson import ObjectId
 from bson.errors import InvalidId
 import pyotp
@@ -49,6 +50,7 @@ DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+KJAPP_STORAGE_BACKEND = (os.environ.get("KJAPP_STORAGE_BACKEND") or "emergent").strip().lower()
 
 # ------------------ Environment / security hardening ------------------
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
@@ -197,7 +199,31 @@ def init_storage(force: bool = False) -> Optional[str]:
     return _storage_key
 
 
+def _mongo_blob_collection():
+    """Synchronous small-object storage used only when explicitly enabled.
+
+    KJAPP uploads are capped at 8 MB, safely below MongoDB's 16 MB document limit.
+    The public API contract remains unchanged; this is a provider swap for beta portability.
+    """
+    client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=10000)
+    return client[DB_NAME]["stored_objects"]
+
+
 def storage_put(path: str, data: bytes, content_type: str) -> dict:
+    if KJAPP_STORAGE_BACKEND == "mongo":
+        coll = _mongo_blob_collection()
+        coll.update_one(
+            {"_id": path},
+            {"$set": {
+                "data": data,
+                "content_type": content_type or "application/octet-stream",
+                "size": len(data),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+        return {"path": path, "size": len(data), "provider": "mongo"}
+
     key = init_storage()
     if not key:
         raise HTTPException(status_code=503, detail="Objektlager utilgjengelig")
@@ -208,7 +234,6 @@ def storage_put(path: str, data: bytes, content_type: str) -> dict:
         timeout=120,
     )
     if r.status_code == 404:
-        # Try re-init once
         key = init_storage(force=True)
         r = http_requests.put(
             f"{STORAGE_URL}/objects/{path}",
@@ -221,6 +246,12 @@ def storage_put(path: str, data: bytes, content_type: str) -> dict:
 
 
 def storage_get(path: str) -> tuple[bytes, str]:
+    if KJAPP_STORAGE_BACKEND == "mongo":
+        doc = _mongo_blob_collection().find_one({"_id": path})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Fil ikke funnet")
+        return bytes(doc.get("data") or b""), doc.get("content_type") or "application/octet-stream"
+
     key = init_storage()
     if not key:
         raise HTTPException(status_code=503, detail="Objektlager utilgjengelig")
@@ -242,6 +273,10 @@ def storage_get(path: str) -> tuple[bytes, str]:
 
 def storage_delete(path: str) -> None:
     """Physically delete an object. Metadata is only tombstoned after this succeeds."""
+    if KJAPP_STORAGE_BACKEND == "mongo":
+        _mongo_blob_collection().delete_one({"_id": path})
+        return
+
     key = init_storage()
     if not key:
         raise RuntimeError("Objektlager utilgjengelig")
@@ -251,7 +286,6 @@ def storage_delete(path: str) -> None:
         timeout=60,
     )
     if r.status_code == 404:
-        # Treat already-missing objects as deleted; retry once only when the storage key may have expired.
         key = init_storage(force=True)
         retry = http_requests.delete(
             f"{STORAGE_URL}/objects/{path}",
@@ -1605,7 +1639,7 @@ async def readiness():
         "apple_bundle_env_matches": (
             (os.environ.get("APPLE_BUNDLE_ID") or "").strip() in ("", APPLE_NATIVE_BUNDLE_ID)
         ),
-        "object_storage_configured": bool((EMERGENT_LLM_KEY or "").strip()),
+        "object_storage_configured": (KJAPP_STORAGE_BACKEND == "mongo") or bool((EMERGENT_LLM_KEY or "").strip()),
         "service_area_enforced": OSLO_BETA_ENFORCE,
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
         "booking_enabled": runtime_features.get("booking_enabled", True),
