@@ -3699,6 +3699,10 @@ STRIKTE REGLER:
 @api.post("/ai/chat")
 async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_current_user)):
     await _enforce_rate_limit(request, "ai-chat", 30, 60)
+    settings = await db.platform_settings.find_one({"_id": "singleton"}, {"features": 1}) or {}
+    features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(settings.get("features") or {})}
+    if features.get("ai_chat") is False:
+        raise HTTPException(status_code=503, detail="KJAPP Assist er midlertidig satt på pause.")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     session_id = body.session_id or f"user_{current['id']}"
