@@ -282,7 +282,7 @@ export function InteractiveMap({
             ) : null}
 
             {cars.map((c, i) => (
-              <G key={`car-${i}`} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${20 / 24}) translate(-12, -12)`}>
+              <G key={`car-${i}`} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${28 / 24}) translate(-12, -12)`}>
                 <CarShape {...CAR_IDLE} />
               </G>
             ))}
@@ -290,7 +290,7 @@ export function InteractiveMap({
             {smoothCar ? (
               <>
                 <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${36 / 24}) translate(-12, -12)`}>
+                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${38 / 24}) translate(-12, -12)`}>
                   <CarShape {...CAR_ACTIVE} />
                 </G>
               </>
