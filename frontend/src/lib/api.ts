@@ -37,6 +37,7 @@ export const authApi = {
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
+  googleSignIn: (id_token: string) => api.post('/auth/google/signin', { id_token }).then((r) => r.data),
   appleSignIn: (data: { identity_token: string; fullName?: string; email?: string | null }) =>
     api.post('/auth/apple', data).then((r) => r.data),
 };
