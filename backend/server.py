@@ -8,8 +8,9 @@ import random
 import secrets
 import json
 import base64
-import traceback
 import re
+import logging
+import time
 import bcrypt
 import jwt
 import httpx
@@ -33,6 +34,12 @@ from bson.errors import InvalidId
 import pyotp
 import qrcode
 import uuid
+
+logger = logging.getLogger("kjapp.api")
+if not logger.handlers:
+    logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 try:
     from pywebpush import webpush, WebPushException
@@ -1602,13 +1609,25 @@ async def request_id_middleware(request: Request, call_next):
     """Correlation ID for every request; safe logging on unhandled errors (never logs headers/credentials)."""
     rid = uuid.uuid4().hex[:12]
     request.state.request_id = rid
+    started = time.perf_counter()
     try:
         response = await call_next(request)
         response.headers["X-Request-ID"] = rid
+        logger.info(json.dumps({
+            "event": "http_request", "request_id": rid,
+            "method": request.method,
+            "route": getattr(request.scope.get("route"), "path", "/unmatched"),
+            "status": response.status_code,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+        }))
         return response
     except Exception:
-        print(f"[unhandled-error] request_id={rid} {request.method} {request.url.path}")
-        traceback.print_exc()
+        logger.exception(json.dumps({
+            "event": "unhandled_error", "request_id": rid,
+            "method": request.method,
+            "route": getattr(request.scope.get("route"), "path", "/unmatched"),
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+        }))
         return JSONResponse(status_code=500, content={"detail": "Intern serverfeil", "request_id": rid})
 
 # ------------------ Routes ------------------

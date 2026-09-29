@@ -261,3 +261,22 @@ def test_health_returns_503_when_mongo_is_unavailable(monkeypatch):
     response = asyncio.run(server.health())
     assert response.status_code == 503
     assert b'"db":false' in response.body
+
+
+def test_request_logging_does_not_expose_password_reset_token(capsys):
+    import asyncio
+    from fastapi.responses import JSONResponse
+
+    secret = "RESET-TOKEN-DO-NOT-LOG"
+    request = Request({
+        "type": "http", "method": "GET",
+        "path": f"/api/auth/reset-password/{secret}", "headers": [],
+    })
+
+    async def respond(_):
+        return JSONResponse({"ok": True})
+
+    response = asyncio.run(server.request_id_middleware(request, respond))
+    assert response.status_code == 200
+    assert response.headers.get("X-Request-ID")
+    assert secret not in capsys.readouterr().err
