@@ -10,6 +10,7 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
+import RuntimeGuard from '@/src/components/RuntimeGuard';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
 
 const queryClient = new QueryClient({
@@ -73,9 +74,10 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <NativeRuntimeBridge />
-            <StatusBar style="light" />
-            <Stack
+            <RuntimeGuard>
+              <NativeRuntimeBridge />
+              <StatusBar style="light" />
+              <Stack
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: colors.bg },
@@ -94,7 +96,8 @@ export default function RootLayout() {
               <Stack.Screen name="payment-methods" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
-            </Stack>
+              </Stack>
+            </RuntimeGuard>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
