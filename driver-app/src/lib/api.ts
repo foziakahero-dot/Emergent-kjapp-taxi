@@ -32,6 +32,10 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+export const runtimeConfigApi = {
+  get: (app: 'customer' | 'driver') => api.get('/config/runtime', { params: { app } }).then((r) => r.data),
+};
+
 export const authApi = {
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'driver' }).then((r) => r.data),

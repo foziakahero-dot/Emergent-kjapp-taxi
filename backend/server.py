@@ -16,6 +16,7 @@ import jwt
 import httpx
 import stripe
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from admin_operations_os import install_kjapp_operations_os
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
@@ -1446,6 +1447,13 @@ async def lifespan(app: FastAPI):
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
+    # Operations OS: versioned config, release registry and AI plans.
+    await db.operations_config_versions.create_index("version", unique=True)
+    await db.operations_config_versions.create_index([("saved_at", -1)])
+    await db.release_registry.create_index("id", unique=True)
+    await db.release_registry.create_index([("created_at", -1)])
+    await db.ai_change_plans.create_index("id", unique=True)
+    await db.ai_change_plans.create_index([("created_at", -1)])
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -3691,6 +3699,10 @@ STRIKTE REGLER:
 @api.post("/ai/chat")
 async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_current_user)):
     await _enforce_rate_limit(request, "ai-chat", 30, 60)
+    settings = await db.platform_settings.find_one({"_id": "singleton"}, {"features": 1}) or {}
+    features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(settings.get("features") or {})}
+    if features.get("ai_chat") is False:
+        raise HTTPException(status_code=503, detail="KJAPP Assist er midlertidig satt på pause.")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     session_id = body.session_id or f"user_{current['id']}"
@@ -5195,6 +5207,7 @@ ADMIN_PERMISSION_PREFIXES = (
     ("/api/admin/support", "support"),
     ("/api/admin/control/communication-fleets", "communications"),
     ("/api/admin/control/communications", "communications"),
+    ("/api/admin/operations", "system"),
     ("/api/admin/settings", "system"),
     ("/api/admin/audit-log", "system"),
     ("/api/admin/control/integrations", "system"),
@@ -10961,6 +10974,16 @@ install_admin_control_center(
     send_email=send_email,
     hash_password=hash_password,
     audit=_audit,
+)
+
+# KJAPP Operations OS: versioned remote config, release registry and AI change planner.
+install_kjapp_operations_os(
+    api,
+    db,
+    require_admin=require_admin,
+    require_superadmin=require_superadmin,
+    audit=_audit,
+    default_features=DEFAULT_PLATFORM_SETTINGS["features"],
 )
 
 app.include_router(api)

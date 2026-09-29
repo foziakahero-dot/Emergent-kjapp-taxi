@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - fix/beta-mobile-firebase-ops-20260926
     paths:
       - 'admin-web/**'
       - '.github/workflows/admin-web-check.yml'
