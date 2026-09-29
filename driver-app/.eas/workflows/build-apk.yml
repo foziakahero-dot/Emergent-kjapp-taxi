@@ -1,9 +1,10 @@
 name: KJAPP Driver Android APK
 
+# Builds are started deliberately from the Driver project after source and Firebase checks.
 on:
   push:
     branches:
-      - fix/beta-mobile-firebase-ops-20260926
+      - __disabled_driver_apk_auto_push__
 
 jobs:
   build_driver_android_apk:
