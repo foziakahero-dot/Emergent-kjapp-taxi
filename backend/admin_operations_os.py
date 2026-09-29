@@ -260,7 +260,7 @@ async def _ai_plan(request_text: str):
     if not key:
         return _fallback_plan(request_text), "rules"
 
-    model = (os.getenv("KJAPP_ADMIN_AI_MODEL") or "gpt-5.6-luna").strip()
+    model = (os.getenv("KJAPP_ADMIN_AI_MODEL") or "gpt-5.6-sol").strip()
     system = """Du er KJAPP Senior Engineer Change Planner. Svar KUN med gyldig JSON.
 Klassifiser forespørselen som config, ota, native, backend eller code.
 Direkte runtime_patch er KUN tillatt for:
