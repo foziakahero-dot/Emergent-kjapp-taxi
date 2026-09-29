@@ -3,12 +3,14 @@ import axios from 'axios';
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://api.kjappapp.no/api';
+const stagingBackend = 'https://kjapp-beta-api.onrender.com/api';
 const host = window.location.hostname;
 const isProductionFleetHost = host === 'fleet.kjappapp.no';
+const isRenderStagingHost = host === 'kjapp-fleet-beta.onrender.com';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
 
 // Never proxy a preview deployment into production. Configure VITE_API_BASE to a staging API when needed.
-export const API_BASE = configuredBase || (isProductionFleetHost ? productionBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
+export const API_BASE = configuredBase || (isProductionFleetHost ? productionBackend : isRenderStagingHost ? stagingBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
 export const TOKEN_KEY = 'kjapp_fleet_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 30000 });

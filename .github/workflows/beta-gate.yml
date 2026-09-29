@@ -5,11 +5,13 @@ on:
   push:
     branches:
       - beta/oslo-production-ready
+      - fix/beta-mobile-firebase-ops-20260926
     paths:
       - 'backend/**'
       - 'frontend/**'
       - 'driver-app/**'
       - 'admin-web/**'
+      - 'fleet-web/**'
       - 'marketing-web/**'
       - '.github/workflows/beta-gate.yml'
   pull_request:
@@ -21,6 +23,7 @@ on:
       - 'frontend/**'
       - 'driver-app/**'
       - 'admin-web/**'
+      - 'fleet-web/**'
       - 'marketing-web/**'
       - '.github/workflows/beta-gate.yml'
 
@@ -73,6 +76,20 @@ jobs:
           cache: npm
           cache-dependency-path: admin-web/package-lock.json
       - run: npm ci
+      - run: npm run build
+
+  fleet-web:
+    name: Fleet web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fleet-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
       - run: npm run build
 
   marketing-web:
