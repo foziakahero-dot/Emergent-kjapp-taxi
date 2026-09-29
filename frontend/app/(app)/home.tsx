@@ -16,7 +16,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
 import { useAuth } from '@/src/context/AuthContext';
-import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { carsApi, mePlacesApi, paymentApi, placesApi, runtimeConfigApi, tripsApi } from '@/src/lib/api';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
@@ -52,6 +52,7 @@ export default function Home() {
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
+  const [runtimeConfig, setRuntimeConfig] = useState<any>(null);
 
   const loadMethods = useCallback(() => {
     paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});
@@ -103,6 +104,7 @@ export default function Home() {
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
     loadPlaces();
+    runtimeConfigApi.get('customer').then(setRuntimeConfig).catch(() => {});
   }, [loadMethods, loadPlaces, refreshLocation]);
 
   useEffect(() => {
@@ -132,6 +134,8 @@ export default function Home() {
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
   const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
+  const homePrompt = runtimeConfig?.config?.home_prompt || 'Hvor skal du?';
+  const homeHint = runtimeConfig?.config?.home_hint || 'Søk adresse, sted eller flyplass';
 
   const openVoice = () => {
     setSearchOpen(false);
@@ -233,7 +237,7 @@ export default function Home() {
             <View style={s.collapsedSearchIcon}><Icon name="search" size={18} color={colors.accent} /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.collapsedTitle} numberOfLines={1}>{dropoff?.name || 'Hvor vil du?'}</Text>
-              <Text style={s.collapsedHint} numberOfLines={1}>{dropoff ? 'Trykk for turvalg og pris' : 'Søk adresse, sted eller flyplass'}</Text>
+              <Text style={s.collapsedHint} numberOfLines={1}>{dropoff ? 'Trykk for turvalg og pris' : homeHint}</Text>
             </View>
             {!dropoff ? (
               <Pressable
@@ -286,8 +290,8 @@ export default function Home() {
                 accessibilityLabel="Søk etter destinasjon"
               >
                 <Text style={s.greeting}>{greeting(user?.fullName)}</Text>
-                <Text style={s.whereTitle}>Hvor skal du?</Text>
-                <Text style={s.whereHint}>Søk adresse, sted eller flyplass</Text>
+                <Text style={s.whereTitle}>{homePrompt}</Text>
+                <Text style={s.whereHint}>{homeHint}</Text>
               </Pressable>
               <View style={s.destinationActions}>
                 <Pressable
