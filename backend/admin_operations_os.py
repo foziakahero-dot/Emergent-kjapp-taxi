@@ -341,11 +341,17 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         # original configuration rollbackable and normalizes legacy documents that
         # pre-date Operations OS.
         if current_version == 1:
-            await db.platform_settings.update_one(
-                {"_id": "singleton", "runtime_config_version": {"$exists": False}},
-                {"$set": {"runtime_config_version": 1}},
-                upsert=True,
-            )
+            try:
+                await db.platform_settings.update_one(
+                    {"_id": "singleton", "runtime_config_version": {"$exists": False}},
+                    {"$set": {"runtime_config_version": 1}},
+                    upsert=True,
+                )
+            except DuplicateKeyError:
+                # Another first publisher (or a prior partial attempt) already
+                # versioned the singleton. Re-read and continue through the normal
+                # compare-and-swap path instead of leaking a 500.
+                pass
             previous = await state()
             current_version = int(previous["version"])
 
