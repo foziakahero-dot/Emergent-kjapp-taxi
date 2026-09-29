@@ -13,7 +13,8 @@
       "android": {
         "buildType": "apk"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "channel": "staging"
     },
     "production": {
       "autoIncrement": true,
@@ -24,7 +25,8 @@
       "ios": {
         "image": "latest"
       },
-      "environment": "production"
+      "environment": "production",
+      "channel": "production"
     },
     "ios-simulator": {
       "distribution": "internal",
@@ -33,7 +35,8 @@
       },
       "ios": {
         "simulator": true
-      }
+      },
+      "channel": "staging"
     },
     "testflight-beta": {
       "distribution": "store",
@@ -43,7 +46,8 @@
       },
       "ios": {
         "image": "latest"
-      }
+      },
+      "channel": "production"
     },
     "testflight-staging": {
       "distribution": "store",
@@ -54,7 +58,8 @@
       },
       "ios": {
         "image": "latest"
-      }
+      },
+      "channel": "staging"
     }
   },
   "submit": {
