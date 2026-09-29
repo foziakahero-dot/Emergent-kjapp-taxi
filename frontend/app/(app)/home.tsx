@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -26,7 +26,7 @@ const GOLD_VEHICLE_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
 
 function vehicleCopy(type: string) {
   if (type === 'trygg') return { name: 'KJAPP XL', tagline: 'Mer plass · 7 seter' };
-  if (type === 'premium') return { name: 'Premium', tagline: 'Executive comfort' };
+  if (type === 'premium') return { name: 'Premium', tagline: 'Ekstra komfort' };
   return { name: 'KJAPP', tagline: 'Rask og enkel' };
 }
 
@@ -222,7 +222,7 @@ export default function Home() {
         pickup={dropoff && locationReady ? loc : null}
         dropoff={dropoff}
         route={routeGeom}
-        cars={dropoff ? [] : cars}
+        cars={cars}
         testID="home-map"
       />
 
@@ -245,10 +245,13 @@ export default function Home() {
         <View style={[s.collapsedSheet, { paddingBottom: insets.bottom + 8 }]} testID="home-sheet-collapsed">
           <Pressable
             style={s.collapsedDestination}
-            onPress={() => setSheetCollapsed(false)}
+            onPress={() => {
+              if (dropoff) setSheetCollapsed(false);
+              else { setSearchTarget('dropoff'); setSearchOpen(true); }
+            }}
             testID="home-sheet-expand"
             accessibilityRole="button"
-            accessibilityLabel="Utvid bestillingspanelet"
+            accessibilityLabel={dropoff ? 'Utvid bestillingspanelet' : 'Åpne destinasjonssøk'}
           >
             <View style={s.collapsedSearchIcon}><Icon name="search" size={18} color={colors.accent} /></View>
             <View style={{ flex: 1 }}>
@@ -281,6 +284,8 @@ export default function Home() {
           <View style={s.handle} />
           <Icon name="chevron-down" size={18} color={colors.textMuted} />
         </Pressable>
+
+        <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
 
         <View style={s.pickupRow} testID="home-pickup-row">
           <View style={s.beacon} />
@@ -405,14 +410,18 @@ export default function Home() {
                     <View style={s.vehicleArtwork}>
                       <VehicleAsset kind={v.type as VehicleKind} selected={active} width={126} height={66} />
                     </View>
-                    <View style={s.vehicleCopyRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.vName, active && { color: colors.text }]}>{copy.name}</Text>
-                        <Text style={s.vTag}>{copy.tagline}</Text>
+                    <View style={s.vehicleCopy}>
+                      <View style={s.vehicleTitleRow}>
+                        <Text style={[s.vName, active && { color: colors.text }]} numberOfLines={1}>{copy.name}</Text>
+                        {active ? <Icon name="check" size={15} color={colors.accent} /> : null}
                       </View>
-                      <Text style={[s.vPrice, active && { color: colors.accent }]}>
-                        {price != null ? kr(price) : '…'}
-                      </Text>
+                      <Text style={s.vTag} numberOfLines={1}>{copy.tagline}</Text>
+                      <View style={s.vehiclePriceRow}>
+                        <Text style={s.vPriceLabel}>Estimert</Text>
+                        <Text style={[s.vPrice, active && { color: colors.accent }]} numberOfLines={1}>
+                          {price != null ? kr(price) : 'Beregner…'}
+                        </Text>
+                      </View>
                     </View>
                   </Pressable>
                 );
@@ -502,6 +511,7 @@ export default function Home() {
             </Pressable>
           </>
         )}
+        </ScrollView>
       </View>
       )}
 
@@ -517,6 +527,7 @@ export default function Home() {
               setDropoff(d);
             }
             setSearchTarget('dropoff');
+            setSheetCollapsed(false);
             setSearchOpen(false);
           }}
           featured={featured}
@@ -532,7 +543,6 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const timer = useRef<any>(null);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -544,16 +554,16 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
   }, [onClose]);
 
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) { setResults([]); return; }
+    let cancelled = false;
+    if (q.trim().length < 2) { setResults([]); setLoading(false); return; }
     setLoading(true);
-    timer.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       placesApi.search(q.trim())
-        .then((r) => setResults(r.results || []))
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+        .then((r) => { if (!cancelled) setResults(r.results || []); })
+        .catch(() => { if (!cancelled) setResults([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
     }, 350);
-    return () => timer.current && clearTimeout(timer.current);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [q]);
 
   const items = q.trim().length < 2
@@ -643,6 +653,7 @@ const useStyles = makeStyles((c) => ({
   },
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
+    maxHeight: '78%',
     backgroundColor: 'rgba(9,17,25,0.97)', borderTopLeftRadius: 24, borderTopRightRadius: 24,
     borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 8,
   },
@@ -707,15 +718,18 @@ const useStyles = makeStyles((c) => ({
   sectionMeta: { color: c.textMuted, fontSize: 12 },
   vehiclesRow: { gap: 10, paddingBottom: 13 },
   vehicle: {
-    width: 162, minHeight: 132, flexShrink: 0, backgroundColor: c.cardSubtle, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 12, paddingTop: 7, paddingBottom: 12,
+    width: 172, minHeight: 145, flexShrink: 0, backgroundColor: c.cardSubtle, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: c.line, paddingHorizontal: 12, paddingTop: 6, paddingBottom: 10,
   },
-  vehicleActive: { borderColor: c.accent, backgroundColor: c.accentSoft },
+  vehicleActive: { borderColor: c.accent, borderWidth: 1.5, backgroundColor: c.accentSoft },
   vehicleArtwork: { height: 68, alignItems: 'center', justifyContent: 'center' },
-  vehicleCopyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  vName: { color: c.textSecondary, fontSize: 14, fontWeight: '700', marginTop: 1 },
-  vTag: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
-  vPrice: { color: c.text, fontFamily: font.mono, fontSize: 14, fontWeight: '600' },
+  vehicleCopy: { flex: 1 },
+  vehicleTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  vName: { color: c.textSecondary, fontSize: 14, fontWeight: '700', flexShrink: 1 },
+  vTag: { color: c.textMuted, fontSize: 11, marginTop: 3 },
+  vehiclePriceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 5, marginTop: 10 },
+  vPriceLabel: { color: c.textMuted, fontSize: 10 },
+  vPrice: { color: c.text, fontFamily: font.mono, fontSize: 14, fontWeight: '700', flexShrink: 1 },
   summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   summaryLeft: { color: c.textMuted, fontSize: 12, flex: 1 },
   summaryPrice: { color: c.text, fontFamily: font.display, fontWeight: '650' as any, fontSize: 22 },

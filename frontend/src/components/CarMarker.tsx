@@ -1,13 +1,13 @@
 import React from 'react';
-import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
+import Svg, { Ellipse, Path, Rect } from 'react-native-svg';
 import { colors } from '@/src/theme';
 
-/** Top-down vehicle marker. Its front points north; map layers rotate it by GPS heading. */
+/** Compact top-down car; its nose points north and map layers rotate it by GPS heading. */
 export function CarShape({
   body = colors.accent,
   roof = colors.accentHover,
   glass = '#0A0F13',
-  shadow = 'rgba(0,0,0,0.35)',
+  shadow = 'rgba(0,0,0,0.38)',
 }: {
   body?: string;
   roof?: string;
@@ -16,20 +16,16 @@ export function CarShape({
 }) {
   return (
     <>
-      <Ellipse cx={12} cy={13} rx={11} ry={10.8} fill={shadow} />
-      <Circle cx={12} cy={12} r={10.6} fill="#08141C" stroke={body} strokeOpacity={0.52} strokeWidth={1} />
-      <Path
-        d="M9 3.7 C7.2 3.7 6.8 5.5 6.8 7.3 L6.8 17 C6.8 19.1 8 20.3 9.8 20.3 L14.2 20.3 C16 20.3 17.2 19.1 17.2 17 L17.2 7.3 C17.2 5.5 16.8 3.7 15 3.7 Z"
-        fill={body}
-        stroke="#F4FFFF"
-        strokeOpacity={0.65}
-        strokeWidth={0.55}
-      />
-      <Path d="M8.6 8.4 L15.4 8.4 L14.7 6 C13.2 5.3 10.8 5.3 9.3 6 Z" fill={glass} />
-      <Rect x={8.25} y={9.3} width={7.5} height={5.8} rx={1.7} fill={roof} />
-      <Path d="M8.7 16.3 L15.3 16.3 L14.4 18.6 L9.6 18.6 Z" fill={glass} />
-      <Path d="M8 4.8 L9.5 4.8 M14.5 4.8 L16 4.8" stroke="#FFFFFF" strokeWidth={0.8} strokeLinecap="round" />
-      <Path d="M8 18.8 L9.2 18.8 M14.8 18.8 L16 18.8" stroke="#FF6B70" strokeWidth={0.7} strokeLinecap="round" />
+      <Ellipse cx={12} cy={13.2} rx={7.5} ry={10} fill={shadow} />
+      <Path d="M8.5 3.1C9.1 2.5 10 2.2 12 2.2S14.9 2.5 15.5 3.1L17.4 7V18.1C17.4 20.2 15.8 21.4 13.9 21.4H10.1C8.2 21.4 6.6 20.2 6.6 18.1V7Z"
+        fill={body} stroke="#E8FAFC" strokeOpacity={0.82} strokeWidth={0.75} />
+      <Path d="M7.2 9.3H5.6V12.2H7.2M16.8 9.3H18.4V12.2H16.8" fill={body}
+        stroke="#D7F7FA" strokeOpacity={0.6} strokeWidth={0.5} />
+      <Path d="M8.3 8.5L9.2 5.7C10.9 5.1 13.1 5.1 14.8 5.7L15.7 8.5Z" fill={glass} />
+      <Rect x={8.2} y={10.1} width={7.6} height={5.1} rx={1.4} fill={roof} opacity={0.94} />
+      <Path d="M8.5 17.2H15.5L14.7 19H9.3Z" fill={glass} />
+      <Path d="M8.2 3.8H9.7M14.3 3.8H15.8" stroke="#FFFFFF" strokeWidth={0.85} strokeLinecap="round" />
+      <Path d="M8 19.9H9.7M14.3 19.9H16" stroke="#EF7476" strokeWidth={0.8} strokeLinecap="round" />
     </>
   );
 }

@@ -16,7 +16,7 @@ import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; id?: string; driver_id?: string };
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -27,7 +27,7 @@ const ATTRIB = MAPTILER_KEY ? '© MapTiler · OpenStreetMap' : '© Esri · OpenS
 
 const baseTileUrl = (z: number, x: number, y: number) =>
   MAPTILER_KEY
-    ? `https://api.maptiler.com/maps/dataviz-dark/${z}/${x}/${y}@2x.png?key=${MAPTILER_KEY}`
+    ? `https://api.maptiler.com/maps/streets-v4-dark/${z}/${x}/${y}@2x.png?key=${MAPTILER_KEY}`
     : `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`;
 
 const labelTileUrl = (z: number, x: number, y: number) =>
@@ -52,7 +52,7 @@ function unprojectY(y: number, z: number) {
 }
 
 function clampZoom(z: number) {
-  return Math.max(MIN_Z, Math.min(MAX_Z, Math.round(z)));
+  return Math.max(MIN_Z, Math.min(MAX_Z, z));
 }
 
 function touchDistance(touches: any[]) {
@@ -62,6 +62,14 @@ function touchDistance(touches: any[]) {
   const dx = a.pageX - b.pageX;
   const dy = a.pageY - b.pageY;
   return Math.sqrt(dx * dx + dy * dy);
+}
+
+function touchMidpoint(touches: any[], origin: { x: number; y: number }, size: { w: number; h: number }) {
+  if (!touches || touches.length < 2) return { x: size.w / 2, y: size.h / 2 };
+  return {
+    x: (touches[0].pageX + touches[1].pageX) / 2 - origin.x,
+    y: (touches[0].pageY + touches[1].pageY) / 2 - origin.y,
+  };
 }
 
 function fitView(points: LL[], w: number, h: number) {
@@ -112,12 +120,18 @@ export function InteractiveMap({
   const [zoom, setZoom] = useState(15);
   const [manual, setManual] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
+  const viewRef = useRef<View>(null);
+  const windowOrigin = useRef({ x: 0, y: 0 });
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
 
   const centerRef = useRef(center);
   const zoomRef = useRef(zoom);
   const panStartWorld = useRef({ x: 0, y: 0 });
   const pinchStartDistance = useRef(0);
   const pinchStartZoom = useRef(zoom);
+  const pinchAnchorWorld = useRef({ x: 0, y: 0 });
+  const panStartTranslation = useRef({ x: 0, y: 0 });
   centerRef.current = center;
   zoomRef.current = zoom;
 
@@ -130,22 +144,50 @@ export function InteractiveMap({
     return pts;
   }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
 
-  const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
+  // A GPS update or a moving car must not take the map back from the user.
+  // Fit when location first arrives or when the route endpoints change.
+  const focusKey = [
+    user ? 'located' : 'unlocated',
+    pickup ? `${pickup.lat.toFixed(5)},${pickup.lng.toFixed(5)}` : '',
+    dropoff ? `${dropoff.lat.toFixed(5)},${dropoff.lng.toFixed(5)}` : '',
+    activeCar ? 'assigned' : '',
+  ].join('|');
 
+  const dropoffKey = dropoff ? `${dropoff.lat.toFixed(5)},${dropoff.lng.toFixed(5)}` : '';
+  const lastDropoffKey = useRef(dropoffKey);
   useEffect(() => {
-    if (manual || !size.w || !size.h) return;
+    const newDestination = lastDropoffKey.current !== dropoffKey;
+    lastDropoffKey.current = dropoffKey;
+    if ((manual && !newDestination) || !size.w || !size.h) return;
+    if (newDestination) setManual(false);
     const fitted = fitView(focus, size.w, size.h);
     setCenter(fitted.center);
     setZoom(fitted.zoom);
-  }, [focusKey, size.w, size.h, manual]);
+  }, [focusKey, dropoffKey, size.w, size.h, manual]);
 
   const recenter = () => {
+    if (user) {
+      setManual(true);
+      setCenter(user);
+      setZoom(16);
+      return;
+    }
     setManual(false);
     if (size.w && size.h) {
       const fitted = fitView(focus, size.w, size.h);
       setCenter(fitted.center);
       setZoom(fitted.zoom);
     }
+  };
+
+  const beginPinch = (touches: any[], z: number) => {
+    pinchStartDistance.current = touchDistance(touches);
+    pinchStartZoom.current = z;
+    const middle = touchMidpoint(touches, windowOrigin.current, sizeRef.current);
+    pinchAnchorWorld.current = {
+      x: projectX(centerRef.current.lng, z) + middle.x - sizeRef.current.w / 2,
+      y: projectY(centerRef.current.lat, z) + middle.y - sizeRef.current.h / 2,
+    };
   };
 
   const pan = useRef(
@@ -160,26 +202,49 @@ export function InteractiveMap({
           y: projectY(centerRef.current.lat, z),
         };
         const touches = e.nativeEvent.touches as any[];
-        pinchStartDistance.current = touchDistance(touches);
-        pinchStartZoom.current = z;
+        if (touches?.length >= 2) beginPinch(touches, z);
+        else pinchStartDistance.current = 0;
+        panStartTranslation.current = { x: 0, y: 0 };
       },
       onPanResponderMove: (e, g) => {
         const touches = e.nativeEvent.touches as any[];
         if (touches?.length >= 2) {
           const distance = touchDistance(touches);
-          if (pinchStartDistance.current > 0 && distance > 0) {
-            const delta = Math.log2(distance / pinchStartDistance.current);
-            const nextZoom = clampZoom(pinchStartZoom.current + delta * 1.35);
-            if (nextZoom !== zoomRef.current) setZoom(nextZoom);
+          if (!pinchStartDistance.current) {
+            beginPinch(touches, zoomRef.current);
+          } else if (distance > 0) {
+            const nextZoom = clampZoom(pinchStartZoom.current + Math.log2(distance / pinchStartDistance.current));
+            if (Math.abs(nextZoom - zoomRef.current) > 0.008) {
+              const middle = touchMidpoint(touches, windowOrigin.current, sizeRef.current);
+              const zoomScale = Math.pow(2, nextZoom - pinchStartZoom.current);
+              const nextCenter = {
+                lat: unprojectY(pinchAnchorWorld.current.y * zoomScale - (middle.y - sizeRef.current.h / 2), nextZoom),
+                lng: unprojectX(pinchAnchorWorld.current.x * zoomScale - (middle.x - sizeRef.current.w / 2), nextZoom),
+              };
+              centerRef.current = nextCenter;
+              zoomRef.current = nextZoom;
+              setCenter(nextCenter);
+              setZoom(nextZoom);
+            }
           }
           return;
         }
 
+        // Rebase the drag after a pinch; gesture dx/dy still include the
+        // movement from before the second finger was lifted.
+        if (pinchStartDistance.current) {
+          pinchStartDistance.current = 0;
+          panStartTranslation.current = { x: g.dx, y: g.dy };
+          panStartWorld.current = {
+            x: projectX(centerRef.current.lng, zoomRef.current),
+            y: projectY(centerRef.current.lat, zoomRef.current),
+          };
+        }
         const z = zoomRef.current;
         const start = panStartWorld.current;
         setCenter({
-          lat: unprojectY(start.y - g.dy, z),
-          lng: unprojectX(start.x - g.dx, z),
+          lat: unprojectY(start.y - (g.dy - panStartTranslation.current.y), z),
+          lng: unprojectX(start.x - (g.dx - panStartTranslation.current.x), z),
         });
       },
       onPanResponderRelease: () => {
@@ -202,24 +267,27 @@ export function InteractiveMap({
   const labelTiles: React.ReactNode[] = [];
 
   if (w && h) {
-    const scale = Math.pow(2, zoom);
-    const firstCol = Math.floor(originX / TILE);
-    const firstRow = Math.floor(originY / TILE);
-    const lastCol = Math.floor((originX + w) / TILE);
-    const lastRow = Math.floor((originY + h) / TILE);
+    const tileZoom = Math.floor(zoom);
+    const tileScale = Math.pow(2, zoom - tileZoom);
+    const tileSize = TILE * tileScale;
+    const tileCount = Math.pow(2, tileZoom);
+    const firstCol = Math.floor(originX / tileSize);
+    const firstRow = Math.floor(originY / tileSize);
+    const lastCol = Math.floor((originX + w) / tileSize);
+    const lastRow = Math.floor((originY + h) / tileSize);
 
     for (let col = firstCol; col <= lastCol; col++) {
       for (let row = firstRow; row <= lastRow; row++) {
-        if (row < 0 || row >= scale) continue;
-        const tx = ((col % scale) + scale) % scale;
-        const left = col * TILE - originX;
-        const top = row * TILE - originY;
-        const tileStyle = { position: 'absolute' as const, left, top, width: TILE, height: TILE };
+        if (row < 0 || row >= tileCount) continue;
+        const tx = ((col % tileCount) + tileCount) % tileCount;
+        const left = col * tileSize - originX;
+        const top = row * tileSize - originY;
+        const tileStyle = { position: 'absolute' as const, left, top, width: tileSize + 0.5, height: tileSize + 0.5 };
 
         baseTiles.push(
           <Image
-            key={`base-${zoom}-${tx}-${row}`}
-            source={{ uri: baseTileUrl(zoom, tx, row) }}
+            key={`base-${tileZoom}-${tx}-${row}`}
+            source={{ uri: baseTileUrl(tileZoom, tx, row) }}
             style={tileStyle}
             fadeDuration={0}
           />,
@@ -228,8 +296,8 @@ export function InteractiveMap({
         if (!MAPTILER_KEY) {
           labelTiles.push(
             <Image
-              key={`label-${zoom}-${tx}-${row}`}
-              source={{ uri: labelTileUrl(zoom, tx, row) }}
+              key={`label-${tileZoom}-${tx}-${row}`}
+              source={{ uri: labelTileUrl(tileZoom, tx, row) }}
               style={tileStyle}
               fadeDuration={0}
             />,
@@ -251,9 +319,14 @@ export function InteractiveMap({
 
   return (
     <View
+      ref={viewRef}
       testID={testID}
       style={[{ backgroundColor: colors.mapCanvas, overflow: 'hidden' }, style]}
-      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      onLayout={(e) => {
+        const { width: w, height: h } = e.nativeEvent.layout;
+        setSize((previous) => previous.w === w && previous.h === h ? previous : { w, h });
+        viewRef.current?.measureInWindow((x, y) => { windowOrigin.current = { x, y }; });
+      }}
       {...(interactive ? pan.panHandlers : {})}
     >
       {w > 0 && h > 0 ? (
@@ -282,7 +355,7 @@ export function InteractiveMap({
             ) : null}
 
             {cars.map((c, i) => (
-              <G key={`car-${i}`} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${28 / 24}) translate(-12, -12)`}>
+              <G key={c.id || c.driver_id || `car-${i}`} opacity={dropoff ? 0.7 : 1} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${28 / 24}) translate(-12, -12)`}>
                 <CarShape {...CAR_IDLE} />
               </G>
             ))}
