@@ -153,9 +153,21 @@ def validate_feature_patch(patch: dict, default_features: dict) -> dict:
     return cleaned
 
 
-# AI is intentionally narrower than the manual superadmin control plane.
-# Pricing/payment switches must never be model-applied, even after approval.
-AI_FEATURE_ALLOWLIST = {"booking_enabled", "ai_chat"}
+# Operations OS is intentionally narrower than the full Settings/Pricing surfaces.
+# Pricing/payment switches must use their dedicated audited workflows.
+OPS_FEATURE_ALLOWLIST = {"booking_enabled", "ai_chat"}
+AI_FEATURE_ALLOWLIST = OPS_FEATURE_ALLOWLIST
+
+
+def validate_ops_feature_patch(patch: dict, default_features: dict) -> dict:
+    cleaned = validate_feature_patch(patch, default_features)
+    blocked = set(cleaned) - OPS_FEATURE_ALLOWLIST
+    if blocked:
+        raise HTTPException(
+            400,
+            "Bruk dedikert Settings/Pricing for disse feature-flaggene: " + ", ".join(sorted(blocked)),
+        )
+    return cleaned
 
 
 def validate_ai_feature_patch(patch: dict, default_features: dict) -> dict:
@@ -408,7 +420,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
     async def admin_patch_runtime_config(body: RuntimePatchRequest, current=Depends(require_superadmin)):
         current_state = await state()
         runtime_patch = validate_runtime_patch(body.runtime_patch)
-        feature_patch = validate_feature_patch(body.feature_patch, default_features)
+        feature_patch = validate_ops_feature_patch(body.feature_patch, default_features)
         runtime = _merge_runtime(current_state["runtime_config"], runtime_patch)
         features = {**current_state["features"], **feature_patch}
         features["demo_trips"] = False
