@@ -1,0 +1,80 @@
+name: KJAPP EAS Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "App to update"
+        required: true
+        type: choice
+        options:
+          - customer
+          - driver
+      channel:
+        description: "EAS Update channel"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      message:
+        description: "Release message"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kjapp-eas-update-${{ inputs.app }}-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.channel == 'production' && 'production' || 'staging' }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.app == 'customer' && 'frontend' || 'driver-app' }}
+    steps:
+      - name: Checkout requested branch
+        uses: actions/checkout@v4
+
+      - name: Guard OTA native activation
+        shell: bash
+        run: |
+          if ! node -e "const p=require('./package.json'); process.exit(p.dependencies?.['expo-updates'] ? 0 : 1)"; then
+            echo "::error::expo-updates is not installed in this app yet. Run 'npx expo install expo-updates', commit package.json + package-lock.json, then make one fresh native build before OTA publishing."
+            exit 1
+          fi
+
+      - name: Validate channel
+        shell: bash
+        run: |
+          if [ "${{ inputs.channel }}" = "production" ] && [ "${{ github.ref_name }}" != "fix/beta-mobile-firebase-ops-20260926" ]; then
+            echo "::error::Production OTA is locked to the approved beta branch until launch cutover."
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ inputs.app == 'customer' && 'frontend/package-lock.json' || 'driver-app/package-lock.json' }}
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Validate Expo configuration
+        run: npx expo config --type public >/tmp/kjapp-expo-config.json
+
+      - name: Publish EAS Update
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::GitHub Environment secret EXPO_TOKEN is missing."
+            exit 1
+          fi
+          npx --yes eas-cli@latest update --channel "${{ inputs.channel }}" --message "${{ inputs.message }}" --non-interactive
