@@ -99,6 +99,23 @@ export const api = {
   betaReadiness: () => http.get('/admin/beta-readiness').then((r) => r.data),
   search: (q: string) => http.get('/admin/search', { params: { q } }).then((r) => r.data),
 
+  // KJAPP Operations OS
+  runtimeConfig: () => http.get('/admin/operations/runtime-config').then((r) => r.data),
+  patchRuntimeConfig: (body: any) => http.patch('/admin/operations/runtime-config', body).then((r) => r.data),
+  runtimeConfigHistory: (limit = 30) => http.get('/admin/operations/runtime-config/history', { params: { limit } }).then((r) => r.data),
+  rollbackRuntimeConfig: (version: number, reason: string) =>
+    http.post('/admin/operations/runtime-config/rollback', { version, reason }).then((r) => r.data),
+  releases: (limit = 50) => http.get('/admin/operations/releases', { params: { limit } }).then((r) => r.data),
+  createRelease: (body: any) => http.post('/admin/operations/releases', body).then((r) => r.data),
+  transitionRelease: (id: string, status: string, note = '') =>
+    http.post(`/admin/operations/releases/${id}/transition`, { status, note }).then((r) => r.data),
+  aiPlan: (request: string) => http.post('/admin/operations/ai/plan', { request }).then((r) => r.data),
+  aiPlans: (limit = 30) => http.get('/admin/operations/ai/plans', { params: { limit } }).then((r) => r.data),
+  approveAIPlan: (id: string, note = '') =>
+    http.post(`/admin/operations/ai/plans/${id}/approve`, { note }).then((r) => r.data),
+  applyAIPlan: (id: string) =>
+    http.post(`/admin/operations/ai/plans/${id}/apply`, { confirmation: 'APPLY' }).then((r) => r.data),
+
   // Superadmin-only løyvehaver onboarding. A fleet_owner account is created only after approval.
   fleetApplications: (status = 'pending') =>
     http.get('/superadmin/fleet-applications', { params: status ? { status } : {} }).then((r) => r.data),
