@@ -1447,6 +1447,15 @@ async def lifespan(app: FastAPI):
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
+    # Operations OS indexes: deterministic config versions, release history and AI-plan lookup.
+    await db.operations_config_versions.create_index("version", unique=True)
+    await db.operations_config_versions.create_index([("saved_at", -1)])
+    await db.release_registry.create_index("id", unique=True)
+    await db.release_registry.create_index([("created_at", -1)])
+    await db.release_registry.create_index([("channel", 1), ("status", 1), ("created_at", -1)])
+    await db.ai_change_plans.create_index("id", unique=True)
+    await db.ai_change_plans.create_index([("created_at", -1)])
+    await db.ai_change_plans.create_index([("status", 1), ("created_at", -1)])
     # Operations OS: versioned config, release registry and AI plans.
     await db.operations_config_versions.create_index("version", unique=True)
     await db.operations_config_versions.create_index([("saved_at", -1)])
