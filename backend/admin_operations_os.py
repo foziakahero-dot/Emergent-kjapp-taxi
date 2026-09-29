@@ -79,6 +79,22 @@ def _clean_doc(doc: Optional[dict]) -> dict:
     return out
 
 
+async def _ensure_baseline_version(platform_settings) -> None:
+    """Best-effort legacy migration to an explicit runtime_config_version=1.
+
+    DuplicateKeyError means another publisher already touched the singleton.
+    That is safe: callers re-read state and continue through compare-and-swap.
+    """
+    try:
+        await platform_settings.update_one(
+            {"_id": "singleton", "runtime_config_version": {"$exists": False}},
+            {"$set": {"runtime_config_version": 1}},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        pass
+
+
 def _merge_runtime(base: Optional[dict], patch: Optional[dict] = None) -> dict:
     out = deepcopy(DEFAULT_RUNTIME_CONFIG)
     for section, values in (base or {}).items():
@@ -341,17 +357,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         # original configuration rollbackable and normalizes legacy documents that
         # pre-date Operations OS.
         if current_version == 1:
-            try:
-                await db.platform_settings.update_one(
-                    {"_id": "singleton", "runtime_config_version": {"$exists": False}},
-                    {"$set": {"runtime_config_version": 1}},
-                    upsert=True,
-                )
-            except DuplicateKeyError:
-                # Another first publisher (or a prior partial attempt) already
-                # versioned the singleton. Re-read and continue through the normal
-                # compare-and-swap path instead of leaking a 500.
-                pass
+            await _ensure_baseline_version(db.platform_settings)
             previous = await state()
             current_version = int(previous["version"])
 
