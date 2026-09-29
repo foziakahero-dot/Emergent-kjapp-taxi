@@ -9,6 +9,7 @@ import { unregisterNativePush } from '@/src/lib/nativeRuntime';
 // Complete any pending auth session (mobile). No-op on web.
 WebBrowser.maybeCompleteAuthSession();
 
+// Web keeps the existing Emergent redirect flow during beta. Native iOS/Android use KJAPP-owned Google OAuth.
 const EMERGENT_AUTH = 'https://auth.emergentagent.com/';
 
 export type User = {
@@ -139,23 +140,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async (): Promise<User> => {
-    const redirectUrl = Platform.OS === 'web'
-      ? window.location.origin + '/'
-      : Linking.createURL('');
-    const authUrl = `${EMERGENT_AUTH}?redirect=${encodeURIComponent(redirectUrl)}`;
-
     if (Platform.OS === 'web') {
+      const redirectUrl = window.location.origin + '/';
+      const authUrl = `${EMERGENT_AUTH}?redirect=${encodeURIComponent(redirectUrl)}`;
       window.location.href = authUrl;
       return null; // return handled on next mount
     }
 
-    lastUrl.current = null;
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-    let url: string | null = result.type === 'success' ? result.url : null;
-    if (!url) url = lastUrl.current || (await Linking.getInitialURL());
-    const sid = extractSessionId(url);
-    if (!sid) return null;
-    return await handleSessionId(sid);
+    const webClientId = (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '').trim();
+    if (!webClientId) {
+      throw new Error('Google-innlogging er ikke konfigurert i denne app-builden.');
+    }
+    const iosClientId = (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '').trim();
+    if (Platform.OS === 'ios' && !iosClientId) {
+      throw new Error('Google-innlogging mangler iOS client ID i denne app-builden.');
+    }
+
+    const {
+      GoogleSignin,
+      isSuccessResponse,
+    } = await import('@react-native-google-signin/google-signin');
+
+    GoogleSignin.configure({
+      webClientId,
+      ...(Platform.OS === 'ios' ? { iosClientId } : {}),
+      offlineAccess: false,
+    });
+
+    if (Platform.OS === 'android') {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    }
+
+    const googleResult = await GoogleSignin.signIn();
+    if (!isSuccessResponse(googleResult)) return null;
+    const idToken = googleResult.data.idToken;
+    if (!idToken) {
+      throw new Error('Google returnerte ikke et gyldig identity token.');
+    }
+
+    const res = await authApi.googleSignIn(idToken);
+    if (res.twofa_required) {
+      throw new Error('Kontoen krever tofaktor — logg inn via web-portalen.');
+    }
+    if (res?.user?.role !== 'user') {
+      throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
+    }
+    await storage.setItem(TOKEN_KEY, res.token);
+    setUser(res.user);
+    return res.user;
   };
 
   const signInWithApple = async (): Promise<User> => {
@@ -198,6 +230,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try { await unregisterNativePush(); } catch {}
     try { await authApi.logout(); } catch {}
+    if (Platform.OS !== 'web') {
+      try {
+        const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
+        await GoogleSignin.signOut();
+      } catch {}
+    }
     await storage.removeItem(TOKEN_KEY);
     setUser(null);
   };
