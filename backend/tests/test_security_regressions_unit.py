@@ -280,3 +280,49 @@ def test_request_logging_does_not_expose_password_reset_token(capsys):
     assert response.status_code == 200
     assert response.headers.get("X-Request-ID")
     assert secret not in capsys.readouterr().err
+
+
+def test_parallel_dispatch_notifies_only_one_driver(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    class Trips:
+        def __init__(self):
+            self.offer_seq = None
+            self.lock = asyncio.Lock()
+
+        async def update_one(self, query, update):
+            async with self.lock:
+                expected = query["$and"][1]["offer_seq"]
+                if not isinstance(expected, dict) or not expected.get("$exists") is False or self.offer_seq is not None:
+                    return SimpleNamespace(modified_count=0)
+                self.offer_seq = update["$inc"]["offer_seq"]
+                return SimpleNamespace(modified_count=1)
+
+    async def candidates(*_args):
+        return [{"id": "driver-1", "km": 1.2}]
+
+    async def commission(*_args):
+        return 0.1
+
+    notifications = []
+
+    async def push(driver_id, *_args, **_kwargs):
+        notifications.append(driver_id)
+
+    trips = Trips()
+    monkeypatch.setattr(server, "db", SimpleNamespace(trips=trips))
+    monkeypatch.setattr(server, "_dispatch_candidates", candidates)
+    monkeypatch.setattr(server, "_commission_for_trip", commission)
+    monkeypatch.setattr(server, "send_push_to_user", push)
+    trip = {"trip_id": "real-trip-1", "pickup_lat": 59.9, "pickup_lng": 10.7,
+            "pickup_address": "Oslo S", "dropoff_address": "Majorstuen", "price": 200}
+
+    async def race():
+        return await asyncio.gather(
+            server.offer_trip_to_next_driver(trip),
+            server.offer_trip_to_next_driver(trip),
+        )
+
+    assert asyncio.run(race()).count("driver-1") == 1
+    assert notifications == ["driver-1"]
