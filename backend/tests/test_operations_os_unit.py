@@ -3,7 +3,9 @@ from fastapi import HTTPException
 
 from admin_operations_os import (
     _fallback_plan,
+    validate_ai_feature_patch,
     validate_feature_patch,
+    validate_ops_feature_patch,
     validate_runtime_patch,
 )
 
@@ -47,3 +49,24 @@ def test_rules_planner_routes_native_change_out_of_admin_apply():
     assert plan["change_type"] == "native"
     assert plan["requires_build"] is True
     assert plan["runtime_patch"] == {}
+
+
+def test_quick_publish_rejects_pricing_and_payment_flags():
+    with pytest.raises(HTTPException):
+        validate_ops_feature_patch({"surge": False}, DEFAULT_FEATURES)
+    with pytest.raises(HTTPException):
+        validate_ops_feature_patch({"vipps": True}, DEFAULT_FEATURES)
+
+
+def test_ai_rejects_pricing_and_payment_flags():
+    with pytest.raises(HTTPException):
+        validate_ai_feature_patch({"surge": False}, DEFAULT_FEATURES)
+    with pytest.raises(HTTPException):
+        validate_ai_feature_patch({"vipps": True}, DEFAULT_FEATURES)
+
+
+def test_ai_allows_only_safe_operational_flags():
+    assert validate_ai_feature_patch(
+        {"booking_enabled": False, "ai_chat": False},
+        DEFAULT_FEATURES,
+    ) == {"booking_enabled": False, "ai_chat": False}
