@@ -3145,6 +3145,7 @@ class TripMessageRequest(BaseModel):
 
 
 async def _load_trip_or_403(trip_id: str, current: dict):
+    _enforce_admin_2fa(current)
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
@@ -9176,6 +9177,7 @@ async def upload_public(request: Request, file: UploadFile = File(...), applicat
 
 @api.get("/files/{path:path}")
 async def download_file(path: str, current=Depends(get_current_user)):
+    _enforce_admin_2fa(current)
     rec = await db.uploaded_files.find_one({"storage_path": path, "is_deleted": {"$ne": True}})
     if not rec:
         raise HTTPException(status_code=404, detail="Fil ikke funnet")

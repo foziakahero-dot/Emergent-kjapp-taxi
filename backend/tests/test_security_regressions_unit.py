@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import jwt
+import pytest
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 
@@ -326,3 +328,36 @@ def test_parallel_dispatch_notifies_only_one_driver(monkeypatch):
 
     assert asyncio.run(race()).count("driver-1") == 1
     assert notifications == ["driver-1"]
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin"])
+@pytest.mark.parametrize("path", [
+    "/api/trips/other-customer-trip/messages",
+    "/api/files/private-driver-document",
+])
+def test_admin_sensitive_reads_fail_before_database_access(monkeypatch, role, path):
+    class ForbiddenDatabase:
+        def __getattr__(self, name):
+            raise AssertionError("2FA denial must happen before reading sensitive data")
+
+    current = {"id": "507f1f77bcf86cd799439011", "role": role, "totp_enabled": False}
+    monkeypatch.setattr(server, "db", ForbiddenDatabase())
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: current)
+    try:
+        response = TestClient(server.app).get(path)
+        assert response.status_code == 403
+        assert "2FA" in response.json()["detail"]
+    finally:
+        server.app.dependency_overrides.pop(server.get_current_user, None)
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin"])
+def test_admin_2fa_status_remains_reachable_for_enrollment(monkeypatch, role):
+    current = {"id": "507f1f77bcf86cd799439011", "role": role, "totp_enabled": False}
+    monkeypatch.setitem(server.app.dependency_overrides, server.get_current_user, lambda: current)
+    try:
+        response = TestClient(server.app).get("/api/auth/2fa/status")
+        assert response.status_code == 200
+        assert response.json() == {"enabled": False, "required": True}
+    finally:
+        server.app.dependency_overrides.pop(server.get_current_user, None)

@@ -13,11 +13,13 @@ on:
       - 'admin-web/**'
       - 'fleet-web/**'
       - 'marketing-web/**'
+      - 'scripts/**'
       - '.github/workflows/beta-gate.yml'
   pull_request:
     branches:
       - main
       - beta/oslo-production-ready
+      - fix/beta-mobile-firebase-ops-20260926
     paths:
       - 'backend/**'
       - 'frontend/**'
@@ -25,6 +27,7 @@ on:
       - 'admin-web/**'
       - 'fleet-web/**'
       - 'marketing-web/**'
+      - 'scripts/**'
       - '.github/workflows/beta-gate.yml'
 
 permissions:
