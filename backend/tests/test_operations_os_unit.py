@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
@@ -74,11 +75,10 @@ def test_ai_allows_only_safe_operational_flags():
     ) == {"booking_enabled": False, "ai_chat": False}
 
 
-@pytest.mark.asyncio
-async def test_baseline_duplicate_key_is_safe_noop():
+def test_baseline_duplicate_key_is_safe_noop():
     class Collection:
         async def update_one(self, *args, **kwargs):
             raise DuplicateKeyError("singleton already versioned")
 
     # Must not leak a 500 when another first publisher wins the baseline race.
-    await _ensure_baseline_version(Collection())
+    asyncio.run(_ensure_baseline_version(Collection()))
