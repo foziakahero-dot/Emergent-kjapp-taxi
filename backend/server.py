@@ -1760,6 +1760,7 @@ async def cars_nearby(body: NearbyCarsRequest):
         "accepted_terms_at": {"$exists": True, "$ne": None},
         "online": True,
         "disabled": {"$ne": True},
+        "active_trip_id": None,
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
@@ -1794,7 +1795,18 @@ async def cars_nearby(body: NearbyCarsRequest):
             "distance_km": round(d_km, 2),
             "updated_at": u.get("last_location_at"),
         })
-    cars.sort(key=lambda x: x["eta_min"])
+    if cars:
+        busy = set()
+        async for trip in db.trips.find(
+            _real_trip_filter({
+                "driver_id": {"$in": [car["id"] for car in cars]},
+                "status": {"$in": ACTIVE_TRIP_STATUSES},
+            }),
+            {"driver_id": 1},
+        ):
+            busy.add(trip["driver_id"])
+        cars = [car for car in cars if car["id"] not in busy]
+    cars.sort(key=lambda x: (x["distance_km"], x["eta_min"]))
     return {
         "cars": cars,
         "count": len(cars),
