@@ -16,6 +16,7 @@ import jwt
 import httpx
 import stripe
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from admin_operations_os import install_kjapp_operations_os
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
@@ -5195,6 +5196,7 @@ ADMIN_PERMISSION_PREFIXES = (
     ("/api/admin/support", "support"),
     ("/api/admin/control/communication-fleets", "communications"),
     ("/api/admin/control/communications", "communications"),
+    ("/api/admin/operations", "system"),
     ("/api/admin/settings", "system"),
     ("/api/admin/audit-log", "system"),
     ("/api/admin/control/integrations", "system"),
@@ -10961,6 +10963,16 @@ install_admin_control_center(
     send_email=send_email,
     hash_password=hash_password,
     audit=_audit,
+)
+
+# KJAPP Operations OS: versioned remote config, release registry and AI change planner.
+install_kjapp_operations_os(
+    api,
+    db,
+    require_admin=require_admin,
+    require_superadmin=require_superadmin,
+    audit=_audit,
+    default_features=DEFAULT_PLATFORM_SETTINGS["features"],
 )
 
 app.include_router(api)
