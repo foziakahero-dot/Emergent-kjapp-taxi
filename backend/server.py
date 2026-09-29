@@ -5065,9 +5065,10 @@ async def google_session(body: GoogleSessionRequest, request: Request, response:
 
 
 # ============================================================
-# Google Sign-In — KJAPP-owned OAuth 2.0 (Authorization Code + PKCE)
-# The client secret never leaves the backend. Key-optional: with no keys configured the
-# endpoints report "not configured" and the login button stays inactive.
+# Google Sign-In — KJAPP-owned authentication
+# - Native Customer app: verified Google ID token -> KJAPP JWT.
+# - Web/PKCE: authorization code exchange -> verified Google ID token -> KJAPP JWT.
+# The client secret is used only by the web/PKCE code exchange and never leaves the backend.
 # ============================================================
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
@@ -5075,8 +5076,17 @@ GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 GOOGLE_KEYS_CACHE = {"keys": None, "fetched_at": None}
 
 
+def google_id_token_configured() -> bool:
+    """Native ID-token sign-in only needs the server WEB client ID."""
+    return bool(os.environ.get("GOOGLE_CLIENT_ID", "").strip())
+
+
 def google_oauth_configured() -> bool:
-    return bool(os.environ.get("GOOGLE_CLIENT_ID", "").strip() and os.environ.get("GOOGLE_CLIENT_SECRET", "").strip())
+    """Authorization-code/PKCE exchange additionally needs the client secret."""
+    return bool(
+        os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+        and os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+    )
 
 
 async def _get_google_keys(force: bool = False):
@@ -5086,6 +5096,7 @@ async def _get_google_keys(force: bool = False):
         return GOOGLE_KEYS_CACHE["keys"]
     async with httpx.AsyncClient(timeout=8.0) as client:
         r = await client.get(GOOGLE_JWKS_URL)
+        r.raise_for_status()
         keys = r.json().get("keys", [])
     GOOGLE_KEYS_CACHE.update({"keys": keys, "fetched_at": now})
     return keys
@@ -5097,36 +5108,118 @@ class GoogleCodeRequest(BaseModel):
     redirect_uri: str
 
 
+class GoogleNativeSignInRequest(BaseModel):
+    id_token: str = Field(min_length=20, max_length=10000)
+
+
 @api.get("/auth/google/config")
 async def google_oauth_config():
-    """Public config — only the client ID (never the secret) so the app can start the OAuth flow."""
-    enabled = google_oauth_configured()
+    """Public readiness; never exposes the Google client secret."""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
     return {
-        "enabled": enabled,
-        "client_id": os.environ.get("GOOGLE_CLIENT_ID", "").strip() if enabled else "",
-        "message": None if enabled else "Google-innlogging er ikke konfigurert ennå",
+        "enabled": google_id_token_configured(),
+        "native_enabled": google_id_token_configured(),
+        "pkce_enabled": google_oauth_configured(),
+        "client_id": client_id if google_id_token_configured() else "",
+        "message": None if google_id_token_configured() else "Google-innlogging er ikke konfigurert ennå",
     }
 
 
 async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
-    header = jwt.get_unverified_header(id_token)
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
     kid = header.get("kid")
-    keys = await _get_google_keys()
-    key_data = next((k for k in keys if k.get("kid") == kid), None)
-    if not key_data:  # Google rotates keys — refresh once before failing
-        keys = await _get_google_keys(force=True)
+    if not kid:
+        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
+    try:
+        keys = await _get_google_keys()
         key_data = next((k for k in keys if k.get("kid") == kid), None)
+        if not key_data:  # Google rotates keys — refresh once before failing
+            keys = await _get_google_keys(force=True)
+            key_data = next((k for k in keys if k.get("kid") == kid), None)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Google-verifisering er midlertidig utilgjengelig")
     if not key_data:
         raise HTTPException(status_code=401, detail="Ukjent Google-nøkkel")
     from jwt.algorithms import RSAAlgorithm
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
     try:
         claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id)
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Ugyldig Google-token: {e}")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
     if claims.get("iss") not in GOOGLE_ISSUERS:
         raise HTTPException(status_code=401, detail="Ugyldig Google-utsteder")
     return claims
+
+
+async def _google_session_from_claims(claims: dict, response: Response):
+    """Link/create a Customer account only after cryptographic Google verification."""
+    google_sub = str(claims.get("sub") or "").strip()
+    email = str(claims.get("email") or "").strip().lower()
+    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
+    if not google_sub:
+        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
+    if not (email and email_verified):
+        raise HTTPException(status_code=400, detail="Google-kontoen mangler verifisert e-post")
+
+    name = str(claims.get("name") or email.split("@")[0]).strip()
+    picture = claims.get("picture")
+    user = await db.users.find_one({"google_sub": google_sub})
+    if not user:
+        user = await db.users.find_one({"email": email})
+
+    if user:
+        if user.get("disabled") or user.get("role", "user") != "user":
+            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
+        existing_sub = str(user.get("google_sub") or "").strip()
+        if existing_sub and existing_sub != google_sub:
+            # Never silently re-link an existing KJAPP account to another Google identity.
+            raise HTTPException(status_code=401, detail="Google-kontoen kan ikke kobles til denne brukeren")
+        uid = str(user["_id"])
+        email = user["email"]
+        await db.users.update_one({"_id": user["_id"]}, {"$set": {
+            "google_sub": google_sub,
+            "google_linked": True,
+            "picture": picture,
+        }})
+    else:
+        result = await db.users.insert_one({
+            "email": email,
+            "password_hash": hash_password(secrets.token_hex(16)),  # unused; sign-in goes through Google
+            "fullName": name,
+            "phone": "",
+            "picture": picture,
+            "role": "user",
+            "google_sub": google_sub,
+            "google_linked": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        uid = str(result.inserted_id)
+
+    if user and user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    session_user = await db.users.find_one({"_id": ObjectId(uid)})
+    if not session_user:
+        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
+    return {"token": token, "user": user_public(session_user)}
+
+
+@api.post("/auth/google/signin")
+async def google_native_signin(body: GoogleNativeSignInRequest, request: Request, response: Response):
+    """Accept a native Google ID token, verify it server-side and create a KJAPP Customer session."""
+    await _enforce_rate_limit(request, "auth-google-signin", 60, 900)
+    if not google_id_token_configured():
+        raise HTTPException(status_code=503, detail="Google-innlogging er ikke konfigurert ennå")
+    client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
+    claims = await _verify_google_id_token(body.id_token.strip(), client_id)
+    return await _google_session_from_claims(claims, response)
 
 
 @api.post("/auth/google/code")
@@ -5154,54 +5247,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
         raise HTTPException(status_code=401, detail="Ingen id_token fra Google")
 
     claims = await _verify_google_id_token(id_token, client_id)
-    google_sub = claims.get("sub")
-    email = (claims.get("email") or "").strip().lower()
-    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
-    if not google_sub:
-        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
-    if not (email and email_verified):
-        raise HTTPException(status_code=400, detail="Google-kontoen mangler verifisert e-post")
-
-    name = claims.get("name") or email.split("@")[0]
-    user = await db.users.find_one({"google_sub": google_sub}) or await db.users.find_one({"email": email})
-    if user:
-        if user.get("disabled") or user.get("role", "user") != "user":
-            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
-        uid = str(user["_id"])
-        role = "user"
-        driver_id = None
-        display_name = user.get("fullName") or name
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {
-            "google_sub": google_sub, "google_linked": True, "picture": claims.get("picture"),
-        }})
-        phone = user.get("phone", "")
-        email = user["email"]
-    else:
-        display_name = name
-        result = await db.users.insert_one({
-            "email": email,
-            "password_hash": hash_password(secrets.token_hex(16)),  # unused, login goes through Google
-            "fullName": display_name,
-            "phone": "",
-            "picture": claims.get("picture"),
-            "role": "user",
-            "google_sub": google_sub,
-            "google_linked": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        uid = str(result.inserted_id)
-        role = "user"
-        driver_id = None
-        phone = ""
-
-    if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
-    token = create_access_token(uid, email)
-    set_auth_cookie(response, token)
-    session_user = await db.users.find_one({"_id": ObjectId(uid)})
-    if not session_user:
-        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
-    return {"token": token, "user": user_public(session_user)}
+    return await _google_session_from_claims(claims, response)
 
 
 # ============================================================
