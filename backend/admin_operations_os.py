@@ -456,7 +456,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         return {
             "releases": rows,
             "automation": {
-                "remote_config": True, "ota": "github_workflow",
+                "remote_config": True, "ota": "not_configured",
                 "native": "eas_build", "approval_required": True,
             },
         }
