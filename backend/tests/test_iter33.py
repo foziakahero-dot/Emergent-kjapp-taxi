@@ -124,6 +124,16 @@ class TestGoogleOAuth:
         body = r.text.lower()
         assert any(w in body for w in ["ikke konfigurert", "google", "ikke tilgjengelig"]), body
 
+    def test_native_signin_returns_503_without_client_id(self):
+        r = requests.post(
+            f"{API}/auth/google/signin",
+            json={"id_token": "x" * 40},
+            timeout=10,
+        )
+        assert r.status_code == 503, f"expected 503, got {r.status_code}: {r.text}"
+        assert "google" in r.text.lower()
+
+
 
 # ---------- Apple Sign-In key-optional ----------
 
