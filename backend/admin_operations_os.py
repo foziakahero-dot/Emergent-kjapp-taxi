@@ -22,8 +22,9 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 import httpx
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
+from pymongo.errors import DuplicateKeyError
 
 
 DEFAULT_RUNTIME_CONFIG = {
@@ -152,6 +153,19 @@ def validate_feature_patch(patch: dict, default_features: dict) -> dict:
     return cleaned
 
 
+# AI is intentionally narrower than the manual superadmin control plane.
+# Pricing/payment switches must never be model-applied, even after approval.
+AI_FEATURE_ALLOWLIST = {"booking_enabled", "ai_chat"}
+
+
+def validate_ai_feature_patch(patch: dict, default_features: dict) -> dict:
+    cleaned = validate_feature_patch(patch, default_features)
+    blocked = set(cleaned) - AI_FEATURE_ALLOWLIST
+    if blocked:
+        raise HTTPException(400, "AI kan ikke endre disse feature-flaggene: " + ", ".join(sorted(blocked)))
+    return cleaned
+
+
 class RuntimePatchRequest(BaseModel):
     runtime_patch: dict = Field(default_factory=dict)
     feature_patch: dict = Field(default_factory=dict)
@@ -267,9 +281,9 @@ Direkte runtime_patch er KUN tillatt for:
 shared: help_url, privacy_url, terms_url, support_email, support_phone, status_message
 customer: home_prompt, home_hint, maintenance_mode, maintenance_message, force_update, min_supported_version
 driver: maintenance_mode, maintenance_message, force_update, min_supported_version
-feature_patch: surge, ai_chat, demo_trips, vipps, booking_enabled
-demo_trips må alltid være false.
-Penge-/prisendringer, auth, database, Stripe, dispatch og kode skal aldri bli config-patch.
+feature_patch: ai_chat, booking_enabled
+surge, vipps og demo_trips er ALDRI tillatt i en AI-applisert patch.
+Penge-/prisendringer, betalingsmetoder, auth, database, Stripe, dispatch og kode skal aldri bli config-patch.
 Returner JSON med summary, change_type, risk, runtime_patch, feature_patch, requires_build, requires_ota, notes.
 Ingen markdown, hemmeligheter eller shell-kommandoer."""
     try:
@@ -309,29 +323,69 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
 
     async def write_version(current_user, runtime_config, features, reason, source):
         previous = await state()
-        version = int(previous["version"]) + 1
+        current_version = int(previous["version"])
+
+        # Establish an explicit v1 baseline before the first publish. This makes the
+        # original configuration rollbackable and normalizes legacy documents that
+        # pre-date Operations OS.
+        if current_version == 1:
+            await db.platform_settings.update_one(
+                {"_id": "singleton", "runtime_config_version": {"$exists": False}},
+                {"$set": {"runtime_config_version": 1}},
+                upsert=True,
+            )
+            previous = await state()
+            current_version = int(previous["version"])
+
+        baseline = {
+            "version": current_version,
+            "runtime_config": previous["runtime_config"],
+            "features": previous["features"],
+            "reason": "Baseline før Operations OS-endring",
+            "source": "baseline",
+            "saved_at": previous.get("updated_at") or _now(),
+            "saved_by": "system",
+        }
+        await db.operations_config_versions.update_one(
+            {"version": current_version}, {"$setOnInsert": baseline}, upsert=True,
+        )
+
+        version = current_version + 1
         now = _now()
-        await db.platform_settings.update_one(
-            {"_id": "singleton"},
+        operation_id = str(uuid.uuid4())
+        snapshot = {
+            "version": version, "runtime_config": runtime_config, "features": features,
+            "reason": reason, "source": source, "saved_at": now,
+            "saved_by": current_user.get("email"), "operation_id": operation_id,
+        }
+
+        # Reserve the history version first. The unique index makes concurrent
+        # publishers fail closed instead of silently sharing the same version.
+        try:
+            await db.operations_config_versions.insert_one(dict(snapshot))
+        except DuplicateKeyError:
+            raise HTTPException(409, "Konfigurasjonen ble endret samtidig. Oppdater siden og prøv igjen.")
+
+        # Compare-and-swap the live document. Exactly one writer may advance a
+        # specific runtime_config_version.
+        result = await db.platform_settings.update_one(
+            {"_id": "singleton", "runtime_config_version": current_version},
             {"$set": {
                 "runtime_config": runtime_config,
                 "runtime_config_version": version,
                 "runtime_config_updated_at": now,
                 "features": features,
             }},
-            upsert=True,
         )
-        snapshot = {
-            "version": version, "runtime_config": runtime_config, "features": features,
-            "reason": reason, "source": source, "saved_at": now,
-            "saved_by": current_user.get("email"),
-        }
-        await db.operations_config_versions.update_one(
-            {"version": version}, {"$setOnInsert": snapshot}, upsert=True,
-        )
+        if result.matched_count != 1:
+            await db.operations_config_versions.delete_one(
+                {"version": version, "operation_id": operation_id}
+            )
+            raise HTTPException(409, "Konfigurasjonen ble endret samtidig. Oppdater siden og prøv igjen.")
+
         await audit(
             current_user, "operations.config.publish", "operations_config", str(version),
-            {"version": previous["version"]}, {"version": version, "source": source}, reason,
+            {"version": current_version}, {"version": version, "source": source}, reason,
         )
         return snapshot
 
@@ -432,7 +486,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         return {"ok": True, "id": release_id, **updates}
 
     @api.post("/admin/operations/ai/plan")
-    async def admin_ai_plan(body: AIPlanRequest, request: Request, current=Depends(require_admin)):
+    async def admin_ai_plan(body: AIPlanRequest, current=Depends(require_admin)):
         plan, provider = await _ai_plan(body.request)
         change_type = str(plan.get("change_type") or "code").lower()
         if change_type not in {"config", "ota", "native", "backend", "code"}:
@@ -440,10 +494,23 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         risk = str(plan.get("risk") or "medium").lower()
         if risk not in {"low", "medium", "high"}:
             risk = "medium"
-        runtime_patch = validate_runtime_patch(plan.get("runtime_patch") or {})
-        feature_patch = validate_feature_patch(plan.get("feature_patch") or {}, default_features)
-        if change_type != "config":
-            runtime_patch, feature_patch = {}, {}
+
+        raw_notes = plan.get("notes")
+        notes = [str(x)[:500] for x in raw_notes[:10]] if isinstance(raw_notes, list) else []
+
+        # Non-config plans are advisory by definition. Ignore any model-supplied
+        # patch before validation so a backend/code plan can always be recorded.
+        runtime_patch, feature_patch = {}, {}
+        if change_type == "config":
+            try:
+                runtime_patch = validate_runtime_patch(plan.get("runtime_patch") or {})
+                feature_patch = validate_ai_feature_patch(plan.get("feature_patch") or {}, default_features)
+            except HTTPException:
+                change_type = "code"
+                risk = "high"
+                runtime_patch, feature_patch = {}, {}
+                notes.append("AI foreslo en endring utenfor direkte allow-list; planen er derfor kun rådgivende.")
+
         plan_id = str(uuid.uuid4())
         doc = {
             "id": plan_id, "request": body.request,
@@ -452,7 +519,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
             "runtime_patch": runtime_patch, "feature_patch": feature_patch,
             "requires_build": bool(plan.get("requires_build")),
             "requires_ota": bool(plan.get("requires_ota")),
-            "notes": [str(x)[:500] for x in (plan.get("notes") or [])[:10]],
+            "notes": notes,
             "status": "proposed", "provider": provider,
             "created_at": _now(), "created_by": current.get("email"),
         }
@@ -496,7 +563,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
             raise HTTPException(409, "Kode/OTA/native/backend-endringer kan ikke kjøres direkte fra Admin")
         current_state = await state()
         runtime_patch = validate_runtime_patch(plan.get("runtime_patch") or {})
-        feature_patch = validate_feature_patch(plan.get("feature_patch") or {}, default_features)
+        feature_patch = validate_ai_feature_patch(plan.get("feature_patch") or {}, default_features)
         if not runtime_patch and not feature_patch:
             raise HTTPException(409, "Planen inneholder ingen publiserbar konfigurasjon")
         runtime = _merge_runtime(current_state["runtime_config"], runtime_patch)
