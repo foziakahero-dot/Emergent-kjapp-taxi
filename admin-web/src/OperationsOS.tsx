@@ -25,6 +25,7 @@ const FEATURE_LABELS: Record<string, string> = {
   vipps: 'Vipps',
   demo_trips: 'Demo-turer (låst av)',
 };
+const QUICK_FEATURES = new Set(['booking_enabled', 'ai_chat']);
 
 function Toggle({ checked, disabled, onChange, label, sub }: any) {
   return <label style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', opacity: disabled ? .55 : 1 }}>
@@ -77,7 +78,10 @@ function ConfigEditor() {
     try {
       const result = await api.patchRuntimeConfig({
         runtime_patch: runtime,
-        feature_patch: features,
+        feature_patch: {
+          booking_enabled: !!features.booking_enabled,
+          ai_chat: !!features.ai_chat,
+        },
         reason: reason.trim(),
       });
       setMsg('Publisert som konfigurasjonsversjon ' + result.version + '.');
@@ -146,8 +150,12 @@ function ConfigEditor() {
         <div className="section-title" style={{ marginTop: 0 }}>Feature flags</div>
         {Object.keys(features).sort().map((key) =>
           <Toggle key={key} label={FEATURE_LABELS[key] || key} checked={features[key]}
-            disabled={!isSuper || key === 'demo_trips'}
-            sub={key === 'demo_trips' ? 'Permanent av i beta/produksjon.' : 'Serverstyrt. Ingen ny APK nødvendig.'}
+            disabled={!isSuper || !QUICK_FEATURES.has(key)}
+            sub={
+              key === 'demo_trips' ? 'Permanent av i beta/produksjon.' :
+              QUICK_FEATURES.has(key) ? 'Serverstyrt. Ingen ny APK nødvendig.' :
+              'Endres i dedikert Settings/Pricing — ikke via hurtigpublisering.'
+            }
             onChange={(v: boolean) => setFeatures((old: any) => ({ ...old, [key]: v }))} />
         )}
       </Card>
