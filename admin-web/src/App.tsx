@@ -7,6 +7,7 @@ import Login from './Login';
 import FleetApplications from './FleetApplications';
 import IdentityVerifications from './IdentityVerifications';
 import Receipts from './Receipts';
+import OperationsOS from './OperationsOS';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
@@ -41,6 +42,7 @@ const NAV = [
     { to: '/documents', label: 'Dokumenter', ic: '❑', perm: 'operations' },
   ]},
   { group: 'System', items: [
+    { to: '/operations-os', label: 'Operations OS', ic: '⚡', perm: 'system' },
     { to: '/integrations', label: 'Integrasjoner', ic: '◎', perm: 'system' },
     { to: '/admins', label: 'Administratorer', ic: '♙', superadminOnly: true },
     { to: '/audit', label: 'Audit-logg', ic: '⌘', perm: 'system' },
@@ -176,6 +178,7 @@ function Shell() {
             <Route path="/pricing" element={gate('system', <Settings />)} />
             <Route path="/communications" element={gate('communications', <Communications />)} />
             <Route path="/actions" element={gate('operations', <ActionCenter />)} />
+            <Route path="/operations-os" element={gate('system', <OperationsOS />)} />
             <Route path="/integrations" element={gate('system', <SystemIntegrations />)} />
             <Route path="/admins" element={gate('system', <AdminRoles />, true)} />
             <Route path="/support" element={gate('support', <Support />)} />
