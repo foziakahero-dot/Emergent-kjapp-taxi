@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
+  Keyboard,
   Linking,
   Pressable,
   ScrollView,
@@ -39,6 +41,7 @@ export default function Home() {
   const [locDenied, setLocDenied] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
   const [cars, setCars] = useState<any[]>([]);
+  const [carsStatus, setCarsStatus] = useState<'loading' | 'live' | 'error'>('loading');
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [estimate, setEstimate] = useState<any>(null);
@@ -111,9 +114,22 @@ export default function Home() {
     let mounted = true;
     if (!locationReady) {
       setCars([]);
+      setCarsStatus('loading');
       return () => { mounted = false; };
     }
-    const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
+    setCars([]);
+    setCarsStatus('loading');
+    const load = () => carsApi.nearby(loc.lat, loc.lng)
+      .then((r) => {
+        if (!mounted) return;
+        setCars(Array.isArray(r?.cars) ? r.cars : []);
+        setCarsStatus('live');
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCars([]);
+        setCarsStatus('error');
+      });
     load();
     const i = setInterval(load, 8000);
     return () => { mounted = false; clearInterval(i); };
@@ -275,7 +291,9 @@ export default function Home() {
           <Text style={s.carsText}>
             {cars.length
               ? (nearest != null ? `${cars.length} biler i nærheten · nærmeste ${nearest} min` : `${cars.length} biler i nærheten`)
-              : (locationReady ? 'Søker etter ledige biler…' : 'Posisjon kreves for å se biler i nærheten')}
+              : (locationReady
+                ? (carsStatus === 'error' ? 'Kunne ikke oppdatere ledige biler' : carsStatus === 'loading' ? 'Søker etter ledige biler…' : 'Ingen ledige biler i nærheten akkurat nå')
+                : 'Posisjon kreves for å se biler i nærheten')}
           </Text>
         </View>
 
@@ -489,8 +507,8 @@ export default function Home() {
 
       {searchOpen && (
         <SearchSheet
-          onClose={() => setSearchOpen(false)}
-          onMinimize={() => { setSearchOpen(false); setSheetCollapsed(true); }}
+          onClose={() => { Keyboard.dismiss(); setSearchOpen(false); }}
+          onMinimize={() => { Keyboard.dismiss(); setSearchOpen(false); setSheetCollapsed(true); }}
           onVoice={openVoice}
           onSelect={(d: any) => {
             if (searchTarget === 'stop') {
@@ -515,6 +533,15 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const timer = useRef<any>(null);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      Keyboard.dismiss();
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [onClose]);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -566,10 +593,11 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
           onPress={onMinimize}
           testID="search-minimize"
           style={s.searchMinimize}
+          hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Minimer søk og vis kart"
         >
-          <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+          <Icon name="chevron-down" size={22} color={colors.accent} />
         </Pressable>
         <Pressable onPress={onClose} testID="search-close" style={s.searchClose}>
           <Text style={{ color: colors.accent, fontSize: 15 }}>Avbryt</Text>
@@ -707,7 +735,7 @@ const useStyles = makeStyles((c) => ({
   },
   searchInput: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
   searchVoice: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
-  searchMinimize: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  searchMinimize: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accentDim },
   searchClose: { minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   searchPrompt: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12, paddingHorizontal: 2 },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, borderBottomWidth: 1, borderBottomColor: c.line },
