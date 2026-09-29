@@ -10,6 +10,7 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
+import RuntimeGuard from '@/src/components/RuntimeGuard';
 import { driverApi } from '@/src/lib/api';
 import {
   normalizeDriverNotificationUrl,
@@ -117,9 +118,10 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <NativeRuntimeBridge />
-            <StatusBar style="light" />
-            <Stack
+            <RuntimeGuard>
+              <NativeRuntimeBridge />
+              <StatusBar style="light" />
+              <Stack
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: colors.driverBg },
@@ -135,7 +137,8 @@ export default function RootLayout() {
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-identity" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
-            </Stack>
+              </Stack>
+            </RuntimeGuard>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
