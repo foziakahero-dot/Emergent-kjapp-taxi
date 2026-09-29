@@ -1,9 +1,11 @@
 name: KJAPP Driver Local Internal APK
 
+# Manual builds only while the Firebase JSON does not match the Driver Android package.
+# Branch pushes must not create a failing paid build for every unrelated change.
 on:
   push:
     branches:
-      - fix/beta-mobile-firebase-ops-20260926
+      - __disabled_driver_local_apk__
 
 jobs:
   build_driver_local:
