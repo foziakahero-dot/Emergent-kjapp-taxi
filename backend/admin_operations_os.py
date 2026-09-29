@@ -155,6 +155,18 @@ def validate_runtime_patch(patch: dict) -> dict:
     return cleaned
 
 
+def validate_runtime_consistency(runtime: dict) -> dict:
+    """Cross-field safety rules for blocking runtime switches."""
+    for app_name in ("customer", "driver"):
+        cfg = (runtime or {}).get(app_name) or {}
+        if cfg.get("force_update") is True and not str(cfg.get("min_supported_version") or "").strip():
+            raise HTTPException(
+                400,
+                f"{app_name}.min_supported_version må settes før force_update kan aktiveres",
+            )
+    return runtime
+
+
 def validate_feature_patch(patch: dict, default_features: dict) -> dict:
     if not isinstance(patch, dict):
         raise HTTPException(400, "feature_patch må være et objekt")
@@ -433,7 +445,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         current_state = await state()
         runtime_patch = validate_runtime_patch(body.runtime_patch)
         feature_patch = validate_ops_feature_patch(body.feature_patch, default_features)
-        runtime = _merge_runtime(current_state["runtime_config"], runtime_patch)
+        runtime = validate_runtime_consistency(_merge_runtime(current_state["runtime_config"], runtime_patch))
         features = {**current_state["features"], **feature_patch}
         features["demo_trips"] = False
         saved = await write_version(current, runtime, features, body.reason, "admin")
@@ -452,7 +464,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         snapshot = await db.operations_config_versions.find_one({"version": body.version})
         if not snapshot:
             raise HTTPException(404, "Fant ikke konfigurasjonsversjonen")
-        runtime = _merge_runtime(snapshot.get("runtime_config"))
+        runtime = validate_runtime_consistency(_merge_runtime(snapshot.get("runtime_config")))
         features = {**default_features, **(snapshot.get("features") or {})}
         features = validate_feature_patch(features, default_features)
         features["demo_trips"] = False
@@ -590,7 +602,7 @@ def install_kjapp_operations_os(api, db, *, require_admin, require_superadmin, a
         feature_patch = validate_ai_feature_patch(plan.get("feature_patch") or {}, default_features)
         if not runtime_patch and not feature_patch:
             raise HTTPException(409, "Planen inneholder ingen publiserbar konfigurasjon")
-        runtime = _merge_runtime(current_state["runtime_config"], runtime_patch)
+        runtime = validate_runtime_consistency(_merge_runtime(current_state["runtime_config"], runtime_patch))
         features = {**current_state["features"], **feature_patch}
         features["demo_trips"] = False
         saved = await write_version(current, runtime, features, f"AI-plan {plan_id}: {plan.get('summary', '')}"[:500], f"ai:{plan_id}")
