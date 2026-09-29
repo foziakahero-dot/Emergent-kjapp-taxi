@@ -230,3 +230,34 @@ def test_admin_control_surfaces_require_2fa():
 
     assert server._enforce_admin_2fa({"role": "admin", "totp_enabled": True})["role"] == "admin"
     assert server._enforce_admin_2fa({"role": "user", "totp_enabled": False})["role"] == "user"
+
+
+def test_in_flight_driver_reservation_cannot_be_reclaimed():
+    now = datetime(2026, 9, 29, 3, 0, tzinfo=timezone.utc)
+    assert server._recent_driver_reservation((now - timedelta(seconds=1)).isoformat(), now)
+    assert server._recent_driver_reservation((now - timedelta(seconds=119)).isoformat(), now)
+    assert not server._recent_driver_reservation((now - timedelta(seconds=121)).isoformat(), now)
+    assert not server._recent_driver_reservation(None, now)
+
+
+def test_fleet_admin_entry_also_requires_2fa():
+    import asyncio
+    import pytest
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(server.require_fleet_owner({"role": "superadmin", "totp_enabled": False}))
+    assert exc.value.status_code == 403
+
+
+def test_health_returns_503_when_mongo_is_unavailable(monkeypatch):
+    import asyncio
+
+    class FailedDB:
+        async def command(self, *_):
+            raise TimeoutError("Mongo unavailable")
+
+    monkeypatch.setattr(server, "db", FailedDB())
+    response = asyncio.run(server.health())
+    assert response.status_code == 503
+    assert b'"db":false' in response.body
