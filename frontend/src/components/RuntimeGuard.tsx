@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { runtimeConfigApi } from '@/src/lib/api';
 import { colors, font } from '@/src/theme';
@@ -50,7 +50,17 @@ export default function RuntimeGuard({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 60000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refresh();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [refresh]);
 
   const appVersion = Constants.expoConfig?.version || null;
   const blockedForVersion = useMemo(
