@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -8,6 +8,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
+import { storage } from '@/src/utils/storage';
 
 const NOTIF: { key: string; label: string; sub: string }[] = [
   { key: 'notif_requests', label: 'Turforespørsler', sub: 'Varsel når en ny tur er tilgjengelig' },
@@ -23,7 +24,7 @@ export default function DriverSettings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
@@ -32,14 +33,28 @@ export default function DriverSettings() {
   const [exportInfo, setExportInfo] = useState('');
 
   useEffect(() => {
-    settingsApi.get().then((r) => setSettings(r.settings || r || {})).catch(() => setSettings({}));
+    settingsApi.get().then(async (r) => {
+      const data = r.settings || r || {};
+      setSettings(data);
+      await storage.setItem('driver_navigation_app', data.navigation_app || 'google');
+      for (const key of ['notif_requests', 'req_sound', 'req_vibrate']) {
+        await storage.setItem(`driver_${key}`, String(data[key] !== false));
+      }
+    }).catch(() => setSettings({}));
   }, []);
 
   const toggle = async (key: string, def = true) => {
     const cur = settings[key] === undefined ? def : settings[key];
     const next = { ...settings, [key]: !cur };
     setSettings(next);
-    try { await settingsApi.update({ [key]: next[key] }); } catch {}
+    try {
+      await settingsApi.update({ [key]: next[key] });
+      if (['notif_requests', 'req_sound', 'req_vibrate'].includes(key)) {
+        await storage.setItem(`driver_${key}`, String(next[key]));
+      }
+    } catch {
+      setSettings(settings);
+    }
   };
 
   const exportData = async () => {
@@ -95,8 +110,40 @@ export default function DriverSettings() {
 
           <Text style={s.sectionTitle}>Kjøring</Text>
           <View style={s.card}>
-            {DRIVE.map((t, i) => (
+            {DRIVE.filter((t) => Platform.OS === 'android' || t.key !== 'req_vibrate').map((t, i) => (
               <ToggleRow key={t.key} t={t} on={settings[t.key] !== false} onToggle={() => toggle(t.key, true)} border={i > 0} s={s} />
+            ))}
+          </View>
+
+          <Text style={s.sectionTitle}>Mine biler</Text>
+          <View style={s.card}>
+            <LinkRow icon="car" label={user?.car && user?.plate ? `${user.car} · ${user.plate}` : 'Velg bil fra flåten'}
+              onPress={() => router.push('/driver-vehicles')} s={s} testID="ds-vehicles" />
+            <LinkRow icon="shield" label="Identitetskontroll" onPress={() => router.push('/driver-identity')}
+              border s={s} testID="ds-identity" />
+          </View>
+
+          <Text style={s.sectionTitle}>Navigasjon</Text>
+          <View style={s.card}>
+            {([
+              ['google', 'Google Maps'],
+              ['waze', 'Waze'],
+              ...(Platform.OS === 'ios' ? [['apple', 'Apple Kart']] : []),
+            ] as string[][]).map(([key, label], i) => (
+              <Pressable key={key} testID={`driver-navigation-${key}`}
+                accessibilityRole="radio" accessibilityState={{ selected: (settings.navigation_app || 'google') === key }}
+                style={[s.row, i > 0 && s.rowBorder]}
+                onPress={() => { void (async () => {
+                  const previous = settings;
+                  setSettings({ ...settings, navigation_app: key });
+                  try {
+                    await settingsApi.update({ navigation_app: key });
+                    await storage.setItem('driver_navigation_app', key);
+                  } catch { setSettings(previous); }
+                })(); }}>
+                <Text style={s.rowLabel}>{label}</Text>
+                <Text style={[s.rowSub, { marginLeft: 'auto' }]}>{(settings.navigation_app || 'google') === key ? 'Valgt' : ''}</Text>
+              </Pressable>
             ))}
           </View>
 
@@ -191,7 +238,7 @@ function LinkRow({ icon, label, onPress, border, s, testID }: { icon: IconName; 
 
 const useStyles = makeStyles((c) => ({
   header: { paddingHorizontal: 20, paddingBottom: 16, gap: 16 },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line },
+  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   title: { fontFamily: font.display, fontSize: 26, color: c.text },
   sectionTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '600', marginTop: 22, marginBottom: 8 },
   card: { backgroundColor: c.driverCard, borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
@@ -204,14 +251,14 @@ const useStyles = makeStyles((c) => ({
   linkIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   linkLabel: { color: c.text, fontSize: 15, flex: 1 },
   linkValue: { color: c.textMuted, fontSize: 14 },
-  logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, paddingVertical: 16, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line },
+  logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, paddingVertical: 16, borderRadius: 16, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   logoutText: { color: c.text, fontSize: 15, fontWeight: '600' },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12, paddingVertical: 16, borderRadius: 16, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12, paddingVertical: 16, borderRadius: 16, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.line },
   deleteText: { color: c.danger, fontSize: 15, fontWeight: '600' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(4,8,10,0.75)', alignItems: 'center', justifyContent: 'center', padding: 28 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', alignItems: 'center', justifyContent: 'center', padding: 28 },
   modalCard: { width: '100%', maxWidth: 400, backgroundColor: c.elevated, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   modalTitle: { color: c.text, fontFamily: font.display, fontSize: 22, textAlign: 'center' },
   modalBody: { color: c.textMuted, fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 },
-  modalInput: { alignSelf: 'stretch', marginTop: 16, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line, borderRadius: 12, paddingHorizontal: 16, height: 52, color: c.text, fontSize: 16, letterSpacing: 2, textAlign: 'center' },
+  modalInput: { alignSelf: 'stretch', marginTop: 16, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 12, paddingHorizontal: 16, height: 52, color: c.text, fontSize: 16, letterSpacing: 2, textAlign: 'center' },
 }));

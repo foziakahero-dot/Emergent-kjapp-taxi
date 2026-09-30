@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -8,7 +8,7 @@ import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
-import { driverApi, safetyApi } from '@/src/lib/api';
+import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 import { storage } from '@/src/utils/storage';
 
@@ -23,6 +23,10 @@ function hoursLabel(min?: number) {
 type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
 type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
 const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
+const MINIMIZED_TRIP_KEY = 'kjapp_driver_minimized_active_trip_v1';
+const DISMISSED_FINISHED_KEY = 'kjapp_driver_dismissed_finished_trip_v1';
+const ACTIVE_STATUSES = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
+const FINISHED_STATUSES = new Set(['arrived', 'completed', 'rated']);
 
 async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
   if (action === 'at_pickup') return driverApi.atPickup(tripId);
@@ -49,6 +53,8 @@ export default function DriverHome() {
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>(null);
+  const [completedTrip, setCompletedTrip] = useState<any>(null);
+  const [tripMinimized, setTripMinimized] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [busy, setBusy] = useState(false);
@@ -63,7 +69,13 @@ export default function DriverHome() {
     try {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
-      setCurrent(normalized);
+      if (normalized && FINISHED_STATUSES.has(normalized.status)) {
+        const dismissed = await storage.getItem(DISMISSED_FINISHED_KEY);
+        setCompletedTrip(dismissed === normalized.trip_id ? null : normalized);
+      } else if (normalized && ACTIVE_STATUSES.has(normalized.status)) {
+        setCompletedTrip(null);
+      }
+      setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
 
       if (!actionRetrying.current) {
         const raw = await storage.getItem(QUEUED_TRIP_ACTION_KEY);
@@ -83,7 +95,11 @@ export default function DriverHome() {
                   await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
                   const refreshed = await driverApi.current();
                   normalized = refreshed?.trip || refreshed || normalized;
-                  setCurrent(normalized);
+                  if (normalized && FINISHED_STATUSES.has(normalized.status)) {
+                    const dismissed = await storage.getItem(DISMISSED_FINISHED_KEY);
+                    setCompletedTrip(dismissed === normalized.trip_id ? null : normalized);
+                  }
+                  setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
                   setError('');
                 } catch (e: any) {
                   if (e?.response) {
@@ -317,6 +333,24 @@ export default function DriverHome() {
     await execute();
   };
 
+  useEffect(() => {
+    let active = true;
+    if (!current?.trip_id) { setTripMinimized(false); return; }
+    storage.getItem(MINIMIZED_TRIP_KEY).then((id) => {
+      if (active) setTripMinimized(id === current.trip_id);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [current?.trip_id]);
+
+  useEffect(() => {
+    if (!completedTrip?.trip_id) return;
+    const timer = setTimeout(() => {
+      void storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
+      setCompletedTrip(null);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [completedTrip?.trip_id]);
+
   const noShow = async () => {
     if (!current || current.status !== 'at_pickup' || busy) return;
     Alert.alert(
@@ -377,11 +411,13 @@ export default function DriverHome() {
       `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
       (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '') +
       '&travelmode=driving';
-    const native = validStops.length
-      ? fallback
-      : Platform.OS === 'ios'
-        ? `maps://?daddr=${lat},${lng}&dirflg=d`
-        : `google.navigation:q=${lat},${lng}&mode=d`;
+    const preferred = (await storage.getItem('driver_navigation_app').catch(() => null)) ||
+      (await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app || 'google').catch(() => 'google'));
+    const native = validStops.length ? fallback
+      : preferred === 'waze' ? `waze://?ll=${lat},${lng}&navigate=yes`
+      : preferred === 'apple' && Platform.OS === 'ios' ? `maps://?daddr=${lat},${lng}&dirflg=d`
+      : Platform.OS === 'android' ? `google.navigation:q=${lat},${lng}&mode=d`
+      : `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
 
     try {
       const supported = await Linking.canOpenURL(native);
@@ -486,15 +522,36 @@ export default function DriverHome() {
         <Text style={s.mapStatusText}>{operationalLabel}</Text>
       </View>
 
-      <View style={[s.sheet, { paddingBottom: insets.bottom + 12 }]}>
+      <ScrollView
+        style={s.sheet}
+        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 12 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.handle} />
         {error ? <Text style={s.error} testID="driver-error">{error}</Text> : null}
 
-        {current ? (
+        {current && tripMinimized ? (
+          <Pressable testID="driver-active-trip-minimized" onPress={async () => {
+            setTripMinimized(false);
+            await storage.removeItem(MINIMIZED_TRIP_KEY);
+          }} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.overlineOnline}>AKTIV TUR · TRYKK FOR Å ÅPNE</Text>
+              <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
+            </View>
+            <Icon name="chevron-up" size={20} color={colors.text} />
+          </Pressable>
+        ) : current ? (
           <View testID="driver-active-trip">
             <View style={s.sectionHeading}>
               <Text style={s.overlineOnline}>AKTIV TUR</Text>
               <Text style={s.tripPrice}>{kr(current.price)}</Text>
+              <Pressable testID="driver-trip-minimize" accessibilityLabel="Minimer turkort" onPress={async () => {
+                setTripMinimized(true);
+                await storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id);
+              }} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="chevron-down" size={20} color={colors.text} />
+              </Pressable>
             </View>
             <View style={[s.epRow, { marginTop: 12 }]}>
               <View style={s.beacon} />
@@ -505,6 +562,12 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
+            <Text style={s.offerMeta} testID="driver-current-customer">{current.customer?.name || 'Kundenavn utilgjengelig'}</Text>
+            {current.customer?.phone ? (
+              <Pressable testID="driver-call-customer" onPress={() => Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))}>
+                <Text style={s.navBtnText}>Ring kunde · {current.customer.phone}</Text>
+              </Pressable>
+            ) : null}
             {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
             {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
             {['driver_on_way', 'in_trip'].includes(current.status) ? (
@@ -522,7 +585,7 @@ export default function DriverHome() {
               </Pressable>
               {actionLabel ? (
                 <Pressable style={s.action} onPress={advance} disabled={busy} testID="driver-advance">
-                  {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.actionText}>{actionLabel}</Text>}
+                  {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.actionText}>{actionLabel}</Text>}
                 </Pressable>
               ) : null}
             </View>
@@ -561,6 +624,7 @@ export default function DriverHome() {
                 ? (offerExpired ? 'Tilbudet sendes videre…' : `Sendes videre om ${offerRemaining} sek`)
                 : 'Åpen for alle ledige sjåfører'}
             </Text>
+            <Text style={s.offerMeta} testID="driver-offer-customer">{firstOffer.customer?.name || 'Kundenavn utilgjengelig'}</Text>
             {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
             {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
@@ -573,10 +637,23 @@ export default function DriverHome() {
                 disabled={busy || offerExpired}
                 testID={`driver-accept-${firstOffer.trip_id}`}
               >
-                {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.acceptText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
+                {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.acceptText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
               </Pressable>
             </View>
           </View>
+        ) : completedTrip ? (
+          <Pressable testID="driver-trip-completed" onPress={async () => {
+            await storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
+            setCompletedTrip(null);
+          }} style={{ paddingVertical: 16 }}>
+            <Text style={s.overlineOnline}>TUR AVSLUTTET</Text>
+            <Text style={s.epText}>Klar for neste tur</Text>
+            <Text style={s.offerMeta}>{completedTrip.payment_status === 'paid'
+              ? `Din opptjening · ${kr(completedTrip.driver_earnings)}`
+              : completedTrip.estimated_driver_earnings != null
+                ? `Estimert opptjening · ${kr(completedTrip.estimated_driver_earnings)} · betaling avventer`
+                : 'Betaling avventer'}</Text>
+          </Pressable>
         ) : (
           <View>
             <View style={s.summaryRow}>
@@ -598,9 +675,9 @@ export default function DriverHome() {
               </View>
             ) : (
               <Pressable style={s.goOnline} onPress={toggleOnline} disabled={busy} testID="driver-go-online">
-                {busy ? <ActivityIndicator color="#03120B" /> : (
+                {busy ? <ActivityIndicator color={colors.accentOn} /> : (
                   <>
-                    <Icon name="power" size={19} color="#03120B" />
+                    <Icon name="power" size={19} color={colors.accentOn} />
                     <Text style={s.goOnlineText}>Gå online</Text>
                   </>
                 )}
@@ -608,7 +685,7 @@ export default function DriverHome() {
             )}
           </View>
         )}
-      </View>
+      </ScrollView>
 
       {current ? (
         <ChatSheet
@@ -616,7 +693,7 @@ export default function DriverHome() {
           role="driver"
           visible={chatOpen}
           onClose={() => setChatOpen(false)}
-          peerName="Kunde"
+          peerName={current.customer?.name || 'Kunde'}
         />
       ) : null}
     </View>
@@ -639,36 +716,38 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: 16, paddingBottom: 8,
   },
   identityPanel: {
-    minHeight: 48, justifyContent: 'center', backgroundColor: 'rgba(3,6,7,0.91)',
-    borderRadius: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: c.line,
+    minHeight: 48, justifyContent: 'center', backgroundColor: c.surface,
+    borderRadius: 18, paddingHorizontal: 14, borderWidth: 1, borderColor: c.line,
+    shadowColor: c.text, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   productLabel: { color: c.online, fontSize: 10, lineHeight: 13, letterSpacing: 1.6, fontWeight: '700' },
   driverName: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any, maxWidth: 140 },
   onlineControl: {
     minWidth: 108, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: 'rgba(3,6,7,0.91)', borderRadius: 14, borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.surface, borderRadius: 18, borderWidth: 1, borderColor: c.line,
   },
-  onlineControlOn: { borderColor: 'rgba(57,229,140,0.46)', backgroundColor: 'rgba(5,24,17,0.92)' },
+  onlineControlOn: { borderColor: c.online, backgroundColor: c.onlineSoft },
   statusDot: { width: 9, height: 9, borderRadius: 5 },
   onlineText: { color: c.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.1 },
   mapStatus: {
     position: 'absolute', left: 16, zIndex: 9, minHeight: 36,
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(3,6,7,0.88)',
-    borderRadius: 12, borderWidth: 1, borderColor: c.line, paddingHorizontal: 11,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface,
+    borderRadius: 16, borderWidth: 1, borderColor: c.line, paddingHorizontal: 11,
   },
   mapStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   mapStatusDivider: { width: 1, height: 16, backgroundColor: c.line, marginHorizontal: 9 },
   mapStatusText: { color: c.textSecondary, fontSize: 11, fontWeight: '600' },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,12,15,0.98)',
-    borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: c.line,
-    paddingHorizontal: 18, paddingTop: 10,
+    position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '78%', backgroundColor: c.surface,
+    borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: c.line,
+    shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8,
   },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginBottom: 12 },
   summaryRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.025)',
-    borderRadius: 14, borderWidth: 1, borderColor: c.line, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
+    borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingVertical: 14,
   },
   vDivider: { width: 1, height: 32, backgroundColor: c.line },
   statValue: { color: c.text, fontFamily: font.mono, fontSize: 17, fontWeight: '600' },
@@ -682,42 +761,42 @@ const useStyles = makeStyles((c) => ({
   square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
   epText: { color: c.text, fontSize: 14, flex: 1 },
   navBtn: {
-    minHeight: 50, marginTop: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(57,229,140,0.35)',
-    backgroundColor: 'rgba(57,229,140,0.07)', flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center',
+    minHeight: 50, marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: c.lineStrong,
+    backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center',
   },
   navBtnText: { color: c.text, fontSize: 14, fontWeight: '700' },
   tripActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   msgBtn: {
     minWidth: 112, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
+    borderRadius: 18, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
   },
   msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
   noShowBtn: { minHeight: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   noShowText: { color: c.textSecondary, fontSize: 12, fontWeight: '600' },
   driverSafetyBtn: { height: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
   driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
-  action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
-  actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  action: { flex: 1, height: 56, borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  actionText: { color: c.accentOn, fontSize: 16, fontWeight: '800' },
   offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
   offerCountdown: { color: c.online, fontSize: 12, fontWeight: '700', marginTop: 8 },
   offerCountdownExpired: { color: c.textMuted },
   offerBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong },
+  declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong },
   declineText: { color: c.textSecondary, fontSize: 15, fontWeight: '600' },
-  acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: c.online },
+  acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
   acceptBtnDisabled: { opacity: 0.45 },
-  acceptText: { color: '#03120B', fontSize: 15, fontWeight: '800' },
+  acceptText: { color: c.accentOn, fontSize: 15, fontWeight: '800' },
   waiting: {
     flexDirection: 'row', alignItems: 'center', gap: 13, minHeight: 72, marginTop: 12,
-    paddingHorizontal: 14, borderRadius: 14, backgroundColor: 'rgba(57,229,140,0.055)',
-    borderWidth: 1, borderColor: 'rgba(57,229,140,0.16)',
+    paddingHorizontal: 14, borderRadius: 18, backgroundColor: c.onlineSoft,
+    borderWidth: 1, borderColor: c.line,
   },
   waitIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center' },
   waitTitle: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any },
   waitSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
   goOnline: {
-    flexDirection: 'row', gap: 10, marginTop: 14, height: 56, borderRadius: 14,
+    flexDirection: 'row', gap: 10, marginTop: 14, height: 56, borderRadius: 28,
     backgroundColor: c.online, alignItems: 'center', justifyContent: 'center',
   },
-  goOnlineText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  goOnlineText: { color: c.accentOn, fontSize: 16, fontWeight: '800' },
 }));

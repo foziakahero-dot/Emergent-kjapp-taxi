@@ -250,7 +250,12 @@ export default function Home() {
           </Pressable>
         </View>
       ) : (
-      <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
+      <ScrollView
+        style={s.sheet}
+        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 8 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Pressable
           style={s.sheetHandleButton}
           onPress={() => setSheetCollapsed(true)}
@@ -444,7 +449,7 @@ export default function Home() {
                     <Pressable
                       key={id}
                       onPress={() => setSpecialNeeds((prev) => active ? prev.filter((x) => x !== id) : [...prev, id])}
-                      style={[s.chip, active && { borderColor: colors.accent, backgroundColor: 'rgba(45,212,191,0.10)' }]}
+                      style={[s.chip, active && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
                       testID={`need-${id}`}
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
@@ -480,7 +485,7 @@ export default function Home() {
             </Pressable>
           </>
         )}
-      </View>
+      </ScrollView>
       )}
 
       {searchOpen && (
@@ -601,24 +606,27 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: 16, paddingBottom: 8,
   },
   brandPill: {
-    backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
     borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9,
+    shadowColor: c.text, shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   brand: { fontFamily: font.display, fontSize: 19, fontWeight: '700', color: c.text, letterSpacing: 1.1 },
   iconControl: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
   },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(9,17,25,0.97)', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 8,
+    position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '76%',
+    backgroundColor: c.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30,
+    borderWidth: 1, borderColor: c.line,
+    shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8,
   },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 8 },
   sheetHandleButton: { alignSelf: 'center', minWidth: 72, minHeight: 34, alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong },
   collapsedSheet: {
     position: 'absolute', left: 14, right: 14, bottom: 0,
-    backgroundColor: 'rgba(9,17,25,0.96)', borderRadius: 22,
+    backgroundColor: c.surface, borderRadius: 24,
     borderWidth: 1, borderColor: c.line, paddingHorizontal: 10, paddingTop: 10,
   },
   collapsedDestination: {
@@ -647,7 +655,7 @@ const useStyles = makeStyles((c) => ({
   whereHint: { color: c.textMuted, fontSize: 12, marginTop: 4 },
   voiceBtn: {
     width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft,
-    borderWidth: 1, borderColor: 'rgba(0,229,245,0.22)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center',
   },
   searchBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   chipsRow: { gap: 10, paddingBottom: 10 },
@@ -691,7 +699,7 @@ const useStyles = makeStyles((c) => ({
   payText: { color: c.text, fontSize: 14, flex: 1 },
   error: { color: c.danger, fontSize: 13, marginBottom: 10 },
   confirm: {
-    height: 56, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
+    height: 56, borderRadius: radius.pill, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
     shadowColor: c.accent, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   },
   confirmText: { color: c.accentOn, fontSize: 16, fontWeight: '700' },
