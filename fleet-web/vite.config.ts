@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5180,
     proxy: {
       '/api': {
-        target: 'https://github-app-builder-28.emergent.host',
+        target: 'https://api.kjappapp.no',
         changeOrigin: true,
       },
     },
