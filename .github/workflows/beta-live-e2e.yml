@@ -6,7 +6,7 @@ on:
       api:
         description: Beta API origin without /api
         required: true
-        default: https://github-app-builder-28.emergent.host
+        default: https://api.kjappapp.no
         type: string
       strict_smoke:
         description: Require Apple/push/service-area production readiness

@@ -85,7 +85,6 @@
     },
     "experiments": {
       "typedRoutes": false
-    },
-    "newArchEnabled": true
+    }
   }
 }
