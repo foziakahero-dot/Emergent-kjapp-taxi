@@ -69,7 +69,7 @@ jobs:
       - name: Isolated dispatch/trip lifecycle E2E
         if: ${{ inputs.run_isolated_lifecycle }}
         run: |
-          if [ "$KJAPP_E2E_API" = "https://api.kjappapp.no" ] || [ "$KJAPP_E2E_API" = "https://api.kjappapp.no" ]; then
+          if [ "$KJAPP_E2E_API" = "https://github-app-builder-28.emergent.host" ] || [ "$KJAPP_E2E_API" = "https://api.kjappapp.no" ]; then
             echo "Refusing mutating lifecycle E2E against shared live beta/production API"
             exit 1
           fi
