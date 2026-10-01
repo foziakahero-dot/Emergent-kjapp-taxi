@@ -2,6 +2,13 @@ name: KJAPP Android APKs
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/mapbox-standard-mobile-20261001
+    paths:
+      - 'frontend/**'
+      - 'driver-app/**'
+      - '.github/workflows/android-build.yml'
 
 permissions:
   contents: read
@@ -13,6 +20,7 @@ concurrency:
 env:
   CI: '1'
   EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+  EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
 
 jobs:
   customer-apk:
