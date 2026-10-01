@@ -37,7 +37,7 @@ jobs:
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,7 +69,7 @@ jobs:
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
