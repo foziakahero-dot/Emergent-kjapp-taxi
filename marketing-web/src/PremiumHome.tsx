@@ -67,7 +67,7 @@ function PhoneScene() {
                   <span className="mk-pickup-dot" />
                   <div><small>HENTESTED</small><strong>Din posisjon · Oslo</strong></div>
                 </div>
-                <div className="mk-cars-nearby"><i />4 biler i nærheten · nærmeste 3 min</div>
+                <div className="mk-cars-nearby"><i />Forhåndsvisning av appen</div>
 
                 <div className="mk-destination-card-v2">
                   <div className="mk-destination-copy-v2">
@@ -76,8 +76,8 @@ function PhoneScene() {
                     <span>Søk adresse, sted eller flyplass</span>
                   </div>
                   <div className="mk-destination-actions-v2">
-                    <button type="button" className="mk-voice-btn-v2" aria-label="Bestill med stemmen"><MicIcon /></button>
-                    <button type="button" className="mk-search-btn-v2" aria-label="Åpne destinasjonssøk">⌕</button>
+                    <span className="mk-voice-btn-v2" aria-hidden="true"><MicIcon /></span>
+                    <span className="mk-search-btn-v2" aria-hidden="true">⌕</span>
                   </div>
                 </div>
 
@@ -107,41 +107,41 @@ function PhoneScene() {
         <button type="button" className={expanded ? 'active' : ''} onClick={() => setExpanded(true)}>Åpen</button>
         <button type="button" className={!expanded ? 'active' : ''} onClick={() => setExpanded(false)}>Minimert</button>
       </div>
-      <span className="mk-phone-caption">CUSTOMER · GOLD · MAP FIRST</span>
+      <span className="mk-phone-caption">KJAPP KUNDEAPP · ILLUSTRASJON</span>
     </div>
   );
 }
 
 const steps = [
-  ['01', 'Si eller skriv hvor du skal', 'Søk etter destinasjon eller bruk stemmen. KJAPP finner stedet og gjør reisen klar.'],
-  ['02', 'Velg bil og se estimatet', 'KJAPP, KJAPP XL eller Premium. Se estimert pris og hentetid før du bestiller.'],
-  ['03', 'Bestill og følg bilen live', 'Bekreft turen og følg sjåføren på kartet helt frem til hentestedet.'],
+  ['01', 'Si eller skriv hvor du skal', 'Skriv inn adressen, eller bruk stemmen hvis det passer bedre.'],
+  ['02', 'Velg bil og se estimatet', 'Se tilgjengelige biltyper og prisestimat før du bestemmer deg.'],
+  ['03', 'Bestill og følg bilen live', 'Når en sjåfør tar turen, kan du følge bilen på kartet.'],
 ];
 
 const values = [
-  ['01', 'NORSK', 'Bygget rundt norske reisende, lokale løyvehavere og norsk kundestøtte.'],
-  ['02', 'TYDELIG', 'Biltype, prisestimat og turstatus vises før og under reisen.'],
-  ['03', 'SMART', 'Skriv eller si destinasjonen. Teknologien hjelper deg videre uten å stå i veien.'],
-  ['04', 'TRYGT', 'Lisensierte sjåfører, live sporing og samme system fra bestilling til fullført tur.'],
+  ['01', 'NORSK', 'Vi starter i Oslo og samarbeider med løyvehavere her.'],
+  ['02', 'TYDELIG', 'Se bilvalg og prisestimat før du bekrefter turen.'],
+  ['03', 'SMART', 'Søk med tekst eller stemme. Du velger selv når turen skal bestilles.'],
+  ['04', 'TRYGT', 'Sjåføren er tilknyttet en løyvehaver, og du kan følge turstatus i appen.'],
 ];
 
 const vehicles = [
-  { name: 'KJAPP', copy: 'Rask og enkel', image: '/assets/figma/standard.png' },
+  { name: 'KJAPP', copy: 'For hverdagsreisen', image: '/assets/figma/standard.png' },
   { name: 'KJAPP XL', copy: 'Mer plass · opptil 7 seter', image: '/assets/figma/xl.png' },
-  { name: 'Premium', copy: 'Premium komfort', image: '/assets/figma/premium.png' },
+  { name: 'Premium', copy: 'Når du ønsker mer komfort', image: '/assets/figma/premium.png' },
 ];
 
 function VoiceDemo() {
   return (
     <section className="mk-voice mk-shell" aria-labelledby="voice-title">
       <div className="mk-voice-copy">
-        <span className="mk-section-label">VOICE BOOKING</span>
-        <h2 id="voice-title">Si hvor du skal.<br />KJAPP ordner resten.</h2>
-        <p>Stemmen er en snarvei inn i bestillingen, ikke en egen chatbot. KJAPP finner destinasjonen og gjør turen klar, mens pris og hentetid alltid kommer fra selve KJAPP-systemet.</p>
+        <span className="mk-section-label">STEMMESØK</span>
+        <h2 id="voice-title">Skriv adressen.<br />Eller si den.</h2>
+        <p>Du kan søke etter reisemålet med tekst eller stemme. Se over adresse, bilvalg og pris før du bekrefter turen.</p>
         <div className="mk-trust-row"><span>Destinasjon</span><i /> <span>Bilvalg</span><i /> <span>Estimat</span><i /> <span>Bekreft</span></div>
       </div>
-      <div className="mk-voice-card" aria-label="Eksempel på KJAPP voice booking">
-        <div className="mk-voice-field"><span>Hvor vil du?</span><button type="button" aria-label="Mikrofon"><MicIcon /></button></div>
+      <div className="mk-voice-card" aria-label="Illustrasjon av stemmesøk i KJAPP">
+        <div className="mk-voice-field"><span>Hvor vil du?</span><span aria-hidden="true"><MicIcon /></span></div>
         <div className="mk-wave" aria-hidden="true">{Array.from({ length: 16 }).map((_, index) => <i key={index} />)}</div>
         <blockquote>«Kjør meg til Gardermoen.»</blockquote>
         <div className="mk-voice-result">
@@ -149,7 +149,7 @@ function VoiceDemo() {
           <div><small>DESTINASJON FUNNET</small><strong>Oslo lufthavn, Gardermoen</strong></div>
           <b>✓</b>
         </div>
-        <div className="mk-system-note">KJAPP-systemet henter tilgjengelige biler, pris og hentetid før bestilling.</div>
+        <div className="mk-system-note">Illustrasjon. Biltilgjengelighet og pris vises i appen når du bestiller.</div>
       </div>
     </section>
   );
@@ -183,33 +183,33 @@ export default function PremiumHome() {
 
       <section className="mk-hero mk-hero-v2 mk-shell">
         <div className="mk-hero-copy">
-          <div className="mk-eyebrow">NORSK TAXI — PÅ DINE PREMISSER</div>
-          <h1>NORSK TAXI,<br />UTEN OMVEIER.</h1>
-          <p className="mk-hero-lead">Kartet først. Bestill med tekst eller stemme. Velg bilen som passer, se estimatet før du bekrefter — og følg reisen live.</p>
-          <div className="mk-hero-promise"><span className="mk-pulse" />Si hvor du skal. KJAPP ordner resten.</div>
+          <div className="mk-eyebrow">BETA · OSLO FØRST</div>
+          <h1>En enklere taxitur<br />i Oslo.</h1>
+          <p className="mk-hero-lead">Skriv inn hvor du skal. Se bilvalg og prisestimat før du bestiller. Når sjåføren er på vei, kan du følge bilen i appen.</p>
+          <div className="mk-hero-promise"><span className="mk-pulse" />Taxi med lokale løyvehavere. Vi starter i Oslo.</div>
           <div className="mk-actions">
             <button className="mk-pill mk-pill-primary mk-beta-trigger" type="button" onClick={openWaitlist}>Få tilgang til beta <span className="mk-beta-badge">BETA</span></button>
-            <a className="mk-pill mk-pill-dark" href="#voice">Se voice booking</a>
+            <a className="mk-pill mk-pill-dark" href="#journey">Slik fungerer KJAPP</a>
             <Link className="mk-fleet-inline" to="/loyvehaver">For løyvehavere →</Link>
           </div>
-          <div className="mk-location">Lisensierte sjåfører · Tydelig estimat · Live sporing · Norsk support</div>
+          <div className="mk-location">Oslo først · Godkjente løyvehavere · Tydelig prisestimat</div>
         </div>
         <PhoneScene />
       </section>
 
-      <section className="mk-journey mk-shell">
+      <section id="journey" className="mk-journey mk-shell">
         <div className="mk-journey-copy">
           <span className="mk-section-label">SLIK FUNGERER KJAPP</span>
-          <h2>Én reise.<br />Tre enkle steg.</h2>
+          <h2>Fra adresse<br />til avreise.</h2>
           <div className="mk-step-list">
             {steps.map(([number, title, copy]) => <article className="mk-step" key={number}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div></article>)}
           </div>
         </div>
         <aside className="mk-promise">
-          <span>KJAPP GOLD</span>
-          <h3>Mobilitet først.<br />Teknologien i bakgrunnen.</h3>
+          <span>KJAPP BETA</span>
+          <h3>Du velger turen.<br />Vi viser deg veien.</h3>
           <div />
-          <p>Destinasjon først<br />Voice når du trenger det<br />Tydelig bilvalg<br />Pris og hentetid før bekreftelse</p>
+          <p>Søk etter adresse<br />Se bilene du kan velge<br />Sjekk prisestimatet<br />Bekreft når du er klar</p>
         </aside>
       </section>
 
@@ -218,7 +218,7 @@ export default function PremiumHome() {
       <section id="vehicles" className="mk-vehicles mk-shell" aria-labelledby="vehicles-title">
         <div className="mk-section-heading">
           <div><span className="mk-section-label">VELG DIN KJAPP</span><h2 id="vehicles-title">Tre måter å reise.</h2></div>
-          <p>Samme tydelige bestilling. Ulik plass og komfort. Velg kategori etter reisen — ikke etter kompliserte produktnavn.</p>
+          <p>Alene, med bagasje eller flere sammen? Velg bilen som passer turen.</p>
         </div>
         <div className="mk-vehicle-grid">
           {vehicles.map((vehicle, index) => (
@@ -234,8 +234,8 @@ export default function PremiumHome() {
 
       <section className="mk-why mk-shell">
         <div className="mk-why-intro">
-          <div><span className="mk-section-label">HVORFOR KJAPP?</span><h2>Ikke større.<br />Bare smartere og nærmere.</h2></div>
-          <p>KJAPP kombinerer lokale løyvehavere og lisensierte sjåfører med en moderne bestillingsopplevelse bygget for Norge. Teknologien skal gjøre turen enklere — ikke gjøre appen mer komplisert.</p>
+          <div><span className="mk-section-label">HVORFOR KJAPP?</span><h2>En tur du har<br />oversikt over.</h2></div>
+          <p>Vi bygger KJAPP sammen med løyvehavere i Oslo. I appen ser du hva turen er estimert å koste, hvem som henter deg, og hvor sjåføren er når turen er bekreftet.</p>
         </div>
         <div className="mk-value-grid">
           {values.map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p></article>)}
@@ -245,21 +245,21 @@ export default function PremiumHome() {
       <section className="mk-partner mk-shell">
         <div className="mk-partner-copy">
           <span>BYGGET OGSÅ FOR DE SOM KJØRER</span>
-          <h2>Din virksomhet.<br />Moderne verktøy rundt turene.</h2>
-          <p>KJAPP gir sjåfører og løyvehavere et samlet økosystem for turer, aktivitet, dokumentasjon og oppgjør — uten at partnerbudskapet tar over kundeopplevelsen.</p>
+          <h2>Se sjåførene.<br />Hold orden på driften.</h2>
+          <p>Som løyvehaver får du oversikt over tilknyttede sjåfører, biler, dokumenter, turer og oppgjør i flåteportalen.</p>
           <div className="mk-actions"><Link className="mk-pill mk-pill-primary" to="/loyvehaver">For løyvehavere</Link><a className="mk-pill mk-pill-dark" href={FLEET_URL}>Åpne Fleet Panel</a></div>
         </div>
         <div className="mk-partner-system" aria-label="KJAPP partnerverktøy">
           <span>FLEET PANEL</span>
           <strong>Sjåfører</strong><strong>Turer</strong><strong>Dokumenter</strong><strong>Oppgjør</strong>
-          <small>Partnerøkonomi og serviceavgift forklares på løyvehaversiden.</small>
+          <small>Les mer om vilkår og søknad på løyvehaversiden.</small>
         </div>
       </section>
 
       <section id="download" className="mk-download mk-shell">
         <span className="mk-section-label">KJAPP BETA</span>
-        <h2>Klar når du er.</h2>
-        <p>KJAPP er i beta. Meld interesse nå, så kontakter vi deg når tilgang åpner for din gruppe. Ekte nedlastingslenker vises først når de er aktive.</p>
+        <h2>Vil du prøve KJAPP?</h2>
+        <p>Meld deg på beta i Oslo. Vi tar kontakt når vi kan gi deg tilgang. Android- og iPhone-lenker legges ut når appene er klare.</p>
         <div className="mk-actions">
           <button className="mk-pill mk-pill-primary mk-beta-trigger" type="button" onClick={openWaitlist}>Få tilgang til beta <span className="mk-beta-badge">BETA</span></button>
           {ANDROID_BETA_URL ? <a className="mk-pill mk-pill-dark" href={ANDROID_BETA_URL} rel="noreferrer">Android beta</a> : <span className="mk-pill mk-pill-disabled" aria-disabled="true">Android beta · klargjøres</span>}
@@ -269,7 +269,7 @@ export default function PremiumHome() {
       </section>
 
       <footer className="mk-footer mk-shell">
-        <div className="mk-footer-brand"><Wordmark /><p>Norsk taxi. Uten omveier.</p></div>
+        <div className="mk-footer-brand"><Wordmark /><p>En enklere taxitur i Oslo.</p></div>
         <nav aria-label="Bunnmeny">
           <a href="#top">Kunder</a>
           <a href="#vehicles">Bilvalg</a>
