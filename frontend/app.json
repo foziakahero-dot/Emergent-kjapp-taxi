@@ -36,6 +36,12 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.30.1"
+        }
+      ],
       "expo-router",
       "expo-font",
       [
