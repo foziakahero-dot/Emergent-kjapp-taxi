@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - beta/oslo-production-ready
       - snar/mobile-ui-review-20260930
     paths:
       - 'frontend/**'
