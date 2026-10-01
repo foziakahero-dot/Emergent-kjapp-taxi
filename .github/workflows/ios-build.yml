@@ -1,6 +1,14 @@
 name: KJAPP iOS smoke builds
 
 on:
+  push:
+    branches:
+      - main
+      - snar/mobile-ui-review-20260930
+    paths:
+      - 'frontend/**'
+      - 'driver-app/**'
+      - '.github/workflows/ios-build.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +33,8 @@ jobs:
             label: Driver
     env:
       CI: '1'
-      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ vars.MAPBOX_PUBLIC_TOKEN }}
 
     defaults:
       run:
