@@ -1,6 +1,15 @@
 name: KJAPP Android APKs
 
 on:
+  push:
+    branches:
+      - main
+      - beta/oslo-production-ready
+      - snar/mobile-ui-review-20260930
+    paths:
+      - 'frontend/**'
+      - 'driver-app/**'
+      - '.github/workflows/android-build.yml'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +21,8 @@ concurrency:
 
 env:
   CI: '1'
-  EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+  EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+  EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ vars.MAPBOX_PUBLIC_TOKEN }}
 
 jobs:
   customer-apk:

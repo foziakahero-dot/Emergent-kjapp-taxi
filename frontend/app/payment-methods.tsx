@@ -183,7 +183,7 @@ const useStyles = makeStyles((c) => ({
   verifiedText: { color: c.online, fontFamily: font.bold, fontSize: 10 },
   unverified: { backgroundColor: c.dangerSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   unverifiedText: { color: c.danger, fontFamily: font.bold, fontSize: 10 },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(57,229,140,0.28)' },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: c.line },
   noticeText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, flex: 1 },
   error: { color: c.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   emptyCard: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 20, marginBottom: 12 },

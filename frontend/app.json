@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "MGLMapboxMetricsEnabledSettingShownInApp": true
       },
       "usesAppleSignIn": true
     },
@@ -36,6 +37,12 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.31.1"
+        }
+      ],
       "expo-router",
       "expo-font",
       [
@@ -78,6 +85,7 @@
     },
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "newArchEnabled": true
   }
 }

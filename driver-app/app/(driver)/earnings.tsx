@@ -193,7 +193,7 @@ function ChartBars({ days, max }: { days: any[]; max: number }) {
             const bh = Math.max(3, ((d.income || 0) / max) * (H - 10));
             const isToday = i === days.length - 1;
             return (
-              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : 'rgba(57,229,140,0.30)'} />
+              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : colors.onlineSoft} />
             );
           })}
         </Svg>
@@ -204,7 +204,7 @@ function ChartBars({ days, max }: { days: any[]; max: number }) {
 
 const useStyles = makeStyles((c) => ({
   title: { color: c.text, fontFamily: font.display, fontSize: 28, marginBottom: 16 },
-  segs: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 999, padding: 4, marginBottom: 18 },
+  segs: { flexDirection: 'row', backgroundColor: c.cardSubtle, borderRadius: 999, padding: 4, marginBottom: 18 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   segOn: { backgroundColor: c.online },
   segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },

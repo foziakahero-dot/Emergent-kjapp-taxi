@@ -11,6 +11,11 @@
       "supportsTablet": false,
       "bundleIdentifier": "no.nexorahub.kjapp.driver",
       "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "waze",
+          "comgooglemaps",
+          "maps"
+        ],
         "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer.",
         "UIBackgroundModes": [
@@ -18,7 +23,8 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll."
+        "NSCameraUsageDescription": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll.",
+        "MGLMapboxMetricsEnabledSettingShownInApp": true
       }
     },
     "android": {
@@ -42,6 +48,13 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.31.1"
+        }
+      ],
+      "./plugins/withNavigationQueries",
       "expo-router",
       "expo-font",
       [
@@ -86,6 +99,7 @@
     },
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "newArchEnabled": true
   }
 }
