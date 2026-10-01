@@ -852,6 +852,7 @@ class TripDestinationUpdate(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    navigation_app: Optional[Literal["google", "waze", "apple"]] = None
     ai_voice: Optional[str] = None
     notifications: Optional[bool] = None
     trip_updates: Optional[bool] = None
@@ -3541,6 +3542,7 @@ async def get_settings(current=Depends(get_current_user)):
             "price_alerts": True,
             "language": "Norsk",
             "theme": "Mørk",
+            "navigation_app": "google",
         }
         await db.settings.insert_one(settings)
     settings.pop("_id", None)

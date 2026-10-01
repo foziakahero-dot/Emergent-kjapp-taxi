@@ -288,7 +288,7 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
         borderColor: colors.line,
       }}
     >
-      <Icon name={name} size={20} color={colors.text} />
+      <Icon name={name} size={20} color={colors.accentOn} />
     </Pressable>
   );
 }

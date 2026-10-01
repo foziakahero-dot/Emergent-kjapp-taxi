@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 import { storage } from '@/src/utils/storage';
+import { isNavigationApp, navigationStorageKey, NavigationApp } from '@/src/lib/navigationPreference';
 
 const NOTIF: { key: string; label: string; sub: string }[] = [
   { key: 'notif_requests', label: 'Turforespørsler', sub: 'Varsel når en ny tur er tilgjengelig' },
@@ -31,17 +32,52 @@ export default function DriverSettings() {
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportInfo, setExportInfo] = useState('');
+  const [navigationSaving, setNavigationSaving] = useState(false);
+  const [navigationError, setNavigationError] = useState('');
+  const navigationBusy = useRef(false);
 
   useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
     settingsApi.get().then(async (r) => {
       const data = r.settings || r || {};
-      setSettings(data);
-      await storage.setItem('driver_navigation_app', data.navigation_app || 'google');
+      const key = navigationStorageKey(user.id);
+      const cached = await storage.getItem(key).catch(() => null);
+      const choice = isNavigationApp(data.navigation_app) ? data.navigation_app :
+        isNavigationApp(cached) ? cached : 'google';
+      if (!active) return;
+      setSettings({ ...data, navigation_app: choice });
+      await storage.setItem(key, choice);
       for (const key of ['notif_requests', 'req_sound', 'req_vibrate']) {
         await storage.setItem(`driver_${key}`, String(data[key] !== false));
       }
-    }).catch(() => setSettings({}));
-  }, []);
+    }).catch(async () => {
+      const cached = await storage.getItem(navigationStorageKey(user.id)).catch(() => null);
+      if (active) setSettings({ navigation_app: isNavigationApp(cached) ? cached : 'google' });
+    });
+    return () => { active = false; };
+  }, [user?.id]);
+
+  const selectNavigation = async (choice: NavigationApp) => {
+    if (!user?.id || navigationBusy.current) return;
+    navigationBusy.current = true;
+    setNavigationSaving(true);
+    setNavigationError('');
+    try {
+      const response = await settingsApi.update({ navigation_app: choice });
+      if ((response?.settings || response)?.navigation_app !== choice) {
+        throw new Error('Server did not confirm navigation preference');
+      }
+      setSettings((previous: any) => ({ ...previous, navigation_app: choice }));
+      // A cache failure must not undo a preference already saved by the server.
+      await storage.setItem(navigationStorageKey(user.id), choice).catch(() => {});
+    } catch {
+      setNavigationError('Kunne ikke lagre navigasjonsvalget. Prøv igjen.');
+    } finally {
+      navigationBusy.current = false;
+      setNavigationSaving(false);
+    }
+  };
 
   const toggle = async (key: string, def = true) => {
     const cur = settings[key] === undefined ? def : settings[key];
@@ -130,22 +166,17 @@ export default function DriverSettings() {
               ['waze', 'Waze'],
               ...(Platform.OS === 'ios' ? [['apple', 'Apple Kart']] : []),
             ] as string[][]).map(([key, label], i) => (
-              <Pressable key={key} testID={`driver-navigation-${key}`}
+              <Pressable key={key} testID={`driver-navigation-${key}`} disabled={navigationSaving}
                 accessibilityRole="radio" accessibilityState={{ selected: (settings.navigation_app || 'google') === key }}
                 style={[s.row, i > 0 && s.rowBorder]}
-                onPress={() => { void (async () => {
-                  const previous = settings;
-                  setSettings({ ...settings, navigation_app: key });
-                  try {
-                    await settingsApi.update({ navigation_app: key });
-                    await storage.setItem('driver_navigation_app', key);
-                  } catch { setSettings(previous); }
-                })(); }}>
+                onPress={() => { if (isNavigationApp(key)) void selectNavigation(key); }}>
                 <Text style={s.rowLabel}>{label}</Text>
                 <Text style={[s.rowSub, { marginLeft: 'auto' }]}>{(settings.navigation_app || 'google') === key ? 'Valgt' : ''}</Text>
               </Pressable>
             ))}
           </View>
+
+          {navigationError ? <Text accessibilityRole="alert" style={{ color: colors.danger, marginTop: 8 }}>{navigationError}</Text> : null}
 
           <Text style={s.sectionTitle}>Språk</Text>
           <View style={s.card}>

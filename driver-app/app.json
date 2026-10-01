@@ -11,6 +11,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "no.nexorahub.kjapp.driver",
       "infoPlist": {
+        "LSApplicationQueriesSchemes": ["waze", "comgooglemaps", "maps"],
         "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer.",
         "UIBackgroundModes": [
@@ -42,6 +43,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "./plugins/withNavigationQueries",
       "expo-router",
       "expo-font",
       [

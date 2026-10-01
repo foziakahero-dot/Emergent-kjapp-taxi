@@ -11,6 +11,8 @@ import { useAuth } from '@/src/context/AuthContext';
 import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 import { storage } from '@/src/utils/storage';
+import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
+import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripReceipt } from '@/src/lib/tripSummary';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -24,7 +26,6 @@ type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
 type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
 const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
 const MINIMIZED_TRIP_KEY = 'kjapp_driver_minimized_active_trip_v1';
-const DISMISSED_FINISHED_KEY = 'kjapp_driver_dismissed_finished_trip_v1';
 const ACTIVE_STATUSES = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
 const FINISHED_STATUSES = new Set(['arrived', 'completed', 'rated']);
 
@@ -64,14 +65,16 @@ export default function DriverHome() {
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
+  const completedSummaryVisible = !current && !(pending[0] && online);
 
   const poll = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
       if (normalized && FINISHED_STATUSES.has(normalized.status)) {
-        const dismissed = await storage.getItem(DISMISSED_FINISHED_KEY);
-        setCompletedTrip(dismissed === normalized.trip_id ? null : normalized);
+        const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
+        setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
       } else if (normalized && ACTIVE_STATUSES.has(normalized.status)) {
         setCompletedTrip(null);
       }
@@ -96,8 +99,8 @@ export default function DriverHome() {
                   const refreshed = await driverApi.current();
                   normalized = refreshed?.trip || refreshed || normalized;
                   if (normalized && FINISHED_STATUSES.has(normalized.status)) {
-                    const dismissed = await storage.getItem(DISMISSED_FINISHED_KEY);
-                    setCompletedTrip(dismissed === normalized.trip_id ? null : normalized);
+                    const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
+                    setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
                   }
                   setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
                   setError('');
@@ -133,7 +136,7 @@ export default function DriverHome() {
       setSummary(r);
       if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
     }).catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -343,13 +346,14 @@ export default function DriverHome() {
   }, [current?.trip_id]);
 
   useEffect(() => {
-    if (!completedTrip?.trip_id) return;
+    if (!user?.id || !completedTrip?.trip_id || !canAutoDismissFinishedTrip(completedTrip, completedSummaryVisible)) return;
+    const receipt = finishedTripReceipt(completedTrip);
     const timer = setTimeout(() => {
-      void storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
-      setCompletedTrip(null);
+      void storage.setItem(finishedTripDismissalKey(user.id), receipt).catch(() => {});
+      setCompletedTrip((trip: any) => trip && finishedTripReceipt(trip) === receipt ? null : trip);
     }, 8000);
     return () => clearTimeout(timer);
-  }, [completedTrip?.trip_id]);
+  }, [user?.id, completedTrip?.trip_id, completedTrip?.payment_status, completedSummaryVisible]);
 
   const noShow = async () => {
     if (!current || current.status !== 'at_pickup' || busy) return;
@@ -411,8 +415,10 @@ export default function DriverHome() {
       `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
       (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '') +
       '&travelmode=driving';
-    const preferred = (await storage.getItem('driver_navigation_app').catch(() => null)) ||
-      (await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app || 'google').catch(() => 'google'));
+    const cached = user?.id ? await storage.getItem(navigationStorageKey(user.id)).catch(() => null) : null;
+    const serverChoice = isNavigationApp(cached) ? cached :
+      await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app).catch(() => null);
+    const preferred = isNavigationApp(serverChoice) ? serverChoice : 'google';
     const native = validStops.length ? fallback
       : preferred === 'waze' ? `waze://?ll=${lat},${lng}&navigate=yes`
       : preferred === 'apple' && Platform.OS === 'ios' ? `maps://?daddr=${lat},${lng}&dirflg=d`
@@ -643,7 +649,8 @@ export default function DriverHome() {
           </View>
         ) : completedTrip ? (
           <Pressable testID="driver-trip-completed" onPress={async () => {
-            await storage.setItem(DISMISSED_FINISHED_KEY, completedTrip.trip_id);
+            if (!user?.id) return;
+            await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
             setCompletedTrip(null);
           }} style={{ paddingVertical: 16 }}>
             <Text style={s.overlineOnline}>TUR AVSLUTTET</Text>
