@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "MGLMapboxMetricsEnabledSettingShownInApp": true
       },
       "usesAppleSignIn": true
     },
