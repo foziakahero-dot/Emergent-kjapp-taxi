@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - beta/oslo-production-ready
+      - feat/mapbox-standard-mobile-20261001
     paths:
       - 'backend/**'
       - 'frontend/**'
