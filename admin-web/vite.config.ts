@@ -12,6 +12,6 @@ export default defineConfig({
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
     port: 5173,
-    proxy: { '/api': { target: 'https://github-app-builder-28.emergent.host', changeOrigin: true } },
+    proxy: { '/api': { target: 'https://api.kjappapp.no', changeOrigin: true } },
   },
 });
