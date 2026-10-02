@@ -118,7 +118,7 @@ export default function Register() {
       </ScrollView>
     </KeyboardAvoidingView>
   );
-
+}
 
 function Field({ label, s, ...props }: any) {
   return (
