@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -13,14 +13,13 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
-import { Button } from '@/src/components/ui';
 import { BrandBadge } from '@/src/components/BrandBadge';
-import { AppleSignInButton } from '@/src/components/AppleSignInButton';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function DriverLogin() {
-  const { login, logout, signInWithGoogle, signInWithApple } = useAuth();
+  const { login, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -30,14 +29,6 @@ export default function DriverLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const social = async (provider: 'google' | 'apple') => {
-    setError(''); setLoading(true);
-    try {
-      const u = await (provider === 'google' ? signInWithGoogle() : signInWithApple());
-      if (u) router.replace(u.legal_accepted ? '/(driver)/home' : '/driver-legal-consent');
-    } catch (e) { setError(apiError(e)); }
-    finally { setLoading(false); }
-  };
 
   const submit = async () => {
     setError('');
@@ -72,92 +63,98 @@ export default function DriverLogin() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.driverBg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={[s.wrap, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 24 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Pressable onPress={() => router.back()} style={s.back} testID="driver-login-back" accessibilityRole="button" accessibilityLabel="Tilbake">
-          <Icon name="arrow-left" size={20} color={colors.text} />
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={s.bgGradient} pointerEvents="none" />
+      <ScrollView contentContainerStyle={[s.wrap, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => router.back()} style={s.backLink} testID="driver-login-back" accessibilityRole="button" accessibilityLabel="Tilbake">
+          <Text style={s.backLinkText}>‹  Tilbake</Text>
         </Pressable>
 
         <View style={s.identity}>
-          <BrandBadge size={64} />
-          <Text style={s.title}>Klar for skift</Text>
-          <Text style={s.eyebrow}>KJAPP DRIVER</Text>
+          <BrandBadge size={48} />
+          <View>
+            <Text style={s.eyebrow}>KJAPP SJÅFØR</Text>
+            <Text style={s.title}>Logg inn</Text>
+          </View>
         </View>
-        <Text style={s.sub}>Logg inn med e-post eller telefonnummeret på den inviterte og godkjente sjåførkontoen din. Online-status velger du først etter innlogging.</Text>
 
         <View style={s.form}>
-          <View style={s.field}>
-            <Icon name="user" size={18} color={colors.textMuted} />
-            <TextInput
-              testID="driver-login-identifier"
-              placeholder="E-post eller telefonnummer"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              autoCapitalize="none"
-              keyboardType="default"
-              value={identifier}
-              onChangeText={setIdentifier}
-              autoComplete="off"
-            />
+          <View>
+            <Text style={s.fieldLabel}>E-POST ELLER TELEFON</Text>
+            <View style={s.field}>
+              <TextInput
+                testID="driver-login-identifier"
+                placeholder="deg@epost.no"
+                placeholderTextColor={colors.textMuted}
+                style={s.input}
+                autoCapitalize="none"
+                keyboardType="default"
+                value={identifier}
+                onChangeText={setIdentifier}
+                autoComplete="off"
+              />
+            </View>
           </View>
-          <View style={s.field}>
-            <Icon name="lock" size={18} color={colors.textMuted} />
-            <TextInput
-              testID="driver-login-password"
-              placeholder="Passord"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              secureTextEntry={!show}
-              value={password}
-              onChangeText={setPassword}
-              autoComplete="current-password"
-            />
-            <Pressable onPress={() => setShow((v) => !v)} style={s.fieldAction} testID="driver-login-toggle-password" accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}>
-              <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
-            </Pressable>
+          <View>
+            <Text style={s.fieldLabel}>PASSORD</Text>
+            <View style={s.field}>
+              <TextInput
+                testID="driver-login-password"
+                placeholder="••••••••"
+                placeholderTextColor={colors.textMuted}
+                style={s.input}
+                secureTextEntry={!show}
+                value={password}
+                onChangeText={setPassword}
+                autoComplete="current-password"
+              />
+              <Pressable onPress={() => setShow((v) => !v)} style={s.fieldAction} testID="driver-login-toggle-password" accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}>
+                <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
           </View>
         </View>
+
+        {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
+
+        <Pressable onPress={submit} disabled={loading} testID="driver-login-submit" style={{ marginTop: 28 }}>
+          <LinearGradient colors={loading ? [colors.lineStrong, colors.lineStrong] : ['#012A54', '#001F3F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.primaryButton}>
+            <Text style={s.primaryButtonText}>{loading ? 'Logger inn…' : 'Logg inn'}</Text>
+          </LinearGradient>
+        </Pressable>
 
         <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password">
           <Text style={s.forgotText}>Glemt passord?</Text>
         </Pressable>
 
-        {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
-
-        <Button label="Logg inn som sjåfør" onPress={submit} loading={loading} testID="driver-login-submit" style={{ marginTop: 12 }} />
-
-        <Pressable onPress={() => social('google')} disabled={loading} accessibilityRole="button"
-          accessibilityLabel="Fortsett med Google" testID="driver-login-google"
-          style={[s.field, { justifyContent: 'center', marginTop: 12 }]}>
-          {loading ? <ActivityIndicator color={colors.text} /> : <Text style={{ color: colors.text, fontFamily: font.semibold }}>Fortsett med Google</Text>}
-        </Pressable>
-        <AppleSignInButton loading={loading} onPress={() => social('apple')} />
-
         <View style={s.note}>
-          <Icon name="shield" size={17} color={colors.online} />
-          <Text style={s.noteText}>Kun godkjente sjåførkontoer får tilgang til turer og posisjonsdeling.</Text>
+          <Text style={s.noteText}>Har du ikke fått tilgang? Sjåførkonto opprettes via invitasjon fra flåteeier.</Text>
+          <Text style={s.helpText}>Trenger du hjelp?</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
-}
+
 
 const useStyles = makeStyles((c) => ({
-  wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.driverBg },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 28 },
-  identity: { alignItems: 'center', marginBottom: 14 },
-  eyebrow: { color: c.online, fontFamily: font.bold, fontSize: 10, letterSpacing: 2, marginTop: 8 },
-  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 24 },
-  sub: { color: c.textSecondary, fontFamily: font.body, fontSize: 14, marginBottom: 30, lineHeight: 21, textAlign: 'center' },
-  form: { gap: 12 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.driverCard, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 18, paddingLeft: 16, paddingRight: 6, height: 56 },
-  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
+  bgGradient: { ...StyleSheet.absoluteFillObject },
+  wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
+  backLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center', marginBottom: 24 },
+  backLinkText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 14 },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 34 },
+  eyebrow: { color: c.text, fontFamily: font.mono, fontSize: 10, letterSpacing: 2.2 },
+  title: { fontFamily: font.semibold, fontSize: 24, color: c.text, marginTop: 2, letterSpacing: -0.5 },
+  form: { gap: 16 },
+  fieldLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.8, marginBottom: 8 },
+  field: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.driverCard, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 16, paddingLeft: 16, paddingRight: 6, height: 52 },
+  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 15, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  forgot: { minHeight: 32, alignSelf: 'flex-end', justifyContent: 'center', marginTop: 6 },
-  forgotText: { color: c.online, fontFamily: font.semibold, fontSize: 13 },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 10 },
-  note: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.onlineSoft, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 18 },
-  noteText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },
+  primaryButton: { minHeight: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', shadowColor: c.text, shadowOpacity: 0.25, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  primaryButtonText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
+  forgot: { minHeight: 42, alignSelf: 'center', justifyContent: 'center', marginTop: 8 },
+  forgotText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 12 },
+  note: { marginTop: 'auto', borderRadius: 16, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  noteText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  helpText: { color: c.text, fontFamily: font.semibold, fontSize: 12, textAlign: 'center', marginTop: 8 },
 }));
+
