@@ -4,6 +4,7 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -11,7 +12,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { colors, font, makeStyles, radius } from '@/src/theme';
+import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
