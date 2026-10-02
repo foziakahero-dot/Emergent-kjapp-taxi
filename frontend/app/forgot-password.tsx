@@ -83,6 +83,7 @@ export default function ForgotPassword() {
       </View>
     </KeyboardAvoidingView>
   );
+}
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.bg },
