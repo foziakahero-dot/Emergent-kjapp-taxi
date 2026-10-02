@@ -744,15 +744,6 @@ export default function DriverHome() {
   );
 }
 
-function Stat({ label, value, s }: any) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const useStyles = makeStyles((c) => ({
   driverHeaderWrap: { position: 'absolute', left: 16, right: 16, zIndex: 50 },
   driverHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
