@@ -68,6 +68,7 @@ export default function DriverResetPassword() {
       </View>
     </KeyboardAvoidingView>
   );
+}
 
 const useStyles = makeStyles((c) => ({
   screen:{flex:1,backgroundColor:c.driverBg}, wrap:{flex:1,paddingHorizontal:28},
