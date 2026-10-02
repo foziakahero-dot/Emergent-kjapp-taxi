@@ -33,6 +33,9 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
+  nativeConfig: () => api.get('/auth/native/config', { params: { client: 'driver' } }).then((r) => r.data),
+  nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
+    api.post(`/auth/${provider}/native`, { identity_token, client: 'driver', device_id }).then((r) => r.data),
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'driver' }).then((r) => r.data),
   checkResetToken: (token: string) => api.get(`/auth/reset-password/${token}`).then((r) => r.data),
@@ -168,3 +171,4 @@ export const driverApi = {
     return api.post('/driver/identity-verification/selfie', form).then((r) => r.data);
   },
 };
+

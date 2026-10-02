@@ -24,6 +24,12 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
+  googleWebConfig: () => api.get('/auth/google/config').then((r) => r.data),
+  googleWebCode: (code: string, code_verifier: string, redirect_uri: string) =>
+    api.post('/auth/google/code', { code, code_verifier, redirect_uri }).then((r) => r.data),
+  nativeConfig: () => api.get('/auth/native/config', { params: { client: 'customer' } }).then((r) => r.data),
+  nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
+    api.post(`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }).then((r) => r.data),
   register: (data: any) => api.post('/auth/register', data).then((r) => r.data),
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'customer' }).then((r) => r.data),
@@ -64,6 +70,9 @@ export const placesApi = {
 };
 
 export const paymentApi = {
+  nativeConfig: () => api.get('/payments/native/config').then((r) => r.data),
+  nativeIntent: (trip_id: string) => api.post('/payments/native/intent', { trip_id }).then((r) => r.data),
+  nativeStatus: (id: string) => api.get(`/payments/native/intent/${id}`).then((r) => r.data),
   list: () => api.get('/payment-methods').then((r) => r.data),
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
   cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
@@ -131,3 +140,4 @@ export const driverApi = {
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
   payouts: () => api.get('/driver/payouts').then((r) => r.data),
 };
+

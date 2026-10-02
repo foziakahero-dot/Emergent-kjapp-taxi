@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -14,11 +15,12 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import { BrandBadge } from '@/src/components/BrandBadge';
+import { AppleSignInButton } from '@/src/components/AppleSignInButton';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
-  const { login, logout } = useAuth();
+  const { login, logout, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -27,6 +29,15 @@ export default function DriverLogin() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const social = async (provider: 'google' | 'apple') => {
+    setError(''); setLoading(true);
+    try {
+      const u = await (provider === 'google' ? signInWithGoogle() : signInWithApple());
+      if (u) router.replace(u.legal_accepted ? '/(driver)/home' : '/driver-legal-consent');
+    } catch (e) { setError(apiError(e)); }
+    finally { setLoading(false); }
+  };
 
   const submit = async () => {
     setError('');
@@ -116,6 +127,13 @@ export default function DriverLogin() {
         {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
 
         <Button label="Logg inn som sjåfør" onPress={submit} loading={loading} testID="driver-login-submit" style={{ marginTop: 12 }} />
+
+        <Pressable onPress={() => social('google')} disabled={loading} accessibilityRole="button"
+          accessibilityLabel="Fortsett med Google" testID="driver-login-google"
+          style={[s.field, { justifyContent: 'center', marginTop: 12 }]}>
+          {loading ? <ActivityIndicator color={colors.text} /> : <Text style={{ color: colors.text, fontFamily: font.semibold }}>Fortsett med Google</Text>}
+        </Pressable>
+        <AppleSignInButton loading={loading} onPress={() => social('apple')} />
 
         <View style={s.note}>
           <Icon name="shield" size={17} color={colors.online} />
