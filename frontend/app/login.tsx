@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -13,10 +14,10 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
-import { Button } from '@/src/components/ui';
 import { AppleSignInButton } from '@/src/components/AppleSignInButton';
-import { BrandBadge } from '@/src/components/BrandBadge';
+import { KjappMark } from '@/src/components/KjappMark';
 import { apiError } from '@/src/lib/format';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
@@ -98,6 +99,7 @@ export default function Login() {
       style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={s.bgGradient} pointerEvents="none" />
       <ScrollView
         contentContainerStyle={[
           s.wrap,
@@ -105,18 +107,12 @@ export default function Login() {
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={s.back}
-          testID="login-back"
-          accessibilityRole="button"
-          accessibilityLabel="Tilbake"
-        >
-          <Text style={s.backText}>←</Text>
+        <Pressable onPress={() => router.back()} style={s.backLink} testID="login-back" accessibilityRole="button" accessibilityLabel="Tilbake">
+          <Text style={s.backLinkText}>‹  Tilbake</Text>
         </Pressable>
 
         <View style={s.brandBlock}>
-          <BrandBadge size={64} />
+          <KjappMark size={64} />
           <Text style={s.title}>Velkommen til KJAPP</Text>
           <Text style={s.sub}>Bestill. Følg. Betal.</Text>
         </View>
@@ -147,77 +143,53 @@ export default function Login() {
         </View>
 
         <View style={s.form}>
-          <View style={s.field}>
-            <Text style={s.fieldPrefix}>@</Text>
-            <TextInput
-              testID="login-email"
-              placeholder="E-post"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              autoComplete="email"
-            />
+          <View>
+            <Text style={s.fieldLabel}>E-POST</Text>
+            <View style={s.field}>
+              <TextInput
+                testID="login-email"
+                placeholder="deg@epost.no"
+                placeholderTextColor={colors.textMuted}
+                style={s.input}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                autoComplete="email"
+              />
+            </View>
           </View>
 
-          <View style={s.field}>
-            <Text style={s.fieldPrefix}>•</Text>
-            <TextInput
-              testID="login-password"
-              placeholder="Passord"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              secureTextEntry={!show}
-              value={password}
-              onChangeText={setPassword}
-              autoComplete="current-password"
-            />
-            <Pressable
-              onPress={() => setShow((v) => !v)}
-              testID="login-toggle-password"
-              style={s.fieldAction}
-              accessibilityRole="button"
-              accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}
-            >
-              <Text style={s.fieldActionText}>{show ? 'SKJUL' : 'VIS'}</Text>
-            </Pressable>
+          <View>
+            <Text style={s.fieldLabel}>PASSORD</Text>
+            <View style={s.field}>
+              <TextInput
+                testID="login-password"
+                placeholder="••••••••"
+                placeholderTextColor={colors.textMuted}
+                style={s.input}
+                secureTextEntry={!show}
+                value={password}
+                onChangeText={setPassword}
+                autoComplete="current-password"
+              />
+              <Pressable onPress={() => setShow((v) => !v)} testID="login-toggle-password" style={s.fieldAction} accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}>
+                <Text style={s.fieldActionText}>{show ? 'SKJUL' : 'VIS'}</Text>
+              </Pressable>
+            </View>
           </View>
 
-          <Pressable
-            onPress={() => router.push('/forgot-password')}
-            style={s.forgot}
-            testID="login-forgot-password"
-          >
+          <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="login-forgot-password">
             <Text style={s.forgotText}>Glemt passord?</Text>
           </Pressable>
 
-          {error ? (
-            <Text style={s.error} testID="login-error">
-              {error}
-            </Text>
-          ) : null}
+          {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
 
-          <Button
-            label="Logg inn"
-            onPress={submit}
-            loading={loading}
-            testID="login-submit"
-            style={{ marginTop: 2 }}
-          />
-        </View>
-
-        <View style={s.trustRow}>
-          <View style={s.trustItem}>
-            <Text style={s.trustMark}>✓</Text>
-            <Text style={s.trustText}>Trygg konto</Text>
-          </View>
-          <View style={s.trustDivider} />
-          <View style={s.trustItem}>
-            <Text style={s.trustMark}>✓</Text>
-            <Text style={s.trustText}>Sikker betaling</Text>
-          </View>
+          <Pressable onPress={submit} disabled={loading} testID="login-submit">
+            <LinearGradient colors={loading ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B', '#FF0000']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.primaryButton}>
+              {loading ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryButtonText}>Logg inn</Text>}
+            </LinearGradient>
+          </Pressable>
         </View>
 
         <Pressable
@@ -235,24 +207,15 @@ export default function Login() {
 }
 
 const useStyles = makeStyles((c) => ({
-  wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.bg },
-  back: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.cardSubtle,
-    borderWidth: 1,
-    borderColor: c.line,
-    marginBottom: 28,
-  },
-  backText: { color: c.text, fontSize: 26, lineHeight: 28, fontFamily: font.medium },
+  bgGradient: { ...StyleSheet.absoluteFillObject },
+  wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
+  backLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center', marginBottom: 18 },
+  backLinkText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 14 },
   brandBlock: { alignItems: 'center', marginBottom: 34 },
-  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 24, textAlign: 'center' },
+  title: { fontFamily: font.semibold, fontSize: 28, color: c.text, marginTop: 24, textAlign: 'center', letterSpacing: -0.7 },
   sub: { color: c.textSecondary, fontFamily: font.body, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: 'center' },
   socialButtons: { gap: 12 },
-  form: { gap: 12 },
+  form: { gap: 16 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -260,13 +223,13 @@ const useStyles = makeStyles((c) => ({
     backgroundColor: c.card,
     borderWidth: 1,
     borderColor: c.lineStrong,
-    borderRadius: 18,
+    borderRadius: 16,
     paddingLeft: 16,
     paddingRight: 6,
-    height: 56,
+    height: 52,
   },
-  fieldPrefix: { width: 18, textAlign: 'center', color: c.textMuted, fontFamily: font.bold, fontSize: 16 },
-  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
+  fieldLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.9, marginBottom: 8 },
+  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 15, height: '100%' },
   fieldAction: { minWidth: 48, height: 44, alignItems: 'center', justifyContent: 'center' },
   fieldActionText: { color: c.textMuted, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.7 },
   forgot: { minHeight: 32, alignSelf: 'flex-end', justifyContent: 'center', paddingHorizontal: 2 },
@@ -300,7 +263,9 @@ const useStyles = makeStyles((c) => ({
   trustMark: { color: c.accent, fontFamily: font.bold, fontSize: 13 },
   trustText: { color: c.textMuted, fontSize: 11 },
   trustDivider: { width: 1, height: 16, backgroundColor: c.line },
-  footer: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  primaryButton: { minHeight: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.30, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  primaryButtonText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
+  footer: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
   footerText: { color: c.textSecondary, fontSize: 14 },
   footerLink: { color: c.accent, fontFamily: font.semibold },
 }));
