@@ -61,8 +61,8 @@ function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
   if (kind === 'user') {
     return (
       <Svg width={42} height={42} viewBox="0 0 42 42">
-        <Circle cx={21} cy={21} r={18} fill="rgba(64,145,255,0.16)" />
-        <Circle cx={21} cy={21} r={9} fill="#4091FF" stroke="#FFFFFF" strokeWidth={2.5} />
+        <Circle cx={21} cy={21} r={18} fill="rgba(255,0,0,0.16)" />
+        <Circle cx={21} cy={21} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />
         <Circle cx={21} cy={21} r={3} fill="#FFFFFF" />
       </Svg>
     );
