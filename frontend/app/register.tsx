@@ -63,7 +63,7 @@ export default function Register() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFillObject} pointerEvents="none" />
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <ScrollView contentContainerStyle={[s.wrap, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
         <Pressable onPress={() => router.back()} style={s.backLink} testID="register-back" accessibilityRole="button" accessibilityLabel="Tilbake">
           <Text style={s.backLinkText}>‹  Tilbake</Text>
@@ -155,4 +155,5 @@ const useStyles = makeStyles((c) => ({
   footerText: { color: c.textSecondary, fontSize: 14 },
   footerLink: { color: c.accent, fontFamily: font.semibold },
 }));
+
 

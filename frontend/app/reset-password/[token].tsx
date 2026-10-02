@@ -44,7 +44,7 @@ export default function ResetPassword() {
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFillObject} pointerEvents="none" />
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[s.wrap, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 24 }]}>
         <Pressable onPress={() => router.replace('/login')} style={s.backLink} accessibilityRole="button" accessibilityLabel="Til innlogging">
           <Text style={s.backLinkText}>‹  Til innlogging</Text>
@@ -102,3 +102,4 @@ const useStyles = makeStyles((c) => ({
   secondaryText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
   doneCircle: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
 }));
+

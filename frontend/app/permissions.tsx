@@ -34,7 +34,7 @@ export default function Permissions() {
 
   return (
     <View style={s.screen}>
-      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
       <View style={[s.content, { paddingTop: insets.top + 44, paddingBottom: insets.bottom + 24 }]}>
         <KjappMark size={44} />
         <Text style={s.title}>Noen få tillatelser</Text>
@@ -90,3 +90,4 @@ const useStyles = makeStyles(c => ({
   primaryText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
   error: { color: c.danger, fontSize: 12, textAlign: 'center', marginTop: 12 },
 }));
+

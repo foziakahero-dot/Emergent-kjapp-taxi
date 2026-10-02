@@ -207,7 +207,7 @@ export default function Login() {
 }
 
 const useStyles = makeStyles((c) => ({
-  bgGradient: { ...StyleSheet.absoluteFillObject },
+  bgGradient: { ...StyleSheet.absoluteFill },
   wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
   backLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center', marginBottom: 18 },
   backLinkText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 14 },
@@ -269,3 +269,4 @@ const useStyles = makeStyles((c) => ({
   footerText: { color: c.textSecondary, fontSize: 14 },
   footerLink: { color: c.accent, fontFamily: font.semibold },
 }));
+

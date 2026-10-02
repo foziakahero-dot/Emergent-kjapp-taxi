@@ -136,7 +136,7 @@ export default function DriverLogin() {
 }
 
 const useStyles = makeStyles((c) => ({
-  bgGradient: { ...StyleSheet.absoluteFillObject },
+  bgGradient: { ...StyleSheet.absoluteFill },
   wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
   backLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center', marginBottom: 24 },
   backLinkText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 14 },
@@ -157,4 +157,5 @@ const useStyles = makeStyles((c) => ({
   noteText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   helpText: { color: c.text, fontFamily: font.semibold, fontSize: 12, textAlign: 'center', marginTop: 8 },
 }));
+
 

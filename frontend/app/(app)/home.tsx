@@ -603,7 +603,7 @@ const useStyles = makeStyles((c) => ({
   buttonDisabled: { opacity: 0.45 },
   error: { color: c.danger, fontSize: 12, textAlign: 'center', marginTop: 8 },
 
-  reviewScreen: { ...StyleSheet.absoluteFillObject, zIndex: 30, backgroundColor: c.bg, paddingHorizontal: 24 },
+  reviewScreen: { ...StyleSheet.absoluteFill, zIndex: 30, backgroundColor: c.bg, paddingHorizontal: 24 },
   reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   backButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
   reviewTitle: { color: c.text, fontFamily: font.bold, fontSize: 20 },
@@ -628,7 +628,7 @@ const useStyles = makeStyles((c) => ({
   confirmButton: { minHeight: 56, marginTop: 'auto', borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.32, shadowRadius: 17, shadowOffset: { width: 0, height: 9 }, elevation: 7 },
   confirmButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 16 },
 
-  searchOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 60, backgroundColor: c.surface, paddingHorizontal: 16 },
+  searchOverlay: { ...StyleSheet.absoluteFill, zIndex: 60, backgroundColor: c.surface, paddingHorizontal: 16 },
   searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.line },
   searchField: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 16, paddingHorizontal: 12, backgroundColor: c.cardSubtle },
   searchInput: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 15, paddingVertical: 0 },
@@ -646,4 +646,5 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
+
 

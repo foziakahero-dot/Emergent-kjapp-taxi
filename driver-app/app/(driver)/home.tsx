@@ -489,7 +489,7 @@ export default function DriverHome() {
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
       {(online || current || firstOffer) ? (
         <Map
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           user={!current ? loc : null}
           pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
           dropoff={current ? mapDropoff : (firstOffer ? { lat: firstOffer.dropoff_lat, lng: firstOffer.dropoff_lng } : null)}
@@ -498,7 +498,7 @@ export default function DriverHome() {
           testID="driver-map"
         />
       ) : (
-        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFillObject} />
+        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
       )}
 
       <View style={[s.driverHeaderWrap, { top: insets.top + 12 }]}>
@@ -663,7 +663,7 @@ export default function DriverHome() {
           </View>
         </>
       ) : completedTrip ? (
-        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={[StyleSheet.absoluteFillObject, s.completeWrap]}>
+        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={[StyleSheet.absoluteFill, s.completeWrap]}>
           <View style={[s.completeContent, { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 26 }]}>
             <Text style={s.completeEyebrow}>TUR FULLFØRT</Text>
             <Text style={s.completeAmount}>
@@ -719,7 +719,7 @@ export default function DriverHome() {
 
       {declineReasonsOpen && firstOffer ? (
         <View style={s.declineOverlay}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setDeclineReasonsOpen(false)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeclineReasonsOpen(false)} />
           <View style={[s.declineSheet, { paddingBottom: insets.bottom + 18 }]}>
             <View style={s.declineHead}><Text style={s.declineTitle}>Hvorfor avslår du?</Text><Pressable style={s.closeReason} onPress={() => setDeclineReasonsOpen(false)}><Icon name="x" size={18} color={colors.text} /></Pressable></View>
             {['For langt å kjøre', 'Ikke egnet bil', 'Skal snart av vakt', 'Annet'].map((reason) => (
@@ -788,7 +788,7 @@ const useStyles = makeStyles((c) => ({
   sosTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: '#E11D48' },
   sosToolText: { color: c.accentOn, fontFamily: font.bold, fontSize: 11.5 },
 
-  mapDim: { ...StyleSheet.absoluteFillObject, zIndex: 20, backgroundColor: 'rgba(11,14,20,0.28)' },
+  mapDim: { ...StyleSheet.absoluteFill, zIndex: 20, backgroundColor: 'rgba(11,14,20,0.28)' },
   offerSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 40, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 12, backgroundColor: c.surface, shadowColor: '#0B0E14', shadowOpacity: 0.26, shadowRadius: 28, shadowOffset: { width: 0, height: -12 }, elevation: 12 },
   offerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   offerEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
@@ -841,7 +841,7 @@ const useStyles = makeStyles((c) => ({
   continueButton: { flex: 1.6, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
   continueButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
 
-  declineOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 80, justifyContent: 'flex-end', backgroundColor: 'rgba(11,14,20,0.35)' },
+  declineOverlay: { ...StyleSheet.absoluteFill, zIndex: 80, justifyContent: 'flex-end', backgroundColor: 'rgba(11,14,20,0.35)' },
   declineSheet: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: c.surface },
   declineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   declineTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20 },
@@ -849,4 +849,5 @@ const useStyles = makeStyles((c) => ({
   reasonRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: c.line },
   reasonText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
 }));
+
 

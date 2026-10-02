@@ -366,7 +366,7 @@ const useStyles = makeStyles((c) => ({
   retryBtn: { minHeight: 50, borderRadius: 25, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
   retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
 
-  matchingOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 20, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 160, backgroundColor: 'rgba(244,246,250,0.62)' },
+  matchingOverlay: { ...StyleSheet.absoluteFill, zIndex: 20, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 160, backgroundColor: 'rgba(244,246,250,0.62)' },
   matchingCard: { width: 278, alignItems: 'center', borderRadius: 24, paddingHorizontal: 30, paddingVertical: 28, backgroundColor: 'rgba(255,255,255,0.97)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.14, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
   matchingMarkWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
   matchingRing: { position: 'absolute', width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'transparent', borderTopColor: c.accent },
@@ -434,4 +434,5 @@ const useStyles = makeStyles((c) => ({
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
+
 

@@ -16,7 +16,7 @@ export default function ProfileSetup() {
 
   return (
     <View style={s.screen}>
-      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
       <View style={[s.content, { paddingTop: insets.top + 44, paddingBottom: insets.bottom + 24 }]}>
         <KjappMark size={44} />
         <Text style={s.title}>Sett opp profilen</Text>
@@ -74,3 +74,4 @@ const useStyles = makeStyles(c => ({
   skip: { minHeight: 40, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   skipText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 12 },
 }));
+
