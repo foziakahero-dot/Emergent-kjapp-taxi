@@ -6,6 +6,7 @@ on:
       - main
       - beta/oslo-production-ready
       - snar/mobile-ui-review-20260930
+      - design/figma-make-pixel-match-20261002
     paths:
       - 'frontend/**'
       - 'driver-app/**'
@@ -126,3 +127,4 @@ jobs:
           path: driver-app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
