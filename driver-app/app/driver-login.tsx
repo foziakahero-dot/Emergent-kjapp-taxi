@@ -133,7 +133,7 @@ export default function DriverLogin() {
       </ScrollView>
     </KeyboardAvoidingView>
   );
-
+}
 
 const useStyles = makeStyles((c) => ({
   bgGradient: { ...StyleSheet.absoluteFillObject },
