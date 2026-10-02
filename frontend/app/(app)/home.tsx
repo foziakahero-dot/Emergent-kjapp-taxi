@@ -15,9 +15,8 @@ import { colors, font, makeStyles, radius } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
-import { useAuth } from '@/src/context/AuthContext';
 import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
-import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
+import { apiError, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 const GOLD_VEHICLE_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
@@ -32,7 +31,6 @@ export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
-  const { user } = useAuth();
 
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
   const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
@@ -47,6 +45,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
@@ -193,6 +192,8 @@ export default function Home() {
 
   const routeGeom = estimate?.geometry?.coordinates;
   const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
+  const selectedCopy = vehicleCopy(selType);
+  const selectedPrice = priceFor(selType);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -206,298 +207,236 @@ export default function Home() {
         testID="home-map"
       />
 
-      <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <View style={s.brandPill}>
-          <Text style={s.brand}>KJ<Text style={{ color: colors.accent }}>A</Text>PP</Text>
-        </View>
-        <Pressable
-          style={s.iconControl}
-          testID="home-profile-btn"
-          onPress={() => router.push('/(app)/profile')}
-          accessibilityRole="button"
-          accessibilityLabel="Åpne profil"
-        >
-          <Icon name="user" size={20} color={colors.text} />
-        </Pressable>
-      </View>
+      {!reviewing ? (
+        <>
+          <View style={[s.searchBarWrap, { top: insets.top + 12 }]}>
+            <Pressable
+              style={s.floatingSearch}
+              onPress={() => setSearchOpen(true)}
+              testID="home-where-to"
+              accessibilityRole="button"
+              accessibilityLabel="Søk etter destinasjon"
+            >
+              <Icon name="search" size={20} color={colors.textMuted} />
+              <Text style={[s.floatingSearchText, dropoff && { color: colors.text }]} numberOfLines={1}>
+                {dropoff?.name || 'Hvor skal du?'}
+              </Text>
+            </Pressable>
+          </View>
 
-      {sheetCollapsed ? (
-        <View style={[s.collapsedSheet, { paddingBottom: insets.bottom + 8 }]} testID="home-sheet-collapsed">
           <Pressable
-            style={s.collapsedDestination}
-            onPress={() => setSheetCollapsed(false)}
-            testID="home-sheet-expand"
+            style={[
+              s.locationFab,
+              {
+                bottom: dropoff
+                  ? insets.bottom + 372
+                  : insets.bottom + (sheetCollapsed ? 94 : 300),
+              },
+            ]}
+            onPress={() => void refreshLocation()}
+            testID="home-recenter"
             accessibilityRole="button"
-            accessibilityLabel="Utvid bestillingspanelet"
+            accessibilityLabel="Sentrer kartet på min posisjon"
           >
-            <View style={s.collapsedSearchIcon}><Icon name="search" size={18} color={colors.accent} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.collapsedTitle} numberOfLines={1}>{dropoff?.name || 'Hvor vil du?'}</Text>
-              <Text style={s.collapsedHint} numberOfLines={1}>{dropoff ? 'Trykk for turvalg og pris' : 'Søk adresse, sted eller flyplass'}</Text>
-            </View>
-            {!dropoff ? (
-              <Pressable
-                style={s.collapsedVoice}
-                onPress={(e: any) => { e.stopPropagation?.(); openVoice(); }}
-                testID="home-collapsed-voice"
-                accessibilityRole="button"
-                accessibilityLabel="Bestill med stemmen"
-              >
-                <Icon name="mic" size={19} color={colors.accent} />
-              </Pressable>
-            ) : null}
-            <Icon name="chevron-up" size={20} color={colors.textSecondary} />
+            <Icon name="crosshair" size={21} color={colors.accent} />
           </Pressable>
-        </View>
-      ) : (
-      <ScrollView
-        style={s.sheet}
-        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 8 }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Pressable
-          style={s.sheetHandleButton}
-          onPress={() => setSheetCollapsed(true)}
-          testID="home-sheet-collapse"
-          accessibilityRole="button"
-          accessibilityLabel="Minimer bestillingspanelet"
-        >
-          <View style={s.handle} />
-          <Icon name="chevron-down" size={18} color={colors.textMuted} />
-        </Pressable>
 
-        <View style={s.pickupRow} testID="home-pickup-row">
-          <View style={s.beacon} />
-          <Text style={s.pickupText} numberOfLines={1}>{pickupLabel}</Text>
-        </View>
-        <View style={s.carsRow} testID="home-cars-nearby-status">
-          <View style={[s.dot, { backgroundColor: cars.length ? colors.online : colors.textMuted }]} />
-          <Text style={s.carsText}>
-            {cars.length
-              ? (nearest != null ? `${cars.length} biler i nærheten · nærmeste ${nearest} min` : `${cars.length} biler i nærheten`)
-              : (locationReady ? 'Søker etter ledige biler…' : 'Posisjon kreves for å se biler i nærheten')}
-          </Text>
-        </View>
-
-        {!dropoff ? (
-          <>
-            <View style={s.destinationCard} testID="home-destination-entry">
+          {!dropoff ? (
+            <View style={[s.browseSheet, { paddingBottom: insets.bottom + 12 }]} testID="home-browse-sheet">
               <Pressable
-                style={s.destinationMain}
-                onPress={() => setSearchOpen(true)}
-                testID="home-where-to"
+                style={s.sheetHandleButton}
+                onPress={() => setSheetCollapsed((v) => !v)}
                 accessibilityRole="button"
-                accessibilityLabel="Søk etter destinasjon"
+                accessibilityLabel={sheetCollapsed ? 'Utvid nylige steder' : 'Minimer nylige steder'}
               >
-                <Text style={s.greeting}>{greeting(user?.fullName)}</Text>
-                <Text style={s.whereTitle}>Hvor skal du?</Text>
-                <Text style={s.whereHint}>Søk adresse, sted eller flyplass</Text>
+                <View style={s.handle} />
               </Pressable>
-              <View style={s.destinationActions}>
-                <Pressable
-                  style={s.voiceBtn}
-                  onPress={openVoice}
-                  testID="home-voice"
-                  accessibilityRole="button"
-                  accessibilityLabel="Bestill med stemmen"
-                >
-                  <Icon name="mic" size={21} color={colors.accent} />
-                </Pressable>
-                <Pressable
-                  style={s.searchBtn}
-                  onPress={() => setSearchOpen(true)}
-                  testID="home-search"
-                  accessibilityRole="button"
-                  accessibilityLabel="Åpne destinasjonssøk"
-                >
-                  <Icon name="search" size={20} color={colors.accentOn} />
-                </Pressable>
-              </View>
-            </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-              {quickPlaces.map((p: any) => (
-                <Pressable
-                  key={p.id || p.slug}
-                  style={s.chip}
-                  testID={`quick-${p.label}`}
-                  onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
-                >
-                  <Icon name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'map-pin') as IconName} size={16} color={colors.accent} />
-                  <Text style={s.chipText}>{p.label}</Text>
-                </Pressable>
-              ))}
-              <Pressable style={s.chipEdit} testID="quick-edit-places" onPress={() => router.push('/saved-places')}>
-                <Icon name={myPlaces.length ? 'settings' : 'plus'} size={16} color={colors.textSecondary} />
-                <Text style={s.chipEditText}>{myPlaces.length ? 'Rediger' : 'Legg til'}</Text>
+              <Pressable style={s.sheetTitleRow} onPress={() => setSheetCollapsed((v) => !v)}>
+                <Text style={s.sheetEyebrow}>NYLIG OG FAVORITTER</Text>
+                <Icon name={sheetCollapsed ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textMuted} />
               </Pressable>
-            </ScrollView>
 
-            {locDenied ? (
-              <View style={s.locationWarning} testID="home-location-required">
-                <Text style={s.hint}>KJAPP bestiller aldri fra en antatt posisjon. Slå på posisjon for å velge korrekt hentested.</Text>
-                <View style={s.locationActions}>
-                  <Pressable style={s.locationAction} onPress={() => void refreshLocation()}>
-                    <Text style={s.locationActionText}>Prøv igjen</Text>
-                  </Pressable>
-                  <Pressable style={s.locationAction} onPress={() => Linking.openSettings().catch(() => {})}>
-                    <Text style={s.locationActionText}>Innstillinger</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <View style={s.endpoints} testID="booking-endpoints">
-              <View style={s.epRow}>
-                <View style={s.beacon} />
-                <Text style={s.epText} numberOfLines={1}>{pickupLabel}</Text>
-              </View>
-              <View style={s.epLine} />
-              <View style={s.epRow}>
-                <View style={s.square} />
-                <Text style={s.epText} numberOfLines={1}>{dropoff.name}</Text>
-                <Pressable onPress={() => { setDropoff(null); setEstimate(null); }} testID="booking-change-dest">
-                  <Text style={s.change}>Endre</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            <View style={s.sectionHeader}>
-              <Text style={s.sectionTitle}>Velg bil</Text>
-              <Text style={s.sectionMeta}>{estimate ? `ca. ${estimate.duration_min} min` : 'Beregner…'}</Text>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.vehiclesRow}>
-              {goldVehicles.map((v) => {
-                const active = selType === v.type;
-                const price = priceFor(v.type);
-                const copy = vehicleCopy(v.type);
-                return (
-                  <Pressable
-                    key={v.type}
-                    testID={`vehicle-${v.type}`}
-                    onPress={() => setSelType(v.type)}
-                    style={[s.vehicle, active && s.vehicleActive]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={`${copy.name}, ${copy.tagline}, ${price != null ? kr(price) : 'pris beregnes'}`}
-                  >
-                    <View style={s.vehicleArtwork}>
-                      <VehicleAsset kind={v.type as VehicleKind} selected={active} width={126} height={66} />
-                    </View>
-                    <View style={s.vehicleCopyRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.vName, active && { color: colors.text }]}>{copy.name}</Text>
-                        <Text style={s.vTag}>{copy.tagline}</Text>
+              {!sheetCollapsed ? (
+                <View style={s.placeList}>
+                  {quickPlaces.slice(0, 4).map((p: any, i: number) => (
+                    <Pressable
+                      key={p.id || p.slug || `${p.name}-${i}`}
+                      style={s.placeRow}
+                      testID={`quick-${p.label || i}`}
+                      onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
+                    >
+                      <View style={s.placeIcon}>
+                        <Icon
+                          name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'history') as IconName}
+                          size={18}
+                          color={colors.textSecondary}
+                        />
                       </View>
-                      <Text style={[s.vPrice, active && { color: colors.accent }]}>
-                        {price != null ? kr(price) : '…'}
-                      </Text>
+                      <View style={s.placeTextWrap}>
+                        <Text style={s.placeTitle} numberOfLines={1}>{p.label || p.name}</Text>
+                        <Text style={s.placeSub} numberOfLines={1}>{p.name}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                  <Pressable style={s.managePlaces} onPress={() => router.push('/saved-places')}>
+                    <Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />
+                    <Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>
+                  </Pressable>
+                  {locDenied ? (
+                    <View style={s.locationWarning} testID="home-location-required">
+                      <Text style={s.hint}>KJAPP trenger posisjonen din for korrekt hentested og biler i nærheten.</Text>
+                      <View style={s.locationActions}>
+                        <Pressable style={s.locationAction} onPress={() => void refreshLocation()}>
+                          <Text style={s.locationActionText}>Prøv igjen</Text>
+                        </Pressable>
+                        <Pressable style={s.locationAction} onPress={() => Linking.openSettings().catch(() => {})}>
+                          <Text style={s.locationActionText}>Innstillinger</Text>
+                        </Pressable>
+                      </View>
                     </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <View style={s.summary} testID="booking-price-summary">
-              <View style={{ flex: 1 }}>
-                <Text style={s.summaryLeft}>
-                  {estimate ? `${estimate.distance_km} km · estimert kjøretid ${estimate.duration_min} min` : 'Beregner rute…'}
-                </Text>
-                {estimate?.commission_rate != null ? (
-                  <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }} testID="booking-service-fee">
-                    KJAPP serviceavgift {Math.round(Number(estimate.commission_rate) * 100)} % · inkludert i vist totalpris
-                  </Text>
-                ) : null}
-              </View>
-              <Text style={s.summaryPrice}>{kr(priceFor(selType))}</Text>
-            </View>
-
-            <View style={{ gap: 8, marginBottom: 10 }} testID="booking-options">
-              {stops.map((stop, idx) => (
-                <View key={`${stop.name}-${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Icon name="map-pin" size={14} color={colors.accent} />
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, flex: 1 }} numberOfLines={1}>Stopp {idx + 1}: {stop.name}</Text>
-                  <Pressable onPress={() => setStops((prev) => prev.filter((_, i) => i !== idx))} accessibilityLabel={`Fjern stopp ${idx + 1}`}>
-                    <Icon name="x" size={15} color={colors.textMuted} />
-                  </Pressable>
+                  ) : null}
                 </View>
-              ))}
-              {stops.length < 3 ? (
-                <Pressable
-                  style={s.payRow}
-                  onPress={() => { setSearchTarget('stop'); setSearchOpen(true); }}
-                  testID="booking-add-stop"
-                  accessibilityRole="button"
-                  accessibilityLabel="Legg til stopp"
-                >
-                  <Icon name="plus" size={17} color={colors.accent} />
-                  <Text style={s.payText}>Legg til stopp</Text>
-                  <Text style={s.change}>{stops.length}/3</Text>
-                </Pressable>
               ) : null}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {[
-                  ['wheelchair', 'Rullestol'], ['large_luggage', 'Stor bagasje'], ['pet', 'Kjæledyr'],
-                  ['hearing_impaired', 'Hørselsbehov'], ['visual_impaired', 'Synsbehov'], ['child_seat', 'Barnesete'],
-                ].map(([id, label]) => {
-                  const active = specialNeeds.includes(id);
+            </View>
+          ) : (
+            <View style={[s.rideSheet, { paddingBottom: insets.bottom + 14 }]} testID="home-ride-sheet">
+              <Pressable style={s.sheetHandleButton} onPress={() => setSheetCollapsed((v) => !v)}>
+                <View style={s.handle} />
+              </Pressable>
+
+              <View style={s.rideHeader}>
+                <Text style={s.rideTitle}>Velg reise</Text>
+                <Pressable
+                  onPress={() => {
+                    setReviewing(false);
+                    setDropoff(null);
+                    setEstimate(null);
+                  }}
+                  testID="booking-change-dest"
+                >
+                  <Text style={s.changeMono}>ENDRE</Text>
+                </Pressable>
+              </View>
+
+              <View style={s.vehicleList}>
+                {goldVehicles.map((v) => {
+                  const active = selType === v.type;
+                  const price = priceFor(v.type);
+                  const copy = vehicleCopy(v.type);
                   return (
                     <Pressable
-                      key={id}
-                      onPress={() => setSpecialNeeds((prev) => active ? prev.filter((x) => x !== id) : [...prev, id])}
-                      style={[s.chip, active && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
-                      testID={`need-${id}`}
+                      key={v.type}
+                      testID={`vehicle-${v.type}`}
+                      onPress={() => setSelType(v.type)}
+                      style={[s.vehicleRow, active && s.vehicleRowActive]}
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
                     >
-                      <Text style={[s.chipText, active && { color: colors.accent }]}>{label}</Text>
+                      <View style={[s.vehicleIconBox, active && s.vehicleIconBoxActive]}>
+                        <VehicleAsset kind={v.type as VehicleKind} selected={active} width={72} height={40} />
+                      </View>
+                      <View style={s.vehicleInfo}>
+                        <View style={s.vehicleNameRow}>
+                          <Text style={s.vehicleName}>
+                            {v.type === 'ai-first' ? 'KJAPP Standard' : v.type === 'trygg' ? 'KJAPP Comfort' : 'KJAPP Premium'}
+                          </Text>
+                          {v.type === 'ai-first' ? <Text style={s.vehicleBadge}>Mest valgt</Text> : null}
+                        </View>
+                        <Text style={s.vehicleMeta}>
+                          {copy.tagline}{nearest != null ? ` · ${nearest} min` : ''}{v.type === 'trygg' ? ' · 7 pers.' : ' · 4 pers.'}
+                        </Text>
+                      </View>
+                      <Text style={s.vehiclePrice}>{price != null ? kr(price) : '…'}</Text>
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+              </View>
+
+              <Pressable
+                style={[s.reviewButton, !canBook && s.buttonDisabled]}
+                onPress={() => canBook && setReviewing(true)}
+                disabled={!canBook}
+                testID="booking-review"
+              >
+                <Text style={s.reviewButtonText}>Se over · {selectedCopy.name}</Text>
+              </Pressable>
+              {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
             </View>
-
-            <Pressable style={s.payRow} onPress={() => router.push('/payment-methods')} testID="booking-payment-row">
-              <Icon name={payMethod?.type === 'vipps' ? 'wallet' : 'card'} size={18} color={colors.accent} />
-              <Text style={s.payText}>
-                {payMethod ? (payMethod.type === 'vipps' ? 'Vipps' : `${payMethod.label} •••• ${payMethod.last4}`) : 'Legg til betaling'}
-              </Text>
-              <Text style={s.change}>Endre</Text>
+          )}
+        </>
+      ) : (
+        <View style={[s.reviewScreen, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 18 }]} testID="booking-review-screen">
+          <View style={s.reviewHeader}>
+            <Pressable style={s.backButton} onPress={() => setReviewing(false)} accessibilityLabel="Tilbake til bilvalg">
+              <Icon name="chevron-left" size={20} color={colors.text} />
             </Pressable>
+            <Text style={s.reviewTitle}>Bekreft tur</Text>
+          </View>
 
-            {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
+          <View style={s.routeCard}>
+            <View style={s.routeRow}>
+              <View style={[s.routeDot, { backgroundColor: colors.online }]} />
+              <Text style={s.routeText} numberOfLines={1}>{pickupLabel}</Text>
+            </View>
+            <View style={s.routeConnector} />
+            <View style={s.routeRow}>
+              <View style={[s.routeDot, { backgroundColor: colors.accent }]} />
+              <Text style={s.routeText} numberOfLines={2}>{dropoff?.name}</Text>
+            </View>
+          </View>
 
-            <Pressable
-              style={[s.confirm, !canBook && { opacity: 0.55 }]}
-              onPress={book}
-              disabled={!canBook}
-              testID="booking-confirm"
-            >
-              {booking ? (
-                <ActivityIndicator color={colors.accentOn} />
-              ) : (
-                <Text style={s.confirmText}>Bekreft KJAPP · {kr(priceFor(selType))}</Text>
-              )}
-            </Pressable>
-          </>
-        )}
-      </ScrollView>
+          <View style={s.fareCard}>
+            <View style={s.fareHead}>
+              <Text style={s.fareVehicle}>{selectedCopy.name}</Text>
+              <Text style={s.fastPriceBadge}>Fastpris</Text>
+            </View>
+            <View style={s.fareRows}>
+              <View style={s.fareRow}>
+                <Text style={s.fareLabel}>Avstand</Text>
+                <Text style={s.fareValue}>{estimate ? `${estimate.distance_km} km` : '—'}</Text>
+              </View>
+              <View style={s.fareRow}>
+                <Text style={s.fareLabel}>Estimert kjøretid</Text>
+                <Text style={s.fareValue}>{estimate ? `${estimate.duration_min} min` : '—'}</Text>
+              </View>
+              <View style={s.fareTotalRow}>
+                <Text style={s.fareTotalLabel}>Totalt</Text>
+                <Text style={s.fareTotalValue}>{selectedPrice != null ? kr(selectedPrice) : '—'}</Text>
+              </View>
+            </View>
+          </View>
+
+          <Pressable style={s.paymentRow} onPress={() => router.push('/payment-methods')} testID="booking-payment-row">
+            <Icon name={payMethod?.type === 'vipps' ? 'wallet' : 'card'} size={19} color={colors.textSecondary} />
+            <Text style={s.paymentText} numberOfLines={1}>
+              {payMethod ? (payMethod.type === 'vipps' ? 'Vipps' : `${payMethod.label} ••${payMethod.last4}`) : 'Legg til betalingsmåte'}
+            </Text>
+            <Text style={s.changeMono}>ENDRE</Text>
+          </Pressable>
+
+          {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
+          <Pressable
+            style={[s.confirmButton, !canBook && s.buttonDisabled]}
+            onPress={book}
+            disabled={!canBook}
+            testID="booking-confirm"
+          >
+            {booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}
+          </Pressable>
+        </View>
       )}
 
-      {searchOpen && (
+      {searchOpen && !reviewing ? (
         <SearchSheet
           onClose={() => setSearchOpen(false)}
-          onMinimize={() => { setSearchOpen(false); setSheetCollapsed(true); }}
           onVoice={openVoice}
           onSelect={(d: any) => {
             if (searchTarget === 'stop') {
               setStops((prev) => prev.length < 3 ? [...prev, d] : prev);
             } else {
               setDropoff(d);
+              setReviewing(false);
             }
             setSearchTarget('dropoff');
             setSearchOpen(false);
@@ -505,12 +444,12 @@ export default function Home() {
           featured={featured}
           insets={insets}
         />
-      )}
+      ) : null}
     </View>
   );
-}
 
-function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets }: any) {
+
+function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -538,7 +477,7 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
     <View style={[s.searchOverlay, { paddingTop: insets.top + 12 }]} testID="search-sheet">
       <View style={s.searchHeader}>
         <View style={s.searchField}>
-          <Icon name="search" size={18} color={colors.textMuted} />
+          <Icon name="search" size={19} color={colors.textMuted} />
           <TextInput
             testID="search-input"
             autoFocus
@@ -551,33 +490,22 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
           />
           {loading ? (
             <ActivityIndicator color={colors.accent} />
+          ) : q ? (
+            <Pressable onPress={() => setQ('')} style={s.clearButton} accessibilityLabel="Tøm søk">
+              <Icon name="x" size={12} color={colors.accentOn} strokeWidth={2.4} />
+            </Pressable>
           ) : (
-            <Pressable
-              onPress={onVoice}
-              style={s.searchVoice}
-              testID="search-voice"
-              accessibilityRole="button"
-              accessibilityLabel="Bruk stemmen"
-            >
-              <Icon name="mic" size={19} color={colors.accent} />
+            <Pressable onPress={onVoice} style={s.voiceInline} accessibilityLabel="Bestill med stemmen">
+              <Icon name="mic" size={18} color={colors.accent} />
             </Pressable>
           )}
         </View>
-        <Pressable
-          onPress={onMinimize}
-          testID="search-minimize"
-          style={s.searchMinimize}
-          accessibilityRole="button"
-          accessibilityLabel="Minimer søk og vis kart"
-        >
-          <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-        </Pressable>
-        <Pressable onPress={onClose} testID="search-close" style={s.searchClose}>
-          <Text style={{ color: colors.accent, fontSize: 15 }}>Avbryt</Text>
+        <Pressable onPress={onClose} testID="search-close" style={s.cancelButton}>
+          <Text style={s.cancelText}>Avbryt</Text>
         </Pressable>
       </View>
-      <Text style={s.searchPrompt}>Skriv eller si destinasjonen. Du bekrefter alltid bil og pris før turen opprettes.</Text>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
+
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.searchResults}>
         {items.map((r: any, i: number) => (
           <Pressable
             key={`${r.name}-${i}`}
@@ -586,13 +514,19 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
             onPress={() => onSelect({ name: r.name, lat: r.lat, lng: r.lng })}
           >
             <View style={s.resultIcon}>
-              <Icon name={r.saved ? 'star' : 'map-pin'} size={16} color={colors.accent} fill={r.saved ? colors.accent : 'none'} />
+              <Icon name={r.saved ? 'star' : 'map-pin'} size={17} color={colors.textSecondary} fill={r.saved ? colors.textSecondary : 'none'} />
             </View>
-            <Text style={s.resultText} numberOfLines={1}>{r.name}</Text>
+            <View style={s.resultTextWrap}>
+              <Text style={s.resultText} numberOfLines={1}>{r.name}</Text>
+            </View>
           </Pressable>
         ))}
         {!items.length && q.trim().length >= 2 && !loading ? (
-          <Text style={s.hint}>Ingen treff. Prøv et annet søk.</Text>
+          <View style={s.emptySearch}>
+            <View style={s.emptySearchIcon}><Icon name="search" size={24} color={colors.textMuted} /></View>
+            <Text style={s.emptyTitle}>Fant ingen steder</Text>
+            <Text style={s.emptySub}>Prøv et annet søk</Text>
+          </View>
         ) : null}
       </ScrollView>
     </View>
@@ -600,121 +534,115 @@ function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets 
 }
 
 const useStyles = makeStyles((c) => ({
-  topBar: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 8,
+  searchBarWrap: { position: 'absolute', left: 16, right: 16, zIndex: 20 },
+  floatingSearch: {
+    minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10,
+    shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
   },
-  brandPill: {
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
-    borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9,
-    shadowColor: c.text, shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  floatingSearchText: { flex: 1, color: c.textMuted, fontFamily: font.medium, fontSize: 15 },
+  locationFab: {
+    position: 'absolute', right: 16, zIndex: 21, width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12,
+    shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 5,
   },
-  brand: { fontFamily: font.display, fontSize: 19, fontWeight: '700', color: c.text, letterSpacing: 1.1 },
-  iconControl: {
-    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
+  browseSheet: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
+    backgroundColor: 'rgba(255,255,255,0.98)', borderTopLeftRadius: 30, borderTopRightRadius: 30,
+    borderTopWidth: 1, borderColor: c.line, paddingHorizontal: 24, paddingTop: 10,
+    shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9,
   },
-  sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '76%',
-    backgroundColor: c.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30,
-    borderWidth: 1, borderColor: c.line,
-    shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8,
+  rideSheet: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
+    backgroundColor: 'rgba(255,255,255,0.98)', borderTopLeftRadius: 30, borderTopRightRadius: 30,
+    borderTopWidth: 1, borderColor: c.line, paddingHorizontal: 24, paddingTop: 10,
+    shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9,
   },
-  sheetContent: { paddingHorizontal: 18, paddingTop: 8 },
-  sheetHandleButton: { alignSelf: 'center', minWidth: 72, minHeight: 34, alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 },
+  sheetHandleButton: { alignSelf: 'center', width: 64, height: 28, alignItems: 'center', justifyContent: 'center' },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong },
-  collapsedSheet: {
-    position: 'absolute', left: 14, right: 14, bottom: 0,
-    backgroundColor: c.surface, borderRadius: 24,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 10, paddingTop: 10,
-  },
-  collapsedDestination: {
-    minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.lineStrong,
-    borderRadius: 18, paddingHorizontal: 12,
-  },
-  collapsedSearchIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
-  collapsedTitle: { color: c.text, fontSize: 15, fontWeight: '650' as any },
-  collapsedHint: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-  collapsedVoice: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
-  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 },
-  beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.accent },
-  pickupText: { color: c.text, fontSize: 14, flex: 1 },
-  carsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 15 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-  carsText: { color: c.textMuted, fontSize: 12 },
-  destinationCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
-    borderRadius: radius.lg, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: c.line,
-  },
-  destinationMain: { flex: 1, paddingVertical: 2 },
-  destinationActions: { flexDirection: 'row', gap: 8, alignItems: 'center', marginLeft: 12 },
-  greeting: { color: c.accent, fontSize: 12, marginBottom: 3, letterSpacing: 0.4, fontWeight: '600' },
-  whereTitle: { color: c.text, fontFamily: font.display, fontWeight: '650' as any, fontSize: 24, lineHeight: 29 },
-  whereHint: { color: c.textMuted, fontSize: 12, marginTop: 4 },
-  voiceBtn: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft,
-    borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center',
-  },
-  searchBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  chipsRow: { gap: 10, paddingBottom: 10 },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0,
-    backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
-    borderRadius: 999, paddingHorizontal: 15, height: 44,
-  },
-  chipText: { color: c.text, fontSize: 14 },
-  chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 15, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
-  chipEditText: { color: c.textSecondary, fontSize: 14 },
-  hint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 },
-  locationWarning: { backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, padding: 12, marginTop: 8 },
+  sheetTitleRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetEyebrow: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+  placeList: { paddingBottom: 2 },
+  placeRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  placeIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  placeTextWrap: { flex: 1, minHeight: 62, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: c.line },
+  placeTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  placeSub: { color: c.textSecondary, fontSize: 12, marginTop: 2 },
+  managePlaces: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 4 },
+  managePlacesText: { color: c.accent, fontFamily: font.medium, fontSize: 13 },
+  locationWarning: { marginTop: 8, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: c.warning, backgroundColor: c.warning + '10' },
+  hint: { color: c.textSecondary, fontSize: 12, lineHeight: 17 },
   locationActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  locationAction: { minHeight: 38, flex: 1, borderRadius: 10, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
-  locationActionText: { color: c.accent, fontSize: 12, fontWeight: '700' },
-  endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 12 },
-  epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  epText: { color: c.text, fontSize: 14, flex: 1 },
-  epLine: { width: 1, height: 16, backgroundColor: c.lineStrong, marginLeft: 5, marginVertical: 4 },
-  square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
-  change: { color: c.accent, fontSize: 13, fontWeight: '600' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9, paddingHorizontal: 2 },
-  sectionTitle: { color: c.text, fontSize: 15, fontWeight: '650' as any },
-  sectionMeta: { color: c.textMuted, fontSize: 12 },
-  vehiclesRow: { gap: 10, paddingBottom: 13 },
-  vehicle: {
-    width: 162, minHeight: 132, flexShrink: 0, backgroundColor: c.cardSubtle, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 12, paddingTop: 7, paddingBottom: 12,
+  locationAction: { minHeight: 38, paddingHorizontal: 14, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface },
+  locationActionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
+  rideHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  rideTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, letterSpacing: -0.4 },
+  changeMono: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.4 },
+  vehicleList: { gap: 8 },
+  vehicleRow: {
+    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10,
+    borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
   },
-  vehicleActive: { borderColor: c.accent, backgroundColor: c.accentSoft },
-  vehicleArtwork: { height: 68, alignItems: 'center', justifyContent: 'center' },
-  vehicleCopyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  vName: { color: c.textSecondary, fontSize: 14, fontWeight: '700', marginTop: 1 },
-  vTag: { color: c.textMuted, fontSize: 10.5, marginTop: 2 },
-  vPrice: { color: c.text, fontFamily: font.mono, fontSize: 14, fontWeight: '600' },
-  summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  summaryLeft: { color: c.textMuted, fontSize: 12, flex: 1 },
-  summaryPrice: { color: c.text, fontFamily: font.display, fontWeight: '650' as any, fontSize: 22 },
-  payRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: radius.md, paddingHorizontal: 15, height: 52, marginBottom: 12 },
-  payText: { color: c.text, fontSize: 14, flex: 1 },
-  error: { color: c.danger, fontSize: 13, marginBottom: 10 },
-  confirm: {
-    height: 56, borderRadius: radius.pill, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
-    shadowColor: c.accent, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3,
+  vehicleRowActive: { backgroundColor: c.accentSoft, borderColor: c.accent },
+  vehicleIconBox: { width: 68, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  vehicleIconBoxActive: { backgroundColor: c.surface },
+  vehicleInfo: { flex: 1 },
+  vehicleNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  vehicleName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  vehicleBadge: { color: c.accentOn, backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, fontFamily: font.semibold, fontSize: 9 },
+  vehicleMeta: { color: c.textSecondary, fontSize: 11, marginTop: 3 },
+  vehiclePrice: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  reviewButton: {
+    minHeight: 54, marginTop: 14, borderRadius: 27, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
+    shadowColor: c.accent, shadowOpacity: 0.30, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6,
   },
-  confirmText: { color: c.accentOn, fontSize: 16, fontWeight: '700' },
-  searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, paddingHorizontal: 16, zIndex: 50 },
-  searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
-  searchField: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card,
-    borderWidth: 1, borderColor: c.lineStrong, borderRadius: radius.md, paddingLeft: 14, paddingRight: 6, height: 54,
-  },
-  searchInput: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
-  searchVoice: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
-  searchMinimize: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  searchClose: { minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  searchPrompt: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12, paddingHorizontal: 2 },
-  resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, borderBottomWidth: 1, borderBottomColor: c.line },
-  resultIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-  resultText: { color: c.text, fontSize: 15, flex: 1 },
+  reviewButtonText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
+  buttonDisabled: { opacity: 0.45 },
+  error: { color: c.danger, fontSize: 12, textAlign: 'center', marginTop: 8 },
+
+  reviewScreen: { ...StyleSheet.absoluteFillObject, zIndex: 30, backgroundColor: c.bg, paddingHorizontal: 24 },
+  reviewHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backButton: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+  reviewTitle: { color: c.text, fontFamily: font.bold, fontSize: 20 },
+  routeCard: { marginTop: 24, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  routeDot: { width: 10, height: 10, borderRadius: 5 },
+  routeText: { flex: 1, color: c.text, fontFamily: font.medium, fontSize: 14 },
+  routeConnector: { width: 1, height: 20, marginLeft: 4.5, backgroundColor: c.lineStrong },
+  fareCard: { marginTop: 16, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  fareHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  fareVehicle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  fastPriceBadge: { color: c.accentOn, backgroundColor: c.online, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, fontFamily: font.semibold, fontSize: 10 },
+  fareRows: { marginTop: 12 },
+  fareRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7 },
+  fareLabel: { color: c.textSecondary, fontSize: 14 },
+  fareValue: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+  fareTotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5, paddingTop: 13, borderTopWidth: 1, borderTopColor: c.line },
+  fareTotalLabel: { color: c.text, fontFamily: font.bold, fontSize: 16 },
+  fareTotalValue: { color: c.text, fontFamily: font.bold, fontSize: 16 },
+  paymentRow: { marginTop: 16, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingHorizontal: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  paymentText: { flex: 1, color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  confirmButton: { minHeight: 56, marginTop: 'auto', borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.32, shadowRadius: 17, shadowOffset: { width: 0, height: 9 }, elevation: 7 },
+  confirmButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 16 },
+
+  searchOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 60, backgroundColor: c.surface, paddingHorizontal: 16 },
+  searchHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: c.line },
+  searchField: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 16, paddingHorizontal: 12, backgroundColor: c.cardSubtle },
+  searchInput: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 15, paddingVertical: 0 },
+  clearButton: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: c.textMuted },
+  voiceInline: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  cancelButton: { minHeight: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { color: c.accent, fontFamily: font.semibold, fontSize: 14 },
+  searchResults: { paddingTop: 4, paddingBottom: 40 },
+  resultRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  resultIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  resultTextWrap: { flex: 1, minHeight: 64, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: c.line },
+  resultText: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  emptySearch: { alignItems: 'center', paddingTop: 64 },
+  emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
+  emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
+
