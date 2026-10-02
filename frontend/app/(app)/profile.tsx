@@ -46,15 +46,16 @@ export default function Profile() {
     <>
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.bg }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{ paddingHorizontal: 28, paddingTop: insets.top + 38, paddingBottom: 120 }}
       >
         <Text style={s.title}>Profil</Text>
 
         <View style={s.card} testID="profile-card">
           <View style={s.avatar}><Text style={s.avatarText}>{initials}</Text></View>
-          <Text style={s.name}>{user?.fullName || 'KJAPP-bruker'}</Text>
-          <Text style={s.email}>{user?.email}</Text>
-          {user?.phone ? <Text style={s.email}>{user.phone}</Text> : null}
+          <View style={{ flex: 1 }}>
+            <Text style={s.name}>{user?.fullName || 'KJAPP-bruker'}</Text>
+            <Text style={s.email} numberOfLines={1}>{user?.phone || user?.email}</Text>
+          </View>
         </View>
 
         <View style={s.menu}>
@@ -126,16 +127,16 @@ export default function Profile() {
 }
 
 const useStyles = makeStyles((c) => ({
-  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginBottom: 20 },
-  card: { backgroundColor: c.card, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
-  avatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  avatarText: { color: c.accent, fontFamily: font.display, fontSize: 28 },
-  name: { color: c.text, fontFamily: font.display, fontSize: 22 },
-  email: { color: c.textMuted, fontSize: 14, marginTop: 4 },
-  menu: { marginTop: 20, backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.line, overflow: 'hidden' },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: c.line },
-  menuIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-  menuLabel: { color: c.text, fontSize: 15, flex: 1 },
+  title: { fontFamily: font.semibold, fontSize: 24, color: c.text, marginBottom: 20, letterSpacing: -0.5 },
+  card: { minHeight: 96, flexDirection: 'row', gap: 16, backgroundColor: c.card, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 18, alignItems: 'center' },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 20 },
+  name: { color: c.text, fontFamily: font.semibold, fontSize: 18 },
+  email: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
+  menu: { marginTop: 12, gap: 10 },
+  menuRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.line },
+  menuIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  menuLabel: { color: c.text, fontFamily: font.semibold, fontSize: 14, flex: 1 },
   deleteAccount: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 20, paddingHorizontal: 16, paddingVertical: 16, borderRadius: 20, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.line },
   deleteIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center' },
   deleteLabel: { color: c.danger, fontSize: 15, fontWeight: '700' },
