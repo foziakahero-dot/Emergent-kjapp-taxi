@@ -758,6 +758,36 @@ function payoutLabel(p: FleetPayout) {
   return 'Stripe-oppgjør';
 }
 
+function StripeOnboarding() {
+  const [status, setStatus] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const refresh = async () => {
+    setBusy(true); setError('');
+    try { setStatus(await api.stripeStatus()); } catch (e) { setError(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  useEffect(() => { refresh(); }, []);
+  const start = async () => {
+    setBusy(true); setError('');
+    try {
+      const result = await api.stripeOnboarding();
+      const url = new URL(result.onboarding_url);
+      if (url.protocol !== 'https:' || url.hostname !== 'connect.stripe.com') throw new Error('Ugyldig Stripe-lenke');
+      window.location.assign(url.href);
+    } catch (e) { setError(apiError(e)); setBusy(false); }
+  };
+  return <div className="payout-card" style={{ marginBottom: 20 }}>
+    <div className="eyebrow">STRIPE · BANK OG VERIFISERING</div>
+    <h2>{status?.ready ? 'Klar for automatiske oppgjør' : 'Fullfør Stripe-oppsettet'}</h2>
+    <p>{status?.ready ? 'Turbetalinger fordeles med avtalt KJAPP-serviceavgift. Stripe utbetaler til bankkonto etter bekreftet plan.' : 'KJAPP-godkjenningen gir tilgang til panelet. Firma, bankkonto og identitet må i tillegg bekreftes direkte hos Stripe.'}</p>
+    {status?.currently_due?.length ? <p>Stripe trenger flere opplysninger. Åpne oppsettet for å se hva som mangler.</p> : null}
+    {!status?.ready && <button className="primary-button" disabled={busy} onClick={start}>{busy ? 'Venter…' : status?.connected ? 'Fortsett hos Stripe' : 'Koble bankkonto med Stripe'}</button>}
+    <button className="text-link" disabled={busy} onClick={refresh}>Oppdater Stripe-status</button>
+    <ErrorBox message={error} />
+  </div>;
+}
+
 export function FinancePage() {
   const [book, setBook] = useState<FleetWorkbook | null>(null); const [payouts, setPayouts] = useState<FleetPayout[]>([]); const [payoutMeta, setPayoutMeta] = useState<{ source?: string; connected?: boolean; payout_schedule?: string; temporarily_unavailable?: boolean }>({}); const [me, setMe] = useState<FleetMe | null>(null); const [err, setErr] = useState(''); const [downloading, setDownloading] = useState(false);
   const now = new Date();
@@ -766,7 +796,7 @@ export function FinancePage() {
   const rate = Math.round((me.commission_rate ?? (book.summary.gross ? book.summary.commission / book.summary.gross : .10)) * 100);
   const download = async () => { setDownloading(true); try { const buf = await api.exportMonthly(now.getFullYear(), now.getMonth() + 1); const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `KJAPP-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}.xlsx`; a.click(); URL.revokeObjectURL(url); } catch (e) { setErr(apiError(e)); } finally { setDownloading(false); } };
   return <div className="page-content"><PageHead title="Økonomi" sub="Enkelt oppgjør. Ingen regnskapssystem inni KJAPP." />
-    <div className="kpi-grid three"><div className="kpi-card"><span>BRUTTO DENNE MÅNEDEN</span><strong>{fmtMoney(book.summary.gross)}</strong><small>{book.summary.trips} turer</small></div><div className="kpi-card"><span>KJAPP PROVISJON</span><strong>{fmtMoney(book.summary.commission)}</strong><small>{rate}% avtalt</small></div><div className="kpi-card"><span>NETTO</span><strong>{fmtMoney(book.summary.net)}</strong><small>før øvrige kostnader</small></div></div>
+    <StripeOnboarding /><div className="kpi-grid three"><div className="kpi-card"><span>BRUTTO DENNE MÅNEDEN</span><strong>{fmtMoney(book.summary.gross)}</strong><small>{book.summary.trips} turer</small></div><div className="kpi-card"><span>KJAPP PROVISJON</span><strong>{fmtMoney(book.summary.commission)}</strong><small>{rate}% avtalt</small></div><div className="kpi-card"><span>NETTO</span><strong>{fmtMoney(book.summary.net)}</strong><small>før øvrige kostnader</small></div></div>
     <div className="finance-grid"><div className="payout-card"><div className="eyebrow">STRIPE-UTBETALINGER</div><small>{payoutMeta.connected ? (payoutMeta.payout_schedule === 'weekly_friday' ? 'Connected account · ukentlig fredag' : 'Connected account · Stripe-plan') : 'Stripe Connect er ikke aktivert'}</small>{payouts.slice(0,5).map((p,i) => <div className="payout-row" key={p.id || i}><span>{payoutLabel(p)}</span><b className="mono">{fmtMoney(payoutAmount(p))}</b><em className={['paid','completed','utbetalt'].includes(String(p.status).toLowerCase()) ? 'status-green' : 'muted'}>{p.status === 'paid' ? 'Utbetalt' : p.status || 'Registrert'}</em></div>)}{!payouts.length ? <div className="empty-state">{payoutMeta.temporarily_unavailable ? 'Stripe-utbetalinger er midlertidig utilgjengelige. Prøv igjen senere.' : payoutMeta.connected ? 'Ingen Stripe-utbetalinger registrert ennå.' : 'Koble løyvehaver til Stripe Connect for automatiske oppgjør.'}</div> : null}</div><div className="report-card"><div className="eyebrow">MÅNEDSRAPPORT</div><h2>{monthTitle(now)}</h2><p>Turer · sjåførfordeling<br/>brutto · provisjon · netto</p><button className="primary-button" onClick={download} disabled={downloading}>{downloading ? 'Laster…' : 'Last ned Excel'}</button><small>Eksporten genereres av KJAPP-backenden fra ekte turdata.</small></div></div><ErrorBox message={err} />
   </div>;
 }
@@ -781,3 +811,4 @@ export function BedriftPage() {
   </div>;
 }
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) { return <div className="info-row"><span>{label}</span><b>{value}</b></div>; }
+

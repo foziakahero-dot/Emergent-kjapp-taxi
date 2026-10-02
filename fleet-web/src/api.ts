@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
-const productionBackend = 'https://github-app-builder-28.emergent.host/api';
+const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
 const isProductionFleetHost = host === 'fleet.kjappapp.no';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
@@ -239,6 +239,8 @@ export type PublicDriverInvite = {
 };
 
 export const api = {
+  stripeStatus: () => http.get('/fleet/stripe/status').then((r) => r.data),
+  stripeOnboarding: () => http.post('/fleet/stripe/onboarding').then((r) => r.data),
   login: (email: string, password: string) =>
     http.post('/auth/login', { email, password }).then((r) => r.data),
   me: () => http.get('/auth/me').then((r) => r.data),
@@ -304,3 +306,4 @@ export const api = {
     return http.post('/upload/driver-doc', form).then((r) => r.data);
   },
 };
+

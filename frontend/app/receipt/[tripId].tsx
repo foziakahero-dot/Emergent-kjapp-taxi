@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
+import { payNative } from '@/src/lib/nativePayment';
 import { paymentApi, tripsApi } from '@/src/lib/api';
 import { apiError, kr, vehicleMeta } from '@/src/lib/format';
 
@@ -101,6 +102,12 @@ export default function Receipt() {
     setPaymentError('');
     setPaying(true);
     try {
+      const nativeResult = await payNative(tripId);
+      if (nativeResult !== null) {
+        await loadTrip();
+        if (!nativeResult) setPaymentError('Betalingen er ikke bekreftet. Du kan åpne betalingen igjen eller sjekke status.');
+        return;
+      }
       const result = await paymentApi.checkout(tripId, CHECKOUT_ORIGIN);
       if (!result?.checkout_url || !result?.session_id) throw new Error('Stripe svarte uten betalingslenke.');
 
