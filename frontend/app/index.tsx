@@ -59,7 +59,7 @@ export default function Index() {
         <Text style={s.tag} testID="ob-tag">KUNDEAPP · NORGE</Text>
         <Text style={s.subtitle}>Bestill. Følg. Betal.</Text>
       </View>
-      <Button label="Kom i gang" onPress={() => router.push('/login')} testID="onboarding-next" />
+      <Button label="Kom i gang" onPress={() => router.push('/permissions')} testID="onboarding-next" />
     </View>
   );
 }
