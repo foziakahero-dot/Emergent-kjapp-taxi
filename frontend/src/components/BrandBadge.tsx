@@ -14,14 +14,14 @@ export function BrandBadge({ size = 64 }: { size?: number }) {
         borderRadius: size * 0.28,
         overflow: 'hidden',
         shadowColor: colors.accent,
-        shadowOpacity: 0.24,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.35,
+        shadowRadius: 15,
+        shadowOffset: { width: 0, height: 8 },
         elevation: 8,
       }}
     >
       <LinearGradient
-        colors={['#FF4B4B', '#F71922', '#BA121C']}
+        colors={['#FF3B3B', '#FF0000', '#B30000']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
