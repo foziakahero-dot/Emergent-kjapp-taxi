@@ -28,8 +28,8 @@ export default function DriverProfile() {
   });
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
-      <Text style={s.title}>Profil</Text>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 38, paddingBottom: 120, paddingHorizontal: 28 }}>
+      <Text style={s.title}>Min profil</Text>
 
       <View style={s.card}>
         <Pressable style={s.avatarWrap} onPress={() => router.push('/driver-profile-photo')} testID="driver-profile-photo-open">
@@ -38,8 +38,10 @@ export default function DriverProfile() {
           </View>
           <View style={s.photoBadge}><Icon name="user" size={12} color={colors.accentOn} /></View>
         </Pressable>
-        <Text style={s.name}>{u.fullName || 'Sjåfør'}</Text>
-        <Text style={s.email}>{u.email}</Text>
+        <View style={s.identityText}>
+          <Text style={s.name}>{u.fullName || 'Sjåfør'}</Text>
+          <Text style={s.email}>{u.phone || u.email}</Text>
+        </View>
         <View style={s.badgeRow}>
           <View style={s.badge}>
             <Icon name="star" size={13} color={colors.accent} fill={colors.accent} />
@@ -110,18 +112,19 @@ function MenuRow({ icon, label, onPress, border, s, testID }: { icon: IconName; 
 }
 
 const useStyles = makeStyles((c) => ({
-  title: { color: c.text, fontFamily: font.display, fontSize: 28, marginBottom: 20 },
-  card: { backgroundColor: c.driverCard, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
-  avatarWrap: { width: 82, height: 82, marginBottom: 14, position: 'relative' },
-  avatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  avatarImage: { width: 76, height: 76, borderRadius: 38 },
+  title: { color: c.text, fontFamily: font.semibold, fontSize: 24, marginBottom: 20, letterSpacing: -0.5 },
+  card: { minHeight: 104, flexDirection: 'row', gap: 14, backgroundColor: c.driverCard, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 18, alignItems: 'center' },
+  avatarWrap: { width: 66, height: 66, position: 'relative' },
+  avatar: { width: 62, height: 62, borderRadius: 31, backgroundColor: c.text, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarImage: { width: 62, height: 62, borderRadius: 31 },
   photoBadge: { position: 'absolute', right: 0, bottom: 2, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: c.online, borderWidth: 2, borderColor: c.driverCard },
-  avatarText: { color: c.online, fontFamily: font.display, fontSize: 28 },
-  name: { color: c.text, fontFamily: font.display, fontSize: 22 },
-  email: { color: c.textMuted, fontSize: 14, marginTop: 4 },
-  badgeRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accentSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
-  badgeText: { color: c.accent, fontSize: 12 },
+  avatarText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 22 },
+  identityText: { flex: 1 },
+  name: { color: c.text, fontFamily: font.semibold, fontSize: 18 },
+  email: { color: c.textSecondary, fontSize: 11.5, marginTop: 4 },
+  badgeRow: { position: 'absolute', left: 96, bottom: 13, flexDirection: 'row', gap: 6 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.accentSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  badgeText: { color: c.accent, fontSize: 9.5 },
   section: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 26, marginBottom: 8 },
   vehicleHint: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 8, paddingHorizontal: 4 },
   infoCard: { backgroundColor: c.driverCard, borderRadius: 20, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
