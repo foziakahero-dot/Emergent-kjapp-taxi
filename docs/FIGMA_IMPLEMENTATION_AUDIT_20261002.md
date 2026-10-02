@@ -78,7 +78,23 @@ The exact source palette has contrast limitations: faint ink against white is ap
 1. No current live Make source/render comparison has passed. The 30 September export may be older than the current design.
 2. Profile setup still routes to real payment/address management instead of the reference's direct four-payment-tile/name/address form. Driver profile/onboarding does not reproduce every reference fleet/document/settings subsection. The proactive AI recommendation overlay and every Customer support/settings sub-screen are not fully ported. These are remaining implementation work, not verified parity.
 3. Complete screens, scroll states, dynamic type, keyboard behavior, blur, SVG shadows, icon masks and full animation timelines require same-size iOS/Android rendering and comparison. The arrow path is exact; its browser drop-shadow/heading transition is not a passed native match. Raster fallback when a Mapbox token is absent cannot match Mapbox Standard.
-4. GitHub native build attempts at parent commit completed with `startup_failure`, `path: BuildFailed`, and zero jobs. Retry was rejected with HTTP 403. No app compiler log exists for those attempts, and the root cause was not established. Latest build status must be checked for the implementation commit.
+4. GitHub build attempts for implementation commit `d0d118254a7618121a3149d4e4561acc8fce0c79` completed with `startup_failure`, `path: BuildFailed`, **zero jobs and zero artifacts**. The push run is https://github.com/foziakahero-dot/Emergent-kjapp-taxi/actions/runs/37033515038; the pull-request run is https://github.com/foziakahero-dot/Emergent-kjapp-taxi/actions/runs/37033518396. Both job and artifact lists were checked. Parent-commit attempts failed the same way; retry was rejected with HTTP 403. No app compiler log exists and the root cause is not established.
 5. This Linux session has no configured Android SDK, Xcode or Expo authentication token. Native project generation and Hermes packaging succeeded; APK/IPA compilation and signing have not been performed here.
 
 The draft should not be described as pixel-perfect, fully implemented, release-ready, security-clean or accepted on physical devices. Review the remaining design gaps and build results before production integration.
+
+## Local follow-up checkpoint — not published application source
+
+After the source port above was committed, an additional local pass revised Customer profile setup, the six-item profile menu and detail layouts, native support, saved-address editing, the recommendation overlay, and Driver profile fleet/vehicle/document/earnings sections. It added shared 48 × 28 animated toggles and extended component checks. APIs remained unchanged. Support used real server replies and ticket IDs; missing reward, RideCheck and consent capabilities were explicitly unavailable rather than simulated.
+
+The extended component regression checks passed, including duplicate support/ticket submission guards, server-confirmed success, unmount cancellation, and preserving a Work address ID/label when entered from a Home shortcut. Both app typechecks passed during this pass. Last minor presentation and permission-toggle edits did not receive the intended final typecheck/export run.
+
+Before the final four exports could start, the execution service disconnected. Recovery returned `environment_offline: Environment is not connected`. Attempts to read and publish the local follow-up source were blocked by the same failure. **These follow-up app changes are not in PR #65.** The committed platform export hashes and validation table above describe the published `d0d1182` application source, not the unpublished follow-up.
+
+The local follow-up files, when the workspace becomes reachable again, are:
+
+- `frontend/app/profile-setup.tsx`, `frontend/app/(app)/profile.tsx`, `frontend/app/(app)/home.tsx`, `frontend/app/saved-places.tsx`, `frontend/app/permissions.tsx`
+- `frontend/src/components/CustomerSupport.tsx`, `frontend/src/components/CustomerProfileDetails.tsx`, `frontend/src/components/DesignToggle.tsx`, `frontend/src/components/Icon.tsx`
+- `driver-app/app/(driver)/profile.tsx`, `driver-app/src/components/DesignToggle.tsx`, `scripts/verify-figma-mobile.cjs`
+
+Resume by inspecting those files, repeating final source checks and four exports, replacing the build manifest with matching hashes, and publishing a separately verified follow-up commit. Full current-Figma/native pixel comparison, missing production-backed features, and native compilation remain open.
