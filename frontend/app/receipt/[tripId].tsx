@@ -234,7 +234,7 @@ export default function Receipt() {
       ) : null}
     </ScrollView>
   );
-
+}
 
 const useStyles = makeStyles((c) => ({
   loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
