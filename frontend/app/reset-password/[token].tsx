@@ -82,6 +82,7 @@ export default function ResetPassword() {
       </View>
     </KeyboardAvoidingView>
   );
+}
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.bg },
