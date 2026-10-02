@@ -448,7 +448,7 @@ export default function Home() {
       ) : null}
     </View>
   );
-
+}
 
 function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
