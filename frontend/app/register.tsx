@@ -51,7 +51,7 @@ export default function Register() {
         accepted_terms: true,
         legal_version: '2026-09',
       });
-      router.replace('/(app)/home');
+      router.replace('/profile-setup');
     } catch (e) {
       setError(apiError(e));
     } finally {
