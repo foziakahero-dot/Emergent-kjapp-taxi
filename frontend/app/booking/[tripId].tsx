@@ -9,7 +9,6 @@ import { KjappMark } from '@/src/components/KjappMark';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
 import { safetyApi, tripDriverPhotoSource, tripsApi } from '@/src/lib/api';
-import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
   searching: { title: 'Søker sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
@@ -139,7 +138,7 @@ export default function BookingFlow() {
   };
 
   const callDriver = () => {
-    const phone = trip?.driver?.phone || trip?.passenger_phone;
+    const phone = trip?.driver?.phone;
     if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});
   };
 
