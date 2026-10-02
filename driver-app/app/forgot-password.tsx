@@ -59,6 +59,7 @@ export default function DriverForgotPassword() {
       </View>
     </KeyboardAvoidingView>
   );
+}
 
 const useStyles = makeStyles((c) => ({
   screen: { flex:1, backgroundColor:c.driverBg },
