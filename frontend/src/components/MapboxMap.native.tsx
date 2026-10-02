@@ -1,3 +1,4 @@
+import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox, {
@@ -8,17 +9,16 @@ import Mapbox, {
   ShapeSource,
   StyleImport,
 } from '@rnmapbox/maps';
-import Svg, { Circle, G, Rect } from 'react-native-svg';
+import Svg, { Circle, Rect } from 'react-native-svg';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
-import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './InteractiveMap';
 
 type LL = { lat: number; lng: number };
 type Car = { lat: number; lng: number; heading?: number };
 
-const OSLO: LL = { lat: 59.9127, lng: 10.7461 };
+const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
 const STYLE_URL = 'mapbox://styles/mapbox/standard';
 
@@ -38,15 +38,8 @@ type Props = {
   interactive?: boolean;
 };
 
-function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
-  return (
-    <Svg width={active ? 46 : 34} height={active ? 46 : 34} viewBox="0 0 24 24">
-      {active ? <Circle cx={12} cy={12} r={11} fill={colors.accentGlow} opacity={0.42} /> : null}
-      <G transform={`rotate(${car.heading || 0} 12 12)`}>
-        <CarShape {...(active ? CAR_ACTIVE : CAR_IDLE)} />
-      </G>
-    </Svg>
-  );
+function MarkerCar({ car }: { car: Car; active?: boolean }) {
+  return <MapCar heading={car.heading || 0} />;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
@@ -58,15 +51,7 @@ function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
       </Svg>
     );
   }
-  if (kind === 'user') {
-    return (
-      <Svg width={42} height={42} viewBox="0 0 42 42">
-        <Circle cx={21} cy={21} r={18} fill="rgba(255,0,0,0.16)" />
-        <Circle cx={21} cy={21} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />
-        <Circle cx={21} cy={21} r={3} fill="#FFFFFF" />
-      </Svg>
-    );
-  }
+  if (kind === 'user') return <PositionDot />;
   return (
     <Svg width={32} height={32} viewBox="0 0 32 32">
       <Circle cx={16} cy={16} r={12} fill={colors.accentSoft} />
@@ -110,8 +95,8 @@ export function MapboxInteractiveMap({
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
-        zoomLevel: 13,
-        pitch: 34,
+        zoomLevel: 13.4,
+        pitch: 0,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -120,8 +105,8 @@ export function MapboxInteractiveMap({
     if (focus.length === 1) {
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
-        zoomLevel: 16.5,
-        pitch: 36,
+        zoomLevel: 13.4,
+        pitch: 0,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -206,8 +191,8 @@ export function MapboxInteractiveMap({
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [user?.lng ?? OSLO.lng, user?.lat ?? OSLO.lat],
-            zoomLevel: user ? 16 : 13,
-            pitch: 34,
+            zoomLevel: 13.4,
+            pitch: 0,
           }}
           minZoomLevel={3}
           maxZoomLevel={20}
@@ -218,13 +203,13 @@ export function MapboxInteractiveMap({
           existing
           config={{
             lightPreset: 'day',
-            theme: 'faded',
-            show3dObjects: true,
-            show3dBuildings: true,
-            show3dLandmarks: true,
-            show3dTrees: true,
+            theme: 'monochrome',
+            show3dObjects: false,
+            show3dBuildings: false,
+            show3dLandmarks: false,
+            show3dTrees: false,
             showPlaceLabels: true,
-            showPointOfInterestLabels: true,
+            showPointOfInterestLabels: false,
             showRoadLabels: true,
             showPedestrianRoads: true,
             showHdRoads: true,
@@ -325,3 +310,4 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 export const Map = MapboxInteractiveMap;
 export const InteractiveMap = MapboxInteractiveMap;
 export default MapboxInteractiveMap;
+

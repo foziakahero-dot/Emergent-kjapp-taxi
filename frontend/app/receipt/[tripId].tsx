@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -281,4 +282,5 @@ const useStyles = makeStyles((c) => ({
   starHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   ratingLocked: { color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center' },
 }));
+
 

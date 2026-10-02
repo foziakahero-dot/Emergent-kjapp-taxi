@@ -1,15 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
@@ -155,5 +146,6 @@ const useStyles = makeStyles((c) => ({
   footerText: { color: c.textSecondary, fontSize: 14 },
   footerLink: { color: c.accent, fontFamily: font.semibold },
 }));
+
 
 

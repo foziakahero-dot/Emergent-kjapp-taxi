@@ -1,5 +1,8 @@
+import { SlideConfirm } from '@/src/components/SlideConfirm';
+import { useHideTabBar } from '@/src/components/FloatingTabBar';
+import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -69,6 +72,7 @@ export default function DriverHome() {
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
   const completedSummaryVisible = !current && !(pending[0] && online);
+  useHideTabBar(Boolean((current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
 
   const poll = useCallback(async () => {
     if (!user?.id) return;
@@ -540,7 +544,7 @@ export default function DriverHome() {
             </Pressable>
           </View>
 
-          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 18 }]} testID="driver-topickup-sheet">
+          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-topickup-sheet">
             <View style={s.handle} />
             <Text style={s.stateEyebrow}>HENTING</Text>
             <Text style={s.stateTitle}>{current.customer?.name || 'Kunde'}</Text>
@@ -559,15 +563,11 @@ export default function DriverHome() {
               </Pressable>
             </View>
 
-            <Pressable style={s.slideAction} onPress={advance} disabled={busy} testID="driver-advance">
-              <View style={s.slideKnob}>{busy ? <ActivityIndicator color={colors.accent} /> : <Icon name="chevron-right" size={20} color={colors.accent} />}</View>
-              <Text style={s.slideLabel}>Jeg er fremme</Text>
-              <Icon name="chevron-right" size={18} color={colors.textMuted} />
-            </Pressable>
+            <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Skyv når du er fremme" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
           </View>
         </>
       ) : current?.status === 'at_pickup' ? (
-        <View style={[s.stateSheet, { paddingBottom: insets.bottom + 18 }]} testID="driver-pickup-confirm">
+        <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-pickup-confirm">
           <View style={s.handle} />
           <Text style={s.stateEyebrow}>BEKREFT PASSASJER</Text>
           <Text style={s.stateTitle}>{current.customer?.name || 'Kunde'}</Text>
@@ -576,11 +576,7 @@ export default function DriverHome() {
             <Text style={s.destinationValue}>{current.dropoff_address}</Text>
           </View>
           {tripExtras(current) ? <Text style={s.stateMeta}>{tripExtras(current)}</Text> : null}
-          <Pressable style={s.slideAction} onPress={advance} disabled={busy} testID="driver-advance">
-            <View style={s.slideKnob}>{busy ? <ActivityIndicator color={colors.accent} /> : <Icon name="chevron-right" size={20} color={colors.accent} />}</View>
-            <Text style={s.slideLabel}>Start tur</Text>
-            <Icon name="chevron-right" size={18} color={colors.textMuted} />
-          </Pressable>
+          <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Start tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
           <Pressable style={s.noShowLink} onPress={noShow} disabled={busy} testID="driver-no-show">
             <Text style={s.noShowLinkText}>Kunden kom ikke?</Text>
           </Pressable>
@@ -598,7 +594,7 @@ export default function DriverHome() {
             </Pressable>
           </View>
 
-          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 18 }]} testID="driver-intrip-sheet">
+          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-intrip-sheet">
             <View style={s.handle} />
             <View style={s.inTripControls}>
               <Pressable style={s.tripTool} onPress={() => setChatOpen(true)} testID="driver-chat">
@@ -614,17 +610,13 @@ export default function DriverHome() {
                 <Text style={s.sosToolText}>SOS</Text>
               </Pressable>
             </View>
-            <Pressable style={s.slideAction} onPress={advance} disabled={busy} testID="driver-advance">
-              <View style={s.slideKnob}>{busy ? <ActivityIndicator color={colors.accent} /> : <Icon name="chevron-right" size={20} color={colors.accent} />}</View>
-              <Text style={s.slideLabel}>Avslutt tur</Text>
-              <Icon name="chevron-right" size={18} color={colors.textMuted} />
-            </Pressable>
+            <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Avslutt tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
           </View>
         </>
       ) : firstOffer && online ? (
         <>
           <View style={s.mapDim} pointerEvents="none" />
-          <View style={[s.offerSheet, { paddingBottom: insets.bottom + 18 }]} testID={`driver-offer-${firstOffer.trip_id}`}>
+          <View style={[s.offerSheet, { paddingBottom: insets.bottom + 32 }]} testID={`driver-offer-${firstOffer.trip_id}`}>
             <View style={s.handle} />
             <View style={s.offerHead}>
               <View>
@@ -693,7 +685,7 @@ export default function DriverHome() {
           </View>
         </LinearGradient>
       ) : online ? (
-        <View style={[s.waitingSheet, { paddingBottom: insets.bottom + 18 }]} testID="driver-waiting">
+        <View style={[s.waitingSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-waiting">
           <View style={s.handle} />
           <View style={s.waitingInner}>
             <View style={s.waitingIcon}><Icon name="navigation" size={20} color={colors.online} /></View>
@@ -720,7 +712,7 @@ export default function DriverHome() {
       {declineReasonsOpen && firstOffer ? (
         <View style={s.declineOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeclineReasonsOpen(false)} />
-          <View style={[s.declineSheet, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={[s.declineSheet, { paddingBottom: insets.bottom + 32 }]}>
             <View style={s.declineHead}><Text style={s.declineTitle}>Hvorfor avslår du?</Text><Pressable style={s.closeReason} onPress={() => setDeclineReasonsOpen(false)}><Icon name="x" size={18} color={colors.text} /></Pressable></View>
             {['For langt å kjøre', 'Ikke egnet bil', 'Skal snart av vakt', 'Annet'].map((reason) => (
               <Pressable key={reason} style={s.reasonRow} onPress={async () => { setDeclineReasonsOpen(false); await decline(firstOffer.trip_id); }}>
@@ -745,109 +737,99 @@ export default function DriverHome() {
 }
 
 const useStyles = makeStyles((c) => ({
-  driverHeaderWrap: { position: 'absolute', left: 16, right: 16, zIndex: 50 },
-  driverHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
-  driverIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  headerName: { color: c.text, fontFamily: font.semibold, fontSize: 14, maxWidth: 180 },
-  headerStatus: { fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4, marginTop: 2 },
-  switchTrack: { width: 56, height: 32, borderRadius: 16, backgroundColor: c.lineStrong, padding: 2 },
-  switchTrackOn: { backgroundColor: c.online },
-  switchKnob: { width: 28, height: 28, borderRadius: 14, backgroundColor: c.surface },
-  switchKnobOn: { marginLeft: 24 },
-  errorBanner: { position: 'absolute', left: 16, right: 16, zIndex: 55, borderRadius: 12, padding: 10, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger },
-  errorText: { color: c.danger, fontSize: 12, textAlign: 'center' },
-
-  navInstruction: { position: 'absolute', left: 16, right: 16, zIndex: 30, minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
-  navIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
-  navTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
-  navSub: { color: c.textSecondary, fontSize: 11, marginTop: 2 },
-  navOpen: { minHeight: 36, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
-  navOpenText: { color: c.accent, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.2 },
-
-  stateSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 12, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 16 },
-  stateEyebrow: { color: c.online, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
-  stateTitle: { color: c.text, fontFamily: font.semibold, fontSize: 21, marginTop: 4 },
-  stateAddress: { color: c.textSecondary, fontSize: 13, marginTop: 3 },
-  stateMeta: { color: c.textMuted, fontSize: 11.5, lineHeight: 17, marginTop: 8 },
-  contactGrid: { flexDirection: 'row', gap: 10, marginTop: 15 },
-  contactAction: { flex: 1, minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
-  contactActionText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
-  slideAction: { minHeight: 58, marginTop: 16, flexDirection: 'row', alignItems: 'center', borderRadius: 29, paddingHorizontal: 5, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.lineStrong },
-  slideKnob: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  slideLabel: { flex: 1, color: c.text, fontFamily: font.semibold, fontSize: 14, textAlign: 'center' },
-  noShowLink: { minHeight: 38, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
-  noShowLinkText: { color: c.textMuted, fontSize: 12, textDecorationLine: 'underline' },
-  destinationCard: { marginTop: 14, borderRadius: 16, padding: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  destinationLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4 },
-  destinationValue: { color: c.text, fontFamily: font.medium, fontSize: 14, marginTop: 5 },
-
-  inTripControls: { flexDirection: 'row', gap: 10 },
-  tripTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
-  tripToolText: { color: c.text, fontFamily: font.medium, fontSize: 11.5 },
-  sosTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: '#E11D48' },
-  sosToolText: { color: c.accentOn, fontFamily: font.bold, fontSize: 11.5 },
-
-  mapDim: { ...StyleSheet.absoluteFill, zIndex: 20, backgroundColor: 'rgba(11,14,20,0.28)' },
-  offerSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 40, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 12, backgroundColor: c.surface, shadowColor: '#0B0E14', shadowOpacity: 0.26, shadowRadius: 28, shadowOffset: { width: 0, height: -12 }, elevation: 12 },
-  offerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  offerEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
-  offerCustomer: { color: c.text, fontFamily: font.semibold, fontSize: 21, marginTop: 3 },
-  offerCountdownCircle: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.accent, backgroundColor: c.accentSoft },
-  offerCountdownNum: { color: c.accent, fontFamily: font.bold, fontSize: 20, lineHeight: 21 },
-  offerCountdownUnit: { color: c.textMuted, fontFamily: font.mono, fontSize: 7, letterSpacing: 1.2 },
-  offerPriceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14 },
-  offerPrice: { color: c.text, fontFamily: font.semibold, fontSize: 25 },
-  offerRouteMeta: { color: c.textSecondary, fontSize: 11 },
-  routeBox: { marginTop: 13, borderRadius: 16, padding: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  routePointRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  routeDot: { width: 10, height: 10, borderRadius: 5 },
-  routeLine: { width: 1, height: 17, backgroundColor: c.lineStrong, marginLeft: 4.5 },
-  routePointText: { flex: 1, color: c.text, fontSize: 13 },
-  offerButtons: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  declineButton: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface },
-  declineButtonText: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 14 },
-  acceptButton: { flex: 2, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
-  acceptButtonDisabled: { opacity: 0.45 },
-  acceptButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
-
-  waitingSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 12, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
-  waitingInner: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 13 },
-  waitingIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: c.onlineSoft },
-  waitingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
-  waitingSub: { color: c.textSecondary, fontSize: 12, marginTop: 3 },
-
-  offlineContent: { flex: 1, paddingHorizontal: 28 },
-  offlineEyebrow: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
-  offlineAmount: { color: c.text, fontFamily: font.semibold, fontSize: 38, marginTop: 4 },
-  summaryCards: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  summaryCard: { flex: 1, minHeight: 96, borderRadius: 18, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  summaryValue: { color: c.text, fontFamily: font.semibold, fontSize: 22 },
-  summaryLabel: { color: c.textMuted, fontSize: 11, marginTop: 7 },
-  goOnlineButton: { minHeight: 56, marginTop: 'auto', borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.30, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
-  goOnlineButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
-
-  completeWrap: { zIndex: 25 },
-  completeContent: { flex: 1, paddingHorizontal: 28 },
-  completeEyebrow: { color: c.online, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
-  completeAmount: { color: c.text, fontFamily: font.semibold, fontSize: 34, marginTop: 4 },
-  completeCard: { marginTop: 20, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  completeRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  completeLabel: { color: c.textSecondary, fontSize: 13 },
-  completeValue: { color: c.text, fontFamily: font.medium, fontSize: 13 },
-  completeButtons: { flexDirection: 'row', gap: 10, marginTop: 'auto' },
-  pauseButton: { flex: 1, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
-  pauseButtonText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
-  continueButton: { flex: 1.6, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
-  continueButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
-
-  declineOverlay: { ...StyleSheet.absoluteFill, zIndex: 80, justifyContent: 'flex-end', backgroundColor: 'rgba(11,14,20,0.35)' },
-  declineSheet: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: c.surface },
-  declineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  declineTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20 },
-  closeReason: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
-  reasonRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: c.line },
-  reasonText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+    driverHeaderWrap: { position: 'absolute', left: 16, right: 16, zIndex: 50 },
+    driverHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+    driverIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+    headerName: { color: c.text, fontFamily: font.semibold, fontSize: 14, maxWidth: 180 },
+    headerStatus: { fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4, marginTop: 2 },
+    switchTrack: { width: 56, height: 32, borderRadius: 16, backgroundColor: c.lineStrong, padding: 2 },
+    switchTrackOn: { backgroundColor: c.online },
+    switchKnob: { width: 28, height: 28, borderRadius: 14, backgroundColor: c.surface },
+    switchKnobOn: { marginLeft: 24 },
+    errorBanner: { position: 'absolute', left: 16, right: 16, zIndex: 55, borderRadius: 12, padding: 10, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger },
+    errorText: { color: c.danger, fontSize: 12, textAlign: 'center' },
+    navInstruction: { position: 'absolute', left: 16, right: 16, zIndex: 30, minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+    navIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
+    navTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
+    navSub: { color: c.textSecondary, fontSize: 11, marginTop: 2 },
+    navOpen: { minHeight: 36, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+    navOpenText: { color: c.accent, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.2 },
+    stateSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+    handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 16 },
+    stateEyebrow: { color: c.online, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    stateTitle: { color: c.text, fontFamily: font.semibold, fontSize: 21, marginTop: 4 },
+    stateAddress: { color: c.textSecondary, fontSize: 13, marginTop: 3 },
+    stateMeta: { color: c.textMuted, fontSize: 11.5, lineHeight: 17, marginTop: 8 },
+    contactGrid: { flexDirection: 'row', gap: 10, marginTop: 15 },
+    contactAction: { flex: 1, minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+    contactActionText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+    noShowLink: { minHeight: 38, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+    noShowLinkText: { color: c.textMuted, fontSize: 12, textDecorationLine: 'underline' },
+    destinationCard: { marginTop: 14, borderRadius: 16, padding: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+    destinationLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4 },
+    destinationValue: { color: c.text, fontFamily: font.medium, fontSize: 14, marginTop: 5 },
+    inTripControls: { flexDirection: 'row', gap: 10 },
+    tripTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+    tripToolText: { color: c.text, fontFamily: font.medium, fontSize: 11.5 },
+    sosTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: '#E11D48' },
+    sosToolText: { color: c.accentOn, fontFamily: font.bold, fontSize: 11.5 },
+    mapDim: { ...StyleSheet.absoluteFill, zIndex: 20, backgroundColor: 'rgba(11,14,20,0.28)' },
+    offerSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 40, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: c.surface, shadowColor: '#0B0E14', shadowOpacity: 0.26, shadowRadius: 28, shadowOffset: { width: 0, height: -12 }, elevation: 12 },
+    offerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    offerEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    offerCustomer: { color: c.text, fontFamily: font.semibold, fontSize: 21, marginTop: 3 },
+    offerCountdownCircle: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.accent, backgroundColor: c.accentSoft },
+    offerCountdownNum: { color: c.accent, fontFamily: font.bold, fontSize: 20, lineHeight: 21 },
+    offerCountdownUnit: { color: c.textMuted, fontFamily: font.mono, fontSize: 7, letterSpacing: 1.2 },
+    offerPriceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14 },
+    offerPrice: { color: c.text, fontFamily: font.semibold, fontSize: 25 },
+    offerRouteMeta: { color: c.textSecondary, fontSize: 11 },
+    routeBox: { marginTop: 13, borderRadius: 16, padding: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+    routePointRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    routeDot: { width: 10, height: 10, borderRadius: 5 },
+    routeLine: { width: 1, height: 17, backgroundColor: c.lineStrong, marginLeft: 4.5 },
+    routePointText: { flex: 1, color: c.text, fontSize: 13 },
+    offerButtons: { flexDirection: 'row', gap: 10, marginTop: 16 },
+    declineButton: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface },
+    declineButtonText: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 14 },
+    acceptButton: { flex: 2, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
+    acceptButtonDisabled: { opacity: 0.45 },
+    acceptButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
+    waitingSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+    waitingInner: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 13 },
+    waitingIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: c.onlineSoft },
+    waitingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
+    waitingSub: { color: c.textSecondary, fontSize: 12, marginTop: 3 },
+    offlineContent: { flex: 1, paddingHorizontal: 28 },
+    offlineEyebrow: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    offlineAmount: { color: c.text, fontFamily: font.semibold, fontSize: 36, lineHeight: 40, marginTop: 4 },
+    summaryCards: { flexDirection: 'row', gap: 12, marginTop: 20 },
+    summaryCard: { flex: 1, minHeight: 96, borderRadius: 18, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+    summaryValue: { color: c.text, fontFamily: font.semibold, fontSize: 24, lineHeight: 32 },
+    summaryLabel: { color: c.textMuted, fontSize: 11, marginTop: 7 },
+    goOnlineButton: { minHeight: 56, marginTop: 'auto', borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.30, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    goOnlineButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
+    completeWrap: { zIndex: 25 },
+    completeContent: { flex: 1, paddingHorizontal: 28 },
+    completeEyebrow: { color: c.online, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    completeAmount: { color: c.text, fontFamily: font.semibold, fontSize: 34, marginTop: 4 },
+    completeCard: { marginTop: 20, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+    completeRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    completeLabel: { color: c.textSecondary, fontSize: 13 },
+    completeValue: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+    completeButtons: { flexDirection: 'row', gap: 10, marginTop: 'auto' },
+    pauseButton: { flex: 1, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+    pauseButtonText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+    continueButton: { flex: 1.6, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+    continueButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
+    declineOverlay: { ...StyleSheet.absoluteFill, zIndex: 80, justifyContent: 'flex-end', backgroundColor: 'rgba(11,14,20,0.35)' },
+    declineSheet: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: c.surface },
+    declineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+    declineTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20 },
+    closeReason: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+    reasonRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: c.line },
+    reasonText: { color: c.text, fontFamily: font.medium, fontSize: 14 }
 }));
+
 
 

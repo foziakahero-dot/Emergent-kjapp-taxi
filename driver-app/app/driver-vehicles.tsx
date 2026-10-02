@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -138,3 +139,4 @@ const useStyles = makeStyles((c) => ({
   emptyText: { color: c.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   error: { color: c.danger, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 16 },
 }));
+

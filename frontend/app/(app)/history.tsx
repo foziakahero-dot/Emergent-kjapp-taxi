@@ -1,5 +1,7 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React from 'react';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -33,7 +35,7 @@ export default function History() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[s.header, { paddingTop: insets.top + 56 }]}>
         <Text style={s.title}>Aktivitet</Text>
       </View>
       {isLoading ? (
@@ -50,7 +52,7 @@ export default function History() {
         <FlatList
           data={trips}
           keyExtractor={(t) => t.id || t.trip_id}
-          contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: 120, gap: 10 }}
+          contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: insets.bottom + 112, gap: 10 }}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />}
           ListEmptyComponent={
             <View style={s.center}>
@@ -96,11 +98,12 @@ const useStyles = makeStyles((c) => ({
   retry: { minHeight: 44, borderRadius: 12, backgroundColor: c.accent, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   retryText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
   row: {
-    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12,
+    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16,
     borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
   },
   rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  rowSub: { color: c.textSecondary, fontSize: 11.5, marginTop: 3 },
+  rowSub: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 0 },
   rowPrice: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
 }));
+

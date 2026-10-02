@@ -1,0 +1,56 @@
+name: Figma mobile source checks
+
+on:
+  push:
+    branches: [design/figma-make-pixel-match-20261002]
+    paths: ['frontend/**', 'driver-app/**', 'design/**', 'scripts/verify-figma-mobile.cjs', '.github/workflows/figma-mobile-audit.yml']
+  pull_request:
+    paths: ['frontend/**', 'driver-app/**', 'design/**', 'scripts/verify-figma-mobile.cjs', '.github/workflows/figma-mobile-audit.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: figma-mobile-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-export:
+    name: ${{ matrix.app }} source and Hermes exports
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend, driver-app]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    env:
+      CI: '1'
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
+      - name: Font, motion and confirmation regressions
+        if: matrix.app == 'frontend'
+        run: npm run test:design
+      - name: Driver receipt and navigation regressions
+        if: matrix.app == 'driver-app'
+        run: node --test tests/tripSummary.test.mjs
+      - run: npx expo export --platform android --max-workers 2 --output-dir dist-android
+      - run: npx expo export --platform ios --max-workers 2 --output-dir dist-ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-hermes-exports
+          path: |
+            ${{ matrix.app }}/dist-android
+            ${{ matrix.app }}/dist-ios
+          if-no-files-found: error
+          retention-days: 14

@@ -1,14 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Image,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleProp,
-  Text,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
@@ -362,3 +354,4 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 
 export const Map = InteractiveMap;
 export default InteractiveMap;
+

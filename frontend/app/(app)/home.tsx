@@ -1,14 +1,10 @@
+import { useHideTabBar } from '@/src/components/FloatingTabBar';
+import { VehicleGlyph } from '@/src/components/VehicleGlyph';
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Rise, Collapse } from '@/src/components/Motion';
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -47,6 +43,7 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  useHideTabBar(reviewing);
   const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
@@ -243,7 +240,7 @@ export default function Home() {
           </Pressable>
 
           {!dropoff ? (
-            <View style={[s.browseSheet, { paddingBottom: insets.bottom + 12 }]} testID="home-browse-sheet">
+            <View style={[s.browseSheet, { paddingBottom: insets.bottom + (sheetCollapsed ? 32 : 112) }]} testID="home-browse-sheet">
               <Pressable
                 style={s.sheetHandleButton}
                 onPress={() => setSheetCollapsed((v) => !v)}
@@ -258,7 +255,7 @@ export default function Home() {
                 <Icon name={sheetCollapsed ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textMuted} />
               </Pressable>
 
-              {!sheetCollapsed ? (
+              <Collapse open={!sheetCollapsed}>
                 <View style={s.placeList}>
                   {quickPlaces.slice(0, 4).map((p: any, i: number) => (
                     <Pressable
@@ -269,7 +266,7 @@ export default function Home() {
                     >
                       <View style={s.placeIcon}>
                         <Icon
-                          name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'history') as IconName}
+                          name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'clock') as IconName}
                           size={18}
                           color={colors.textSecondary}
                         />
@@ -298,10 +295,10 @@ export default function Home() {
                     </View>
                   ) : null}
                 </View>
-              ) : null}
+              </Collapse>
             </View>
           ) : (
-            <View style={[s.rideSheet, { paddingBottom: insets.bottom + 14 }]} testID="home-ride-sheet">
+            <View style={[s.rideSheet, { paddingBottom: insets.bottom + 112 }]} testID="home-ride-sheet">
               <Pressable style={s.sheetHandleButton} onPress={() => setSheetCollapsed((v) => !v)}>
                 <View style={s.handle} />
               </Pressable>
@@ -335,7 +332,7 @@ export default function Home() {
                       accessibilityState={{ selected: active }}
                     >
                       <View style={[s.vehicleIconBox, active && s.vehicleIconBoxActive]}>
-                        <VehicleAsset kind={v.type as VehicleKind} selected={active} width={72} height={40} />
+                        <VehicleGlyph selected={active} />
                       </View>
                       <View style={s.vehicleInfo}>
                         <View style={s.vehicleNameRow}>
@@ -360,6 +357,7 @@ export default function Home() {
                 disabled={!canBook}
                 testID="booking-review"
               >
+                <FigmaGradient pointerEvents="none" colors={['#FF3B3B', '#FF0000']} style={{ position: 'absolute', inset: 0, borderRadius: 999 }} />
                 <Text style={s.reviewButtonText}>Se over · {selectedCopy.name}</Text>
               </Pressable>
               {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
@@ -367,7 +365,8 @@ export default function Home() {
           )}
         </>
       ) : (
-        <View style={[s.reviewScreen, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 18 }]} testID="booking-review-screen">
+        <View style={[s.reviewScreen, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 32 }]} testID="booking-review-screen">
+          <FigmaGradient pointerEvents="none" angle={180} colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
           <View style={s.reviewHeader}>
             <Pressable style={s.backButton} onPress={() => setReviewing(false)} accessibilityLabel="Tilbake til bilvalg">
               <Icon name="chevron-left" size={20} color={colors.text} />
@@ -423,6 +422,7 @@ export default function Home() {
             disabled={!canBook}
             testID="booking-confirm"
           >
+            <FigmaGradient pointerEvents="none" colors={['#FF3B3B', '#FF0000']} style={{ position: 'absolute', inset: 0, borderRadius: 999 }} />
             {booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}
           </Pressable>
         </View>
@@ -552,25 +552,25 @@ const useStyles = makeStyles((c) => ({
   browseSheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
     backgroundColor: 'rgba(255,255,255,0.98)', borderTopLeftRadius: 30, borderTopRightRadius: 30,
-    borderTopWidth: 1, borderColor: c.line, paddingHorizontal: 24, paddingTop: 10,
+    borderTopWidth: 1, borderColor: c.line, paddingHorizontal: 24, paddingTop: 16,
     shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9,
   },
   rideSheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20,
     backgroundColor: 'rgba(255,255,255,0.98)', borderTopLeftRadius: 30, borderTopRightRadius: 30,
-    borderTopWidth: 1, borderColor: c.line, paddingHorizontal: 24, paddingTop: 10,
+    borderTopWidth: 1, borderColor: c.line, paddingHorizontal: 24, paddingTop: 16,
     shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9,
   },
-  sheetHandleButton: { alignSelf: 'center', width: 64, height: 28, alignItems: 'center', justifyContent: 'center' },
+  sheetHandleButton: { alignSelf: 'center', width: 64, height: 24, marginBottom: 12, alignItems: 'center', justifyContent: 'center' },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong },
   sheetTitleRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sheetEyebrow: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
   placeList: { paddingBottom: 2 },
-  placeRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  placeIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
-  placeTextWrap: { flex: 1, minHeight: 62, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: c.line },
+  placeRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  placeIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  placeTextWrap: { flex: 1, minHeight: 82, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: c.line },
   placeTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  placeSub: { color: c.textSecondary, fontSize: 12, marginTop: 2 },
+  placeSub: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 2 },
   managePlaces: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 4 },
   managePlacesText: { color: c.accent, fontFamily: font.medium, fontSize: 13 },
   locationWarning: { marginTop: 8, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: c.warning, backgroundColor: c.warning + '10' },
@@ -579,21 +579,21 @@ const useStyles = makeStyles((c) => ({
   locationAction: { minHeight: 38, paddingHorizontal: 14, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface },
   locationActionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
   rideHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  rideTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, letterSpacing: -0.4 },
+  rideTitle: { color: c.text, fontFamily: font.semibold, fontSize: 18, lineHeight: 28, letterSpacing: -0.36 },
   changeMono: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.4 },
   vehicleList: { gap: 8 },
   vehicleRow: {
-    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10,
+    minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12,
     borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
   },
   vehicleRowActive: { backgroundColor: c.accentSoft, borderColor: c.accent },
-  vehicleIconBox: { width: 68, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  vehicleIconBox: { width: 56, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
   vehicleIconBoxActive: { backgroundColor: c.surface },
   vehicleInfo: { flex: 1 },
   vehicleNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   vehicleName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   vehicleBadge: { color: c.accentOn, backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, fontFamily: font.semibold, fontSize: 9 },
-  vehicleMeta: { color: c.textSecondary, fontSize: 11, marginTop: 3 },
+  vehicleMeta: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 3 },
   vehiclePrice: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   reviewButton: {
     minHeight: 54, marginTop: 14, borderRadius: 27, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
@@ -646,5 +646,6 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
+
 
 

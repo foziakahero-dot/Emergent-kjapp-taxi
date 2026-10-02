@@ -1,5 +1,7 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect } from 'react-native-svg';
@@ -73,16 +75,16 @@ export default function DriverEarnings() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.driverBg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
         <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 16, textAlign: 'center' }}>Kunne ikke hente inntektsdata</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>KJAPP viser ikke 0 kr som fallback. Prøv igjen når forbindelsen er tilbake.</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>Prøv igjen når forbindelsen er tilbake.</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
       <Text style={s.title}>Inntjening</Text>
 
-      <LinearGradient colors={['#FF3B3B', '#B30000']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
+      <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.hero}>
         <Text style={s.heroLabel}>NETTO {PERIODS.find((p) => p.key === period)!.label.toUpperCase()}</Text>
         <Text style={s.heroValue} testID="earnings-net">{kr(period_data.net)}</Text>
         <View style={s.heroRow}>
@@ -93,7 +95,7 @@ export default function DriverEarnings() {
             <Text style={s.heroStatL}>online</Text>
           </View>
         </View>
-      </LinearGradient>
+      </FigmaGradient>
 
       <View style={s.card}>
         <BreakRow label="Bruttoinntekt" value={kr(period_data.gross)} s={s} />
@@ -204,7 +206,7 @@ const useStyles = makeStyles((c) => ({
   segTextOn: { color: c.accentOn },
   hero: { borderRadius: 24, padding: 24 },
   heroLabel: { color: 'rgba(255,255,255,0.78)', fontSize: 10, letterSpacing: 1.7, fontFamily: font.mono },
-  heroValue: { color: c.accentOn, fontFamily: font.semibold, fontSize: 38, marginTop: 8 },
+  heroValue: { color: c.accentOn, fontFamily: font.semibold, fontSize: 36, lineHeight: 40, marginTop: 8 },
   heroRow: { flexDirection: 'row', gap: 24, marginTop: 14 },
   heroStat: { alignItems: 'center' },
   heroStatV: { color: c.accentOn, fontFamily: font.mono, fontSize: 14 },

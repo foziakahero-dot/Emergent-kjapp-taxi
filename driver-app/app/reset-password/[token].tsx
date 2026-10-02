@@ -1,5 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApi } from '@/src/lib/api';
@@ -81,4 +82,5 @@ const useStyles = makeStyles((c) => ({
   secondaryButton:{minHeight:50,paddingHorizontal:22,borderRadius:25,alignItems:'center',justifyContent:'center',backgroundColor:c.surface,borderWidth:1,borderColor:c.lineStrong}, secondaryText:{color:c.text,fontFamily:font.semibold,fontSize:13},
   doneCircle:{width:58,height:58,borderRadius:29,backgroundColor:c.online,alignItems:'center',justifyContent:'center'},
 }));
+
 

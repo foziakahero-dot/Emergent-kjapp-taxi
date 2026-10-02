@@ -1,12 +1,7 @@
+import { Text } from '@/src/components/Typography';
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleProp,
-  Text,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { colors, font, makeStyles, radius } from '@/src/theme';
 
 export function Button({
@@ -42,10 +37,11 @@ export function Button({
         variant === 'ghost' && s.btnGhost,
         isDanger && s.btnDanger,
         (disabled || loading) && { opacity: 0.55 },
-        pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+        pressed && { transform: [{ scale: 0.95 }] },
         style,
       ]}
     >
+      {isPrimary && <FigmaGradient pointerEvents="none" colors={['#FF3B3B', '#FF0000']} style={{ position: 'absolute', inset: 0, borderRadius: 999 }} />}
       {loading ? (
         <ActivityIndicator color={isPrimary ? colors.accentOn : colors.accent} />
       ) : (
@@ -92,7 +88,7 @@ export function Overline({ children, color }: { children: React.ReactNode; color
         letterSpacing: 2.4,
         textTransform: 'uppercase',
         color: color || colors.accent,
-        fontWeight: '600',
+        fontFamily: font.mono,
       }}
     >
       {children}
@@ -113,7 +109,7 @@ export function Loader({ label }: { label?: string }) {
 
 const useStyles = makeStyles((c) => ({
   btn: {
-    height: 54,
+    height: 52,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -138,7 +134,7 @@ const useStyles = makeStyles((c) => ({
     borderColor: 'rgba(239,68,68,0.35)',
   },
   btnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  btnText: { fontSize: 16, fontWeight: '600', color: c.accentOn },
+  btnText: { fontSize: 14, lineHeight: 20, letterSpacing: -0.28, fontWeight: '600', color: c.accentOn },
   card: {
     backgroundColor: c.card,
     borderRadius: radius.xl,
@@ -149,3 +145,4 @@ const useStyles = makeStyles((c) => ({
 }));
 
 export { font };
+

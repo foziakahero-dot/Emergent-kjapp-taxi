@@ -1,3 +1,4 @@
+import { useReducedMotion } from '@/src/components/Motion';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -108,6 +109,7 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded] = useFonts(FONT_ASSETS);
   useEffect(() => installClientErrorMonitor(), []);
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.driverBg }} />;
@@ -142,3 +144,4 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+

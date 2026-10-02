@@ -1,5 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApi } from '@/src/lib/api';
@@ -102,4 +103,5 @@ const useStyles = makeStyles((c) => ({
   secondaryText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
   doneCircle: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
 }));
+
 

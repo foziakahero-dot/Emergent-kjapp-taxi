@@ -1,81 +1,84 @@
-# KJAPP Figma implementation audit — 2026-10-02
+# KJAPP Figma implementation audit — 2 October 2026
 
-## Outcome
+## Result
 
-The requested complete pixel-for-pixel implementation is NOT complete. No live Figma screen, asset geometry or motion comparison passed in this session. The existing partial port remains in draft PR #65. This session changes only build dependency installation and adds this audit; it does not claim new visual implementation.
+This revision implements source-based visual corrections in both Expo 57 native apps. It does **not** establish complete pixel identity with the current live Figma Make file. Signed APK/IPA compilation and phone acceptance remain outstanding.
 
-Audited mobile source commit: `bc7d0da232010b379c8d35616bb841e8d023afe3`.
-Design source: https://www.figma.com/make/y94k21wsXX8d9sI966cOAY/Revolutionary-AI-Taxi-App-Design
+Parent commit: `87a8ce48ca211619fe21541ca48f5f319a93a8a9`, branch `design/figma-make-pixel-match-20261002`, draft PR #65, stacked on the existing native auth/payment PR #64. No production merge is part of this revision.
 
-## Integration checked
+## Design evidence
 
-| PR | Actual state | Relationship |
+Reference: the supplied **Revolutionary AI Taxi App Design (2).zip**, exported on 30 September 2026. Original visual source files are retained in `design/figma-make-20260930/`, with archive/file SHA-256 values in its manifest. Those files are reference material, not production modules.
+
+The Make link is https://www.figma.com/make/y94k21wsXX8d9sI966cOAY/Revolutionary-AI-Taxi-App-Design. Its connected design-context tool returned resource links without readable bodies. Screenshot and motion-context tools explicitly reject Make files. The approved browser fallback displayed **Site Unavailable**; it also rejected the local reference preview URL. The live file manifest includes additional source files absent from the older export. Current-file freshness and same-dimension reference/native screenshots are therefore unverified.
+
+The provided export contains a component screenshot for the recent-address sheet. Source geometry was checked against that reference; no native screen screenshot comparison passed.
+
+## Implemented corrections
+
+| Area | Previous mismatch | Source-based change |
 | --- | --- | --- |
-| #60 | Merged | Earlier mobile UI and Mapbox changes already integrated |
-| #62 | Merged | Expo 57 release corrections already integrated |
-| #64 | Open, draft | Native auth/payment foundation, based on beta |
-| #65 | Open, draft | Partial Figma port, stacked on #64 |
+| Fonts throughout both apps | System-font text and synthetic weights; missing weights | Shared Text/TextInput select actual Inter 300/400/500/600/700/800 and JetBrains Mono 400/500 files, preserving nested font/color inheritance |
+| Palette | Muted and feedback colors differed | Faint ink `#8B97A7`, success `#4CAF50`, warning `#FF9800`, error `#F44336`; operational green remains `#12B981` |
+| In-app mark | Customer chevrons filled the tile; different gradient/shadow | Original 24-unit paths, glyph at 52% of tile size, radius 28%, CSS 145° gradient with middle stop at 55%, source shadows |
+| Splash | One pulse; different title spacing; full-width bottom CTA; extra copy | Centered group, 104 px mark, two 3 s rings offset 1.2 s, 4 s / −6 px float, 60 px wordmark with 36 px margin, compact CTA at 56 px margin, 2.8 s shimmer, radial background |
+| Login | Extra top navigation, fake Google letter, different fields/spacing | Original Google SVG, source field labels and focus halo, entrance delays 0/60/100/140/180 ms, 30 px customer title, primary gradient, forgot link below primary action |
+| Shared actions | Flat red fill, 0.99 press, 16 px text | 120° gradient calculated for actual rectangle dimensions, 0.95 press scale, 14/20 px Inter semibold |
+| Task bars | Built-in tab layout, wrong inactive glyphs/color, Driver green selection | Original Customer SVG paths, Driver glyphs, 20 px icons, 10 px labels, 26 px radius, 16 px inset, original active indicator, scene-backed native blur |
+| Customer browse | Recent rows too short; bottom content obscured by navigation | Source row/icon/text spacing, 112 px bottom reservation while expanded, 300 ms collapse, original vehicle glyph and category-row proportions |
+| Confirmation/matching/arrival | Different gradient, padding and type spacing | Source shell gradients and primary actions; matching card spacing; preserved 900 ms linear spinner; arrival sheet/top-card spacing |
+| Driver trip actions | Static gray row with multiple arrows | Red 56 px pill, 48 px white thumb, 300 ms travel, action after 350 ms; existing backend handler and final-trip confirmation retained |
+| Motion preference | Loops did not consult system preference | Shared native accessibility subscription; new rise/float/pulse/shimmer/collapse/confirmation and matching motion respect reduced motion; animations/timers clean up on unmount |
+| Maps | Faded theme, tilted camera, 3D buildings and POI labels | Mapbox Standard monochrome/day, flat 13.4 zoom, source Oslo fallback, 3D/POI disabled, original 30 px arrow glyphs and 22 px position pulse |
+| Platform identity | Old gold K icons, dark launch/theme, cyan notification tint | Original Customer red/white and Driver navy/red S ribbons, generated adaptive/monochrome/favicon assets, source splash mark, light native theme and red notification tint |
 
-PR #65 head was checked again before publishing these changes. No older UI branch was imported and neither #64 nor #65 was merged.
+Native safe areas are added to the mockup's content insets. App names, package identifiers, schemes and visible KJAPP wordmarks retain the existing project identity. iOS uses its native Continue with Apple control rather than the browser's imitation. Unsupported platforms do not show a fake Apple action. Store icon corner transparency is filled for valid opaque iOS assets; the OS supplies its icon mask.
 
-## Mobile architecture
+`npm run icons:figma` in frontend regenerates platform icon files directly from the archived AppIcons SVG source. No generated or invented icon paths are used.
 
-Reviewed 22 Customer route files and 15 Driver route files, plus their application source (94 TS/TSX files in total).
+## Backend preservation
 
-- Both mobile API clients and all EAS build profiles target `https://api.kjappapp.no`.
-- No Supabase dependencies appear in either mobile package manifest, and no Supabase references appear in either app's TS/TSX source.
-- The existing KJAPP API clients for auth, places, nearby cars, quotes, booking, trip lifecycle, chat, payments, safety and receipts remain in place.
-- This is a source audit, not proof that all live backend flows work. A read-only API health probe timed out after 10 seconds; this does not establish backend downtime.
+Both `src/lib/api.ts` files are byte-identical to the pre-change source. No Supabase dependency or reference is present in either app's runtime TS/TSX or manifests. Existing auth, place search, quotes, nearby cars, booking, trip state, receipts, payment, chat and safety APIs remain authoritative.
 
-## Concrete visual and motion findings
+An AST comparison confirmed these existing handlers were unchanged: Customer booking, email login, Google login, Apple login and account-role completion; Driver login, poll, accept, decline and advance; permission-request completion. Role, approval, legal-consent and identity gates remain in place. The new confirmation component animates before calling the existing advance handler and reports unexpected rejections to the screen.
 
-Targets in this table come from the repository's previously extracted `docs/FIGMA_MAKE_PIXEL_SOURCE_20261002.md`. They have not been reconfirmed against the current live Make source.
+The source export's random cars, hardcoded passengers/prices/earnings, automatic matching and demo approval are not production data. This audit does not certify live end-to-end backend behavior or constitute a full backend security assessment.
 
-| Area | Documented target | Current source | Result |
-| --- | --- | --- | --- |
-| Font coverage | Inter 400/500/600/700/800 | Both themes load only 400/500/600/700 | Inter 800 absent |
-| Mono coverage | JetBrains Mono 400/500 | Only local Regular TTF is loaded | Mono 500 absent |
-| Shared button typography | Inter | Button text uses fontWeight with no fontFamily; its View parent does not supply text inheritance | Shared controls do not explicitly select Inter |
-| Shared button press | Scale 0.95 | Both shared Button components use 0.99 | Source mismatch |
-| Sheet timing | 300 ms | Both themes declare 280 ms; token usage must be confirmed during port | Token mismatch, actual transition parity unverified |
-| Entrance motion | 700 ms with specified cubic easing and 14 px rise | No corresponding shared entrance implementation found | Not verified/implemented as specified |
-| Matching spinner | 900 ms linear | Customer booking uses 900 ms and Easing.linear | Source duration/easing match; appearance unverified |
-| Reduced motion | System preference collapses animation | Neither mobile source references useReducedMotion, isReduceMotionEnabled or reduceMotionChanged; explicit splash/spinner loops do not consult it | Missing explicit preference handling |
-| Icon and image geometry | Exact Make assets and sizing | Current native assets/icons could not be compared to readable Make source | Unverified |
-| Screen spacing, type size, shadows, radii | Exact per-screen source | No same-size reference/native renders available | Unverified |
-
-Font loading alone is not proof that every screen uses the intended font. Existing comparison document labels such as IMPLEMENTED remain source-level assertions, not passed pixel comparisons.
-
-## Checks executed in this session
-
-Environment: Node 24.19.0, npm 11.9.0, Expo SDK 57 and React Native 0.86.3. Read the versioned Expo 57 documentation required by both mobile AGENTS.md files before preparing changes.
+## Validation
 
 | Check | Customer | Driver |
 | --- | --- | --- |
-| npm ci --no-audit --no-fund | PASS | PASS |
-| npx tsc --noEmit | PASS | PASS |
-| npx expo-doctor@latest | 21/21 PASS | 21/21 PASS |
-| Android Hermes JavaScript export | PASS | PASS |
-| iOS Hermes JavaScript export | PASS | PASS |
-| Signed APK | NOT BUILT | NOT BUILT |
-| IPA/TestFlight | NOT BUILT | NOT BUILT |
-| Physical phone auth/trip/payment | NOT TESTED | NOT TESTED |
-| Figma visual/motion comparison | BLOCKED | BLOCKED |
+| TypeScript, `npx tsc --noEmit` | PASS | PASS |
+| Expo Doctor | 21/21 PASS | 21/21 PASS |
+| Android native project generation, no installation | PASS | PASS |
+| Android Hermes export | PASS | PASS |
+| iOS Hermes export | PASS | PASS |
+| Component regression checks | PASS across both apps | PASS across both apps |
+| Existing receipt/navigation regression suite | — | 4/4 PASS |
+| Signed APK / IPA | NOT COMPILED | NOT COMPILED |
+| Native screenshot / full motion playback | NOT VERIFIED | NOT VERIFIED |
+| Real phone auth → booking → trip → payment | NOT TESTED | NOT TESTED |
 
-Both exports package the local JetBrains Mono Regular font and Inter 400–700. They do not include the missing target font weights. JavaScript exports are not APK/IPA compilation.
+The component checks cover all loaded font weights, nested text inheritance, CSS gradient direction on non-square surfaces, one shared reduced-motion subscription, delayed single trip-action invocation despite repeated presses, cancellation after unmount, and error recovery. They use mocked native host components and are **not visual tests**.
 
-## Changes published by this audit
+Commands: `npm run test:design` in frontend; `node --test tests/tripSummary.test.mjs` in driver-app; `npx tsc --noEmit`; `npx expo-doctor@latest`; `npx expo prebuild --platform android --no-install`; `npx expo export --platform android` and `--platform ios` in each app.
 
-The Android native, iOS simulator, EAS Android and EAS iOS workflows now run `npm ci --no-audit --no-fund` instead of `npm install`. This prevents fresh build dependency resolution from drifting away from the tested committed lockfiles. All four workflow files parse as valid YAML. Existing trigger, credential, signing, API-target and payment behavior is unchanged. The native Android and iOS workflow file updates request new push-triggered build attempts on the current Figma branch.
+The new `figma-mobile-audit.yml` requests the source checks and both platform exports on pushes/PRs. Existing APK/simulator/EAS workflows retain their separate native compilation/signing responsibilities. YAML parsing passed; successful GitHub workflow startup is still required.
 
-## Verified blockers
+## Security and accessibility findings
 
-1. Figma get_design_context for Make root 0:1 returned links for 27 source files and 28 image resources, not readable source bodies or a reference screenshot. App.tsx resource reads return Unknown resource. A second request with forceCode returned the same links. get_screenshot explicitly rejects Make files. The current Make source/assets/renders are therefore unavailable through the connected tools.
-2. The latest existing GitHub run at the audited head, https://github.com/foziakahero-dot/Emergent-kjapp-taxi/actions/runs/36996628221, is completed/startup_failure with zero jobs. The retry request returned HTTP 403: This workflow run cannot be retried. The underlying startup cause is not established; it is not a failing app compilation.
-3. This session has no EXPO_TOKEN or configured Android SDK and runs Linux without Xcode. The connected GitHub tools do not expose workflow_dispatch. Signed EAS builds cannot be requested directly from this session.
+`npm audit --omit=dev` reports **7 high affected packages for Customer and 6 for Driver**, no critical/moderate/low findings. These counts propagate from the same underlying `node-forge` advisory, **GHSA-86w9-cpqp-85rv / CVE-2026-85393**, through Expo CLI/code-signing dependencies. The advisory lists versions through 1.4.0 as affected and no patched version. The npm registry's latest version checked was 1.4.0. Downgrading Google/Stripe integrations as suggested by the dependency resolver would not constitute a verified fix.
 
-## Required continuation
+Primary advisory: https://github.com/advisories/GHSA-86w9-cpqp-85rv. The audit remains open on this finding. CLI dependency paths were inspected; this is not evidence that the vulnerable verification routine is bundled or exploitable in the native customer runtime.
 
-Obtain readable current Make source, assets and screen/state renders through an approved browser export or a supplied Make source export. Port each remaining mismatch into the existing native apps, keeping production data and APIs authoritative. Compare screenshots at identical dimensions and test motion including reduced motion. Then compile native APK/IPA and verify the complete Customer/Driver lifecycle on phones.
+The exact source palette has contrast limitations: faint ink against white is approximately **2.97:1** and white against primary red is **4.00:1**. These do not meet 4.5:1 for ordinary small text. Colors were retained to match the supplied design. Reduced motion, native permission prompts, tab/switch/button semantics and error states are included; comprehensive accessibility compliance is not asserted.
 
-No visual completion, merge readiness, successful signed build or beta acceptance is asserted.
+## Remaining design and release gaps
+
+1. No current live Make source/render comparison has passed. The 30 September export may be older than the current design.
+2. Profile setup still routes to real payment/address management instead of the reference's direct four-payment-tile/name/address form. Driver profile/onboarding does not reproduce every reference fleet/document/settings subsection. The proactive AI recommendation overlay and every Customer support/settings sub-screen are not fully ported. These are remaining implementation work, not verified parity.
+3. Complete screens, scroll states, dynamic type, keyboard behavior, blur, SVG shadows, icon masks and full animation timelines require same-size iOS/Android rendering and comparison. The arrow path is exact; its browser drop-shadow/heading transition is not a passed native match. Raster fallback when a Mapbox token is absent cannot match Mapbox Standard.
+4. GitHub native build attempts at parent commit completed with `startup_failure`, `path: BuildFailed`, and zero jobs. Retry was rejected with HTTP 403. No app compiler log exists for those attempts, and the root cause was not established. Latest build status must be checked for the implementation commit.
+5. This Linux session has no configured Android SDK, Xcode or Expo authentication token. Native project generation and Hermes packaging succeeded; APK/IPA compilation and signing have not been performed here.
+
+The draft should not be described as pixel-perfect, fully implemented, release-ready, security-clean or accepted on physical devices. Review the remaining design gaps and build results before production integration.

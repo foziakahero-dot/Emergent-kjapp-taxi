@@ -1,5 +1,7 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -28,7 +30,7 @@ export default function DriverProfile() {
   });
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 38, paddingBottom: 120, paddingHorizontal: 28 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
       <Text style={s.title}>Min profil</Text>
 
       <View style={s.card}>
@@ -138,3 +140,4 @@ const useStyles = makeStyles((c) => ({
   logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, paddingVertical: 16 },
   logoutText: { color: c.danger, fontSize: 15, fontWeight: '600' },
 }));
+

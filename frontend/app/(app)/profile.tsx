@@ -1,5 +1,7 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -46,7 +48,7 @@ export default function Profile() {
     <>
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.bg }}
-        contentContainerStyle={{ paddingHorizontal: 28, paddingTop: insets.top + 38, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingHorizontal: 28, paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112 }}
       >
         <Text style={s.title}>Profil</Text>
 
@@ -151,3 +153,4 @@ const useStyles = makeStyles((c) => ({
   modalInput: { alignSelf: 'stretch', marginTop: 16, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 12, paddingHorizontal: 16, height: 52, color: c.text, fontSize: 16, letterSpacing: 2, textAlign: 'center' },
   deleteError: { color: c.danger, fontSize: 12, textAlign: 'center', marginTop: 10 },
 }));
+

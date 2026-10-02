@@ -1,5 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApi } from '@/src/lib/api';
@@ -105,4 +106,5 @@ const useStyles = makeStyles((c) => ({
   secondaryButton: { minHeight: 50, marginTop: 8, paddingHorizontal: 22, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
   secondaryText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
 }));
+
 

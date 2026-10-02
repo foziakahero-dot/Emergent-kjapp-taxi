@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,7 +41,7 @@ export default function ProfileSetup() {
           <Text style={s.label}>FASTE ADRESSER</Text>
           <Pressable style={s.actionCard} onPress={() => router.push('/saved-places')} testID="setup-places">
             <View style={s.actionIcon}><Icon name="home" size={20} color={colors.accent} /></View>
-            <View style={{ flex: 1 }}><Text style={s.actionTitle}>Hjem og jobb</Text><Text style={s.actionSub}>Legg til adresser i KJAPPs ekte lagrede steder</Text></View>
+            <View style={{ flex: 1 }}><Text style={s.actionTitle}>Hjem og jobb</Text><Text style={s.actionSub}>Legg til hjem og jobb</Text></View>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -74,4 +75,5 @@ const useStyles = makeStyles(c => ({
   skip: { minHeight: 40, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   skipText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 12 },
 }));
+
 

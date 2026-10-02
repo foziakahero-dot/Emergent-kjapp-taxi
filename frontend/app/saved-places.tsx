@@ -1,14 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -182,3 +174,4 @@ const useStyles = makeStyles((c) => ({
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16, borderRadius: 16, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed', marginTop: 8 },
   addText: { color: c.accent, fontSize: 15, fontWeight: '600' },
 }));
+

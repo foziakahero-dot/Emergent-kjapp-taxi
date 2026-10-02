@@ -1,5 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';

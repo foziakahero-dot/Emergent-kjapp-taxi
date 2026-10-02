@@ -14,9 +14,9 @@ export function AppleSignInButton({
     return (
       <View
         style={{
-          marginTop: 10,
+          
           width: '100%',
-          height: 54,
+          height: 50,
           borderRadius: 27,
           backgroundColor: colors.text,
           alignItems: 'center',
@@ -29,14 +29,15 @@ export function AppleSignInButton({
   }
 
   return (
-    <View style={{ marginTop: 10, width: '100%' }}>
+    <View style={{  width: '100%' }}>
       <AppleAuthentication.AppleAuthenticationButton
-        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
         buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
         cornerRadius={27}
-        style={{ width: '100%', height: 54 }}
+        style={{ width: '100%', height: 50 }}
         onPress={onPress}
       />
     </View>
   );
 }
+

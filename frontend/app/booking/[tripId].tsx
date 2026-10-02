@@ -1,5 +1,8 @@
+import { useReducedMotion } from '@/src/components/Motion';
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -35,9 +38,10 @@ export default function BookingFlow() {
   const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
   const nav = useRef(false);
   const matchingSpin = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!['searching', 'booking'].includes(trip?.status)) {
+    if (reducedMotion || !['searching', 'booking'].includes(trip?.status)) {
       matchingSpin.stopAnimation();
       matchingSpin.setValue(0);
       return;
@@ -52,7 +56,7 @@ export default function BookingFlow() {
     );
     loop.start();
     return () => loop.stop();
-  }, [matchingSpin, trip?.status]);
+  }, [matchingSpin, trip?.status, reducedMotion]);
 
   useEffect(() => {
     let mounted = true;
@@ -200,6 +204,7 @@ export default function BookingFlow() {
 
       {trip.status === 'searching' || trip.status === 'booking' ? (
         <View style={s.matchingOverlay} testID="matching-overlay">
+          <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
           <View style={s.matchingCard}>
             <View style={s.matchingMarkWrap}>
               <Animated.View style={[s.matchingRing, { transform: [{ rotate: spinDeg }] }]} />
@@ -226,7 +231,7 @@ export default function BookingFlow() {
         </View>
       ) : trip.status === 'in_trip' ? (
         <>
-          <View style={[s.tripBanner, { top: insets.top + 12 }]} testID="inride-banner">
+          <View style={[s.tripBanner, { top: insets.top + 16 }]} testID="inride-banner">
             <View style={s.tripBannerRow}>
               <View style={{ flex: 1 }}>
                 <Text style={s.tripEyebrow}>UNDERVEIS</Text>
@@ -238,7 +243,7 @@ export default function BookingFlow() {
             </View>
           </View>
 
-          <View style={[s.inRideSheet, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={[s.inRideSheet, { paddingBottom: insets.bottom + 32 }]}>
             <View style={s.handle} />
             {networkIssue || !driverGpsFresh ? (
               <View style={s.networkBanner}>
@@ -264,14 +269,14 @@ export default function BookingFlow() {
         </>
       ) : (
         <>
-          <View style={[s.arrivalTopCard, { top: insets.top + 12 }]} testID="driver-arrival-eta">
+          <View style={[s.arrivalTopCard, { top: insets.top + 16 }]} testID="driver-arrival-eta">
             <Text style={s.arrivalEyebrow}>{trip.status === 'at_pickup' ? 'SJÅFØREN ER FREMME' : 'SJÅFØREN ER PÅ VEI'}</Text>
             <Text style={s.arrivalEta}>
               {trip.status === 'at_pickup' ? 'Klar for henting' : etaMinutes ? `Ankommer om ${etaMinutes} min` : 'På vei til deg'}
             </Text>
           </View>
 
-          <View style={[s.arrivalSheet, { paddingBottom: insets.bottom + 18 }]}>
+          <View style={[s.arrivalSheet, { paddingBottom: insets.bottom + 32 }]}>
             <View style={s.handle} />
             {networkIssue || !driverGpsFresh ? (
               <View style={s.networkBanner}>
@@ -366,11 +371,11 @@ const useStyles = makeStyles((c) => ({
   retryBtn: { minHeight: 50, borderRadius: 25, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
   retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
 
-  matchingOverlay: { ...StyleSheet.absoluteFill, zIndex: 20, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 160, backgroundColor: 'rgba(244,246,250,0.62)' },
-  matchingCard: { width: 278, alignItems: 'center', borderRadius: 24, paddingHorizontal: 30, paddingVertical: 28, backgroundColor: 'rgba(255,255,255,0.97)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.14, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+  matchingOverlay: { ...StyleSheet.absoluteFill, zIndex: 20, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 160, backgroundColor: 'transparent' },
+  matchingCard: { width: 278, alignItems: 'center', borderRadius: 24, paddingHorizontal: 40, paddingVertical: 32, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.14, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
   matchingMarkWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
   matchingRing: { position: 'absolute', width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'transparent', borderTopColor: c.accent },
-  matchingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16, marginTop: 18 },
+  matchingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 24, letterSpacing: -0.32, marginTop: 20 },
   matchingSub: { color: c.textSecondary, fontSize: 12, marginTop: 4, textAlign: 'center' },
   matchingCancel: { marginTop: 18, minHeight: 36, justifyContent: 'center' },
   matchingCancelText: { color: c.textSecondary, fontSize: 13, textDecorationLine: 'underline' },
@@ -378,7 +383,7 @@ const useStyles = makeStyles((c) => ({
   arrivalTopCard: { position: 'absolute', left: 16, right: 16, zIndex: 20, alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
   arrivalEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.4 },
   arrivalEta: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 3 },
-  arrivalSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 12, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+  arrivalSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 16 },
   verifyLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.5, marginBottom: 9 },
   driverCard: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
@@ -387,7 +392,7 @@ const useStyles = makeStyles((c) => ({
   driverAvatarText: { color: c.accentOn, fontFamily: font.bold, fontSize: 18 },
   driverInfo: { flex: 1 },
   driverName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  driverCar: { color: c.textSecondary, fontFamily: font.mono, fontSize: 10.5, marginTop: 3 },
+  driverCar: { color: c.textSecondary, fontFamily: font.mono, fontSize: 11, lineHeight: 16, marginTop: 0 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingText: { color: c.textSecondary, fontSize: 12 },
   driverDistance: { color: c.textSecondary, fontSize: 11 },
@@ -403,7 +408,7 @@ const useStyles = makeStyles((c) => ({
   tripEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4 },
   tripDriverLine: { color: c.text, fontFamily: font.semibold, fontSize: 13, marginTop: 3 },
   tripEta: { color: c.text, fontFamily: font.semibold, fontSize: 18 },
-  inRideSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 12, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+  inRideSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
   inRideActions: { flexDirection: 'row', gap: 10 },
   rideAction: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
   rideActionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
@@ -434,5 +439,6 @@ const useStyles = makeStyles((c) => ({
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
+
 
 

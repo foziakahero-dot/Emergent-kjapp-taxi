@@ -1,5 +1,7 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { paymentApi } from '@/src/lib/api';
@@ -21,14 +23,14 @@ export default function Wallet() {
   }, []));
 
   return (
-    <ScrollView style={s.screen} contentContainerStyle={{ paddingTop: insets.top + 38, paddingHorizontal: 28, paddingBottom: 120 }}>
+    <ScrollView style={s.screen} contentContainerStyle={{ paddingTop: insets.top + 56, paddingHorizontal: 28, paddingBottom: insets.bottom + 112 }}>
       <Text style={s.title}>Lommebok</Text>
 
-      <View style={s.creditCard}>
+      <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.creditCard}>
         <Text style={s.creditEyebrow}>KJAPP-KREDITT</Text>
         <Text style={s.creditTitle}>Kommer snart</Text>
         <Text style={s.creditSub}>Kreditt og verving er ikke aktivert i beta.</Text>
-      </View>
+      </FigmaGradient>
 
       <View style={s.list}>
         {methods.map((m, i) => (
@@ -59,10 +61,11 @@ const useStyles = makeStyles(c => ({
   creditEyebrow: { color: 'rgba(255,255,255,0.78)', fontFamily: font.mono, fontSize: 10, letterSpacing: 1.7 },
   creditTitle: { color: c.accentOn, fontFamily: font.semibold, fontSize: 27, marginTop: 8 },
   creditSub: { color: 'rgba(255,255,255,0.82)', fontSize: 12, marginTop: 4 },
-  list: { gap: 10, marginTop: 18 },
-  methodRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingHorizontal: 14, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  methodIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+  list: { gap: 12, marginTop: 12 },
+  methodRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  methodIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
   methodTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  methodSub: { color: c.textSecondary, fontSize: 11.5, marginTop: 3 },
+  methodSub: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 0 },
   activePill: { color: c.accentOn, fontFamily: font.semibold, fontSize: 10, backgroundColor: c.online, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
 }));
+
