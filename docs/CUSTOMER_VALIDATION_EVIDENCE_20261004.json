@@ -145,5 +145,21 @@
     "baseline-regressions.log": "9d5432ed789042b301bb23dd6fdd3556f8dc12232b609e26421a3be21a71b4fd",
     "current-regressions.log": "45094a0078f046d59ab3fa5b83790fc34f928ef042d60745d41672cf88685f2a"
   },
-  "retainedIconSha256": "d4a29f74eac608c11f8cb220296e98e75a476e6145396306b24198e34423e70f"
+  "retainedIconSha256": "d4a29f74eac608c11f8cb220296e98e75a476e6145396306b24198e34423e70f",
+  "customerImplementationCommit": "92b957e4f0581811bcdb6895551ca3b2940679b8",
+  "customerPR": "https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/67",
+  "remoteCI": {
+    "status": "startup_failure; no jobs started",
+    "runs": [
+      37163387691,
+      37163390226
+    ],
+    "baselineSameFailure": [
+      37097397045,
+      37087528954,
+      37087526771
+    ],
+    "rootCause": "UNVERIFIED; connector has no jobs and check-suite read unsupported",
+    "editedWorkflowYaml": "PASS local parse"
+  }
 }
