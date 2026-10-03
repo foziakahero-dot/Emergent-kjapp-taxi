@@ -14,7 +14,8 @@
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
         "ITSAppUsesNonExemptEncryption": false,
-        "MGLMapboxMetricsEnabledSettingShownInApp": true
+        "MGLMapboxMetricsEnabledSettingShownInApp": true,
+        "NSCameraUsageDescription": "KJAPP bruker kameraet når du velger å skanne et betalingskort for å betale for taxiturer."
       },
       "usesAppleSignIn": true
     },
