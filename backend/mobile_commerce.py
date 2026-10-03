@@ -97,6 +97,35 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             raise HTTPException(401, "Ugyldig Google-token")
         return await identity_session("google", claims, body, response)
 
+    @api.post("/auth/google/link")
+    async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
+        await rate_limit(request, "google-link", 20, 900)
+        if body.client != "customer":
+            raise HTTPException(403, "Kun kundekonto kan kobles her")
+        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        if not client_id:
+            raise HTTPException(503, "Google-innlogging er ikke konfigurert")
+        try:
+            claims = await verify_google(body.identity_token, client_id)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(401, "Ugyldig Google-token")
+        sub = claims.get("sub")
+        verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
+        email = str(claims.get("email") or "").strip().lower()
+        if not sub or not verified or email != str(current.get("email") or "").strip().lower():
+            raise HTTPException(409, "Google-kontoen må ha samme verifiserte e-postadresse")
+        existing = await db.users.find_one({"google_sub": sub})
+        if existing and str(existing["_id"]) != current["id"]:
+            raise HTTPException(409, "Google-kontoen er allerede koblet til en annen bruker")
+        result = await db.users.update_one({"_id": ObjectId(current["id"]),
+            "$or": [{"google_sub": {"$exists": False}}, {"google_sub": None}, {"google_sub": sub}]},
+            {"$set": {"google_sub": sub, "google_linked": True}})
+        if result.matched_count != 1:
+            raise HTTPException(409, "Kontoen er koblet til en annen Google-identitet")
+        return {"linked": True}
+
     @api.post("/auth/apple/native")
     async def apple_native(body: NativeIdentity, request: Request, response: Response):
         await rate_limit(request, "apple-native", 30, 900)
@@ -160,8 +189,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     def payment_config():
         key = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
-        mode_matches = ((key.startswith("pk_test_") and str(stripe.api_key).startswith("sk_test_")) or
-            (key.startswith("pk_live_") and str(stripe.api_key).startswith("sk_live_")))
+        mode_matches = key.startswith("pk_test_") and str(stripe.api_key).startswith(("sk_test_", "rk_test_"))
         enabled = os.getenv("NATIVE_PAYMENTS_ENABLED", "false").lower() == "true" and mode_matches
         return {"enabled": bool(enabled), "publishable_key": key if enabled else "",
             "test_mode": key.startswith("pk_test_"),
@@ -271,3 +299,4 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return True
 
     return handle_native_webhook
+

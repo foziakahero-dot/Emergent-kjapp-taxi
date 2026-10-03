@@ -16,6 +16,7 @@ import httpx
 import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
+from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
@@ -1701,11 +1702,15 @@ async def cars_nearby(body: NearbyCarsRequest):
         "approved": True,
         "accepted_terms_at": {"$exists": True, "$ne": None},
         "online": True,
+        "internal_test_account": {"$ne": True},
+        "active_trip_id": {"$in": [None, ""]},
         "disabled": {"$ne": True},
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
     }):
+        if await db.trips.find_one(_real_trip_filter({"driver_id": str(u["_id"]), "status": {"$in": ["booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}), {"_id": 1}):
+            continue
         lat = u.get("last_lat")
         lng = u.get("last_lng")
         if lat is None or lng is None or await _fleet_is_suspended(u.get("fleet_id")):
@@ -2461,7 +2466,11 @@ async def me(current=Depends(get_current_user)):
             current["car"] = vehicle.get("car")
             current["plate"] = vehicle.get("plate")
             current["vehicle_type"] = vehicle.get("vehicle_type") or "ai-first"
-    return user_public(current)
+    public = user_public(current)
+    if current.get("role", "user") in ("user", "customer"):
+        photo = await db.customer_photos.find_one({"_id": current["id"]}, {"version": 1})
+        public["customer_photo_version"] = (photo or {}).get("version")
+    return public
 
 
 # ---- Trips ----
@@ -7789,7 +7798,7 @@ async def send_trip_receipts(trip_id: str):
     customer_sent_at = await deliver_once(
         "customer",
         (passenger or {}).get("email"),
-        f"KJAPP-kvittering · {price} kr",
+        f"SNAR-kvittering · {price} kr",
         f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
         f"<p>{route}</p><p><strong>Total: {price} kr</strong></p>"
         f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
@@ -8353,7 +8362,8 @@ async def gdpr_export(current=Depends(get_current_user)):
         "user": user,
         "trips": trips,
         "ai_messages": messages,
-        "payments": payments,
+        "payments": [{k: v for k, v in p.items() if k not in ("client_secret", "stripe_client_secret")} for p in payments],
+        "customer_photo": await export_customer_photo(db, uid),
     }
 
 
@@ -8378,6 +8388,7 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
         }},
     )
     # Delete personal data
+    await delete_customer_photo(db, uid)
     await db.chat_messages.delete_many({"user_id": uid})
     await db.trip_messages.update_many(
         {"from_user_id": uid},
@@ -10942,6 +10953,8 @@ handle_native_payment_webhook = install_mobile_commerce(
     mark_paid=_mark_trip_paid_and_complete, send_receipts=send_trip_receipts,
 )
 
+install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
+
 app.include_router(api)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
@@ -10957,4 +10970,5 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+
 
