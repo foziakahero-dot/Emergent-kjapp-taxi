@@ -8,15 +8,15 @@ import random
 import secrets
 import json
 import base64
+import traceback
 import re
-import logging
-import time
 import bcrypt
 import jwt
 import httpx
 import stripe
+from stripe_fleet import ensure_fleet_account
+from mobile_commerce import install_mobile_commerce
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
-from admin_operations_os import install_kjapp_operations_os
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
@@ -29,18 +29,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import MongoClient
 from bson import ObjectId
 from bson.errors import InvalidId
 import pyotp
 import qrcode
 import uuid
-
-logger = logging.getLogger("kjapp.api")
-if not logger.handlers:
-    logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
-logger.propagate = False
 
 try:
     from pywebpush import webpush, WebPushException
@@ -58,7 +51,6 @@ DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
-KJAPP_STORAGE_BACKEND = (os.environ.get("KJAPP_STORAGE_BACKEND") or "emergent").strip().lower()
 
 # ------------------ Environment / security hardening ------------------
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
@@ -143,7 +135,6 @@ def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
         return list(PRODUCTION_CORS_ORIGINS)
     origins = list(PRODUCTION_CORS_ORIGINS) + [
         "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001",
-        "https://kjapp-admin-beta.onrender.com", "https://kjapp-fleet-beta.onrender.com",
         # admin web local dev servers (Vite / Next / CRA)
         "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173",
         "http://localhost:3001", "http://127.0.0.1:3001",
@@ -151,15 +142,6 @@ def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
     fu = (frontend_url or "").strip().rstrip("/")
     if fu and fu != "*" and fu.startswith("http"):
         origins.append(fu)
-
-    extra_origins = (os.environ.get("KJAPP_EXTRA_CORS_ORIGINS") or "").strip()
-    for raw_origin in extra_origins.split(","):
-        origin = raw_origin.strip().rstrip("/")
-        if origin and origin != "*" and origin.startswith("http"):
-            origins.append(origin)
-
-    origins = list(dict.fromkeys(origins))
-    if fu or extra_origins:
         return origins
     # Development fallback when preview origin is unknown (auth uses Bearer header, not cookies)
     return ["*"]
@@ -208,36 +190,7 @@ def init_storage(force: bool = False) -> Optional[str]:
     return _storage_key
 
 
-_mongo_blob_client = None
-
-
-def _mongo_blob_collection():
-    """Synchronous small-object storage used only when explicitly enabled.
-
-    KJAPP uploads are capped at 8 MB, safely below MongoDB's 16 MB document limit.
-    The public API contract remains unchanged; this is a provider swap for beta portability.
-    """
-    global _mongo_blob_client
-    if _mongo_blob_client is None:
-        _mongo_blob_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=10000)
-    return _mongo_blob_client[DB_NAME]["stored_objects"]
-
-
 def storage_put(path: str, data: bytes, content_type: str) -> dict:
-    if KJAPP_STORAGE_BACKEND == "mongo":
-        coll = _mongo_blob_collection()
-        coll.update_one(
-            {"_id": path},
-            {"$set": {
-                "data": data,
-                "content_type": content_type or "application/octet-stream",
-                "size": len(data),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }},
-            upsert=True,
-        )
-        return {"path": path, "size": len(data), "provider": "mongo"}
-
     key = init_storage()
     if not key:
         raise HTTPException(status_code=503, detail="Objektlager utilgjengelig")
@@ -248,6 +201,7 @@ def storage_put(path: str, data: bytes, content_type: str) -> dict:
         timeout=120,
     )
     if r.status_code == 404:
+        # Try re-init once
         key = init_storage(force=True)
         r = http_requests.put(
             f"{STORAGE_URL}/objects/{path}",
@@ -260,12 +214,6 @@ def storage_put(path: str, data: bytes, content_type: str) -> dict:
 
 
 def storage_get(path: str) -> tuple[bytes, str]:
-    if KJAPP_STORAGE_BACKEND == "mongo":
-        doc = _mongo_blob_collection().find_one({"_id": path})
-        if not doc:
-            raise HTTPException(status_code=404, detail="Fil ikke funnet")
-        return bytes(doc.get("data") or b""), doc.get("content_type") or "application/octet-stream"
-
     key = init_storage()
     if not key:
         raise HTTPException(status_code=503, detail="Objektlager utilgjengelig")
@@ -287,10 +235,6 @@ def storage_get(path: str) -> tuple[bytes, str]:
 
 def storage_delete(path: str) -> None:
     """Physically delete an object. Metadata is only tombstoned after this succeeds."""
-    if KJAPP_STORAGE_BACKEND == "mongo":
-        _mongo_blob_collection().delete_one({"_id": path})
-        return
-
     key = init_storage()
     if not key:
         raise RuntimeError("Objektlager utilgjengelig")
@@ -300,6 +244,7 @@ def storage_delete(path: str) -> None:
         timeout=60,
     )
     if r.status_code == 404:
+        # Treat already-missing objects as deleted; retry once only when the storage key may have expired.
         key = init_storage(force=True)
         retry = http_requests.delete(
             f"{STORAGE_URL}/objects/{path}",
@@ -318,24 +263,12 @@ ALLOWED_UPLOAD_MIME = {
 }
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB per file
 
-client = AsyncIOMotorClient(
-    MONGO_URL,
-    serverSelectionTimeoutMS=10000,
-    connectTimeoutMS=10000,
-    socketTimeoutMS=20000,
-    maxPoolSize=50,
-    waitQueueTimeoutMS=10000,
-)
+client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
 # Stripe setup
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-STRIPE_KEY = (stripe.api_key or "").strip()
-STRIPE_IS_TEST = STRIPE_KEY.startswith("sk_test_")
-STRIPE_IS_LIVE = STRIPE_KEY.startswith("sk_live_")
-if APP_ENV in ("staging", "development", "dev", "test", "local") and STRIPE_IS_LIVE:
-    raise RuntimeError("Stripe live key is forbidden outside APP_ENV=production")
 
 
 # ------------------ Utils ------------------
@@ -490,13 +423,6 @@ def _gen_backup_codes(n: int = 8):
 
 def _twofa_required_role(role: str) -> bool:
     return role in ("admin", "superadmin")
-
-
-def _enforce_admin_2fa(current: dict) -> dict:
-    """Fail closed for every admin control surface until mandatory TOTP is enabled."""
-    if _twofa_required_role(current.get("role", "user")) and not current.get("totp_enabled"):
-        raise HTTPException(status_code=403, detail="2FA må aktiveres før administratortilgang")
-    return current
 
 
 USER_RESPONSE_FIELDS = frozenset({
@@ -928,6 +854,7 @@ class TripDestinationUpdate(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    navigation_app: Optional[Literal["google", "waze", "apple"]] = None
     ai_voice: Optional[str] = None
     notifications: Optional[bool] = None
     trip_updates: Optional[bool] = None
@@ -935,12 +862,6 @@ class SettingsUpdate(BaseModel):
     price_alerts: Optional[bool] = None
     language: Optional[str] = None
     theme: Optional[str] = None
-    notif_requests: Optional[bool] = None
-    notif_messages: Optional[bool] = None
-    notif_payouts: Optional[bool] = None
-    req_sound: Optional[bool] = None
-    req_vibrate: Optional[bool] = None
-    navigation_app: Optional[Literal["google", "apple", "waze"]] = None
 
 
 # ------------------ Trip simulator ------------------
@@ -1235,8 +1156,7 @@ def _fcm_app():
     return FCM_APP
 
 
-def _fcm_send(tokens: list, title: str, body: str, data: dict,
-              sound: bool = True, vibrate: bool = True, channel_id: str = "kjapp_trips"):
+def _fcm_send(tokens: list, title: str, body: str, data: dict):
     """Blocking FCM call — run through asyncio.to_thread. Returns tokens that are dead."""
     from firebase_admin import messaging
     msg_data = {k: str(v) for k, v in (data or {}).items()}
@@ -1251,14 +1171,13 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict,
                     android=messaging.AndroidConfig(
                         priority="high",
                         notification=messaging.AndroidNotification(
-                            channel_id=channel_id, sound="default" if sound else None,
-                             default_vibrate_timings=vibrate,
+                            channel_id="kjapp_trips", sound="default", default_vibrate_timings=True,
                         ),
                     ),
                     apns=messaging.APNSConfig(
                         headers={"apns-priority": "10", "apns-push-type": "alert"},
                         payload=messaging.APNSPayload(
-                            aps=messaging.Aps(sound="default" if sound else None, badge=1, content_available=True)
+                            aps=messaging.Aps(sound="default", badge=1, content_available=True)
                         ),
                     ),
                 ),
@@ -1277,8 +1196,7 @@ def _is_expo_push_token(token: str) -> bool:
     return isinstance(token, str) and token.startswith(("ExpoPushToken[", "ExponentPushToken["))
 
 
-async def _expo_send(tokens: list[str], title: str, body: str, data: dict,
-                     *, sound: bool = True, channel_id: str = "kjapp_trips") -> list[str]:
+async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> list[str]:
     """Send real native notifications through Expo Push -> APNs/FCM.
 
     Expo tokens are preferred for the React Native apps because getDevicePushTokenAsync()
@@ -1290,9 +1208,9 @@ async def _expo_send(tokens: list[str], title: str, body: str, data: dict,
         "to": token,
         "title": title,
         "body": body,
-        "sound": "default" if sound else None,
+        "sound": "default",
         "priority": "high",
-        "channelId": channel_id,
+        "channelId": "kjapp_trips",
         "data": {k: str(v) for k, v in (data or {}).items()},
     } for token in tokens]
     dead = []
@@ -1341,27 +1259,13 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
     ]
     dead = []
     data = {"url": url, "tag": tag or ""}
-    request_settings = {}
-    if tag == "kjapp-new-trip":
-        request_settings = await db.settings.find_one({"user_id": user_id}) or {}
-        if request_settings.get("notif_requests") is False:
-            return
-    sound_enabled = request_settings.get("req_sound") is not False
-    vibrate_enabled = request_settings.get("req_vibrate") is not False
-    channel_id = (
-        "kjapp_trips" if sound_enabled and vibrate_enabled else
-        "kjapp_trips_sound" if sound_enabled else
-        "kjapp_trips_vibrate" if vibrate_enabled else "kjapp_trips_quiet"
-    ) if tag == "kjapp-new-trip" else "kjapp_trips"
 
     if expo_tokens:
-        dead.extend(await _expo_send(expo_tokens, title, body, data,
-                                     sound=sound_enabled, channel_id=channel_id))
+        dead.extend(await _expo_send(expo_tokens, title, body, data))
 
     if legacy_fcm_tokens and _fcm_app():
         try:
-            dead.extend(await asyncio.to_thread(_fcm_send, legacy_fcm_tokens, title, body, data,
-                                                sound_enabled, vibrate_enabled, channel_id))
+            dead.extend(await asyncio.to_thread(_fcm_send, legacy_fcm_tokens, title, body, data))
         except Exception as e:
             print(f"FCM legacy push failed: {type(e).__name__}: {e}")
 
@@ -1371,10 +1275,6 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
     """Deliver a notification to every channel the user has: real mobile app (FCM/APNs) + web push."""
-    if tag == "kjapp-new-trip":
-        preferences = await db.settings.find_one({"user_id": user_id}) or {}
-        if preferences.get("notif_requests") is False:
-            return
     await send_native_push(user_id, title, body, url, tag)
     if not PUSH_AVAILABLE:
         return
@@ -1417,9 +1317,6 @@ async def lifespan(app: FastAPI):
     await db.users.create_index("email", unique=True)
     await db.trips.create_index("user_id")
     await db.trips.create_index("trip_id", unique=True)
-    await db.trips.create_index([("status", 1), ("driver_id", 1), ("dispatch_mode", 1), ("offer_expires_at", 1)])
-    await db.trips.create_index([("driver_id", 1), ("status", 1), ("created_at", -1)])
-    await db.trips.create_index([("user_id", 1), ("status", 1), ("created_at", -1)])
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
@@ -1447,22 +1344,6 @@ async def lifespan(app: FastAPI):
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
-    # Operations OS indexes: deterministic config versions, release history and AI-plan lookup.
-    await db.operations_config_versions.create_index("version", unique=True)
-    await db.operations_config_versions.create_index([("saved_at", -1)])
-    await db.release_registry.create_index("id", unique=True)
-    await db.release_registry.create_index([("created_at", -1)])
-    await db.release_registry.create_index([("channel", 1), ("status", 1), ("created_at", -1)])
-    await db.ai_change_plans.create_index("id", unique=True)
-    await db.ai_change_plans.create_index([("created_at", -1)])
-    await db.ai_change_plans.create_index([("status", 1), ("created_at", -1)])
-    # Operations OS: versioned config, release registry and AI plans.
-    await db.operations_config_versions.create_index("version", unique=True)
-    await db.operations_config_versions.create_index([("saved_at", -1)])
-    await db.release_registry.create_index("id", unique=True)
-    await db.release_registry.create_index([("created_at", -1)])
-    await db.ai_change_plans.create_index("id", unique=True)
-    await db.ai_change_plans.create_index([("created_at", -1)])
 
     # generate VAPID keys once
     if PUSH_AVAILABLE and not await db.vapid.find_one({"_id": "keys"}):
@@ -1479,8 +1360,7 @@ async def lifespan(app: FastAPI):
         await db.vapid.insert_one({"_id": "keys", "private_pem": priv_pem, "public_key": pub_b64})
 
     # Clean up legacy fake fleet drivers (from earlier seed) — one-time migration
-    if str(os.environ.get("KJAPP_RUN_LEGACY_DRIVER_CLEANUP", "")).strip().lower() in ("1", "true", "yes", "on"):
-        await db.drivers.delete_many({})
+    await db.drivers.delete_many({})
 
     # No more fake seed drivers — only real drivers who accept invites will populate db.users {role: driver}
     # Legacy `drivers` collection kept ONLY as fallback for orphaned invites; new invites reference user directly.
@@ -1626,25 +1506,13 @@ async def request_id_middleware(request: Request, call_next):
     """Correlation ID for every request; safe logging on unhandled errors (never logs headers/credentials)."""
     rid = uuid.uuid4().hex[:12]
     request.state.request_id = rid
-    started = time.perf_counter()
     try:
         response = await call_next(request)
         response.headers["X-Request-ID"] = rid
-        logger.info(json.dumps({
-            "event": "http_request", "request_id": rid,
-            "method": request.method,
-            "route": getattr(request.scope.get("route"), "path", "/unmatched"),
-            "status": response.status_code,
-            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
-        }))
         return response
     except Exception:
-        logger.exception(json.dumps({
-            "event": "unhandled_error", "request_id": rid,
-            "method": request.method,
-            "route": getattr(request.scope.get("route"), "path", "/unmatched"),
-            "duration_ms": round((time.perf_counter() - started) * 1000, 1),
-        }))
+        print(f"[unhandled-error] request_id={rid} {request.method} {request.url.path}")
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": "Intern serverfeil", "request_id": rid})
 
 # ------------------ Routes ------------------
@@ -1661,12 +1529,12 @@ async def health():
         db_ok = True
     except Exception:
         db_ok = False
-    return JSONResponse(status_code=200 if db_ok else 503, content={
+    return {
         "app": "KJAPP",
         "status": "ok" if db_ok else "degraded",
         "db": db_ok,
         "time": datetime.now(timezone.utc).isoformat(),
-    })
+    }
 
 
 @api.get("/ready")
@@ -1687,15 +1555,10 @@ async def readiness():
     checks = {
         "database": db_ok,
         "production_mode": IS_PRODUCTION,
-        "staging_mode": APP_ENV == "staging",
-        "runtime_mode_allowed": APP_ENV in ("production", "staging"),
         "demo_data_disabled": not ENABLE_DEMO_DATA,
         "jwt_configured": bool((JWT_SECRET or "").strip()),
         "admin_identity_configured": bool((os.environ.get("ADMIN_EMAIL") or "").strip()),
-        "stripe_key_configured": bool(STRIPE_KEY),
-        "stripe_test_mode": STRIPE_IS_TEST,
-        "stripe_live_mode": STRIPE_IS_LIVE,
-        "stripe_mode_safe": STRIPE_IS_LIVE if IS_PRODUCTION else STRIPE_IS_TEST,
+        "stripe_key_configured": bool((stripe.api_key or "").strip()),
         "stripe_webhook_configured": bool((STRIPE_WEBHOOK_SECRET or "").strip()),
         "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
         "public_web_origin_configured": (
@@ -1708,38 +1571,36 @@ async def readiness():
         "apple_bundle_env_matches": (
             (os.environ.get("APPLE_BUNDLE_ID") or "").strip() in ("", APPLE_NATIVE_BUNDLE_ID)
         ),
-        "object_storage_configured": (KJAPP_STORAGE_BACKEND == "mongo") or bool((EMERGENT_LLM_KEY or "").strip()),
+        "object_storage_configured": bool((EMERGENT_LLM_KEY or "").strip()),
         "service_area_enforced": OSLO_BETA_ENFORCE,
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
         "booking_enabled": runtime_features.get("booking_enabled", True),
     }
     required_keys = (
         "database",
-        "runtime_mode_allowed",
+        "production_mode",
         "demo_data_disabled",
         "jwt_configured",
         "admin_identity_configured",
         "stripe_key_configured",
-        "stripe_mode_safe",
         "stripe_webhook_configured",
         "email_configured",
         "public_web_origin_configured",
         "apple_native_auth_configured",
-        "object_storage_configured",
         "service_area_enforced",
         "booking_enabled",
     )
     blockers = [key for key in required_keys if not checks[key]]
     if checks["auto_charge_enabled"]:
         blockers.append("auto_charge_must_remain_off_until_stripe_e2e")
-    return JSONResponse(status_code=200 if not blockers else 503, content={
+    return {
         "app": "KJAPP",
         "ready": not blockers,
         "status": "ready" if not blockers else "not_ready",
         "checks": checks,
         "blockers": blockers,
         "time": datetime.now(timezone.utc).isoformat(),
-    })
+    }
 
 
 # ---- Available cars nearby (real driver fleet from DB) ----
@@ -1760,7 +1621,6 @@ async def cars_nearby(body: NearbyCarsRequest):
         "accepted_terms_at": {"$exists": True, "$ne": None},
         "online": True,
         "disabled": {"$ne": True},
-        "active_trip_id": None,
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
@@ -1795,18 +1655,7 @@ async def cars_nearby(body: NearbyCarsRequest):
             "distance_km": round(d_km, 2),
             "updated_at": u.get("last_location_at"),
         })
-    if cars:
-        busy = set()
-        async for trip in db.trips.find(
-            _real_trip_filter({
-                "driver_id": {"$in": [car["id"] for car in cars]},
-                "status": {"$in": ACTIVE_TRIP_STATUSES},
-            }),
-            {"driver_id": 1},
-        ):
-            busy.add(trip["driver_id"])
-        cars = [car for car in cars if car["id"] not in busy]
-    cars.sort(key=lambda x: (x["distance_km"], x["eta_min"]))
+    cars.sort(key=lambda x: x["eta_min"])
     return {
         "cars": cars,
         "count": len(cars),
@@ -2314,8 +2163,6 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
 
 @api.post("/auth/2fa/disable")
 async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_user)):
-    if _twofa_required_role(current.get("role", "user")):
-        raise HTTPException(status_code=403, detail="2FA er obligatorisk for administratorer")
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
@@ -2461,16 +2308,23 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     if len(body.new_password) < 8:
         raise HTTPException(status_code=400, detail="Passord må ha minst 8 tegn")
     token_hash = _password_reset_token_hash(body.token)
-    rec = await db.password_reset_tokens.find_one_and_update({
+    rec = await db.password_reset_tokens.find_one({
         "$or": [{"token_hash": token_hash}, {"token": body.token}],
         "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
-    }, {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}, "$unset": {"token": ""}})
+    })
     if not rec:
         raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
     await db.users.update_one(
         {"_id": ObjectId(rec["user_id"])},
         {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
+    )
+    await db.password_reset_tokens.update_one(
+        {"_id": rec["_id"]},
+        {
+            "$set": {"used": True, "used_at": datetime.now(timezone.utc)},
+            "$unset": {"token": ""},
+        },
     )
     # Unlock the account: clear brute-force counters so the user can log in immediately
     await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
@@ -3157,7 +3011,6 @@ class TripMessageRequest(BaseModel):
 
 
 async def _load_trip_or_403(trip_id: str, current: dict):
-    _enforce_admin_2fa(current)
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
@@ -3691,6 +3544,7 @@ async def get_settings(current=Depends(get_current_user)):
             "price_alerts": True,
             "language": "Norsk",
             "theme": "Mørk",
+            "navigation_app": "google",
         }
         await db.settings.insert_one(settings)
     settings.pop("_id", None)
@@ -3721,10 +3575,6 @@ STRIKTE REGLER:
 @api.post("/ai/chat")
 async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_current_user)):
     await _enforce_rate_limit(request, "ai-chat", 30, 60)
-    settings = await db.platform_settings.find_one({"_id": "singleton"}, {"features": 1}) or {}
-    features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(settings.get("features") or {})}
-    if features.get("ai_chat") is False:
-        raise HTTPException(status_code=503, detail="KJAPP Assist er midlertidig satt på pause.")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     session_id = body.session_id or f"user_{current['id']}"
@@ -3795,14 +3645,14 @@ class AcceptTripRequest(BaseModel):
     trip_id: str
 
 
-def customer_public(u: dict, *, include_phone: bool = False) -> dict:
+def customer_public(u: dict) -> dict:
     """Minimal, real customer info a driver is allowed to see. No fabricated values —
     missing rating stays None so the UI can show a neutral state instead of a fake number."""
     name = u.get("fullName") or u.get("full_name") or "Kunde"
     rating = u.get("rating")
     return {
         "name": name,
-        "phone": (u.get("phone") or "") if include_phone else "",
+        "phone": u.get("phone") or "",
         "rating": round(float(rating), 1) if isinstance(rating, (int, float)) else None,
         "initials": "".join([p[0] for p in name.split()[:2]]).upper() or "K",
         "trip_count": int(u.get("trip_count") or 0),
@@ -3812,17 +3662,6 @@ def customer_public(u: dict, *, include_phone: bool = False) -> dict:
 # Never serve fabricated/demo/test trips to a driver
 ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
-
-
-def _recent_driver_reservation(locked_at, now=None) -> bool:
-    """A fresh reservation can be in flight before the matching trip is claimed."""
-    try:
-        since = datetime.fromisoformat(str(locked_at).replace("Z", "+00:00"))
-        if since.tzinfo is None:
-            since = since.replace(tzinfo=timezone.utc)
-        return (now or datetime.now(timezone.utc)) - since < timedelta(minutes=2)
-    except (TypeError, ValueError):
-        return False
 
 
 async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, vehicle_type: Optional[str] = None) -> list:
@@ -3874,8 +3713,6 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
     """
     tried = set(trip.get("offer_history") or [])
-    expected_seq = trip.get("offer_seq")
-    offer_generation = expected_seq if expected_seq is not None else {"$exists": False}
     cands = await _dispatch_candidates(
         trip.get("pickup_lat"),
         trip.get("pickup_lng"),
@@ -3886,17 +3723,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     commission = await _commission_for_trip(trip)
     earnings = int(round((trip.get("price") or 0) * (1 - commission)))
     title = f"Ny tur · {earnings} kr til deg"
-    passenger = None
-    try:
-        if trip.get("user_id"):
-            passenger = await db.users.find_one(
-                {"_id": ObjectId(trip["user_id"])},
-                {"fullName": 1, "full_name": 1},
-            )
-    except (InvalidId, TypeError):
-        passenger = None
-    passenger_name = (passenger or {}).get("fullName") or (passenger or {}).get("full_name") or "Kunde"
-    body = f"{passenger_name} · {trip.get('pickup_address')} → {trip.get('dropoff_address')}"
+    body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
 
     if not nxt:
         res = await db.trips.update_one(
@@ -3904,7 +3731,6 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
                 "trip_id": trip["trip_id"],
                 "driver_id": None,
                 "status": {"$in": ["searching", "booking"]},
-                "offer_seq": offer_generation,
             }),
             {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
         )
@@ -3915,12 +3741,8 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
         return None
 
     expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
-    # Compare the offer generation so parallel dispatch workers cannot replace
-    # one another's offer and notify two drivers for the same window.
     res = await db.trips.update_one(
-        _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None,
-                           "status": {"$in": ["searching", "booking"]},
-                           "offer_seq": offer_generation}),
+        _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
         {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
                   "offer_expires_at": expires.isoformat(), "offer_km": round(nxt["km"], 2)},
          "$addToSet": {"offer_history": nxt["id"]},
@@ -4202,7 +4024,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     )
     if lock.modified_count == 0:
         # Self-heal a lock left behind by an already-finished/cancelled ride.
-        locked_driver = await db.users.find_one({"_id": driver_oid}, {"active_trip_id": 1, "active_trip_locked_at": 1})
+        locked_driver = await db.users.find_one({"_id": driver_oid}, {"active_trip_id": 1})
         locked_trip_id = (locked_driver or {}).get("active_trip_id")
         locked_trip = None
         if locked_trip_id:
@@ -4214,16 +4036,12 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
                 }),
                 {"_id": 1},
             )
-        # An unclaimed trip may simply be between reservation and claim.
-        # Never clear that fresh reservation, even if no active trip is visible yet.
-        if locked_trip or _recent_driver_reservation((locked_driver or {}).get("active_trip_locked_at")):
+        if locked_trip:
             raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
-        cleared = await db.users.update_one(
-            {"_id": driver_oid, "active_trip_id": locked_trip_id},
+        await db.users.update_one(
+            {"_id": driver_oid},
             {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
         )
-        if cleared.modified_count != 1:
-            raise HTTPException(status_code=409, detail="En tur behandles allerede")
         lock = await db.users.update_one(
             {
                 "_id": driver_oid,
@@ -4243,8 +4061,6 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}
     if trip_pre.get("dispatch_mode") == "sequential":
         claim["offer_driver_id"] = trip_pre.get("offer_driver_id")
-        claim["offer_seq"] = trip_pre.get("offer_seq")
-        claim["offer_expires_at"] = {"$gt": datetime.now(timezone.utc).isoformat()}
     result = await db.trips.update_one(
         _real_trip_filter(claim),
         {"$set": updates, "$unset": {"offer_driver_id": "", "offer_expires_at": ""}},
@@ -4284,9 +4100,8 @@ async def driver_current(current=Depends(require_driver)):
         )
     else:
         # No active trip means any reservation lock is stale and must not block new work.
-        lock_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
         await db.users.update_one(
-            {"_id": ObjectId(driver_id), "active_trip_locked_at": {"$lt": lock_cutoff}},
+            {"_id": ObjectId(driver_id)},
             {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
         )
         # Just-finished trip: keep the summary visible for 15 minutes. "completed"/"rated" appear
@@ -4316,7 +4131,7 @@ async def driver_current(current=Depends(require_driver)):
             u = await db.users.find_one({"_id": ObjectId(t["user_id"])}, {"password_hash": 0})
         except Exception:
             u = None
-    t["customer"] = customer_public(u, include_phone=True) if u else None
+    t["customer"] = customer_public(u) if u else None
     # Real routing for the leg the driver is actually on (driver's live GPS -> pickup)
     t["pickup_route"] = None
     if t["status"] in ("driver_on_way", "at_pickup") and current.get("last_lat") is not None:
@@ -5134,7 +4949,7 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
     from jwt.algorithms import RSAAlgorithm
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
     try:
-        claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id)
+        claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id, options={"require": ["exp", "aud", "sub", "iss"]})
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Ugyldig Google-token: {e}")
     if claims.get("iss") not in GOOGLE_ISSUERS:
@@ -5229,7 +5044,6 @@ ADMIN_PERMISSION_PREFIXES = (
     ("/api/admin/support", "support"),
     ("/api/admin/control/communication-fleets", "communications"),
     ("/api/admin/control/communications", "communications"),
-    ("/api/admin/operations", "system"),
     ("/api/admin/settings", "system"),
     ("/api/admin/audit-log", "system"),
     ("/api/admin/control/integrations", "system"),
@@ -5241,7 +5055,6 @@ ADMIN_PERMISSION_PREFIXES = (
 def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
-    _enforce_admin_2fa(current)
     if current.get("role") == "admin":
         permissions = current.get("permissions", None)
         if permissions is not None:
@@ -5254,14 +5067,12 @@ def require_admin(request: Request, current=Depends(get_current_user)):
 def require_superadmin(current=Depends(get_current_user)):
     if current.get("role") != "superadmin":
         raise HTTPException(status_code=403, detail="Kun for superadmin")
-    _enforce_admin_2fa(current)
     return current
 
 
 async def require_fleet_owner(current=Depends(get_current_user)):
     if current.get("role") not in ("fleet_owner", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for flåteiere")
-    _enforce_admin_2fa(current)
     if current.get("role") == "fleet_owner":
         await _require_active_fleet(current.get("fleet_id"))
     return current
@@ -5279,7 +5090,7 @@ class FleetCreateRequest(BaseModel):
     name: str
     org_number: Optional[str] = ""
     owner_email: str
-    commission_rate: float = 0.10
+    commission_rate: float = Field(default=0.10, ge=0, le=0.50)
 
 
 @api.post("/admin/fleets")
@@ -5317,6 +5128,15 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     fres = await db.fleets.insert_one(fleet_doc)
     fleet_id = str(fres.inserted_id)
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
+    fleet_doc["stripe_connect_status"] = "not_configured"
+    if stripe.api_key:
+        try:
+            fleet_doc["_id"] = fres.inserted_id
+            fleet_doc["stripe_account_id"] = await ensure_fleet_account(db, stripe, fleet_doc, owner_email)
+            fleet_doc["stripe_connect_status"] = "onboarding"
+        except HTTPException:
+            fleet_doc["stripe_connect_status"] = "retry_required"
+            await db.fleets.update_one({"_id": fres.inserted_id}, {"$set": {"stripe_connect_status": "retry_required"}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
     onboarding_email_sent = False
@@ -6442,8 +6262,7 @@ async def fleet_export_monthly(
     if not fid: raise HTTPException(404, "Ingen flåte")
 
     fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)}) or {}
-    commission = (float(fleet_doc["commission_rate"]) if fleet_doc.get("commission_rate") is not None
-                  else await _platform_commission())
+    commission = float(fleet_doc.get("commission_rate", 0.20))
     fleet_name = fleet_doc.get("name", "Flåte")
 
     # Date range
@@ -6486,7 +6305,7 @@ async def fleet_export_monthly(
             did = t.get("driver_id")
             if did in drivers_map:
                 gross = int(t.get("price", 0) or 0)
-                rate = float(t["commission_rate"]) if t.get("commission_rate") is not None else commission
+                rate = float(t.get("commission_rate", commission) or commission)
                 fee = int(round(gross * rate))
                 drivers_map[did]["trips"] += 1
                 drivers_map[did]["gross"] += gross
@@ -6495,9 +6314,7 @@ async def fleet_export_monthly(
 
     total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
     total_trips = len(trips)
-    total_commission = sum(int(round(int(t.get("price", 0) or 0) *
-                               (float(t["commission_rate"]) if t.get("commission_rate") is not None else commission)))
-                           for t in trips)
+    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -6516,7 +6333,7 @@ async def fleet_export_monthly(
     for k, v in [
         ("Antall turer", total_trips),
         ("Brutto omsetning (NOK)", total_gross),
-        ("KJAPP-provisjon (NOK)", total_commission),
+        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
         ("Netto til flåte (NOK)", total_net),
         ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
     ]:
@@ -7702,10 +7519,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
             fleet = None
 
     price = int(trip.get("price") or 0)
-    default_commission = (fleet or {}).get("commission_rate")
-    if default_commission is None:
-        default_commission = await _platform_commission()
-    commission = float(trip["commission_rate"] if trip.get("commission_rate") is not None else default_commission)
+    commission = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
     platform_fee = int(round(price * commission))
     paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
     paid_day = str(paid_at)[:10].replace("-", "")
@@ -7930,6 +7744,28 @@ AUTO_CHARGE_ENABLED = str(os.environ.get("KJAPP_AUTO_CHARGE_ENABLED", "false")).
 
 
 async def _attempt_trip_auto_charge(trip: dict) -> dict:
+    if not AUTO_CHARGE_ENABLED or not trip or not trip.get("trip_id"):
+        return {"attempted": False, "reason": "disabled_or_missing"}
+    lock = secrets.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+    locked = await db.trips.update_one(_real_trip_filter({"trip_id": trip["trip_id"],
+        "payment_status": {"$ne": "paid"},
+        "$or": [{"payment_checkout_lock": {"$exists": False}}, {"payment_checkout_lock": None},
+            {"payment_checkout_locked_at": {"$lt": now - timedelta(minutes=2)}}]}),
+        {"$set": {"payment_checkout_lock": lock, "payment_checkout_locked_at": now}})
+    if locked.modified_count != 1:
+        return {"attempted": False, "reason": "payment_in_progress"}
+    try:
+        if await db.payment_transactions.find_one({"trip_id": trip["trip_id"],
+                "status": {"$in": ["initiated", "awaiting_payment", "completed"]}}):
+            return {"attempted": False, "reason": "payment_already_started"}
+        return await _attempt_trip_auto_charge_locked(trip)
+    finally:
+        await db.trips.update_one({"trip_id": trip["trip_id"], "payment_checkout_lock": lock},
+            {"$unset": {"payment_checkout_lock": "", "payment_checkout_locked_at": ""}})
+
+
+async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     """Charge a previously verified saved card after arrival.
 
     Disabled by default. When enabled, Stripe is the source of truth and a deterministic
@@ -7974,6 +7810,8 @@ async def _attempt_trip_auto_charge(trip: dict) -> dict:
     if not pm:
         return {"attempted": False, "reason": "no_verified_payment_method"}
 
+    if await db.payment_transactions.find_one({"trip_id": trip_id, "kind": "native_payment"}):
+        return {"attempted": False, "reason": "native_payment_started"}
     payment_method_id = pm.get("stripe_payment_method_id")
     metadata = {"trip_id": trip_id, "user_id": user_id, "source": "kjapp_auto_charge"}
     kwargs = {
@@ -8178,6 +8016,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         except stripe.error.StripeError:
             pass
 
+    if await db.payment_transactions.find_one({"trip_id": body.trip_id, "kind": "native_payment"}):
+        raise HTTPException(409, "Mobilbetaling er allerede startet. Sjekk betalingen i appen.")
     origin = _trusted_checkout_origin(body.origin_url)
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
@@ -8243,6 +8083,12 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
 
     session = None
     try:
+        if await db.payment_transactions.find_one({"trip_id": body.trip_id, "kind": "native_payment"}):
+            raise HTTPException(409, "Mobilbetaling er allerede startet")
+        # Recheck after obtaining the shared payment lock, including paid autocharges.
+        latest = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
+        if latest and latest.get("payment_status") == "paid":
+            raise HTTPException(409, "Turen er allerede betalt")
         session = stripe.checkout.Session.create(**checkout_kwargs)
         await db.payment_transactions.insert_one({
             "session_id": session.id,
@@ -8334,6 +8180,8 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Invalid signature")
     except Exception:
         raise HTTPException(400, "Webhook error")
+    if await handle_native_payment_webhook(event):
+        return {"status": "ok"}
     obj, t = event["data"]["object"], event["type"]
     if t == "checkout.session.completed" and obj.get("payment_status") == "paid":
         existing = await db.payment_transactions.find_one({"session_id": obj["id"]})
@@ -8512,7 +8360,6 @@ def _driver_history_area(address: Optional[str]) -> str:
 async def driver_history(current=Depends(require_driver), limit: int = 30):
     """Driver history deliberately omits exact coordinates and exact customer addresses."""
     driver_id = current["id"]
-    default_commission = await _platform_commission()
     trips = []
     async for t in db.trips.find(
         _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}})
@@ -8530,8 +8377,7 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
             "payment_status": t.get("payment_status"),
             "receipt_id": t.get("receipt_id"),
             "driver_earnings": (
-                int(round(int(t.get("price", 0) or 0) *
-                          (1 - (float(t["commission_rate"]) if t.get("commission_rate") is not None else default_commission))))
+                int(round(int(t.get("price", 0) or 0) * (1 - float(t.get("commission_rate", 0.10) or 0.10))))
                 if t.get("payment_status") == "paid" else None
             ),
             "pickup_address": _driver_history_area(t.get("pickup_address")),
@@ -9189,7 +9035,6 @@ async def upload_public(request: Request, file: UploadFile = File(...), applicat
 
 @api.get("/files/{path:path}")
 async def download_file(path: str, current=Depends(get_current_user)):
-    _enforce_admin_2fa(current)
     rec = await db.uploaded_files.find_one({"storage_path": path, "is_deleted": {"$ne": True}})
     if not rec:
         raise HTTPException(status_code=404, detail="Fil ikke funnet")
@@ -9261,7 +9106,7 @@ class FleetApplicationSubmitRequest(BaseModel):
 
 class FleetApplicationDecisionRequest(BaseModel):
     review_notes: Optional[str] = ""
-    commission_rate: Optional[float] = 0.10
+    commission_rate: Optional[float] = Field(default=0.10, ge=0, le=0.50)
 
 
 @api.post("/fleet-applications/draft")
@@ -9436,13 +9281,23 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
             "fleet_owner_user_id": owner_id,
         }},
     )
+    stripe_onboarding_status = "not_configured"
+    if stripe.api_key:
+        try:
+            fleet_doc["_id"] = fres.inserted_id
+            await ensure_fleet_account(db, stripe, fleet_doc, owner_email)
+            stripe_onboarding_status = "onboarding"
+        except HTTPException:
+            stripe_onboarding_status = "retry_required"
+            await db.fleets.update_one({"_id": fres.inserted_id}, {"$set": {"stripe_connect_status": "retry_required"}})
+    # The owner completes bank/KYC in their authenticated Fleet portal.
     # Email the applicant
     send_email(
         owner_email,
         "KJAPP: Løyvehaver-søknaden er godkjent",
         _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", temp_pw),
     )
-    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw}
+    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw, "stripe_onboarding_status": stripe_onboarding_status}
 
 
 @api.post("/superadmin/fleet-applications/{app_id}/reject")
@@ -9780,8 +9635,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
             "driver_earnings": (
-                int(round((t.get("price") or 0) *
-                          (1 - (float(t["commission_rate"]) if t.get("commission_rate") is not None else commission))))
+                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
                 if finished and t.get("payment_status") == "paid" else None
             ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
@@ -10060,7 +9914,7 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
         {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
     ):
         price = int(t.get("price", 0) or 0)
-        rate = float(t["commission_rate"]) if t.get("commission_rate") is not None else default_rate
+        rate = float(t.get("commission_rate", default_rate) or default_rate)
         fee = int(round(price * rate))
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
@@ -10114,8 +9968,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * (float(t["commission_rate"]) if t.get("commission_rate") is not None else _rate))
-            if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -10463,13 +10316,12 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
             fid = t.get("fleet_id") or driver_fleet.get(t.get("driver_id"))
             if fleet_id and fid != fleet_id: continue
             price = int(t.get("price") or 0)
-            rate = float(t["commission_rate"]) if t.get("commission_rate") is not None else commission
             rows.append({
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price,
-                "commission": round(price * rate),
-                "driver_net": round(price * (1 - rate)),
+                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
+                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
                 "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
@@ -10999,14 +10851,14 @@ install_admin_control_center(
     audit=_audit,
 )
 
-# KJAPP Operations OS: versioned remote config, release registry and AI change planner.
-install_kjapp_operations_os(
-    api,
-    db,
-    require_admin=require_admin,
-    require_superadmin=require_superadmin,
-    audit=_audit,
-    default_features=DEFAULT_PLATFORM_SETTINGS["features"],
+handle_native_payment_webhook = install_mobile_commerce(
+    api, db, stripe=stripe, get_current_user=get_current_user, require_customer=require_customer,
+    require_fleet_owner=require_fleet_owner, rate_limit=_enforce_rate_limit,
+    verify_google=_verify_google_id_token, apple_keys=_get_apple_keys, hash_password=hash_password,
+    create_access_token=create_access_token, create_twofa_token=create_twofa_token,
+    set_auth_cookie=set_auth_cookie, user_public=user_public, apply_driver_risk=_apply_driver_identity_risk,
+    require_active_fleet=_require_active_fleet, real_trip_filter=_real_trip_filter,
+    mark_paid=_mark_trip_paid_and_complete, send_receipts=send_trip_receipts,
 )
 
 app.include_router(api)
@@ -11024,3 +10876,4 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+
