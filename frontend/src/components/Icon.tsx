@@ -10,9 +10,12 @@ type IconName =
   | 'plane' | 'card' | 'sparkles' | 'power' | 'wallet' | 'log-out' | 'history'
   | 'trending-up' | 'lock' | 'mail' | 'eye' | 'eye-off' | 'circle-dot' | 'flag'
   | 'help' | 'bell' | 'chevron-up' | 'minus' | 'crosshair' | 'file-text'
-  | 'globe' | 'chevron-down' | 'mic';
+  | 'globe' | 'chevron-down' | 'mic' | 'gift' | 'food' | 'send';
 
 const P: Record<IconName, React.ReactNode> = {
+  gift: (<><Rect x="4" y="9" width="16" height="11" rx="1.5" /><Path d="M3 9h18v3H3zM12 9v11M12 9c-1.5-4-6-3-6-1s3 2 6 1zm0 0c1.5-4 6-3 6-1s-3 2-6 1z" /></>),
+  food: (<Path d="M6 3v7a2 2 0 004 0V3M8 10v11M16 3c-1.5 0-2.5 1.5-2.5 4s1 4 2.5 4v10" />),
+  send: (<Path d="M4 12l16-8-6 16-2.5-6.5z" />),
   menu: (<><Line x1="3" y1="6" x2="21" y2="6" /><Line x1="3" y1="12" x2="21" y2="12" /><Line x1="3" y1="18" x2="21" y2="18" /></>),
   search: (<Path d="M11 4a7 7 0 105 12l4 4M11 4a7 7 0 010 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />),
   x: (<Path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />),
@@ -89,4 +92,3 @@ export function Icon({
 }
 
 export type { IconName };
-

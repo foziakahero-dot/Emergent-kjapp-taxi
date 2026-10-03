@@ -15,6 +15,7 @@ console.error = (...args) => { if (!String(args[0]).includes('react-test-rendere
 let clock = 0, timerId = 0, nativeListeners = 0;
 const timers = new Map(), accessibility = new Set(), cache = new Map();
 const timingCalls = [];
+const stubs = new Map();
 class Value {
   constructor(value) { this.value = value; }
   setValue(value) { this.value = value; }
@@ -23,7 +24,7 @@ class Value {
 }
 const animation = () => ({ start() {}, stop() {} });
 const native = {
-  Text: 'NativeText', TextInput: 'NativeTextInput', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
+  Text: 'NativeText', TextInput: 'NativeTextInput', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' },
   StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', inset: 0 }, flatten: value => Array.isArray(value) ? Object.assign({}, ...value.filter(Boolean).map(native.StyleSheet.flatten)) : value },
   AccessibilityInfo: {
     isReduceMotionEnabled: () => Promise.resolve(false),
@@ -39,10 +40,13 @@ function load(app, file) {
   cache.set(absolute, result.exports);
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
+    if (stubs.has(name)) return stubs.get(name);
     if (name === 'react') return React;
     if (name === 'react/jsx-runtime') return customerRequire(name);
     if (name === 'react-native') return native;
     if (name === 'expo-linear-gradient') return { LinearGradient: 'Gradient' };
+    if (name === 'react-native-svg') return new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => target[key] ?? String(key) });
+    if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
     if (name.startsWith('@expo-google-fonts/')) return new Proxy({}, { get: (_target, key) => key === '__esModule' ? true : `asset:${String(key)}` });
     if (name.endsWith('.ttf')) return name;
     if (name.startsWith('@/')) {
@@ -102,6 +106,23 @@ const act = renderer.act;
   assert.ok(preferences.root.findAllByType('Preference').every(node => node.props.reduced));
   await act(async () => preferences.unmount());
   assert.equal(nativeListeners, 0, 'Preference listener must be removed');
+  for (const app of ['frontend', 'driver-app']) {
+    const { DesignToggle } = load(app, 'src/components/DesignToggle.tsx');
+    function ToggleHarness() {
+      const [value, setValue] = React.useState(false);
+      return React.createElement(DesignToggle, { value, onChange: setValue, label: 'Varsler' });
+    }
+    let toggle;
+    await act(async () => { toggle = renderer.create(React.createElement(ToggleHarness)); });
+    await act(async () => accessibility.forEach(callback => callback(true)));
+    const count = timingCalls.length;
+    await act(async () => toggle.root.findByType('Pressable').props.onPress());
+    assert.equal(toggle.root.findByType('Pressable').props.accessibilityState.checked, true);
+    assert.equal(timingCalls.length, count, 'Reduced motion must apply toggle state without a duration-zero animation');
+    await act(async () => accessibility.forEach(callback => callback(false)));
+    assert.equal(timingCalls.at(-1).duration, 150);
+    await act(async () => toggle.unmount());
+  }
   const { SlideConfirm } = load('driver-app', 'src/components/SlideConfirm.tsx');
   let calls = 0, release;
   const errors = [];
@@ -128,7 +149,120 @@ const act = renderer.act;
   assert.deepEqual(errors, [failure], 'Backend action errors must reach the screen');
   assert.equal(slide.root.findByType('Pressable').props.disabled, false);
   await act(async () => slide.unmount());
+  // Support must use server replies/IDs, suppress duplicate submission and leave failures visible.
+  const user = { id: 'customer-1', fullName: 'Test Kunde', email: 'test@example.com' };
+  let chats = 0, tickets = 0, resolveChat, resolveTicket;
+  const supportApi = {
+    aiApi: { chat: () => { chats++; return new Promise(resolve => { resolveChat = resolve; }); } },
+    api: { post: (route, body) => { assert.equal(route, '/support/public'); assert.equal(body.contact, user.email); assert.ok(body.message.length >= 10); tickets++; return new Promise(resolve => { resolveTicket = resolve; }); } },
+  };
+  stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user }) });
+  stubs.set('@/src/lib/api', supportApi);
+  const { CustomerSupport } = load('frontend', 'src/components/CustomerSupport.tsx');
+  let support;
+  await act(async () => { support = renderer.create(React.createElement(CustomerSupport, { onBack() {} })); });
+  await act(async () => support.root.findByProps({ testID: 'support-message-input' }).props.onChangeText('Jeg trenger hjelp med en tur'));
+  await act(async () => { const send = support.root.findByProps({ testID: 'support-send' }).props.onPress; send(); send(); });
+  assert.equal(chats, 1);
+  await act(async () => resolveChat({ reply: 'Et ekte svar fra API-et' }));
+  assert.ok(support.root.findAllByType('NativeText').some(node => node.props.children === 'Et ekte svar fra API-et'));
+  await act(async () => { const escalate = support.root.findByProps({ testID: 'support-escalate' }).props.onPress; escalate(); escalate(); });
+  assert.equal(tickets, 1);
+  await act(async () => resolveTicket({ data: { ok: true, ticket_id: 'server-ticket-007' } }));
+  assert.ok(support.root.findAllByType('NativeText').some(node => String(node.props.children).includes('server-ticket-007')));
+  await act(async () => support.root.findByProps({ testID: 'support-escalate' }).props.onPress());
+  await act(async () => resolveTicket({ data: {} }));
+  assert.ok(support.root.findAllByType('NativeText').some(node => node.props.accessibilityRole === 'alert'));
+  assert.equal(support.root.findAllByType('NativeText').filter(node => String(node.props.children).includes('Saksnummer:')).length, 1, 'An unconfirmed ticket must not produce a success message');
+  await act(async () => support.root.findByProps({ testID: 'support-message-input' }).props.onChangeText('Ny henvendelse etter unmount'));
+  await act(async () => support.root.findByProps({ testID: 'support-send' }).props.onPress());
+  await act(async () => support.unmount());
+  await act(async () => resolveChat({ reply: 'Et sent svar' }));
+  // Privacy export shares real server data once and never opens a share sheet after leaving.
+  let exports = 0, resolveExport;
+  const shared = [];
+  native.Share = { share: async value => shared.push(value) };
+  native.Linking = { openSettings: async () => {}, openURL: async () => {} };
+  stubs.set('@/src/lib/api', { gdprApi: { export: () => { exports++; return new Promise(resolve => { resolveExport = resolve; }); } } });
+  const { CustomerProfileDetails } = load('frontend', 'src/components/CustomerProfileDetails.tsx');
+  let details;
+  await act(async () => { details = renderer.create(React.createElement(CustomerProfileDetails, { view: 'privacy', onBack() {}, onDelete() {}, onSupport() {} })); });
+  await act(async () => { const press = details.root.findByProps({ testID: 'privacy-export' }).props.onPress; press(); press(); });
+  assert.equal(exports, 1);
+  const exported = { user: { id: user.id }, trips: [{ id: 'real-trip' }] };
+  await act(async () => resolveExport(exported));
+  assert.deepEqual(JSON.parse(shared[0].message), exported);
+  await act(async () => details.root.findByProps({ testID: 'privacy-export' }).props.onPress());
+  await act(async () => details.unmount());
+  await act(async () => resolveExport({ user: { id: 'late' } }));
+  assert.equal(shared.length, 1, 'Leaving privacy must cancel the late share-sheet action');
+  // Driver offer alerts persist the real backend preference, gated by OS permission.
+  const driverUser = { id: 'driver-1', fullName: 'Test Sjåfør' };
+  let permissionGranted = true, settingsData = { notif_requests: true }, updates = 0, resolveUpdate;
+  const confirmedSettings = [], cachedPreferences = [];
+  native.Image = 'Image';
+  native.AppState = { addEventListener: () => ({ remove() {} }) };
+  stubs.set('expo-notifications', { getPermissionsAsync: async () => ({ granted: permissionGranted }), requestPermissionsAsync: async () => ({ granted: permissionGranted }) });
+  stubs.set('expo-router', { useRouter: () => ({ push() {} }) });
+  stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: driverUser, logout() {}, refresh: async () => {} }) });
+  stubs.set('@/src/utils/storage', { storage: { setItem: async (key, value) => cachedPreferences.push({ key, value }) } });
+  stubs.set('@/src/lib/api', {
+    authApi: { me() {} }, authenticatedFileSource() {},
+    driverApi: { ratings() {}, vehicles() {}, summary() {}, payouts() {} },
+    settingsApi: { get() {}, update: body => { updates++; assert.equal(typeof body.notif_requests, 'boolean'); return new Promise(resolve => { resolveUpdate = resolve; }); } },
+    apiError: error => error.message,
+  });
+  stubs.set('@tanstack/react-query', {
+    useQuery: ({ queryKey }) => ({ data: queryKey[0] === 'driver-notification-settings' ? settingsData : undefined }),
+    useQueryClient: () => ({ setQueryData: (key, data) => { confirmedSettings.push({ key, data }); settingsData = data; } }),
+  });
+  const DriverProfile = load('driver-app', 'app/(driver)/profile.tsx').default;
+  let profile;
+  await act(async () => { profile = renderer.create(React.createElement(DriverProfile)); });
+  await act(async () => { const press = profile.root.findByProps({ testID: 'profile-push-toggle' }).findByType('Pressable').props.onPress; press(); press(); });
+  assert.equal(updates, 1);
+  await act(async () => resolveUpdate({ notif_requests: false }));
+  assert.equal(confirmedSettings.length, 1);
+  assert.deepEqual(cachedPreferences, [{ key: 'driver_notif_requests', value: 'false' }]);
+  await act(async () => profile.root.findByProps({ testID: 'profile-push-toggle' }).findByType('Pressable').props.onPress());
+  await act(async () => resolveUpdate({}));
+  assert.equal(confirmedSettings.length, 1, 'Unconfirmed settings must not update the cache or toggle');
+  assert.equal(cachedPreferences.length, 1);
+  await act(async () => profile.root.findByProps({ testID: 'profile-push-toggle' }).findByType('Pressable').props.onPress());
+  await act(async () => profile.unmount());
+  await act(async () => resolveUpdate({ notif_requests: true }));
+  assert.equal(confirmedSettings.length, 1, 'Unmounted profiles must not apply a late preference response');
+  permissionGranted = false;
+  await act(async () => { profile = renderer.create(React.createElement(DriverProfile)); });
+  const beforeDenied = updates;
+  await act(async () => profile.root.findByProps({ testID: 'profile-push-toggle' }).findByType('Pressable').props.onPress());
+  assert.equal(updates, beforeDenied, 'Denied OS notification permission must not enable backend offer alerts');
+  await act(async () => profile.unmount());
+  // Address edits preserve the chosen record and label, including an initial Home shortcut.
+  const records = [{ id: 'home-1', label: 'Hjem', name: 'Hjemme', icon: 'home' }, { id: 'work-1', label: 'Jobb', name: 'Kontoret', icon: 'briefcase' }];
+  const writes = [];
+  let addressQueryFailed = false;
+  const placeApi = { mePlacesApi: { list() {}, add: async value => writes.push({ type: 'add', value }), update: async (id, value) => writes.push({ type: 'update', id, value }), remove: async () => {} }, placesApi: { search: async () => ({ results: [{ name: 'Ny adresse', lat: 59.9, lng: 10.7 }] }) } };
+  stubs.set('@/src/lib/api', placeApi);
+  stubs.set('expo-router', { useRouter: () => ({ back() {} }), useLocalSearchParams: () => ({ label: 'Hjem' }) });
+  stubs.set('@tanstack/react-query', { useQuery: () => addressQueryFailed ? ({ data: undefined, isLoading: false, isError: true, refetch: async () => {} }) : ({ data: { places: records }, isLoading: false }), useQueryClient: () => ({ invalidateQueries: async () => {} }) });
+  const SavedPlaces = load('frontend', 'app/saved-places.tsx').default;
+  let saved;
+  await act(async () => { saved = renderer.create(React.createElement(SavedPlaces)); });
+  await act(async () => saved.root.findByProps({ testID: 'place-edit-work-1' }).props.onPress());
+  await act(async () => saved.root.findByProps({ testID: 'places-search-input' }).props.onChangeText('Ny adresse'));
+  await act(async () => advance(350));
+  await act(async () => saved.root.findByProps({ testID: 'places-result-0' }).props.onPress());
+  assert.equal(saved.root.findAllByProps({ testID: 'places-label-Hjem' }).length, 0, 'Editing Work must not inherit the Home shortcut label');
+  await act(async () => { const save = saved.root.findByProps({ testID: 'places-label-Jobb' }).props.onPress; save(); save(); });
+  assert.deepEqual(writes.map(item => ({ type: item.type, id: item.id, label: item.value.label })), [{ type: 'update', id: 'work-1', label: 'Jobb' }]);
+  await act(async () => saved.unmount());
+  addressQueryFailed = true;
+  await act(async () => { saved = renderer.create(React.createElement(SavedPlaces)); });
+  assert.equal(saved.root.findAllByProps({ testID: 'places-search-input' }).length, 0, 'Failed address fetch must not open a create form for a potentially existing Home address');
+  assert.equal(saved.root.findAllByProps({ testID: 'places-retry' }).length, 1);
+  await act(async () => saved.unmount());
   assert.equal(timers.size, 0);
   assert.equal(nativeListeners, 0);
-  console.log('PASS: font files/weights, nested text inheritance, CSS gradient angles, shared reduced-motion preference, delayed single trip action, unmount cancellation and error recovery.');
+  console.log('PASS: fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, duplicate guards, privacy export, permission-gated server-confirmed Driver alerts, unmount cancellation, error recovery and address edit identity.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { console.error = originalError; });

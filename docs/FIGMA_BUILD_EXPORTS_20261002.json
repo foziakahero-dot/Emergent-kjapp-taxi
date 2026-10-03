@@ -1,26 +1,26 @@
 {
   "frontend-android": {
-    "hermes_bundle": "entry-9b3183118a9c6a63a0e715285d7346dc.hbc",
-    "bytes": 5176552,
-    "sha256": "0989ee904400edf3263f76f19074ca16b25b7e847ecf7af078545f8d73f08151",
+    "hermes_bundle": "entry-236e6eabd1753620b8b6afe2eecad75e.hbc",
+    "bytes": 5207632,
+    "sha256": "8311789a13e7d2e02ccf32236b7f5c80bea1a23c1d82c205720928715fb11841",
     "asset_count": 38
   },
   "frontend-ios": {
-    "hermes_bundle": "entry-265dde86ac6aecae00eb1bab545fd080.hbc",
-    "bytes": 4975079,
-    "sha256": "2258c29d956755e45d7ef91be57a6c9420afd2545e7b146f1c4d679408ba3b83",
+    "hermes_bundle": "entry-6391e82c3cf5048a3585ebb40ad80081.hbc",
+    "bytes": 5005601,
+    "sha256": "fd5efa112da2b8626f55e3c0d7b82066c54758877d652a70c60251756ef43134",
     "asset_count": 34
   },
   "driver-app-android": {
-    "hermes_bundle": "entry-11d38d7ddd6c842ab42e5344a0f4dc92.hbc",
-    "bytes": 4922467,
-    "sha256": "ecec4865c3e68fa598d391438e7bb73544c0153fb1e9fc42b6a9a4a24a024874",
+    "hermes_bundle": "entry-0212b7e3068927b3407590e504471980.hbc",
+    "bytes": 4937062,
+    "sha256": "7ef18490a3ce591b8816feb3463caa261c62c06c0f2d7320078c22d401b1b4fd",
     "asset_count": 38
   },
   "driver-app-ios": {
-    "hermes_bundle": "entry-194461cdfbf568d18f962111ecdff1fe.hbc",
-    "bytes": 4724191,
-    "sha256": "220e16b725f49ed506bcb7ca72a54549ae692769bae220c73f77e5445abd294a",
+    "hermes_bundle": "entry-b7bf6f8bce41cd65307c1929e6f6c8e5.hbc",
+    "bytes": 4738991,
+    "sha256": "95f09ed75116ba7aa7def4c4d959563d788b1747305552c33cca35213ec8d926",
     "asset_count": 34
   }
 }

@@ -42,6 +42,8 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const [recommendationOpen, setRecommendationOpen] = useState(false);
+  const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [reviewing, setReviewing] = useState(false);
   useHideTabBar(reviewing);
   const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
@@ -49,6 +51,12 @@ export default function Home() {
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (dropoff || searchOpen) return;
+    const timer = setTimeout(() => setRecommendationOpen(true), 3500);
+    return () => clearTimeout(timer);
+  }, [dropoff, searchOpen]);
 
   const loadMethods = useCallback(() => {
     paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});
@@ -192,6 +200,8 @@ export default function Home() {
   const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
   const selectedCopy = vehicleCopy(selType);
   const selectedPrice = priceFor(selType);
+  const recommendations = featured.filter(place => place.name && place.lat != null && place.lng != null && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)));
+  const recommendation = recommendations[recommendationIndex % Math.max(1, recommendations.length)];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -238,6 +248,29 @@ export default function Home() {
           >
             <Icon name="crosshair" size={21} color={colors.accent} />
           </Pressable>
+
+          {recommendationOpen && recommendation && !dropoff && !searchOpen && <Rise style={{ position: 'absolute', left: 16, right: 16, bottom: insets.bottom + (sheetCollapsed ? 112 : 316), zIndex: 30 }}>
+            <View style={{ overflow: 'hidden', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.98)', borderWidth: 1, borderColor: colors.line, boxShadow: '0 16px 40px rgba(11,14,20,0.18)' }} testID="home-recommendation">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14 }}>
+                <FigmaGradient angle={135} colors={['#FF3B3B', '#FF0000']} style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}><Icon name="sparkles" size={16} color="#FFFFFF" /></FigmaGradient>
+                <Text style={{ flex: 1, fontFamily: font.mono, fontSize: 10, letterSpacing: 2, color: colors.accent }}>KJAPP ANBEFALER</Text>
+                <Pressable onPress={() => setRecommendationOpen(false)} style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Lukk anbefaling"><Icon name="x" size={16} color={colors.textMuted} /></Pressable>
+              </View>
+              <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 19.25 }}>{recommendation.description || 'Lyst til å dra et sted? Her er et forslag til din neste tur.'}</Text>
+                <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, backgroundColor: colors.cardSubtle, padding: 12 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}><Icon name="map-pin" size={20} color={colors.accent} /></View>
+                  <View style={{ flex: 1 }}><Text style={{ fontSize: 14, fontFamily: font.semibold }}>{recommendation.name}</Text><Text style={{ fontSize: 12, color: colors.textSecondary }}>{recommendation.address || recommendation.category || 'Utvalgt sted'}</Text></View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                  <Pressable style={{ flex: 1 }} onPress={() => { setDropoff({ name: recommendation.name, lat: Number(recommendation.lat), lng: Number(recommendation.lng) }); setRecommendationOpen(false); }} testID="recommendation-select">
+                    <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={{ borderRadius: 999, paddingVertical: 10, alignItems: 'center' }}><Text style={{ fontSize: 14, fontFamily: font.semibold, color: '#FFFFFF' }}>Ta meg dit</Text></FigmaGradient>
+                  </Pressable>
+                  <Pressable onPress={() => setRecommendationIndex(index => index + 1)} disabled={recommendations.length < 2} style={{ borderRadius: 999, borderWidth: 1, borderColor: colors.lineStrong, paddingHorizontal: 16, paddingVertical: 10, opacity: recommendations.length < 2 ? 0.55 : 1 }}><Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: font.semibold }}>Noe annet</Text></Pressable>
+                </View>
+              </View>
+            </View>
+          </Rise>}
 
           {!dropoff ? (
             <View style={[s.browseSheet, { paddingBottom: insets.bottom + (sheetCollapsed ? 32 : 112) }]} testID="home-browse-sheet">
@@ -646,6 +679,5 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
-
 
 

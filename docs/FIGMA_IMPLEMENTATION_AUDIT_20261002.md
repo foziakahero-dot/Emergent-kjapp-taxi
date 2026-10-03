@@ -98,3 +98,41 @@ The local follow-up files, when the workspace becomes reachable again, are:
 - `driver-app/app/(driver)/profile.tsx`, `driver-app/src/components/DesignToggle.tsx`, `scripts/verify-figma-mobile.cjs`
 
 Resume by inspecting those files, repeating final source checks and four exports, replacing the build manifest with matching hashes, and publishing a separately verified follow-up commit. Full current-Figma/native pixel comparison, missing production-backed features, and native compilation remain open.
+
+## Resumed and verified follow-up — 3 October 2026 (Oslo)
+
+This section supersedes the unpublished checkpoint above. The original workspace was recovered and its substantive follow-up files were compared against parent commit `d89cdd441aabbaeee6cfacb73f308ccbe4bfb544`. Other differences were one extra retrieval newline and were normalized without changing source. This revision includes Customer setup/profile/detail/support/address/recommendation layouts and Driver profile fleet/vehicle/document/earnings sections.
+
+Additional resumption fixes:
+
+- Source 48 × 28 toggles retain the 150 ms easing and set the final state directly under reduced motion.
+- Driver offer alerts read/persist the existing `notif_requests` preference, require OS permission before enabling, check server confirmation, update the existing foreground cache, and guard duplicate taps and late replies after unmount.
+- Customer privacy shares the actual server export JSON through the OS share interface. Duplicate requests are guarded; late responses cannot open the share sheet after leaving. This is not a native JSON/CSV attachment exporter.
+- Home/Work edits preserve record ID and label. Failed initial address fetching shows retry rather than opening a create form for a possibly existing record.
+- Support uses the existing `/ai/chat` and `/support/public` contracts and real replies/ticket IDs. Rewards and live human chat are not simulated.
+- Profile data, assigned cars, fleet, documents, ratings, income and payout dates use existing APIs. Recommendation destinations are server-provided featured places; no personalised AI computation is asserted.
+
+| Final check on resumed source | Customer | Driver |
+| --- | --- | --- |
+| TypeScript | PASS | PASS |
+| Expo Doctor | 21/21 PASS | 21/21 PASS |
+| Android Hermes export | PASS | PASS |
+| iOS Hermes export | PASS | PASS |
+| Extended component regressions | PASS (shared suite) | PASS (shared suite) |
+| Existing receipt/navigation regressions | — | 4/4 PASS |
+| Signed APK / IPA | NOT COMPILED | NOT COMPILED |
+| Current-Figma/native pixel comparison | BLOCKED | BLOCKED |
+
+Extended tests cover static reduced-motion toggles, confirmed notification preferences, denied OS permission, duplicate export, late-share cancellation, address failure, and unmount/cache cancellation. Native hosts/API responses are mocked; these are not device or visual acceptance tests.
+
+The four final hashes replace `docs/FIGMA_BUILD_EXPORTS_20261002.json`. Their source snapshot is `docs/FIGMA_SOURCE_CHECKPOINT_20261003.json`. Both API clients/auth contexts and the unrelated authentication/booking/payment/trip handlers remain byte-identical to the parent. Backend, dependency manifests and locks are unchanged.
+
+Current remaining work:
+
+1. A fresh live Make context still returns resource links without readable bodies. Motion/screenshot tools reject Make files; a fresh browser attempt shows **Site Unavailable** in this browser. The 30 September export remains the available reference. No native pixel-identity result has passed.
+2. No existing self-service endpoint updates the Customer name; setup displays the registered name read-only. Address/payment tiles open existing management screens. Source privacy/RideCheck/automatic emergency sharing/reward capabilities are explicitly unavailable. Driver onboarding and all payment/settings details still require complete porting and device comparison. Complete parity is not certified.
+3. `eas whoami` returns **Not logged in** in this session. Android SDK/Xcode are unavailable locally. Existing GitHub push workflows cover this branch for Android APK and unsigned iOS simulator compilation; signed EAS/TestFlight and physical-device acceptance remain outstanding.
+4. Pre-publication runs `37037504043`, `37037415903` and `37037411981` for the parent report `startup_failure` / `BuildFailed`. No compiler evidence establishes why. Check the follow-up push separately; a trigger is not a successful native build.
+5. Earlier dependency and contrast findings remain open. Dependencies were unchanged; no new full security assessment was run.
+
+The same draft branch remains stacked on PR #64. No production merge/deployment, live charge or App Store submission is included.

@@ -8,6 +8,8 @@ import * as Notifications from 'expo-notifications';
 import { FigmaGradient as LinearGradient } from '@/src/components/FigmaGradient';
 import { KjappMark } from '@/src/components/KjappMark';
 import { Icon } from '@/src/components/Icon';
+import { DesignToggle } from '@/src/components/DesignToggle';
+import { Rise } from '@/src/components/Motion';
 import { colors, font, makeStyles } from '@/src/theme';
 
 export default function Permissions() {
@@ -38,8 +40,8 @@ export default function Permissions() {
       <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
       <View style={[s.content, { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 32 }]}>
         <KjappMark size={44} />
-        <Text style={s.title}>Noen få tillatelser</Text>
-        <Text style={s.sub}>Vi trenger disse for en trygg og rask opplevelse.</Text>
+        <Rise><Text style={s.title}>Noen få tillatelser</Text></Rise>
+        <Rise><Text style={s.sub}>Vi trenger disse for en trygg og rask opplevelse.</Text></Rise>
 
         <View style={s.rows}>
           <PermissionRow icon="map-pin" title="Posisjon" sub="For å finne sjåfører i nærheten og vise hvor du er" value={locationOn} onPress={() => setLocationOn(v => !v)} s={s} />
@@ -60,16 +62,14 @@ export default function Permissions() {
 
 function PermissionRow({ icon, title, sub, value, onPress, s }: any) {
   return (
-    <View style={s.row}>
+    <Rise style={s.row} delay={title === 'Varsler' ? 60 : 0}>
       <View style={s.rowIcon}><Icon name={icon} size={20} color={colors.accent} /></View>
       <View style={{ flex: 1 }}>
         <Text style={s.rowTitle}>{title}</Text>
         <Text style={s.rowSub}>{sub}</Text>
       </View>
-      <Pressable onPress={onPress} style={[s.toggle, value && s.toggleOn]} accessibilityRole="switch" accessibilityState={{ checked: value }}>
-        <View style={[s.knob, value && s.knobOn]} />
-      </Pressable>
-    </View>
+      <DesignToggle label={title} value={value} onChange={onPress} />
+    </Rise>
   );
 }
 
@@ -83,13 +83,8 @@ const useStyles = makeStyles(c => ({
   rowIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
   rowTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   rowSub: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 3 },
-  toggle: { width: 48, height: 28, borderRadius: 14, padding: 2, backgroundColor: c.lineStrong },
-  toggleOn: { backgroundColor: c.accent },
-  knob: { width: 24, height: 24, borderRadius: 12, backgroundColor: c.surface },
-  knobOn: { marginLeft: 20 },
   primary: { minHeight: 52, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.3, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
   primaryText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
   error: { color: c.danger, fontSize: 12, textAlign: 'center', marginTop: 12 },
 }));
-
 
