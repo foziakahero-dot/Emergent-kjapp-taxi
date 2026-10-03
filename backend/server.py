@@ -1408,6 +1408,87 @@ async def lifespan(app: FastAPI):
         # stops working), fix role, and ensure it is never disabled/flagged as demo.
         await reconcile_superadmin(db, admin_email, admin_password, IS_PRODUCTION)
 
+    # Internal beta driver accounts — explicit env-gated provisioning only.
+    # These accounts are kept OFFLINE and still pass through normal document/compliance
+    # gates before they can take real work. Passwords live only in Render env vars.
+    if os.environ.get("KJAPP_TEST_DRIVER_SEED_ENABLED", "false").strip().lower() == "true":
+        fleet = await db.fleets.find_one({"internal_test_fleet": True})
+        if not fleet:
+            fleet_result = await db.fleets.insert_one({
+                "name": "KJAPP Internal Beta Fleet",
+                "org_number": "INTERNAL-BETA",
+                "status": "active",
+                "internal_test_fleet": True,
+                "commission_rate": 0.10,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            fleet = await db.fleets.find_one({"_id": fleet_result.inserted_id})
+        fleet_id = str(fleet["_id"])
+        test_specs = [
+            ("KJAPP_TEST_DRIVER_1_EMAIL", "KJAPP_TEST_DRIVER_1_PASSWORD", "Beta Sjåfør 1", "+4790000101", "SNAR01", "Tesla Model Y"),
+            ("KJAPP_TEST_DRIVER_2_EMAIL", "KJAPP_TEST_DRIVER_2_PASSWORD", "Beta Sjåfør 2", "+4790000102", "SNAR02", "Volkswagen ID.4"),
+        ]
+        for email_key, password_key, full_name, phone, plate, car in test_specs:
+            email = (os.environ.get(email_key) or "").strip().lower()
+            password = os.environ.get(password_key) or ""
+            if not email or not password:
+                continue
+            now_iso = datetime.now(timezone.utc).isoformat()
+            existing_driver = await db.users.find_one({"email": email})
+            driver_fields = {
+                "email": email,
+                "password_hash": hash_password(password),
+                "fullName": full_name,
+                "phone": phone,
+                "role": "driver",
+                "approved": True,
+                "online": False,
+                "disabled": False,
+                "fleet_id": fleet_id,
+                "fleet_active": True,
+                "legal_accepted": True,
+                "legal_version": CURRENT_LEGAL_VERSION,
+                "identity_verification_status": "verified",
+                "identity_verification_updated_at": now_iso,
+                "identity_verified_at": now_iso,
+                "next_identity_check_at": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(),
+                "internal_test_account": True,
+                "updated_at": now_iso,
+            }
+            if existing_driver:
+                await db.users.update_one({"_id": existing_driver["_id"]}, {"$set": driver_fields})
+                driver = await db.users.find_one({"_id": existing_driver["_id"]})
+            else:
+                driver_fields["created_at"] = now_iso
+                result = await db.users.insert_one(driver_fields)
+                driver = await db.users.find_one({"_id": result.inserted_id})
+            driver_id = str(driver["_id"])
+            vehicle = await db.fleet_vehicles.find_one({
+                "fleet_id": fleet_id,
+                "assigned_driver_id": driver_id,
+                "internal_test_vehicle": True,
+            })
+            if not vehicle:
+                vr = await db.fleet_vehicles.insert_one({
+                    "fleet_id": fleet_id,
+                    "assigned_driver_id": driver_id,
+                    "car": car,
+                    "plate": plate,
+                    "vehicle_type": "ai-first",
+                    "active": True,
+                    "internal_test_vehicle": True,
+                    "created_at": now_iso,
+                })
+                vehicle = await db.fleet_vehicles.find_one({"_id": vr.inserted_id})
+            await db.users.update_one({"_id": driver["_id"]}, {"$set": {
+                "vehicle_id": str(vehicle["_id"]),
+                "car": vehicle.get("car") or car,
+                "plate": vehicle.get("plate") or plate,
+                "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+                "online": False,
+            }})
+        print("[seed] internal beta driver accounts provisioned (offline; credentials not logged)")
+
     # Initialize object storage
     try:
         init_storage()
