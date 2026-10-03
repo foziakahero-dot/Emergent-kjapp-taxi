@@ -22,6 +22,7 @@ from typing import Any, Literal, Optional
 from bson import ObjectId
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
+from stripe_fleet import ensure_fleet_account
 
 
 ADMIN_PERMISSIONS = ("operations", "finance", "support", "communications", "system")
@@ -96,7 +97,7 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
         return None
     # Preserve the commission agreed/snapshotted on the ride. Changing fleet pricing
     # after booking must not change settlement for an already accepted trip.
-    rate = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
+    rate = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)))
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
@@ -321,41 +322,8 @@ def install_admin_control_center(
         fleet = await fleet_or_404(fleet_id)
         owner = await owner_for(fleet)
         owner_email = (owner or {}).get("email") or fleet.get("contact_email")
-        account_id = fleet.get("stripe_account_id")
-        created = False
-        if not account_id:
-            try:
-                account = await asyncio.to_thread(
-                    stripe.Account.create,
-                    type="express",
-                    country="NO",
-                    email=owner_email,
-                    capabilities={"transfers": {"requested": True}},
-                    metadata={"kjapp_fleet_id": fleet_id, "kjapp_org_number": fleet.get("org_number") or ""},
-                )
-            except Exception as exc:
-                raise HTTPException(502, f"Stripe Connect kunne ikke opprettes: {type(exc).__name__}")
-            account_id = account.id
-            created = True
-            await db.fleets.update_one({"_id": _oid(fleet_id)}, {"$set": {
-                "stripe_account_id": account_id,
-                "stripe_connect_status": "onboarding",
-                "stripe_payout_schedule": "stripe_default",
-                "stripe_connected_at": _now(),
-            }})
-            try:
-                await asyncio.to_thread(
-                    stripe.Account.modify,
-                    account_id,
-                    settings={"payouts": {"schedule": {"interval": "weekly", "weekly_anchor": "friday"}}},
-                )
-                await db.fleets.update_one(
-                    {"_id": _oid(fleet_id)},
-                    {"$set": {"stripe_payout_schedule": "weekly_friday", "stripe_payout_schedule_updated_at": _now()}},
-                )
-            except Exception:
-                # Connected account remains usable; display Stripe's default schedule until confirmed.
-                pass
+        created = not fleet.get("stripe_account_id")
+        account_id = await ensure_fleet_account(db, stripe, fleet, owner_email)
         public_admin = os.getenv("ADMIN_PUBLIC_URL", "https://admin.kjappapp.no").rstrip("/")
         try:
             link = await asyncio.to_thread(
@@ -710,3 +678,4 @@ def install_admin_control_center(
         await db.users.update_one({"_id": target["_id"]}, {"$set": sets})
         await audit(current, "admin_user.update", "admin_user", user_id, before, sets)
         return {"ok": True}
+

@@ -10,7 +10,9 @@ pymongo==4.9.2
 PyOTP==2.10.0
 python-dotenv==1.0.1
 python-multipart==0.0.19
-qrcode==8.2
+qrcode[pil]==8.2
 requests==2.34.2
 stripe==14.4.1
 pytest==9.1.1
+
+mongomock==4.3.0
