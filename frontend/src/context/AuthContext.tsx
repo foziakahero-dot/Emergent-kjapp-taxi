@@ -13,9 +13,12 @@ export type User = {
   role?: string;
   driver_id?: string;
   legal_accepted?: boolean;
+  customer_photo_version?: string;
+  google_linked?: boolean;
 } | null;
 
 type AuthCtx = {
+  sessionError: string;
   user: User | undefined; // undefined = loading, null = signed out
   login: (email: string, password: string) => Promise<any>;
   register: (data: any) => Promise<any>;
@@ -29,9 +32,11 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx>(null as any);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [sessionError, setSessionError] = useState('');
   const [user, setUser] = useState<User | undefined>(undefined);
 
   const refresh = useCallback(async () => {
+    setSessionError('');
     const token = await storage.getItem(TOKEN_KEY);
     if (!token) {
       setUser(null);
@@ -45,9 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setUser(u);
-    } catch {
-      await storage.removeItem(TOKEN_KEY);
-      setUser(null);
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
+        await storage.removeItem(TOKEN_KEY);
+        setUser(null);
+      } else {
+        setSessionError('Kan ikke kontakte SNAR. Sjekk forbindelsen og prøv igjen.');
+      }
     }
   }, []);
 
@@ -56,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await authApi.login({ email, password, client: 'customer' });
     if (res.twofa_required) return res;
-    if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
+    if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i SNAR kundeappen.');
     await storage.setItem(TOKEN_KEY, res.token);
     setUser(res.user);
     return res.user;
@@ -97,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
+    <Ctx.Provider value={{ sessionError, user, login, register, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
       {children}
     </Ctx.Provider>
   );

@@ -1,0 +1,149 @@
+{
+  "timezone": "Europe/Oslo",
+  "date": "2026-10-04",
+  "backendCommits": [
+    "4d4dd5050c3d225b07a6892ef8c4b74477ee9c92",
+    "865023425d48acc5c0c665ae248d828a689fceb0"
+  ],
+  "renderDeploys": [
+    {
+      "id": "dep-db0p65vavr4c738o8g9g",
+      "status": "live"
+    },
+    {
+      "id": "dep-db0p9hgu01pc73bcinc0",
+      "status": "live",
+      "finishedAt": "2026-10-03T23:51:50.849371Z"
+    }
+  ],
+  "publicLiveSmoke": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "body": {
+        "app": "KJAPP",
+        "status": "ok",
+        "db": true,
+        "time": "2026-10-03T23:45:09.984992+00:00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/ready",
+      "status": 200,
+      "body": {
+        "app": "KJAPP",
+        "ready": false,
+        "status": "not_ready",
+        "checks": {
+          "database": true,
+          "production_mode": false,
+          "demo_data_disabled": true,
+          "jwt_configured": true,
+          "admin_identity_configured": true,
+          "stripe_key_configured": false,
+          "stripe_webhook_configured": true,
+          "email_configured": false,
+          "public_web_origin_configured": true,
+          "expo_push_sender": true,
+          "identity_recheck_policy_days": [
+            30,
+            90
+          ],
+          "identity_inactivity_days": 30,
+          "apple_native_auth_configured": true,
+          "apple_bundle_env_matches": true,
+          "object_storage_configured": false,
+          "service_area_enforced": true,
+          "auto_charge_enabled": false,
+          "booking_enabled": true
+        },
+        "blockers": [
+          "production_mode",
+          "stripe_key_configured",
+          "email_configured"
+        ],
+        "time": "2026-10-03T23:45:17.293964+00:00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/auth/native/config",
+      "status": 200,
+      "body": {
+        "google_enabled": false,
+        "google_web_client_id": "",
+        "google_ios_client_id": ""
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/payments/native/config",
+      "status": 200,
+      "body": {
+        "enabled": false,
+        "publishable_key": "",
+        "test_mode": false,
+        "apple_merchant_id": "",
+        "google_pay_enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/me/profile-photo",
+      "status": 401,
+      "body": {
+        "detail": "Ikke innlogget"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/auth/google/link",
+      "status": 401,
+      "body": {
+        "detail": "Ikke innlogget"
+      }
+    }
+  ],
+  "checks": {
+    "backendFocused": "47 passed, Pillow 11.3.0; isolated local fixtures, no live E2E",
+    "typescript": "PASS",
+    "components": "PASS",
+    "expoDoctor": "21/21",
+    "androidPrebuild": "PASS --no-install",
+    "iosPrebuild": "PASS --no-install",
+    "androidHermesExport": "PASS",
+    "iosHermesExport": "PASS",
+    "physicalDevice": "UNVERIFIED",
+    "nativeCompilation": "UNVERIFIED",
+    "EASBuild": "NOT STARTED"
+  },
+  "legacySuite": {
+    "baseline": "11 failed, 60 passed",
+    "changed": "11 failed, 60 passed",
+    "failedTests": [
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_driver_app_does_not_mask_money_failures_or_recompute_trip_earnings",
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_driver_bundle_contains_no_google_or_self_registration_auth_path",
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_driver_app_exposes_vehicle_selector_and_profile_photo_without_redesign",
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_customer_booking_shows_real_driver_photo_with_initials_fallback",
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_fleet_ui_distinguishes_selected_from_extra_assigned_cars",
+      "FAILED kjapp/backend/tests/test_beta_trip_lifecycle_contract.py::test_receipt_email_delivery_is_atomically_serialized_per_recipient",
+      "FAILED kjapp/backend/tests/test_real_trip_integrity_contract.py::test_operational_trip_surfaces_use_real_trip_filter",
+      "FAILED kjapp/backend/tests/test_real_trip_integrity_contract.py::test_public_seed_places_never_impersonate_user_home_or_work",
+      "FAILED kjapp/backend/tests/test_real_trip_integrity_contract.py::test_admin_settings_can_never_reenable_demo_trips",
+      "FAILED kjapp/backend/tests/test_real_trip_integrity_contract.py::test_all_mutating_e2e_scripts_refuse_shared_beta_and_require_isolation",
+      "FAILED kjapp/backend/tests/test_real_trip_integrity_contract.py::test_mutating_e2e_scripts_do_not_store_legacy_passwords"
+    ],
+    "limitation": "Partial local repo fixture set; source assertion/harness errors and out-of-scope Driver/Fleet checks. Not a clean full-suite result."
+  },
+  "logSha256": {
+    "android-prebuild.log": "07819c69a477be4341498eb37152f9b524479e3fc6d71e80fa4dd3ac47dde350",
+    "ios-prebuild.log": "ea6a31fac96c2ca8aa33201b283d2020b59853c916c0edb77185e1ae23ac5b40",
+    "android-export-final.log": "550d32380598ed23408df046063c821e9c1621ec75a868291fd1c3ed93dc955c",
+    "ios-export-final.log": "8215b89a582d05d6c1c98116ad534c162abe8ed412ddbb541a94cddb4b9c4e86",
+    "baseline-regressions.log": "9d5432ed789042b301bb23dd6fdd3556f8dc12232b609e26421a3be21a71b4fd",
+    "current-regressions.log": "45094a0078f046d59ab3fa5b83790fc34f928ef042d60745d41672cf88685f2a"
+  },
+  "retainedIconSha256": "d4a29f74eac608c11f8cb220296e98e75a476e6145396306b24198e34423e70f"
+}

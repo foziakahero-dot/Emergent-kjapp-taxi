@@ -232,11 +232,7 @@ export function InteractiveMap({
   }
 
   const routeLine = (
-    route && route.length
-      ? route
-      : pickup && dropoff
-        ? [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]]
-        : []
+    route && route.length > 1 ? route : []
   )
     .map(([lng, lat]) => `${sx(lng).toFixed(1)},${sy(lat).toFixed(1)}`)
     .join(' ');

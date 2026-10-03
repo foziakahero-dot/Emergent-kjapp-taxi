@@ -69,7 +69,7 @@ export default function History() {
               <Pressable
                 style={s.row}
                 testID={`trip-${item.trip_id}`}
-                onPress={() => receiptState && router.push(`/receipt/${item.trip_id}`)}
+                onPress={() => router.push(receiptState ? `/receipt/${item.trip_id}` : `/booking/${item.trip_id}`)}
               >
                 <View style={s.rowIcon}>
                   <Icon name="navigation" size={18} color={colors.accent} />

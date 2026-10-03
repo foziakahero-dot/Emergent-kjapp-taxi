@@ -43,6 +43,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce SNAR Customer pre-build gate
+        run: node scripts/customer-build-gate.cjs
       - name: Require Expo token
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
@@ -89,3 +91,4 @@ jobs:
       - name: Submit latest build to TestFlight
         if: ${{ inputs.submit_to_testflight }}
         run: npx eas-cli@latest submit --platform ios --profile production --latest --non-interactive
+

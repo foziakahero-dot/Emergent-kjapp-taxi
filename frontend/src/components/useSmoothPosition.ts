@@ -38,10 +38,11 @@ export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
       return;
     }
     if (Math.abs(from.lat - target.lat) < 1e-7 && Math.abs(from.lng - target.lng) < 1e-7) {
+      setPos({ ...from, heading: target.heading ?? from.heading });
       return;
     }
     const head =
-      target.heading != null && target.heading !== 0
+      target.heading != null
         ? target.heading
         : bearing(from, target);
     const start = Date.now();
@@ -52,7 +53,7 @@ export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
       setPos({
         lat: startPos.lat + (target.lat - startPos.lat) * e,
         lng: startPos.lng + (target.lng - startPos.lng) * e,
-        heading: head,
+        heading: (startPos.heading + (((head - startPos.heading + 540) % 360) - 180) * e + 360) % 360,
       });
       if (t < 1) raf.current = requestAnimationFrame(step);
     };
@@ -60,7 +61,7 @@ export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
     raf.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target?.lat, target?.lng, duration]);
+  }, [target?.lat, target?.lng, target?.heading, duration]);
 
   return pos;
 }

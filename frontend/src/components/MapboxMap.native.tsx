@@ -1,6 +1,6 @@
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox, {
   Camera,
   LineLayer,
@@ -10,13 +10,14 @@ import Mapbox, {
   StyleImport,
 } from '@rnmapbox/maps';
 import Svg, { Circle, Rect } from 'react-native-svg';
+import { Text } from './Typography';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
 import { useSmoothPosition } from './useSmoothPosition';
-import { InteractiveMap as RasterInteractiveMap } from './InteractiveMap';
+import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { id?: string; lat: number; lng: number; heading?: number };
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -38,8 +39,10 @@ type Props = {
   interactive?: boolean;
 };
 
-function MarkerCar({ car }: { car: Car; active?: boolean }) {
-  return <MapCar heading={car.heading || 0} />;
+function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+  const smooth = useSmoothPosition(car);
+  if (!smooth) return null;
+  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
@@ -75,6 +78,7 @@ export function MapboxInteractiveMap({
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
+  const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
 
@@ -125,12 +129,7 @@ export function MapboxInteractiveMap({
   }, [mapReady, manual, fitFocus]);
 
   const routeShape = useMemo(() => {
-    const coordinates =
-      route && route.length > 1
-        ? route
-        : pickup && dropoff
-          ? [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]]
-          : [];
+    const coordinates = route?.filter(p => p.length >= 2 && p.every(Number.isFinite)) || [];
     if (coordinates.length < 2) return null;
     return {
       type: 'Feature',
@@ -139,8 +138,9 @@ export function MapboxInteractiveMap({
     } as any;
   }, [route, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng]);
 
-  if (!TOKEN) {
+  if (!TOKEN || mapError) {
     return (
+      <View style={[{ overflow: 'hidden' }, style]}>
       <RasterInteractiveMap
         pickup={pickup}
         dropoff={dropoff}
@@ -148,10 +148,15 @@ export function MapboxInteractiveMap({
         cars={cars}
         activeCar={activeCar}
         user={user}
-        style={style}
+        style={{ flex: 1 }}
         testID={testID}
         interactive={interactive}
       />
+      <View testID="map-error" style={{ position: 'absolute', left: 16, right: 16, top: 62, backgroundColor: colors.surface, padding: 10, borderRadius: 16 }}>
+        <Text accessibilityRole="alert">{TOKEN ? 'Mapbox er midlertidig utilgjengelig. Viser reservekart.' : 'Viser reservekart. Mapbox mangler konfigurasjon.'}</Text>
+        {TOKEN ? <Pressable testID="map-retry" onPress={() => { setMapError(false); setMapReady(false); }}><Text>Prøv igjen</Text></Pressable> : null}
+      </View>
+      </View>
     );
   }
 
@@ -183,6 +188,7 @@ export function MapboxInteractiveMap({
         attributionEnabled
         logoEnabled
         onDidFinishLoadingMap={() => setMapReady(true)}
+        onMapLoadingError={() => setMapError(true)}
         onCameraChanged={(state: any) => {
           if (state?.gestures?.isGestureActive) setManual(true);
         }}
@@ -244,15 +250,11 @@ export function MapboxInteractiveMap({
         ) : null}
 
         {cars.map((car, index) => (
-          <MarkerView key={`car-${index}`} coordinate={[car.lng, car.lat]} allowOverlap>
-            <MarkerCar car={car} />
-          </MarkerView>
+          <MarkerCar key={car.id || `car-${index}`} car={car} />
         ))}
 
         {smoothCar ? (
-          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap>
-            <MarkerCar car={smoothCar} active />
-          </MarkerView>
+          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap><MapCar heading={smoothCar.heading} active /></MarkerView>
         ) : null}
 
         {pickup ? (
@@ -274,6 +276,7 @@ export function MapboxInteractiveMap({
         ) : null}
       </MapView>
 
+      {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
       {interactive ? (
         <View style={{ position: 'absolute', right: 14, top: 116, gap: 8 }} pointerEvents="box-none">
           <Ctrl name="plus" onPress={() => void zoomBy(1)} testID="map-zoom-in" />

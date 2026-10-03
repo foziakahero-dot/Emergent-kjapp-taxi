@@ -42,6 +42,7 @@ function load(app, file) {
   const localRequire = name => {
     if (stubs.has(name)) return stubs.get(name);
     if (name === 'react') return React;
+    if (name.startsWith('./')) { const target = path.relative(path.join(root, app), path.resolve(path.dirname(absolute), name)); return load(app, fs.existsSync(path.join(root, app, target + '.tsx')) ? target + '.tsx' : target + '.ts'); }
     if (name === 'react/jsx-runtime') return customerRequire(name);
     if (name === 'react-native') return native;
     if (name === 'expo-linear-gradient') return { LinearGradient: 'Gradient' };
@@ -59,6 +60,8 @@ function load(app, file) {
   vm.runInNewContext(compiled, { require: localRequire, module: result, exports: result.exports, console,
     setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, at: clock + delay }); return id; },
     clearTimeout: id => timers.delete(id),
+    setInterval: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, at: Infinity }); return id; },
+    clearInterval: id => timers.delete(id),
   }, { filename: absolute });
   cache.set(absolute, result.exports);
   return result.exports;
@@ -262,7 +265,30 @@ const act = renderer.act;
   assert.equal(saved.root.findAllByProps({ testID: 'places-search-input' }).length, 0, 'Failed address fetch must not open a create form for a potentially existing Home address');
   assert.equal(saved.root.findAllByProps({ testID: 'places-retry' }).length, 1);
   await act(async () => saved.unmount());
+  // Customer active trip: minimize/reopen retains canonical server state; completion exits.
+  native.Image = 'Image'; native.Modal = 'Modal';
+  native.AppState = { currentState: 'active', addEventListener: () => ({ remove() {} }) };
+  native.Share = { share: async () => ({}) }; native.Alert = { alert() {} };
+  let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
+  const navigations = [];
+  stubs.set('expo-router', { useLocalSearchParams: () => ({ tripId: 'unit-trip' }), useRouter: () => ({ replace: url => navigations.push(url) }) });
+  stubs.set('@/src/lib/api', { tripsApi: { get: async () => serverTrip }, tripDriverPhotoSource: async () => ({ uri: 'fixture' }) });
+  stubs.set('@/src/components/Map', { Map: 'Map' });
+  stubs.set('@/src/components/ChatSheet', { ChatSheet: 'ChatSheet' });
+  const Booking = load('frontend', 'app/booking/[tripId].tsx').default;
+  let booking;
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => booking.root.findByProps({ testID: 'active-trip-minimize' }).props.onPress());
+  assert.equal(booking.root.findAllByProps({ testID: 'active-trip-reopen' }).length, 1);
+  assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0);
+  await act(async () => booking.root.findByProps({ testID: 'active-trip-reopen' }).props.onPress());
+  assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1);
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'completed' };
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  assert.ok(navigations.includes('/receipt/unit-trip'));
+  await act(async () => booking.unmount());
   assert.equal(timers.size, 0);
   assert.equal(nativeListeners, 0);
-  console.log('PASS: fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, duplicate guards, privacy export, permission-gated server-confirmed Driver alerts, unmount cancellation, error recovery and address edit identity.');
+  console.log('PASS: Customer minimize/reopen/completion; fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, duplicate guards, privacy export, permission-gated server-confirmed Driver alerts, unmount cancellation, error recovery and address edit identity.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { console.error = originalError; });

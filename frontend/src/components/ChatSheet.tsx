@@ -21,6 +21,8 @@ export function ChatSheet({
 }) {
   const insets = useSafeAreaInsets();
   const s = useStyles();
+  const sendLock = useRef(false);
+  const [error, setError] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -30,11 +32,13 @@ export function ChatSheet({
   useEffect(() => {
     if (!visible) return;
     let mounted = true;
+    setLoading(true);
+    setError('');
     const load = async () => {
       try {
         const r = await messagesApi.list(tripId);
-        if (mounted) setMessages(r.messages || []);
-      } catch {}
+        if (mounted) { setMessages(r.messages || []); setError(''); }
+      } catch { if (mounted) setError('Kan ikke hente meldinger. Vi prøver igjen automatisk.'); }
       finally { if (mounted) setLoading(false); }
     };
     load();
@@ -44,7 +48,9 @@ export function ChatSheet({
 
   const send = async () => {
     const t = text.trim();
-    if (!t) return;
+    if (!t || sendLock.current) return;
+    sendLock.current = true;
+    setError('');
     setSending(true);
     setText('');
     try {
@@ -53,7 +59,9 @@ export function ChatSheet({
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch {
       setText(t);
+      setError('Meldingen ble ikke sendt. Prøv igjen.');
     } finally {
+      sendLock.current = false;
       setSending(false);
     }
   };
@@ -65,6 +73,7 @@ export function ChatSheet({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}
         >
+          {error ? <Text accessibilityRole="alert" testID="chat-error" style={{ padding: 12, color: colors.danger }}>{error}</Text> : null}
           <View style={[s.header, { paddingTop: 14 }]}>
             <View style={s.handle} />
             <View style={s.headerRow}>

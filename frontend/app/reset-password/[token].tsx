@@ -47,7 +47,7 @@ export default function ResetPassword() {
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[s.wrap, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 24 }]}>
-        <Pressable onPress={() => router.replace('/login')} style={s.backLink} accessibilityRole="button" accessibilityLabel="Til innlogging">
+        <Pressable testID="customer-app-reset-password-token-50" onPress={() => router.replace('/login')} style={s.backLink} accessibilityRole="button" accessibilityLabel="Til innlogging">
           <Text style={s.backLinkText}>‹  Til innlogging</Text>
         </Pressable>
         <View style={s.content}>
@@ -56,7 +56,7 @@ export default function ResetPassword() {
             <KjappMark size={44} />
             <Text style={s.title}>Lenken virker ikke</Text>
             <Text style={s.sub}>Lenken er ugyldig eller utløpt. Be om en ny fra innloggingsskjermen.</Text>
-            <Pressable style={s.secondaryButton} onPress={() => router.replace('/forgot-password')}><Text style={s.secondaryText}>Be om ny lenke</Text></Pressable>
+            <Pressable testID="customer-app-reset-password-token-59" style={s.secondaryButton} onPress={() => router.replace('/forgot-password')}><Text style={s.secondaryText}>Be om ny lenke</Text></Pressable>
           </> : null}
           {state === 'form' ? <>
             <KjappMark size={44} />
@@ -67,7 +67,7 @@ export default function ResetPassword() {
             <Text style={[s.fieldLabel, { marginTop: 16 }]}>GJENTA PASSORD</Text>
             <View style={s.field}><TextInput value={again} onChangeText={setAgain} secureTextEntry placeholder="Gjenta passord" placeholderTextColor={colors.textMuted} autoComplete="new-password" style={s.input} /></View>
             {error ? <Text style={s.error}>{error}</Text> : null}
-            <Pressable onPress={submit} disabled={busy} style={{marginTop:18}}>
+            <Pressable testID="customer-app-reset-password-token-70" onPress={submit} disabled={busy} style={{marginTop:18}}>
               <LinearGradient colors={busy ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B','#FF0000']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}>
                 {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Lagre nytt passord</Text>}
               </LinearGradient>
@@ -76,8 +76,8 @@ export default function ResetPassword() {
           {state === 'done' ? <>
             <View style={s.doneCircle}><Icon name="check" size={24} color={colors.accentOn} /></View>
             <Text style={s.title}>Passordet er endret</Text>
-            <Text style={s.sub}>Du kan nå logge inn i KJAPP med det nye passordet.</Text>
-            <Pressable style={s.secondaryButton} onPress={() => router.replace('/login')}><Text style={s.secondaryText}>Logg inn</Text></Pressable>
+            <Text style={s.sub}>Du kan nå logge inn i SNAR med det nye passordet.</Text>
+            <Pressable testID="customer-app-reset-password-token-80" style={s.secondaryButton} onPress={() => router.replace('/login')}><Text style={s.secondaryText}>Logg inn</Text></Pressable>
           </> : null}
         </View>
       </View>

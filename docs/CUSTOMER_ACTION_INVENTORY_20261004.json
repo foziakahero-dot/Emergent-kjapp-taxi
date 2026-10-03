@@ -1,0 +1,3099 @@
+[
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 350,
+    "component": "Pressable",
+    "testID": "\"assist-back\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{() => router.back()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 363,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-assist-363\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 406,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-assist-406\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => send(q)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 415,
+    "component": "Pressable",
+    "testID": "{`assist-place-${i}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => chooseDestination(p)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 432,
+    "component": "Pressable",
+    "testID": "{`assist-vehicle-${o.vehicle_type}`}",
+    "label": "{`${copy.name}, ${copy.tagline}, ${kr(o.price)}`}",
+    "handlers": {
+      "onPress": "{() => chooseVehicle(o.vehicle_type)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 464,
+    "component": "Pressable",
+    "testID": "\"assist-confirm\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{confirm}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{sending}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 481,
+    "component": "Pressable",
+    "testID": "\"assist-mic\"",
+    "label": "{recorderState.isRecording ? 'Stopp taleopptak' : 'Start taleopptak'}",
+    "handlers": {
+      "onPress": "{toggleVoice}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{transcribing}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 493,
+    "component": "TextInput",
+    "testID": "\"assist-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setInput}",
+      "onSubmitEditing": "{() => send()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 504,
+    "component": "Pressable",
+    "testID": "\"assist-send\"",
+    "label": "\"Send\"",
+    "handlers": {
+      "onPress": "{() => send()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{!input.trim() || sending || transcribing}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/history.tsx",
+    "line": 47,
+    "component": "Pressable",
+    "testID": "\"history-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => refetch()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/history.tsx",
+    "line": 68,
+    "component": "Pressable",
+    "testID": "{`trip-${item.trip_id}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push(receiptState ? `/receipt/${item.trip_id}` : `/booking/${item.trip_id}`)}"
+    },
+    "destination": "receiptState ? `/receipt/${item.trip_id}` : `/booking/${item.trip_id}`",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 251,
+    "component": "Pressable",
+    "testID": "\"home-where-to\"",
+    "label": "\"Søk etter destinasjon\"",
+    "handlers": {
+      "onPress": "{() => setSearchOpen(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 265,
+    "component": "Pressable",
+    "testID": "\"home-recenter\"",
+    "label": "\"Sentrer kartet på min posisjon\"",
+    "handlers": {
+      "onPress": "{() => void refreshLocation()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 287,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-287\"",
+    "label": "\"Lukk anbefaling\"",
+    "handlers": {
+      "onPress": "{() => setRecommendationOpen(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 296,
+    "component": "Pressable",
+    "testID": "\"recommendation-select\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setDropoff({ name: recommendation.name, lat: Number(recommendation.lat), lng: Number(recommendation.lng) }); setRecommendationOpen(false); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 299,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-299\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setRecommendationIndex(index => index + 1)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{recommendations.length < 2}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 307,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-307\"",
+    "label": "{sheetCollapsed ? 'Utvid nylige steder' : 'Minimer nylige steder'}",
+    "handlers": {
+      "onPress": "{() => setSheetCollapsed((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 316,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-316\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setSheetCollapsed((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 323,
+    "component": "Pressable",
+    "testID": "{`quick-${p.label || i}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 343,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-343\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/saved-places')}"
+    },
+    "destination": "'/saved-places'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 351,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-351\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void refreshLocation()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 354,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-354\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => Linking.openSettings().catch(() => {})}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 365,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-365\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setSheetCollapsed((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 371,
+    "component": "Pressable",
+    "testID": "\"booking-change-dest\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => {\n                    setReviewing(false);\n                    setDropoff(null);\n                    setEstimate(null);\n                  }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 388,
+    "component": "Pressable",
+    "testID": "{`vehicle-${v.type}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setSelType(v.type)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 417,
+    "component": "Pressable",
+    "testID": "\"booking-review\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => canBook && setReviewing(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{!canBook}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 434,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-434\"",
+    "label": "\"Tilbake til bilvalg\"",
+    "handlers": {
+      "onPress": "{() => setReviewing(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 473,
+    "component": "Pressable",
+    "testID": "\"booking-payment-row\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/payment-methods')}"
+    },
+    "destination": "'/payment-methods'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 482,
+    "component": "Pressable",
+    "testID": "\"booking-confirm\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{book}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{!canBook}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 545,
+    "component": "TextInput",
+    "testID": "\"search-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setQ}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 557,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-557\"",
+    "label": "\"Tøm søk\"",
+    "handlers": {
+      "onPress": "{() => setQ('')}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 561,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-561\"",
+    "label": "\"Bestill med stemmen\"",
+    "handlers": {
+      "onPress": "{onVoice}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 567,
+    "component": "Pressable",
+    "testID": "\"search-close\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onClose}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 573,
+    "component": "Pressable",
+    "testID": "{`search-result-${i}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => onSelect({ name: r.name, lat: r.lat, lng: r.lng })}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 90,
+    "component": "Pressable",
+    "testID": "\"profile-link-google\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void linkGoogle()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{googleBusy || user?.google_linked}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 92,
+    "component": "Pressable",
+    "testID": "{r.testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{r.onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 101,
+    "component": "Pressable",
+    "testID": "\"profile-logout\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{logout}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 113,
+    "component": "TextInput",
+    "testID": "\"profile-delete-confirm-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setConfirmText}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 123,
+    "component": "Button",
+    "testID": "\"profile-delete-confirm\"",
+    "label": "\"Slett konto permanent\"",
+    "handlers": {
+      "onPress": "{deleteAccount}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{confirmText.trim().toUpperCase() !== 'SLETT'}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 132,
+    "component": "Pressable",
+    "testID": "\"profile-delete-cancel\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => {\n                setDeleteOpen(false);\n                setConfirmText('');\n                setDeleteError('');\n              }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/wallet.tsx",
+    "line": 36,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-wallet-36\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/payment-methods')}"
+    },
+    "destination": "'/payment-methods'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/wallet.tsx",
+    "line": 47,
+    "component": "Pressable",
+    "testID": "\"wallet-add-payment\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/payment-methods')}"
+    },
+    "destination": "'/payment-methods'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/_layout.tsx",
+    "line": 24,
+    "component": "Pressable",
+    "testID": "\"session-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void refresh()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 172,
+    "component": "Pressable",
+    "testID": "\"booking-retry-load\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setRetryKey((v) => v + 1)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 211,
+    "component": "Pressable",
+    "testID": "\"active-trip-minimize\"",
+    "label": "\"Minimer tur\"",
+    "handlers": {
+      "onPress": "{() => { setMinimized(true); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 214,
+    "component": "Pressable",
+    "testID": "\"active-trip-home\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/(app)/home')}"
+    },
+    "destination": "'/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 225,
+    "component": "Pressable",
+    "testID": "\"searching-cancel\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{cancel}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 238,
+    "component": "Pressable",
+    "testID": "\"booking-home\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/(app)/home')}"
+    },
+    "destination": "'/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 265,
+    "component": "Pressable",
+    "testID": "\"ontrip-share\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{shareTrip}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 269,
+    "component": "Pressable",
+    "testID": "\"ontrip-chat\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setChatOpen(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 273,
+    "component": "Pressable",
+    "testID": "\"ontrip-safety\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setSafetyOpen(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 323,
+    "component": "Pressable",
+    "testID": "\"action-call-driver\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{callDriver}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 327,
+    "component": "Pressable",
+    "testID": "\"action-message\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setChatOpen(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 337,
+    "component": "Pressable",
+    "testID": "\"customer-app-booking-tripId-337\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => !safetyBusy && setSafetyOpen(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 338,
+    "component": "Pressable",
+    "testID": "\"customer-app-booking-tripId-338\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => {}}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 344,
+    "component": "Pressable",
+    "testID": "\"customer-app-booking-tripId-344\"",
+    "label": "\"Lukk sikkerhetsmeny\"",
+    "handlers": {
+      "onPress": "{() => setSafetyOpen(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{safetyBusy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 349,
+    "component": "Pressable",
+    "testID": "\"safety-call-112\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{callEmergency}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{safetyBusy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 353,
+    "component": "Pressable",
+    "testID": "\"safety-share-trip\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{shareTrip}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{safetyBusy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 357,
+    "component": "Pressable",
+    "testID": "\"safety-report\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{reportSafety}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{safetyBusy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/forgot-password.tsx",
+    "line": 40,
+    "component": "Pressable",
+    "testID": "\"customer-app-forgot-password-40\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{() => router.back()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/forgot-password.tsx",
+    "line": 50,
+    "component": "Pressable",
+    "testID": "\"customer-app-forgot-password-50\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/login')}"
+    },
+    "destination": "'/login'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/forgot-password.tsx",
+    "line": 62,
+    "component": "TextInput",
+    "testID": "\"forgot-email\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setEmail}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/forgot-password.tsx",
+    "line": 76,
+    "component": "Pressable",
+    "testID": "\"forgot-submit\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{submit}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/index.tsx",
+    "line": 45,
+    "component": "Button",
+    "testID": "\"customer-role-logout\"",
+    "label": "\"Logg ut\"",
+    "handlers": {
+      "onPress": "{async () => {\n            await logout();\n            router.replace('/login');\n          }}"
+    },
+    "destination": "'/login'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/index.tsx",
+    "line": 61,
+    "component": "SplashAction",
+    "testID": "\"onboarding-next\"",
+    "label": "\"Kom i gang\"",
+    "handlers": {
+      "onPress": "{() => router.push('/permissions')}"
+    },
+    "destination": "'/permissions'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/legal-consent.tsx",
+    "line": 53,
+    "component": "Pressable",
+    "testID": "\"customer-app-legal-consent-53\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/vilkar')}"
+    },
+    "destination": "'https://kjappapp.no/vilkar'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/legal-consent.tsx",
+    "line": 58,
+    "component": "Pressable",
+    "testID": "\"customer-app-legal-consent-58\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/personvern')}"
+    },
+    "destination": "'https://kjappapp.no/personvern'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/legal-consent.tsx",
+    "line": 65,
+    "component": "Pressable",
+    "testID": "\"legal-consent-checkbox\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setAccepted((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/legal-consent.tsx",
+    "line": 82,
+    "component": "Button",
+    "testID": "\"legal-consent-submit\"",
+    "label": "\"Godta og fortsett\"",
+    "handlers": {
+      "onPress": "{submit}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{!accepted}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/legal-consent.tsx",
+    "line": 83,
+    "component": "Pressable",
+    "testID": "\"legal-consent-logout\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{signOut}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 113,
+    "component": "AppleSignInButton",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{appleSignIn}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{appleLoading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 114,
+    "component": "Pressable",
+    "testID": "\"login-google\"",
+    "label": "\"Fortsett med Google\"",
+    "handlers": {
+      "onPress": "{googleSignIn}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{gLoading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 138,
+    "component": "DesignField",
+    "testID": "\"login-email\"",
+    "label": "\"E-post\"",
+    "handlers": {
+      "onChangeText": "{setEmail}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 139,
+    "component": "DesignField",
+    "testID": "\"login-password\"",
+    "label": "\"Passord\"",
+    "handlers": {
+      "onChangeText": "{setPassword}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 140,
+    "component": "Pressable",
+    "testID": "\"login-toggle-password\"",
+    "label": "{show ? 'Skjul passord' : 'Vis passord'}",
+    "handlers": {
+      "onPress": "{() => setShow(v => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 144,
+    "component": "Button",
+    "testID": "\"login-submit\"",
+    "label": "\"Logg inn\"",
+    "handlers": {
+      "onPress": "{submit}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{loading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 145,
+    "component": "Pressable",
+    "testID": "\"login-forgot-password\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/forgot-password')}"
+    },
+    "destination": "'/forgot-password'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/login.tsx",
+    "line": 148,
+    "component": "Pressable",
+    "testID": "\"login-to-register\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/register')}"
+    },
+    "destination": "'/register'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/payment/cancel.tsx",
+    "line": 24,
+    "component": "Pressable",
+    "testID": "\"payment-cancel-back\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{back}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/payment/success.tsx",
+    "line": 73,
+    "component": "Pressable",
+    "testID": "\"payment-success-back\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace(tripId ? `/receipt/${tripId}` : '/(app)/home')}"
+    },
+    "destination": "tripId ? `/receipt/${tripId}` : '/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 96,
+    "component": "Pressable",
+    "testID": "\"pm-back\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{() => router.back()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 110,
+    "component": "Pressable",
+    "testID": "\"pm-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => refetch()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 137,
+    "component": "Pressable",
+    "testID": "{`pm-remove-${m.id}`}",
+    "label": "\"Fjern betalingsmåte\"",
+    "handlers": {
+      "onPress": "{() => remove(m.id)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 152,
+    "component": "Pressable",
+    "testID": "\"pm-stripe\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{addStripeCard}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/permissions.tsx",
+    "line": 47,
+    "component": "PermissionRow",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setLocationOn(v => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/permissions.tsx",
+    "line": 48,
+    "component": "PermissionRow",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setNotificationsOn(v => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/permissions.tsx",
+    "line": 53,
+    "component": "Pressable",
+    "testID": "\"permissions-continue\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{continueFlow}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/permissions.tsx",
+    "line": 71,
+    "component": "DesignToggle",
+    "testID": "MISSING (wrapper/input)",
+    "label": "{title}",
+    "handlers": {
+      "onChange": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/profile-setup.tsx",
+    "line": 41,
+    "component": "Pressable",
+    "testID": "{`setup-payment-${id}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/payment-methods')}"
+    },
+    "destination": "'/payment-methods'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/profile-setup.tsx",
+    "line": 48,
+    "component": "Pressable",
+    "testID": "{`setup-place-${label}`}",
+    "label": "{`Endre ${label}`}",
+    "handlers": {
+      "onPress": "{() => router.push({ pathname: '/saved-places', params: { label } })}"
+    },
+    "destination": "{ pathname: '/saved-places', params: { label } }",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/profile-setup.tsx",
+    "line": 55,
+    "component": "Button",
+    "testID": "\"setup-finish\"",
+    "label": "\"Fullfør\"",
+    "handlers": {
+      "onPress": "{() => router.replace('/(app)/home')}"
+    },
+    "destination": "'/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/profile-setup.tsx",
+    "line": 56,
+    "component": "Pressable",
+    "testID": "\"setup-skip\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/(app)/home')}"
+    },
+    "destination": "'/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 142,
+    "component": "Pressable",
+    "testID": "\"receipt-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{loadTrip}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 201,
+    "component": "Button",
+    "testID": "\"receipt-pay\"",
+    "label": "{`Betal ${kr(trip.price)} med kort`}",
+    "handlers": {
+      "onPress": "{pay}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{paying}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 202,
+    "component": "Pressable",
+    "testID": "\"receipt-check-payment\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{loadTrip}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{paying}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 225,
+    "component": "Pressable",
+    "testID": "{`rate-star-${n}`}",
+    "label": "{`${n} stjerner`}",
+    "handlers": {
+      "onPress": "{() => !rated && submitRating(n)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{rated}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 236,
+    "component": "Button",
+    "testID": "\"receipt-done\"",
+    "label": "\"Ferdig\"",
+    "handlers": {
+      "onPress": "{() => router.replace('/(app)/home')}"
+    },
+    "destination": "'/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 59,
+    "component": "Pressable",
+    "testID": "\"register-back\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{() => router.back()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 68,
+    "component": "Field",
+    "testID": "\"register-name\"",
+    "label": "\"FULLT NAVN\"",
+    "handlers": {
+      "onChangeText": "{setFullName}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 69,
+    "component": "Field",
+    "testID": "\"register-email\"",
+    "label": "\"E-POST\"",
+    "handlers": {
+      "onChangeText": "{setEmail}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 70,
+    "component": "Field",
+    "testID": "\"register-phone\"",
+    "label": "\"TELEFON\"",
+    "handlers": {
+      "onChangeText": "{setPhone}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 74,
+    "component": "TextInput",
+    "testID": "\"register-password\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setPassword}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 84,
+    "component": "Pressable",
+    "testID": "\"register-toggle-password\"",
+    "label": "{show ? 'Skjul passord' : 'Vis passord'}",
+    "handlers": {
+      "onPress": "{() => setShow((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 91,
+    "component": "Pressable",
+    "testID": "\"register-legal-consent\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setAcceptedTerms((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 94,
+    "component": "Text",
+    "testID": "\"register-terms-link\"",
+    "label": "vilkår",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/vilkar')}"
+    },
+    "destination": "'https://kjappapp.no/vilkar'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 94,
+    "component": "Text",
+    "testID": "\"register-privacy-link\"",
+    "label": "personvernerklæring",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/personvern')}"
+    },
+    "destination": "'https://kjappapp.no/personvern'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 100,
+    "component": "Pressable",
+    "testID": "\"register-submit\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{submit}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{!acceptedTerms || loading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/register.tsx",
+    "line": 106,
+    "component": "Pressable",
+    "testID": "\"register-to-login\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/login')}"
+    },
+    "destination": "'/login'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 50,
+    "component": "Pressable",
+    "testID": "\"customer-app-reset-password-token-50\"",
+    "label": "\"Til innlogging\"",
+    "handlers": {
+      "onPress": "{() => router.replace('/login')}"
+    },
+    "destination": "'/login'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 59,
+    "component": "Pressable",
+    "testID": "\"customer-app-reset-password-token-59\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/forgot-password')}"
+    },
+    "destination": "'/forgot-password'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 66,
+    "component": "TextInput",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setPassword}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 68,
+    "component": "TextInput",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setAgain}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 70,
+    "component": "Pressable",
+    "testID": "\"customer-app-reset-password-token-70\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{submit}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 80,
+    "component": "Pressable",
+    "testID": "\"customer-app-reset-password-token-80\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.replace('/login')}"
+    },
+    "destination": "'/login'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 94,
+    "component": "Pressable",
+    "testID": "\"places-back\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.back()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 102,
+    "component": "Pressable",
+    "testID": "\"places-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void refetch()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 113,
+    "component": "Pressable",
+    "testID": "{`place-edit-${p.id}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setEditingId(p.id); setTargetLabel(p.label); setAdding(true); setChosen(null); setQuery(''); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 114,
+    "component": "Pressable",
+    "testID": "{`place-remove-${p.id}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => remove(p.id)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 130,
+    "component": "TextInput",
+    "testID": "\"places-search-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setQuery}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 141,
+    "component": "Pressable",
+    "testID": "{`places-result-${i}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setChosen(r)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 153,
+    "component": "Pressable",
+    "testID": "{`places-label-${l.label}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => save(l.label, l.icon)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{saving}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 161,
+    "component": "Pressable",
+    "testID": "\"places-choose-back\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setChosen(null)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 167,
+    "component": "Pressable",
+    "testID": "\"places-add\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setEditingId(''); setTargetLabel(''); setAdding(true); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 93,
+    "component": "Pressable",
+    "testID": "\"settings-back\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{() => router.back()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 100,
+    "component": "Button",
+    "testID": "\"settings-retry\"",
+    "label": "\"Prøv igjen\"",
+    "handlers": {
+      "onPress": "{() => void loadSettings()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 113,
+    "component": "Switch",
+    "testID": "{`setting-${t.key}`}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onValueChange": "{() => toggle(t.key)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{saving}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 127,
+    "component": "Pressable",
+    "testID": "\"customer-app-settings-110\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/help')}"
+    },
+    "destination": "'https://kjappapp.no/help'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 130,
+    "component": "Pressable",
+    "testID": "\"customer-app-settings-113\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/personvern')}"
+    },
+    "destination": "'https://kjappapp.no/personvern'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 133,
+    "component": "Pressable",
+    "testID": "\"customer-app-settings-116\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => Linking.openURL('https://kjappapp.no/vilkar')}"
+    },
+    "destination": "'https://kjappapp.no/vilkar'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 140,
+    "component": "Pressable",
+    "testID": "\"gdpr-export\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{exportData}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{exporting}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 151,
+    "component": "Pressable",
+    "testID": "\"gdpr-delete-open\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setDeleteOpen(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 163,
+    "component": "TextInput",
+    "testID": "\"gdpr-delete-confirm-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setConfirmText}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 173,
+    "component": "Button",
+    "testID": "\"gdpr-delete-confirm\"",
+    "label": "\"Slett konto permanent\"",
+    "handlers": {
+      "onPress": "{deleteAccount}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{confirmText.trim().toUpperCase() !== 'SLETT'}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 182,
+    "component": "Pressable",
+    "testID": "\"gdpr-delete-cancel\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setDeleteOpen(false); setConfirmText(''); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/ActiveTripCard.tsx",
+    "line": 10,
+    "component": "Pressable",
+    "testID": "\"active-trip-reopen\"",
+    "label": "\"Åpne aktiv tur\"",
+    "handlers": {
+      "onPress": "{onOpen}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/AppleSignInButton.ios.tsx",
+    "line": 33,
+    "component": "AppleAuthentication.AppleAuthenticationButton",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/ChatSheet.tsx",
+    "line": 81,
+    "component": "Pressable",
+    "testID": "\"chat-close\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onClose}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/ChatSheet.tsx",
+    "line": 111,
+    "component": "TextInput",
+    "testID": "\"chat-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setText}",
+      "onSubmitEditing": "{send}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/ChatSheet.tsx",
+    "line": 121,
+    "component": "Pressable",
+    "testID": "\"chat-send\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{send}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{sending || !text.trim()}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 55,
+    "component": "Pressable",
+    "testID": "\"profile-photo-edit\"",
+    "label": "\"Endre profilbilde\"",
+    "handlers": {
+      "onPress": "{() => setChoosing(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 64,
+    "component": "Pressable",
+    "testID": "\"profile-photo-camera\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void change(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 65,
+    "component": "Pressable",
+    "testID": "\"profile-photo-gallery\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void change(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 66,
+    "component": "Pressable",
+    "testID": "\"profile-photo-delete\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void remove()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 67,
+    "component": "Pressable",
+    "testID": "\"profile-photo-cancel\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setChoosing(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 36,
+    "component": "Pressable",
+    "testID": "\"customer-src-components-CustomerProfileDetails-36\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{onBack}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 39,
+    "component": "Row",
+    "testID": "MISSING (wrapper/input)",
+    "label": "\"Nødkontakter\"",
+    "handlers": {
+      "onPress": "{onSupport}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 44,
+    "component": "Button",
+    "testID": "\"customer-src-components-CustomerProfileDetails-44\"",
+    "label": "\"Nødhjelp (112)\"",
+    "handlers": {
+      "onPress": "{() => void Linking.openURL('tel:112')}"
+    },
+    "destination": "'tel:112'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 55,
+    "component": "Row",
+    "testID": "\"privacy-export\"",
+    "label": "{exporting ? 'Henter data…' : 'Last ned mine data'}",
+    "handlers": {
+      "onPress": "{() => void exportData()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{exporting}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 56,
+    "component": "Row",
+    "testID": "MISSING (wrapper/input)",
+    "label": "\"Slett konto og data\"",
+    "handlers": {
+      "onPress": "{onDelete}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 59,
+    "component": "Text",
+    "testID": "\"customer-src-components-CustomerProfileDetails-59\"",
+    "label": "Les personvernerklæringen · kjappapp.no/personvern",
+    "handlers": {
+      "onPress": "{() => void Linking.openURL('https://kjappapp.no/personvern')}"
+    },
+    "destination": "'https://kjappapp.no/personvern'",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 61,
+    "component": "Row",
+    "testID": "MISSING (wrapper/input)",
+    "label": "\"Språk\"",
+    "handlers": {
+      "onPress": "{() => void Linking.openSettings()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 68,
+    "component": "Pressable",
+    "testID": "\"customer-src-components-CustomerProfileDetails-68\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void Linking.openSettings()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 74,
+    "component": "DesignToggle",
+    "testID": "MISSING (wrapper/input)",
+    "label": "{`${label}, ikke aktivert`}",
+    "handlers": {
+      "onChange": "{() => {}}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "true",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 76,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{disabled || !onPress}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 67,
+    "component": "Pressable",
+    "testID": "\"customer-src-components-CustomerSupport-67\"",
+    "label": "\"Tilbake\"",
+    "handlers": {
+      "onPress": "{onBack}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 72,
+    "component": "Pressable",
+    "testID": "\"customer-src-components-CustomerSupport-72\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void send(question)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 83,
+    "component": "TextInput",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setCode}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 84,
+    "component": "Pressable",
+    "testID": "\"customer-src-components-CustomerSupport-84\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setError('Kodeinnløsning er ikke aktivert ennå. Kontakt kundestøtte for hjelp med en kode.')}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 90,
+    "component": "TextInput",
+    "testID": "\"support-message-input\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onChangeText": "{setInput}",
+      "onSubmitEditing": "{() => void send()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 91,
+    "component": "Pressable",
+    "testID": "\"support-send\"",
+    "label": "\"Send til AI-assistent\"",
+    "handlers": {
+      "onPress": "{() => void send()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{busy || !input.trim()}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 95,
+    "component": "Pressable",
+    "testID": "\"support-escalate\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void escalate()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{busy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/DesignToggle.tsx",
+    "line": 16,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "{label}",
+    "handlers": {
+      "onPress": "{() => onChange(!value)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{disabled}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/FloatingTabBar.tsx",
+    "line": 55,
+    "component": "Pressable",
+    "testID": "{`tab-${route.name}`}",
+    "label": "{options.tabBarAccessibilityLabel || label}",
+    "handlers": {
+      "onPress": "{() => {\n            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });\n            if (!selected && !event.defaultPrevented) navigation.navigate(route.name, route.params);\n          }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/InteractiveMap.tsx",
+    "line": 318,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-in\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/InteractiveMap.tsx",
+    "line": 319,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-out\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/InteractiveMap.tsx",
+    "line": 320,
+    "component": "Ctrl",
+    "testID": "\"map-recenter\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{recenter}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/InteractiveMap.tsx",
+    "line": 330,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/MapboxMap.native.tsx",
+    "line": 157,
+    "component": "Pressable",
+    "testID": "\"map-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setMapError(false); setMapReady(false); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/MapboxMap.native.tsx",
+    "line": 282,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-in\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void zoomBy(1)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/MapboxMap.native.tsx",
+    "line": 283,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-out\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void zoomBy(-1)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/MapboxMap.native.tsx",
+    "line": 284,
+    "component": "Ctrl",
+    "testID": "\"map-recenter\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{recenter}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/MapboxMap.native.tsx",
+    "line": 292,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/RasterMap.tsx",
+    "line": 318,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-in\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/RasterMap.tsx",
+    "line": 319,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-out\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/RasterMap.tsx",
+    "line": 320,
+    "component": "Ctrl",
+    "testID": "\"map-recenter\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{recenter}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/RasterMap.tsx",
+    "line": 330,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/SplashArt.tsx",
+    "line": 62,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/TileMap.tsx",
+    "line": 256,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-in\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => Math.min(MAX_Z, z + 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/TileMap.tsx",
+    "line": 257,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-out\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => Math.max(MIN_Z, z - 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/TileMap.tsx",
+    "line": 258,
+    "component": "Ctrl",
+    "testID": "\"map-recenter\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{recenter}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/TileMap.tsx",
+    "line": 268,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/src/components/ui.tsx",
+    "line": 29,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{disabled || loading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  }
+]

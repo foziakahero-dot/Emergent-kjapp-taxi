@@ -26,9 +26,9 @@ const QUICK = ['Bestill taxi', 'Hva koster en tur?', 'Kundeservice'];
 const PRIMARY_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
 
 function vehicleCopy(type: string) {
-  if (type === 'trygg') return { name: 'KJAPP XL', tagline: 'Mer plass · 7 seter' };
+  if (type === 'trygg') return { name: 'SNAR XL', tagline: 'Mer plass · 7 seter' };
   if (type === 'premium') return { name: 'Premium', tagline: 'Executive comfort' };
-  return { name: 'KJAPP', tagline: 'Rask og enkel' };
+  return { name: 'SNAR', tagline: 'Rask og enkel' };
 }
 
 function hasFutureRideTime(text: string) {
@@ -139,7 +139,7 @@ export default function Assist() {
     if (hasFutureRideTime(originalText)) {
       add({
         role: 'assistant',
-        content: 'Planlagte turer er ikke aktivert i KJAPP-backenden ennå. Jeg bestiller derfor ikke denne som en tur nå. Du kan fortsatt be om en bil nå.',
+        content: 'Planlagte turer er ikke aktivert i SNAR-backenden ennå. Jeg bestiller derfor ikke denne som en tur nå. Du kan fortsatt be om en bil nå.',
       });
       setSending(false);
       return;
@@ -201,7 +201,7 @@ export default function Assist() {
       });
       setEstimate(est);
       setStep('category');
-      add({ role: 'assistant', content: `Ruten er ca. ${est.distance_km} km · ${est.duration_min} min. Prisene under kommer fra KJAPP.` });
+      add({ role: 'assistant', content: `Ruten er ca. ${est.distance_km} km · ${est.duration_min} min. Prisene under kommer fra SNAR.` });
     } catch (e) {
       add({ role: 'assistant', content: apiError(e) });
       setDropoff(null);
@@ -357,11 +357,11 @@ export default function Assist() {
           <Icon name="arrow-left" size={20} color={colors.text} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={s.eyebrow}>KJAPP ASSIST</Text>
+          <Text style={s.eyebrow}>SNAR ASSIST</Text>
           <Text style={s.title}>Bestill med tale eller tekst</Text>
         </View>
         {step !== 'chat' ? (
-          <Pressable
+          <Pressable testID="customer-app-app-assist-363"
             onPress={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }}
             style={s.cancel}
             accessibilityRole="button"
@@ -374,7 +374,7 @@ export default function Assist() {
       <View style={s.voiceStatus}>
         <View style={[s.voiceDot, recorderState.isRecording && s.voiceDotActive]} />
         <Text style={[s.voiceStatusText, recorderState.isRecording && { color: colors.accent }]}>{voiceLabel}</Text>
-        <Text style={s.voicePrivacy}>Pris og ETA kommer alltid fra KJAPP</Text>
+        <Text style={s.voicePrivacy}>Pris og ETA kommer alltid fra SNAR</Text>
       </View>
 
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={s.messages} keyboardShouldPersistTaps="handled">
@@ -385,7 +385,7 @@ export default function Assist() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.voiceTitle}>Si hvor du skal</Text>
-              <Text style={s.voiceBody}>For eksempel «Kjør meg til Gardermoen». KJAPP bruker posisjonen din som hentested og viser sikre stedstreff før pris og ETA.</Text>
+              <Text style={s.voiceBody}>For eksempel «Kjør meg til Gardermoen». SNAR bruker posisjonen din som hentested og viser sikre stedstreff før pris og ETA.</Text>
             </View>
           </View>
         ) : null}
@@ -394,7 +394,7 @@ export default function Assist() {
           {messages.map((m, i) => (
             <View key={`${m.role}-${i}`} style={s.transcriptRow}>
               <Text style={[s.transcriptRole, m.role === 'user' && { color: colors.textSecondary }]}>
-                {m.role === 'user' ? 'DU' : 'KJAPP'}
+                {m.role === 'user' ? 'DU' : 'SNAR'}
               </Text>
               <Text style={s.transcriptText}>{m.content}</Text>
             </View>
@@ -404,7 +404,7 @@ export default function Assist() {
         {step === 'chat' && messages.length <= 1 ? (
           <View style={s.quickWrap}>
             {QUICK.map((q) => (
-              <Pressable key={q} style={s.quick} onPress={() => send(q)}>
+              <Pressable testID="customer-app-app-assist-406" key={q} style={s.quick} onPress={() => send(q)}>
                 <Text style={s.quickText}>{q}</Text>
                 <Icon name="chevron-right" size={16} color={colors.textMuted} />
               </Pressable>
@@ -462,7 +462,7 @@ export default function Assist() {
             </View>
             <Text style={s.confirmHint}>Ingen tur opprettes før du trykker bekreft.</Text>
             <Pressable style={s.confirmBtn} onPress={confirm} disabled={sending} testID="assist-confirm">
-              {sending ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmBtnText}>Bekreft KJAPP</Text>}
+              {sending ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmBtnText}>Bekreft SNAR</Text>}
             </Pressable>
           </View>
         ) : null}

@@ -91,7 +91,7 @@ export default function Register() {
         <Pressable style={s.consentRow} onPress={() => setAcceptedTerms((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: acceptedTerms }} testID="register-legal-consent">
           <View style={[s.checkbox, acceptedTerms && s.checkboxOn]}><Text style={s.checkmark}>{acceptedTerms ? '✓' : ''}</Text></View>
           <Text style={s.consentText}>
-            Jeg godtar KJAPPs <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>vilkår</Text> og <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>personvernerklæring</Text>.
+            Jeg godtar SNARs <Text testID="register-terms-link" style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>vilkår</Text> og <Text testID="register-privacy-link" style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>personvernerklæring</Text>.
           </Text>
         </Pressable>
 

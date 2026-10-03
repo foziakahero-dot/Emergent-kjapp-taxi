@@ -1,3 +1,4 @@
+import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useReducedMotion } from '@/src/components/Motion';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
@@ -29,6 +30,7 @@ export default function BookingFlow() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
+  const [minimized, setMinimized] = useState(false);
   const [trip, setTrip] = useState<any>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -60,7 +62,11 @@ export default function BookingFlow() {
 
   useEffect(() => {
     let mounted = true;
+    let fetching = false;
+    nav.current = false;
     const fetchTrip = async () => {
+      if (fetching) return;
+      fetching = true;
       try {
         const t = await tripsApi.get(tripId!);
         if (!mounted) return;
@@ -74,7 +80,7 @@ export default function BookingFlow() {
         }
       } catch {
         if (mounted) setNetworkIssue(true);
-      }
+      } finally { fetching = false; }
     };
     fetchTrip();
     const i = setInterval(fetchTrip, 2500);
@@ -151,7 +157,7 @@ export default function BookingFlow() {
     try {
       const shared = await safetyApi.shareLink(tripId!);
       await safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
-      await Share.share({ title: 'Følg KJAPP-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
+      await Share.share({ title: 'Følg SNAR-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
     } catch {}
     finally { setSafetyBusy(false); }
   };
@@ -162,7 +168,7 @@ export default function BookingFlow() {
         <View style={s.loading} testID="booking-load-error">
           <View style={s.offlineIcon}><Icon name="crosshair" size={22} color={colors.accent} /></View>
           <Text style={s.loadErrorTitle}>Får ikke kontakt med turen</Text>
-          <Text style={s.loadErrorSub}>Sjekk nettet ditt. KJAPP gjør ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>
+          <Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gjør ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>
           <Pressable style={s.retryBtn} onPress={() => setRetryKey((v) => v + 1)} testID="booking-retry-load">
             <Text style={s.retryBtnText}>Prøv igjen</Text>
           </Pressable>
@@ -173,7 +179,7 @@ export default function BookingFlow() {
   }
 
   const meta = META[trip.status] || META.searching;
-  const route = trip.geometry?.coordinates || [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
+  const route = trip.geometry?.coordinates || null;
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
@@ -202,7 +208,11 @@ export default function BookingFlow() {
         testID="booking-map"
       />
 
-      {trip.status === 'searching' || trip.status === 'booking' ? (
+      {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
+      {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
+        <ActiveTripCard trip={trip} offline={networkIssue || !driverGpsFresh} onOpen={() => setMinimized(false)} />
+        <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
+      </View> : trip.status === 'searching' || trip.status === 'booking' ? (
         <View style={s.matchingOverlay} testID="matching-overlay">
           <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
           <View style={s.matchingCard}>
@@ -211,7 +221,7 @@ export default function BookingFlow() {
               <KjappMark size={40} />
             </View>
             <Text style={s.matchingTitle}>Finner din sjåfør…</Text>
-            <Text style={s.matchingSub}>Matcher med nærmeste ledige KJAPP-bil</Text>
+            <Text style={s.matchingSub}>Matcher med nærmeste ledige SNAR-bil</Text>
             <Pressable onPress={cancel} testID="searching-cancel" style={s.matchingCancel}>
               <Text style={s.matchingCancelText}>Avbryt søk</Text>
             </Pressable>
@@ -324,18 +334,18 @@ export default function BookingFlow() {
       )}
 
       <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
-        <Pressable style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
-          <Pressable style={s.safetySheet} onPress={() => {}}>
+        <Pressable testID="customer-app-booking-tripId-337" style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
+          <Pressable testID="customer-app-booking-tripId-338" style={s.safetySheet} onPress={() => {}}>
             <View style={s.safetyHead}>
               <View>
-                <Text style={s.safetyOverline}>KJAPP SIKKERHET</Text>
+                <Text style={s.safetyOverline}>SNAR SIKKERHET</Text>
                 <Text style={s.safetyTitle}>Hjelp på turen</Text>
               </View>
-              <Pressable onPress={() => setSafetyOpen(false)} disabled={safetyBusy} accessibilityLabel="Lukk sikkerhetsmeny">
+              <Pressable testID="customer-app-booking-tripId-344" onPress={() => setSafetyOpen(false)} disabled={safetyBusy} accessibilityLabel="Lukk sikkerhetsmeny">
                 <Icon name="x" size={20} color={colors.text} />
               </Pressable>
             </View>
-            <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. KJAPP-support erstatter ikke nødetatene.</Text>
+            <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. SNAR-support erstatter ikke nødetatene.</Text>
             <Pressable style={s.emergencyAction} onPress={callEmergency} disabled={safetyBusy} testID="safety-call-112">
               <Icon name="phone" size={18} color={colors.text} />
               <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Hendelsen logges også på turen</Text></View>
@@ -346,7 +356,7 @@ export default function BookingFlow() {
             </Pressable>
             <Pressable style={s.safetyAction} onPress={reportSafety} disabled={safetyBusy} testID="safety-report">
               <Icon name="flag" size={18} color={colors.accent} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til KJAPP</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til SNAR</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
             </Pressable>
           </Pressable>
         </Pressable>

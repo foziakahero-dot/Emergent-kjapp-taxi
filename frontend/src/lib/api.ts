@@ -28,6 +28,7 @@ export const authApi = {
   googleWebCode: (code: string, code_verifier: string, redirect_uri: string) =>
     api.post('/auth/google/code', { code, code_verifier, redirect_uri }).then((r) => r.data),
   nativeConfig: () => api.get('/auth/native/config', { params: { client: 'customer' } }).then((r) => r.data),
+  linkGoogle: (identity_token: string) => api.post('/auth/google/link', { identity_token, client: 'customer' }).then(r => r.data),
   nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
     api.post(`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }).then((r) => r.data),
   register: (data: any) => api.post('/auth/register', data).then((r) => r.data),
@@ -141,3 +142,16 @@ export const driverApi = {
   payouts: () => api.get('/driver/payouts').then((r) => r.data),
 };
 
+
+
+export const customerProfileApi = {
+  uploadPhoto: (form: FormData, progress: (percent: number) => void) => api.post('/me/profile-photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: event => { if (event.total) progress(Math.min(99, Math.round(event.loaded / event.total * 100))); },
+  }).then(r => { progress(100); return r.data; }),
+  deletePhoto: () => api.delete('/me/profile-photo').then(r => r.data),
+  photoSource: async (version: string) => {
+    const token = await storage.getItem(TOKEN_KEY);
+    return { uri: `${BACKEND}/api/me/profile-photo?v=${encodeURIComponent(version)}`, headers: token ? { Authorization: `Bearer ${token}` } : undefined };
+  },
+};

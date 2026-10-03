@@ -1,14 +1,17 @@
+import { CustomerPhoto } from '@/src/components/CustomerPhoto';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text, TextInput } from '@/src/components/Typography';
-import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { useAuth } from '@/src/context/AuthContext';
-import { gdprApi } from '@/src/lib/api';
+import { googleIdentity } from '@/src/lib/socialSignIn';
+import { apiError } from '@/src/lib/format';
+import { authApi, gdprApi } from '@/src/lib/api';
 import { CustomerSupport } from '@/src/components/CustomerSupport';
 import { CustomerProfileDetails, type ProfileDetail } from '@/src/components/CustomerProfileDetails';
 
@@ -16,13 +19,28 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const [view, setView] = useState<'menu' | 'help' | ProfileDetail>('menu');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const deleteLock = useRef(false);
   const [deleteError, setDeleteError] = useState('');
 
+  const googleLock = useRef(false);
+  const [googleError, setGoogleError] = useState('');
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const linkGoogle = async () => {
+    if (googleLock.current) return;
+    googleLock.current = true; setGoogleBusy(true); setGoogleError('');
+    try {
+      const identity = await googleIdentity(await authApi.nativeConfig());
+      if (!identity) return;
+      if (typeof identity !== 'string') throw new Error('Kontokobling må gjøres i mobilappen.');
+      await authApi.linkGoogle(identity); await refresh();
+    } catch (error) { setGoogleError(apiError(error)); }
+    finally { googleLock.current = false; setGoogleBusy(false); }
+  };
   const initials = (user?.fullName || user?.email || 'K')
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -36,7 +54,8 @@ export default function Profile() {
   ];
 
   const deleteAccount = async () => {
-    if (confirmText.trim().toUpperCase() !== 'SLETT') return;
+    if (deleteLock.current || confirmText.trim().toUpperCase() !== 'SLETT') return;
+    deleteLock.current = true;
     setDeleting(true);
     setDeleteError('');
     try {
@@ -46,7 +65,7 @@ export default function Profile() {
     } catch {
       setDeleteError('Kunne ikke slette kontoen akkurat nå. Prøv igjen.');
       setDeleting(false);
-    }
+    } finally { deleteLock.current = false; }
   };
 
   return (
@@ -60,14 +79,16 @@ export default function Profile() {
         <Text style={s.title}>Profil</Text>
 
         <View style={s.card} testID="profile-card">
-          <FigmaGradient angle={135} colors={['#FF3B3B', '#FF0000']} style={s.avatar}><Text style={s.avatarText}>{initials}</Text></FigmaGradient>
+          <CustomerPhoto initials={initials} />
           <View style={{ flex: 1 }}>
-            <Text style={s.name}>{user?.fullName || 'KJAPP-bruker'}</Text>
+            <Text style={s.name}>{user?.fullName || 'SNAR-bruker'}</Text>
             <Text style={s.email} numberOfLines={1}>{user?.phone || user?.email}</Text>
           </View>
         </View>
 
         <View style={s.menu}>
+          {Platform.OS !== 'web' ? <Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.menuRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable> : null}
+          {googleError ? <Text testID="profile-link-google-error" accessibilityRole="alert" style={{ color: colors.danger }}>{googleError}</Text> : null}
           {rows.map((r) => (
             <Pressable key={r.label} style={s.menuRow} onPress={r.onPress} testID={r.testID}>
               <View style={s.menuIcon}><Icon name={r.icon} size={20} color={colors.accent} /></View>

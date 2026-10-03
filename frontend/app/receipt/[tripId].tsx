@@ -1,5 +1,5 @@
 import { Text } from '@/src/components/Typography';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -98,8 +98,10 @@ export default function Receipt() {
     return latest?.payment_status === 'paid';
   };
 
+  const paymentLock = useRef(false);
   const pay = async () => {
-    if (!tripId || paying) return;
+    if (!tripId || paying || paymentLock.current) return;
+    paymentLock.current = true;
     setPaymentError('');
     setPaying(true);
     try {
@@ -125,6 +127,7 @@ export default function Receipt() {
     } catch (e) {
       setPaymentError(apiError(e));
     } finally {
+      paymentLock.current = false;
       setPaying(false);
     }
   };

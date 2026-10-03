@@ -1,0 +1,90 @@
+{
+  "uploaded_file": "Revolutionary AI Taxi App Design (3).zip",
+  "archive_sha256": "c4bd6782980232108f679792fb4c7ad8a68006513b9e0d6229e7a862676a42ee",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "b39f6ead09e39e9f6eb5a132342519fb7bf9c77ab14522f0da38edf9224c6b77"
+    },
+    {
+      "path": "package.json",
+      "sha256": "c9f8d8bbeb8559972fde20157d9e0e0bf6a8794d125994cd3105dc4b47bd16a1"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "3e0ed985ec3f3e50b1fc22544fc9a9f9204b280e627c9dbef986dd1c2a9e9c75"
+    },
+    {
+      "path": "src/apps/CustomerApp.tsx",
+      "sha256": "b629968e640d4c6bd9d36798006e5b17026154acca07a981e9dc738c6d1976cf"
+    },
+    {
+      "path": "src/apps/DriverApp.tsx",
+      "sha256": "ee8bc005dda953d27465b46b9d1abb00e5067d9022ecd47e5e766f6dcc2b7603"
+    },
+    {
+      "path": "src/components/AppIcons.tsx",
+      "sha256": "7df483cdd24410e44519e33604ee33801adc67bd272d248de842a735350778e2"
+    },
+    {
+      "path": "src/components/LiveMap.tsx",
+      "sha256": "756d8e92b2055e4e1194d3469532211ebcc37c04cbb264cfe03947ef231a64ca"
+    },
+    {
+      "path": "src/components/SnarMark.tsx",
+      "sha256": "b1703e22b863bd8a9a4aea5778723d8890cea9c1c804389a4c13680185bc1ef9"
+    },
+    {
+      "path": "src/components/TaskBar.tsx",
+      "sha256": "120ed95aa09bfa1561dd8e2a1a86becc76ef0019595dcd5d02d8d09f266cd423"
+    },
+    {
+      "path": "src/imports/image.png",
+      "sha256": "c04fe26b64859ce5808cd567a0575c45c5ab86236d7a6a777fddb9dc1f7fd14a"
+    },
+    {
+      "path": "src/imports/pasted_text/design-principles.md",
+      "sha256": "4f1e7fab5d77c3b7766206effb83a4db10ea8b5348b08d18ef8c6034cbff37ef"
+    },
+    {
+      "path": "src/imports/pasted_text/ride-hailing-app-design.md",
+      "sha256": "d93b52544ff676fe923ba8aae48a451001204ca36b2083ba8bb33d8bd113e695"
+    },
+    {
+      "path": "src/index.css",
+      "sha256": "e82e5513f136887f90627cab75b7bdde19db26a6269435693db9774c69125fc0"
+    },
+    {
+      "path": "src/lib/supabase.ts",
+      "sha256": "7f250b1dcab49ad57242ca23d6ba351af3cd74dc85d111575d08c67d70fac56f"
+    },
+    {
+      "path": "src/main.tsx",
+      "sha256": "2ec0bf17863a2e127c05072f12f133e97ba942027695401853e693dcdabfe180"
+    },
+    {
+      "path": "src/screens/AdminPanel.tsx",
+      "sha256": "379b6ca99589a0a2681762560ddb38a42c61074175984d8ad03876fdb65e6a99"
+    },
+    {
+      "path": "src/screens/IconStudio.tsx",
+      "sha256": "25afb781096702b8122879fb1b97a373937a998d2ee4e7e5c8541260b3da7700"
+    },
+    {
+      "path": "src/screens/Login.tsx",
+      "sha256": "40feeee4ada58c9f04f0164ab2511e66f16e3ac9f8a63e06bafed2e6d0d5cf53"
+    },
+    {
+      "path": "src/screens/LoginGateway.tsx",
+      "sha256": "b3b8c7d8cfee0cbe20ef4f11da4d12a8ccfae0201a00d5f54f6c0876a9b2f5ad"
+    },
+    {
+      "path": "src/screens/Splash.tsx",
+      "sha256": "4027d46f3c104a19f2201f13a6db7cf519cce43453bbfb6a083a3e17392ed2e4"
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+    }
+  ]
+}

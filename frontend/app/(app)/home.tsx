@@ -1,10 +1,11 @@
+import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { VehicleGlyph } from '@/src/components/VehicleGlyph';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Rise, Collapse } from '@/src/components/Motion';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -19,9 +20,9 @@ const OSLO = { lat: 59.9127, lng: 10.7461 };
 const GOLD_VEHICLE_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
 
 function vehicleCopy(type: string) {
-  if (type === 'trygg') return { name: 'KJAPP XL', tagline: 'Mer plass · 7 seter' };
+  if (type === 'trygg') return { name: 'SNAR XL', tagline: 'Mer plass · 7 seter' };
   if (type === 'premium') return { name: 'Premium', tagline: 'Executive comfort' };
-  return { name: 'KJAPP', tagline: 'Rask og enkel' };
+  return { name: 'SNAR', tagline: 'Rask og enkel' };
 }
 
 export default function Home() {
@@ -29,6 +30,9 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
 
+  const [activeTrip, setActiveTrip] = useState<any>(null);
+  const [activeTripOffline, setActiveTripOffline] = useState(false);
+  const [activeTripChecked, setActiveTripChecked] = useState(false);
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
   const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
   const [locDenied, setLocDenied] = useState(false);
@@ -38,6 +42,7 @@ export default function Home() {
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [estimate, setEstimate] = useState<any>(null);
   const [selType, setSelType] = useState('ai-first');
+  const bookingLock = useRef(false);
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -71,10 +76,24 @@ export default function Home() {
       let active = true;
       loadMethods();
       loadPlaces();
-      tripsApi.active().then((t) => {
-        if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
-      }).catch(() => {});
-      return () => { active = false; };
+      let fetching = false;
+      const recover = async () => {
+        if (fetching) return;
+        fetching = true;
+        try {
+          const t = await tripsApi.active();
+          if (active) {
+            setActiveTrip(t?.trip_id ? t : null);
+            setActiveTripOffline(false);
+            setActiveTripChecked(true);
+          }
+        } catch { if (active) setActiveTripOffline(true); }
+        finally { fetching = false; }
+      };
+      void recover();
+      const timer = setInterval(() => { if (AppState.currentState === 'active') void recover(); }, 2500);
+      const listener = AppState.addEventListener('change', state => { if (state === 'active') void recover(); });
+      return () => { active = false; clearInterval(timer); listener.remove(); };
     }, [loadMethods, loadPlaces, router]),
   );
 
@@ -116,19 +135,23 @@ export default function Home() {
       setCars([]);
       return () => { mounted = false; };
     }
-    const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
+    const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });
     load();
     const i = setInterval(load, 8000);
     return () => { mounted = false; clearInterval(i); };
   }, [locationReady, loc.lat, loc.lng]);
 
   useEffect(() => {
-    if (!dropoff || !locationReady) { setEstimate(null); return; }
+    let current = true;
+    setEstimate(null);
+    if (!dropoff || !locationReady) return;
     tripsApi.estimate({
       pickup_lat: loc.lat, pickup_lng: loc.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
       stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
-    }).then(setEstimate).catch(() => setEstimate(null));
+    }).then(result => { if (current) { setEstimate(result); setError(''); } })
+      .catch(error => { if (current) setError(apiError(error)); });
+    return () => { current = false; };
   }, [dropoff, locationReady, loc.lat, loc.lng, stops]);
 
   const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
@@ -144,9 +167,10 @@ export default function Home() {
   };
 
   const book = async () => {
+    if (bookingLock.current || activeTrip || !activeTripChecked || activeTripOffline) return;
     if (!dropoff) return;
     if (!locationReady) {
-      setError('KJAPP trenger en fersk posisjon før du kan bestille tur.');
+      setError('SNAR trenger en fersk posisjon før du kan bestille tur.');
       return;
     }
     if (!estimate || priceFor(selType) == null) {
@@ -159,6 +183,7 @@ export default function Home() {
       return;
     }
     setError('');
+    bookingLock.current = true;
     setBooking(true);
     try {
       const trip = await tripsApi.request({
@@ -187,17 +212,18 @@ export default function Home() {
         setError('Legg til et betalingskort før du bestiller.');
         setTimeout(() => router.push('/payment-methods'), 700);
       } else if (e?.response?.status === 409) {
-        setError('En bestilling behandles allerede. KJAPP sjekker den aktive turen automatisk.');
+        setError('En bestilling behandles allerede. SNAR sjekker den aktive turen automatisk.');
       } else {
         setError(apiError(e));
       }
     } finally {
+      bookingLock.current = false;
       setBooking(false);
     }
   };
 
   const routeGeom = estimate?.geometry?.coordinates;
-  const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
+  const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
   const selectedCopy = vehicleCopy(selType);
   const selectedPrice = priceFor(selType);
   const recommendations = featured.filter(place => place.name && place.lat != null && place.lng != null && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)));
@@ -208,14 +234,18 @@ export default function Home() {
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={locationReady ? loc : null}
-        pickup={dropoff && locationReady ? loc : null}
-        dropoff={dropoff}
-        route={routeGeom}
-        cars={dropoff ? [] : cars}
+        pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : dropoff && locationReady ? loc : null}
+        dropoff={activeTrip ? { lat: activeTrip.dropoff_lat, lng: activeTrip.dropoff_lng } : dropoff}
+        route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
+        cars={activeTrip || dropoff ? [] : cars}
+        activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
 
-      {!reviewing ? (
+      {activeTrip ? <View style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 16 }}>
+        <ActiveTripCard trip={activeTrip} offline={activeTripOffline} onOpen={() => router.push(activeTrip.status === 'arrived' ? `/receipt/${activeTrip.trip_id}` : `/booking/${activeTrip.trip_id}`)} />
+      </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
+      {!reviewing && !activeTrip ? (
         <>
           <View style={[s.searchBarWrap, { top: insets.top + 12 }]}>
             <Pressable
@@ -253,8 +283,8 @@ export default function Home() {
             <View style={{ overflow: 'hidden', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.98)', borderWidth: 1, borderColor: colors.line, boxShadow: '0 16px 40px rgba(11,14,20,0.18)' }} testID="home-recommendation">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14 }}>
                 <FigmaGradient angle={135} colors={['#FF3B3B', '#FF0000']} style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}><Icon name="sparkles" size={16} color="#FFFFFF" /></FigmaGradient>
-                <Text style={{ flex: 1, fontFamily: font.mono, fontSize: 10, letterSpacing: 2, color: colors.accent }}>KJAPP ANBEFALER</Text>
-                <Pressable onPress={() => setRecommendationOpen(false)} style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Lukk anbefaling"><Icon name="x" size={16} color={colors.textMuted} /></Pressable>
+                <Text style={{ flex: 1, fontFamily: font.mono, fontSize: 10, letterSpacing: 2, color: colors.accent }}>SNAR ANBEFALER</Text>
+                <Pressable testID="customer-app-app-home-287" onPress={() => setRecommendationOpen(false)} style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Lukk anbefaling"><Icon name="x" size={16} color={colors.textMuted} /></Pressable>
               </View>
               <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
                 <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 19.25 }}>{recommendation.description || 'Lyst til å dra et sted? Her er et forslag til din neste tur.'}</Text>
@@ -266,7 +296,7 @@ export default function Home() {
                   <Pressable style={{ flex: 1 }} onPress={() => { setDropoff({ name: recommendation.name, lat: Number(recommendation.lat), lng: Number(recommendation.lng) }); setRecommendationOpen(false); }} testID="recommendation-select">
                     <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={{ borderRadius: 999, paddingVertical: 10, alignItems: 'center' }}><Text style={{ fontSize: 14, fontFamily: font.semibold, color: '#FFFFFF' }}>Ta meg dit</Text></FigmaGradient>
                   </Pressable>
-                  <Pressable onPress={() => setRecommendationIndex(index => index + 1)} disabled={recommendations.length < 2} style={{ borderRadius: 999, borderWidth: 1, borderColor: colors.lineStrong, paddingHorizontal: 16, paddingVertical: 10, opacity: recommendations.length < 2 ? 0.55 : 1 }}><Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: font.semibold }}>Noe annet</Text></Pressable>
+                  <Pressable testID="customer-app-app-home-299" onPress={() => setRecommendationIndex(index => index + 1)} disabled={recommendations.length < 2} style={{ borderRadius: 999, borderWidth: 1, borderColor: colors.lineStrong, paddingHorizontal: 16, paddingVertical: 10, opacity: recommendations.length < 2 ? 0.55 : 1 }}><Text style={{ color: colors.textSecondary, fontSize: 14, fontFamily: font.semibold }}>Noe annet</Text></Pressable>
                 </View>
               </View>
             </View>
@@ -274,7 +304,7 @@ export default function Home() {
 
           {!dropoff ? (
             <View style={[s.browseSheet, { paddingBottom: insets.bottom + (sheetCollapsed ? 32 : 112) }]} testID="home-browse-sheet">
-              <Pressable
+              <Pressable testID="customer-app-app-home-307"
                 style={s.sheetHandleButton}
                 onPress={() => setSheetCollapsed((v) => !v)}
                 accessibilityRole="button"
@@ -283,7 +313,7 @@ export default function Home() {
                 <View style={s.handle} />
               </Pressable>
 
-              <Pressable style={s.sheetTitleRow} onPress={() => setSheetCollapsed((v) => !v)}>
+              <Pressable testID="customer-app-app-home-316" style={s.sheetTitleRow} onPress={() => setSheetCollapsed((v) => !v)}>
                 <Text style={s.sheetEyebrow}>NYLIG OG FAVORITTER</Text>
                 <Icon name={sheetCollapsed ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textMuted} />
               </Pressable>
@@ -310,18 +340,18 @@ export default function Home() {
                       </View>
                     </Pressable>
                   ))}
-                  <Pressable style={s.managePlaces} onPress={() => router.push('/saved-places')}>
+                  <Pressable testID="customer-app-app-home-343" style={s.managePlaces} onPress={() => router.push('/saved-places')}>
                     <Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />
                     <Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>
                   </Pressable>
                   {locDenied ? (
                     <View style={s.locationWarning} testID="home-location-required">
-                      <Text style={s.hint}>KJAPP trenger posisjonen din for korrekt hentested og biler i nærheten.</Text>
+                      <Text style={s.hint}>SNAR trenger posisjonen din for korrekt hentested og biler i nærheten.</Text>
                       <View style={s.locationActions}>
-                        <Pressable style={s.locationAction} onPress={() => void refreshLocation()}>
+                        <Pressable testID="customer-app-app-home-351" style={s.locationAction} onPress={() => void refreshLocation()}>
                           <Text style={s.locationActionText}>Prøv igjen</Text>
                         </Pressable>
-                        <Pressable style={s.locationAction} onPress={() => Linking.openSettings().catch(() => {})}>
+                        <Pressable testID="customer-app-app-home-354" style={s.locationAction} onPress={() => Linking.openSettings().catch(() => {})}>
                           <Text style={s.locationActionText}>Innstillinger</Text>
                         </Pressable>
                       </View>
@@ -332,7 +362,7 @@ export default function Home() {
             </View>
           ) : (
             <View style={[s.rideSheet, { paddingBottom: insets.bottom + 112 }]} testID="home-ride-sheet">
-              <Pressable style={s.sheetHandleButton} onPress={() => setSheetCollapsed((v) => !v)}>
+              <Pressable testID="customer-app-app-home-365" style={s.sheetHandleButton} onPress={() => setSheetCollapsed((v) => !v)}>
                 <View style={s.handle} />
               </Pressable>
 
@@ -365,12 +395,12 @@ export default function Home() {
                       accessibilityState={{ selected: active }}
                     >
                       <View style={[s.vehicleIconBox, active && s.vehicleIconBoxActive]}>
-                        <VehicleGlyph selected={active} />
+                        <VehicleGlyph selected={active} kind={v.type} />
                       </View>
                       <View style={s.vehicleInfo}>
                         <View style={s.vehicleNameRow}>
                           <Text style={s.vehicleName}>
-                            {v.type === 'ai-first' ? 'KJAPP Standard' : v.type === 'trygg' ? 'KJAPP Comfort' : 'KJAPP Premium'}
+                            {v.type === 'ai-first' ? 'SNAR' : v.type === 'trygg' ? 'SNAR XL' : 'Premium'}
                           </Text>
                           {v.type === 'ai-first' ? <Text style={s.vehicleBadge}>Mest valgt</Text> : null}
                         </View>
@@ -397,11 +427,11 @@ export default function Home() {
             </View>
           )}
         </>
-      ) : (
+      ) : !activeTrip ? (
         <View style={[s.reviewScreen, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 32 }]} testID="booking-review-screen">
           <FigmaGradient pointerEvents="none" angle={180} colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
           <View style={s.reviewHeader}>
-            <Pressable style={s.backButton} onPress={() => setReviewing(false)} accessibilityLabel="Tilbake til bilvalg">
+            <Pressable testID="customer-app-app-home-434" style={s.backButton} onPress={() => setReviewing(false)} accessibilityLabel="Tilbake til bilvalg">
               <Icon name="chevron-left" size={20} color={colors.text} />
             </Pressable>
             <Text style={s.reviewTitle}>Bekreft tur</Text>
@@ -459,7 +489,7 @@ export default function Home() {
             {booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}
           </Pressable>
         </View>
-      )}
+      ) : null}
 
       {searchOpen && !reviewing ? (
         <SearchSheet
@@ -525,11 +555,11 @@ function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
           {loading ? (
             <ActivityIndicator color={colors.accent} />
           ) : q ? (
-            <Pressable onPress={() => setQ('')} style={s.clearButton} accessibilityLabel="Tøm søk">
+            <Pressable testID="customer-app-app-home-557" onPress={() => setQ('')} style={s.clearButton} accessibilityLabel="Tøm søk">
               <Icon name="x" size={12} color={colors.accentOn} strokeWidth={2.4} />
             </Pressable>
           ) : (
-            <Pressable onPress={onVoice} style={s.voiceInline} accessibilityLabel="Bestill med stemmen">
+            <Pressable testID="customer-app-app-home-561" onPress={onVoice} style={s.voiceInline} accessibilityLabel="Bestill med stemmen">
               <Icon name="mic" size={18} color={colors.accent} />
             </Pressable>
           )}

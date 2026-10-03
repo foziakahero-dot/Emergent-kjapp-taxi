@@ -6,12 +6,13 @@ import { paymentApi } from './api';
 export async function payNative(tripId: string): Promise<boolean | null> {
   const config = await paymentApi.nativeConfig();
   if (!config.enabled) return null;
+  if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');
   const compiledMerchant = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || '';
   await initStripe({ publishableKey: config.publishable_key, urlScheme: 'kjapp',
     merchantIdentifier: compiledMerchant || undefined });
   const intent = await paymentApi.nativeIntent(tripId);
   const initialized = await initPaymentSheet({
-    merchantDisplayName: 'KJAPP', paymentIntentClientSecret: intent.client_secret,
+    merchantDisplayName: 'SNAR', paymentIntentClientSecret: intent.client_secret,
     returnURL: 'kjapp://payment/success', allowsDelayedPaymentMethods: false,
     applePay: compiledMerchant && compiledMerchant === config.apple_merchant_id
       ? { merchantCountryCode: 'NO' } : undefined,

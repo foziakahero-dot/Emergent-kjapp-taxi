@@ -13,7 +13,7 @@ import { colors, font } from '@/src/theme';
 type Message = { role: 'assistant' | 'user'; text: string };
 const FAQ = ['Hvordan fungerer fastpris?', 'Jeg glemte noe i bilen', 'Endre destinasjon underveis', 'Refusjon og klage på en tur'];
 
-/** Figma Support layout, with replies and ticket IDs supplied by KJAPP. */
+/** Figma Support layout, with replies and ticket IDs supplied by SNAR. */
 export function CustomerSupport({ onBack }: { onBack: () => void }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -22,7 +22,7 @@ export function CustomerSupport({ onBack }: { onBack: () => void }) {
   const active = useRef(true);
   const requestLock = useRef(false);
   const sessionId = useRef(`support_${user?.id || 'customer'}_${Date.now()}`).current;
-  const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', text: 'Hei! Jeg er KJAPP AI-assistent. Spør meg om det meste, eller velg et vanlig tema under. Trenger du et menneske, kan du sende en henvendelse.' }]);
+  const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', text: 'Hei! Jeg er SNAR AI-assistent. Spør meg om det meste, eller velg et vanlig tema under. Trenger du et menneske, kan du sende en henvendelse.' }]);
   const [input, setInput] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,12 +64,12 @@ export function CustomerSupport({ onBack }: { onBack: () => void }) {
   return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <FigmaGradient angle={180} colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
     <View style={[s.header, { paddingTop: insets.top + 56 }]}>
-      <Pressable style={s.back} onPress={onBack} accessibilityRole="button" accessibilityLabel="Tilbake"><Icon name="chevron-left" size={16} /></Pressable>
+      <Pressable testID="customer-src-components-CustomerSupport-67" style={s.back} onPress={onBack} accessibilityRole="button" accessibilityLabel="Tilbake"><Icon name="chevron-left" size={16} /></Pressable>
       <FigmaGradient angle={135} colors={['#FF3B3B', '#FF0000']} style={s.aiIcon}><Icon name="sparkles" size={16} color="#FFFFFF" /></FigmaGradient>
-      <View><Text style={s.title}>Kundestøtte</Text><Text style={s.status}>● KJAPP AI{busy ? ' · SVARER NÅ' : ''}</Text></View>
+      <View><Text style={s.title}>Kundestøtte</Text><Text style={s.status}>● SNAR AI{busy ? ' · SVARER NÅ' : ''}</Text></View>
     </View>
     <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }} onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: !reduced })}>
-      <View style={s.chips}>{FAQ.map(question => <Pressable key={question} onPress={() => void send(question)} disabled={busy} style={({ pressed }) => [s.chip, pressed && { transform: [{ scale: 0.95 }] }]}><Text style={{ fontSize: 12, fontFamily: font.medium, color: colors.textSecondary }}>{question}</Text></Pressable>)}</View>
+      <View style={s.chips}>{FAQ.map(question => <Pressable testID="customer-src-components-CustomerSupport-72" key={question} onPress={() => void send(question)} disabled={busy} style={({ pressed }) => [s.chip, pressed && { transform: [{ scale: 0.95 }] }]}><Text style={{ fontSize: 12, fontFamily: font.medium, color: colors.textSecondary }}>{question}</Text></Pressable>)}</View>
       <View style={{ gap: 10 }}>
         {messages.map((message, index) => <View key={index} style={{ alignItems: message.role === 'user' ? 'flex-end' : 'flex-start' }}>
           {message.role === 'user' ? <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={[s.message, { borderBottomRightRadius: 6 }]}><Text style={[s.messageText, { color: '#FFFFFF' }]}>{message.text}</Text></FigmaGradient> : <View style={[s.message, s.assistant]}><Text style={s.messageText}>{message.text}</Text></View>}
@@ -81,7 +81,7 @@ export function CustomerSupport({ onBack }: { onBack: () => void }) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Icon name="gift" size={16} color={colors.accent} /><Text style={{ fontSize: 14, fontFamily: font.semibold }}>Kode eller reward</Text></View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <TextInput value={code} onChangeText={setCode} placeholder="F.eks. VENN50" placeholderTextColor={colors.textMuted} autoCapitalize="characters" style={s.codeInput} />
-          <Pressable style={s.redeem} onPress={() => setError('Kodeinnløsning er ikke aktivert ennå. Kontakt kundestøtte for hjelp med en kode.')} accessibilityRole="button"><Text style={{ color: '#FFFFFF', fontFamily: font.semibold, fontSize: 14 }}>Løs inn</Text></Pressable>
+          <Pressable testID="customer-src-components-CustomerSupport-84" style={s.redeem} onPress={() => setError('Kodeinnløsning er ikke aktivert ennå. Kontakt kundestøtte for hjelp med en kode.')} accessibilityRole="button"><Text style={{ color: '#FFFFFF', fontFamily: font.semibold, fontSize: 14 }}>Løs inn</Text></Pressable>
         </View>
       </View>
     </ScrollView>

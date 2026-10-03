@@ -15,7 +15,7 @@
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med SNAR Assist og bestille taxi.",
         "ITSAppUsesNonExemptEncryption": false,
         "MGLMapboxMetricsEnabledSettingShownInApp": true,
-        "NSCameraUsageDescription": "SNAR bruker kameraet når du velger å skanne et betalingskort for å betale for taxiturer."
+        "NSCameraUsageDescription": "Ta et profilbilde eller skann betalingskort i SNAR."
       },
       "usesAppleSignIn": true
     },
@@ -75,6 +75,13 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 104,
           "backgroundColor": "#F4F6FA"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Velg et profilbilde i SNAR.",
+          "cameraPermission": "Ta et profilbilde i SNAR."
         }
       ]
     ],

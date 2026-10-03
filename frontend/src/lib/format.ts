@@ -30,9 +30,9 @@ export const VEHICLES: {
   tagline: string;
   seats: number;
 }[] = [
-  { type: 'ai-first', name: 'KJAPP', tagline: 'Rask og enkel', seats: 4 },
-  { type: 'enkelt', name: 'KJAPP', tagline: 'Rask og enkel', seats: 4 },
-  { type: 'trygg', name: 'KJAPP XL', tagline: 'Mer plass · 7 seter', seats: 7 },
+  { type: 'ai-first', name: 'SNAR', tagline: 'Rask og enkel', seats: 4 },
+  { type: 'enkelt', name: 'SNAR', tagline: 'Rask og enkel', seats: 4 },
+  { type: 'trygg', name: 'SNAR XL', tagline: 'Mer plass · 7 seter', seats: 7 },
   { type: 'premium', name: 'Premium', tagline: 'Executive comfort', seats: 4 },
 ];
 

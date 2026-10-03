@@ -2,7 +2,7 @@ import React from 'react';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { colors as theme } from '@/src/theme';
 
-// KJAPP icon system — Lucide-style 24x24 strokes with a consistent optical grid.
+// SNAR icon system — Lucide-style 24x24 strokes with a consistent optical grid.
 type IconName =
   | 'menu' | 'search' | 'x' | 'map-pin' | 'navigation' | 'star' | 'phone'
   | 'message' | 'shield' | 'car' | 'user' | 'settings' | 'clock' | 'chevron-right'

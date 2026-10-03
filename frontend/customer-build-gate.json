@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-04 Europe/Oslo",
+  "customerBuildAuthorized": false,
+  "checks": {
+    "typescript": "PASS",
+    "expoDoctor": "PASS",
+    "androidPrebuild": "PASS",
+    "iosPrebuild": "PASS",
+    "componentTests": "PASS",
+    "backendFocusedTests": "PASS",
+    "apiContract": "FAIL",
+    "figmaParity": "PARTIAL",
+    "customerE2E": "PARTIAL",
+    "mapboxNativeRuntime": "UNVERIFIED",
+    "googleNativeLogin": "BLOCKED",
+    "appleNativeLogin": "UNVERIFIED",
+    "stripeTestPayment": "BLOCKED",
+    "googlePay": "BLOCKED",
+    "applePay": "BLOCKED",
+    "pushOnDevice": "UNVERIFIED",
+    "androidNativeCompile": "UNVERIFIED",
+    "iosNativeCompile": "UNVERIFIED",
+    "legacyRegressionSuite": "FAIL"
+  },
+  "p0": [
+    "Google OAuth configuration missing in live API",
+    "Stripe matching test keys/native activation missing",
+    "Mapbox public runtime token/native map unverified",
+    "Reset/receipt email sender missing",
+    "Physical Customer state-machine/payment/device acceptance not completed"
+  ],
+  "p1": [
+    "Figma pixel parity and realistic category renders not complete",
+    "Available legacy suite is not green (11 baseline/current failures); fixture/harness review required",
+    "Apple Merchant capability, native payment callbacks and FCM/APNs not physically verified"
+  ]
+}

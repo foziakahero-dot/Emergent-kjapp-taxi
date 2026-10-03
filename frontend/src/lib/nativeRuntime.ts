@@ -26,7 +26,7 @@ export async function registerNativePush() {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('kjapp_trips', {
-      name: 'KJAPP turer',
+      name: 'SNAR turer',
       description: 'Oppdateringer om bestilling, sjåfør og tur.',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 220, 160, 220],
