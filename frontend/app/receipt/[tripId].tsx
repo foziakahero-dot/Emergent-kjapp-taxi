@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -153,127 +154,115 @@ export default function Receipt() {
     : 'Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.';
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-      <View style={[s.header, { paddingTop: insets.top + 20 }]}>
-        <View style={[s.checkCircle, !isPaid && s.pendingCircle]}>
-          <Icon name={isPaid ? 'check' : 'card'} size={34} color={isPaid ? colors.accentOn : colors.accent} />
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      contentContainerStyle={[s.screen, { paddingTop: insets.top + 22, paddingBottom: insets.bottom + 24 }]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={s.receiptHeader}>
+        <View style={[s.statusCheck, !isPaid && s.pendingCircle]}>
+          <Icon name={isPaid ? 'check' : 'card'} size={20} color={isPaid ? colors.accentOn : colors.accent} />
         </View>
-        <Text style={s.title}>Takk for turen</Text>
-        <Text style={s.price}>{kr(trip.price)}</Text>
-        <Text style={[s.paymentStatus, { color: isPaid ? colors.success : colors.warning }]} testID="receipt-payment-status">
-          {paymentLabel}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.receiptEyebrow, { color: isPaid ? colors.online : colors.warning }]}>
+            {isPaid ? 'BETALT AUTOMATISK' : paymentLabel.toUpperCase()}
+          </Text>
+          <Text style={s.receiptTitle}>Takk for turen!</Text>
+        </View>
       </View>
 
-      <View style={s.body}>
-        <View style={s.card}>
-          <Row label="Fra" value={trip.pickup_address} />
-          <View style={s.sep} />
-          <Row label="Til" value={trip.dropoff_address} />
-          <View style={s.sep} />
-          <Row label="Avstand" value={`${trip.distance_km} km`} />
-          <View style={s.sep} />
-          <Row label="Varighet" value={`${trip.duration_min} min`} />
-          <View style={s.sep} />
-          <Row label="Kjøretøy" value={v.name} />
-          {trip.receipt_id ? (
-            <>
-              <View style={s.sep} />
-              <Row label="Kvittering" value={trip.receipt_id} />
-            </>
-          ) : null}
+      <View style={s.fareCard}>
+        <View style={s.fareRow}><Text style={s.fareLabel}>Avstand</Text><Text style={s.fareValue}>{trip.distance_km} km</Text></View>
+        <View style={s.fareRow}><Text style={s.fareLabel}>Varighet</Text><Text style={s.fareValue}>{trip.duration_min} min</Text></View>
+        <View style={s.fareRow}><Text style={s.fareLabel}>Kjøretøy</Text><Text style={s.fareValue}>{v.name}</Text></View>
+        {trip.receipt_id ? <View style={s.fareRow}><Text style={s.fareLabel}>Kvittering</Text><Text style={s.fareValue} numberOfLines={1}>{trip.receipt_id}</Text></View> : null}
+        <View style={s.totalRow}>
+          <Text style={s.totalLabel}>Totalt</Text>
+          <Text style={s.totalValue}>{kr(trip.price)}</Text>
         </View>
+        <View style={s.paymentFoot}>
+          <Icon name="card" size={15} color={colors.textSecondary} />
+          <Text style={s.paymentFootText}>{isPaid ? 'Betaling registrert' : paymentLabel}</Text>
+        </View>
+      </View>
 
-        {!isPaid ? (
-          <View style={[s.card, s.paymentCard]}>
-            <View style={s.paymentHead}>
-              <View style={s.paymentIcon}><Icon name="lock" size={18} color={colors.accent} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.paymentTitle}>Betal turen sikkert</Text>
-                <Text style={s.paymentSub}>{paymentHint}</Text>
-              </View>
+      {!isPaid ? (
+        <View style={s.paymentCard}>
+          <View style={s.paymentHead}>
+            <View style={s.paymentIcon}><Icon name="lock" size={18} color={colors.accent} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.paymentTitle}>Betal turen sikkert</Text>
+              <Text style={s.paymentSub}>{paymentHint}</Text>
             </View>
-            <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} />
-            <Pressable onPress={loadTrip} disabled={paying} style={s.refreshPayment} testID="receipt-check-payment">
-              <Icon name="history" size={15} color={colors.textSecondary} />
-              <Text style={s.refreshText}>Sjekk betaling</Text>
-            </Pressable>
-            {paymentError ? <Text style={s.paymentError}>{paymentError}</Text> : null}
+          </View>
+          <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} />
+          <Pressable onPress={loadTrip} disabled={paying} style={s.refreshPayment} testID="receipt-check-payment">
+            <Icon name="history" size={15} color={colors.textSecondary} />
+            <Text style={s.refreshText}>Sjekk betaling</Text>
+          </Pressable>
+          {paymentError ? <Text style={s.paymentError}>{paymentError}</Text> : null}
+        </View>
+      ) : null}
+
+      <View style={s.ratingCard}>
+        {trip.driver ? (
+          <View style={s.driverRow}>
+            <View style={s.driverAvatar}>
+              <Text style={s.driverAvatarText}>{String(trip.driver.name || 'K').slice(0, 1).toUpperCase()}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.driverName}>{trip.driver.name}</Text>
+              <Text style={s.driverCar}>{trip.driver.car} · {trip.driver.plate}</Text>
+            </View>
+          </View>
+        ) : null}
+        <Text style={s.ratingPrompt}>{rated ? 'Takk for vurderingen!' : 'Hvordan var turen?'}</Text>
+        {isPaid ? (
+          <View style={s.stars}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
+                <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
+              </Pressable>
+            ))}
           </View>
         ) : (
-          <View style={[s.card, s.paidCard]} testID="receipt-paid-banner">
-            <View style={s.paidIcon}><Icon name="check" size={18} color={colors.bg} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.paidTitle}>Betaling fullført</Text>
-              <Text style={s.paidSub}>Kvitteringen er registrert på turen.</Text>
-            </View>
-          </View>
+          <Text style={s.ratingLocked}>Vurdering åpnes når betalingen er bekreftet.</Text>
         )}
-
-        {trip.driver ? (
-          <View style={[s.card, { marginTop: 16 }]}>
-            <Text style={s.overline}>DIN SJÅFØR</Text>
-            <Text style={s.driverName}>{trip.driver.name}</Text>
-            <Text style={s.driverCar}>{trip.driver.car} · {trip.driver.plate}</Text>
-          </View>
-        ) : null}
-
-        <View style={[s.card, { marginTop: 16, alignItems: 'center' }]}>
-          <Text style={s.overline}>{rated ? 'DIN VURDERING' : 'VURDER TUREN'}</Text>
-          {isPaid ? (
-            <>
-              <View style={s.stars}>
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
-                    <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
-                  </Pressable>
-                ))}
-              </View>
-              {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
-            </>
-          ) : (
-            <Text style={s.thanks}>Vurdering åpnes når betalingen er bekreftet.</Text>
-          )}
-        </View>
-
-        {isPaid ? (
-          <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
-        ) : null}
       </View>
-    </ScrollView>
-  );
-}
 
-function Row({ label, value }: { label: string; value: string }) {
-  const s = useStyles();
-  return (
-    <View style={s.row}>
-      <Text style={s.rowLabel}>{label}</Text>
-      <Text style={s.rowValue} numberOfLines={1}>{value}</Text>
-    </View>
+      {isPaid ? (
+        <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 22 }} />
+      ) : null}
+    </ScrollView>
   );
 }
 
 const useStyles = makeStyles((c) => ({
   loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   loadErrorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  loadErrorTitle: { color: c.text, fontFamily: font.display, fontSize: 20, marginTop: 16, textAlign: 'center' },
+  loadErrorTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 16, textAlign: 'center' },
   loadErrorSub: { color: c.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 },
-  retryBtn: { minHeight: 50, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
+  retryBtn: { minHeight: 50, borderRadius: 25, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
   retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
-  header: { alignItems: 'center', paddingBottom: 28 },
-  checkCircle: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+
+  screen: { paddingHorizontal: 28, backgroundColor: c.bg },
+  receiptHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statusCheck: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.online },
   pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
-  title: { color: c.text, fontFamily: font.display, fontSize: 24 },
-  price: { color: c.accent, fontFamily: font.mono, fontSize: 38, marginTop: 8 },
-  paymentStatus: { color: c.text, fontFamily: font.bold, fontSize: 11, letterSpacing: 1.2, marginTop: 5 },
-  body: { paddingHorizontal: 20 },
-  card: { backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
-  rowLabel: { color: c.textMuted, fontSize: 13 },
-  rowValue: { color: c.text, fontFamily: font.medium, fontSize: 14, flex: 1, textAlign: 'right' },
-  sep: { height: 1, backgroundColor: c.line, marginVertical: 12 },
-  paymentCard: { marginTop: 16, borderColor: c.line },
+  receiptEyebrow: { fontFamily: font.mono, fontSize: 10, letterSpacing: 1.4 },
+  receiptTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 2 },
+
+  fareCard: { marginTop: 24, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  fareRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  fareLabel: { color: c.textSecondary, fontSize: 14 },
+  fareValue: { maxWidth: '58%', color: c.text, fontFamily: font.medium, fontSize: 14, textAlign: 'right' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.line },
+  totalLabel: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
+  totalValue: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
+  paymentFoot: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10 },
+  paymentFootText: { color: c.textSecondary, fontSize: 12 },
+
+  paymentCard: { marginTop: 16, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18, backgroundColor: c.surface },
   paymentHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   paymentIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   paymentTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
@@ -281,14 +270,17 @@ const useStyles = makeStyles((c) => ({
   refreshPayment: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 6 },
   refreshText: { color: c.textSecondary, fontSize: 13 },
   paymentError: { color: c.danger, fontSize: 12, lineHeight: 17, marginTop: 4, textAlign: 'center' },
-  paidCard: { marginTop: 16, backgroundColor: c.onlineSoft, flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: c.line },
-  paidIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
-  paidTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
-  paidSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
-  overline: { color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 1.7 },
-  driverName: { color: c.text, fontFamily: font.semibold, fontSize: 16, marginTop: 6 },
-  driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
-  stars: { flexDirection: 'row', gap: 4, marginTop: 10 },
+
+  ratingCard: { marginTop: 22, alignItems: 'center', borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  driverRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  driverAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
+  driverAvatarText: { color: c.accentOn, fontFamily: font.bold, fontSize: 18 },
+  driverName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  driverCar: { color: c.textSecondary, fontFamily: font.mono, fontSize: 10.5, marginTop: 3 },
+  ratingPrompt: { color: c.text, fontFamily: font.medium, fontSize: 14, marginTop: 16 },
+  stars: { flexDirection: 'row', justifyContent: 'center', gap: 2, marginTop: 10 },
   starHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  thanks: { color: c.text, fontSize: 13, marginTop: 8 },
+  ratingLocked: { color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center' },
 }));
+
+

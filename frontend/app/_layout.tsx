@@ -1,3 +1,4 @@
+import { useReducedMotion } from '@/src/components/Motion';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -64,6 +65,7 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded] = useFonts(FONT_ASSETS);
   useEffect(() => installClientErrorMonitor(), []);
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
@@ -84,6 +86,8 @@ export default function RootLayout() {
             >
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
+              <Stack.Screen name="permissions" />
+              <Stack.Screen name="profile-setup" />
               <Stack.Screen name="register" />
               <Stack.Screen name="forgot-password" />
               <Stack.Screen name="reset-password/[token]" />
@@ -101,3 +105,4 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+

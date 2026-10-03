@@ -1,22 +1,18 @@
+import { GoogleIcon } from '@/src/components/SocialIcons';
+import { DesignField } from '@/src/components/DesignField';
+import { Rise } from '@/src/components/Motion';
+import { Button } from '@/src/components/ui';
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
-import { Button } from '@/src/components/ui';
 import { AppleSignInButton } from '@/src/components/AppleSignInButton';
-import { BrandBadge } from '@/src/components/BrandBadge';
+import { KjappMark } from '@/src/components/KjappMark';
 import { apiError } from '@/src/lib/format';
+import { FigmaGradient as LinearGradient } from '@/src/components/FigmaGradient';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
@@ -98,30 +94,22 @@ export default function Login() {
       style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={s.bgGradient} pointerEvents="none" />
       <ScrollView
         contentContainerStyle={[
           s.wrap,
-          { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 24 },
+          { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 40 },
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={s.back}
-          testID="login-back"
-          accessibilityRole="button"
-          accessibilityLabel="Tilbake"
-        >
-          <Text style={s.backText}>←</Text>
-        </Pressable>
 
-        <View style={s.brandBlock}>
-          <BrandBadge size={64} />
+        <Rise style={s.brandBlock}>
+          <KjappMark size={64} float />
           <Text style={s.title}>Velkommen til KJAPP</Text>
           <Text style={s.sub}>Bestill. Følg. Betal.</Text>
-        </View>
+        </Rise>
 
-        <View style={s.socialButtons}>
+        <Rise delay={60} style={s.socialButtons}>
           <AppleSignInButton loading={appleLoading} onPress={appleSignIn} />
           <Pressable
             style={s.googleBtn}
@@ -133,92 +121,29 @@ export default function Login() {
           >
             {gLoading ? <ActivityIndicator color={colors.text} /> : (
               <>
-                <Text style={s.googleG}>G</Text>
+                <GoogleIcon />
                 <Text style={s.googleText}>Fortsett med Google</Text>
               </>
             )}
           </Pressable>
-        </View>
+        </Rise>
 
-        <View style={s.dividerRow}>
+        <Rise delay={100} style={s.dividerRow}>
           <View style={s.divLine} />
           <Text style={s.divText}>ELLER</Text>
           <View style={s.divLine} />
-        </View>
+        </Rise>
 
-        <View style={s.form}>
-          <View style={s.field}>
-            <Text style={s.fieldPrefix}>@</Text>
-            <TextInput
-              testID="login-email"
-              placeholder="E-post"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              autoComplete="email"
-            />
-          </View>
-
-          <View style={s.field}>
-            <Text style={s.fieldPrefix}>•</Text>
-            <TextInput
-              testID="login-password"
-              placeholder="Passord"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              secureTextEntry={!show}
-              value={password}
-              onChangeText={setPassword}
-              autoComplete="current-password"
-            />
-            <Pressable
-              onPress={() => setShow((v) => !v)}
-              testID="login-toggle-password"
-              style={s.fieldAction}
-              accessibilityRole="button"
-              accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}
-            >
-              <Text style={s.fieldActionText}>{show ? 'SKJUL' : 'VIS'}</Text>
-            </Pressable>
-          </View>
-
-          <Pressable
-            onPress={() => router.push('/forgot-password')}
-            style={s.forgot}
-            testID="login-forgot-password"
-          >
-            <Text style={s.forgotText}>Glemt passord?</Text>
-          </Pressable>
-
-          {error ? (
-            <Text style={s.error} testID="login-error">
-              {error}
-            </Text>
-          ) : null}
-
-          <Button
-            label="Logg inn"
-            onPress={submit}
-            loading={loading}
-            testID="login-submit"
-            style={{ marginTop: 2 }}
-          />
-        </View>
-
-        <View style={s.trustRow}>
-          <View style={s.trustItem}>
-            <Text style={s.trustMark}>✓</Text>
-            <Text style={s.trustText}>Trygg konto</Text>
-          </View>
-          <View style={s.trustDivider} />
-          <View style={s.trustItem}>
-            <Text style={s.trustMark}>✓</Text>
-            <Text style={s.trustText}>Sikker betaling</Text>
-          </View>
-        </View>
+        <Rise delay={140} style={s.form}>
+          <DesignField label="E-post" testID="login-email" placeholder="deg@epost.no" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} autoComplete="email" />
+          <DesignField label="Passord" testID="login-password" placeholder="••••••••" secureTextEntry={!show} value={password} onChangeText={setPassword} autoComplete="current-password"
+            action={<Pressable onPress={() => setShow(v => !v)} testID="login-toggle-password" style={s.fieldAction} accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}><Text style={s.fieldActionText}>{show ? 'SKJUL' : 'VIS'}</Text></Pressable>} />
+        </Rise>
+        <Rise delay={180} style={{ marginTop: 28, gap: 16 }}>
+          {error ? <Text style={s.error} testID="login-error">{error}</Text> : null}
+          <Button label="Logg inn" onPress={submit} loading={loading} testID="login-submit" />
+          <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="login-forgot-password"><Text style={s.forgotText}>Glemt passord?</Text></Pressable>
+        </Rise>
 
         <Pressable
           onPress={() => router.push('/register')}
@@ -235,72 +160,36 @@ export default function Login() {
 }
 
 const useStyles = makeStyles((c) => ({
-  wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.bg },
-  back: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.cardSubtle,
-    borderWidth: 1,
-    borderColor: c.line,
-    marginBottom: 28,
-  },
-  backText: { color: c.text, fontSize: 26, lineHeight: 28, fontFamily: font.medium },
-  brandBlock: { alignItems: 'center', marginBottom: 34 },
-  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 24, textAlign: 'center' },
-  sub: { color: c.textSecondary, fontFamily: font.body, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: 'center' },
-  socialButtons: { gap: 12 },
-  form: { gap: 12 },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: c.card,
-    borderWidth: 1,
-    borderColor: c.lineStrong,
-    borderRadius: 18,
-    paddingLeft: 16,
-    paddingRight: 6,
-    height: 56,
-  },
-  fieldPrefix: { width: 18, textAlign: 'center', color: c.textMuted, fontFamily: font.bold, fontSize: 16 },
-  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
-  fieldAction: { minWidth: 48, height: 44, alignItems: 'center', justifyContent: 'center' },
-  fieldActionText: { color: c.textMuted, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.7 },
-  forgot: { minHeight: 32, alignSelf: 'flex-end', justifyContent: 'center', paddingHorizontal: 2 },
-  forgotText: { color: c.accent, fontFamily: font.semibold, fontSize: 13 },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 18 },
-  divLine: { flex: 1, height: 1, backgroundColor: c.line },
-  divText: { color: c.textMuted, fontSize: 12 },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    height: 54,
-    borderRadius: 28,
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.lineStrong,
-  },
-  googleG: { color: '#4285F4', fontFamily: font.bold, fontSize: 20 },
-  googleText: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
-  trustRow: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    gap: 12,
-  },
-  trustItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  trustMark: { color: c.accent, fontFamily: font.bold, fontSize: 13 },
-  trustText: { color: c.textMuted, fontSize: 11 },
-  trustDivider: { width: 1, height: 16, backgroundColor: c.line },
-  footer: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
-  footerText: { color: c.textSecondary, fontSize: 14 },
-  footerLink: { color: c.accent, fontFamily: font.semibold },
+    bgGradient: { ...StyleSheet.absoluteFill },
+    wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
+    brandBlock: { alignItems: 'center', marginBottom: 36 },
+    title: { fontFamily: font.semibold, fontSize: 30, lineHeight: 36, color: c.text, marginTop: 24, textAlign: 'center', letterSpacing: -0.7 },
+    sub: { color: c.textSecondary, fontFamily: font.body, fontSize: 14, lineHeight: 20, marginTop: 4, textAlign: 'center' },
+    socialButtons: { gap: 12 },
+    form: { gap: 16 },
+    fieldAction: { minWidth: 48, height: 44, alignItems: 'center', justifyContent: 'center' },
+    fieldActionText: { color: c.textMuted, fontFamily: font.bold, fontSize: 10, letterSpacing: 0.7 },
+    forgot: { minHeight: 20, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: 2 },
+    forgotText: { color: c.accent, fontFamily: font.medium, fontSize: 14, lineHeight: 20 },
+    error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+    dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 },
+    divLine: { flex: 1, height: 1, backgroundColor: c.line },
+    divText: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, lineHeight: 15, letterSpacing: 1 },
+    googleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        height: 50,
+        borderRadius: 28,
+        backgroundColor: c.surface,
+        borderWidth: 1,
+        borderColor: c.lineStrong,
+    },
+    googleText: { color: c.text, fontFamily: font.semibold, fontSize: 14, lineHeight: 20 },
+    footer: { minHeight: 20, alignItems: 'center', justifyContent: 'center', marginTop: 32 },
+    footerText: { color: c.textSecondary, fontSize: 14 },
+    footerLink: { color: c.accent, fontFamily: font.semibold }
 }));
+
+

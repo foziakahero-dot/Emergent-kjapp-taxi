@@ -1,11 +1,12 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
-import { BrandBadge } from '@/src/components/BrandBadge';
+import { SplashAction, SplashBackground, SplashBrand } from '@/src/components/SplashArt';
 
 export default function Index() {
   const { user, logout } = useAuth();
@@ -27,7 +28,8 @@ export default function Index() {
   if (user === undefined || (user?.role === 'driver' && user?.approved === true)) {
     return (
       <View style={s.splash}>
-        <BrandMark />
+        <SplashBackground />
+        <SplashBrand />
         <ActivityIndicator color={colors.online} style={{ marginTop: 28 }} />
       </View>
     );
@@ -38,7 +40,7 @@ export default function Index() {
     return (
       <View style={[s.splash, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }]}>
         <View style={s.center}>
-          <BrandMark />
+          <SplashBrand />
           <Text style={s.title}>{pendingApproval ? 'Kontoen venter på godkjenning' : 'Denne appen er kun for sjåfører'}</Text>
           <Text style={s.subtitle}>
             {pendingApproval
@@ -78,36 +80,18 @@ export default function Index() {
   }
 
   return (
-    <View style={[s.splash, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }]} testID="driver-onboarding">
-      <View style={s.center}>
-        <BrandMark />
-        <Text style={s.tag}>DRIVER</Text>
-        <Text style={s.subtitle}>Turer, navigasjon og inntekt — samlet i én sjåførapp.</Text>
-      </View>
-      <Button label="Logg inn som sjåfør" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
-    </View>
-  );
-}
-
-function BrandMark() {
-  const s = useStyles();
-  return (
-    <View style={s.brandMark}>
-      <View style={s.markHalo}><BrandBadge size={96} /></View>
-      <Text style={s.wordmark}>KJAPP</Text>
-      <Text style={s.driverWord}>DRIVER</Text>
+    <View style={[s.splash, { paddingTop: insets.top, paddingBottom: insets.bottom, alignItems: 'center' }]} testID="driver-onboarding">
+      <SplashBackground />
+      <SplashBrand />
+      <SplashAction label="Start vakt" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
     </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  splash: { flex: 1, backgroundColor: c.driverBg, paddingHorizontal: 28, justifyContent: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  brandMark: { alignItems: 'center' },
-  markHalo: { width: 132, height: 132, borderRadius: 38, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
-  wordmark: { color: c.text, fontFamily: font.display, fontSize: 52, letterSpacing: -2, marginTop: 24 },
-  driverWord: { color: c.online, fontFamily: font.bold, fontSize: 11, letterSpacing: 4, marginTop: 2 },
-  tag: { color: c.accent, fontFamily: font.semibold, fontSize: 10, letterSpacing: 3, marginTop: 18 },
-  title: { color: c.text, fontFamily: font.display, fontSize: 24, textAlign: 'center', marginTop: 32 },
-  subtitle: { color: c.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 12, maxWidth: 320 },
+    splash: { flex: 1, backgroundColor: c.driverBg, paddingHorizontal: 28, justifyContent: 'center' },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    title: { color: c.text, fontFamily: font.display, fontSize: 24, textAlign: 'center', marginTop: 32 },
+    subtitle: { color: c.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 12, maxWidth: 320 }
 }));
+

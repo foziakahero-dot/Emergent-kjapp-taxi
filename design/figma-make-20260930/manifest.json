@@ -1,0 +1,17 @@
+{
+  "source": "Revolutionary AI Taxi App Design (2).zip",
+  "export_date": "2026-09-30",
+  "archive_sha256": "2ef6aefa30b0b667564de78efeb707537b73ff0969acec79fe7dc007b3355ebf",
+  "figma_url": "https://www.figma.com/make/y94k21wsXX8d9sI966cOAY/Revolutionary-AI-Taxi-App-Design",
+  "files": {
+    "src/index.css": "e82e5513f136887f90627cab75b7bdde19db26a6269435693db9774c69125fc0",
+    "src/apps/CustomerApp.tsx": "3b91aee459fda6334d02675381b89a480470d43be5bd2f33b7c49e06027f5c4d",
+    "src/apps/DriverApp.tsx": "9500007391ee02891738427b199bc807df50897e15e8712638fb394f724f67bf",
+    "src/components/AppIcons.tsx": "7df483cdd24410e44519e33604ee33801adc67bd272d248de842a735350778e2",
+    "src/components/LiveMap.tsx": "756d8e92b2055e4e1194d3469532211ebcc37c04cbb264cfe03947ef231a64ca",
+    "src/components/SnarMark.tsx": "b1703e22b863bd8a9a4aea5778723d8890cea9c1c804389a4c13680185bc1ef9",
+    "src/components/TaskBar.tsx": "120ed95aa09bfa1561dd8e2a1a86becc76ef0019595dcd5d02d8d09f266cd423",
+    "src/screens/Splash.tsx": "4027d46f3c104a19f2201f13a6db7cf519cce43453bbfb6a083a3e17392ed2e4",
+    "src/screens/Login.tsx": "75ec4f961c36cb5d6920f9f5101d23e33c35c7f01eb0b56d23e3793a78460c27"
+  }
+}

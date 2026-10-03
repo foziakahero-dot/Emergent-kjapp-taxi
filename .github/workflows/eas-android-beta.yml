@@ -44,7 +44,7 @@ jobs:
             echo "Missing GitHub secret EXPO_TOKEN"
             exit 1
           fi
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npx expo-doctor@latest
       - run: npx expo config --type public
@@ -73,7 +73,7 @@ jobs:
             echo "Missing GitHub secret EXPO_TOKEN"
             exit 1
           fi
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npx expo-doctor@latest
       - run: npx expo config --type public

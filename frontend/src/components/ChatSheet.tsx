@@ -1,15 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -149,3 +140,4 @@ const useStyles = makeStyles((c) => ({
   input: { flex: 1, maxHeight: 110, minHeight: 48, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 16, paddingHorizontal: 14, paddingTop: 12, color: c.text, fontSize: 15 },
   sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
 }));
+

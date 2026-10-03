@@ -7,7 +7,8 @@
       },
       "android": {
         "buildType": "apk",
-        "image": "latest"
+        "image": "latest",
+        "resourceClass": "medium"
       }
     },
     "production": {
@@ -39,7 +40,8 @@
         "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "ios": {
-        "image": "latest"
+        "image": "latest",
+        "resourceClass": "medium"
       }
     }
   },

@@ -1,6 +1,4 @@
-const base = require('./app.json').expo;
-
-module.exports = () => {
+module.exports = ({ config: base }) => {
   const plugins = [...base.plugins];
   const iosClient = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
   // No guessed Google scheme or Apple Merchant ID is placed in the binary.
@@ -15,3 +13,4 @@ module.exports = () => {
   }]);
   return { ...base, plugins };
 };
+

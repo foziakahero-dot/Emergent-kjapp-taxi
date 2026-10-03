@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -35,3 +36,4 @@ const useStyles = makeStyles((c) => ({
   button: { marginTop: 24, backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 28, paddingVertical: 14 },
   buttonText: { color: c.accentOn, fontSize: 15, fontWeight: '800' },
 }));
+

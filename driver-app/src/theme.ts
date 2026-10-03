@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Geist_400Regular } from '@expo-google-fonts/geist/400Regular';
-import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
-import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
-import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
+import { Inter_300Light } from '@expo-google-fonts/inter/300Light';
+import { Inter_800ExtraBold } from '@expo-google-fonts/inter/800ExtraBold';
+import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 
 /** KJAPP Driver — shared light/navy/red system with green for real online status. */
 export const colors = {
@@ -16,22 +19,22 @@ export const colors = {
   lineStrong: 'rgba(0,31,63,0.18)',
   text: '#001F3F',
   textSecondary: '#4A5A6E',
-  textMuted: '#637489',
-  accent: '#D60013',
+  textMuted: '#8B97A7',
+  accent: '#FF0000',
   accentHover: '#FF3B3B',
-  accentDim: '#AE0010',
+  accentDim: '#CC0000',
   accentSoft: '#FFE6E6',
-  accentGlow: 'rgba(214,0,19,0.25)',
+  accentGlow: 'rgba(255,0,0,0.25)',
   accentOn: '#FFFFFF',
-  success: '#16734D',
-  warning: '#9A5700',
-  danger: '#B42329',
+  success: '#4CAF50',
+  warning: '#FF9800',
+  danger: '#F44336',
   dangerSoft: '#FFF0F0',
   info: '#245FAD',
-  online: '#16734D',
+  online: '#12B981',
   onlineSoft: '#E5F7ED',
-  onlineGlow: 'rgba(22,115,77,0.24)',
-  route: '#245FAD',
+  onlineGlow: 'rgba(18,185,129,0.24)',
+  route: '#FF0000',
   mapCanvas: '#E9EEF3',
   mapWater: '#D8E8F0',
   mapRoad: '#FFFFFF',
@@ -44,19 +47,25 @@ export const colors = {
 export type ThemeColors = typeof colors;
 
 export const font = {
-  display: 'Geist_600SemiBold',
-  body: 'Geist_400Regular',
-  medium: 'Geist_500Medium',
-  semibold: 'Geist_600SemiBold',
-  bold: 'Geist_700Bold',
+  display: 'Inter_600SemiBold',
+  body: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  light: 'Inter_300Light',
+  extraBold: 'Inter_800ExtraBold',
   mono: 'JetBrainsMono',
+  monoMedium: 'JetBrainsMono_500Medium',
 };
 
 export const FONT_ASSETS = {
-  Geist_400Regular,
-  Geist_500Medium,
-  Geist_600SemiBold,
-  Geist_700Bold,
+  Inter_300Light,
+  Inter_800ExtraBold,
+  JetBrainsMono_500Medium,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
   JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
 };
 
@@ -77,9 +86,9 @@ export const spacing = {
 export const motion = {
   instant: 100,
   fast: 160,
-  base: 240,
-  sheet: 280,
-  slow: 400,
+  base: 300,
+  sheet: 300,
+  slow: 700,
 };
 
 export function useTheme() {
@@ -93,3 +102,4 @@ export function makeStyles<T extends StyleSheet.NamedStyles<T>>(
     return useMemo(() => StyleSheet.create(factory(colors)), []);
   };
 }
+

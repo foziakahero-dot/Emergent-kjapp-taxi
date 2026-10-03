@@ -1,8 +1,11 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -22,7 +25,7 @@ export default function DriverEarnings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const [period, setPeriod] = useState<Period>('today');
+  const [period] = useState<Period>('week');
 
   const summaryQ = useQuery({ queryKey: ['driver-summary'], queryFn: driverApi.summary });
   const weeklyQ = useQuery({ queryKey: ['driver-weekly'], queryFn: driverApi.weekly });
@@ -72,24 +75,16 @@ export default function DriverEarnings() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.driverBg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
         <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 16, textAlign: 'center' }}>Kunne ikke hente inntektsdata</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>KJAPP viser ikke 0 kr som fallback. Prøv igjen når forbindelsen er tilbake.</Text>
+        <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>Prøv igjen når forbindelsen er tilbake.</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
-      <Text style={s.title}>Inntekt</Text>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
+      <Text style={s.title}>Inntjening</Text>
 
-      <View style={s.segs}>
-        {PERIODS.map((p) => (
-          <Pressable key={p.key} onPress={() => setPeriod(p.key)} style={[s.seg, period === p.key && s.segOn]} testID={`earnings-period-${p.key}`}>
-            <Text style={[s.segText, period === p.key && s.segTextOn]}>{p.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={s.hero}>
+      <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.hero}>
         <Text style={s.heroLabel}>NETTO {PERIODS.find((p) => p.key === period)!.label.toUpperCase()}</Text>
         <Text style={s.heroValue} testID="earnings-net">{kr(period_data.net)}</Text>
         <View style={s.heroRow}>
@@ -100,7 +95,7 @@ export default function DriverEarnings() {
             <Text style={s.heroStatL}>online</Text>
           </View>
         </View>
-      </View>
+      </FigmaGradient>
 
       <View style={s.card}>
         <BreakRow label="Bruttoinntekt" value={kr(period_data.gross)} s={s} />
@@ -193,7 +188,7 @@ function ChartBars({ days, max }: { days: any[]; max: number }) {
             const bh = Math.max(3, ((d.income || 0) / max) * (H - 10));
             const isToday = i === days.length - 1;
             return (
-              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.online : colors.onlineSoft} />
+              <Rect key={i} x={i * (bw + gap)} y={H - bh} width={bw} height={bh} rx={5} fill={isToday ? colors.accent : colors.accentSoft} />
             );
           })}
         </Svg>
@@ -203,19 +198,19 @@ function ChartBars({ days, max }: { days: any[]; max: number }) {
 }
 
 const useStyles = makeStyles((c) => ({
-  title: { color: c.text, fontFamily: font.display, fontSize: 28, marginBottom: 16 },
+  title: { color: c.text, fontFamily: font.semibold, fontSize: 24, marginBottom: 22, letterSpacing: -0.5 },
   segs: { flexDirection: 'row', backgroundColor: c.cardSubtle, borderRadius: 999, padding: 4, marginBottom: 18 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   segOn: { backgroundColor: c.online },
   segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
   segTextOn: { color: c.accentOn },
-  hero: { backgroundColor: c.driverCard, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
-  heroLabel: { color: c.online, fontSize: 11, letterSpacing: 3, fontFamily: font.bold },
-  heroValue: { color: c.text, fontFamily: font.display, fontSize: 44, marginTop: 8 },
-  heroRow: { flexDirection: 'row', gap: 28, marginTop: 20 },
+  hero: { borderRadius: 24, padding: 24 },
+  heroLabel: { color: 'rgba(255,255,255,0.78)', fontSize: 10, letterSpacing: 1.7, fontFamily: font.mono },
+  heroValue: { color: c.accentOn, fontFamily: font.semibold, fontSize: 36, lineHeight: 40, marginTop: 8 },
+  heroRow: { flexDirection: 'row', gap: 24, marginTop: 14 },
   heroStat: { alignItems: 'center' },
-  heroStatV: { color: c.text, fontFamily: font.mono, fontSize: 16 },
-  heroStatL: { color: c.textMuted, fontSize: 11, marginTop: 4 },
+  heroStatV: { color: c.accentOn, fontFamily: font.mono, fontSize: 14 },
+  heroStatL: { color: 'rgba(255,255,255,0.75)', fontSize: 10, marginTop: 3 },
   card: { backgroundColor: c.driverCard, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18, marginTop: 12 },
   breakRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   breakLabel: { color: c.textSecondary, fontSize: 14 },

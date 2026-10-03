@@ -1,5 +1,7 @@
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React from 'react';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -33,8 +35,8 @@ export default function History() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={s.title}>Dine turer</Text>
+      <View style={[s.header, { paddingTop: insets.top + 56 }]}>
+        <Text style={s.title}>Aktivitet</Text>
       </View>
       {isLoading ? (
         <View style={s.center}><Loader label="Henter turer…" /></View>
@@ -50,7 +52,7 @@ export default function History() {
         <FlatList
           data={trips}
           keyExtractor={(t) => t.id || t.trip_id}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}
+          contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: insets.bottom + 112, gap: 10 }}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />}
           ListEmptyComponent={
             <View style={s.center}>
@@ -89,18 +91,19 @@ export default function History() {
 }
 
 const useStyles = makeStyles((c) => ({
-  header: { paddingHorizontal: 20, paddingBottom: 12 },
-  title: { fontFamily: font.display, fontSize: 28, color: c.text },
+  header: { paddingHorizontal: 28, paddingBottom: 18 },
+  title: { fontFamily: font.semibold, fontSize: 24, color: c.text, letterSpacing: -0.5 },
   center: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
   retry: { minHeight: 44, borderRadius: 12, backgroundColor: c.accent, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   retryText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: c.line,
+    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16,
+    borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
   },
-  rowIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-  rowTitle: { color: c.text, fontSize: 15 },
-  rowSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
-  rowPrice: { color: c.text, fontFamily: font.mono, fontSize: 15 },
+  rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  rowTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  rowSub: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 0 },
+  rowPrice: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
 }));
+

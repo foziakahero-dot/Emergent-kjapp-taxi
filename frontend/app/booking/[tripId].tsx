@@ -1,14 +1,17 @@
+import { useReducedMotion } from '@/src/components/Motion';
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
-import { Icon, IconName } from '@/src/components/Icon';
+import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
+import { KjappMark } from '@/src/components/KjappMark';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
 import { safetyApi, tripDriverPhotoSource, tripsApi } from '@/src/lib/api';
-import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
   searching: { title: 'Søker sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
@@ -34,6 +37,26 @@ export default function BookingFlow() {
   const [retryKey, setRetryKey] = useState(0);
   const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
   const nav = useRef(false);
+  const matchingSpin = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (reducedMotion || !['searching', 'booking'].includes(trip?.status)) {
+      matchingSpin.stopAnimation();
+      matchingSpin.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(matchingSpin, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [matchingSpin, trip?.status, reducedMotion]);
 
   useEffect(() => {
     let mounted = true;
@@ -118,6 +141,11 @@ export default function BookingFlow() {
     finally { setSafetyBusy(false); }
   };
 
+  const callDriver = () => {
+    const phone = trip?.driver?.phone;
+    if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});
+  };
+
   const shareTrip = async () => {
     setSafetyBusy(true);
     try {
@@ -156,6 +184,7 @@ export default function BookingFlow() {
   const driverDistanceLabel = Number.isFinite(driverDistance) && driverDistance >= 0
     ? `${driverDistance.toFixed(driverDistance < 10 ? 1 : 0)} km unna`
     : null;
+  const spinDeg = matchingSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   let driverGpsFresh = true;
   if (trip.driver_location_at && ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status)) {
     const stamp = Date.parse(trip.driver_location_at);
@@ -173,145 +202,126 @@ export default function BookingFlow() {
         testID="booking-map"
       />
 
-      <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        {canCancel ? (
-          <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel" accessibilityRole="button" accessibilityLabel="Avbryt tur">
-            <Icon name="x" size={20} color={colors.text} />
-          </Pressable>
-        ) : <View style={{ width: 44 }} />}
-        <View style={s.statusPill}>
-          <Text style={s.statusText} testID="customer-trip-status">{meta.title}</Text>
+      {trip.status === 'searching' || trip.status === 'booking' ? (
+        <View style={s.matchingOverlay} testID="matching-overlay">
+          <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
+          <View style={s.matchingCard}>
+            <View style={s.matchingMarkWrap}>
+              <Animated.View style={[s.matchingRing, { transform: [{ rotate: spinDeg }] }]} />
+              <KjappMark size={40} />
+            </View>
+            <Text style={s.matchingTitle}>Finner din sjåfør…</Text>
+            <Text style={s.matchingSub}>Matcher med nærmeste ledige KJAPP-bil</Text>
+            <Pressable onPress={cancel} testID="searching-cancel" style={s.matchingCancel}>
+              <Text style={s.matchingCancelText}>Avbryt søk</Text>
+            </Pressable>
+          </View>
         </View>
-        <View style={{ width: 44 }} />
-      </View>
-
-      <ScrollView
-        style={s.sheet}
-        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 16 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={s.handle} />
-
-        {networkIssue ? (
-          <View style={s.networkBanner} testID="booking-network-warning">
-            <View style={s.networkDot} />
-            <Text style={s.networkText}>Live-data er midlertidig utilgjengelig · prøver igjen automatisk</Text>
+      ) : isFinal ? (
+        <View style={[s.finalSheet, { paddingBottom: insets.bottom + 22 }]}>
+          <View style={[s.finalIcon, driverCancelled && s.finalIconDriver]}>
+            <Icon name={driverCancelled ? 'car' : 'x'} size={22} color={driverCancelled ? colors.accent : colors.danger} />
           </View>
-        ) : !driverGpsFresh ? (
-          <View style={s.networkBanner} testID="booking-gps-warning">
-            <View style={s.networkDot} />
-            <Text style={s.networkText}>Sjåførposisjonen oppdateres · viser siste kjente posisjon</Text>
-          </View>
-        ) : null}
-
-        {trip.status === 'searching' || trip.status === 'booking' ? (
-          <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-            <View style={s.radar}><Icon name="navigation" size={26} color={colors.accent} /></View>
-            <Text style={s.bigTitle}>{meta.title}</Text>
-            <Text style={s.sub}>{meta.sub}</Text>
-            <View style={s.destBox}>
-              <Icon name="map-pin" size={16} color={colors.accent} />
-              <Text style={s.destText} numberOfLines={1}>{trip.dropoff_address}</Text>
-              <Text style={s.destPrice}>{kr(trip.price)}</Text>
-            </View>
-            <Pressable onPress={cancel} testID="searching-cancel" style={{ marginTop: 14 }}>
-              <Text style={s.cancelLink}>Avbryt søk</Text>
-            </Pressable>
-          </View>
-        ) : isFinal ? (
-          <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-            <View style={[s.finalIcon, driverCancelled && s.finalIconDriver]}>
-              <Icon name={driverCancelled ? 'car' : 'x'} size={22} color={driverCancelled ? colors.accent : colors.danger} />
-            </View>
-            <Text style={s.bigTitle}>{meta.title}</Text>
-            <Text style={s.sub}>{meta.sub}</Text>
-            {driverCancelled ? (
-              <Text style={s.recoveryCopy}>Start en ny bestilling når du er klar. KJAPP bruker ikke den avbrutte turen som om den fortsatt var aktiv.</Text>
-            ) : null}
-            <Pressable onPress={() => router.replace('/(app)/home')} style={s.homeBtn} testID="booking-home">
-              <Text style={s.homeBtnText}>{driverCancelled ? 'Bestill ny tur' : 'Tilbake til hjem'}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View>
-            <View style={s.driverRow}>
-              <View style={s.etaBadge}>
-                {trip.status === 'in_trip' ? (
-                  <Icon name="navigation" size={22} color={colors.accent} />
-                ) : trip.status === 'at_pickup' ? (
-                  <>
-                    <Text style={s.etaNum}>✓</Text>
-                    <Text style={s.etaMin}>FREMME</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={s.etaNum}>{etaMinutes ?? '—'}</Text>
-                    <Text style={s.etaMin}>{etaMinutes ? 'MIN' : 'PÅ VEI'}</Text>
-                  </>
-                )}
+          <Text style={s.finalTitle}>{meta.title}</Text>
+          <Text style={s.finalSub}>{meta.sub}</Text>
+          {driverCancelled ? <Text style={s.recoveryCopy}>Start en ny bestilling når du er klar.</Text> : null}
+          <Pressable onPress={() => router.replace('/(app)/home')} style={s.homeBtn} testID="booking-home">
+            <Text style={s.homeBtnText}>{driverCancelled ? 'Bestill ny tur' : 'Tilbake til hjem'}</Text>
+          </Pressable>
+        </View>
+      ) : trip.status === 'in_trip' ? (
+        <>
+          <View style={[s.tripBanner, { top: insets.top + 16 }]} testID="inride-banner">
+            <View style={s.tripBannerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.tripEyebrow}>UNDERVEIS</Text>
+                <Text style={s.tripDriverLine} numberOfLines={1}>
+                  {trip.driver?.name || 'Din sjåfør'} · {trip.driver?.car || 'Bil'} · {trip.driver?.plate || ''}
+                </Text>
               </View>
+              <Text style={s.tripEta}>{etaMinutes ? `${etaMinutes} min` : 'På vei'}</Text>
+            </View>
+          </View>
+
+          <View style={[s.inRideSheet, { paddingBottom: insets.bottom + 32 }]}>
+            <View style={s.handle} />
+            {networkIssue || !driverGpsFresh ? (
+              <View style={s.networkBanner}>
+                <View style={s.networkDot} />
+                <Text style={s.networkText}>{networkIssue ? 'Live-data oppdateres automatisk' : 'Viser siste kjente sjåførposisjon'}</Text>
+              </View>
+            ) : null}
+            <View style={s.inRideActions}>
+              <Pressable style={s.rideAction} onPress={shareTrip} testID="ontrip-share">
+                <Icon name="shield" size={20} color={colors.accent} />
+                <Text style={s.rideActionText}>Del tur</Text>
+              </Pressable>
+              <Pressable style={s.rideAction} onPress={() => setChatOpen(true)} testID="ontrip-chat">
+                <Icon name="message" size={20} color={colors.accent} />
+                <Text style={s.rideActionText}>Melding</Text>
+              </Pressable>
+              <Pressable style={s.sosAction} onPress={() => setSafetyOpen(true)} testID="ontrip-safety">
+                <Icon name="shield" size={20} color={colors.accentOn} />
+                <Text style={s.sosText}>SOS</Text>
+              </Pressable>
+            </View>
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={[s.arrivalTopCard, { top: insets.top + 16 }]} testID="driver-arrival-eta">
+            <Text style={s.arrivalEyebrow}>{trip.status === 'at_pickup' ? 'SJÅFØREN ER FREMME' : 'SJÅFØREN ER PÅ VEI'}</Text>
+            <Text style={s.arrivalEta}>
+              {trip.status === 'at_pickup' ? 'Klar for henting' : etaMinutes ? `Ankommer om ${etaMinutes} min` : 'På vei til deg'}
+            </Text>
+          </View>
+
+          <View style={[s.arrivalSheet, { paddingBottom: insets.bottom + 32 }]}>
+            <View style={s.handle} />
+            {networkIssue || !driverGpsFresh ? (
+              <View style={s.networkBanner}>
+                <View style={s.networkDot} />
+                <Text style={s.networkText}>{networkIssue ? 'Live-data oppdateres automatisk' : 'Viser siste kjente sjåførposisjon'}</Text>
+              </View>
+            ) : null}
+            <Text style={s.verifyLabel}>BEKREFT SJÅFØR OG BIL</Text>
+            <View style={s.driverCard}>
               <View style={s.driverAvatar}>
                 {driverPhotoSource ? (
-                  <Image
-                    source={driverPhotoSource}
-                    style={s.driverAvatarImage}
-                    resizeMode="cover"
-                    onError={() => setDriverPhotoSource(null)}
-                    testID="customer-driver-photo"
-                  />
+                  <Image source={driverPhotoSource} style={s.driverAvatarImage} resizeMode="cover" onError={() => setDriverPhotoSource(null)} />
                 ) : (
-                  <Text style={s.driverAvatarText}>{trip.driver?.photo || 'SJ'}</Text>
+                  <Text style={s.driverAvatarText}>{(trip.driver?.name || 'KJ').slice(0, 1).toUpperCase()}</Text>
                 )}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.overline}>{meta.title}</Text>
+              <View style={s.driverInfo}>
                 <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
-                <Text style={s.driverCar} numberOfLines={1}>
-                  {(trip.driver?.car || 'Bil')} · {trip.driver?.plate || ''}
-                </Text>
+                <Text style={s.driverCar} numberOfLines={1}>{trip.driver?.car || 'Bil'}</Text>
                 {trip.driver?.rating != null ? (
                   <View style={s.ratingRow}>
                     <Icon name="star" size={12} color={colors.accent} fill={colors.accent} />
                     <Text style={s.ratingText}>{trip.driver.rating}</Text>
-                    {trip.status === 'driver_on_way' && driverDistanceLabel ? (
-                      <Text style={s.driverDistance}>· {driverDistanceLabel}</Text>
-                    ) : null}
+                    {driverDistanceLabel ? <Text style={s.driverDistance}>· {driverDistanceLabel}</Text> : null}
                   </View>
-                ) : trip.status === 'driver_on_way' && driverDistanceLabel ? (
-                  <Text style={s.driverDistance}>{driverDistanceLabel}</Text>
                 ) : null}
               </View>
+              <View style={s.plateBox}>
+                <Text style={s.plateLabel}>SKILT</Text>
+                <Text style={s.plateText}>{trip.driver?.plate || '—'}</Text>
+              </View>
             </View>
-
-            {trip.status === 'in_trip' ? (
-              <View style={s.metrics}>
-                <Metric label="Avstand" value={`${trip.distance_km} km`} />
-                <View style={s.divider} />
-                <Metric label="Tid" value={`${trip.duration_min} min`} />
-                <View style={s.divider} />
-                <Metric label="Pris" value={kr(trip.price)} />
-              </View>
-            ) : (
-              <View style={s.actions}>
-                <Action icon="message" label="Melding" testID="action-message" onPress={() => setChatOpen(true)} />
-                <Action icon="shield" label="Sikkerhet" testID="action-safety" onPress={() => setSafetyOpen(true)} />
-              </View>
-            )}
-            {trip.status === 'in_trip' ? (
-              <View style={s.onTripActions}>
-                <Pressable style={[s.chatBtn, { marginTop: 0 }]} onPress={() => setChatOpen(true)} testID="ontrip-chat">
-                  <Icon name="message" size={16} color={colors.text} />
-                  <Text style={s.chatBtnText}>Melding</Text>
-                </Pressable>
-                <Pressable style={s.safetyBtn} onPress={() => setSafetyOpen(true)} testID="ontrip-safety">
-                  <Icon name="shield" size={16} color={colors.accent} />
-                  <Text style={s.safetyBtnText}>Sikkerhet</Text>
-                </Pressable>
-              </View>
-            ) : null}
+            <View style={s.contactRow}>
+              <Pressable style={s.contactButton} onPress={callDriver} testID="action-call-driver">
+                <Icon name="phone" size={18} color={colors.text} />
+                <Text style={s.contactText}>Ring</Text>
+              </Pressable>
+              <Pressable style={s.contactButton} onPress={() => setChatOpen(true)} testID="action-message">
+                <Icon name="message" size={18} color={colors.text} />
+                <Text style={s.contactText}>Melding</Text>
+              </Pressable>
+            </View>
           </View>
-        )}
-      </ScrollView>
+        </>
+      )}
 
       <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
         <Pressable style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
@@ -353,88 +363,82 @@ export default function BookingFlow() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  const s = useStyles();
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={s.metricLabel}>{label}</Text>
-      <Text style={s.metricValue}>{value}</Text>
-    </View>
-  );
-}
-
-function Action({ icon, label, onPress, testID }: { icon: IconName; label: string; onPress: () => void; testID: string }) {
-  const s = useStyles();
-  return (
-    <Pressable style={s.action} onPress={onPress} testID={testID} accessibilityRole="button" accessibilityLabel={label}>
-      <Icon name={icon} size={18} color={colors.accent} />
-      <Text style={s.actionText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const useStyles = makeStyles((c) => ({
   loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   offlineIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  loadErrorTitle: { color: c.text, fontFamily: font.display, fontSize: 20, marginTop: 16, textAlign: 'center' },
+  loadErrorTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 16, textAlign: 'center' },
   loadErrorSub: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 8, textAlign: 'center' },
   retryBtn: { minHeight: 50, borderRadius: 25, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
   retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  statusPill: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10 },
-  statusText: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '76%', backgroundColor: c.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: c.line, shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8 },
-  sheetContent: { paddingHorizontal: 20, paddingTop: 10 },
-  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
+
+  matchingOverlay: { ...StyleSheet.absoluteFill, zIndex: 20, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 160, backgroundColor: 'transparent' },
+  matchingCard: { width: 278, alignItems: 'center', borderRadius: 24, paddingHorizontal: 40, paddingVertical: 32, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.14, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
+  matchingMarkWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
+  matchingRing: { position: 'absolute', width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: 'transparent', borderTopColor: c.accent },
+  matchingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 24, letterSpacing: -0.32, marginTop: 20 },
+  matchingSub: { color: c.textSecondary, fontSize: 12, marginTop: 4, textAlign: 'center' },
+  matchingCancel: { marginTop: 18, minHeight: 36, justifyContent: 'center' },
+  matchingCancelText: { color: c.textSecondary, fontSize: 13, textDecorationLine: 'underline' },
+
+  arrivalTopCard: { position: 'absolute', left: 16, right: 16, zIndex: 20, alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  arrivalEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.4 },
+  arrivalEta: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 3 },
+  arrivalSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 16 },
+  verifyLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.5, marginBottom: 9 },
+  driverCard: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  driverAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: c.accent },
+  driverAvatarImage: { width: 48, height: 48, borderRadius: 24 },
+  driverAvatarText: { color: c.accentOn, fontFamily: font.bold, fontSize: 18 },
+  driverInfo: { flex: 1 },
+  driverName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
+  driverCar: { color: c.textSecondary, fontFamily: font.mono, fontSize: 11, lineHeight: 16, marginTop: 0 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  ratingText: { color: c.textSecondary, fontSize: 12 },
+  driverDistance: { color: c.textSecondary, fontSize: 11 },
+  plateBox: { minWidth: 82, alignItems: 'center', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+  plateLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 8, letterSpacing: 1.2 },
+  plateText: { color: c.text, fontFamily: font.bold, fontSize: 13, letterSpacing: 0.8, marginTop: 2 },
+  contactRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  contactButton: { flex: 1, minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+  contactText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+
+  tripBanner: { position: 'absolute', left: 16, right: 16, zIndex: 20, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  tripBannerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tripEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4 },
+  tripDriverLine: { color: c.text, fontFamily: font.semibold, fontSize: 13, marginTop: 3 },
+  tripEta: { color: c.text, fontFamily: font.semibold, fontSize: 18 },
+  inRideSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+  inRideActions: { flexDirection: 'row', gap: 10 },
+  rideAction: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+  rideActionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
+  sosAction: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: '#E11D48' },
+  sosText: { color: c.accentOn, fontFamily: font.bold, fontSize: 12 },
+
   networkBanner: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.warning + '12', borderWidth: 1, borderColor: c.warning, borderRadius: 10, paddingHorizontal: 11, marginBottom: 12 },
   networkDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.warning },
   networkText: { color: c.textSecondary, fontSize: 11, flex: 1 },
-  radar: { width: 72, height: 72, borderRadius: 36, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  bigTitle: { color: c.text, fontFamily: font.display, fontSize: 22 },
-  sub: { color: c.textMuted, fontSize: 14, marginTop: 4, textAlign: 'center' },
-  destBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle, borderRadius: 16, borderWidth: 1, borderColor: c.line, padding: 14, marginTop: 16, alignSelf: 'stretch' },
-  destText: { color: c.text, fontSize: 14, flex: 1 },
-  destPrice: { color: c.text, fontFamily: font.mono, fontSize: 16 },
-  cancelLink: { color: c.textMuted, fontSize: 14, textDecorationLine: 'underline' },
+
+  finalSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, alignItems: 'center', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 28, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.line },
   finalIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   finalIconDriver: { backgroundColor: c.accentSoft, borderColor: c.accent },
-  recoveryCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
+  finalTitle: { color: c.text, fontFamily: font.semibold, fontSize: 22 },
+  finalSub: { color: c.textMuted, fontSize: 14, marginTop: 4, textAlign: 'center' },
+  recoveryCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 10 },
   homeBtn: { marginTop: 20, minHeight: 52, backgroundColor: c.accent, borderRadius: 26, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
   homeBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  driverAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  driverAvatarImage: { width: 48, height: 48, borderRadius: 24 },
-  driverAvatarText: { color: c.accent, fontFamily: font.bold, fontSize: 13 },
-  etaBadge: { width: 74, height: 74, borderRadius: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
-  etaNum: { color: c.text, fontFamily: font.display, fontSize: 26 },
-  etaMin: { color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 2, marginTop: 2 },
-  overline: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.6, textTransform: 'uppercase' },
-  driverName: { color: c.text, fontFamily: font.semibold, fontSize: 16, marginTop: 4 },
-  driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  ratingText: { color: c.textMuted, fontSize: 12 },
-  driverDistance: { color: c.textMuted, fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  action: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  actionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },
-  metrics: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: c.line },
-  divider: { width: 1, height: 28, backgroundColor: c.line },
-  metricLabel: { color: c.textMuted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', textAlign: 'center' },
-  metricValue: { color: c.text, fontFamily: font.mono, fontSize: 15, textAlign: 'center', marginTop: 4 },
-  chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, minHeight: 48, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  chatBtnText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
-  onTripActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  safetyBtn: { minHeight: 48, flex: 0.8, borderRadius: 14, borderWidth: 1, borderColor: c.accent, backgroundColor: c.accentSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
-  safetyBtnText: { color: c.text, fontFamily: font.medium, fontSize: 14 },
+
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.68)' },
   safetySheet: { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: c.line, padding: 20, paddingBottom: 34 },
   safetyHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   safetyOverline: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.4 },
-  safetyTitle: { color: c.text, fontFamily: font.display, fontSize: 22, marginTop: 3 },
+  safetyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 22, marginTop: 3 },
   safetyCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 12, marginBottom: 14 },
   emergencyAction: { minHeight: 66, borderRadius: 16, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, marginTop: 8 },
   safetyAction: { minHeight: 66, borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, marginTop: 8 },
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
+
+
+

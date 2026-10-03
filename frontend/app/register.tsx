@@ -1,20 +1,13 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
-import { Button } from '@/src/components/ui';
 import { Icon } from '@/src/components/Icon';
+import { KjappMark } from '@/src/components/KjappMark';
+import { LinearGradient } from 'expo-linear-gradient';
 import { apiError } from '@/src/lib/format';
 
 export default function Register() {
@@ -51,7 +44,7 @@ export default function Register() {
         accepted_terms: true,
         legal_version: '2026-09',
       });
-      router.replace('/(app)/home');
+      router.replace('/profile-setup');
     } catch (e) {
       setError(apiError(e));
     } finally {
@@ -61,108 +54,98 @@ export default function Register() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={[s.wrap, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 24 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Pressable onPress={() => router.back()} style={s.back} testID="register-back" accessibilityRole="button" accessibilityLabel="Tilbake">
-          <Icon name="arrow-left" size={20} color={colors.text} />
+      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <ScrollView contentContainerStyle={[s.wrap, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => router.back()} style={s.backLink} testID="register-back" accessibilityRole="button" accessibilityLabel="Tilbake">
+          <Text style={s.backLinkText}>‹  Tilbake</Text>
         </Pressable>
 
-        <View style={s.brandBlock}>
-          <Text style={s.eyebrow}>KJAPP · PASSASJER</Text>
-          <Text style={s.brand}>KJAPP</Text>
-          <View style={s.brandLine} />
-        </View>
+        <KjappMark size={44} />
         <Text style={s.title}>Opprett konto</Text>
-        <Text style={s.sub}>Én konto for bestilling, live turstatus, betaling og kvitteringer.</Text>
+        <Text style={s.sub}>Kom i gang på under ett minutt.</Text>
 
         <View style={s.form}>
-          <Field icon="user" placeholder="Fullt navn" value={fullName} onChangeText={setFullName} testID="register-name" s={s} autoComplete="name" />
-          <Field icon="mail" placeholder="E-post" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" testID="register-email" s={s} autoComplete="email" />
-          <Field icon="phone" placeholder="Telefon (valgfritt)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="register-phone" s={s} autoComplete="tel" />
-          <View style={s.field}>
-            <Icon name="lock" size={18} color={colors.textMuted} />
-            <TextInput
-              placeholder="Passord"
-              placeholderTextColor={colors.textMuted}
-              style={s.input}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!show}
-              autoComplete="new-password"
-              testID="register-password"
-            />
-            <Pressable onPress={() => setShow((v) => !v)} style={s.fieldAction} testID="register-toggle-password" accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}>
-              <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
-            </Pressable>
+          <Field label="FULLT NAVN" placeholder="Ola Nordmann" value={fullName} onChangeText={setFullName} testID="register-name" s={s} autoComplete="name" />
+          <Field label="E-POST" placeholder="deg@epost.no" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" testID="register-email" s={s} autoComplete="email" />
+          <Field label="TELEFON" placeholder="+47 000 00 000" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="register-phone" s={s} autoComplete="tel" />
+          <View>
+            <Text style={s.fieldLabel}>PASSORD</Text>
+            <View style={s.field}>
+              <TextInput
+                placeholder="Minst 8 tegn"
+                placeholderTextColor={colors.textMuted}
+                style={s.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!show}
+                autoComplete="new-password"
+                testID="register-password"
+              />
+              <Pressable onPress={() => setShow((v) => !v)} style={s.fieldAction} testID="register-toggle-password" accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'}>
+                <Icon name={show ? 'eye-off' : 'eye'} size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
           </View>
         </View>
 
-        <Text style={s.passwordHint}>Minst 8 tegn. Du kan endre kontoinnstillinger senere.</Text>
-
-        <Pressable
-          style={s.consentRow}
-          onPress={() => setAcceptedTerms((v) => !v)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: acceptedTerms }}
-          testID="register-legal-consent"
-        >
+        <Pressable style={s.consentRow} onPress={() => setAcceptedTerms((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: acceptedTerms }} testID="register-legal-consent">
           <View style={[s.checkbox, acceptedTerms && s.checkboxOn]}><Text style={s.checkmark}>{acceptedTerms ? '✓' : ''}</Text></View>
           <Text style={s.consentText}>
-            Jeg godtar <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>vilkårene</Text> og har lest <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>personvernerklæringen</Text>.
+            Jeg godtar KJAPPs <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>vilkår</Text> og <Text style={s.consentLink} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>personvernerklæring</Text>.
           </Text>
         </Pressable>
+
         {error ? <Text style={s.error} testID="register-error">{error}</Text> : null}
 
-        <Button label="Opprett konto" onPress={submit} loading={loading} testID="register-submit" style={{ marginTop: 12 }} />
-
-        <View style={s.trustCard}>
-          <Icon name="shield" size={18} color={colors.accent} />
-          <Text style={s.trustText}>Kontoen brukes kun til KJAPP-tjenester og dine turdata.</Text>
-        </View>
+        <Pressable onPress={submit} disabled={!acceptedTerms || loading} testID="register-submit" style={{ marginTop: 18 }}>
+          <LinearGradient colors={!acceptedTerms || loading ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B', '#FF0000']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.primaryButton}>
+            <Text style={s.primaryButtonText}>{loading ? 'Oppretter…' : 'Opprett konto'}</Text>
+          </LinearGradient>
+        </Pressable>
 
         <Pressable onPress={() => router.replace('/login')} style={s.footer} testID="register-to-login">
-          <Text style={s.footerText}>Har du konto? <Text style={s.footerLink}>Logg inn</Text></Text>
+          <Text style={s.footerText}>Har du allerede konto? <Text style={s.footerLink}>Logg inn</Text></Text>
         </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function Field({ icon, s, ...props }: any) {
+function Field({ label, s, ...props }: any) {
   return (
-    <View style={s.field}>
-      <Icon name={icon} size={18} color={colors.textMuted} />
-      <TextInput placeholderTextColor={colors.textMuted} style={s.input} {...props} />
+    <View>
+      <Text style={s.fieldLabel}>{label}</Text>
+      <View style={s.field}>
+        <TextInput placeholderTextColor={colors.textMuted} style={s.input} {...props} />
+      </View>
     </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.bg },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 28 },
-  brandBlock: { alignSelf: 'flex-start' },
-  eyebrow: { color: c.accent, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.8 },
-  brand: { fontFamily: font.bold, fontSize: 34, color: c.text, letterSpacing: 0.5, marginTop: 5 },
-  brandLine: { width: 42, height: 3, borderRadius: 2, backgroundColor: c.accent, marginTop: 8 },
-  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 30 },
-  sub: { color: c.textMuted, fontFamily: font.body, fontSize: 14, lineHeight: 20, marginTop: 7, marginBottom: 24 },
-  form: { gap: 12 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingLeft: 16, paddingRight: 6, height: 56 },
-  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
+  wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
+  backLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center', marginBottom: 18 },
+  backLinkText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 14 },
+  title: { fontFamily: font.semibold, fontSize: 24, color: c.text, marginTop: 20, letterSpacing: -0.5 },
+  sub: { color: c.textSecondary, fontFamily: font.body, fontSize: 14, lineHeight: 20, marginTop: 5, marginBottom: 26 },
+  form: { gap: 16 },
+  fieldLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.9, marginBottom: 8 },
+  field: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 16, paddingLeft: 16, paddingRight: 6, height: 52 },
+  input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 15, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  passwordHint: { color: c.textMuted, fontSize: 11, lineHeight: 16, marginTop: 9 },
-  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 16, minHeight: 44 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
-  checkmark: { color: c.bg, fontSize: 14, fontWeight: '800' },
-  consentText: { color: c.textMuted, fontSize: 12, lineHeight: 18, flex: 1 },
-  consentLink: { color: c.accent, textDecorationLine: 'underline' },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 18, minHeight: 44 },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  checkboxOn: { backgroundColor: c.online, borderColor: c.online },
+  checkmark: { color: c.accentOn, fontSize: 14, fontWeight: '800' },
+  consentText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, flex: 1 },
+  consentLink: { color: c.text, fontFamily: font.semibold },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 9 },
-  trustCard: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 16 },
-  trustText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },
-  footer: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  primaryButton: { minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.3, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  primaryButtonText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
+  footer: { minHeight: 52, alignItems: 'center', justifyContent: 'center', marginTop: 18 },
   footerText: { color: c.textSecondary, fontSize: 14 },
   footerLink: { color: c.accent, fontFamily: font.semibold },
 }));
+
+
+

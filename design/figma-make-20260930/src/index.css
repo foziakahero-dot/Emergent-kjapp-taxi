@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+:root {
+  /* SNAR — Scandinavian minimal: red action, navy ink, ice-white surfaces */
+  --bg: #f4f6fa;
+  --bg-2: #ffffff;
+  --surface: #ffffff;
+  --surface-soft: #eef1f5;
+  --navy: #001f3f;
+  --navy-2: #012a54;
+  --ink: #001f3f;
+  --ink-soft: #4a5a6e;
+  --ink-faint: #8b97a7;
+  --line: rgba(0, 31, 63, 0.1);
+  --line-strong: rgba(0, 31, 63, 0.18);
+  /* SNAR red — primary action & brand */
+  --red: #ff0000;
+  --red-deep: #cc0000;
+  --red-bright: #ff3b3b;
+  --red-soft: #ffe6e6;
+  /* legacy aliases kept so existing var references recolor to the new palette */
+  --blue: var(--red);
+  --blue-deep: var(--red-deep);
+  --blue-bright: var(--red-bright);
+  --blue-soft: var(--red-soft);
+  --green: #12b981;
+  /* feedback palette (per SNAR spec) */
+  --success: #4caf50;
+  --warn: #ff9800;
+  --error: #f44336;
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ---- Motion ---- */
+@keyframes ring-pulse {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes eta-breathe {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  to { background-position: 200% center; }
+}
+@keyframes bar-flicker {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@keyframes mark-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes route-dash {
+  to { stroke-dashoffset: -280; }
+}
+@keyframes skeleton {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-rise { animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+.skeleton {
+  background: linear-gradient(90deg, #e7ebf0 25%, #f2f5f8 50%, #e7ebf0 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { width: 0; height: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

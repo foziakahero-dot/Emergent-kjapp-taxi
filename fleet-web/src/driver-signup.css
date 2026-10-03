@@ -1,245 +1,382 @@
 .driver-signup-screen {
+  --ds-bg: #f4f6fa;
+  --ds-surface: #ffffff;
+  --ds-soft: #eef1f5;
+  --ds-navy: #001f3f;
+  --ds-navy-2: #012a54;
+  --ds-ink: #001f3f;
+  --ds-ink-soft: #4a5a6e;
+  --ds-faint: #8b97a7;
+  --ds-line: rgba(0,31,63,.10);
+  --ds-line-strong: rgba(0,31,63,.18);
+  --ds-red: #ff0000;
+  --ds-green: #12b981;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 75% 18%, rgba(203, 163, 101, .07), transparent 34%),
-    #070b0e;
-  padding: 34px 44px 60px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(180deg,#fff,#f2f5fa);
+  color: var(--ds-ink);
+  font-family: Inter, system-ui, sans-serif;
 }
 
-.driver-signup-screen > .brand {
-  margin: 0 auto;
-  width: min(720px, 100%);
-}
-
-.driver-signup-screen .brand-sub {
-  letter-spacing: .11em;
-}
-
-.driver-signup-card {
-  width: min(620px, 100%);
-  margin: 56px auto 0;
-  padding: 38px;
-  border: 1px solid #273038;
-  border-radius: 28px;
-  background: rgba(12, 18, 22, .96);
-  box-shadow: 0 34px 100px rgba(0, 0, 0, .24);
-}
-
-.driver-signup-card.centered {
-  min-height: 410px;
+.driver-phone-shell {
+  width: min(100%, 430px);
+  min-height: min(820px, calc(100vh - 48px));
+  border: 1px solid var(--ds-line);
+  border-radius: 32px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 30px 80px rgba(11,14,20,.14);
+  padding: 28px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
 }
 
-.driver-signup-kicker {
-  color: #cba365;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .12em;
-}
-
-.driver-signup-card h1 {
-  margin: 12px 0 0;
-  color: #f4f4f0;
-  font: 400 38px/1.08 'Fraunces', Georgia, serif;
-  letter-spacing: -.03em;
-}
-
-.driver-signup-card > p,
-.driver-signup-card.centered > p {
-  max-width: 470px;
-  margin: 17px 0 30px;
-  color: #8a96a0;
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.assigned-car {
-  margin-top: 28px;
-  padding: 18px 20px;
-  border: 1px solid #273038;
-  border-radius: 16px;
-  background: #0e151a;
+.driver-invite-header {
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.assigned-car > span {
-  color: #cba365;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: .08em;
-}
-
-.assigned-car > strong {
-  color: #f4f4f0;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.assigned-car > small {
-  color: #8a96a0;
-  font-size: 11px;
-}
-
-.driver-signup-form {
-  margin-top: 24px;
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 12px;
+  color: var(--ds-navy);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .22em;
 }
 
-.driver-signup-form input {
+.driver-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: linear-gradient(145deg,#ff3b3b,#ff0000 55%,#b30000);
+  box-shadow: 0 8px 20px rgba(255,0,0,.28), inset 0 1px 0 rgba(255,255,255,.34);
+}
+
+.driver-step-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 24px;
+}
+.driver-step-dots span {
+  height: 6px;
+  flex: 1;
+  border-radius: 999px;
+  background: var(--ds-line-strong);
+}
+.driver-step-dots span.active { background: var(--ds-navy); }
+
+.driver-step { margin-top: 22px; }
+.driver-step h1,
+.driver-centered-state h1 {
+  margin: 0;
+  color: var(--ds-ink);
+  font-size: 26px;
+  line-height: 1.12;
+  font-weight: 600;
+  letter-spacing: -.025em;
+}
+.driver-step > p,
+.driver-centered-state > p {
+  margin: 7px 0 0;
+  color: var(--ds-ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.driver-info-card,
+.driver-vehicle-card,
+.driver-pending-card {
+  margin-top: 14px;
+  border: 1px solid var(--ds-line);
+  border-radius: 16px;
+  background: var(--ds-surface);
+  padding: 15px;
+}
+
+.driver-info-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.driver-card-label {
+  color: var(--ds-faint);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: .14em;
+}
+.driver-info-card strong { font-size: 14px; font-weight: 600; }
+.driver-info-card small { color: var(--ds-ink-soft); font-size: 11px; }
+
+.driver-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 24px;
+}
+.driver-form label > span:first-child:not(.driver-terms span) {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ds-faint);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .18em;
+}
+.driver-form input[type="text"],
+.driver-form input[type="email"],
+.driver-form input[type="tel"],
+.driver-form input[type="password"] {
   width: 100%;
   height: 52px;
   padding: 0 16px;
-  border: 1px solid #273038;
-  border-radius: 13px;
-  outline: 0;
-  background: #111920;
-  color: #f4f4f0;
-}
-
-.driver-signup-form input:focus {
-  border-color: rgba(203, 163, 101, .68);
-  box-shadow: 0 0 0 3px rgba(203, 163, 101, .08);
-}
-
-.driver-signup-form input::placeholder {
-  color: #8a96a0;
-}
-
-.driver-legal,
-.driver-doc-intro {
-  color: #8a96a0;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.driver-doc-intro {
-  margin: 0 0 8px;
-}
-
-.driver-doc-row {
-  min-height: 76px;
-  padding: 12px 14px;
-  border: 1px solid #273038;
+  border: 1px solid var(--ds-line-strong);
   border-radius: 16px;
-  background: #0e151a;
-  display: flex;
-  align-items: center;
-  gap: 13px;
+  background: var(--ds-surface);
+  color: var(--ds-ink);
+  font: 400 15px/1 Inter, system-ui, sans-serif;
+  outline: none;
 }
+.driver-form input:focus {
+  border-color: var(--ds-navy);
+  box-shadow: 0 0 0 4px rgba(0,31,63,.08);
+}
+.driver-form input::placeholder { color: var(--ds-faint); }
 
-.driver-doc-mark {
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  border-radius: 12px;
-  background: rgba(244, 244, 240, .045);
-  color: #8a96a0;
+.driver-terms {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--ds-ink-soft);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.driver-terms input { margin-top: 2px; }
+.driver-terms a { color: var(--ds-navy); font-weight: 600; }
+
+.driver-navy-button {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 22px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(120deg,#012a54,#001f3f);
+  box-shadow: 0 12px 30px rgba(0,31,63,.28);
+  color: #fff;
+  font: 600 14px/1 Inter, system-ui, sans-serif;
+  cursor: pointer;
+  transition: transform .16s ease, opacity .16s ease;
+}
+.driver-navy-button:active { transform: scale(.95); }
+.driver-navy-button:disabled {
+  background: var(--ds-line-strong);
+  box-shadow: none;
+  cursor: default;
+  opacity: .8;
+}
+.link-button {
   display: grid;
   place-items: center;
-  font-size: 15px;
+  text-decoration: none;
+  max-width: 300px;
 }
 
-.driver-doc-mark.done {
-  background: rgba(203, 163, 101, .13);
-  color: #cba365;
+.driver-upload-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 22px;
 }
-
-.driver-doc-copy {
-  min-width: 0;
-  flex: 1;
+.driver-doc-row {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: 16px;
+  background: var(--ds-surface);
 }
-
+.driver-doc-row.complete { border-color: rgba(18,185,129,.55); }
+.driver-doc-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 21px;
+  background: var(--ds-soft);
+  color: var(--ds-ink-soft);
+  font-size: 16px;
+}
+.driver-doc-row.complete .driver-doc-icon {
+  background: rgba(18,185,129,.12);
+  color: var(--ds-green);
+}
+.driver-doc-copy { min-width: 0; flex: 1; }
 .driver-doc-copy strong,
+.driver-doc-copy span { display: block; }
+.driver-doc-copy strong { font-size: 13px; font-weight: 600; }
 .driver-doc-copy span {
-  display: block;
-}
-
-.driver-doc-copy strong {
-  color: #f4f4f0;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.driver-doc-copy span {
-  margin-top: 5px;
+  margin-top: 4px;
   overflow: hidden;
-  color: #8a96a0;
+  color: var(--ds-ink-soft);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .driver-doc-action {
-  flex: 0 0 auto;
   min-height: 36px;
-  padding: 0 13px;
-  border: 1px solid rgba(203, 163, 101, .26);
-  border-radius: 999px;
-  background: rgba(203, 163, 101, .10);
-  color: #cba365;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--ds-navy);
+  font: 500 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: .08em;
 }
 
-.driver-signup-form > .primary-button {
-  width: 100%;
-  margin-top: 8px;
+.driver-selfie-wrap {
+  margin-top: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.driver-selfie {
+  width: 176px;
+  height: 176px;
+  border: 2px dashed var(--ds-line-strong);
+  border-radius: 88px;
+  background: var(--ds-surface);
+  color: var(--ds-faint);
+  font-size: 48px;
+}
+.driver-selfie.complete {
+  border-color: var(--ds-green);
+  background: rgba(18,185,129,.10);
+  color: var(--ds-green);
+}
+.driver-selfie-wrap strong {
+  color: var(--ds-ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.driver-vehicle-card {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: var(--ds-navy);
+  box-shadow: 0 0 0 4px rgba(0,31,63,.08);
+}
+.driver-vehicle-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: rgba(0,31,63,.08);
+  color: var(--ds-navy);
+  font-weight: 700;
+}
+.driver-vehicle-card > div { flex: 1; }
+.driver-vehicle-card strong,
+.driver-vehicle-card span { display: block; }
+.driver-vehicle-card strong { font-size: 14px; font-weight: 600; }
+.driver-vehicle-card div span { margin-top: 4px; color: var(--ds-ink-soft); font-size: 11px; }
+.driver-check {
+  width: 22px;
+  height: 22px;
+  display: grid !important;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--ds-navy);
+  color: #fff;
+  font-size: 12px;
+}
+
+.driver-error {
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(244,67,54,.08);
+  color: #b42329;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .driver-back {
   align-self: center;
-  margin-top: 4px;
-  padding: 9px 14px;
+  min-height: 40px;
+  margin-top: 5px;
+  padding: 0 14px;
   border: 0;
   background: transparent;
-  color: #8a96a0;
-  font-size: 11px;
+  color: var(--ds-ink-soft);
+  font-size: 12px;
 }
-
 .driver-invite-help {
-  display: inline-block;
-  margin-top: 26px;
-  color: #8a96a0;
+  align-self: center;
+  margin-top: auto;
+  padding-top: 24px;
+  color: var(--ds-faint);
   font-size: 10px;
   text-decoration: none;
 }
 
-.driver-invite-help:hover,
-.driver-back:hover {
-  color: #f4f4f0;
+.driver-centered-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
+.driver-centered-state > p { max-width: 300px; }
+.driver-status-circle {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  border-radius: 40px;
+  margin-bottom: 22px;
+  background: linear-gradient(135deg,#012a54,#001f3f);
+  color: #fff;
+  font-size: 34px;
+}
+.driver-status-circle.error { background: #fff0f0; color: #b42329; border: 1px solid rgba(180,35,41,.2); }
+.driver-pending-card {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 22px;
+}
+.driver-pending-card div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.driver-pending-card span { color: var(--ds-ink-soft); }
+.driver-pending-card strong { font-weight: 600; }
 
-@media (max-width: 680px) {
-  .driver-signup-screen {
-    padding: 22px 18px 42px;
-  }
+.centered-screen { place-items: center; }
+.driver-loader {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--ds-line-strong);
+  border-top-color: var(--ds-navy);
+  border-radius: 50%;
+  animation: driver-spin .9s linear infinite;
+}
+@keyframes driver-spin { to { transform: rotate(360deg); } }
 
-  .driver-signup-card {
-    margin-top: 38px;
-    padding: 24px 20px;
-    border-radius: 22px;
-  }
-
-  .driver-signup-card.centered {
-    min-height: 360px;
-  }
-
-  .driver-signup-card h1 {
-    font-size: 31px;
-  }
-
-  .assigned-car {
-    margin-top: 22px;
-  }
-
-  .driver-doc-row {
-    padding: 11px;
+@media (max-width: 520px) {
+  .driver-signup-screen { padding: 0; display: block; }
+  .driver-phone-shell {
+    width: 100%;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: max(22px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
   }
 }

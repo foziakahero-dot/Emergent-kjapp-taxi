@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kjapp",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "no.nexorahub.kjapp.customer",
@@ -14,7 +14,8 @@
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
         "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
         "ITSAppUsesNonExemptEncryption": false,
-        "MGLMapboxMetricsEnabledSettingShownInApp": true
+        "MGLMapboxMetricsEnabledSettingShownInApp": true,
+        "NSCameraUsageDescription": "KJAPP bruker kameraet når du velger å skanne et betalingskort for å betale for taxiturer."
       },
       "usesAppleSignIn": true
     },
@@ -23,7 +24,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
-        "backgroundColor": "#070B0E"
+        "backgroundColor": "#FF0000"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
@@ -55,7 +56,7 @@
         "expo-notifications",
         {
           "defaultChannel": "kjapp_trips",
-          "color": "#00E5F5"
+          "color": "#FF0000"
         }
       ],
       [
@@ -72,8 +73,8 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 200,
-          "backgroundColor": "#070B0E"
+          "imageWidth": 104,
+          "backgroundColor": "#F4F6FA"
         }
       ]
     ],

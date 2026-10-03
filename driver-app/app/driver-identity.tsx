@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -237,3 +238,4 @@ const useStyles = makeStyles((c) => ({
   privacyText: { flex: 1, color: c.textMuted, fontSize: 12, lineHeight: 18 },
   error: { color: c.danger, fontSize: 13, lineHeight: 19, marginTop: 14, textAlign: 'center' },
 }));
+
