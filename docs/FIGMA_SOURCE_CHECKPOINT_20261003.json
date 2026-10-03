@@ -5,7 +5,7 @@
     "frontend/package.json": "a7dc081f80d3aee3dc3ec7b75676e2f2d3e650f9b68ce22feb3d499115f65b78",
     "frontend/CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
     "frontend/babel.config.js": "c27c3e8f3470c96cfa6f165c5ada8dcd66b1db7556c22c31cb8f0450babdf209",
-    "frontend/eas.json": "c146ef62471d6b7114841367b53fbe280b9db210338ce26424a4eabf8cbc8487",
+    "frontend/eas.json": "09cb86ccf22cd494dd72573d217ec3e42a8b49d0a620fa4b3d78288db6a1c048",
     "frontend/.gitignore": "5936b94a73a28b6735de672b54c2c058a33c9ae1edb62d87d6a4418e14447805",
     "frontend/tsconfig.json": "5fc60342eb12ad6a2d7834502b95318e86a1ce0962b846a07d88229f57983256",
     "frontend/BUILD_REQUEST.md": "b1349a60bb64c27babc48468ea431ba2054882502474ee8402138bac27759e46",
@@ -97,7 +97,7 @@
     "driver-app/package.json": "4096c13e8686871f5e4467a2a1cc5277ce7acf6f1002017b97f525b6fa2655ab",
     "driver-app/CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
     "driver-app/babel.config.js": "c27c3e8f3470c96cfa6f165c5ada8dcd66b1db7556c22c31cb8f0450babdf209",
-    "driver-app/eas.json": "00086489506d348e6d22fd3877600d2e1a6d565a0bb928b1b5d1003d66f37cd5",
+    "driver-app/eas.json": "6c1d944ad8a2e0cb4de1b2537fd432abc876df70f033c5be1092aae9608e3309",
     "driver-app/.gitignore": "5936b94a73a28b6735de672b54c2c058a33c9ae1edb62d87d6a4418e14447805",
     "driver-app/tsconfig.json": "5fc60342eb12ad6a2d7834502b95318e86a1ce0962b846a07d88229f57983256",
     "driver-app/AGENTS.md": "5986df214fcb822f856b9a8aac7c06503e02158aad55c8d7edf2966d7ee2dffd",
@@ -174,5 +174,9 @@
     "driver-app/assets/fonts/Fraunces.ttf": "177ff6c0f14e5550a3c624247cd1189611d4eb65d000b14944c63d967958abbb",
     "driver-app/assets/fonts/JetBrainsMono-Regular.ttf": "48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda",
     "scripts/verify-figma-mobile.cjs": "fc1425bc6462ab76cd4911e08536737796713c4b56079132a0d8b74a778529b3"
+  },
+  "native_build_preparation": {
+    "application_commit": "66bdbf2c41afaa893c36c232259602a5fd91c938",
+    "changes": "Explicit latest images and medium workers for APK and testflight-beta profiles in both apps. Application source is unchanged from the tested exports."
   }
 }
