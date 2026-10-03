@@ -32,6 +32,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         apply_driver_risk, require_active_fleet, real_trip_filter, mark_paid, send_receipts):
 
     async def identity_session(provider, claims, body, response):
+        brand = "SNAR" if body.client == "customer" else "KJAPP"
         sub = claims.get("sub")
         if not sub:
             raise HTTPException(401, "Ugyldig innlogging")
@@ -48,7 +49,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                 if candidate.get(field) and candidate[field] != sub:
                     raise HTTPException(409, "Kontoen er koblet til en annen identitet")
                 if provider == "google" and not (email.endswith("@gmail.com") or claims.get("hd")):
-                    raise HTTPException(409, "Logg inn med KJAPP-passordet for denne e-postadressen")
+                    raise HTTPException(409, f"Logg inn med {brand}-passordet for denne e-postadressen")
                 user = candidate
         if user and (user.get("disabled") or user.get("role", "user") != role):
             raise HTTPException(401, "Denne kontoen kan ikke brukes i appen")
@@ -69,7 +70,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         uid = str(user["_id"])
         # Do not persist a new social link before a required second factor.
         if user.get("totp_enabled"):
-            raise HTTPException(409, "Kontoen krever tofaktor. Bruk KJAPP-innlogging.")
+            raise HTTPException(409, f"Kontoen krever tofaktor. Bruk {brand}-innlogging.")
         await db.users.update_one({"_id": user["_id"]}, {"$set": {field: sub, provider + "_linked": True}})
         user = await db.users.find_one({"_id": user["_id"]})
         user = await apply_driver_risk(user, body.device_id, body.client, on_login=True)
