@@ -1,0 +1,20 @@
+name: Customer APK startup smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_build_id:
+        type: string
+        required: true
+        default: ebeff02a-4d72-4e15-9d61-d14782b96acb
+        description: Existing Customer APK to launch on an Android emulator
+
+jobs:
+  startup:
+    name: Launch the signed Customer APK
+    type: maestro
+    environment: preview
+    params:
+      build_id: ${{ inputs.android_build_id }}
+      flow_path: .maestro/customer-startup.yml
+      record_screen: true
