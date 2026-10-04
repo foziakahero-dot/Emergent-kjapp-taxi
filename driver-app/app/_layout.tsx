@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
 import { driverApi } from '@/src/lib/api';
 import {
+  listenForNativePushTokenChanges,
   normalizeDriverNotificationUrl,
   registerNativePush,
   startDriverBackgroundLocation,
@@ -25,11 +26,14 @@ function NativeRuntimeBridge() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user?.role === 'driver') registerNativePush().catch(() => {});
-  }, [user?.id, user?.role]);
+    if (user?.role !== 'driver' || user?.approved !== true) return;
+    registerNativePush().catch(() => {});
+    const tokenSub = listenForNativePushTokenChanges();
+    return () => tokenSub.remove();
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
-    if (user?.role !== 'driver') {
+    if (user?.role !== 'driver' || user?.approved !== true) {
       stopDriverBackgroundLocation().catch(() => {});
       return;
     }
@@ -52,22 +56,38 @@ function NativeRuntimeBridge() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
+    if (user?.role !== 'driver' || user?.approved !== true) return;
+
+    let active = true;
+    let sub: { remove: () => void } | undefined;
+
     const open = (notification?: Notifications.Notification | null) => {
       const target = normalizeDriverNotificationUrl(notification?.request.content.data?.url);
       if (target) router.push(target as any);
     };
 
-    const last = Notifications.getLastNotificationResponse();
-    if (last?.notification) open(last.notification);
+    const init = async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (active && last?.notification) open(last.notification);
+        if (!active) return;
+        sub = Notifications.addNotificationResponseReceivedListener((response) => {
+          open(response.notification);
+        });
+      } catch {
+        // Push/deep-link initialization must never terminate the driver app.
+      }
+    };
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      open(response.notification);
-    });
-    return () => sub.remove();
-  }, []);
+    void init();
+    return () => {
+      active = false;
+      sub?.remove();
+    };
+  }, [user?.id, user?.role, user?.approved]);
 
   return null;
 }

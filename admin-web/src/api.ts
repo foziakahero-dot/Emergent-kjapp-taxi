@@ -54,6 +54,7 @@ export const api = {
   twofaDisable: (password: string, code: string) => http.post('/auth/2fa/disable', { password, code }).then((r) => r.data),
 
   overview: () => http.get('/admin/overview').then((r) => r.data),
+  dataIntegrity: () => http.get('/admin/data-integrity').then((r) => r.data),
   live: () => http.get('/admin/live').then((r) => r.data),
   finance: (days = 30) => http.get('/admin/finance', { params: { days } }).then((r) => r.data),
 

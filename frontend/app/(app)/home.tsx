@@ -18,7 +18,6 @@ import { useAuth } from '@/src/context/AuthContext';
 import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, greeting, kr, VEHICLES } from '@/src/lib/format';
 
-const OSLO = { lat: 59.9127, lng: 10.7461 };
 const GOLD_VEHICLE_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
 
 function vehicleCopy(type: string) {
@@ -33,8 +32,8 @@ export default function Home() {
   const s = useStyles();
   const { user } = useAuth();
 
-  const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
-  const [pickupLabel, setPickupLabel] = useState('Din posisjon');
+  const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [pickupLabel, setPickupLabel] = useState('Henter posisjon…');
   const [locDenied, setLocDenied] = useState(false);
   const [cars, setCars] = useState<any[]>([]);
   const [featured, setFeatured] = useState<any[]>([]);
@@ -64,7 +63,12 @@ export default function Home() {
       loadMethods();
       loadPlaces();
       tripsApi.active().then((t) => {
-        if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);
+        if (!active || !t?.trip_id) return;
+        if (t.status === 'arrived') {
+          router.replace(`/receipt/${t.trip_id}`);
+          return;
+        }
+        router.replace(`/booking/${t.trip_id}`);
       }).catch(() => {});
       return () => { active = false; };
     }, [loadMethods, loadPlaces, router]),
@@ -80,9 +84,13 @@ export default function Home() {
           setLoc(p);
           placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});
         } else {
+          setLoc(null);
+          setPickupLabel('Posisjon utilgjengelig');
           setLocDenied(true);
         }
       } catch {
+        setLoc(null);
+        setPickupLabel('Posisjon utilgjengelig');
         setLocDenied(true);
       }
     })();
@@ -92,24 +100,31 @@ export default function Home() {
   }, [loadMethods, loadPlaces]);
 
   useEffect(() => {
+    if (!loc) {
+      setCars([]);
+      return;
+    }
     let mounted = true;
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
     load();
     const i = setInterval(load, 8000);
     return () => { mounted = false; clearInterval(i); };
-  }, [loc.lat, loc.lng]);
+  }, [loc?.lat, loc?.lng]);
 
   useEffect(() => {
-    if (!dropoff) { setEstimate(null); return; }
+    if (!dropoff || !loc) { setEstimate(null); return; }
     tripsApi.estimate({
       pickup_lat: loc.lat, pickup_lng: loc.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
       stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
     }).then(setEstimate).catch(() => setEstimate(null));
-  }, [dropoff, loc.lat, loc.lng, stops]);
+  }, [dropoff, loc?.lat, loc?.lng, stops]);
 
-  const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
+  const routedEtas = cars.map((c) => c.eta_min).filter((v) => typeof v === 'number' && Number.isFinite(v));
+  const nearest = routedEtas.length ? Math.min(...routedEtas) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
+  const quotedPrice = priceFor(selType);
+  const routeReady = Boolean(loc && estimate?.routing_source === 'osrm' && quotedPrice != null);
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
   const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
@@ -121,6 +136,14 @@ export default function Home() {
 
   const book = async () => {
     if (!dropoff) return;
+    if (!loc) {
+      setError('KJAPP trenger din faktiske GPS-posisjon før du kan bestille.');
+      return;
+    }
+    if (!routeReady) {
+      setError('Kjørerute og pris er ikke bekreftet ennå. Prøv igjen om et øyeblikk.');
+      return;
+    }
     setError('');
     setBooking(true);
     try {
@@ -155,7 +178,7 @@ export default function Home() {
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={loc}
-        pickup={dropoff ? loc : null}
+        pickup={dropoff && loc ? loc : null}
         dropoff={dropoff}
         route={routeGeom}
         cars={dropoff ? [] : cars}
@@ -188,8 +211,10 @@ export default function Home() {
           <View style={[s.dot, { backgroundColor: cars.length ? colors.online : colors.textMuted }]} />
           <Text style={s.carsText}>
             {cars.length
-              ? `${cars.length} biler i nærheten · nærmeste ${nearest} min`
-              : 'Søker etter ledige biler…'}
+              ? nearest != null
+                ? `${cars.length} biler i nærheten · nærmeste ca. ${nearest} min`
+                : `${cars.length} biler i nærheten · ETA utilgjengelig`
+              : 'Ingen ledige biler i nærheten akkurat nå'}
           </Text>
         </View>
 
@@ -248,7 +273,7 @@ export default function Home() {
             </ScrollView>
 
             {locDenied ? (
-              <Text style={s.hint}>Slå på posisjon for å se biler rundt deg — vi bruker Oslo sentrum inntil videre.</Text>
+              <Text style={s.hint}>Slå på posisjon for å se ekte biler rundt deg og beregne riktig hentested. KJAPP bruker ikke en erstatningsposisjon.</Text>
             ) : null}
           </>
         ) : (
@@ -308,7 +333,7 @@ export default function Home() {
             <View style={s.summary} testID="booking-price-summary">
               <View style={{ flex: 1 }}>
                 <Text style={s.summaryLeft}>
-                  {estimate ? `${estimate.distance_km} km · estimert kjøretid ${estimate.duration_min} min` : 'Beregner rute…'}
+                  {estimate ? `${estimate.distance_km} km · ca. ${estimate.duration_min} min via kjørerute` : 'Rute/pris ikke tilgjengelig ennå'}
                 </Text>
                 {estimate?.commission_rate != null ? (
                   <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 3 }} testID="booking-service-fee">
@@ -375,15 +400,17 @@ export default function Home() {
             {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
 
             <Pressable
-              style={[s.confirm, booking && { opacity: 0.6 }]}
+              style={[s.confirm, (!routeReady || booking) && { opacity: 0.55 }]}
               onPress={book}
-              disabled={booking}
+              disabled={booking || !routeReady}
               testID="booking-confirm"
             >
               {booking ? (
                 <ActivityIndicator color={colors.accentOn} />
               ) : (
-                <Text style={s.confirmText}>Bekreft KJAPP · {kr(priceFor(selType))}</Text>
+                <Text style={s.confirmText}>
+                  {routeReady ? `Bekreft KJAPP · ${kr(quotedPrice)}` : 'Venter på bekreftet rute og pris'}
+                </Text>
               )}
             </Pressable>
           </>

@@ -239,13 +239,8 @@ export function InteractiveMap({
     }
   }
 
-  const routeLine = (
-    route && route.length
-      ? route
-      : pickup && dropoff
-        ? [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]]
-        : []
-  )
+  // Draw only server-provided road geometry. Never invent a straight-line "route".
+  const routeLine = (route && route.length ? route : [])
     .map(([lng, lat]) => `${sx(lng).toFixed(1)},${sy(lat).toFixed(1)}`)
     .join(' ');
 

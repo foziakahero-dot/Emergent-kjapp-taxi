@@ -78,12 +78,14 @@ LEGACY_DEMO_EMAILS = {
 
 
 def demo_data_enabled(app_env: str, flag) -> bool:
-    """Demo seeds and demo background jobs are NEVER allowed in production."""
+    """Demo/test seeds are opt-in only and are NEVER allowed in production.
+
+    Missing ENABLE_DEMO_DATA means False. This prevents a beta/staging deployment from
+    silently becoming a demo environment just because an env var was omitted.
+    """
     if (app_env or "").strip().lower() == "production":
         return False
-    if flag is None:
-        return True
-    return str(flag).strip().lower() in ("1", "true", "yes", "on")
+    return str(flag or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 ENABLE_DEMO_DATA = demo_data_enabled(APP_ENV, os.environ.get("ENABLE_DEMO_DATA"))
@@ -256,10 +258,12 @@ async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_pro
     return result
 
 
-async def disable_legacy_demo_users(db, is_production: bool, admin_email: str = "") -> int:
-    """In production, disable known seed/demo accounts so they cannot authenticate. Legitimate
-    production users are never touched. Returns the number of accounts disabled."""
-    if not is_production:
+async def disable_legacy_demo_users(db, enforce: bool, admin_email: str = "") -> int:
+    """Disable known seed/demo accounts whenever the deployment is not an explicit demo environment.
+
+    This applies to production and beta/staging with ENABLE_DEMO_DATA=false.
+    """
+    if not enforce:
         return 0
     admin_email = (admin_email or "").strip().lower()
     query = {
@@ -284,6 +288,7 @@ async def purge_synthetic_data(db) -> dict:
     """Delete fabricated trips and simulated accounts so the driver/customer apps only ever
     render real data. Safe to run on every boot — it only matches synthetic markers."""
     trips = await db.trips.delete_many({"$or": [
+        {"synthetic": True},
         {"demo": True},
         {"pickup_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
         {"dropoff_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
@@ -347,6 +352,7 @@ USER_RESPONSE_FIELDS = frozenset({
     "last_location_at", "totp_enabled", "google_linked", "apple_linked", "must_reset_password", "permissions",
     "drivers_license_path", "taxi_license_path", "profile_photo_path", "documents_uploaded_at",
     "approved_at", "approved_by", "fleet_name", "today_income", "today_trips", "status", "capabilities",
+    "active_vehicle_id",
 })
 
 
@@ -440,6 +446,11 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str
+    password: str
+
+
+class DriverLoginRequest(BaseModel):
+    identifier: str
     password: str
 
 
@@ -544,7 +555,7 @@ class SettingsUpdate(BaseModel):
     theme: Optional[str] = None
 
 
-# ------------------ Trip simulator ------------------
+# ------------------ Routing utilities ------------------
 
 
 def haversine_km(lat1, lng1, lat2, lng2):
@@ -599,14 +610,6 @@ async def osrm_route_points(points: list[tuple[float, float]]):
         return None
 
 
-def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int]:
-    distance = 0.0
-    for idx in range(len(points) - 1):
-        distance += haversine_km(points[idx][0], points[idx][1], points[idx + 1][0], points[idx + 1][1])
-    distance = round(distance, 1)
-    return distance, max(3, int(distance * 2.2))
-
-
 def send_email(to_email: str, subject: str, html: str) -> bool:
     """Send email via SendGrid if configured, else log to console."""
     api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
@@ -628,20 +631,25 @@ def send_email(to_email: str, subject: str, html: str) -> bool:
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
     note_html = f"<p style='color:#a1a7ab;font-size:13px'>Notat fra flåte-eier: {note}</p>" if note else ""
+    legacy_vehicle_html = ""
+    if (car or plate):
+        legacy_vehicle_html = f"""
+        <div style="background:#0e1113;border:1px solid #1c2124;border-radius:12px;padding:16px;margin:16px 0;">
+          <div style="color:#2fe08c;font-size:11px;letter-spacing:2px;text-transform:uppercase">Foreløpig bilreferanse</div>
+          <div style="color:#fff;font-size:16px;margin-top:4px">{car or 'Bil'} · {plate or '—'}</div>
+        </div>
+        """
     return f"""
     <div style="font-family:'Segoe UI',Arial,sans-serif;background:#050708;color:#e6ecef;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
       <div style="font-weight:700;font-size:26px;letter-spacing:0.5px;">KJ<span style="color:#2fe08c">A</span>PP</div>
       <div style="font-size:11px;letter-spacing:4px;color:#2fe08c;text-transform:uppercase;margin-top:4px">Sjåfør-invitasjon</div>
       <h1 style="font-size:22px;color:#fff;margin-top:24px;line-height:1.3">Velkommen til KJAPP-flåten</h1>
       <p style="color:#a1a7ab;font-size:14px;line-height:1.6">
-        Du har blitt invitert til å kjøre for KJAPP. Bilen som er tildelt deg:
+        Du har blitt invitert som sjåfør. Fullfør registreringen og dokumentkontrollen. Flåteeieren tildeler biler separat i KJAPP Partner, og du velger aktiv tildelt bil i Driver-appen før du går online.
       </p>
-      <div style="background:#0e1113;border:1px solid #1c2124;border-radius:12px;padding:16px;margin:16px 0;">
-        <div style="color:#2fe08c;font-size:11px;letter-spacing:2px;text-transform:uppercase">Bil</div>
-        <div style="color:#fff;font-size:16px;margin-top:4px">{car} · {plate}</div>
-      </div>
+      {legacy_vehicle_html}
       {note_html}
-      <p style="color:#a1a7ab;font-size:14px;line-height:1.6">Klikk lenken under for å fullføre registreringen. Kontoen din må godkjennes før du kan motta turer.</p>
+      <p style="color:#a1a7ab;font-size:14px;line-height:1.6">Klikk lenken under for å fullføre registreringen. Kontoen må godkjennes før KJAPP Driver kan brukes.</p>
       <a href="{invite_url}" style="display:inline-block;background:#2fe08c;color:#04120a;padding:14px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:12px">Fullfør registrering</a>
       <p style="color:#5a6166;font-size:11px;margin-top:32px;line-height:1.5">
         Hvis du ikke forventet denne invitasjonen kan du trygt ignorere e-posten. Lenken utløper om 14 dager.
@@ -744,13 +752,6 @@ def pricing_for_pickup(pricing: dict, lat: float, lng: float) -> tuple[dict, Opt
     return cfg, None
 
 
-def price_for(distance_km: float, vehicle_type: str, duration_min: float = None, when: datetime = None) -> int:
-    """Legacy-compatible fallback used by tests/helpers; live quotes use calculate_price + active_pricing."""
-    if duration_min is None:
-        duration_min = max(3, distance_km * 2.2)
-    return calculate_price(distance_km, vehicle_type, duration_min, DEFAULT_PRICING, when)["price"]
-
-
 def current_surge_info(when: datetime = None) -> dict:
     """Return current automatic time-based surge for Norway using DST-safe Europe/Oslo time."""
     now = (when or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Oslo"))
@@ -767,14 +768,11 @@ def current_surge_info(when: datetime = None) -> dict:
 
 FCM_APP = None
 FCM_INIT_TRIED = False
+APNS_JWT_CACHE = {"token": None, "issued_at": 0}
 
 
 def _fcm_app():
-    """Lazily initialise Firebase Admin for native push (FCM for Android, APNs via FCM for iOS).
-
-    Key-optional: without FCM_SERVICE_ACCOUNT_JSON / FCM_SERVICE_ACCOUNT_FILE the app runs
-    normally and native push is simply reported as "not configured".
-    """
+    """Lazily initialise Firebase Admin for Android FCM delivery."""
     global FCM_APP, FCM_INIT_TRIED
     if FCM_APP is not None or FCM_INIT_TRIED:
         return FCM_APP
@@ -796,7 +794,7 @@ def _fcm_app():
 
 
 def _fcm_send(tokens: list, title: str, body: str, data: dict):
-    """Blocking FCM call — run through asyncio.to_thread. Returns tokens that are dead."""
+    """Blocking Android FCM call — run through asyncio.to_thread. Returns dead tokens."""
     from firebase_admin import messaging
     msg_data = {k: str(v) for k, v in (data or {}).items()}
     dead = []
@@ -810,13 +808,9 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict):
                     android=messaging.AndroidConfig(
                         priority="high",
                         notification=messaging.AndroidNotification(
-                            channel_id="kjapp_trips", sound="default", default_vibrate_timings=True,
-                        ),
-                    ),
-                    apns=messaging.APNSConfig(
-                        headers={"apns-priority": "10", "apns-push-type": "alert"},
-                        payload=messaging.APNSPayload(
-                            aps=messaging.Aps(sound="default", badge=1, content_available=True)
+                            channel_id="kjapp_trips",
+                            sound="default",
+                            default_vibrate_timings=True,
                         ),
                     ),
                 ),
@@ -831,23 +825,140 @@ def _fcm_send(tokens: list, title: str, body: str, data: dict):
     return dead
 
 
+def _apns_private_key():
+    raw = (os.environ.get("APNS_PRIVATE_KEY") or "").strip()
+    path = (os.environ.get("APNS_PRIVATE_KEY_FILE") or "").strip()
+    if raw:
+        return raw.replace("\\n", "\n")
+    if path:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except Exception as e:
+            print(f"APNs key read failed: {e}")
+    return None
+
+
+def _apns_configured():
+    return bool(
+        (os.environ.get("APNS_KEY_ID") or "").strip()
+        and (os.environ.get("APNS_TEAM_ID") or "").strip()
+        and _apns_private_key()
+    )
+
+
+def _apns_auth_token():
+    now = int(datetime.now(timezone.utc).timestamp())
+    cached = APNS_JWT_CACHE.get("token")
+    issued_at = int(APNS_JWT_CACHE.get("issued_at") or 0)
+    if cached and now - issued_at < 3000:
+        return cached
+
+    key_id = (os.environ.get("APNS_KEY_ID") or "").strip()
+    team_id = (os.environ.get("APNS_TEAM_ID") or "").strip()
+    private_key = _apns_private_key()
+    if not key_id or not team_id or not private_key:
+        return None
+
+    token = jwt.encode(
+        {"iss": team_id, "iat": now},
+        private_key,
+        algorithm="ES256",
+        headers={"kid": key_id},
+    )
+    APNS_JWT_CACHE.update({"token": token, "issued_at": now})
+    return token
+
+
+def _apns_bundle_id(app_role: str):
+    if app_role == "driver":
+        return (os.environ.get("APNS_BUNDLE_ID_DRIVER") or "no.kjapp.driver").strip()
+    return (os.environ.get("APNS_BUNDLE_ID_CUSTOMER") or "no.kjapp.app").strip()
+
+
+async def _apns_send(devices: list, title: str, body: str, data: dict):
+    """Send directly to APNs because expo-notifications returns a native APNs token on iOS."""
+    auth_token = _apns_auth_token()
+    if not auth_token:
+        return []
+
+    dead = []
+    payload = {
+        "aps": {
+            "alert": {"title": title, "body": body},
+            "sound": "default",
+            "badge": 1,
+        },
+        **{k: str(v) for k, v in (data or {}).items()},
+    }
+
+    async with httpx.AsyncClient(http2=True, timeout=10.0) as client:
+        for device in devices:
+            token = device.get("token")
+            if not token:
+                continue
+            app_role = device.get("app_role") or "customer"
+            bundle_id = device.get("bundle_id") or _apns_bundle_id(app_role)
+            environment = device.get("environment") or "production"
+            host = "https://api.sandbox.push.apple.com" if environment == "development" else "https://api.push.apple.com"
+            try:
+                response = await client.post(
+                    f"{host}/3/device/{token}",
+                    headers={
+                        "authorization": f"bearer {auth_token}",
+                        "apns-topic": bundle_id,
+                        "apns-push-type": "alert",
+                        "apns-priority": "10",
+                    },
+                    json=payload,
+                )
+                if response.status_code == 200:
+                    continue
+                try:
+                    reason = (response.json() or {}).get("reason", "")
+                except Exception:
+                    reason = ""
+                if response.status_code == 410 or reason in {
+                    "BadDeviceToken",
+                    "DeviceTokenNotForTopic",
+                    "Unregistered",
+                }:
+                    dead.append(token)
+                else:
+                    print(f"APNs send error: HTTP {response.status_code} {reason}")
+            except Exception as e:
+                print(f"APNs send error: {type(e).__name__}: {e}")
+    return dead
+
+
 async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None):
-    """Push to the user's real mobile devices (locked screen) via FCM/APNs."""
-    if not _fcm_app():
+    """Deliver locked-screen push: Android via Firebase/FCM, iOS directly via APNs."""
+    devices = []
+    async for device in db.native_push_tokens.find({"user_id": user_id}):
+        if device.get("token"):
+            devices.append(device)
+    if not devices:
         return
-    tokens = []
-    async for t in db.native_push_tokens.find({"user_id": user_id}, {"token": 1}):
-        if t.get("token"):
-            tokens.append(t["token"])
-    if not tokens:
-        return
-    try:
-        dead = await asyncio.to_thread(_fcm_send, tokens, title, body, {"url": url, "tag": tag or ""})
-    except Exception as e:
-        print(f"send_native_push failed: {e}")
-        return
+
+    data = {"url": url, "tag": tag or ""}
+    dead = []
+
+    android_tokens = [d["token"] for d in devices if d.get("platform") == "android"]
+    if android_tokens and _fcm_app():
+        try:
+            dead.extend(await asyncio.to_thread(_fcm_send, android_tokens, title, body, data))
+        except Exception as e:
+            print(f"send_native_push FCM failed: {e}")
+
+    ios_devices = [d for d in devices if d.get("platform") == "ios"]
+    if ios_devices and _apns_configured():
+        try:
+            dead.extend(await _apns_send(ios_devices, title, body, data))
+        except Exception as e:
+            print(f"send_native_push APNs failed: {e}")
+
     if dead:
-        await db.native_push_tokens.delete_many({"token": {"$in": dead}})
+        await db.native_push_tokens.delete_many({"token": {"$in": list(set(dead))}})
 
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
@@ -882,12 +993,6 @@ async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/ap
             pass
 
 
-async def progress_trip(trip_id: str):
-    """DEPRECATED — trips now progress ONLY when a real driver acts.
-    Kept for compatibility (no-op)."""
-    return
-
-
 # ------------------ Lifespan ------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -896,6 +1001,11 @@ async def lifespan(app: FastAPI):
     await db.trips.create_index("trip_id", unique=True)
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
+    await db.native_push_tokens.create_index(
+        [("user_id", 1), ("platform", 1), ("device_id", 1), ("app_role", 1)],
+        unique=True,
+    )
+    await db.native_push_tokens.create_index("token")
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
@@ -904,6 +1014,14 @@ async def lifespan(app: FastAPI):
     await db.revoked_tokens.create_index("jti", unique=True)
     await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
     await ensure_marketing_waitlist_indexes(db)
+
+    # Permanent migration: legacy platform setting can never re-enable fabricated demo trips.
+    await db.platform_settings.update_one(
+        {"_id": "singleton"},
+        {"$set": {"features.demo_trips": False}},
+        upsert=True,
+    )
+
     await db.trip_share_tokens.create_index("token_hash", unique=True)
     await db.trip_share_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.safety_events.create_index([("trip_id", 1), ("created_at", -1)])
@@ -975,6 +1093,8 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Nordmann",
             "phone": "+4791234567",
             "role": "user",
+            "demo": True,
+            "is_demo": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         # seed default payment methods for test user
@@ -984,7 +1104,13 @@ async def lifespan(app: FastAPI):
             {"user_id": str(uid.inserted_id), "type": "mastercard", "label": "Mastercard", "last4": "8888", "is_default": False, "created_at": datetime.now(timezone.utc).isoformat()},
         ])
 
-    # seed driver user (demo only) — real driver with car info stored on user record
+    if ENABLE_DEMO_DATA:
+        await db.users.update_one(
+            {"email": test_email, "role": "user"},
+            {"$set": {"demo": True, "is_demo": True}},
+        )
+
+    # seed driver user (demo only) — isolated test driver, never live supply
     driver_email = "sjafor@kjapp.no"
     if ENABLE_DEMO_DATA and not await db.users.find_one({"email": driver_email}):
         await db.users.insert_one({
@@ -993,20 +1119,27 @@ async def lifespan(app: FastAPI):
             "fullName": "Ola Sjåfør",
             "phone": "+4790000001",
             "role": "driver",
+            "demo": True,
+            "is_demo": True,
             "car": "Tesla Model Y",
             "plate": "EL12345",
             "vehicle_type": "ai-first",
-            "rating": 4.9,
+            "rating": None,
+            "rating_count": 0,
             "approved": True,
             "online": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     else:
-        # backfill car/plate on existing driver user (demo/dev only)
+        # Existing explicit demo driver stays clearly marked as demo in isolated test mode.
         if ENABLE_DEMO_DATA:
             await db.users.update_one(
+                {"email": driver_email, "role": "driver"},
+                {"$set": {"demo": True, "is_demo": True}},
+            )
+            await db.users.update_one(
                 {"email": driver_email, "role": "driver", "$or": [{"car": {"$exists": False}}, {"car": None}]},
-                {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": 4.9, "approved": True}},
+                {"$set": {"car": "Tesla Model Y", "plate": "EL12345", "vehicle_type": "ai-first", "rating": None, "rating_count": 0, "approved": True}},
             )
 
     # ---- Simulated "cruising" demo drivers are PERMANENTLY REMOVED ----
@@ -1019,15 +1152,18 @@ async def lifespan(app: FastAPI):
     if stale_demo.modified_count:
         print(f"[seed] forced {stale_demo.modified_count} simulated demo driver(s) offline (never shown on customer map)")
 
-    # PRODUCTION RULE: no fabricated trips/accounts may ever reach the driver or customer app.
-    purged = await purge_synthetic_data(db)
-    if purged:
-        print(f"[seed] purged synthetic data: {purged}")
+    # No-demo deployment rule: fabricated/test records are purged from beta/production.
+    # An explicitly isolated demo environment keeps its own marked demo records for testing only.
+    if not ENABLE_DEMO_DATA:
+        purged = await purge_synthetic_data(db)
+        if purged:
+            print(f"[seed] purged synthetic data: {purged}")
 
-    # P0.1: in production, disable legacy seed/demo accounts so they can no longer authenticate
-    if IS_PRODUCTION:
-        disabled_n = await disable_legacy_demo_users(db, True, admin_email)
-        print(f"[seed] production: disabled {disabled_n} legacy demo account(s)")
+    # No-demo deployment rule: legacy demo accounts cannot authenticate in beta/staging either.
+    enforce_no_demo_accounts = IS_PRODUCTION or not ENABLE_DEMO_DATA
+    disabled_n = await disable_legacy_demo_users(db, enforce_no_demo_accounts, admin_email)
+    if enforce_no_demo_accounts:
+        print(f"[seed] no-demo mode: disabled {disabled_n} legacy demo account(s)")
 
     # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
     dispatch_task = asyncio.create_task(dispatch_loop())
@@ -1094,10 +1230,13 @@ GPS_FRESH_SECONDS = 60  # a driver marker disappears when the GPS heartbeat is o
 
 @api.post("/cars/nearby")
 async def cars_nearby(body: NearbyCarsRequest):
-    """ONLY real, approved, on-duty drivers with a live GPS heartbeat (<60s) within ~10km.
-    Simulated/demo driver records are never returned — an empty list is an honest 'no cars' answer."""
+    """Only real approved/on-duty drivers with fresh GPS.
+
+    GPS coordinates are live device data. Driving ETA/distance comes from OSRM when available;
+    KJAPP never invents a road ETA from straight-line distance.
+    """
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
-    cars = []
+    candidates = []
     async for u in db.users.find({
         "role": "driver",
         "approved": True,
@@ -1105,32 +1244,52 @@ async def cars_nearby(body: NearbyCarsRequest):
         "disabled": {"$ne": True},
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
+        "active_vehicle_id": {"$exists": True, "$nin": [None, ""]},
         "last_location_at": {"$gte": cutoff},
     }):
         lat = u.get("last_lat")
         lng = u.get("last_lng")
         if lat is None or lng is None:
             continue
-        d_km = haversine_km(body.lat, body.lng, lat, lng)
-        if d_km > 10:
+        straight_km = haversine_km(body.lat, body.lng, lat, lng)
+        if straight_km > 10:
             continue
-        # driver "speed": approx 30 km/h in city -> eta = d/30*60 min, min 1 min
-        eta = max(1, int(round(d_km / 30 * 60)))
+        candidates.append((straight_km, u))
+
+    # Route only the nearest candidates for latency; straight-line distance is internal ranking only.
+    candidates.sort(key=lambda item: item[0])
+    candidates = candidates[:8]
+    routes = await asyncio.gather(*[
+        osrm_route(u.get("last_lat"), u.get("last_lng"), body.lat, body.lng)
+        for _, u in candidates
+    ]) if candidates else []
+
+    cars = []
+    for (straight_km, u), route in zip(candidates, routes):
         cars.append({
             "id": str(u["_id"]),
             "name": u.get("fullName") or "Sjåfør",
             "car": u.get("car") or "",
             "plate": u.get("plate") or "",
-            "rating": u.get("rating") or 4.9,
+            "rating": u.get("rating"),
             "type": u.get("vehicle_type") or "ai-first",
-            "lat": lat,
-            "lng": lng,
-            "heading": u.get("last_heading") or 0,
-            "eta_min": eta,
-            "distance_km": round(d_km, 2),
+            "lat": u.get("last_lat"),
+            "lng": u.get("last_lng"),
+            "heading": u.get("last_heading"),
+            "eta_min": route.get("duration_min") if route else None,
+            "distance_km": route.get("distance_km") if route else None,
+            "routing_source": "osrm" if route else None,
             "updated_at": u.get("last_location_at"),
+            "_sort_km": straight_km,
         })
-    cars.sort(key=lambda x: x["eta_min"])
+
+    cars.sort(key=lambda x: (
+        x["eta_min"] is None,
+        x["eta_min"] if x["eta_min"] is not None else x["_sort_km"],
+    ))
+    for car in cars:
+        car.pop("_sort_km", None)
+
     return {
         "cars": cars,
         "count": len(cars),
@@ -1138,7 +1297,6 @@ async def cars_nearby(body: NearbyCarsRequest):
         "gps_fresh_seconds": GPS_FRESH_SECONDS,
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
-
 
 @api.get("/places")
 async def list_places(featured_only: bool = False):
@@ -1331,13 +1489,11 @@ async def search_places(q: str, limit: int = 8):
 async def trip_estimate(body: EstimateRequest):
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
-    if route:
-        est = route["distance_km"]
-        duration = route["duration_min"]
-        geometry = route["geometry"]
-    else:
-        est, duration = fallback_route_points(points)
-        geometry = None
+    if not route:
+        raise HTTPException(status_code=503, detail="Kunne ikke beregne kjørerute akkurat nå. Prøv igjen.")
+    est = route["distance_km"]
+    duration = route["duration_min"]
+    geometry = route["geometry"]
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
@@ -1350,6 +1506,7 @@ async def trip_estimate(body: EstimateRequest):
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
+            "routing_source": "osrm",
             "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
@@ -1397,6 +1554,39 @@ async def _clear_failed_logins(email: str, ip: str):
     await db.login_attempts.delete_many({"identifier": {"$in": [f"email:{email}", f"ip:{ip}"]}})
 
 
+def _normalize_login_phone(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    has_plus = raw.startswith("+")
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if not digits:
+        return ""
+    if digits.startswith("0047"):
+        return "+" + digits[2:]
+    if has_plus:
+        return "+" + digits
+    if len(digits) == 8:
+        return "+47" + digits
+    return digits
+
+
+async def _find_driver_by_identifier(identifier: str):
+    value = (identifier or "").strip()
+    if not value:
+        return None
+    if "@" in value:
+        return await db.users.find_one({"email": value.lower()})
+
+    normalized = _normalize_login_phone(value)
+    candidates = {value, normalized}
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) == 8:
+        candidates.update({digits, f"+47{digits}"})
+    candidates.discard("")
+    return await db.users.find_one({"phone": {"$in": list(candidates)}})
+
+
 @api.post("/auth/register")
 async def register(body: RegisterRequest, response: Response):
     email = body.email.strip().lower()
@@ -1439,7 +1629,49 @@ async def login(body: LoginRequest, request: Request, response: Response):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": user.get("fullName", ""), "phone": user.get("phone", ""), "role": user.get("role", "user"), "driver_id": user.get("driver_id")}}
+    return {"token": token, "user": user_public(user)}
+
+
+@api.post("/auth/driver-login")
+async def driver_login(body: DriverLoginRequest, request: Request, response: Response):
+    """Invite-only Driver app login using e-mail or phone + password.
+
+    Customer/admin/fleet accounts are rejected server-side. Drivers must also be approved before
+    an app session is issued, so an accepted invite that is still pending approval cannot enter
+    active Driver mode.
+    """
+    identifier = body.identifier.strip()
+    rate_key = f"driver:{identifier.lower()}"
+    ip = _client_ip(request)
+
+    if await _login_blocked(rate_key, ip):
+        raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
+
+    user = await _find_driver_by_identifier(identifier)
+    if (
+        not user
+        or user.get("disabled")
+        or user.get("role") != "driver"
+        or not verify_password(body.password, user.get("password_hash", ""))
+    ):
+        await _record_failed_login(rate_key, ip)
+        raise HTTPException(status_code=401, detail="Feil e-post/telefon eller passord")
+
+    if user.get("approved") is not True:
+        await _clear_failed_logins(rate_key, ip)
+        raise HTTPException(status_code=403, detail="Sjåførkontoen venter på godkjenning før KJAPP Driver kan brukes")
+
+    await _require_active_fleet(user.get("fleet_id"))
+    await _clear_failed_logins(rate_key, ip)
+
+    uid = str(user["_id"])
+    if user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+
+    email = (user.get("email") or "").strip().lower()
+    token = create_access_token(uid, email)
+    set_auth_cookie(response, token)
+    return {"token": token, "user": user_public(user)}
 
 
 @api.post("/auth/logout")
@@ -1662,7 +1894,7 @@ async def me(current=Depends(get_current_user)):
 
 # ---- Trips ----
 @api.post("/trips/request")
-async def request_trip(body: TripRequest, current=Depends(get_current_user)):
+async def request_trip(body: TripRequest, request: Request, current=Depends(get_current_user)):
     # Payment gate: user must have at least one VERIFIED payment method to book
     pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
     if pm_count == 0:
@@ -1671,15 +1903,30 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
     if verified_count == 0:
         raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
     trip_id = str(uuid.uuid4())
+
+    # Test traffic is explicitly marked and isolated. It must never masquerade as live demand.
+    e2e_run = (request.headers.get("X-KJAPP-E2E-Run") or "").strip()
+    email = str(current.get("email") or "").strip().lower()
+    known_demo_account = email in LEGACY_DEMO_EMAILS
+    pickup_marker = str(body.pickup_address or "").lstrip().upper().startswith(("TEST_", "TEST ", "TEST-"))
+    dropoff_marker = str(body.dropoff_address or "").lstrip().upper().startswith(("TEST_", "TEST ", "TEST-"))
+    synthetic_reason = (
+        "e2e" if e2e_run else
+        "demo_account" if known_demo_account else
+        "synthetic_address" if (pickup_marker or dropoff_marker) else
+        None
+    )
+    synthetic = synthetic_reason is not None
+    if IS_PRODUCTION and synthetic:
+        raise HTTPException(status_code=403, detail="Test/demo-turer er ikke tillatt i produksjon")
+
     points = [(body.pickup_lat, body.pickup_lng)] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
-    if route:
-        est = route["distance_km"]
-        eta_min = route["duration_min"]
-        geometry = route["geometry"]
-    else:
-        est, eta_min = fallback_route_points(points)
-        geometry = None
+    if not route:
+        raise HTTPException(status_code=503, detail="Kunne ikke bekrefte kjøreruten. Ingen tur ble opprettet. Prøv igjen.")
+    est = route["distance_km"]
+    eta_min = route["duration_min"]
+    geometry = route["geometry"]
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
@@ -1708,18 +1955,23 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
+        "routing_source": "osrm",
         "status": "searching",
         "driver_id": None,
+        "synthetic": synthetic,
+        "synthetic_reason": synthetic_reason,
+        "test_run_id": e2e_run or None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.trips.insert_one(trip)
-    # Trip stays in "searching" — a real driver must accept via /api/driver/accept.
-    # Nearest-driver-first: offer it to the closest available driver, forward automatically on timeout.
-    try:
-        await offer_trip_to_next_driver(trip)
-    except Exception as e:
-        print(f"dispatch on request failed: {e}")
+    # Trip stays in "searching" until a real driver accepts it.
+    # Synthetic test traffic is NEVER offered to live supply.
+    if not synthetic:
+        try:
+            await offer_trip_to_next_driver(trip)
+        except Exception as e:
+            print(f"dispatch on request failed: {e}")
     trip.pop("_id", None)
     return trip
 
@@ -1727,7 +1979,7 @@ async def request_trip(body: TripRequest, current=Depends(get_current_user)):
 @api.get("/trips/active")
 async def active_trip(current=Depends(get_current_user)):
     trip = await db.trips.find_one(
-        {"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}},
+        _real_trip_filter({"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}),
         sort=[("created_at", -1)],
     )
     if not trip:
@@ -1739,7 +1991,7 @@ async def active_trip(current=Depends(get_current_user)):
 
 @api.get("/trips/{trip_id}")
 async def get_trip(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     trip["id"] = str(trip["_id"])
@@ -1750,18 +2002,16 @@ async def get_trip(trip_id: str, current=Depends(get_current_user)):
 @api.patch("/trips/{trip_id}/destination")
 async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, current=Depends(get_current_user)):
     """Change destination/stops while the ride is active, using the price snapshot captured at booking."""
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("driver_on_way", "at_pickup", "in_trip"):
         raise HTTPException(400, "Destinasjonen kan bare endres på en aktiv tur")
     points = [(trip["pickup_lat"], trip["pickup_lng"])] + [(s.lat, s.lng) for s in body.stops] + [(body.dropoff_lat, body.dropoff_lng)]
     route = await osrm_route_points(points)
-    if route:
-        distance_km, duration_min, geometry = route["distance_km"], route["duration_min"], route["geometry"]
-    else:
-        distance_km, duration_min = fallback_route_points(points)
-        geometry = None
+    if not route:
+        raise HTTPException(status_code=503, detail="Kunne ikke beregne ny kjørerute. Destinasjonen er ikke endret.")
+    distance_km, duration_min, geometry = route["distance_km"], route["duration_min"], route["geometry"]
     pricing = trip.get("pricing_snapshot") or await active_pricing()
     quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
     previous = {
@@ -1780,7 +2030,7 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         {"$set": {
             "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
             "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
-            "geometry": geometry, "price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
+            "geometry": geometry, "routing_source": "osrm", "price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
             "extra_stop_fee_total": quote["extra_stop_fee_total"], "updated_at": now_iso,
         }, "$push": {"destination_revisions": revision}},
     )
@@ -1796,15 +2046,26 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
 
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(get_current_user)):
-    result = await db.trips.update_one(
-        {"trip_id": trip_id, "user_id": current["id"]},
-        {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc).isoformat()}},
-    )
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Tur ikke funnet")
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    """Passenger closes a ride after the driver has marked it arrived.
+
+    Idempotent for already-completed/rated rides and rejects premature completion so the
+    customer app cannot accidentally skip the driver lifecycle.
+    """
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
+
+    status = trip.get("status")
+    if status == "arrived":
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.trips.update_one(
+            {"_id": trip["_id"], "status": "arrived"},
+            {"$set": {"status": "completed", "completed_at": now_iso, "updated_at": now_iso}},
+        )
+        trip = await db.trips.find_one(_real_trip_filter({"_id": trip["_id"]}))
+    elif status not in ("completed", "rated"):
+        raise HTTPException(status_code=409, detail="Turen kan ikke fullføres før sjåføren har registrert ankomst")
+
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -1815,7 +2076,7 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
     """Passenger rates the driver + trip (1-5 stars + optional feedback)."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("passenger_rating"):
@@ -1835,7 +2096,7 @@ async def rate_trip(trip_id: str, body: RateTripRequest, current=Depends(get_cur
     if trip.get("driver_id"):
         recent = []
         async for r in db.trips.find(
-            {"driver_id": trip["driver_id"], "passenger_rating": {"$exists": True, "$ne": None}},
+            _real_trip_filter({"driver_id": trip["driver_id"], "passenger_rating": {"$exists": True, "$ne": None}}),
             {"passenger_rating": 1},
         ).sort("rated_at", -1).limit(50):
             recent.append(r.get("passenger_rating"))
@@ -1868,7 +2129,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     """Driver rates the passenger 1-5 stars after trip completion."""
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(400, "Rating må være mellom 1 og 5")
-    trip = await db.trips.find_one({"trip_id": trip_id, "driver_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     if trip.get("driver_rating"):
@@ -1885,7 +2146,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     if trip.get("user_id"):
         recent = []
         async for r in db.trips.find(
-            {"user_id": trip["user_id"], "driver_rating": {"$exists": True, "$ne": None}},
+            _real_trip_filter({"user_id": trip["user_id"], "driver_rating": {"$exists": True, "$ne": None}}),
             {"driver_rating": 1},
         ).sort("driver_rated_at", -1).limit(50):
             recent.append(r.get("driver_rating"))
@@ -1900,7 +2161,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
 
 @api.get("/trips/{trip_id}/cancel-preview")
 async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
@@ -1922,7 +2183,7 @@ async def cancel_trip_preview(trip_id: str, current=Depends(get_current_user)):
 
 @api.post("/trips/{trip_id}/cancel")
 async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
-    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
     if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
@@ -1954,7 +2215,7 @@ async def cancel_trip(trip_id: str, current=Depends(get_current_user)):
 
 @api.get("/trips")
 async def list_trips(current=Depends(get_current_user)):
-    cursor = db.trips.find({"user_id": current["id"]}).sort("created_at", -1).limit(50)
+    cursor = db.trips.find(_real_trip_filter({"user_id": current["id"]})).sort("created_at", -1).limit(50)
     trips = []
     async for t in cursor:
         t["id"] = str(t["_id"])
@@ -1969,7 +2230,7 @@ class TripMessageRequest(BaseModel):
 
 
 async def _load_trip_or_403(trip_id: str, current: dict):
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
     is_passenger = trip.get("user_id") == current["id"]
@@ -2029,7 +2290,7 @@ async def send_trip_message(trip_id: str, body: TripMessageRequest, current=Depe
             other_user_id,
             f"Melding fra {'kunde' if is_passenger else trip.get('driver', {}).get('name', 'sjåfør')}",
             text[:140],
-            f"/app/booking/{trip_id}" if is_passenger else "/driver/trip",
+            f"/driver?chat=1&trip_id={trip_id}" if is_passenger else f"/app/booking/{trip_id}?chat=1",
         )
     return msg
 
@@ -2119,7 +2380,7 @@ async def public_trip_share(token: str):
     share = await db.trip_share_tokens.find_one({"token_hash": token_hash})
     if not share or share.get("expires_at") is None or share["expires_at"] <= datetime.now(timezone.utc):
         raise HTTPException(404, "Delingslenken er utløpt eller ugyldig")
-    trip = await db.trips.find_one({"trip_id": share["trip_id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": share["trip_id"]}))
     if not trip:
         raise HTTPException(404, "Turen finnes ikke")
     driver = trip.get("driver") or {}
@@ -2583,13 +2844,13 @@ async def ai_history(session_id: Optional[str] = None, current=Depends(get_curre
 @api.get("/summary/today")
 async def summary_today(current=Depends(get_current_user)):
     today = datetime.now(timezone.utc).date().isoformat()
-    cursor = db.trips.find({"user_id": current["id"], "created_at": {"$gte": today}})
+    cursor = db.trips.find(_real_trip_filter({"user_id": current["id"], "created_at": {"$gte": today}}))
     trips = 0
     total = 0
     async for t in cursor:
         trips += 1
         total += t.get("price", 0)
-    return {"trips": trips, "spent": total, "satisfaction": 98}
+    return {"trips": trips, "spent": total, "satisfaction": None}
 
 
 # ---- Driver endpoints ----
@@ -2613,43 +2874,120 @@ def customer_public(u: dict) -> dict:
 
 # Never serve fabricated/demo/test trips to a driver
 REAL_TRIPS_ONLY = {
+    "synthetic": {"$ne": True},
     "demo": {"$ne": True},
     "pickup_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    "dropoff_address": {"$not": {"$regex": SYNTHETIC_ADDRESS_RE}},
 }
+
+
+def _real_trip_filter(extra: Optional[dict] = None) -> dict:
+    """One canonical filter for every operational read/metric/export.
+
+    Test/demo records may exist in an isolated test database, but they must never leak into
+    dispatch, histories, ratings, payouts, demand, fleet reporting or admin business metrics.
+    """
+    return {"$and": [dict(REAL_TRIPS_ONLY), extra or {}]}
+
 
 ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
-async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None) -> list:
-    """Real, available drivers sorted by actual distance to pickup.
+def _vehicle_type_compatible(requested: Optional[str], active: Optional[str]) -> bool:
+    # ai-first and enkelt are both the standard 4-seat KJAPP product in the current mobile UI.
+    if requested in (None, "", "ai-first", "enkelt"):
+        return active in ("ai-first", "enkelt")
+    return active == requested
 
-    Equipment-bound needs (wheelchair/child seat) are hard requirements. Other needs are
-    communicated to the driver but do not silently exclude otherwise eligible cars.
+
+async def _dispatch_candidates(
+    lat: float,
+    lng: float,
+    required_capabilities=None,
+    requested_vehicle_type: Optional[str] = None,
+) -> list:
+    """Real available drivers ranked by actual OSRM driving ETA/distance to pickup.
+
+    Straight-line distance is used only as an internal prefilter to avoid routing every driver.
+    It is never exposed to the customer/driver as road distance or ETA.
     """
     if lat is None or lng is None:
         return []
+
     required = set(required_capabilities or [])
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
     busy = set()
-    async for t in db.trips.find({"status": {"$in": ACTIVE_TRIP_STATUSES}}, {"driver_id": 1}):
+    async for t in db.trips.find(
+        _real_trip_filter({"status": {"$in": ACTIVE_TRIP_STATUSES}}),
+        {"driver_id": 1},
+    ):
         if t.get("driver_id"):
             busy.add(t["driver_id"])
-    out = []
+
+    rough = []
     async for d in db.users.find(
-        {"role": "driver", "approved": True, "online": True, "disabled": {"$ne": True},
-         "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
-        {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1},
+        {
+            "role": "driver",
+            "approved": True,
+            "online": True,
+            "disabled": {"$ne": True},
+            "demo": {"$ne": True},
+            "is_demo": {"$ne": True},
+            "last_location_at": {"$gte": fresh},
+            "active_vehicle_id": {"$exists": True, "$nin": [None, ""]},
+        },
+        {
+            "last_lat": 1,
+            "last_lng": 1,
+            "fleet_id": 1,
+            "capabilities": 1,
+            "active_vehicle_id": 1,
+            "vehicle_type": 1,
+        },
     ):
         did = str(d["_id"])
-        if did in busy or d.get("last_lat") is None or await _fleet_is_suspended(d.get("fleet_id")):
+        if did in busy or d.get("last_lat") is None or d.get("last_lng") is None:
+            continue
+        if await _fleet_is_suspended(d.get("fleet_id")):
             continue
         if required and not required.issubset(set(d.get("capabilities") or [])):
             continue
-        out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
-    out.sort(key=lambda x: x["km"])
-    return out
+        if not _vehicle_type_compatible(requested_vehicle_type, d.get("vehicle_type")):
+            continue
 
+        rank_km = haversine_km(lat, lng, d["last_lat"], d["last_lng"])
+        rough.append({
+            "id": did,
+            "lat": d["last_lat"],
+            "lng": d["last_lng"],
+            "_rank_km": rank_km,
+        })
+
+    # Only route the geographically closest candidates; final ranking uses real road routing.
+    rough.sort(key=lambda x: x["_rank_km"])
+    rough = rough[:12]
+    if not rough:
+        return []
+
+    routes = await asyncio.gather(*[
+        osrm_route(cand["lat"], cand["lng"], lat, lng)
+        for cand in rough
+    ])
+
+    out = []
+    for cand, route in zip(rough, routes):
+        if not route:
+            continue
+        out.append({
+            "id": cand["id"],
+            "pickup_distance_km": route["distance_km"],
+            "pickup_eta_min": route["duration_min"],
+            "routing_source": "osrm",
+        })
+
+    out.sort(key=lambda x: (x["pickup_eta_min"], x["pickup_distance_km"]))
+    return out
 
 async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """Nearest-driver-first dispatch: offer the trip to the closest driver who has not seen it yet.
@@ -2659,8 +2997,10 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(
-        trip.get("pickup_lat"), trip.get("pickup_lng"),
+        trip.get("pickup_lat"),
+        trip.get("pickup_lng"),
         _required_driver_capabilities(trip.get("special_needs")),
+        trip.get("vehicle_type"),
     )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
@@ -2680,16 +3020,26 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
     res = await db.trips.update_one(
         {"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}},
-        {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
-                  "offer_expires_at": expires.isoformat(), "offer_km": round(nxt["km"], 2)},
+        {"$set": {
+             "dispatch_mode": "sequential",
+             "offer_driver_id": nxt["id"],
+             "offer_expires_at": expires.isoformat(),
+             "offer_km": round(nxt["pickup_distance_km"], 2),
+             "offer_eta_min": int(nxt["pickup_eta_min"]),
+             "offer_routing_source": "osrm",
+         },
          "$addToSet": {"offer_history": nxt["id"]},
          "$inc": {"offer_seq": 1}},
     )
     if res.modified_count == 0:
         return None
     await send_push_to_user(
-        nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
-        "/driver", tag="kjapp-new-trip", require_interaction=True,
+        nxt["id"],
+        title,
+        f"{body} · ca. {int(nxt['pickup_eta_min'])} min / {round(nxt['pickup_distance_km'], 1)} km til henting",
+        "/driver",
+        tag="kjapp-new-trip",
+        require_interaction=True,
     )
     return nxt["id"]
 
@@ -2699,12 +3049,12 @@ async def dispatch_loop():
     while True:
         try:
             now_iso = datetime.now(timezone.utc).isoformat()
-            async for t in db.trips.find({
+            async for t in db.trips.find(_real_trip_filter({
                 "status": {"$in": ["searching", "booking"]},
                 "driver_id": None,
                 "dispatch_mode": "sequential",
                 "offer_expires_at": {"$lt": now_iso},
-            }).limit(20):
+            })).limit(20):
                 pricing = t.get("pricing_snapshot") or await active_pricing()
                 timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
                 try:
@@ -2724,10 +3074,10 @@ async def dispatch_loop():
                     continue
                 await offer_trip_to_next_driver(t)
             # Hard stop for any still-unassigned request, including broadcast mode.
-            async for t in db.trips.find({
+            async for t in db.trips.find(_real_trip_filter({
                 "status": {"$in": ["searching", "booking"]},
                 "driver_id": None,
-            }).sort("created_at", 1).limit(50):
+            })).sort("created_at", 1).limit(50):
                 pricing = t.get("pricing_snapshot") or await active_pricing()
                 timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
                 try:
@@ -2769,7 +3119,7 @@ async def driver_pending(current=Depends(require_driver)):
     ):
         declined.add(d["trip_id"])
     trips = []
-    async for t in db.trips.find({
+    async for t in db.trips.find(_real_trip_filter({
         "status": {"$in": ["searching", "booking"]},
         "driver_id": None,
         # Sequential dispatch: only the driver the trip is currently offered to sees it.
@@ -2779,11 +3129,12 @@ async def driver_pending(current=Depends(require_driver)):
             {"dispatch_mode": "broadcast"},
             {"dispatch_mode": {"$exists": False}},
         ],
-        **REAL_TRIPS_ONLY,
-    }).sort("created_at", 1).limit(10):
+    })).sort("created_at", 1).limit(10):
         if t["trip_id"] in declined:
             continue
         if not _driver_supports_special_needs(current, t.get("special_needs")):
+            continue
+        if not _vehicle_type_compatible(t.get("vehicle_type"), current.get("vehicle_type")):
             continue
         t["id"] = str(t["_id"])
         t.pop("_id", None)
@@ -2821,15 +3172,34 @@ async def driver_pending(current=Depends(require_driver)):
 @api.post("/driver/accept")
 async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)):
     driver_id = current["id"]  # driver's user id is the driver_id now
+    live_driver = await db.users.find_one({"_id": ObjectId(driver_id)}) or current
+    vehicle = None
+    try:
+        vehicle_id = live_driver.get("active_vehicle_id")
+        if vehicle_id:
+            vehicle = await db.fleet_vehicles.find_one({
+                "_id": ObjectId(vehicle_id),
+                "fleet_id": live_driver.get("fleet_id"),
+                "active": {"$ne": False},
+                "assigned_driver_ids": driver_id,
+            })
+    except Exception:
+        vehicle = None
+    if not vehicle:
+        raise HTTPException(status_code=409, detail="Velg en tildelt bil før du aksepterer turer")
+
     driver = {
-        "name": current.get("fullName") or "Sjåfør",
-        "car": current.get("car") or "",
-        "plate": current.get("plate") or "",
-        "rating": current.get("rating"),
-        "photo": (current.get("fullName") or "S")[:2].upper(),
+        "name": live_driver.get("fullName") or "Sjåfør",
+        "car": vehicle.get("car") or "",
+        "plate": vehicle.get("plate") or "",
+        "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        "vehicle_id": str(vehicle["_id"]),
+        "rating": live_driver.get("rating"),
+        "photo": (live_driver.get("fullName") or "S")[:2].upper(),
+        "has_profile_photo": bool(live_driver.get("profile_photo_path")),
     }
     # Pick up trip first so we know pickup coords
-    trip_pre = await db.trips.find_one({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None})
+    trip_pre = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}))
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
@@ -2851,10 +3221,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     }
     if d_lat is not None and d_lng is not None:
         route = await osrm_route(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"])
-        eta = route["duration_min"] if route else max(1, int(round(
-            haversine_km(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"]) / 30 * 60)))
+        eta = route["duration_min"] if route else None
         updates.update({
             "eta_min": eta,
+            "driver_pickup_route_source": "osrm" if route else None,
             "driver_start_lat": d_lat,
             "driver_start_lng": d_lng,
             "driver_lat": d_lat,
@@ -2870,7 +3240,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
-    t = await db.trips.find_one({"trip_id": body.trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
     await send_push_to_user(
         t["user_id"], "Sjåfør på vei",
         f"{driver['name']} kommer om {eta} min." if eta else f"{driver['name']} er på vei til deg.",
@@ -2886,14 +3256,14 @@ async def driver_current(current=Depends(require_driver)):
     # An ACTIVE trip always wins over a just-finished one. A completed ("arrived") trip is only
     # returned for 15 minutes so the driver can see the summary — after that it is history.
     t = await db.trips.find_one(
-        {"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
+        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
         sort=[("created_at", -1)],
     )
     if not t:
         # Just-finished trip: keep the summary visible for 15 minutes. "completed"/"rated" appear
         # as soon as the passenger's app closes the trip, so they must be included here too.
         t = await db.trips.find_one(
-            {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated"]}},
+            _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated"]}}),
             sort=[("created_at", -1)],
         )
         if not t:
@@ -2938,11 +3308,11 @@ async def driver_at_pickup(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "at_pickup", "at_pickup_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("at_pickup", "in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke registrere ankomst")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Sjåføren er fremme", "Kom ut når du er klar.", f"/app/booking/{trip_id}")
     return {"ok": True}
 
@@ -2956,11 +3326,11 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "in_trip", "trip_started_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("in_trip", "arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True}
         raise HTTPException(status_code=400, detail="Kunne ikke starte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Turen har startet", "Nyt reisen med KJAPP.", f"/app/booking/{trip_id}")
     return {"ok": True}
 
@@ -2975,7 +3345,7 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if t and t.get("user_id"):
         await send_push_to_user(t["user_id"], "Turen ble avlyst", "Du dukket ikke opp — kort no-show-avgift kan bli belastet.", "/app")
     return {"ok": True}
@@ -2989,11 +3359,11 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         {"$set": {"status": "arrived", "arrived_at": datetime.now(timezone.utc).isoformat()}},
     )
     if result.modified_count == 0:
-        existing = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+        existing = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
         if existing and existing.get("status") in ("arrived", "completed", "rated"):
             return {"ok": True, "already_applied": True, "bonuses": []}
         raise HTTPException(status_code=400, detail="Kunne ikke avslutte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.", f"/app/receipt/{trip_id}")
     bonuses = await award_driver_bonuses(driver_id)
     return {"ok": True, "bonuses": bonuses}
@@ -3026,7 +3396,7 @@ async def driver_demand(lat: Optional[float] = None, lng: Optional[float] = None
         return c
 
     cursor = db.trips.find(
-        {"created_at": {"$gte": hist_cut.isoformat()}, "pickup_lat": {"$ne": None}},
+        _real_trip_filter({"created_at": {"$gte": hist_cut.isoformat()}, "pickup_lat": {"$ne": None}}),
         {"pickup_lat": 1, "pickup_lng": 1, "price": 1, "created_at": 1},
     ).limit(5000)
     total_recent = 0
@@ -3086,13 +3456,27 @@ async def driver_demand(lat: Optional[float] = None, lng: Optional[float] = None
     scored.sort(key=lambda s: s["score"], reverse=True)
 
     commission = await _platform_commission()
+    top_zones = scored[:3]
+    zone_routes = []
+    if lat is not None and lng is not None and top_zones:
+        zone_routes = await asyncio.gather(*[
+            osrm_route(lat, lng, zone["lat"], zone["lng"])
+            for zone in top_zones
+        ])
+    else:
+        zone_routes = [None] * len(top_zones)
+
     zones = []
-    for s in scored[:3]:
+    for s, route in zip(top_zones, zone_routes):
         place = await reverse_geocode(s["lat"], s["lng"])
-        if lat is not None and lng is not None:
-            s = {**s, "distance_km": round(haversine_km(lat, lng, s["lat"], s["lng"]), 1)}
-        zones.append({
+        routed = {
             **s,
+            "distance_km": route["distance_km"] if route else None,
+            "duration_min": route["duration_min"] if route else None,
+            "routing_source": "osrm" if route else None,
+        }
+        zones.append({
+            **routed,
             "label": (place or {}).get("label"),
             "avg_earnings": int(round(s["avg_price"] * (1 - commission))) if s.get("avg_price") else None,
         })
@@ -3113,11 +3497,11 @@ async def driver_summary(current=Depends(require_driver)):
     today = datetime.now(timezone.utc).date().isoformat()
     total = 0
     trips = 0
-    async for t in db.trips.find({
+    async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
         "created_at": {"$gte": today},
         "status": {"$in": ["arrived", "completed", "rated"]},
-    }):
+    })):
         trips += 1
         total += t.get("price", 0)
 
@@ -3137,10 +3521,10 @@ async def driver_summary(current=Depends(require_driver)):
             pass
 
     # Acceptance rate — accepted / (accepted + declined) today
-    accepted = await db.trips.count_documents({
+    accepted = await db.trips.count_documents(_real_trip_filter({
         "driver_id": driver_id,
         "created_at": {"$gte": today},
-    })
+    }))
     declined = await db.driver_declines.count_documents({
         "driver_id": driver_id,
         "declined_at": {"$gte": today},
@@ -3174,7 +3558,7 @@ async def driver_decline(body: DeclineTripRequest, current=Depends(require_drive
         "trip_id": body.trip_id,
         "declined_at": datetime.now(timezone.utc).isoformat(),
     })
-    trip = await db.trips.find_one({"trip_id": body.trip_id, "driver_id": None})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "driver_id": None}))
     if trip and trip.get("offer_driver_id") == current["id"]:
         await offer_trip_to_next_driver(trip)
     return {"ok": True}
@@ -3222,6 +3606,47 @@ class DriverOnlineRequest(BaseModel):
 @api.post("/driver/online")
 async def driver_online(body: DriverOnlineRequest, current=Depends(require_driver)):
     now_iso = datetime.now(timezone.utc).isoformat()
+
+    if body.online:
+        user = await db.users.find_one({"_id": ObjectId(current["id"])})
+        if not user:
+            raise HTTPException(404, "Sjåfør ikke funnet")
+        if user.get("fleet_id"):
+            await _backfill_fleet_vehicles(user["fleet_id"])
+            user = await db.users.find_one({"_id": user["_id"]})
+        vehicle_id = (user or {}).get("active_vehicle_id")
+        try:
+            vehicle_oid = ObjectId(vehicle_id) if vehicle_id else None
+        except Exception:
+            vehicle_oid = None
+        vehicle = await db.fleet_vehicles.find_one({
+            "_id": vehicle_oid,
+            "fleet_id": (user or {}).get("fleet_id"),
+            "active": {"$ne": False},
+            "assigned_driver_ids": current["id"],
+        }) if vehicle_oid else None
+        if not vehicle:
+            raise HTTPException(
+                status_code=409,
+                detail="Velg en bil som løyvehaveren har tildelt deg før du går online",
+            )
+        in_use = await db.users.find_one({
+            "role": "driver",
+            "_id": {"$ne": user["_id"]},
+            "active_vehicle_id": vehicle_id,
+            "online": True,
+        })
+        if in_use:
+            raise HTTPException(status_code=409, detail="Bilen er allerede i bruk av en annen sjåfør")
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "car": vehicle.get("car", ""),
+                "plate": vehicle.get("plate", ""),
+                "vehicle_type": vehicle.get("vehicle_type", "ai-first"),
+            }},
+        )
+
     await db.users.update_one(
         {"_id": ObjectId(current["id"])},
         {"$set": {"online": body.online, "online_at": now_iso}},
@@ -3283,44 +3708,70 @@ async def push_test(current=Depends(get_current_user)):
 
 
 class NativePushSubscribeRequest(BaseModel):
-    platform: Literal["ios", "android", "web"]
+    platform: Literal["ios", "android"]
+    provider: Optional[Literal["fcm", "apns"]] = None
     token: str
     device_id: Optional[str] = None
+    app_role: Optional[Literal["customer", "driver"]] = None
+    bundle_id: Optional[str] = None
+    environment: Optional[Literal["development", "production"]] = "production"
 
 
 @api.get("/push/native-config")
 async def push_native_config():
-    """Tells the app whether native (locked-screen) push is configured on this environment."""
-    ready = _fcm_app() is not None
+    """Expose readiness per native push transport without returning any secret material."""
+    android_ready = _fcm_app() is not None
+    ios_ready = _apns_configured()
     return {
-        "enabled": ready,
-        "provider": "fcm",
-        "message": None if ready else "Native push er ikke konfigurert ennå — legg inn FCM_SERVICE_ACCOUNT_JSON i backend-miljøet",
+        "enabled": android_ready or ios_ready,
+        "provider": "fcm+apns",
+        "android": {"enabled": android_ready, "provider": "fcm"},
+        "ios": {"enabled": ios_ready, "provider": "apns"},
+        "message": None if (android_ready and ios_ready) else "Native push mangler credentials for én eller flere plattformer",
     }
 
 
 @api.post("/push/native-subscribe")
 async def push_native_subscribe(body: NativePushSubscribeRequest, current=Depends(get_current_user)):
-    """
-    Store a native push token (APNs for iOS or FCM for Android) so backend can push notifications
-    to the mobile app. Actual APNs/FCM sender is added later (server key required).
-    Composite key is (user_id, platform, device_id) so multi-device users don't overwrite each other.
-    """
-    if not body.token:
+    """Store one native token per signed-in user/device/app, replacing rotated tokens safely."""
+    token = (body.token or "").strip()
+    if not token:
         raise HTTPException(status_code=400, detail="Mangler token")
-    dev_id = body.device_id or body.token[-12:]  # fallback so key is stable per token
+
+    expected_provider = "fcm" if body.platform == "android" else "apns"
+    if body.provider and body.provider != expected_provider:
+        raise HTTPException(status_code=400, detail="Provider matcher ikke plattform")
+
+    role = body.app_role or ("driver" if current.get("role") == "driver" else "customer")
+    if role == "driver" and current.get("role") != "driver":
+        raise HTTPException(status_code=403, detail="Driver-token krever sjåførkonto")
+    if role == "customer" and current.get("role") == "driver":
+        raise HTTPException(status_code=403, detail="Kunde-token kan ikke registreres fra sjåførkonto")
+
+    bundle_id = None
+    if body.platform == "ios":
+        expected_bundle = _apns_bundle_id(role)
+        if body.bundle_id and body.bundle_id != expected_bundle:
+            raise HTTPException(status_code=400, detail="Ugyldig bundle-id for push-token")
+        bundle_id = expected_bundle
+
+    dev_id = (body.device_id or token[-12:]).strip()
     await db.native_push_tokens.update_one(
-        {"user_id": current["id"], "platform": body.platform, "device_id": dev_id},
+        {"user_id": current["id"], "platform": body.platform, "device_id": dev_id, "app_role": role},
         {"$set": {
             "user_id": current["id"],
             "platform": body.platform,
+            "provider": expected_provider,
             "device_id": dev_id,
-            "token": body.token,
+            "app_role": role,
+            "bundle_id": bundle_id,
+            "environment": body.environment if body.platform == "ios" else None,
+            "token": token,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }},
         upsert=True,
     )
-    return {"ok": True}
+    return {"ok": True, "provider": expected_provider}
 
 
 # ============================================================
@@ -3330,24 +3781,31 @@ class GoogleSessionRequest(BaseModel):
     session_id: str
 
 
-@api.post("/auth/google/session")
-async def google_session(body: GoogleSessionRequest, response: Response):
-    """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+async def _google_session_data(session_id: str) -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": body.session_id},
+            headers={"X-Session-ID": session_id},
         )
         if r.status_code != 200:
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
         data = r.json()
     email = (data.get("email") or "").strip().lower()
-    name = data.get("name") or email
     if not email:
         raise HTTPException(status_code=400, detail="Ingen e-post fra Google")
+    data["email"] = email
+    return data
+
+
+@api.post("/auth/google/session")
+async def google_session(body: GoogleSessionRequest, response: Response):
+    """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+    data = await _google_session_data(body.session_id)
+    email = data["email"]
+    name = data.get("name") or email
     user = await db.users.find_one({"email": email})
     if not user:
-        result = await db.users.insert_one({
+        doc = {
             "email": email,
             "password_hash": hash_password(secrets.token_hex(16)),  # random password, unused
             "fullName": name,
@@ -3356,23 +3814,44 @@ async def google_session(body: GoogleSessionRequest, response: Response):
             "role": "user",
             "google_linked": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        uid = str(result.inserted_id)
-        role = "user"
-        driver_id = None
+        }
+        result = await db.users.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        user = doc
     else:
-        uid = str(user["_id"])
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
-        role = user.get("role", "user")
-        driver_id = user.get("driver_id")
+        if user.get("role", "user") not in ("user", "customer"):
+            raise HTTPException(status_code=403, detail="Google-innlogging er kun tilgjengelig i KJAPP kundeappen")
         if not user.get("google_linked"):
-            await db.users.update_one({"_id": user["_id"]}, {"$set": {"google_linked": True, "picture": data.get("picture")}})
-    if user and user.get("totp_enabled"):
+            await db.users.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"google_linked": True, "picture": data.get("picture"), "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            user["google_linked"] = True
+            user["picture"] = data.get("picture")
+    uid = str(user["_id"])
+    if user.get("totp_enabled"):
         return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
-    return {"token": token, "user": {"id": uid, "email": email, "fullName": name, "phone": user.get("phone", "") if user else "", "role": role, "driver_id": driver_id}}
+    return {"token": token, "user": user_public(user)}
+
+
+@api.post("/auth/google/link")
+async def google_link_account(body: GoogleSessionRequest, current=Depends(get_current_user)):
+    """Link Google to a signed-in customer account without replacing the session."""
+    if current.get("role", "user") not in ("user", "customer"):
+        raise HTTPException(status_code=403, detail="Google-kobling er kun tilgjengelig for kundekontoer")
+    data = await _google_session_data(body.session_id)
+    email = data["email"]
+    if email != (current.get("email") or "").strip().lower():
+        raise HTTPException(status_code=409, detail="Google-kontoen må bruke samme e-post som KJAPP-kontoen")
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"])},
+        {"$set": {"google_linked": True, "picture": data.get("picture"), "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"linked": True, "email": email}
 
 
 # ============================================================
@@ -3477,6 +3956,8 @@ async def google_oauth_code(body: GoogleCodeRequest, response: Response):
     if user:
         if user.get("disabled"):
             raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
+        if user.get("role", "user") not in ("user", "customer"):
+            raise HTTPException(status_code=403, detail="Google-innlogging er kun tilgjengelig i KJAPP kundeappen")
         uid = str(user["_id"])
         role = user.get("role", "user")
         driver_id = user.get("driver_id")
@@ -3700,11 +4181,11 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
     today_gross = 0; today_trips = 0
     week_gross = 0; week_trips = 0
     if drivers_ids:
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": {"$in": drivers_ids},
             "status": {"$in": ["arrived", "completed", "rated"]},
             "created_at": {"$gte": week_start},
-        }):
+        })):
             price = t.get("price", 0)
             week_gross += price; week_trips += 1
             if t.get("created_at", "") >= today:
@@ -3721,6 +4202,386 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
     }
 
 
+class FleetVehicleCreateRequest(BaseModel):
+    car: str = Field(min_length=2, max_length=120)
+    plate: str = Field(min_length=2, max_length=20)
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    color: Optional[str] = Field(default="", max_length=40)
+    year: Optional[int] = Field(default=None, ge=1990, le=2100)
+
+
+class FleetVehicleUpdateRequest(BaseModel):
+    car: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    plate: Optional[str] = Field(default=None, min_length=2, max_length=20)
+    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium"]] = None
+    color: Optional[str] = Field(default=None, max_length=40)
+    year: Optional[int] = Field(default=None, ge=1990, le=2100)
+    active: Optional[bool] = None
+
+
+class FleetDriverVehicleAssignmentRequest(BaseModel):
+    vehicle_ids: List[str] = Field(default_factory=list, max_length=50)
+
+
+class DriverVehicleSelectRequest(BaseModel):
+    vehicle_id: str
+
+
+def _fleet_vehicle_public(v: dict) -> dict:
+    return {
+        "id": str(v["_id"]),
+        "fleet_id": v.get("fleet_id"),
+        "car": v.get("car", ""),
+        "plate": v.get("plate", ""),
+        "vehicle_type": v.get("vehicle_type", "ai-first"),
+        "color": v.get("color") or "",
+        "year": v.get("year"),
+        "active": v.get("active", True),
+        "assigned_driver_ids": list(v.get("assigned_driver_ids") or []),
+        "created_at": v.get("created_at"),
+        "updated_at": v.get("updated_at"),
+    }
+
+
+async def _backfill_fleet_vehicles(fleet_id: str):
+    """Migrate existing driver-level car fields into the fleet vehicle registry once.
+
+    This preserves existing real assignments while moving the product to fleet-owned vehicles.
+    """
+    if not fleet_id:
+        return
+    async for driver in db.users.find({
+        "role": "driver",
+        "fleet_id": fleet_id,
+        "plate": {"$exists": True, "$nin": [None, ""]},
+    }):
+        plate = str(driver.get("plate") or "").strip().upper()
+        car = str(driver.get("car") or "").strip()
+        if not plate or not car:
+            continue
+        vehicle = await db.fleet_vehicles.find_one({"fleet_id": fleet_id, "plate": plate})
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if not vehicle:
+            res = await db.fleet_vehicles.insert_one({
+                "fleet_id": fleet_id,
+                "car": car,
+                "plate": plate,
+                "vehicle_type": driver.get("vehicle_type") or "ai-first",
+                "color": "",
+                "year": None,
+                "active": True,
+                "assigned_driver_ids": [str(driver["_id"])],
+                "source": "legacy-driver-backfill",
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            })
+            vehicle_id = str(res.inserted_id)
+        else:
+            vehicle_id = str(vehicle["_id"])
+            await db.fleet_vehicles.update_one(
+                {"_id": vehicle["_id"]},
+                {"$addToSet": {"assigned_driver_ids": str(driver["_id"])}, "$set": {"updated_at": now_iso}},
+            )
+        if not driver.get("active_vehicle_id"):
+            await db.users.update_one(
+                {"_id": driver["_id"]},
+                {"$set": {"active_vehicle_id": vehicle_id}},
+            )
+
+
+@api.get("/fleet/vehicles")
+async def fleet_vehicles(current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    await _backfill_fleet_vehicles(fid)
+    out = []
+    async for v in db.fleet_vehicles.find({"fleet_id": fid}).sort("plate", 1):
+        out.append(_fleet_vehicle_public(v))
+    return {"vehicles": out}
+
+
+@api.post("/fleet/vehicles")
+async def fleet_create_vehicle(body: FleetVehicleCreateRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    plate = body.plate.strip().upper()
+    if await db.fleet_vehicles.find_one({"plate": plate, "active": {"$ne": False}}):
+        raise HTTPException(status_code=409, detail="Skiltnummeret er allerede registrert")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "fleet_id": fid,
+        "car": body.car.strip(),
+        "plate": plate,
+        "vehicle_type": body.vehicle_type,
+        "color": (body.color or "").strip(),
+        "year": body.year,
+        "active": True,
+        "assigned_driver_ids": [],
+        "created_by": current["id"],
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    res = await db.fleet_vehicles.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return _fleet_vehicle_public(doc)
+
+
+@api.patch("/fleet/vehicles/{vehicle_id}")
+async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    try:
+        oid = ObjectId(vehicle_id)
+    except Exception:
+        raise HTTPException(400, "Ugyldig kjøretøy-ID")
+    vehicle = await db.fleet_vehicles.find_one({"_id": oid, "fleet_id": fid})
+    if not vehicle:
+        raise HTTPException(404, "Fant ikke kjøretøyet")
+    updates = {}
+    if body.car is not None:
+        updates["car"] = body.car.strip()
+    if body.plate is not None:
+        plate = body.plate.strip().upper()
+        existing = await db.fleet_vehicles.find_one({"plate": plate, "_id": {"$ne": oid}, "active": {"$ne": False}})
+        if existing:
+            raise HTTPException(409, "Skiltnummeret er allerede registrert")
+        updates["plate"] = plate
+    if body.vehicle_type is not None:
+        updates["vehicle_type"] = body.vehicle_type
+    if body.color is not None:
+        updates["color"] = body.color.strip()
+    if body.year is not None:
+        updates["year"] = body.year
+    if body.active is not None:
+        updates["active"] = body.active
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.fleet_vehicles.update_one({"_id": oid}, {"$set": updates})
+
+    # Keep active drivers' cached vehicle identity synchronized with the fleet registry.
+    identity_updates = {}
+    if "car" in updates:
+        identity_updates["car"] = updates["car"]
+    if "plate" in updates:
+        identity_updates["plate"] = updates["plate"]
+    if "vehicle_type" in updates:
+        identity_updates["vehicle_type"] = updates["vehicle_type"]
+    if identity_updates:
+        identity_updates["updated_at"] = updates["updated_at"]
+        await db.users.update_many(
+            {"fleet_id": fid, "active_vehicle_id": vehicle_id},
+            {"$set": identity_updates},
+        )
+
+    if body.active is False:
+        assigned = list(vehicle.get("assigned_driver_ids") or [])
+        if assigned:
+            oids = []
+            for did in assigned:
+                try:
+                    oids.append(ObjectId(did))
+                except Exception:
+                    pass
+            if oids:
+                await db.users.update_many(
+                    {"_id": {"$in": oids}, "active_vehicle_id": vehicle_id},
+                    {"$unset": {"active_vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}, "$set": {"online": False}},
+                )
+
+    updated = await db.fleet_vehicles.find_one({"_id": oid})
+    return _fleet_vehicle_public(updated)
+
+
+@api.put("/fleet/drivers/{driver_id}/vehicles")
+async def fleet_assign_driver_vehicles(driver_id: str, body: FleetDriverVehicleAssignmentRequest, current=Depends(require_fleet_owner)):
+    fid = await get_fleet_id_for(current)
+    try:
+        driver_oid = ObjectId(driver_id)
+    except Exception:
+        raise HTTPException(400, "Ugyldig sjåfør-ID")
+    driver = await db.users.find_one({"_id": driver_oid, "role": "driver", "fleet_id": fid})
+    if not driver:
+        raise HTTPException(404, "Fant ikke sjåføren i denne flåten")
+
+    requested_ids = list(dict.fromkeys(body.vehicle_ids))
+    vehicle_oids = []
+    for vid in requested_ids:
+        try:
+            vehicle_oids.append(ObjectId(vid))
+        except Exception:
+            raise HTTPException(400, "Ugyldig kjøretøy-ID")
+
+    vehicles = []
+    if vehicle_oids:
+        async for v in db.fleet_vehicles.find({"_id": {"$in": vehicle_oids}, "fleet_id": fid, "active": {"$ne": False}}):
+            vehicles.append(v)
+        if len(vehicles) != len(vehicle_oids):
+            raise HTTPException(400, "Ett eller flere kjøretøy tilhører ikke denne flåten")
+
+    await db.fleet_vehicles.update_many(
+        {"fleet_id": fid},
+        {"$pull": {"assigned_driver_ids": driver_id}},
+    )
+    if vehicle_oids:
+        await db.fleet_vehicles.update_many(
+            {"_id": {"$in": vehicle_oids}},
+            {"$addToSet": {"assigned_driver_ids": driver_id}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    current_vehicle_id = driver.get("active_vehicle_id")
+    allowed_ids = {str(v["_id"]) for v in vehicles}
+    user_update = {"$set": {"online": False}}
+    if current_vehicle_id and current_vehicle_id not in allowed_ids:
+        user_update["$unset"] = {"active_vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}
+    elif not current_vehicle_id and len(vehicles) == 1:
+        v = vehicles[0]
+        user_update["$set"].update({
+            "active_vehicle_id": str(v["_id"]),
+            "car": v.get("car", ""),
+            "plate": v.get("plate", ""),
+            "vehicle_type": v.get("vehicle_type", "ai-first"),
+        })
+    await db.users.update_one({"_id": driver_oid}, user_update)
+    return {"ok": True, "driver_id": driver_id, "vehicle_ids": requested_ids}
+
+
+@api.get("/driver/profile")
+async def driver_profile(current=Depends(require_driver)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user:
+        raise HTTPException(404, "Sjåfør ikke funnet")
+    fid = user.get("fleet_id")
+    fleet = None
+    assigned_vehicles = []
+    if fid:
+        await _backfill_fleet_vehicles(fid)
+        try:
+            fleet_doc = await db.fleets.find_one({"_id": ObjectId(fid)})
+        except Exception:
+            fleet_doc = None
+        if fleet_doc:
+            fleet = {
+                "id": fid,
+                "name": fleet_doc.get("name") or "",
+                "org_number": fleet_doc.get("org_number") or "",
+            }
+        async for v in db.fleet_vehicles.find({
+            "fleet_id": fid,
+            "active": {"$ne": False},
+            "assigned_driver_ids": current["id"],
+        }).sort("plate", 1):
+            assigned_vehicles.append(_fleet_vehicle_public(v))
+
+    active_vehicle_id = user.get("active_vehicle_id")
+    active_vehicle = next((v for v in assigned_vehicles if v["id"] == active_vehicle_id), None)
+    return {
+        "driver": user_public(user),
+        "fleet": fleet,
+        "assigned_vehicles": assigned_vehicles,
+        "active_vehicle_id": active_vehicle_id,
+        "active_vehicle": active_vehicle,
+        "has_profile_photo": bool(user.get("profile_photo_path")),
+    }
+
+
+@api.post("/driver/vehicle/select")
+async def driver_select_vehicle(body: DriverVehicleSelectRequest, current=Depends(require_driver)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user:
+        raise HTTPException(404, "Sjåfør ikke funnet")
+    if user.get("online"):
+        raise HTTPException(409, "Gå offline før du bytter bil")
+    active_trip = await db.trips.find_one(_real_trip_filter({
+        "driver_id": current["id"],
+        "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]},
+    }))
+    if active_trip:
+        raise HTTPException(409, "Du kan ikke bytte bil under en aktiv tur")
+    try:
+        oid = ObjectId(body.vehicle_id)
+    except Exception:
+        raise HTTPException(400, "Ugyldig kjøretøy-ID")
+    vehicle = await db.fleet_vehicles.find_one({
+        "_id": oid,
+        "fleet_id": user.get("fleet_id"),
+        "active": {"$ne": False},
+        "assigned_driver_ids": current["id"],
+    })
+    if not vehicle:
+        raise HTTPException(403, "Denne bilen er ikke tildelt deg av løyvehaveren")
+    in_use = await db.users.find_one({
+        "role": "driver",
+        "_id": {"$ne": user["_id"]},
+        "active_vehicle_id": body.vehicle_id,
+        "online": True,
+    })
+    if in_use:
+        raise HTTPException(409, "Bilen er allerede i bruk av en annen sjåfør")
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "active_vehicle_id": body.vehicle_id,
+            "car": vehicle.get("car", ""),
+            "plate": vehicle.get("plate", ""),
+            "vehicle_type": vehicle.get("vehicle_type", "ai-first"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"ok": True, "active_vehicle": _fleet_vehicle_public(vehicle)}
+
+
+@api.post("/driver/profile-photo")
+async def driver_upload_profile_photo(file: UploadFile = File(...), current=Depends(require_driver)):
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
+        raise HTTPException(status_code=415, detail="Profilbildet må være JPG, PNG, WEBP eller HEIC")
+    data = await _read_uploaded_file(file)
+    path = _mk_upload_path("profile", current["id"], file.filename or "profile.jpg", file.content_type)
+    result = storage_put(path, data, file.content_type)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename or "",
+        "content_type": file.content_type,
+        "size": result.get("size") or len(data),
+        "owner_user_id": current["id"],
+        "scope": "profile",
+        "is_deleted": False,
+        "created_at": now_iso,
+    }
+    await db.uploaded_files.insert_one(doc)
+    await db.users.update_one(
+        {"_id": ObjectId(current["id"])},
+        {"$set": {"profile_photo_path": result["path"], "updated_at": now_iso}},
+    )
+    return {"ok": True, "profile_photo_path": result["path"]}
+
+
+@api.get("/driver/profile-photo")
+async def driver_profile_photo(current=Depends(require_driver)):
+    path = current.get("profile_photo_path")
+    if not path:
+        raise HTTPException(404, "Profilbilde er ikke registrert")
+    data, ct = storage_get(path)
+    return FastResponse(content=data, media_type=ct, headers={"Cache-Control": "private, max-age=60"})
+
+
+@api.get("/trips/{trip_id}/driver-photo")
+async def trip_driver_photo(trip_id: str, current=Depends(get_current_user)):
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
+    if not trip or not trip.get("driver_id"):
+        raise HTTPException(404, "Sjåførbilde ikke tilgjengelig")
+    try:
+        driver = await db.users.find_one({"_id": ObjectId(trip["driver_id"])})
+    except Exception:
+        driver = None
+    path = (driver or {}).get("profile_photo_path")
+    if not path:
+        raise HTTPException(404, "Sjåførbilde ikke registrert")
+    data, ct = storage_get(path)
+    return FastResponse(content=data, media_type=ct, headers={"Cache-Control": "private, max-age=60"})
+
+
 @api.get("/fleet/drivers")
 async def fleet_drivers(current=Depends(require_fleet_owner)):
     fid = await get_fleet_id_for(current)
@@ -3731,7 +4592,7 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
         # Today income
         today = datetime.now(timezone.utc).date().isoformat()
         income = 0; trips = 0
-        async for t in db.trips.find({"driver_id": d["id"], "created_at": {"$gte": today}, "status": {"$in": ["arrived","completed","rated"]}}):
+        async for t in db.trips.find(_real_trip_filter({"driver_id": d["id"], "created_at": {"$gte": today}, "status": {"$in": ["arrived","completed","rated"]}})):
             income += t.get("price", 0); trips += 1
         d["today_income"] = income; d["today_trips"] = trips
         drivers.append(d)
@@ -3797,11 +4658,11 @@ async def fleet_export_monthly(
     # Trips in month
     trips = []
     if driver_ids:
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": {"$in": driver_ids},
             "status": {"$in": ["arrived", "completed", "rated"]},
             "created_at": {"$gte": start_iso, "$lt": end_iso},
-        }):
+        })):
             trips.append(t)
             did = t.get("driver_id")
             if did in drivers_map:
@@ -3942,11 +4803,11 @@ def _oslo_window(campaign: dict, now: datetime = None):
 async def _campaign_progress(driver_id: str, campaign: dict):
     """Real number of trips this driver finished inside today's window + payouts already earned."""
     start_iso, end_iso, local_date = _oslo_window(campaign)
-    trips = await db.trips.count_documents({
+    trips = await db.trips.count_documents(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": FINISHED_TRIP_STATUSES},
         "arrived_at": {"$gte": start_iso, "$lt": end_iso},
-    })
+    }))
     paid = await db.bonus_payouts.count_documents({
         "driver_id": driver_id, "campaign_id": campaign["id"], "local_date": local_date,
     })
@@ -4101,6 +4962,40 @@ def _fresh_driver_location(value, now=None) -> bool:
         return False
 
 
+@api.get("/admin/data-integrity")
+async def admin_data_integrity(current=Depends(require_admin)):
+    """Read-only operational guardrail: confirm business dashboards are backed by real data only."""
+    synthetic_trip_query = {"$or": [
+        {"synthetic": True},
+        {"demo": True},
+        {"pickup_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
+        {"dropoff_address": {"$regex": SYNTHETIC_ADDRESS_RE}},
+    ]}
+    synthetic_trips = await db.trips.count_documents(synthetic_trip_query)
+    legacy_demo_users = await db.users.count_documents({"$or": [
+        {"email": {"$in": list(LEGACY_DEMO_EMAILS)}},
+        {"demo": True},
+        {"is_demo": True},
+    ]})
+    enabled_demo_users = await db.users.count_documents({"$or": [
+        {"demo": True, "disabled": {"$ne": True}},
+        {"is_demo": True, "disabled": {"$ne": True}},
+        {"email": {"$in": list(LEGACY_DEMO_EMAILS)}, "disabled": {"$ne": True}},
+    ]})
+    real_trips = await db.trips.count_documents(_real_trip_filter())
+    return {
+        "ok": synthetic_trips == 0 and (ENABLE_DEMO_DATA or enabled_demo_users == 0),
+        "app_env": APP_ENV,
+        "demo_data_enabled": ENABLE_DEMO_DATA,
+        "synthetic_trips": synthetic_trips,
+        "real_trips": real_trips,
+        "legacy_demo_users_total": legacy_demo_users,
+        "enabled_demo_users": enabled_demo_users,
+        "operational_reads_filter_synthetic": True,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @api.get("/admin/overview")
 async def admin_overview(current=Depends(require_admin)):
     """KPI dashboard for Operations Control Center."""
@@ -4112,23 +5007,27 @@ async def admin_overview(current=Depends(require_admin)):
     active_fleets = await count(db.fleets, {"status": {"$ne": "suspended"}})
     suspended_fleets = await count(db.fleets, {"status": "suspended"})
     pending_applications = await count(db.fleet_applications, {"status": {"$in": ["submitted", "under_review", "documents_required"]}})
-    approved_drivers = await count(db.users, {"role": "driver", "approved": True})
-    pending_drivers = await count(db.users, {"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
+    real_driver_filter = {"role": "driver", "demo": {"$ne": True}, "is_demo": {"$ne": True}, "disabled": {"$ne": True}}
+    approved_drivers = await count(db.users, {**real_driver_filter, "approved": True})
+    pending_drivers = await count(db.users, {**real_driver_filter, "$or": [{"approved": False}, {"approved": {"$exists": False}}]})
     drivers_online = 0
-    async for driver in db.users.find({"role": "driver", "online": True}, {"last_location_at": 1, "last_lat": 1, "last_lng": 1}):
+    async for driver in db.users.find(
+        {**real_driver_filter, "online": True, "active_vehicle_id": {"$exists": True, "$nin": [None, ""]}},
+        {"last_location_at": 1, "last_lat": 1, "last_lng": 1},
+    ):
         if _fresh_driver_location(driver.get("last_location_at")) and driver.get("last_lat") is not None and driver.get("last_lng") is not None:
             drivers_online += 1
-    active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}})
-    stale_active_trips = await count(db.trips, {"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}, "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()}})
-    trips_today = await count(db.trips, {"created_at": {"$gte": today}})
-    trips_yday = await count(db.trips, {"created_at": {"$gte": yday, "$lt": today}})
-    completed_today = await count(db.trips, {"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}})
-    cancelled_today = await count(db.trips, {"status": "cancelled", "created_at": {"$gte": today}})
+    active_trips = await count(db.trips, _real_trip_filter({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}}))
+    stale_active_trips = await count(db.trips, _real_trip_filter({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}, "created_at": {"$lt": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()}}))
+    trips_today = await count(db.trips, _real_trip_filter({"created_at": {"$gte": today}}))
+    trips_yday = await count(db.trips, _real_trip_filter({"created_at": {"$gte": yday, "$lt": today}}))
+    completed_today = await count(db.trips, _real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}))
+    cancelled_today = await count(db.trips, _real_trip_filter({"status": "cancelled", "created_at": {"$gte": today}}))
 
     gmv_today = 0
     kjapp_revenue_today = 0
     _rate = await _platform_commission()
-    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}, {"price": 1}):
+    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": today}}), {"price": 1}):
         price = t.get("price", 0) or 0
         gmv_today += price
         kjapp_revenue_today += round(price * _rate)
@@ -4321,7 +5220,7 @@ async def admin_drivers(current=Depends(require_admin)):
 @api.get("/admin/trips")
 async def admin_trips(current=Depends(require_admin), limit: int = 100):
     out = []
-    async for t in db.trips.find({}).sort("created_at", -1).limit(limit):
+    async for t in db.trips.find(_real_trip_filter()).sort("created_at", -1).limit(limit):
         t["id"] = str(t["_id"])
         t.pop("_id", None)
         out.append(t)
@@ -4348,8 +5247,10 @@ async def admin_approve_driver(user_id: str, body: ApproveDriverRequest, current
 # Driver invitation flow (fleet owner / admin invites drivers)
 # ============================================================
 class DriverInviteRequest(BaseModel):
-    car: str  # e.g. "Tesla Model Y"
-    plate: str  # e.g. "EL12345"
+    # Vehicle is assigned separately by the fleet owner. These legacy fields remain optional
+    # for backward compatibility with old admin/fleet clients.
+    car: str = ""
+    plate: str = ""
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
@@ -4434,10 +5335,20 @@ async def get_driver_invite(token: str):
         raise HTTPException(status_code=410, detail="Invitasjon allerede brukt")
     if _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon utløpt")
+
+    fleet = None
+    if inv.get("fleet_id"):
+        try:
+            fleet = await db.fleets.find_one({"_id": ObjectId(inv["fleet_id"])})
+        except Exception:
+            fleet = None
+
     return {
         "token": inv["token"],
-        "car": inv.get("car"),
-        "plate": inv.get("plate"),
+        "fleet_name": (fleet or {}).get("name"),
+        "fleet_org_number": (fleet or {}).get("org_number"),
+        "car": inv.get("car") or None,
+        "plate": inv.get("plate") or None,
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
         "capabilities": inv.get("capabilities") or [],
         "note": inv.get("note", ""),
@@ -4450,10 +5361,13 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon ugyldig")
     email = body.email.strip().lower()
+    phone = _normalize_login_phone(body.phone) or body.phone.strip()
     if inv.get("email") and inv["email"] != email:
         raise HTTPException(status_code=403, detail="Invitasjonen er knyttet til en annen e-postadresse")
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="E-post er allerede registrert")
+    if phone and await db.users.find_one({"role": "driver", "phone": phone}):
+        raise HTTPException(status_code=400, detail="Telefonnummer er allerede knyttet til en sjåførkonto")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Passord må ha minst 6 tegn")
     # Require all three documents
@@ -4481,13 +5395,14 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
         "email": email,
         "password_hash": hash_password(body.password),
         "fullName": body.fullName,
-        "phone": body.phone,
+        "phone": phone,
         "role": "driver",
         "car": inv.get("car"),
         "plate": inv.get("plate"),
         "vehicle_type": inv.get("vehicle_type", "ai-first"),
         "capabilities": inv.get("capabilities") or [],
-        "rating": 5.0,
+        "rating": None,  # no fabricated starting score; populated only from real passenger ratings
+        "rating_count": 0,
         "approved": False,  # requires admin approval before pending trips visible
         "online": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -4510,7 +5425,7 @@ async def accept_driver_invite(body: DriverSignupRequest, response: Response):
     set_auth_cookie(response, token)
     return {
         "token": token,
-        "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": body.phone, "role": "driver", "approved": False},
+        "user": {"id": uid, "email": email, "fullName": body.fullName, "phone": phone, "role": "driver", "approved": False},
         "pending_approval": True,
     }
 
@@ -4520,6 +5435,8 @@ async def upload_driver_doc(file: UploadFile = File(...), invite_token: str = Fo
     """Public upload used inside the driver-signup flow. Validated by invite token."""
     if doc_type not in ("drivers_license", "taxi_license", "profile_photo"):
         raise HTTPException(status_code=400, detail="Ugyldig dokumenttype")
+    if doc_type == "profile_photo" and file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
+        raise HTTPException(status_code=415, detail="Profilbildet må være et bilde (JPG, PNG, WEBP eller HEIC)")
     inv = await db.driver_invites.find_one({"token": invite_token})
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=403, detail="Ugyldig invitasjon")
@@ -4660,7 +5577,7 @@ async def apple_config():
 
 async def send_trip_receipts(trip_id: str):
     """Send customer + driver receipts once after verified payment capture."""
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip or trip.get("receipt_emailed_at") or trip.get("payment_status") != "paid":
         return
     passenger = None
@@ -4720,7 +5637,7 @@ class TripCheckoutRequest(BaseModel):
 @api.post("/payments/checkout")
 async def create_trip_checkout(body: TripCheckoutRequest, current=Depends(get_current_user)):
     """Create a Stripe Checkout session for an arrived trip. Amount comes from the trip record (server-side)."""
-    trip = await db.trips.find_one({"trip_id": body.trip_id, "user_id": current["id"]})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
@@ -4890,27 +5807,115 @@ async def stripe_webhook(request: Request):
 # ============================================================
 @api.get("/gdpr/export")
 async def gdpr_export(current=Depends(get_current_user)):
-    """Return all data we hold on this user (GDPR right of access)."""
+    """Machine-readable account export for customer and driver accounts.
+
+    Security credentials (password hashes, raw push tokens and push auth secrets) are intentionally
+    excluded. The export still includes the related account/device metadata so the user can see
+    what categories of data are stored.
+    """
     uid = current["id"]
     raw_user = await db.users.find_one({"_id": ObjectId(uid)})
     user = user_public(raw_user) if raw_user else None
-    trips = []
-    async for t in db.trips.find({"user_id": uid}).sort("created_at", -1):
-        t["id"] = str(t["_id"]); t.pop("_id", None); trips.append(t)
-    messages = []
-    async for m in db.chat_messages.find({"user_id": uid}).sort("created_at", 1):
-        m["id"] = str(m["_id"]); m.pop("_id", None); messages.append(m)
-    payments = []
-    async for p in db.payment_transactions.find({"user_id": uid}):
-        p["id"] = str(p["_id"]); p.pop("_id", None); payments.append(p)
-    return {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "user": user,
-        "trips": trips,
-        "ai_messages": messages,
-        "payments": payments,
+
+    async def export_many(collection, query, *, sort=None, projection=None, limit=5000):
+        out = []
+        cursor = collection.find(query, projection)
+        if sort:
+            cursor = cursor.sort(sort[0], sort[1])
+        async for doc in cursor.limit(limit):
+            if doc.get("_id") is not None:
+                doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+            out.append(doc)
+        return out
+
+    customer_trips = await export_many(
+        db.trips, {"user_id": uid}, sort=("created_at", -1)
+    )
+    driver_trips = await export_many(
+        db.trips, {"driver_id": uid}, sort=("created_at", -1)
+    )
+
+    participant_trip_ids = {
+        t.get("trip_id")
+        for t in [*customer_trips, *driver_trips]
+        if t.get("trip_id")
     }
 
+    ai_messages = await export_many(
+        db.chat_messages, {"user_id": uid}, sort=("created_at", 1)
+    )
+    sent_trip_messages = await export_many(
+        db.trip_messages, {"from_user_id": uid}, sort=("created_at", 1)
+    )
+    trip_messages = []
+    if participant_trip_ids:
+        trip_messages = await export_many(
+            db.trip_messages,
+            {"trip_id": {"$in": list(participant_trip_ids)}},
+            sort=("created_at", 1),
+        )
+
+    payments = await export_many(
+        db.payment_transactions, {"user_id": uid}, sort=("created_at", -1)
+    )
+    payment_methods = await export_many(
+        db.payment_methods,
+        {"user_id": uid},
+        sort=("created_at", -1),
+        projection={
+            "stripe_payment_method_id": 0,
+            "stripe_customer_id": 0,
+        },
+    )
+    settings = await export_many(db.settings, {"user_id": uid})
+    saved_places = await export_many(
+        db.user_places, {"user_id": uid}, sort=("created_at", 1)
+    )
+    safety_events = await export_many(
+        db.safety_events,
+        {"user_id": uid},
+        sort=("created_at", -1),
+    )
+    support_tickets = await export_many(
+        db.support_tickets,
+        {"$or": [{"user_id": uid}, {"email": current.get("email")}]},
+        sort=("created_at", -1),
+    )
+
+    native_push_registrations = await export_many(
+        db.native_push_tokens,
+        {"user_id": uid},
+        sort=("updated_at", -1),
+        projection={"token": 0},
+    )
+
+    return {
+        "format": "kjapp-gdpr-export",
+        "format_version": 2,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "account": user,
+        # Backwards-compatible aliases retained for existing mobile clients/tests.
+        "user": user,
+        "trips": driver_trips if current.get("role") == "driver" else customer_trips,
+        "customer_trips": customer_trips,
+        "driver_trips": driver_trips,
+        "trip_messages": trip_messages,
+        "messages_sent_by_account": sent_trip_messages,
+        "ai_messages": ai_messages,
+        "payments": payments,
+        "payment_methods": payment_methods,
+        "settings": settings,
+        "saved_places": saved_places,
+        "safety_events": safety_events,
+        "support_tickets": support_tickets,
+        "native_push_registrations": native_push_registrations,
+        "security_note": (
+            "Password hashes, raw native push tokens, web-push authentication keys and external "
+            "provider secrets are omitted because they are security credentials rather than "
+            "user-facing export content."
+        ),
+    }
 
 @api.delete("/gdpr/delete")
 async def gdpr_delete(current=Depends(get_current_user), response: Response = None):
@@ -4950,7 +5955,7 @@ async def pricing_surge():
 async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
     driver_id = current["id"]
-    original = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
+    original = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
     pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
     penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
     result = await db.trips.update_one(
@@ -4966,7 +5971,7 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke avbryte turen")
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     await send_push_to_user(t["user_id"], "Turen ble avbrutt", "Sjåføren har avbrutt turen. Beklager!", "/app")
     return {"ok": True}
 
@@ -4986,7 +5991,7 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
     driver_id = current["id"]
     trips = []
     async for t in db.trips.find(
-        {"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}}
+        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["arrived", "completed", "rated", "cancelled_by_driver"]}})
     ).sort("created_at", -1).limit(limit):
         trips.append({
             "trip_id": t.get("trip_id"),
@@ -5013,11 +6018,11 @@ async def driver_history_weekly(current=Depends(require_driver)):
         day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
         total = 0
         trips = 0
-        async for t in db.trips.find({
+        async for t in db.trips.find(_real_trip_filter({
             "driver_id": driver_id,
             "created_at": {"$gte": day.isoformat(), "$lt": (day + timedelta(days=1)).isoformat()},
             "status": {"$in": ["arrived", "completed", "rated"]},
-        }):
+        })):
             trips += 1
             total += t.get("price", 0)
         days.append({"date": day.isoformat(), "day_label": day.strftime("%a"), "income": total, "trips": trips})
@@ -5032,7 +6037,7 @@ async def driver_ratings(current=Depends(require_driver), limit: int = 20):
     count = 0
     breakdown = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
     recent = []
-    async for t in db.trips.find({"driver_id": driver_id, "rating": {"$gt": 0}}).sort("created_at", -1):
+    async for t in db.trips.find(_real_trip_filter({"driver_id": driver_id, "rating": {"$gt": 0}})).sort("created_at", -1):
         r = int(t.get("rating") or 0)
         if r < 1 or r > 5: continue
         total += r
@@ -5059,12 +6064,12 @@ async def driver_payouts(current=Depends(require_driver)):
     pending = 0
     pending_net = 0
     trips_count = 0
-    async for t in db.trips.find({
+    async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
         "status": {"$in": ["arrived", "completed", "rated"]},
         "created_at": {"$gte": week_start},
         "payout_paid": {"$ne": True},
-    }):
+    })):
         gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
         pending += gross
@@ -5110,7 +6115,7 @@ async def unread_message_count(current=Depends(get_current_user)):
     q = {"driver_id" if role == "driver" else "user_id": user_id,
          "status": {"$in": ["driver_on_way", "at_pickup", "in_trip", "arrived"]}}
     n = 0
-    async for t in db.trips.find(q):
+    async for t in db.trips.find(_real_trip_filter(q)):
         seen_key = f"{my_role_in_chat}_last_seen_msg_at"
         last_seen = t.get(seen_key) or "1970-01-01"
         c = await db.trip_messages.count_documents({
@@ -5589,7 +6594,15 @@ async def admin_live(current=Depends(require_admin)):
     drivers = []
     stale_drivers = []
     fleet_names = await _fleet_names()
-    async for u in db.users.find({"role": "driver", "online": True}, {"password_hash": 0}):
+    async for u in db.users.find({
+        "role": "driver",
+        "online": True,
+        "approved": True,
+        "disabled": {"$ne": True},
+        "demo": {"$ne": True},
+        "is_demo": {"$ne": True},
+        "active_vehicle_id": {"$exists": True, "$nin": [None, ""]},
+    }, {"password_hash": 0}):
         row = {
             "id": str(u["_id"]),
             "name": u.get("fullName"),
@@ -5606,7 +6619,7 @@ async def admin_live(current=Depends(require_admin)):
     trips = []
     user_ids = []
     raw = []
-    async for t in db.trips.find({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}}).sort("created_at", -1).limit(100):
+    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip"]}})).sort("created_at", -1).limit(100):
         raw.append(t); user_ids.append(t.get("user_id"))
     users = await _users_by_ids(user_ids)
     for t in raw:
@@ -5638,7 +6651,7 @@ async def admin_drivers_full(status: Optional[str] = None, q: Optional[str] = No
     out = []
     async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
         uid = str(u["_id"])
-        completed = await db.trips.count_documents({"driver_id": uid, "status": {"$in": ["arrived", "completed", "rated"]}})
+        completed = await db.trips.count_documents(_real_trip_filter({"driver_id": uid, "status": {"$in": ["arrived", "completed", "rated"]}}))
         out.append({
             "id": uid, "name": u.get("fullName"), "email": u.get("email"), "phone": u.get("phone"),
             "car": u.get("car"), "plate": u.get("plate"), "vehicle_type": u.get("vehicle_type"),
@@ -5685,26 +6698,73 @@ async def admin_set_driver_capabilities(user_id: str, body: DriverCapabilitiesRe
 
 
 @api.get("/admin/vehicles")
-async def admin_vehicles(q: Optional[str] = None, vehicle_type: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
-    filt = {"role": "driver", "car": {"$exists": True, "$ne": None}}
-    if vehicle_type and vehicle_type != "all": filt["vehicle_type"] = vehicle_type
+async def admin_vehicles(
+    q: Optional[str] = None,
+    vehicle_type: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    current=Depends(require_admin),
+):
+    """Canonical vehicle inventory from fleet_vehicles.
+
+    Legacy driver car/plate values are backfilled into the fleet registry when a fleet is known,
+    but this endpoint never treats a driver account as the vehicle record.
+    """
+    async for fleet in db.fleets.find({}, {"_id": 1}):
+        await _backfill_fleet_vehicles(str(fleet["_id"]))
+
+    filt = {}
+    if vehicle_type and vehicle_type != "all":
+        filt["vehicle_type"] = vehicle_type
     if q:
         rx = {"$regex": q, "$options": "i"}
-        filt["$or"] = [{"car": rx}, {"plate": rx}, {"fullName": rx}]
+        filt["$or"] = [{"car": rx}, {"plate": rx}, {"color": rx}]
+
     page, page_size, skip = _page_params(page, page_size)
-    total = await db.users.count_documents(filt)
+    total = await db.fleet_vehicles.count_documents(filt)
     fleet_names = await _fleet_names()
     out = []
-    async for u in db.users.find(filt, {"password_hash": 0}).sort("created_at", -1).skip(skip).limit(page_size):
-        out.append({
-            "id": str(u["_id"]), "car": u.get("car"), "plate": u.get("plate"),
-            "vehicle_type": u.get("vehicle_type"), "driver_name": u.get("fullName"),
-            "fleet_name": fleet_names.get(u.get("fleet_id")),
-            "online": u.get("online", False), "approved": u.get("approved", False),
-            "last_location_at": u.get("last_location_at"),
-        })
-    return _paged(out, total, page, page_size, "vehicles")
 
+    async for vehicle in db.fleet_vehicles.find(filt).sort("updated_at", -1).skip(skip).limit(page_size):
+        assigned_ids = list(vehicle.get("assigned_driver_ids") or [])
+        assigned = []
+        assigned_oids = []
+        for driver_id in assigned_ids:
+            try:
+                assigned_oids.append(ObjectId(driver_id))
+            except Exception:
+                pass
+        if assigned_oids:
+            async for driver in db.users.find(
+                {"_id": {"$in": assigned_oids}, "role": "driver"},
+                {"fullName": 1, "online": 1, "active_vehicle_id": 1, "last_location_at": 1},
+            ):
+                assigned.append({
+                    "id": str(driver["_id"]),
+                    "name": driver.get("fullName") or "Sjåfør",
+                    "online": bool(driver.get("online")),
+                    "is_active_vehicle": driver.get("active_vehicle_id") == str(vehicle["_id"]),
+                    "last_location_at": driver.get("last_location_at"),
+                })
+
+        row = _fleet_vehicle_public(vehicle)
+        row.update({
+            "fleet_name": fleet_names.get(vehicle.get("fleet_id")),
+            "assigned_drivers": assigned,
+            "assigned_driver_count": len(assigned),
+            "online_driver_count": sum(1 for d in assigned if d["online"] and d["is_active_vehicle"]),
+            # Backward-compatible fields used by older admin UI.
+            "driver_name": next((d["name"] for d in assigned if d["is_active_vehicle"]), None),
+            "online": any(d["online"] and d["is_active_vehicle"] for d in assigned),
+            "approved": True,
+            "last_location_at": next(
+                (d["last_location_at"] for d in assigned if d["online"] and d["is_active_vehicle"]),
+                None,
+            ),
+        })
+        out.append(row)
+
+    return _paged(out, total, page, page_size, "vehicles")
 
 @api.get("/admin/trips-full")
 async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, payment_status: Optional[str] = None, page: int = 1, page_size: int = 50, current=Depends(require_admin)):
@@ -5722,6 +6782,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
         rx = {"$regex": q, "$options": "i"}
         filt["$or"] = [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]
     page, page_size, skip = _page_params(page, page_size)
+    filt = _real_trip_filter(filt)
     total = await db.trips.count_documents(filt)
     raw, user_ids = [], []
     async for t in db.trips.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
@@ -5755,7 +6816,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
 
 @api.get("/admin/trips/{trip_id}/timeline")
 async def admin_trip_timeline(trip_id: str, current=Depends(require_admin)):
-    t = await db.trips.find_one({"trip_id": trip_id})
+    t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not t: raise HTTPException(404, "Fant ikke turen")
     events = []
     def ev(label, at):
@@ -5779,7 +6840,7 @@ class TripInterventionRequest(BaseModel):
 
 @api.post("/admin/trips/{trip_id}/intervene")
 async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, current=Depends(require_admin)):
-    trip = await db.trips.find_one({"trip_id": trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(404, "Fant ikke turen")
     reason = body.reason.strip()
@@ -5845,7 +6906,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         if trip.get("user_id"):
             await send_push_to_user(trip["user_id"], "Vi finner en ny sjåfør",
                                     "KJAPP har frigitt den forrige sjåføren og søker på nytt.", f"/app/booking/{trip_id}")
-        refreshed = await db.trips.find_one({"trip_id": trip_id})
+        refreshed = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
         if refreshed:
             await offer_trip_to_next_driver(refreshed)
         return {"ok": True, "action": body.action, "status": "searching"}
@@ -5895,7 +6956,7 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
     driver_fleet = {}
     async for u in db.users.find({"role": "driver", "fleet_id": {"$exists": True, "$ne": None}}, {"fleet_id": 1}):
         driver_fleet[str(u["_id"])] = u["fleet_id"]
-    async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": since}}, {"price": 1, "created_at": 1, "driver_id": 1}):
+    async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": since}}), {"price": 1, "created_at": 1, "driver_id": 1}):
         price = t.get("price", 0) or 0
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
@@ -5945,7 +7006,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
     w = _csv.writer(buf, delimiter=";")
     _rate = await _platform_commission()
     w.writerow(["dato", "trip_id", "status", "pris_kr", "distanse_km", "sjåfør", "passasjer_id", "kjapp_provisjon_kr"])
-    async for t in db.trips.find({"created_at": {"$gte": since}}).sort("created_at", -1).limit(5000):
+    async for t in db.trips.find(_real_trip_filter({"created_at": {"$gte": since}})).sort("created_at", -1).limit(5000):
         price = t.get("price", 0) or 0
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
@@ -6065,7 +7126,7 @@ async def admin_refunds(status: Optional[str] = None, page: int = 1, page_size: 
 async def admin_create_refund(body: RefundRequest, current=Depends(require_admin)):
     if not (body.reason or "").strip():
         raise HTTPException(400, "Begrunnelse kreves")
-    trip = await db.trips.find_one({"trip_id": body.trip_id})
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
     if not trip:
         raise HTTPException(404, "Fant ikke tur")
     if trip.get("status") not in ("arrived", "completed", "rated"):
@@ -6145,7 +7206,7 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
     want = (type or "").upper()
     rows = []
     if want in ("", "FARE"):
-        async for t in db.trips.find({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": lo, "$lte": hi}}):
+        async for t in db.trips.find(_real_trip_filter({"status": {"$in": ["arrived", "completed", "rated"]}, "created_at": {"$gte": lo, "$lte": hi}})):
             fid = driver_fleet.get(t.get("driver_id"))
             if fleet_id and fid != fleet_id: continue
             price = int(t.get("price") or 0)
@@ -6265,7 +7326,7 @@ async def admin_analytics(days: int = 14, current=Depends(require_admin)):
     price_sum, dist_sum, dur_sum, priced = 0, 0.0, 0.0, 0
     hours = [0] * 24
     driver_counts = {}
-    async for t in db.trips.find({"created_at": {"$gte": since}}):
+    async for t in db.trips.find(_real_trip_filter({"created_at": {"$gte": since}})):
         total += 1
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"trips": 0, "completed": 0, "cancelled": 0})
@@ -6285,7 +7346,7 @@ async def admin_analytics(days: int = 14, current=Depends(require_admin)):
             hours[datetime.fromisoformat((t.get("created_at") or "").replace("Z", "+00:00")).hour] += 1
         except Exception:
             pass
-    accepted = await db.trips.count_documents({"created_at": {"$gte": since}, "driver_id": {"$exists": True, "$ne": None}})
+    accepted = await db.trips.count_documents(_real_trip_filter({"created_at": {"$gte": since}, "driver_id": {"$exists": True, "$ne": None}}))
     declined = await db.driver_declines.count_documents({"declined_at": {"$gte": since}})
     offered = accepted + declined
     series = []
@@ -6320,7 +7381,7 @@ DEFAULT_PLATFORM_SETTINGS = {
         "trygg":    {"label": "Komfort",  "multiplier": 1.25, "enabled": True},
         "premium":  {"label": "Premium",  "multiplier": 1.6, "enabled": True},
     },
-    "features": {"surge": True, "ai_chat": True, "demo_trips": True, "vipps": False},
+    "features": {"surge": True, "ai_chat": True, "demo_trips": False, "vipps": False},
     "compliance": {
         "legal_review_completed": False,
         "transport_requirements_verified": False,
@@ -6382,6 +7443,11 @@ async def admin_get_settings(current=Depends(require_admin)):
         return {**DEFAULT_PLATFORM_SETTINGS, "updated_at": None}
     s.pop("_id", None)
     merged = {**DEFAULT_PLATFORM_SETTINGS, **s}
+    merged["features"] = {
+        **DEFAULT_PLATFORM_SETTINGS["features"],
+        **(s.get("features") or {}),
+        "demo_trips": False,
+    }
     return merged
 
 
@@ -6400,7 +7466,20 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
         next_pricing["version"] = int(previous_pricing.get("version", 1)) + 1
         sets["pricing"] = next_pricing
     if body.ride_classes is not None: sets["ride_classes"] = body.ride_classes
-    if body.features is not None: sets["features"] = body.features
+    if body.features is not None:
+        if body.features.get("demo_trips") is True:
+            raise HTTPException(400, "Demo-turer er permanent deaktivert i KJAPP beta/drift")
+        allowed_features = set(DEFAULT_PLATFORM_SETTINGS["features"].keys())
+        unknown_features = set(body.features.keys()) - allowed_features
+        if unknown_features:
+            raise HTTPException(400, f"Ukjente funksjonsflagg: {', '.join(sorted(unknown_features))}")
+        if any(not isinstance(v, bool) for v in body.features.values()):
+            raise HTTPException(400, "Funksjonsflagg må være true/false")
+        sets["features"] = {
+            **DEFAULT_PLATFORM_SETTINGS["features"],
+            **body.features,
+            "demo_trips": False,
+        }
     if body.compliance is not None:
         allowed = set(DEFAULT_PLATFORM_SETTINGS["compliance"].keys())
         unknown = set(body.compliance.keys()) - allowed
@@ -6614,7 +7693,7 @@ async def admin_search(q: str, current=Depends(require_admin)):
         return {"query": q, "trips": [], "drivers": [], "customers": [], "fleets": []}
     rx = {"$regex": q, "$options": "i"}
     trips = []
-    async for t in db.trips.find({"$or": [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]}).sort("created_at", -1).limit(10):
+    async for t in db.trips.find(_real_trip_filter({"$or": [{"trip_id": rx}, {"pickup_address": rx}, {"dropoff_address": rx}]})).sort("created_at", -1).limit(10):
         trips.append({
             "trip_id": t.get("trip_id"), "status": t.get("status"), "price": t.get("price"),
             "pickup_address": t.get("pickup_address"), "dropoff_address": t.get("dropoff_address"),

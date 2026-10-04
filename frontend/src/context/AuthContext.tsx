@@ -17,6 +17,7 @@ export type User = {
   phone?: string;
   role?: string;
   driver_id?: string;
+  google_linked?: boolean;
 } | null;
 
 type AuthCtx = {
@@ -26,6 +27,7 @@ type AuthCtx = {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   signInWithGoogle: () => Promise<User>;
+  linkGoogle: () => Promise<boolean>;
 };
 
 const Ctx = createContext<AuthCtx>(null as any);
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | undefined>(undefined);
   const processed = useRef<Set<string>>(new Set());
   const lastUrl = useRef<string | null>(null);
+  const googleError = useRef('');
 
   const refresh = useCallback(async () => {
     const token = await storage.getItem(TOKEN_KEY);
@@ -61,11 +64,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (processed.current.has(sid)) return null;
     processed.current.add(sid);
     try {
+      googleError.current = '';
       const res = await authApi.googleSession(sid);
+      if (res?.twofa_required) {
+        googleError.current = 'Kontoen krever tofaktor. Bruk e-post og passord for å fullføre innloggingen.';
+        return null;
+      }
+      if (!res?.token || !res?.user) {
+        googleError.current = 'Google-innloggingen returnerte ingen gyldig KJAPP-session.';
+        return null;
+      }
       await storage.setItem(TOKEN_KEY, res.token);
       setUser(res.user);
       return res.user;
-    } catch {
+    } catch (e: any) {
+      googleError.current = e?.response?.data?.detail || e?.message || 'Google-innloggingen feilet.';
       return null;
     }
   }, []);
@@ -137,16 +150,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!url) url = lastUrl.current || (await Linking.getInitialURL());
     const sid = extractSessionId(url);
     if (!sid) return null;
-    return await handleSessionId(sid);
+    const linkedUser = await handleSessionId(sid);
+    if (!linkedUser && googleError.current) throw new Error(googleError.current);
+    return linkedUser;
   };
 
+  const linkGoogle = async (): Promise<boolean> => {
+    const redirectUrl = Platform.OS === 'web'
+      ? window.location.origin + '/'
+      : Linking.createURL('');
+    const authUrl = `${EMERGENT_AUTH}?redirect=${encodeURIComponent(redirectUrl)}`;
+
+    if (Platform.OS === 'web') return false;
+
+    lastUrl.current = null;
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+    let url: string | null = result.type === 'success' ? result.url : null;
+    if (!url) url = lastUrl.current || (await Linking.getInitialURL());
+    const sid = extractSessionId(url);
+    if (!sid) return false;
+    await authApi.googleLink(sid);
+    await refresh();
+    return true;
+  };
   const logout = async () => {
     await storage.removeItem(TOKEN_KEY);
     setUser(null);
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle }}>
+    <Ctx.Provider value={{ user, login, register, logout, refresh, signInWithGoogle, linkGoogle }}>
       {children}
     </Ctx.Provider>
   );

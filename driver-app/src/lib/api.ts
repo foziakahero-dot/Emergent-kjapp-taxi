@@ -2,11 +2,12 @@ import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
+export const API_BASE = `${BACKEND}/api`;
 export const TOKEN_KEY = 'kjapp_token';
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
 export const api = axios.create({
-  baseURL: `${BACKEND}/api`,
+  baseURL: API_BASE,
   timeout: 30000,
 });
 
@@ -17,11 +18,10 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
-  register: (data: any) => api.post('/auth/register', data).then((r) => r.data),
-  login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
+  driverLogin: (identifier: string, password: string) =>
+    api.post('/auth/driver-login', { identifier, password }).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
-  googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
 };
 
 export const tripsApi = {
@@ -114,12 +114,17 @@ export const driverApi = {
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
-  location: (lat: number, lng: number, heading = 0, speed = 0) =>
+  location: (lat: number, lng: number, heading?: number | null, speed?: number | null) =>
     api.post('/driver/location', { lat, lng, heading, speed }).then((r) => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
+  profile: () => api.get('/driver/profile').then((r) => r.data),
+  selectVehicle: (vehicle_id: string) => api.post('/driver/vehicle/select', { vehicle_id }).then((r) => r.data),
+  uploadProfilePhoto: (form: FormData) => api.post('/driver/profile-photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r) => r.data),
   payouts: () => api.get('/driver/payouts')
     .then((r) => normalizePayouts(r.data))
     .catch(() => normalizePayouts()),

@@ -1,0 +1,31 @@
+name: KJAPP Firebase Native Push Code Validation
+
+on:
+  push:
+    branches: ['fix/firebase-native-push-production']
+
+jobs:
+  validate_push_code:
+    name: Validate Firebase/APNs integration code
+    environment: preview
+    env:
+      KJAPP_REQUIRE_FIREBASE: "false"
+    steps:
+      - uses: eas/checkout
+      - name: Compile backend push code
+        run: python -m py_compile ../backend/server.py ../backend/admin_control_center.py
+      - name: Resolve Customer Expo config
+        run: node -e "const f=require('./app.config.js'); const j=require('./app.json'); const c=f({config:j.expo}); if(c.android.package!=='no.kjapp.app') process.exit(2); console.log('Customer config OK')"
+      - name: Install Customer dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck Customer
+        run: npx tsc --noEmit
+      - name: Resolve Driver Expo config
+        working_directory: ../driver-app
+        run: node -e "const f=require('./app.config.js'); const j=require('./app.json'); const c=f({config:j.expo}); if(c.android.package!=='no.kjapp.driver') process.exit(2); console.log('Driver config OK')"
+      - name: Install Driver dependencies
+        working_directory: ../driver-app
+        run: npm install --no-audit --no-fund
+      - name: Typecheck Driver
+        working_directory: ../driver-app
+        run: npx tsc --noEmit

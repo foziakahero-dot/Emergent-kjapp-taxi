@@ -8,6 +8,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
+import { shareJsonExport } from '@/src/lib/gdprExport';
 
 const NOTIF: { key: string; label: string; sub: string }[] = [
   { key: 'notif_requests', label: 'Turforespørsler', sub: 'Varsel når en ny tur er tilgjengelig' },
@@ -23,11 +24,12 @@ export default function DriverSettings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     settingsApi.get().then((r) => setSettings(r.settings || r || {})).catch(() => setSettings({}));
@@ -50,6 +52,16 @@ export default function DriverSettings() {
     } catch { setDeleting(false); }
   };
 
+  const exportMyData = async () => {
+    setExporting(true);
+    try {
+      const data = await gdprApi.export();
+      await shareJsonExport(data, 'kjapp-driver-gdpr');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const version = Constants.expoConfig?.version || '1.0.0';
 
   return (
@@ -65,6 +77,21 @@ export default function DriverSettings() {
         <View style={{ paddingTop: 60 }}><Loader /></View>
       ) : (
         <View style={{ paddingHorizontal: 20 }}>
+          <Text style={s.sectionTitle}>Konto</Text>
+          <View style={s.card}>
+            <View style={s.accountRow}>
+              <View style={s.linkIcon}><Icon name="user" size={18} color={colors.accent} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.linkLabel}>Godkjent sjåførkonto</Text>
+                <Text style={s.rowSub}>{user?.email || user?.phone || 'KJAPP Driver'} · invite-only</Text>
+              </View>
+              <View style={s.connectedBadge}>
+                <Icon name="check" size={14} color={colors.online} />
+                <Text style={s.connectedText}>GODKJENT</Text>
+              </View>
+            </View>
+          </View>
+
           <Text style={s.sectionTitle}>Varsler</Text>
           <View style={s.card}>
             {NOTIF.map((t, i) => (
@@ -91,7 +118,7 @@ export default function DriverSettings() {
           <Text style={s.sectionTitle}>Personvern</Text>
           <View style={s.card}>
             <LinkRow icon="map-pin" label="Posisjonstilgang" onPress={() => Linking.openSettings()} s={s} testID="ds-location" />
-            <LinkRow icon="file-text" label="Last ned mine data" onPress={() => Linking.openURL('mailto:support@kjapp.no?subject=Innsyn%20i%20data')} border s={s} testID="ds-gdpr" />
+            <LinkRow icon="file-text" label={exporting ? 'Eksporterer data…' : 'Eksporter mine data'} onPress={exportMyData} border s={s} testID="ds-gdpr" />
           </View>
 
           <Text style={s.sectionTitle}>Hjelp</Text>
@@ -172,6 +199,9 @@ const useStyles = makeStyles((c) => ({
   title: { fontFamily: font.display, fontSize: 26, color: c.text },
   sectionTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '600', marginTop: 22, marginBottom: 8 },
   card: { backgroundColor: c.driverCard, borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  connectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: c.onlineSoft },
+  connectedText: { color: c.online, fontSize: 11, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 16 },
   rowBorder: { borderTopWidth: 1, borderTopColor: c.line },
   rowLabel: { color: c.text, fontSize: 15 },

@@ -2,10 +2,11 @@ import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
+export const API_BASE = `${BACKEND}/api`;
 export const TOKEN_KEY = 'kjapp_token';
 
 export const api = axios.create({
-  baseURL: `${BACKEND}/api`,
+  baseURL: API_BASE,
   timeout: 30000,
 });
 
@@ -21,6 +22,7 @@ export const authApi = {
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
+  googleLink: (session_id: string) => api.post('/auth/google/link', { session_id }).then((r) => r.data),
 };
 
 export const tripsApi = {

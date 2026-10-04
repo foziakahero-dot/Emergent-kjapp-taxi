@@ -61,7 +61,15 @@
           "enableBackgroundRemoteNotifications": true
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "KJAPP Driver bruker bildebiblioteket slik at du kan velge profilbilde.",
+          "cameraPermission": "KJAPP Driver bruker kameraet dersom du vil ta nytt profilbilde.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "extra": {
       "appRole": "driver",

@@ -24,7 +24,13 @@ function UploadRow({ item, value, busy, onFile, onRemove }: {
     <div className={`driver-doc-mark ${value ? 'done' : ''}`}>{value ? '✓' : '□'}</div>
     <div className="driver-doc-copy"><strong>{item.label}</strong><span>{value?.original_filename || item.sub}</span></div>
     {value ? <button type="button" className="driver-doc-action" onClick={onRemove}>Fjern</button> : <button type="button" className="driver-doc-action" disabled={busy} onClick={() => ref.current?.click()}>{busy ? 'Laster…' : 'Last opp'}</button>}
-    <input ref={ref} type="file" accept="image/*,application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+    <input
+      ref={ref}
+      type="file"
+      accept={item.key === 'profile_photo' ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'image/*,application/pdf'}
+      hidden
+      onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+    />
   </div>;
 }
 
@@ -86,7 +92,11 @@ export default function DriverSignup() {
     <div className="driver-signup-card">
       <span className="driver-signup-kicker">SJÅFØRREGISTRERING · STEG {step}/2</span>
       <h1>{step === 1 ? 'Velkommen til KJAPP.' : 'Dokumentasjon.'}</h1>
-      <div className="assigned-car"><span>BIL TILDELT</span><strong>{invite.car || 'KJAPP-bil'}{invite.plate ? ` · ${invite.plate}` : ''}</strong>{invite.fleet_name ? <small>{invite.fleet_name}</small> : null}</div>
+      <div className="assigned-car">
+        <span>INVITERT AV</span>
+        <strong>{invite.fleet_name || 'KJAPP Partner'}</strong>
+        <small>{invite.fleet_org_number ? `Org.nr. ${invite.fleet_org_number}` : 'Bil tildeles separat av løyvehaveren etter godkjenning.'}</small>
+      </div>
       {step === 1 ? <form onSubmit={next} className="driver-signup-form">
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
         <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />

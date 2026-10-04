@@ -7,6 +7,7 @@ import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
+import { shareJsonExport } from '@/src/lib/gdprExport';
 
 const TOGGLES: { key: string; label: string; sub: string }[] = [
   { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til KJAPP-turen din' },
@@ -17,26 +18,47 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout, linkGoogle, refresh } = useAuth();
   const [settings, setSettings] = useState<any>(null);
   const [exporting, setExporting] = useState(false);
   const [exportInfo, setExportInfo] = useState<string>('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleInfo, setGoogleInfo] = useState('');
 
   const exportData = async () => {
     setExporting(true);
     setExportInfo('');
     try {
       const d = await gdprApi.export();
-      const trips = (d.trips || []).length;
+      const trips = (d.customer_trips || d.trips || []).length;
       const payments = (d.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjapp.no for en full kopi på e-post.`);
+      const exported = await shareJsonExport(d, 'kjapp-customer-gdpr');
+      setExportInfo(`Dataeksport klar: ${trips} turer og ${payments} betalinger · ${exported.filename}`);
     } catch {
-      setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
+      setExportInfo('Kunne ikke eksportere data akkurat nå. Prøv igjen senere.');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const connectGoogle = async () => {
+    setGoogleInfo('');
+    setGoogleBusy(true);
+    try {
+      const linked = await linkGoogle();
+      if (!linked) {
+        setGoogleInfo('Google-tilkoblingen ble avbrutt.');
+        return;
+      }
+      await refresh();
+      setGoogleInfo('Google-kontoen er koblet til KJAPP-kontoen.');
+    } catch (e: any) {
+      setGoogleInfo(e?.response?.data?.detail || 'Kunne ikke koble Google-kontoen.');
+    } finally {
+      setGoogleBusy(false);
     }
   };
 
@@ -76,6 +98,28 @@ export default function Settings() {
           <View style={{ paddingTop: 60 }}><Loader /></View>
         ) : (
           <>
+            <Text style={s.sectionTitle}>Konto</Text>
+            <View style={s.card}>
+              <View style={s.accountRow}>
+                <View style={s.gdprIcon}><Icon name="user" size={18} color={colors.accent} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rowLabel}>Google-konto</Text>
+                  <Text style={s.rowSub}>{user?.google_linked ? user.email : 'Ikke tilkoblet'}</Text>
+                </View>
+                {user?.google_linked ? (
+                  <View style={s.connectedBadge}>
+                    <Icon name="check" size={14} color={colors.online} />
+                    <Text style={s.connectedText}>Tilkoblet</Text>
+                  </View>
+                ) : (
+                  <Pressable style={s.connectBtn} onPress={connectGoogle} disabled={googleBusy} testID="settings-google-link">
+                    <Text style={s.connectBtnText}>{googleBusy ? 'Kobler…' : 'Koble til'}</Text>
+                  </Pressable>
+                )}
+              </View>
+              {googleInfo ? <Text style={s.exportInfo} testID="settings-google-info">{googleInfo}</Text> : null}
+            </View>
+
             <Text style={s.sectionTitle}>Turvarsler</Text>
             <View style={s.card}>
               {TOGGLES.map((t, i) => (
@@ -107,7 +151,7 @@ export default function Settings() {
               <Pressable style={s.gdprRow} onPress={exportData} disabled={exporting} testID="gdpr-export">
                 <View style={s.gdprIcon}><Icon name="file-text" size={18} color={colors.accent} /></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.rowLabel}>Last ned mine data</Text>
+                  <Text style={s.rowLabel}>Eksporter mine data</Text>
                   <Text style={s.rowSub}>Få innsyn i dataene vi lagrer om deg (GDPR)</Text>
                 </View>
                 {exporting ? <Loader /> : <Icon name="chevron-right" size={18} color={colors.textMuted} />}
@@ -164,6 +208,11 @@ const useStyles = makeStyles((c) => ({
   title: { fontFamily: font.display, fontSize: 26, color: c.text },
   sectionTitle: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 13, marginTop: 24, marginBottom: 8 },
   card: { backgroundColor: c.card, borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  connectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, backgroundColor: c.onlineSoft },
+  connectedText: { color: c.online, fontSize: 11, fontWeight: '700' },
+  connectBtn: { minHeight: 36, paddingHorizontal: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
+  connectBtnText: { color: c.text, fontSize: 12, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 16 },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: c.line },
   rowLabel: { color: c.text, fontFamily: font.medium, fontSize: 15 },

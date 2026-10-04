@@ -79,6 +79,18 @@ export type FleetDriver = {
   today_trips?: number;
 };
 
+export type FleetVehicle = {
+  id: string;
+  fleet_id: string;
+  car: string;
+  plate: string;
+  vehicle_type: string;
+  color?: string;
+  year?: number | null;
+  active: boolean;
+  assigned_driver_ids: string[];
+};
+
 export type FleetPayout = {
   id?: string;
   period_start?: string;
@@ -110,6 +122,7 @@ export type PublicDriverInvite = {
   plate?: string;
   vehicle_type?: string;
   fleet_name?: string;
+  fleet_org_number?: string;
   expires_at?: string;
 };
 
@@ -125,9 +138,16 @@ export const api = {
   fleetMe: (): Promise<FleetMe> => http.get('/fleet/me').then((r) => r.data),
   overview: (): Promise<FleetOverview> => http.get('/fleet/overview').then((r) => r.data),
   drivers: (): Promise<{ drivers: FleetDriver[] }> => http.get('/fleet/drivers').then((r) => r.data),
+  vehicles: (): Promise<{ vehicles: FleetVehicle[] }> => http.get('/fleet/vehicles').then((r) => r.data),
+  createVehicle: (body: { car: string; plate: string; vehicle_type: string; color?: string; year?: number }) =>
+    http.post('/fleet/vehicles', body).then((r) => r.data),
+  updateVehicle: (vehicleId: string, body: Partial<Pick<FleetVehicle, 'car' | 'plate' | 'vehicle_type' | 'color' | 'year' | 'active'>>) =>
+    http.patch(`/fleet/vehicles/${vehicleId}`, body).then((r) => r.data),
+  assignDriverVehicles: (driverId: string, vehicle_ids: string[]) =>
+    http.put(`/fleet/drivers/${driverId}/vehicles`, { vehicle_ids }).then((r) => r.data),
   payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
-  createInvite: (body: { car: string; plate: string; vehicle_type: string; email?: string; note?: string }) =>
+  createInvite: (body: { email?: string; note?: string; car?: string; plate?: string; vehicle_type?: string }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),

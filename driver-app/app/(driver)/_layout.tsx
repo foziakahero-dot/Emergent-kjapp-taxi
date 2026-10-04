@@ -1,8 +1,9 @@
 import React from 'react';
 import { Platform } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { Icon, IconName } from '@/src/components/Icon';
 import { colors, font } from '@/src/theme';
+import { useAuth } from '@/src/context/AuthContext';
 
 function tab(name: IconName) {
   const TabIcon = ({ color, size }: { color: string; size: number }) => (
@@ -13,6 +14,13 @@ function tab(name: IconName) {
 }
 
 export default function DriverTabsLayout() {
+  const { user } = useAuth();
+
+  if (user === undefined) return null;
+  if (!user || user.role !== 'driver' || user.approved !== true) {
+    return <Redirect href="/" />;
+  }
+
   return (
     <Tabs
       screenOptions={{

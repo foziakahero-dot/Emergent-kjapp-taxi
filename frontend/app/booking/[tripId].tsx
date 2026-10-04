@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -7,7 +8,8 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
-import { safetyApi, tripsApi } from '@/src/lib/api';
+import { API_BASE, safetyApi, TOKEN_KEY, tripsApi } from '@/src/lib/api';
+import { storage } from '@/src/utils/storage';
 import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
@@ -22,7 +24,7 @@ const META: Record<string, { title: string; sub: string }> = {
 };
 
 export default function BookingFlow() {
-  const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const { tripId, chat } = useLocalSearchParams<{ tripId: string; chat?: string }>();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
@@ -32,7 +34,16 @@ export default function BookingFlow() {
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const nav = useRef(false);
+
+  useEffect(() => {
+    if (chat === '1') setChatOpen(true);
+  }, [chat]);
+
+  useEffect(() => {
+    storage.getItem(TOKEN_KEY).then(setAuthToken).catch(() => setAuthToken(null));
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -121,7 +132,7 @@ export default function BookingFlow() {
   }
 
   const meta = META[trip.status] || META.searching;
-  const route = trip.geometry?.coordinates || [[trip.pickup_lng, trip.pickup_lat], [trip.dropoff_lng, trip.dropoff_lat]];
+  const route = trip.geometry?.coordinates || null;
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
@@ -193,16 +204,28 @@ export default function BookingFlow() {
                   <Icon name="navigation" size={22} color={colors.accent} />
                 ) : (
                   <>
-                    <Text style={s.etaNum}>{trip.eta_min || 2}</Text>
-                    <Text style={s.etaMin}>MIN</Text>
+                    <Text style={s.etaNum}>{trip.eta_min != null ? trip.eta_min : '—'}</Text>
+                    <Text style={s.etaMin}>{trip.eta_min != null ? 'MIN' : 'ETA'}</Text>
                   </>
                 )}
               </View>
+              {trip.driver?.has_profile_photo && authToken ? (
+                <Image
+                  source={{
+                    uri: `${API_BASE}/trips/${tripId}/driver-photo`,
+                    headers: { Authorization: `Bearer ${authToken}` },
+                  }}
+                  style={s.driverPhoto}
+                  contentFit="cover"
+                  transition={120}
+                  accessibilityLabel="Profilbilde av sjåføren"
+                />
+              ) : null}
               <View style={{ flex: 1 }}>
                 <Text style={s.overline}>{meta.title}</Text>
-                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
+                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Sjåførinfo utilgjengelig'}</Text>
                 <Text style={s.driverCar} numberOfLines={1}>
-                  {(trip.driver?.car || 'Bil')} · {trip.driver?.plate || ''}
+                  {[trip.driver?.car, trip.driver?.plate].filter(Boolean).join(' · ') || 'Kjøretøyinfo utilgjengelig'}
                 </Text>
                 {trip.driver?.rating != null ? (
                   <View style={s.ratingRow}>
@@ -331,6 +354,7 @@ const useStyles = makeStyles((c) => ({
   recoveryCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
   homeBtn: { marginTop: 20, minHeight: 52, backgroundColor: c.accent, borderRadius: 14, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
   homeBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
+  driverPhoto: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.cardSubtle, borderWidth: 1, borderColor: colors.line },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   etaBadge: { width: 74, height: 74, borderRadius: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
   etaNum: { color: c.text, fontFamily: font.display, fontSize: 26 },

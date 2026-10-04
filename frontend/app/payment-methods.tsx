@@ -121,7 +121,7 @@ export default function PaymentMethods() {
             {error ? <Text style={s.error} testID="pm-error">{error}</Text> : null}
 
             {methods.map((m: any) => {
-              const verified = m.verified !== false;
+              const verified = m.verified === true;
               return (
                 <View key={m.id} style={s.card} testID={`pm-${m.id}`}>
                   <View style={s.cardIcon}><Icon name={m.type === 'vipps' ? 'wallet' : 'card'} size={20} color={colors.accent} /></View>

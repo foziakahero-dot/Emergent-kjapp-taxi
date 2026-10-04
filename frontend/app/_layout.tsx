@@ -9,7 +9,7 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
-import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
+import { listenForNativePushTokenChanges, normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -21,7 +21,10 @@ function NativeRuntimeBridge() {
   useEffect(() => {
     const role = user?.role;
     const isCustomer = !!user && (!role || role === 'user' || role === 'customer');
-    if (isCustomer) registerNativePush().catch(() => {});
+    if (!isCustomer) return;
+    registerNativePush().catch(() => {});
+    const tokenSub = listenForNativePushTokenChanges();
+    return () => tokenSub.remove();
   }, [user?.id, user?.role]);
 
   useEffect(() => {

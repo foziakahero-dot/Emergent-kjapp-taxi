@@ -626,3 +626,47 @@ class TestVippsConfig:
             data.get("enabled") is False and data.get("provider") == "Vipps"
         ), data
 
+# ============================================================
+# DRIVER AUTH BOUNDARY — invite-only Driver app
+# ============================================================
+class TestDriverAppAuthBoundary:
+    def test_customer_cannot_use_driver_login(self):
+        r = requests.post(
+            f"{API}/auth/driver-login",
+            json={"identifier": USER["email"], "password": USER["password"]},
+            timeout=15,
+        )
+        assert r.status_code == 401, r.text
+
+    def test_approved_driver_can_login_with_email(self):
+        r = requests.post(
+            f"{API}/auth/driver-login",
+            json={"identifier": DRIVER["email"], "password": DRIVER["password"]},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        user = r.json()["user"]
+        assert user["role"] == "driver"
+        assert user["approved"] is True
+
+    def test_approved_driver_can_login_with_phone_when_registered(self):
+        legacy = _login(**DRIVER)
+        phone = (legacy.get("user") or {}).get("phone")
+        if not phone:
+            pytest.skip("Seed driver has no phone number")
+        r = requests.post(
+            f"{API}/auth/driver-login",
+            json={"identifier": phone, "password": DRIVER["password"]},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["user"]["role"] == "driver"
+
+    def test_driver_google_login_route_is_not_available(self):
+        r = requests.post(
+            f"{API}/auth/google/driver-session",
+            json={"session_id": "not-used"},
+            timeout=15,
+        )
+        assert r.status_code == 404, r.text
+

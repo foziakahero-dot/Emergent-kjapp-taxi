@@ -292,3 +292,27 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .9; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
 }
+
+
+/* ---------- Vehicles ---------- */
+.vehicle-table .tr { grid-template-columns: 1.55fr .8fr .9fr 1.4fr .75fr 1.35fr; gap: 16px; }
+.vehicle-table .tr > span { min-width: 0; }
+.vehicle-table .tr strong { display: block; color: var(--text); font-size: 12px; font-weight: 600; }
+.vehicle-table .tr small { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+.vehicle-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.secondary-button { min-height: 38px; padding: 0 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--soft); font-size: 10px; font-weight: 600; }
+.text-button { border: 0; background: transparent; color: var(--muted); font-size: 10px; padding: 8px; }
+.assignment-modal { max-height: 82vh; overflow: hidden; display: flex; flex-direction: column; }
+.assignment-list { margin-top: 8px; max-height: 380px; overflow-y: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.assignment-row { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid rgba(39,48,56,.65); cursor: pointer; }
+.assignment-row:last-child { border-bottom: 0; }
+.assignment-row span { display: flex; flex-direction: column; gap: 5px; }
+.assignment-row strong { color: var(--text); font-size: 12px; font-weight: 600; }
+.assignment-row small { color: var(--muted); font-size: 10px; }
+.assignment-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--green); }
+
+@media (max-width: 760px) {
+  .vehicle-table { min-width: 900px; }
+  .vehicle-table .tr { grid-template-columns: 1.5fr .8fr .85fr 1.4fr .75fr 1.35fr; }
+  .assignment-modal { max-height: 88vh; }
+}

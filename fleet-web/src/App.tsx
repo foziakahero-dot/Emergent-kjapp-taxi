@@ -13,10 +13,12 @@ import {
   ResetPasswordPage,
   TripsPage,
 } from './pages';
+import VehiclesPage from './VehiclesPage';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true },
   { to: '/sjaforer', label: 'Sjåfører' },
+  { to: '/biler', label: 'Biler' },
   { to: '/turer', label: 'Turer' },
   { to: '/okonomi', label: 'Økonomi' },
   { to: '/bedrift', label: 'Bedrift' },
@@ -87,6 +89,7 @@ function PortalShell() {
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/sjaforer" element={<DriversPage />} />
+          <Route path="/biler" element={<VehiclesPage />} />
           <Route path="/turer" element={<TripsPage />} />
           <Route path="/okonomi" element={<FinancePage />} />
           <Route path="/bedrift" element={<BedriftPage />} />

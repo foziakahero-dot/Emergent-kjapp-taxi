@@ -27,7 +27,14 @@ export default function Receipt() {
   const loadTrip = useCallback(async () => {
     if (!tripId) return null;
     try {
-      const t = await tripsApi.get(tripId);
+      let t = await tripsApi.get(tripId);
+      if (t.status === 'arrived') {
+        try {
+          t = await tripsApi.complete(tripId);
+        } catch {
+          // Keep showing the receipt; a later refresh retries the idempotent completion.
+        }
+      }
       setTrip(t);
       setLoadError(false);
       if (t.passenger_rating) {

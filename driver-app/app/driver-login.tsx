@@ -17,11 +17,11 @@ import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
-  const { login, logout } = useAuth();
+  const { login } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,14 +31,9 @@ export default function DriverLogin() {
     setError('');
     setLoading(true);
     try {
-      const res = await login(email.trim(), password);
+      const res = await login(identifier.trim(), password);
       if (res?.twofa_required) {
         setError('Kontoen krever tofaktor — logg inn via web-portalen.');
-        return;
-      }
-      if (res?.role !== 'driver') {
-        await logout();
-        setError('Denne kontoen er ikke godkjent som KJAPP-sjåfør.');
         return;
       }
       router.replace('/(driver)/home');
@@ -66,21 +61,21 @@ export default function DriverLogin() {
         <Text style={s.brand}>KJAPP</Text>
         <View style={s.brandLine} />
         <Text style={s.title}>Klar for skift</Text>
-        <Text style={s.sub}>Logg inn med den godkjente sjåførkontoen din. Online-status velger du først etter innlogging.</Text>
+        <Text style={s.sub}>Kun inviterte og godkjente sjåfører får tilgang. Logg inn med e-post eller telefonnummer og passord.</Text>
 
         <View style={s.form}>
           <View style={s.field}>
             <Icon name="mail" size={18} color={colors.textMuted} />
             <TextInput
-              testID="driver-login-email"
-              placeholder="E-post"
+              testID="driver-login-identifier"
+              placeholder="E-post eller telefonnummer"
               placeholderTextColor={colors.textMuted}
               style={s.input}
               autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              autoComplete="email"
+              keyboardType="default"
+              value={identifier}
+              onChangeText={setIdentifier}
+              autoComplete="username"
             />
           </View>
           <View style={s.field}>
@@ -107,7 +102,7 @@ export default function DriverLogin() {
 
         <View style={s.note}>
           <Icon name="shield" size={17} color={colors.online} />
-          <Text style={s.noteText}>Kun godkjente sjåførkontoer får tilgang til turer og posisjonsdeling.</Text>
+          <Text style={s.noteText}>KJAPP Driver er invite-only. Kontoen opprettes via sjåførinvitasjon og må godkjennes før innlogging.</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

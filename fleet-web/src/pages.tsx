@@ -1,6 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, apiError, FleetDriver, FleetMe, FleetOverview, FleetPayout } from './api';
+import { api, apiError, FleetDriver, FleetMe, FleetOverview, FleetPayout, FleetVehicle } from './api';
 import { useAuth } from './auth';
 import { FleetWorkbook, FleetWorkbookTrip, loadFleetWorkbook } from './xlsx';
 import { Brand } from './App';
@@ -117,11 +117,30 @@ function LiveFleet({ drivers }: { drivers: FleetDriver[] }) {
 }
 
 export function OverviewPage() {
-  const [me, setMe] = useState<FleetMe | null>(null); const [ov, setOv] = useState<FleetOverview | null>(null); const [drivers, setDrivers] = useState<FleetDriver[]>([]); const [book, setBook] = useState<FleetWorkbook | null>(null); const [err, setErr] = useState('');
+  const [me, setMe] = useState<FleetMe | null>(null);
+  const [ov, setOv] = useState<FleetOverview | null>(null);
+  const [drivers, setDrivers] = useState<FleetDriver[]>([]);
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [book, setBook] = useState<FleetWorkbook | null>(null);
+  const [err, setErr] = useState('');
+
   useEffect(() => {
     const now = new Date();
-    Promise.all([api.fleetMe(), api.overview(), api.drivers(), loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1)])
-      .then(([m, o, d, b]) => { setMe(m); setOv(o); setDrivers(d.drivers || []); setBook(b); }).catch((e) => setErr(apiError(e)));
+    Promise.all([
+      api.fleetMe(),
+      api.overview(),
+      api.drivers(),
+      api.vehicles(),
+      loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1),
+    ])
+      .then(([m, o, d, v, b]) => {
+        setMe(m);
+        setOv(o);
+        setDrivers(d.drivers || []);
+        setVehicles(v.vehicles || []);
+        setBook(b);
+      })
+      .catch((e) => setErr(apiError(e)));
   }, []);
   if (!me || !ov) return err ? <ErrorBox message={err} /> : <Loading />;
   const recent = [...(book?.trips || [])].reverse().slice(0, 4);
@@ -131,7 +150,7 @@ export function OverviewPage() {
       <div className="kpi-card"><span>TURER I DAG</span><strong>{ov.today.trips}</strong><small>{fmtMoney(ov.today.gross)} brutto</small></div>
       <div className="kpi-card"><span>SJÅFØRER</span><strong>{ov.drivers_online} / {ov.drivers_total}</strong><small>pålogget nå</small></div>
       <div className="kpi-card desktop-kpi-extra"><span>UKE NETTO</span><strong>{fmtMoney(ov.week.net)}</strong><small>etter {ov.commission_pct}% provisjon</small></div>
-      <div className="kpi-card desktop-kpi-extra"><span>BILER PÅLOGGET</span><strong>{drivers.filter((d) => d.online).length}</strong><small>av {drivers.length} registrerte</small></div>
+      <div className="kpi-card desktop-kpi-extra"><span>BILER I FLÅTEN</span><strong>{vehicles.filter((v) => v.active).length}</strong><small>{vehicles.length} registrert totalt</small></div>
     </div>
     <div className="overview-grid"><LiveFleet drivers={drivers} /><div className="recent-card"><div className="eyebrow">SISTE TURER</div>{recent.length ? recent.map((t, i) => <div className="recent-row" key={`${t.tripId}-${i}`}><div><strong>{t.from || '—'} → {t.to || '—'}</strong><span>{t.driver}</span></div><b>{fmtMoney(t.price)}</b></div>) : <div className="empty-state">Ingen fullførte turer denne måneden.</div>}</div></div>
     <div className="mobile-week"><span>Denne uken</span><strong>{fmtMoney(ov.week.net)}</strong><small>{ov.week.trips} turer · netto etter provisjon</small></div>
@@ -141,18 +160,47 @@ export function OverviewPage() {
 }
 
 function InviteModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [car, setCar] = useState(''); const [plate, setPlate] = useState(''); const [email, setEmail] = useState(''); const [vehicle, setVehicle] = useState('ai-first'); const [note, setNote] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const submit = async (e: FormEvent) => { e.preventDefault(); setErr(''); setBusy(true); try { await api.createInvite({ car, plate: plate.toUpperCase(), email: email || undefined, vehicle_type: vehicle, note }); onDone(); } catch (e) { setErr(apiError(e)); } finally { setBusy(false); } };
-  return <div className="modal-backdrop" onClick={onClose}><form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={submit}><div className="modal-head"><div><span className="eyebrow">NY SJÅFØR</span><h2>Opprett invitasjon</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div><p>Sjåføren registrerer seg via KJAPP sin eksisterende invitasjonsflyt.</p><input placeholder="Bilmodell" value={car} onChange={(e) => setCar(e.target.value)} required /><input placeholder="Skiltnummer" value={plate} onChange={(e) => setPlate(e.target.value)} required /><select value={vehicle} onChange={(e) => setVehicle(e.target.value)}><option value="ai-first">Standard</option><option value="enkelt">Sparsom</option><option value="trygg">Komfort</option><option value="premium">Premium</option></select><input type="email" placeholder="E-post (valgfritt)" value={email} onChange={(e) => setEmail(e.target.value)} /><textarea placeholder="Kort notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} /><ErrorBox message={err} /><button className="primary-button" disabled={busy}>{busy ? 'Oppretter…' : 'Opprett invitasjon'}</button></form></div>;
+  const [email, setEmail] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    setBusy(true);
+    try {
+      await api.createInvite({ email: email || undefined, note });
+      onDone();
+    } catch (e) {
+      setErr(apiError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <div className="modal-backdrop" onClick={onClose}>
+    <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <div className="modal-head">
+        <div><span className="eyebrow">NY SJÅFØR</span><h2>Opprett invitasjon</h2></div>
+        <button type="button" className="icon-button" onClick={onClose}>×</button>
+      </div>
+      <p>Sjåføren registrerer identitet og dokumenter via invitasjonslenken. Bil tildeles separat under «Biler».</p>
+      <input type="email" placeholder="Sjåførens e-post (valgfritt)" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <textarea placeholder="Kort notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+      <ErrorBox message={err} />
+      <button className="primary-button" disabled={busy}>{busy ? 'Oppretter…' : 'Opprett invitasjon'}</button>
+    </form>
+  </div>;
 }
 
 export function DriversPage() {
   const [drivers, setDrivers] = useState<FleetDriver[]>([]); const [invites, setInvites] = useState<any[]>([]); const [q, setQ] = useState(''); const [modal, setModal] = useState(false); const [err, setErr] = useState('');
   const load = () => Promise.all([api.drivers(), api.invites()]).then(([d, i]) => { setDrivers(d.drivers || []); setInvites(i.invites || []); }).catch((e) => setErr(apiError(e)));
   useEffect(() => { load(); }, []);
-  const filtered = drivers.filter((d) => `${nameOf(d)} ${d.car || ''} ${d.plate || ''}`.toLowerCase().includes(q.toLowerCase()));
-  return <div className="page-content"><PageHead title="Sjåfører" sub="Administrer personer og biler i din flåte" action={<button className="primary-button compact-button" onClick={() => setModal(true)}>+ Legg til sjåfør</button>} />
-    <div className="table-card"><div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk navn, skilt eller bil" /></div><div className="fleet-table driver-table"><div className="tr th"><span>SJÅFØR</span><span>BIL</span><span>STATUS</span><span>TURER I DAG</span><span>OMSETNING</span></div>{filtered.map((d) => <div className="tr" key={d.id}><span className="driver-name"><i className={`status-dot ${d.online ? 'on' : ''}`} />{nameOf(d)}</span><span>{d.car || '—'}{d.plate ? ` · ${d.plate}` : ''}</span><span className={d.online ? 'status-green' : 'muted'}>{d.online ? 'Pålogget' : 'Avlogget'}</span><span className="mono">{d.today_trips || 0}</span><span className="mono">{fmtMoney(d.today_income || 0)}</span></div>)}{!filtered.length ? <div className="empty-state padded">Ingen sjåfører funnet.</div> : null}</div></div>
+  const filtered = drivers.filter((d) => `${nameOf(d)} ${d.email || ''} ${d.phone || ''}`.toLowerCase().includes(q.toLowerCase()));
+  return <div className="page-content"><PageHead title="Sjåfører" sub="Administrer sjåfører. Kjøretøy og tildeling håndteres under Biler." action={<button className="primary-button compact-button" onClick={() => setModal(true)}>+ Legg til sjåfør</button>} />
+    <div className="table-card"><div className="table-tools"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Søk navn, e-post eller telefon" /></div><div className="fleet-table driver-table"><div className="tr th"><span>SJÅFØR</span><span>AKTIV BIL</span><span>STATUS</span><span>TURER I DAG</span><span>OMSETNING</span></div>{filtered.map((d) => <div className="tr" key={d.id}><span className="driver-name"><i className={`status-dot ${d.online ? 'on' : ''}`} />{nameOf(d)}</span><span>{d.car || '—'}{d.plate ? ` · ${d.plate}` : ''}</span><span className={d.online ? 'status-green' : 'muted'}>{d.online ? 'Pålogget' : 'Avlogget'}</span><span className="mono">{d.today_trips || 0}</span><span className="mono">{fmtMoney(d.today_income || 0)}</span></div>)}{!filtered.length ? <div className="empty-state padded">Ingen sjåfører funnet.</div> : null}</div></div>
     <section className="invites-section"><h2>Invitasjoner</h2><p>Opprett en invitasjon og send den til ny sjåfør.</p>{invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => <span key={i.token}>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : i.email_sent ? 'Sendt' : 'Venter'}</span>)}</div> : null}</section>
     <ErrorBox message={err} />{modal ? <InviteModal onClose={() => setModal(false)} onDone={() => { setModal(false); load(); }} /> : null}
   </div>;
