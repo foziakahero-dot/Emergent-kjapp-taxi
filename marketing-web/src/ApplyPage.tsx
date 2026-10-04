@@ -44,8 +44,8 @@ export function ApplyPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    document.title = 'KJAPP Partner — løyvehaversøknad';
-    const description = 'Søk om å bli KJAPP-partner. Last opp firmaattest, løyvebevis, vognkort, forsikring og bankdokumentasjon før Fleet-tilgang aktiveres.';
+    document.title = 'SNAR Partner — løyvehaversøknad';
+    const description = 'Søk om å bli SNAR-partner. Last opp firmaattest, løyvebevis, vognkort, forsikring og bankdokumentasjon før Fleet-tilgang aktiveres.';
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -135,7 +135,7 @@ export function ApplyPage() {
     <main className="apply2-page">
       <ApplyStyles />
       <header className="apply2-header apply2-shell">
-        <Link to="/" className="apply2-wordmark" aria-label="KJAPP forside"><span>KJ</span><em>A</em><span>PP</span></Link>
+        <Link to="/" className="apply2-wordmark" aria-label="SNAR forside"><span>KJ</span><em>A</em><span>PP</span></Link>
         <nav aria-label="Søknadsmeny">
           <Link to="/">Forside</Link>
           <Link to="/loyvehaver">Løyvehavere</Link>
@@ -146,10 +146,10 @@ export function ApplyPage() {
 
       <section className="apply2-hero apply2-shell">
         <div className="apply2-hero-copy">
-          <div className="apply2-eyebrow">KJAPP PARTNER · STEG {step} AV 2</div>
+          <div className="apply2-eyebrow">SNAR PARTNER · STEG {step} AV 2</div>
           <h1>{step === 1 ? 'Søk om Fleet-tilgang.' : 'Last opp dokumentasjonen.'}</h1>
           <p>{step === 1
-            ? 'Fortell oss om virksomheten, løyvene og bilene. KJAPP aktiverer ikke Fleet før dokumentasjonen er kontrollert og godkjent.'
+            ? 'Fortell oss om virksomheten, løyvene og bilene. SNAR aktiverer ikke Fleet før dokumentasjonen er kontrollert og godkjent.'
             : 'Alle fem dokumenttyper må være klare før søknaden sendes videre til manuell kontroll.'}</p>
           <div className="apply2-trust-row">
             <span>10 % serviceavgift</span>
@@ -157,8 +157,8 @@ export function ApplyPage() {
             <span>Ukentlig digitalt oppgjør</span>
           </div>
         </div>
-        <aside className="apply2-side-card" aria-label="KJAPP partnermodell">
-          <div className="apply2-side-top"><span>KJAPP</span><strong>Partner</strong></div>
+        <aside className="apply2-side-card" aria-label="SNAR partnermodell">
+          <div className="apply2-side-top"><span>SNAR</span><strong>Partner</strong></div>
           <div className="apply2-rate">10%</div>
           <p>Serviceavgift for godkjente partnere. Ved digitale betalinger håndteres oppgjør automatisk ukentlig.</p>
           <div className="apply2-side-lines"><span>Søknad</span><span>Dokumentasjon</span><span>Kontroll</span><span>Fleet</span></div>
@@ -224,7 +224,7 @@ export function ApplyPage() {
           </article>
           <article>
             <span>03</span>
-            <h3>KJAPP kontrollerer</h3>
+            <h3>SNAR kontrollerer</h3>
             <p>Superadmin går gjennom dokumentasjon før Fleet aktiveres.</p>
           </article>
           <article className="apply2-info-highlight">
@@ -256,7 +256,7 @@ function DocumentRow({ doc, value, busy, onUpload, onRemove }: { doc: { key: str
 
 function Submitted({ email }: { email: string }) {
   useEffect(() => {
-    document.title = 'KJAPP Partner — søknad mottatt';
+    document.title = 'SNAR Partner — søknad mottatt';
   }, []);
 
   return (
@@ -266,9 +266,9 @@ function Submitted({ email }: { email: string }) {
         <div className="apply2-success-ring">✓</div>
         <div className="apply2-eyebrow">SØKNAD MOTTATT</div>
         <h1>Venter på godkjenning.</h1>
-        <p>KJAPP går gjennom virksomheten og dokumentasjonen manuelt. Det opprettes ingen Fleet-tilgang før superadmin har godkjent søknaden.</p>
+        <p>SNAR går gjennom virksomheten og dokumentasjonen manuelt. Det opprettes ingen Fleet-tilgang før superadmin har godkjent søknaden.</p>
         <div className="apply2-submitted-email">Svar sendes til <strong>{email}</strong></div>
-        <div className="apply2-submitted-actions"><Link className="apply2-button apply2-primary" to="/">Til forsiden</Link><Link className="apply2-button apply2-secondary" to="/loyvehaver">Om KJAPP Partner</Link><a className="apply2-button apply2-secondary" href={FLEET_URL}>Fleet Panel</a></div>
+        <div className="apply2-submitted-actions"><Link className="apply2-button apply2-primary" to="/">Til forsiden</Link><Link className="apply2-button apply2-secondary" to="/loyvehaver">Om SNAR Partner</Link><a className="apply2-button apply2-secondary" href={FLEET_URL}>Fleet Panel</a></div>
       </div>
     </main>
   );
