@@ -147,7 +147,10 @@ export function Header({
     </header>
   );
 }
-const contacts = ["hei", "support", "driver", "fleet", "partner", "privacy"];
+const contacts = [
+  ["Generelt", "hei"], ["Kundeservice", "support"], ["Sjåfører", "driver"],
+  ["Flåte", "fleet"], ["Partnerskap", "partner"], ["Personvern", "privacy"],
+];
 export function Footer() {
   return (
     <footer className="snar-footer snar-shell">
@@ -163,9 +166,9 @@ export function Footer() {
         <a href="https://fleet.kjappapp.no">Fleet Panel</a>
       </nav>
       <div className="snar-contacts">
-        {contacts.map((name) => (
+        {contacts.map(([label, name]) => (
           <a key={name} href={`mailto:${name}@kjappapp.no`}>
-            {name}@kjappapp.no
+            <span>{label}</span><strong>{name}@kjappapp.no</strong>
           </a>
         ))}
       </div>
