@@ -1,0 +1,20 @@
+{
+  "url": "https://deploy-preview-72--kjappapp-no.netlify.app/api/waitlist",
+  "httpStatus": 201,
+  "request": {
+    "name": "SNAR WEB QA TEST 20261004 - ikke kontakt",
+    "email": "snar-web-qa-20261004@example.invalid",
+    "phone": "00000000",
+    "city": "Oslo",
+    "role": "passenger",
+    "website": ""
+  },
+  "response": {
+    "ok": true,
+    "status": "registered"
+  },
+  "successVisible": true,
+  "successText": "Registrert ✓\n\nTakk! Interessen din er registrert. Vi kontakter deg når betaen åpner for din gruppe.\n\nFerdig",
+  "mocked": false,
+  "note": "One clearly labelled QA record through the unchanged API; reserved .invalid email and non-contact phone. No notification sending code exists in this route. No independent database read performed."
+}

@@ -1,0 +1,809 @@
+{
+  "responsive": [
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "Meny"
+      ]
+    },
+    {
+      "width": 375,
+      "scrollWidth": 375,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "Meny"
+      ]
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "Meny"
+      ]
+    },
+    {
+      "width": 430,
+      "scrollWidth": 430,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "Meny"
+      ]
+    },
+    {
+      "width": 768,
+      "scrollWidth": 768,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "Meny"
+      ]
+    },
+    {
+      "width": 1024,
+      "scrollWidth": 1024,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "F\u00e5 tilgang til beta"
+      ]
+    },
+    {
+      "width": 1280,
+      "scrollWidth": 1280,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "F\u00e5 tilgang til beta"
+      ]
+    },
+    {
+      "width": 1440,
+      "scrollWidth": 1440,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "F\u00e5 tilgang til beta"
+      ]
+    },
+    {
+      "width": 1920,
+      "scrollWidth": 1920,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "F\u00e5 tilgang til beta"
+      ]
+    },
+    {
+      "width": 2560,
+      "scrollWidth": 2560,
+      "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+      "brokenImages": [],
+      "visibleCtas": [
+        "F\u00e5 tilgang til beta"
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "route": "/loyvehaver",
+      "width": 320,
+      "heading": "Din fl\u00e5te.\nDin kontroll.",
+      "scrollWidth": 320,
+      "canonical": "https://kjappapp.no/loyvehaver"
+    },
+    {
+      "route": "/loyvehaver",
+      "width": 1440,
+      "heading": "Din fl\u00e5te.\nDin kontroll.",
+      "scrollWidth": 1440,
+      "canonical": "https://kjappapp.no/loyvehaver"
+    },
+    {
+      "route": "/loyvehaver/soknad",
+      "width": 320,
+      "heading": "S\u00f8k om Fleet-tilgang.",
+      "scrollWidth": 320,
+      "canonical": "https://kjappapp.no/loyvehaver/soknad"
+    },
+    {
+      "route": "/loyvehaver/soknad",
+      "width": 1440,
+      "heading": "S\u00f8k om Fleet-tilgang.",
+      "scrollWidth": 1440,
+      "canonical": "https://kjappapp.no/loyvehaver/soknad"
+    },
+    {
+      "route": "/help",
+      "width": 320,
+      "heading": "Hva kan vi\nhjelpe deg med?",
+      "scrollWidth": 320,
+      "canonical": "https://kjappapp.no/help"
+    },
+    {
+      "route": "/help",
+      "width": 1440,
+      "heading": "Hva kan vi\nhjelpe deg med?",
+      "scrollWidth": 1440,
+      "canonical": "https://kjappapp.no/help"
+    },
+    {
+      "route": "/personvern",
+      "width": 320,
+      "heading": "Personvern",
+      "scrollWidth": 320,
+      "canonical": "https://kjappapp.no/personvern"
+    },
+    {
+      "route": "/personvern",
+      "width": 1440,
+      "heading": "Personvern",
+      "scrollWidth": 1440,
+      "canonical": "https://kjappapp.no/personvern"
+    },
+    {
+      "route": "/vilkar",
+      "width": 320,
+      "heading": "Vilk\u00e5r",
+      "scrollWidth": 320,
+      "canonical": "https://kjappapp.no/vilkar"
+    },
+    {
+      "route": "/vilkar",
+      "width": 1440,
+      "heading": "Vilk\u00e5r",
+      "scrollWidth": 1440,
+      "canonical": "https://kjappapp.no/vilkar"
+    }
+  ],
+  "checks": [
+    {
+      "name": "No overflow 320",
+      "pass": true,
+      "detail": {
+        "width": 320,
+        "scrollWidth": 320,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "Meny"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 320",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 320",
+      "pass": true,
+      "detail": {
+        "x": 12,
+        "y": 12,
+        "width": 296,
+        "height": 876
+      }
+    },
+    {
+      "name": "Focus return 320",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta <span aria-hidden=\"true\">\u2197</span></button>"
+    },
+    {
+      "name": "No overflow 375",
+      "pass": true,
+      "detail": {
+        "width": 375,
+        "scrollWidth": 375,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "Meny"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 375",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 375",
+      "pass": true,
+      "detail": {
+        "x": 12,
+        "y": 37.421875,
+        "width": 351,
+        "height": 825.140625
+      }
+    },
+    {
+      "name": "Focus return 375",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta <span aria-hidden=\"true\">\u2197</span></button>"
+    },
+    {
+      "name": "No overflow 390",
+      "pass": true,
+      "detail": {
+        "width": 390,
+        "scrollWidth": 390,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "Meny"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 390",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 390",
+      "pass": true,
+      "detail": {
+        "x": 12,
+        "y": 37.421875,
+        "width": 366,
+        "height": 825.140625
+      }
+    },
+    {
+      "name": "Focus return 390",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta <span aria-hidden=\"true\">\u2197</span></button>"
+    },
+    {
+      "name": "No overflow 430",
+      "pass": true,
+      "detail": {
+        "width": 430,
+        "scrollWidth": 430,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "Meny"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 430",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 430",
+      "pass": true,
+      "detail": {
+        "x": 12,
+        "y": 37.421875,
+        "width": 406,
+        "height": 825.140625
+      }
+    },
+    {
+      "name": "Focus return 430",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta <span aria-hidden=\"true\">\u2197</span></button>"
+    },
+    {
+      "name": "No overflow 768",
+      "pass": true,
+      "detail": {
+        "width": 768,
+        "scrollWidth": 768,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "Meny"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 768",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 768",
+      "pass": true,
+      "detail": {
+        "x": 74,
+        "y": 143.765625,
+        "width": 620,
+        "height": 612.453125
+      }
+    },
+    {
+      "name": "Focus return 768",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta <span aria-hidden=\"true\">\u2197</span></button>"
+    },
+    {
+      "name": "No overflow 1024",
+      "pass": true,
+      "detail": {
+        "width": 1024,
+        "scrollWidth": 1024,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "F\u00e5 tilgang til beta"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 1024",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 1024",
+      "pass": true,
+      "detail": {
+        "x": 202,
+        "y": 138.875,
+        "width": 620,
+        "height": 622.234375
+      }
+    },
+    {
+      "name": "Focus return 1024",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta</button>"
+    },
+    {
+      "name": "No overflow 1280",
+      "pass": true,
+      "detail": {
+        "width": 1280,
+        "scrollWidth": 1280,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "F\u00e5 tilgang til beta"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 1280",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 1280",
+      "pass": true,
+      "detail": {
+        "x": 330,
+        "y": 138.875,
+        "width": 620,
+        "height": 622.234375
+      }
+    },
+    {
+      "name": "Focus return 1280",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta</button>"
+    },
+    {
+      "name": "No overflow 1440",
+      "pass": true,
+      "detail": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "F\u00e5 tilgang til beta"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 1440",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 1440",
+      "pass": true,
+      "detail": {
+        "x": 410,
+        "y": 138.875,
+        "width": 620,
+        "height": 622.234375
+      }
+    },
+    {
+      "name": "Focus return 1440",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta</button>"
+    },
+    {
+      "name": "No overflow 1920",
+      "pass": true,
+      "detail": {
+        "width": 1920,
+        "scrollWidth": 1920,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "F\u00e5 tilgang til beta"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 1920",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 1920",
+      "pass": true,
+      "detail": {
+        "x": 650,
+        "y": 138.875,
+        "width": 620,
+        "height": 622.234375
+      }
+    },
+    {
+      "name": "Focus return 1920",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta</button>"
+    },
+    {
+      "name": "No overflow 2560",
+      "pass": true,
+      "detail": {
+        "width": 2560,
+        "scrollWidth": 2560,
+        "font": "Inter, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+        "brokenImages": [],
+        "visibleCtas": [
+          "F\u00e5 tilgang til beta"
+        ]
+      }
+    },
+    {
+      "name": "No missing images 2560",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Modal fits 2560",
+      "pass": true,
+      "detail": {
+        "x": 970,
+        "y": 138.875,
+        "width": 620,
+        "height": 622.234375
+      }
+    },
+    {
+      "name": "Focus return 2560",
+      "pass": true,
+      "detail": "<button type=\"button\" class=\"snar-btn snar-btn-primary\">F\u00e5 tilgang til beta</button>"
+    },
+    {
+      "name": "Mobile menu expanded",
+      "pass": true
+    },
+    {
+      "name": "Menu closes with Escape",
+      "pass": true
+    },
+    {
+      "name": "Hash navigation",
+      "pass": true
+    },
+    {
+      "name": "/loyvehaver no overflow 320",
+      "pass": true
+    },
+    {
+      "name": "/loyvehaver no overflow 1440",
+      "pass": true
+    },
+    {
+      "name": "/loyvehaver/soknad no overflow 320",
+      "pass": true
+    },
+    {
+      "name": "/loyvehaver/soknad no overflow 1440",
+      "pass": true
+    },
+    {
+      "name": "/help no overflow 320",
+      "pass": true
+    },
+    {
+      "name": "/help no overflow 1440",
+      "pass": true
+    },
+    {
+      "name": "/personvern no overflow 320",
+      "pass": true
+    },
+    {
+      "name": "/personvern no overflow 1440",
+      "pass": true
+    },
+    {
+      "name": "/vilkar no overflow 320",
+      "pass": true
+    },
+    {
+      "name": "/vilkar no overflow 1440",
+      "pass": true
+    },
+    {
+      "name": "Empty form blocked",
+      "pass": true
+    },
+    {
+      "name": "Consent required",
+      "pass": true
+    },
+    {
+      "name": "Server detail shown",
+      "pass": true
+    },
+    {
+      "name": "Payload unchanged",
+      "pass": true
+    },
+    {
+      "name": "HTML cannot fake success",
+      "pass": true
+    },
+    {
+      "name": "Confirmed success focus",
+      "pass": true
+    },
+    {
+      "name": "Dialog dismissed",
+      "pass": true
+    },
+    {
+      "name": "Reduced motion",
+      "pass": true
+    },
+    {
+      "name": "Cookie preference retained",
+      "pass": true
+    },
+    {
+      "name": "Homepage and footer links have valid targets",
+      "pass": true,
+      "detail": [
+        {
+          "text": "Hopp til innhold",
+          "href": "#content"
+        },
+        {
+          "text": "SNAR",
+          "href": "/"
+        },
+        {
+          "text": "Slik fungerer det",
+          "href": "/#how"
+        },
+        {
+          "text": "Bilvalg",
+          "href": "/#vehicles"
+        },
+        {
+          "text": "L\u00f8yvehavere",
+          "href": "/loyvehaver"
+        },
+        {
+          "text": "Hjelp",
+          "href": "/help"
+        },
+        {
+          "text": "For l\u00f8yvehavere",
+          "href": "/loyvehaver"
+        },
+        {
+          "text": "Se voice booking \u2192",
+          "href": "#voice"
+        },
+        {
+          "text": "For l\u00f8yvehavere",
+          "href": "/loyvehaver"
+        },
+        {
+          "text": "\u00c5pne Fleet Panel",
+          "href": "https://fleet.kjappapp.no"
+        },
+        {
+          "text": "Sp\u00f8rsm\u00e5l om beta? Kontakt support \u2192",
+          "href": "mailto:support@kjappapp.no?subject=SNAR%20beta"
+        },
+        {
+          "text": "SNAR",
+          "href": "/"
+        },
+        {
+          "text": "Slik fungerer det",
+          "href": "/#how"
+        },
+        {
+          "text": "Bilvalg",
+          "href": "/#vehicles"
+        },
+        {
+          "text": "L\u00f8yvehaver",
+          "href": "/loyvehaver"
+        },
+        {
+          "text": "Hjelp",
+          "href": "/help"
+        },
+        {
+          "text": "Fleet Panel",
+          "href": "https://fleet.kjappapp.no"
+        },
+        {
+          "text": "hei@kjappapp.no",
+          "href": "mailto:hei@kjappapp.no"
+        },
+        {
+          "text": "support@kjappapp.no",
+          "href": "mailto:support@kjappapp.no"
+        },
+        {
+          "text": "driver@kjappapp.no",
+          "href": "mailto:driver@kjappapp.no"
+        },
+        {
+          "text": "fleet@kjappapp.no",
+          "href": "mailto:fleet@kjappapp.no"
+        },
+        {
+          "text": "partner@kjappapp.no",
+          "href": "mailto:partner@kjappapp.no"
+        },
+        {
+          "text": "privacy@kjappapp.no",
+          "href": "mailto:privacy@kjappapp.no"
+        },
+        {
+          "text": "Personvern",
+          "href": "/personvern"
+        },
+        {
+          "text": "Vilk\u00e5r",
+          "href": "/vilkar"
+        }
+      ]
+    },
+    {
+      "name": "Tab wraps inside dialog",
+      "pass": true
+    },
+    {
+      "name": "Reverse Tab wraps inside dialog",
+      "pass": true,
+      "detail": "<a href=\"mailto:privacy@kjappapp.no\">privacy@kjappapp.no</a>"
+    },
+    {
+      "name": "Shared trip unavailable state 320",
+      "pass": true
+    },
+    {
+      "name": "Shared trip unavailable state 1440",
+      "pass": true
+    },
+    {
+      "name": "No runtime JS errors",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "No failed assets",
+      "pass": true,
+      "detail": []
+    }
+  ],
+  "screenshots": [
+    "mobile-hero.png",
+    "mobile-product.png",
+    "mobile-waitlist.png",
+    "desktop-hero.png",
+    "desktop-mid-page.png",
+    "desktop-footer.png"
+  ],
+  "pageErrors": [],
+  "assetErrors": [],
+  "accessibility": [
+    {
+      "route": "/loyvehaver",
+      "width": 320,
+      "violations": []
+    },
+    {
+      "route": "/loyvehaver",
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "route": "/loyvehaver/soknad",
+      "width": 320,
+      "violations": []
+    },
+    {
+      "route": "/loyvehaver/soknad",
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "route": "/help",
+      "width": 320,
+      "violations": []
+    },
+    {
+      "route": "/help",
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "route": "/personvern",
+      "width": 320,
+      "violations": []
+    },
+    {
+      "route": "/personvern",
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "route": "/vilkar",
+      "width": 320,
+      "violations": []
+    },
+    {
+      "route": "/vilkar",
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "route": "waitlist-modal",
+      "width": 390,
+      "violations": []
+    },
+    {
+      "route": "/",
+      "width": 390,
+      "violations": []
+    },
+    {
+      "route": "/tur/qa-invalid-token",
+      "width": 320,
+      "violations": []
+    },
+    {
+      "route": "/tur/qa-invalid-token",
+      "width": 1440,
+      "violations": []
+    }
+  ],
+  "metadata": {
+    "codeCommit": "cf501b3e56b4d219c22956425a7aaaf4a577a467",
+    "environment": "local Vite production build",
+    "browser": "Chromium via Playwright",
+    "date": "2026-10-04",
+    "submitMocked": true,
+    "realSubmitEvidence": "real-waitlist-submit.json"
+  }
+}
