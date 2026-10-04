@@ -15,7 +15,7 @@ const EMAILS = {
 };
 
 function PartnerWordmark() {
-  return <Link className="mk-wordmark" to="/" aria-label="KJAPP forside"><span>KJ</span><em>A</em><span>PP</span></Link>;
+  return <Link className="mk-wordmark" to="/" aria-label="SNAR forside"><span>KJ</span><em>A</em><span>PP</span></Link>;
 }
 
 function PartnerHeader() {
@@ -47,7 +47,7 @@ function PartnerDashboardPreview() {
 
   return (
     <div
-      aria-label="Forhåndsvisning av KJAPP Fleet Panel"
+      aria-label="Forhåndsvisning av SNAR Fleet Panel"
       style={{
         width: '100%',
         maxWidth: 390,
@@ -62,7 +62,7 @@ function PartnerDashboardPreview() {
     >
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 18, borderBottom: '1px solid #1f3044'}}>
         <div>
-          <div style={{color: '#11d9e8', fontSize: 10, fontWeight: 900, letterSpacing: '.08em'}}>KJAPP FLEET</div>
+          <div style={{color: '#11d9e8', fontSize: 10, fontWeight: 900, letterSpacing: '.08em'}}>SNAR FLEET</div>
           <div style={{fontSize: 21, fontWeight: 900, marginTop: 6}}>Din flåte. Din kontroll.</div>
         </div>
         <span style={{fontSize: 10, color: '#7f91a8'}}>LIVE</span>
@@ -89,7 +89,7 @@ function PartnerDashboardPreview() {
 const onboardingSteps = [
   ['01', 'Send søknad', 'Firma, kontaktinformasjon, løyver og kjøretøy.'],
   ['02', 'Dokumentasjon', 'Løyvebevis, vognkort, forsikring og bankinformasjon.'],
-  ['03', 'KJAPP kontrollerer', 'Søknaden og dokumentasjonen gjennomgås før aktivering.'],
+  ['03', 'SNAR kontrollerer', 'Søknaden og dokumentasjonen gjennomgås før aktivering.'],
   ['04', 'Fleet åpnes', 'Godkjente partnere får tilgang til fleet.kjappapp.no.'],
 ];
 
@@ -102,9 +102,9 @@ const partnerValues = [
 
 function PartnerPage() {
   useEffect(() => {
-    document.title = 'KJAPP for løyvehavere — 10 % serviceavgift';
+    document.title = 'SNAR for løyvehavere — 10 % serviceavgift';
     const meta = document.querySelector('meta[name="description"]');
-    meta?.setAttribute('content', 'Bli KJAPP-partner. 10 % serviceavgift, Fleet Panel for sjåfører og turer, og ukentlig oppgjør for digitale betalinger.');
+    meta?.setAttribute('content', 'Bli SNAR-partner. 10 % serviceavgift, Fleet Panel for sjåfører og turer, og ukentlig oppgjør for digitale betalinger.');
   }, []);
 
   return (
@@ -115,7 +115,7 @@ function PartnerPage() {
         <div className="mk-hero-copy">
           <div className="mk-eyebrow">FOR LØYVEHAVERE</div>
           <h1>DIN FLÅTE.<br />DIN KONTROLL.</h1>
-          <p>KJAPP gir løyvehavere et moderne system for sjåfører, turer, økonomi og dokumentasjon — uten å ta virksomheten fra deg.</p>
+          <p>SNAR gir løyvehavere et moderne system for sjåfører, turer, økonomi og dokumentasjon — uten å ta virksomheten fra deg.</p>
           <div className="mk-actions">
             <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Søk om å bli partner</Link>
             <a className="mk-pill mk-pill-dark" href={FLEET_URL}>Åpne Fleet Panel</a>
@@ -127,12 +127,12 @@ function PartnerPage() {
 
       <section className="mk-partner mk-shell">
         <div className="mk-partner-copy">
-          <span>KJAPP PARTNER</span>
+          <span>SNAR PARTNER</span>
           <h2>Jobb mindre.<br />Behold mer.</h2>
           <p>En enkel serviceavgift og ett kontrollpanel. Ved digitale betalinger legges det opp til automatisk ukentlig avregning. Kontantturer kan registreres og avstemmes separat.</p>
           <div className="mk-actions">
-            <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Bli KJAPP-partner</Link>
-            <a className="mk-pill mk-pill-dark" href={`mailto:${EMAILS.partner}`}>Snakk med KJAPP</a>
+            <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Bli SNAR-partner</Link>
+            <a className="mk-pill mk-pill-dark" href={`mailto:${EMAILS.partner}`}>Snakk med SNAR</a>
           </div>
         </div>
         <div className="mk-commission"><strong>10%</strong><p>serviceavgift<br />90% beholdes</p><div /><span>TYDELIG · ENKELT · UKENTLIG OPPGJØR</span></div>
@@ -159,7 +159,7 @@ function PartnerPage() {
       <section className="mk-why mk-shell">
         <div className="mk-why-intro">
           <div><span>BYGGET FOR LØYVEHAVEREN</span><h2>Mindre administrasjon.<br />Mer kontroll.</h2></div>
-          <p>KJAPP skal gjøre det enklere å drive en moderne taxiflåte. Partneren beholder løyvet, sjåførene og virksomheten — KJAPP leverer teknologien rundt turene.</p>
+          <p>SNAR skal gjøre det enklere å drive en moderne taxiflåte. Partneren beholder løyvet, sjåførene og virksomheten — SNAR leverer teknologien rundt turene.</p>
         </div>
         <div className="mk-value-grid">
           {partnerValues.map(([number, title, copy]) => <article key={number}><span>{number}</span><h3>{title}</h3><p>{copy}</p></article>)}
@@ -168,8 +168,8 @@ function PartnerPage() {
 
       <section className="mk-download mk-shell">
         <div className="mk-eyebrow">KLAR FOR NESTE STEG?</div>
-        <h2 style={{marginTop: 24}}>Bli KJAPP-partner.</h2>
-        <p>Søknaden gir ikke automatisk tilgang. Fleet-konto aktiveres etter at KJAPP har kontrollert og godkjent dokumentasjonen.</p>
+        <h2 style={{marginTop: 24}}>Bli SNAR-partner.</h2>
+        <p>Søknaden gir ikke automatisk tilgang. Fleet-konto aktiveres etter at SNAR har kontrollert og godkjent dokumentasjonen.</p>
         <div className="mk-actions">
           <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad">Start søknaden</Link>
           <a className="mk-pill mk-pill-dark" href={FLEET_URL}>Allerede godkjent? Logg inn</a>
@@ -184,7 +184,7 @@ function PartnerPage() {
           <Link to="/loyvehaver">Løyvehaver</Link>
           <a href={FLEET_URL}>Fleet Panel</a>
         </nav>
-        <div className="mk-contact-grid" aria-label="Kontakt KJAPP">
+        <div className="mk-contact-grid" aria-label="Kontakt SNAR">
           <a href={`mailto:${EMAILS.hello}`}>hei@kjappapp.no</a>
           <a href={`mailto:${EMAILS.support}`}>support@kjappapp.no</a>
           <a href={`mailto:${EMAILS.driver}`}>driver@kjappapp.no</a>
@@ -192,7 +192,7 @@ function PartnerPage() {
           <a href={`mailto:${EMAILS.partner}`}>partner@kjappapp.no</a>
           <a href={`mailto:${EMAILS.privacy}`}>privacy@kjappapp.no</a>
         </div>
-        <span>© 2026 KJAPP · NexoraHub AS</span>
+        <span>© 2026 SNAR · NexoraHub AS</span>
       </footer>
     </main>
   );
