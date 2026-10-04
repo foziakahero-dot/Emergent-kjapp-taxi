@@ -8,18 +8,119 @@ import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
+const LAST_FOREGROUND_OFFER_KEY = 'kjapp_last_foreground_offer';
 const LAST_BACKGROUND_PENDING_CHECK_KEY = 'kjapp_last_background_pending_check_at';
+export const DRIVER_NATIVE_PUSH_REGISTERED_KEY = 'kjapp_driver_native_push_registered_v1';
 let backgroundPermissionRequestedThisSession = false;
 let backgroundLocationMode: 'idle' | 'active' | null = null;
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async () => {
+    const requestsEnabled = (await storage.getItem('driver_notif_requests')) !== 'false';
+    const soundEnabled = (await storage.getItem('driver_req_sound')) !== 'false';
+    return {
+      shouldPlaySound: requestsEnabled && soundEnabled,
+      shouldSetBadge: false,
+      shouldShowBanner: requestsEnabled,
+      shouldShowList: requestsEnabled,
+    };
+  },
 });
+
+async function driverNotificationPrefs() {
+  const [requests, sound, vibrate] = await Promise.all([
+    storage.getItem('driver_notif_requests'),
+    storage.getItem('driver_req_sound'),
+    storage.getItem('driver_req_vibrate'),
+  ]);
+  return {
+    requests: requests !== 'false',
+    sound: sound !== 'false',
+    vibrate: vibrate !== 'false',
+  };
+}
+
+async function ensureDriverNotificationChannels() {
+  if (Platform.OS !== 'android') return;
+  const common = {
+    name: 'KJAPP turer',
+    description: 'Nye turer og viktige oppdateringer mens du er på skift.',
+    importance: Notifications.AndroidImportance.MAX,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+  };
+  await Promise.all([
+    Notifications.setNotificationChannelAsync('kjapp_trips', {
+      ...common,
+      sound: 'default',
+      enableVibrate: true,
+      vibrationPattern: [0, 250, 180, 250],
+    }),
+    Notifications.setNotificationChannelAsync('kjapp_trips_sound', {
+      ...common,
+      sound: 'default',
+      enableVibrate: false,
+    }),
+    Notifications.setNotificationChannelAsync('kjapp_trips_vibrate', {
+      ...common,
+      sound: null,
+      enableVibrate: true,
+      vibrationPattern: [0, 250, 180, 250],
+    }),
+    Notifications.setNotificationChannelAsync('kjapp_trips_quiet', {
+      ...common,
+      sound: null,
+      enableVibrate: false,
+    }),
+  ]);
+}
+
+function channelForPrefs(sound: boolean, vibrate: boolean) {
+  if (sound && vibrate) return 'kjapp_trips';
+  if (sound) return 'kjapp_trips_sound';
+  if (vibrate) return 'kjapp_trips_vibrate';
+  return 'kjapp_trips_quiet';
+}
+
+async function scheduleDriverOfferNotification(offer: any, source: 'foreground-poll' | 'background-poll') {
+  const prefs = await driverNotificationPrefs();
+  if (!prefs.requests || !offer?.trip_id) return false;
+
+  await ensureDriverNotificationChannels();
+  const price = Number.isFinite(Number(offer.price)) ? `${Math.round(Number(offer.price))} kr` : 'Ny tur';
+  const pickup = offer.pickup_address || 'Henting';
+  const dropoff = offer.dropoff_address || 'destinasjon';
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `Ny tur · ${price}`,
+      body: `${pickup} → ${dropoff}`,
+      sound: prefs.sound ? 'default' : undefined,
+      ...(Platform.OS === 'android' ? { vibrate: prefs.vibrate ? [0, 250, 180, 250] : [] } : {}),
+      data: { url: '/driver', trip_id: offer.trip_id, source },
+    },
+    trigger: Platform.OS === 'android'
+      ? { channelId: channelForPrefs(prefs.sound, prefs.vibrate) }
+      : null,
+  });
+  return true;
+}
+
+export async function notifyPendingTripFromForeground(offer: any) {
+  if (!offer?.trip_id || Platform.OS === 'web') return false;
+  const nativePushRegistered = await storage.getItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY);
+  if (nativePushRegistered === 'true') return false;
+
+  const previous = await storage.getItem(LAST_FOREGROUND_OFFER_KEY);
+  if (previous === String(offer.trip_id)) return false;
+
+  try {
+    const delivered = await scheduleDriverOfferNotification(offer, 'foreground-poll');
+    if (delivered) await storage.setItem(LAST_FOREGROUND_OFFER_KEY, String(offer.trip_id));
+    return delivered;
+  } catch {
+    return false;
+  }
+}
 
 async function notifyPendingTripFromBackground() {
   try {
@@ -38,23 +139,14 @@ async function notifyPendingTripFromBackground() {
       return;
     }
 
+    const nativePushRegistered = await storage.getItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY);
+    if (nativePushRegistered === 'true') return;
+
     const previous = await storage.getItem(LAST_BACKGROUND_OFFER_KEY);
     if (previous === String(offer.trip_id)) return;
 
-    const price = Number.isFinite(Number(offer.price)) ? `${Math.round(Number(offer.price))} kr` : 'Ny tur';
-    const pickup = offer.pickup_address || 'Henting';
-    const dropoff = offer.dropoff_address || 'destinasjon';
-
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `Ny tur · ${price}`,
-        body: `${pickup} → ${dropoff}`,
-        sound: true,
-        data: { url: '/driver', trip_id: offer.trip_id, source: 'background-poll' },
-      },
-      trigger: null,
-    });
-    await storage.setItem(LAST_BACKGROUND_OFFER_KEY, String(offer.trip_id));
+    const delivered = await scheduleDriverOfferNotification(offer, 'background-poll');
+    if (delivered) await storage.setItem(LAST_BACKGROUND_OFFER_KEY, String(offer.trip_id));
   } catch {
     // Native FCM/APNs remains the primary channel. This is an on-shift fallback.
   }
@@ -91,33 +183,33 @@ async function getExpoPushTokenData() {
 export async function registerNativePush() {
   if (Platform.OS === 'web') return false;
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('kjapp_trips', {
-      name: 'KJAPP turer',
-      description: 'Nye turer og viktige oppdateringer mens du er på skift.',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 180, 250],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    });
-  }
+  await ensureDriverNotificationChannels();
 
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
   if (status !== 'granted') {
     status = (await Notifications.requestPermissionsAsync()).status;
   }
-  if (status !== 'granted') return false;
+  if (status !== 'granted') {
+    await storage.setItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY, 'false').catch(() => {});
+    return false;
+  }
 
   try {
     const token = await getExpoPushTokenData();
-    if (!token) return false;
+    if (!token) {
+      await storage.setItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY, 'false').catch(() => {});
+      return false;
+    }
     await api.post('/push/native-subscribe', {
       platform: Platform.OS,
       provider: 'expo',
       token,
     });
+    await storage.setItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY, 'true').catch(() => {});
     return true;
   } catch {
+    await storage.setItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY, 'false').catch(() => {});
     // The app remains usable if push credentials are not provisioned yet.
     // On-shift Driver notifications also have a background-location fallback.
     return false;
@@ -126,6 +218,7 @@ export async function registerNativePush() {
 
 export async function unregisterNativePush() {
   if (Platform.OS === 'web') return false;
+  await storage.setItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY, 'false').catch(() => {});
   try {
     const permission = await Notifications.getPermissionsAsync();
     if (permission.status !== 'granted') return false;
@@ -200,6 +293,7 @@ export async function stopDriverBackgroundLocation() {
   if (running) await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
   backgroundLocationMode = null;
   await storage.removeItem(LAST_BACKGROUND_OFFER_KEY);
+  await storage.removeItem(LAST_FOREGROUND_OFFER_KEY);
   await storage.removeItem(LAST_BACKGROUND_PENDING_CHECK_KEY);
 }
 
