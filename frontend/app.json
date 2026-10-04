@@ -44,6 +44,12 @@
           "RNMapboxMapsVersion": "11.31.1"
         }
       ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": true
+        }
+      ],
       "expo-router",
       "expo-font",
       [
