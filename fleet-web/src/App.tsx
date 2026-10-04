@@ -8,14 +8,12 @@ import {
   DriversPage,
   DocumentsPage,
   FinancePage,
-  ForgotPasswordPage,
-  LoginPage,
   LiveOpsPage,
   OverviewPage,
-  ResetPasswordPage,
   TripsPage,
   VehiclesPage,
 } from './pages';
+import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true, icon: '⌂' },
@@ -131,9 +129,9 @@ export default function App() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/glemt-passord" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/login" element={<SnarLoginPage />} />
+        <Route path="/glemt-passord" element={<SnarForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<SnarResetPasswordPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
