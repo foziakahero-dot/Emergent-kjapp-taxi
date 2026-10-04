@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   Text,
@@ -34,8 +35,9 @@ export default function Home() {
   const { user } = useAuth();
 
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
-  const [pickupLabel, setPickupLabel] = useState('Din posisjon');
+  const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
   const [locDenied, setLocDenied] = useState(false);
+  const [locationReady, setLocationReady] = useState(false);
   const [cars, setCars] = useState<any[]>([]);
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
@@ -44,6 +46,7 @@ export default function Home() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
@@ -70,45 +73,61 @@ export default function Home() {
     }, [loadMethods, loadPlaces, router]),
   );
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setLoc(p);
-          placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});
-        } else {
-          setLocDenied(true);
-        }
-      } catch {
+  const refreshLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationReady(false);
         setLocDenied(true);
+        setPickupLabel('Posisjon ikke tilgjengelig');
+        return false;
       }
-    })();
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setLoc(p);
+      setLocationReady(true);
+      setLocDenied(false);
+      setPickupLabel('Din posisjon');
+      placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});
+      return true;
+    } catch {
+      setLocationReady(false);
+      setLocDenied(true);
+      setPickupLabel('Posisjon ikke tilgjengelig');
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshLocation();
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
     loadPlaces();
-  }, [loadMethods, loadPlaces]);
+  }, [loadMethods, loadPlaces, refreshLocation]);
 
   useEffect(() => {
     let mounted = true;
+    if (!locationReady) {
+      setCars([]);
+      return () => { mounted = false; };
+    }
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => {});
     load();
     const i = setInterval(load, 8000);
     return () => { mounted = false; clearInterval(i); };
-  }, [loc.lat, loc.lng]);
+  }, [locationReady, loc.lat, loc.lng]);
 
   useEffect(() => {
-    if (!dropoff) { setEstimate(null); return; }
+    if (!dropoff || !locationReady) { setEstimate(null); return; }
     tripsApi.estimate({
       pickup_lat: loc.lat, pickup_lng: loc.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
       stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
     }).then(setEstimate).catch(() => setEstimate(null));
-  }, [dropoff, loc.lat, loc.lng, stops]);
+  }, [dropoff, locationReady, loc.lat, loc.lng, stops]);
 
-  const nearest = cars.length ? Math.min(...cars.map((c) => c.eta_min || 3)) : null;
+  const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
+  const nearest = etaValues.length ? Math.min(...etaValues) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = myPlaces.length ? myPlaces : featured;
@@ -121,6 +140,19 @@ export default function Home() {
 
   const book = async () => {
     if (!dropoff) return;
+    if (!locationReady) {
+      setError('KJAPP trenger en fersk posisjon før du kan bestille tur.');
+      return;
+    }
+    if (!estimate || priceFor(selType) == null) {
+      setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
+      return;
+    }
+    if (!payMethod) {
+      setError('Legg til et betalingskort før du bestiller.');
+      router.push('/payment-methods');
+      return;
+    }
     setError('');
     setBooking(true);
     try {
@@ -137,9 +169,20 @@ export default function Home() {
       });
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
+      // The request may have reached the server even if the response was lost.
+      // Reconcile against canonical backend state before presenting a failure or allowing another booking.
+      try {
+        const active = await tripsApi.active();
+        if (active?.trip_id) {
+          router.replace(`/booking/${active.trip_id}`);
+          return;
+        }
+      } catch {}
       if (e?.response?.status === 402) {
         setError('Legg til et betalingskort før du bestiller.');
         setTimeout(() => router.push('/payment-methods'), 700);
+      } else if (e?.response?.status === 409) {
+        setError('En bestilling behandles allerede. KJAPP sjekker den aktive turen automatisk.');
       } else {
         setError(apiError(e));
       }
@@ -149,13 +192,14 @@ export default function Home() {
   };
 
   const routeGeom = estimate?.geometry?.coordinates;
+  const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        user={loc}
-        pickup={dropoff ? loc : null}
+        user={locationReady ? loc : null}
+        pickup={dropoff && locationReady ? loc : null}
         dropoff={dropoff}
         route={routeGeom}
         cars={dropoff ? [] : cars}
@@ -177,8 +221,51 @@ export default function Home() {
         </Pressable>
       </View>
 
-      <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
-        <View style={s.handle} />
+      {sheetCollapsed ? (
+        <View style={[s.collapsedSheet, { paddingBottom: insets.bottom + 8 }]} testID="home-sheet-collapsed">
+          <Pressable
+            style={s.collapsedDestination}
+            onPress={() => setSheetCollapsed(false)}
+            testID="home-sheet-expand"
+            accessibilityRole="button"
+            accessibilityLabel="Utvid bestillingspanelet"
+          >
+            <View style={s.collapsedSearchIcon}><Icon name="search" size={18} color={colors.accent} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.collapsedTitle} numberOfLines={1}>{dropoff?.name || 'Hvor vil du?'}</Text>
+              <Text style={s.collapsedHint} numberOfLines={1}>{dropoff ? 'Trykk for turvalg og pris' : 'Søk adresse, sted eller flyplass'}</Text>
+            </View>
+            {!dropoff ? (
+              <Pressable
+                style={s.collapsedVoice}
+                onPress={(e: any) => { e.stopPropagation?.(); openVoice(); }}
+                testID="home-collapsed-voice"
+                accessibilityRole="button"
+                accessibilityLabel="Bestill med stemmen"
+              >
+                <Icon name="mic" size={19} color={colors.accent} />
+              </Pressable>
+            ) : null}
+            <Icon name="chevron-up" size={20} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : (
+      <ScrollView
+        style={s.sheet}
+        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 8 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pressable
+          style={s.sheetHandleButton}
+          onPress={() => setSheetCollapsed(true)}
+          testID="home-sheet-collapse"
+          accessibilityRole="button"
+          accessibilityLabel="Minimer bestillingspanelet"
+        >
+          <View style={s.handle} />
+          <Icon name="chevron-down" size={18} color={colors.textMuted} />
+        </Pressable>
 
         <View style={s.pickupRow} testID="home-pickup-row">
           <View style={s.beacon} />
@@ -188,8 +275,8 @@ export default function Home() {
           <View style={[s.dot, { backgroundColor: cars.length ? colors.online : colors.textMuted }]} />
           <Text style={s.carsText}>
             {cars.length
-              ? `${cars.length} biler i nærheten · nærmeste ${nearest} min`
-              : 'Søker etter ledige biler…'}
+              ? (nearest != null ? `${cars.length} biler i nærheten · nærmeste ${nearest} min` : `${cars.length} biler i nærheten`)
+              : (locationReady ? 'Søker etter ledige biler…' : 'Posisjon kreves for å se biler i nærheten')}
           </Text>
         </View>
 
@@ -248,7 +335,17 @@ export default function Home() {
             </ScrollView>
 
             {locDenied ? (
-              <Text style={s.hint}>Slå på posisjon for å se biler rundt deg — vi bruker Oslo sentrum inntil videre.</Text>
+              <View style={s.locationWarning} testID="home-location-required">
+                <Text style={s.hint}>KJAPP bestiller aldri fra en antatt posisjon. Slå på posisjon for å velge korrekt hentested.</Text>
+                <View style={s.locationActions}>
+                  <Pressable style={s.locationAction} onPress={() => void refreshLocation()}>
+                    <Text style={s.locationActionText}>Prøv igjen</Text>
+                  </Pressable>
+                  <Pressable style={s.locationAction} onPress={() => Linking.openSettings().catch(() => {})}>
+                    <Text style={s.locationActionText}>Innstillinger</Text>
+                  </Pressable>
+                </View>
+              </View>
             ) : null}
           </>
         ) : (
@@ -352,7 +449,7 @@ export default function Home() {
                     <Pressable
                       key={id}
                       onPress={() => setSpecialNeeds((prev) => active ? prev.filter((x) => x !== id) : [...prev, id])}
-                      style={[s.chip, active && { borderColor: colors.accent, backgroundColor: 'rgba(45,212,191,0.10)' }]}
+                      style={[s.chip, active && { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}
                       testID={`need-${id}`}
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
@@ -375,9 +472,9 @@ export default function Home() {
             {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
 
             <Pressable
-              style={[s.confirm, booking && { opacity: 0.6 }]}
+              style={[s.confirm, !canBook && { opacity: 0.55 }]}
               onPress={book}
-              disabled={booking}
+              disabled={!canBook}
               testID="booking-confirm"
             >
               {booking ? (
@@ -388,11 +485,13 @@ export default function Home() {
             </Pressable>
           </>
         )}
-      </View>
+      </ScrollView>
+      )}
 
       {searchOpen && (
         <SearchSheet
           onClose={() => setSearchOpen(false)}
+          onMinimize={() => { setSearchOpen(false); setSheetCollapsed(true); }}
           onVoice={openVoice}
           onSelect={(d: any) => {
             if (searchTarget === 'stop') {
@@ -411,7 +510,7 @@ export default function Home() {
   );
 }
 
-function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
+function SearchSheet({ onClose, onMinimize, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -464,6 +563,15 @@ function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
             </Pressable>
           )}
         </View>
+        <Pressable
+          onPress={onMinimize}
+          testID="search-minimize"
+          style={s.searchMinimize}
+          accessibilityRole="button"
+          accessibilityLabel="Minimer søk og vis kart"
+        >
+          <Icon name="chevron-down" size={20} color={colors.textSecondary} />
+        </Pressable>
         <Pressable onPress={onClose} testID="search-close" style={s.searchClose}>
           <Text style={{ color: colors.accent, fontSize: 15 }}>Avbryt</Text>
         </Pressable>
@@ -498,20 +606,38 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: 16, paddingBottom: 8,
   },
   brandPill: {
-    backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
     borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9,
+    shadowColor: c.text, shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   brand: { fontFamily: font.display, fontSize: 19, fontWeight: '700', color: c.text, letterSpacing: 1.1 },
   iconControl: {
     width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
   },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(9,17,25,0.97)', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    borderWidth: 1, borderColor: c.line, paddingHorizontal: 18, paddingTop: 10,
+    position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '76%',
+    backgroundColor: c.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30,
+    borderWidth: 1, borderColor: c.line,
+    shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8,
   },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 8 },
+  sheetHandleButton: { alignSelf: 'center', minWidth: 72, minHeight: 34, alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong },
+  collapsedSheet: {
+    position: 'absolute', left: 14, right: 14, bottom: 0,
+    backgroundColor: c.surface, borderRadius: 24,
+    borderWidth: 1, borderColor: c.line, paddingHorizontal: 10, paddingTop: 10,
+  },
+  collapsedDestination: {
+    minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.lineStrong,
+    borderRadius: 18, paddingHorizontal: 12,
+  },
+  collapsedSearchIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  collapsedTitle: { color: c.text, fontSize: 15, fontWeight: '650' as any },
+  collapsedHint: { color: c.textMuted, fontSize: 11, marginTop: 2 },
+  collapsedVoice: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
   pickupRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 7 },
   beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.accent },
   pickupText: { color: c.text, fontSize: 14, flex: 1 },
@@ -529,7 +655,7 @@ const useStyles = makeStyles((c) => ({
   whereHint: { color: c.textMuted, fontSize: 12, marginTop: 4 },
   voiceBtn: {
     width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft,
-    borderWidth: 1, borderColor: 'rgba(0,229,245,0.22)', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center',
   },
   searchBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   chipsRow: { gap: 10, paddingBottom: 10 },
@@ -542,6 +668,10 @@ const useStyles = makeStyles((c) => ({
   chipEdit: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0, borderRadius: 999, paddingHorizontal: 15, height: 44, borderWidth: 1, borderColor: c.line, borderStyle: 'dashed' },
   chipEditText: { color: c.textSecondary, fontSize: 14 },
   hint: { color: c.textMuted, fontSize: 12, marginTop: 8, lineHeight: 18 },
+  locationWarning: { backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 14, padding: 12, marginTop: 8 },
+  locationActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  locationAction: { minHeight: 38, flex: 1, borderRadius: 10, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  locationActionText: { color: c.accent, fontSize: 12, fontWeight: '700' },
   endpoints: { backgroundColor: c.cardSubtle, borderRadius: radius.lg, borderWidth: 1, borderColor: c.line, padding: 14, marginBottom: 12 },
   epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   epText: { color: c.text, fontSize: 14, flex: 1 },
@@ -569,7 +699,7 @@ const useStyles = makeStyles((c) => ({
   payText: { color: c.text, fontSize: 14, flex: 1 },
   error: { color: c.danger, fontSize: 13, marginBottom: 10 },
   confirm: {
-    height: 56, borderRadius: radius.lg, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
+    height: 56, borderRadius: radius.pill, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center',
     shadowColor: c.accent, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   },
   confirmText: { color: c.accentOn, fontSize: 16, fontWeight: '700' },
@@ -581,6 +711,7 @@ const useStyles = makeStyles((c) => ({
   },
   searchInput: { flex: 1, color: c.text, fontSize: 16, height: '100%' },
   searchVoice: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft },
+  searchMinimize: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   searchClose: { minWidth: 52, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   searchPrompt: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12, paddingHorizontal: 2 },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 64, borderBottomWidth: 1, borderBottomColor: c.line },

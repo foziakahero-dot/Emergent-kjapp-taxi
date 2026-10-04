@@ -5,6 +5,8 @@ import { api } from './api';
 import { Loader } from './ui';
 import Login from './Login';
 import FleetApplications from './FleetApplications';
+import IdentityVerifications from './IdentityVerifications';
+import Receipts from './Receipts';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
@@ -21,6 +23,7 @@ const NAV = [
   { group: 'Drift', items: [
     { to: '/trips', label: 'Turer', ic: '⇄', perm: 'operations' },
     { to: '/drivers', label: 'Sjåfører', ic: '☗', perm: 'operations' },
+    { to: '/identity-verifications', label: 'Selfie ID', ic: '◉', perm: 'operations' },
     { to: '/customers', label: 'Kunder', ic: '☺', perm: 'operations' },
     { to: '/fleet-applications', label: 'Løyvesøknader', ic: '◇', superadminOnly: true },
     { to: '/fleets', label: 'Løyvehavere', ic: '⌂', perm: 'operations' },
@@ -28,6 +31,7 @@ const NAV = [
   ]},
   { group: 'Økonomi', items: [
     { to: '/finance', label: 'Økonomi', ic: '≣', perm: 'finance' },
+    { to: '/receipts', label: 'Kvitteringer', ic: '▧', perm: 'finance' },
     { to: '/payments', label: 'Betaling & oppgjør', ic: '₭', perm: 'finance' },
     { to: '/pricing', label: 'Prissetting', ic: '◈', perm: 'system' },
   ]},
@@ -160,12 +164,14 @@ function Shell() {
             <Route path="/live" element={gate('operations', <Live />)} />
             <Route path="/trips" element={gate('operations', <Trips />)} />
             <Route path="/drivers" element={gate('operations', <Drivers />)} />
+            <Route path="/identity-verifications" element={gate('operations', <IdentityVerifications />)} />
             <Route path="/customers" element={gate('operations', <Customers />)} />
             <Route path="/fleet-applications" element={gate('operations', <FleetApplications />, true)} />
             <Route path="/fleets" element={gate('operations', <FleetManagement />)} />
             <Route path="/vehicles" element={gate('operations', <Vehicles />)} />
             <Route path="/documents" element={gate('operations', <Documents />)} />
             <Route path="/finance" element={gate('finance', <Finance />)} />
+            <Route path="/receipts" element={gate('finance', <Receipts />)} />
             <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
             <Route path="/pricing" element={gate('system', <Settings />)} />
             <Route path="/communications" element={gate('communications', <Communications />)} />

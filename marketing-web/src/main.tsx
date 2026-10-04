@@ -17,11 +17,39 @@ function RouteMetadata() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    if (pathname === '/help') {
+    if (pathname === '/help' || pathname === '/hjelp') {
       setPageSeo({
         title: 'KJAPP Hjelp & support',
         description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. KJAPP support svarer på support@kjappapp.no.',
         canonical: 'https://kjappapp.no/help',
+      });
+      return;
+    }
+
+    if (pathname === '/personvern') {
+      setPageSeo({
+        title: 'KJAPP Personvern',
+        description: 'Personverninformasjon for KJAPP beta.',
+        canonical: 'https://kjappapp.no/personvern',
+      });
+      return;
+    }
+
+    if (pathname === '/vilkar') {
+      setPageSeo({
+        title: 'KJAPP Vilkår',
+        description: 'Vilkårsinformasjon for KJAPP beta.',
+        canonical: 'https://kjappapp.no/vilkar',
+      });
+      return;
+    }
+
+    if (pathname.startsWith('/reset-password/')) {
+      setPageSeo({
+        title: 'KJAPP Tilbakestill passord',
+        description: 'Sikker tilbakestilling av KJAPP-passord.',
+        canonical: 'https://kjappapp.no/reset-password',
+        robots: 'noindex,nofollow',
       });
       return;
     }
@@ -31,6 +59,16 @@ function RouteMetadata() {
         title: 'KJAPP for løyvehavere — Fleet Panel og norsk oppfølging',
         description: 'Bli KJAPP-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.',
         canonical: 'https://kjappapp.no/loyvehaver',
+      });
+      return;
+    }
+
+    if (pathname.startsWith('/payment/')) {
+      setPageSeo({
+        title: 'KJAPP betaling',
+        description: 'Sikker retur til KJAPP etter betaling.',
+        canonical: `https://kjappapp.no${pathname}`,
+        robots: 'noindex,nofollow',
       });
       return;
     }
@@ -60,7 +98,7 @@ function SupportFooterPortal() {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (pathname === '/help') {
+    if (pathname === '/help' || pathname === '/hjelp') {
       setTarget(null);
       return;
     }
@@ -85,7 +123,7 @@ function SupportFooterPortal() {
 
 function RootContent() {
   const { pathname } = useLocation();
-  return pathname === '/help' ? <HelpPage /> : <App />;
+  return pathname === '/help' || pathname === '/hjelp' ? <HelpPage /> : <App />;
 }
 
 ReactDOMClient.createRoot(document.getElementById('root')!).render(

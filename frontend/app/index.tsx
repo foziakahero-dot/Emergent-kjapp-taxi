@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
+import { BrandBadge } from '@/src/components/BrandBadge';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
@@ -15,7 +16,9 @@ export default function Index() {
   const s = useStyles();
 
   useEffect(() => {
-    if (user && isCustomerRole(user.role)) router.replace('/(app)/home');
+    if (user && isCustomerRole(user.role)) {
+      router.replace(user.legal_accepted === true ? '/(app)/home' : '/legal-consent');
+    }
   }, [user, router]);
 
   if (user === undefined || (user && isCustomerRole(user.role))) {
@@ -53,8 +56,8 @@ export default function Index() {
     <View style={[s.splash, { paddingBottom: insets.bottom + 40, paddingTop: insets.top }]} testID="onboarding">
       <View style={s.center}>
         <BrandMark />
-        <Text style={s.tag} testID="ob-tag">NORDIC TAXI</Text>
-        <Text style={s.subtitle}>Enklere. Tryggere. Kjappere.</Text>
+        <Text style={s.tag} testID="ob-tag">KUNDEAPP · NORGE</Text>
+        <Text style={s.subtitle}>Bestill. Følg. Betal.</Text>
       </View>
       <Button label="Kom i gang" onPress={() => router.push('/login')} testID="onboarding-next" />
     </View>
@@ -62,11 +65,11 @@ export default function Index() {
 }
 
 function BrandMark() {
+  const s = useStyles();
   return (
-    <View style={{ alignItems: 'center' }}>
-      <Text style={{ fontFamily: font.display, fontSize: 72, color: colors.text, letterSpacing: 1 }} testID="ob-brand">
-        KJ<Text style={{ color: colors.accent }}>A</Text>PP
-      </Text>
+    <View style={s.brandMark}>
+      <View style={s.markHalo}><BrandBadge size={96} /></View>
+      <Text style={s.wordmark} testID="ob-brand">KJAPP</Text>
     </View>
   );
 }
@@ -74,7 +77,10 @@ function BrandMark() {
 const useStyles = makeStyles((c) => ({
   splash: { flex: 1, backgroundColor: c.bg, paddingHorizontal: 28, justifyContent: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tag: { color: c.accent, fontSize: 11, letterSpacing: 6, marginTop: 10 },
+  brandMark: { alignItems: 'center' },
+  markHalo: { width: 132, height: 132, borderRadius: 38, borderWidth: 1, borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
+  wordmark: { color: c.text, fontFamily: font.display, fontSize: 52, letterSpacing: -2, marginTop: 24 },
+  tag: { color: c.accent, fontFamily: font.semibold, fontSize: 10, letterSpacing: 3, marginTop: 4 },
   title: { color: c.text, fontFamily: font.display, fontSize: 24, textAlign: 'center', marginTop: 32 },
-  subtitle: { color: c.textSecondary, fontFamily: font.display, fontSize: 18, lineHeight: 25, marginTop: 24, textAlign: 'center' },
+  subtitle: { color: c.textSecondary, fontFamily: font.body, fontSize: 16, lineHeight: 24, marginTop: 14, textAlign: 'center' },
 }));

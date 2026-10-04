@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
@@ -24,6 +25,11 @@ export default function Settings() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const version = Constants.expoConfig?.version || '1.0.0';
+  const buildNumber =
+    (Constants.expoConfig?.ios as any)?.buildNumber ||
+    (Constants.expoConfig?.android as any)?.versionCode ||
+    null;
 
   const exportData = async () => {
     setExporting(true);
@@ -32,7 +38,7 @@ export default function Settings() {
       const d = await gdprApi.export();
       const trips = (d.trips || []).length;
       const payments = (d.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjapp.no for en full kopi på e-post.`);
+      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjappapp.no for en full kopi på e-post.`);
     } catch {
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {
@@ -96,10 +102,16 @@ export default function Settings() {
             </View>
 
             <View style={[s.card, { marginTop: 16 }]}>
-              <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>1.0.0</Text></View>
-              <View style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]}>
-                <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjapp.no</Text>
-              </View>
+              <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
+                <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjappapp.no</Text>
+              </Pressable>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
+                <Text style={s.rowLabel}>Personvern</Text><Text style={s.rowValue}>Åpne</Text>
+              </Pressable>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
+                <Text style={s.rowLabel}>Vilkår</Text><Text style={s.rowValue}>Åpne</Text>
+              </Pressable>
             </View>
 
             <Text style={s.sectionTitle}>Personvern og data</Text>
@@ -173,10 +185,10 @@ const useStyles = makeStyles((c) => ({
   gdprRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
   gdprIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   exportInfo: { color: c.textMuted, fontSize: 13, lineHeight: 19, paddingBottom: 14 },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, minHeight: 52, borderRadius: 14, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: 'rgba(255,92,108,0.35)' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, minHeight: 52, borderRadius: 14, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.line },
   deleteText: { color: c.danger, fontFamily: font.semibold, fontSize: 15 },
   deleteHint: { color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center', lineHeight: 18 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(4,8,10,0.75)', alignItems: 'center', justifyContent: 'center', padding: 28 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', alignItems: 'center', justifyContent: 'center', padding: 28 },
   modalCard: { width: '100%', maxWidth: 400, backgroundColor: c.elevated, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   modalTitle: { color: c.text, fontFamily: font.display, fontSize: 22, textAlign: 'center' },

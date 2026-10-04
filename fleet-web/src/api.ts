@@ -71,12 +71,130 @@ export type FleetDriver = {
   rating?: number;
   online?: boolean;
   approved?: boolean;
+  fleet_active?: boolean;
   last_lat?: number;
   last_lng?: number;
   last_heading?: number;
   last_location_at?: string;
   today_income?: number;
   today_trips?: number;
+  identity_verification_status?: string;
+};
+
+export type FleetLiveDriver = {
+  id: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  car?: string;
+  plate?: string;
+  vehicle_type?: string;
+  approved?: boolean;
+  online?: boolean;
+  gps_fresh?: boolean;
+  operational_status?: 'offline' | 'gps_stale' | 'available' | 'driver_on_way' | 'at_pickup' | 'in_trip' | string;
+  lat?: number;
+  lng?: number;
+  heading?: number;
+  last_location_at?: string;
+  rating?: number;
+  active_trip_id?: string;
+  identity_verification_status?: string;
+};
+
+export type FleetLiveTrip = {
+  trip_id: string;
+  driver_id?: string;
+  status: string;
+  pickup_address?: string;
+  dropoff_address?: string;
+  pickup_lat?: number;
+  pickup_lng?: number;
+  dropoff_lat?: number;
+  dropoff_lng?: number;
+  price?: number;
+  created_at?: string;
+};
+
+export type FleetLive = {
+  drivers: FleetLiveDriver[];
+  trips: FleetLiveTrip[];
+  as_of: string;
+};
+
+export type FleetVehicle = {
+  id: string;
+  car?: string;
+  plate?: string;
+  vehicle_type?: string;
+  active?: boolean;
+  driver_id?: string;
+  driver_name?: string;
+  approved?: boolean;
+  fleet_active?: boolean | null;
+  selected_for_shift?: boolean;
+  online?: boolean;
+  gps_fresh?: boolean;
+  last_location_at?: string;
+  identity_verification_status?: string;
+  document_compliance?: 'VALID' | 'EXPIRING' | 'EXPIRED' | 'PENDING' | 'REJECTED' | 'MISSING';
+  document_statuses?: Record<string, 'VALID' | 'EXPIRING' | 'EXPIRED' | 'PENDING' | 'REJECTED'>;
+  missing_document_types?: string[];
+};
+
+export type FleetDocument = {
+  id: string;
+  filename?: string;
+  content_type?: string;
+  size?: number;
+  scope?: string;
+  doc_type?: string;
+  created_at?: string;
+  storage_path?: string;
+  owner_type?: 'driver' | 'fleet' | 'vehicle';
+  owner_id?: string;
+  owner_name?: string;
+  review_status?: string;
+  expiry?: string;
+  compliance: 'VALID' | 'EXPIRING' | 'EXPIRED' | 'PENDING' | 'REJECTED';
+};
+
+export type FleetDocuments = {
+  documents: FleetDocument[];
+  summary: Record<'VALID' | 'EXPIRING' | 'EXPIRED' | 'PENDING' | 'REJECTED', number>;
+};
+
+export type FleetDriverDetail = FleetDriver & {
+  trips_completed?: number;
+  active_trip?: {
+    trip_id?: string;
+    status?: string;
+    pickup_address?: string;
+    dropoff_address?: string;
+  } | null;
+  documents?: Array<{
+    id: string;
+    filename?: string;
+    doc_type?: string;
+    review_status?: string;
+    expiry?: string;
+    compliance?: string;
+  }>;
+};
+
+export type FleetTrip = {
+  trip_id: string;
+  created_at?: string;
+  status?: string;
+  payment_status?: string;
+  price?: number;
+  pickup_address?: string;
+  dropoff_address?: string;
+  driver_id?: string;
+  driver_name?: string;
+  vehicle_id?: string;
+  vehicle_type?: string;
+  receipt_id?: string;
 };
 
 export type FleetPayout = {
@@ -90,11 +208,16 @@ export type FleetPayout = {
   amount?: number;
   status?: string;
   paid_at?: string;
+  arrival_date?: string;
+  created?: string;
+  currency?: string;
+  source?: string;
 };
 
 export type DriverInvite = {
   id?: string;
   token: string;
+  vehicle_id?: string;
   car?: string;
   plate?: string;
   vehicle_type?: string;
@@ -106,10 +229,12 @@ export type DriverInvite = {
 };
 
 export type PublicDriverInvite = {
+  vehicle_id?: string;
   car?: string;
   plate?: string;
   vehicle_type?: string;
   fleet_name?: string;
+  fleet_org_number?: string;
   expires_at?: string;
 };
 
@@ -125,9 +250,34 @@ export const api = {
   fleetMe: (): Promise<FleetMe> => http.get('/fleet/me').then((r) => r.data),
   overview: (): Promise<FleetOverview> => http.get('/fleet/overview').then((r) => r.data),
   drivers: (): Promise<{ drivers: FleetDriver[] }> => http.get('/fleet/drivers').then((r) => r.data),
-  payouts: (): Promise<{ payouts: FleetPayout[] }> => http.get('/fleet/payouts').then((r) => r.data),
+  driverDetail: (id: string): Promise<FleetDriverDetail> => http.get(`/fleet/drivers/${id}`).then((r) => r.data),
+  live: (): Promise<FleetLive> => http.get('/fleet/live').then((r) => r.data),
+  vehicles: (): Promise<{ vehicles: FleetVehicle[] }> => http.get('/fleet/vehicles').then((r) => r.data),
+  createVehicle: (body: { car: string; plate: string; vehicle_type: string }): Promise<FleetVehicle> =>
+    http.post('/fleet/vehicles', body).then((r) => r.data),
+  updateVehicle: (id: string, body: { car?: string; plate?: string; vehicle_type?: string; active?: boolean }): Promise<FleetVehicle> =>
+    http.patch(`/fleet/vehicles/${id}`, body).then((r) => r.data),
+  assignVehicleDriver: (id: string, driver_id?: string | null): Promise<FleetVehicle> =>
+    http.post(`/fleet/vehicles/${id}/assign-driver`, { driver_id: driver_id || null }).then((r) => r.data),
+  uploadVehicleDocument: (id: string, file: File, doc_type: string, expiry?: string): Promise<FleetDocument> => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('doc_type', doc_type);
+    if (expiry) form.append('expiry', expiry);
+    return http.post(`/fleet/vehicles/${id}/documents`, form).then((r) => r.data);
+  },
+  setDriverActive: (id: string, active: boolean) =>
+    http.post(`/fleet/drivers/${id}/set-active`, { active }).then((r) => r.data),
+  documents: (): Promise<FleetDocuments> => http.get('/fleet/documents').then((r) => r.data),
+  downloadFile: (storagePath: string) => {
+    const encoded = storagePath.split('/').map(encodeURIComponent).join('/');
+    return http.get(`/files/${encoded}`, { responseType: 'blob' }).then((r) => r.data as Blob);
+  },
+  trips: (days = 90): Promise<{ trips: FleetTrip[] }> => http.get('/fleet/trips', { params: { days } }).then((r) => r.data),
+  payouts: (): Promise<{ payouts: FleetPayout[]; source?: string; connected?: boolean; payout_schedule?: string; temporarily_unavailable?: boolean }> =>
+    http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
-  createInvite: (body: { car: string; plate: string; vehicle_type: string; email?: string; note?: string }) =>
+  createInvite: (body: { vehicle_id: string; email?: string; note?: string }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
@@ -140,6 +290,8 @@ export const api = {
     email: string;
     phone: string;
     password: string;
+    accepted_terms: boolean;
+    legal_version: string;
     drivers_license_path: string;
     taxi_license_path: string;
     profile_photo_path: string;

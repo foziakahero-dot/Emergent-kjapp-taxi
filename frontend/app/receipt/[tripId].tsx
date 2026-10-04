@@ -46,6 +46,20 @@ export default function Receipt() {
   }, [loadTrip]);
 
   useEffect(() => {
+    if (!tripId || trip?.payment_status !== 'paid' || trip?.status !== 'arrived') return;
+    // Payment success normally closes the ride server-side. This is a safe fallback
+    // for a legacy/in-flight record that became paid before the new transition existed.
+    let cancelled = false;
+    (async () => {
+      try {
+        await tripsApi.complete(tripId);
+        if (!cancelled) await loadTrip();
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [tripId, trip?.payment_status, trip?.status, loadTrip]);
+
+  useEffect(() => {
     if (!tripId || trip?.payment_status === 'paid') return;
     const timer = setInterval(() => {
       loadTrip();
@@ -54,11 +68,14 @@ export default function Receipt() {
   }, [tripId, trip?.payment_status, loadTrip]);
 
   const submitRating = async (stars: number) => {
+    if (!tripId || trip?.payment_status !== 'paid') return;
     setRating(stars);
     try {
-      await tripsApi.rate(tripId!, { rating: stars, feedback: '' });
+      await tripsApi.rate(tripId, { rating: stars, feedback: '' });
       setRated(true);
-    } catch {}
+    } catch {
+      await loadTrip();
+    }
   };
 
   const verifyCheckout = async (sessionId: string) => {
@@ -122,6 +139,11 @@ export default function Receipt() {
 
   const v = vehicleMeta(trip.vehicle_type);
   const isPaid = trip.payment_status === 'paid';
+  const paymentNeedsAction = trip.payment_status === 'requires_action' || trip.payment_status === 'failed';
+  const paymentLabel = isPaid ? 'Betalt' : paymentNeedsAction ? 'Betaling må fullføres' : 'Venter på betaling';
+  const paymentHint = paymentNeedsAction
+    ? 'Automatisk betaling kunne ikke fullføres uten ny godkjenning. Du kan betale sikkert med kort nedenfor.'
+    : 'Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.';
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
@@ -131,8 +153,8 @@ export default function Receipt() {
         </View>
         <Text style={s.title}>Takk for turen</Text>
         <Text style={s.price}>{kr(trip.price)}</Text>
-        <Text style={[s.paymentStatus, { color: isPaid ? colors.online : colors.warning }]} testID="receipt-payment-status">
-          {isPaid ? 'Betalt' : 'Venter på betaling'}
+        <Text style={[s.paymentStatus, { color: isPaid ? colors.success : colors.warning }]} testID="receipt-payment-status">
+          {paymentLabel}
         </Text>
       </View>
 
@@ -147,6 +169,12 @@ export default function Receipt() {
           <Row label="Varighet" value={`${trip.duration_min} min`} />
           <View style={s.sep} />
           <Row label="Kjøretøy" value={v.name} />
+          {trip.receipt_id ? (
+            <>
+              <View style={s.sep} />
+              <Row label="Kvittering" value={trip.receipt_id} />
+            </>
+          ) : null}
         </View>
 
         {!isPaid ? (
@@ -155,7 +183,7 @@ export default function Receipt() {
               <View style={s.paymentIcon}><Icon name="lock" size={18} color={colors.accent} /></View>
               <View style={{ flex: 1 }}>
                 <Text style={s.paymentTitle}>Betal turen sikkert</Text>
-                <Text style={s.paymentSub}>Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.</Text>
+                <Text style={s.paymentSub}>{paymentHint}</Text>
               </View>
             </View>
             <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} />
@@ -185,17 +213,25 @@ export default function Receipt() {
 
         <View style={[s.card, { marginTop: 16, alignItems: 'center' }]}>
           <Text style={s.overline}>{rated ? 'DIN VURDERING' : 'VURDER TUREN'}</Text>
-          <View style={s.stars}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
-                <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
-              </Pressable>
-            ))}
-          </View>
-          {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
+          {isPaid ? (
+            <>
+              <View style={s.stars}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
+                    <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
+                  </Pressable>
+                ))}
+              </View>
+              {rated ? <Text style={s.thanks}>Takk for tilbakemeldingen!</Text> : null}
+            </>
+          ) : (
+            <Text style={s.thanks}>Vurdering åpnes når betalingen er bekreftet.</Text>
+          )}
         </View>
 
-        <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
+        {isPaid ? (
+          <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 24 }} />
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -223,14 +259,14 @@ const useStyles = makeStyles((c) => ({
   pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
   title: { color: c.text, fontFamily: font.display, fontSize: 24 },
   price: { color: c.accent, fontFamily: font.mono, fontSize: 38, marginTop: 8 },
-  paymentStatus: { fontFamily: font.bold, fontSize: 11, letterSpacing: 1.2, marginTop: 5 },
+  paymentStatus: { color: c.text, fontFamily: font.bold, fontSize: 11, letterSpacing: 1.2, marginTop: 5 },
   body: { paddingHorizontal: 20 },
   card: { backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 16 },
   rowLabel: { color: c.textMuted, fontSize: 13 },
   rowValue: { color: c.text, fontFamily: font.medium, fontSize: 14, flex: 1, textAlign: 'right' },
   sep: { height: 1, backgroundColor: c.line, marginVertical: 12 },
-  paymentCard: { marginTop: 16, borderColor: 'rgba(0,229,245,0.35)' },
+  paymentCard: { marginTop: 16, borderColor: c.line },
   paymentHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   paymentIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   paymentTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
@@ -238,7 +274,7 @@ const useStyles = makeStyles((c) => ({
   refreshPayment: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 6 },
   refreshText: { color: c.textSecondary, fontSize: 13 },
   paymentError: { color: c.danger, fontSize: 12, lineHeight: 17, marginTop: 4, textAlign: 'center' },
-  paidCard: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: 'rgba(57,229,140,0.32)' },
+  paidCard: { marginTop: 16, backgroundColor: c.onlineSoft, flexDirection: 'row', alignItems: 'center', gap: 12, borderColor: c.line },
   paidIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
   paidTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
   paidSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
@@ -247,5 +283,5 @@ const useStyles = makeStyles((c) => ({
   driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
   stars: { flexDirection: 'row', gap: 4, marginTop: 10 },
   starHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  thanks: { color: c.textMuted, fontSize: 13, marginTop: 8 },
+  thanks: { color: c.text, fontSize: 13, marginTop: 8 },
 }));

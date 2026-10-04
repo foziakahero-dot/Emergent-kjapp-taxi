@@ -11,6 +11,8 @@ export type FleetDraft = {
   vehicle_count?: number;
   bank_account?: string;
   notes?: string;
+  accepted_terms?: boolean;
+  legal_version?: string;
 };
 
 export type UploadedDocument = {
@@ -80,3 +82,35 @@ export async function getSharedTrip(token: string) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+
+export async function checkPasswordResetToken(token: string) {
+  const res = await fetch(`${API_BASE}/auth/reset-password/${encodeURIComponent(token)}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function createPublicSupportTicket(data: {
+  topic: 'tur' | 'betaling' | 'konto' | 'sjafor' | 'loyvehaver' | 'annet';
+  name?: string;
+  contact: string;
+  message: string;
+}) {
+  const res = await fetch(`${API_BASE}/support/public`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
+import { BrandBadge } from '@/src/components/BrandBadge';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
@@ -21,7 +22,7 @@ export default function DriverLogin() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,14 +32,23 @@ export default function DriverLogin() {
     setError('');
     setLoading(true);
     try {
-      const res = await login(email.trim(), password);
+      const res = await login(identifier.trim(), password);
       if (res?.twofa_required) {
         setError('Kontoen krever tofaktor — logg inn via web-portalen.');
         return;
       }
       if (res?.role !== 'driver') {
         await logout();
-        setError('Denne kontoen er ikke godkjent som KJAPP-sjåfør.');
+        setError('Denne kontoen er ikke en KJAPP-sjåførkonto.');
+        return;
+      }
+      if (res?.approved !== true) {
+        await logout();
+        setError('Sjåførkontoen din venter fortsatt på godkjenning. Du får tilgang når dokumentene og kontoen er godkjent.');
+        return;
+      }
+      if (res?.legal_accepted !== true) {
+        router.replace('/driver-legal-consent');
         return;
       }
       router.replace('/(driver)/home');
@@ -60,27 +70,25 @@ export default function DriverLogin() {
         </Pressable>
 
         <View style={s.identity}>
-          <View style={s.statusDot} />
+          <BrandBadge size={64} />
+          <Text style={s.title}>Klar for skift</Text>
           <Text style={s.eyebrow}>KJAPP DRIVER</Text>
         </View>
-        <Text style={s.brand}>KJAPP</Text>
-        <View style={s.brandLine} />
-        <Text style={s.title}>Klar for skift</Text>
-        <Text style={s.sub}>Logg inn med den godkjente sjåførkontoen din. Online-status velger du først etter innlogging.</Text>
+        <Text style={s.sub}>Logg inn med e-post eller telefonnummeret på den inviterte og godkjente sjåførkontoen din. Online-status velger du først etter innlogging.</Text>
 
         <View style={s.form}>
           <View style={s.field}>
-            <Icon name="mail" size={18} color={colors.textMuted} />
+            <Icon name="user" size={18} color={colors.textMuted} />
             <TextInput
-              testID="driver-login-email"
-              placeholder="E-post"
+              testID="driver-login-identifier"
+              placeholder="E-post eller telefonnummer"
               placeholderTextColor={colors.textMuted}
               style={s.input}
               autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              autoComplete="email"
+              keyboardType="default"
+              value={identifier}
+              onChangeText={setIdentifier}
+              autoComplete="off"
             />
           </View>
           <View style={s.field}>
@@ -101,6 +109,10 @@ export default function DriverLogin() {
           </View>
         </View>
 
+        <Pressable onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password">
+          <Text style={s.forgotText}>Glemt passord?</Text>
+        </Pressable>
+
         {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
 
         <Button label="Logg inn som sjåfør" onPress={submit} loading={loading} testID="driver-login-submit" style={{ marginTop: 12 }} />
@@ -117,17 +129,16 @@ export default function DriverLogin() {
 const useStyles = makeStyles((c) => ({
   wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: c.driverBg },
   back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, marginBottom: 28 },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.online },
-  eyebrow: { color: c.online, fontFamily: font.bold, fontSize: 10, letterSpacing: 1.8 },
-  brand: { color: c.text, fontFamily: font.bold, fontSize: 34, letterSpacing: 0.5, marginTop: 8 },
-  brandLine: { width: 42, height: 3, borderRadius: 2, backgroundColor: c.online, marginTop: 8 },
-  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 30 },
-  sub: { color: c.textMuted, fontFamily: font.body, fontSize: 14, marginTop: 7, marginBottom: 24, lineHeight: 20 },
+  identity: { alignItems: 'center', marginBottom: 14 },
+  eyebrow: { color: c.online, fontFamily: font.bold, fontSize: 10, letterSpacing: 2, marginTop: 8 },
+  title: { fontFamily: font.display, fontSize: 28, color: c.text, marginTop: 24 },
+  sub: { color: c.textSecondary, fontFamily: font.body, fontSize: 14, marginBottom: 30, lineHeight: 21, textAlign: 'center' },
   form: { gap: 12 },
-  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.driverCard, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingLeft: 16, paddingRight: 6, height: 56 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.driverCard, borderWidth: 1, borderColor: c.lineStrong, borderRadius: 18, paddingLeft: 16, paddingRight: 6, height: 56 },
   input: { flex: 1, color: c.text, fontFamily: font.body, fontSize: 16, height: '100%' },
   fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  forgot: { minHeight: 32, alignSelf: 'flex-end', justifyContent: 'center', marginTop: 6 },
+  forgotText: { color: c.online, fontFamily: font.semibold, fontSize: 13 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 10 },
   note: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.onlineSoft, borderWidth: 1, borderColor: c.line, borderRadius: 14, paddingHorizontal: 14, marginTop: 18 },
   noteText: { color: c.textMuted, fontSize: 11, lineHeight: 16, flex: 1 },

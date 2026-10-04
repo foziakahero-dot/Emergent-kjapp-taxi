@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, Share, Text, View } from 'react-native';
+import { Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -7,7 +7,7 @@ import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
-import { safetyApi, tripsApi } from '@/src/lib/api';
+import { safetyApi, tripDriverPhotoSource, tripsApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 const META: Record<string, { title: string; sub: string }> = {
@@ -32,6 +32,7 @@ export default function BookingFlow() {
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
   const nav = useRef(false);
 
   useEffect(() => {
@@ -42,9 +43,10 @@ export default function BookingFlow() {
         if (!mounted) return;
         setTrip(t);
         setNetworkIssue(false);
-        if (t.status === 'arrived' && !nav.current) {
+        if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
           nav.current = true;
-          try { await tripsApi.complete(tripId!); } catch {}
+          // Server state is canonical. "arrived" means the physical ride ended but
+          // payment may still be unresolved; the receipt screen handles real payment.
           router.replace(`/receipt/${tripId}`);
         }
       } catch {
@@ -53,8 +55,30 @@ export default function BookingFlow() {
     };
     fetchTrip();
     const i = setInterval(fetchTrip, 2500);
-    return () => { mounted = false; clearInterval(i); };
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void fetchTrip();
+    });
+    return () => {
+      mounted = false;
+      clearInterval(i);
+      appStateSub.remove();
+    };
   }, [tripId, retryKey, router]);
+
+  useEffect(() => {
+    let mounted = true;
+    const activeDriver = trip?.driver_id && ['driver_on_way', 'at_pickup', 'in_trip', 'arrived'].includes(trip?.status);
+    if (!activeDriver) {
+      setDriverPhotoSource(null);
+      return () => { mounted = false; };
+    }
+    void tripDriverPhotoSource(tripId!).then((source) => {
+      if (mounted) setDriverPhotoSource(source);
+    }).catch(() => {
+      if (mounted) setDriverPhotoSource(null);
+    });
+    return () => { mounted = false; };
+  }, [trip?.driver_id, trip?.status, tripId]);
 
   const cancel = async () => {
     try {
@@ -125,6 +149,18 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
+  const canCancel = ['searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status);
+  const etaValue = Number(trip.eta_min);
+  const etaMinutes = Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
+  const driverDistance = Number(trip.driver_distance_to_pickup_km);
+  const driverDistanceLabel = Number.isFinite(driverDistance) && driverDistance >= 0
+    ? `${driverDistance.toFixed(driverDistance < 10 ? 1 : 0)} km unna`
+    : null;
+  let driverGpsFresh = true;
+  if (trip.driver_location_at && ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status)) {
+    const stamp = Date.parse(trip.driver_location_at);
+    if (Number.isFinite(stamp)) driverGpsFresh = Date.now() - stamp <= 30000;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -138,22 +174,33 @@ export default function BookingFlow() {
       />
 
       <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel" accessibilityRole="button" accessibilityLabel="Avbryt tur">
-          <Icon name="x" size={20} color={colors.text} />
-        </Pressable>
+        {canCancel ? (
+          <Pressable onPress={cancel} style={s.iconBtn} testID="trip-cancel" accessibilityRole="button" accessibilityLabel="Avbryt tur">
+            <Icon name="x" size={20} color={colors.text} />
+          </Pressable>
+        ) : <View style={{ width: 44 }} />}
         <View style={s.statusPill}>
           <Text style={s.statusText} testID="customer-trip-status">{meta.title}</Text>
         </View>
         <View style={{ width: 44 }} />
       </View>
 
-      <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
+      <ScrollView
+        style={s.sheet}
+        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 16 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.handle} />
 
         {networkIssue ? (
           <View style={s.networkBanner} testID="booking-network-warning">
             <View style={s.networkDot} />
             <Text style={s.networkText}>Live-data er midlertidig utilgjengelig · prøver igjen automatisk</Text>
+          </View>
+        ) : !driverGpsFresh ? (
+          <View style={s.networkBanner} testID="booking-gps-warning">
+            <View style={s.networkDot} />
+            <Text style={s.networkText}>Sjåførposisjonen oppdateres · viser siste kjente posisjon</Text>
           </View>
         ) : null}
 
@@ -191,11 +238,29 @@ export default function BookingFlow() {
               <View style={s.etaBadge}>
                 {trip.status === 'in_trip' ? (
                   <Icon name="navigation" size={22} color={colors.accent} />
+                ) : trip.status === 'at_pickup' ? (
+                  <>
+                    <Text style={s.etaNum}>✓</Text>
+                    <Text style={s.etaMin}>FREMME</Text>
+                  </>
                 ) : (
                   <>
-                    <Text style={s.etaNum}>{trip.eta_min || 2}</Text>
-                    <Text style={s.etaMin}>MIN</Text>
+                    <Text style={s.etaNum}>{etaMinutes ?? '—'}</Text>
+                    <Text style={s.etaMin}>{etaMinutes ? 'MIN' : 'PÅ VEI'}</Text>
                   </>
+                )}
+              </View>
+              <View style={s.driverAvatar}>
+                {driverPhotoSource ? (
+                  <Image
+                    source={driverPhotoSource}
+                    style={s.driverAvatarImage}
+                    resizeMode="cover"
+                    onError={() => setDriverPhotoSource(null)}
+                    testID="customer-driver-photo"
+                  />
+                ) : (
+                  <Text style={s.driverAvatarText}>{trip.driver?.photo || 'SJ'}</Text>
                 )}
               </View>
               <View style={{ flex: 1 }}>
@@ -208,7 +273,12 @@ export default function BookingFlow() {
                   <View style={s.ratingRow}>
                     <Icon name="star" size={12} color={colors.accent} fill={colors.accent} />
                     <Text style={s.ratingText}>{trip.driver.rating}</Text>
+                    {trip.status === 'driver_on_way' && driverDistanceLabel ? (
+                      <Text style={s.driverDistance}>· {driverDistanceLabel}</Text>
+                    ) : null}
                   </View>
+                ) : trip.status === 'driver_on_way' && driverDistanceLabel ? (
+                  <Text style={s.driverDistance}>{driverDistanceLabel}</Text>
                 ) : null}
               </View>
             </View>
@@ -241,7 +311,7 @@ export default function BookingFlow() {
             ) : null}
           </View>
         )}
-      </View>
+      </ScrollView>
 
       <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
         <Pressable style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
@@ -308,13 +378,14 @@ const useStyles = makeStyles((c) => ({
   offlineIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   loadErrorTitle: { color: c.text, fontFamily: font.display, fontSize: 20, marginTop: 16, textAlign: 'center' },
   loadErrorSub: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 8, textAlign: 'center' },
-  retryBtn: { minHeight: 50, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
+  retryBtn: { minHeight: 50, borderRadius: 25, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
   retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
   topBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line },
-  statusPill: { backgroundColor: 'rgba(5,10,15,0.88)', borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10 },
+  iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  statusPill: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10 },
   statusText: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: c.line, paddingHorizontal: 20, paddingTop: 10 },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '76%', backgroundColor: c.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: c.line, shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8 },
+  sheetContent: { paddingHorizontal: 20, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
   networkBanner: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.warning + '12', borderWidth: 1, borderColor: c.warning, borderRadius: 10, paddingHorizontal: 11, marginBottom: 12 },
   networkDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.warning },
@@ -329,9 +400,12 @@ const useStyles = makeStyles((c) => ({
   finalIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   finalIconDriver: { backgroundColor: c.accentSoft, borderColor: c.accent },
   recoveryCopy: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: 12, paddingHorizontal: 12 },
-  homeBtn: { marginTop: 20, minHeight: 52, backgroundColor: c.accent, borderRadius: 14, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
+  homeBtn: { marginTop: 20, minHeight: 52, backgroundColor: c.accent, borderRadius: 26, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
   homeBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  driverAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  driverAvatarImage: { width: 48, height: 48, borderRadius: 24 },
+  driverAvatarText: { color: c.accent, fontFamily: font.bold, fontSize: 13 },
   etaBadge: { width: 74, height: 74, borderRadius: 37, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
   etaNum: { color: c.text, fontFamily: font.display, fontSize: 26 },
   etaMin: { color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 2, marginTop: 2 },
@@ -340,6 +414,7 @@ const useStyles = makeStyles((c) => ({
   driverCar: { color: c.textMuted, fontSize: 13, marginTop: 2 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   ratingText: { color: c.textMuted, fontSize: 12 },
+  driverDistance: { color: c.textMuted, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
   action: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   actionText: { color: c.text, fontFamily: font.medium, fontSize: 12 },

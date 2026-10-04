@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -25,7 +25,7 @@ export default function Profile() {
     { icon: 'map-pin', label: 'Lagrede steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
     { icon: 'card', label: 'Betalingsmåter', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
     { icon: 'settings', label: 'Innstillinger', onPress: () => router.push('/settings'), testID: 'profile-settings' },
-    { icon: 'help', label: 'Hjelp og support', onPress: () => router.push('/settings'), testID: 'profile-help' },
+    { icon: 'help', label: 'Hjelp og support', onPress: () => Linking.openURL('https://kjappapp.no/help'), testID: 'profile-help' },
   ];
 
   const deleteAccount = async () => {
@@ -136,13 +136,13 @@ const useStyles = makeStyles((c) => ({
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: c.line },
   menuIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   menuLabel: { color: c.text, fontSize: 15, flex: 1 },
-  deleteAccount: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 20, paddingHorizontal: 16, paddingVertical: 16, borderRadius: 20, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)' },
-  deleteIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(239,68,68,0.12)', alignItems: 'center', justifyContent: 'center' },
+  deleteAccount: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 20, paddingHorizontal: 16, paddingVertical: 16, borderRadius: 20, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.line },
+  deleteIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center' },
   deleteLabel: { color: c.danger, fontSize: 15, fontWeight: '700' },
   deleteSub: { color: c.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 24, paddingVertical: 16 },
   logoutText: { color: c.danger, fontSize: 15, fontWeight: '600' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(4,8,10,0.78)', alignItems: 'center', justifyContent: 'center', padding: 28 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', alignItems: 'center', justifyContent: 'center', padding: 28 },
   modalCard: { width: '100%', maxWidth: 400, backgroundColor: c.elevated, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
   modalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.dangerSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   modalTitle: { color: c.text, fontFamily: font.display, fontSize: 22, textAlign: 'center' },

@@ -36,6 +36,8 @@ export function Dashboard() {
   const ov = useAsync(() => api.overview(), []);
   const fin = useAsync(() => api.finance(30), []);
   const live = useAsync(() => api.live(), []);
+  const health = useAsync(() => api.betaHealth(7), []);
+  const clientErrors = useAsync(() => api.clientErrors(8), []);
   const twofa = useAsync(() => api.twofaStatus(), []);
   if (ov.loading) return <Loader />;
   if (ov.err) return <ErrorBanner msg={ov.err} />;
@@ -77,6 +79,46 @@ export function Dashboard() {
           foot={<span className="dim">{d.trips?.completed_today ?? 0} fullført</span>} />
         <Kpi label="KJAPP-inntekt i dag" value={fmtMoney(d.finance?.kjapp_revenue_today)} accent />
       </div>
+
+      <div className="section-title">Beta Health · siste 7 dager</div>
+      <div className="grid cards">
+        <Kpi label="Completion" value={health.loading ? '…' : health.err ? '—' : health.data?.trips?.completion_rate_pct == null ? '—' : `${health.data.trips.completion_rate_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.trips.completed}/${health.data.trips.requested} fullført${health.data.trips.arrived_unclosed ? ` · ${health.data.trips.arrived_unclosed} ankommet ikke lukket` : ''}` : 'Ekte turdata'}</span>} />
+        <Kpi label="Dispatch success" value={health.loading ? '…' : health.err ? '—' : health.data?.dispatch?.success_rate_pct == null ? '—' : `${health.data.dispatch.success_rate_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.dispatch.assigned}/${health.data.trips.requested} tildelt` : 'Sjåførtilordning'}</span>} />
+        <Kpi label="Median accept" value={health.loading ? '…' : health.err ? '—' : health.data?.dispatch?.median_accept_seconds == null ? '—' : `${Math.round(health.data.dispatch.median_accept_seconds)}s`}
+          foot={<span className="dim">{health.data?.dispatch?.p95_accept_seconds != null ? `p95 ${Math.round(health.data.dispatch.p95_accept_seconds)}s` : 'Venter på nok turer'}</span>} />
+        <Kpi label="GPS freshness" value={health.loading ? '…' : health.err ? '—' : health.data?.gps?.freshness_pct == null ? '—' : `${health.data.gps.freshness_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.gps.fresh_drivers}/${health.data.gps.online_drivers} online · ${health.data.client_errors.fatal} fatale klientfeil` : 'Aktive sjåfører'}</span>} />
+        <Kpi label="Self-serve completion" value={health.loading ? '…' : health.err ? '—' : health.data?.operations?.self_serve_completion_pct == null ? '—' : `${health.data.operations.self_serve_completion_pct}%`}
+          foot={<span className="dim">{health.data ? `${health.data.operations.self_serve_completed}/${health.data.trips.completed} fullført uten operatørinngrep` : 'Fullførte turer'}</span>} />
+        <Kpi label="Kritiske saker / 100 turer" value={health.loading ? '…' : health.err ? '—' : health.data?.operations?.critical_cases_per_100_trips == null ? '—' : health.data.operations.critical_cases_per_100_trips}
+          foot={<span className="dim">{health.data ? `${health.data.operations.critical_support_cases} kritiske support · ${health.data.operations.fatal_client_errors_per_100_trips ?? '—'} fatale appfeil /100` : 'Beta incident-rate'}</span>} />
+      </div>
+      {health.err ? <ErrorBanner msg={health.err} /> : null}
+
+      <div className="section-title">Siste appfeil</div>
+      <div className="tablewrap">
+        <table>
+          <thead><tr><th>App</th><th>Feil</th><th>Fatal</th><th>Versjon</th><th>Tid</th></tr></thead>
+          <tbody>
+            {clientErrors.loading ? <tr><td colSpan={5}><Loader /></td></tr> :
+              (clientErrors.data?.items || []).length ? (clientErrors.data.items || []).map((e: any) => (
+                <tr key={e.id}>
+                  <td><Pill status="gray" label={e.app || 'app'} /></td>
+                  <td>
+                    <div className="strong">{String(e.message || 'Ukjent feil').slice(0, 180)}</div>
+                    {e.platform ? <div className="cell-sub">{e.platform}{e.route ? ' · ' + e.route : ''}</div> : null}
+                  </td>
+                  <td>{e.is_fatal ? <Pill status="failed" label="Fatal" /> : <Pill status="gray" label="Ikke fatal" />}</td>
+                  <td className="mono dim">{e.version || '—'}</td>
+                  <td className="dim nowrap">{fmtDate(e.created_at)}</td>
+                </tr>
+              )) : <tr><td colSpan={5}><Empty title="Ingen klientfeil registrert i beta" /></td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {clientErrors.err ? <ErrorBanner msg={clientErrors.err} /> : null}
 
       <div className="section-title">Siste 30 dager — brutto omsetning</div>
       <Card>
@@ -190,8 +232,8 @@ export function Trips() {
           <option value="completed">Fullførte</option><option value="cancelled">Avbrutte</option>
         </select>
         <select className="select" value={pay} onChange={(e) => setPay(e.target.value)}>
-          <option value="">Alle betalinger</option><option value="captured">Betalt</option>
-          <option value="pending">Venter</option><option value="failed">Feilet</option>
+          <option value="">Alle betalinger</option><option value="paid">Betalt</option>
+          <option value="pending">Venter</option><option value="requires_action">Krever handling</option><option value="failed">Feilet</option>
         </select>
         <input className="input" type="date" value={df} onChange={(e) => setDf(e.target.value)} />
         <input className="input" type="date" value={dt} onChange={(e) => setDt(e.target.value)} />
@@ -199,19 +241,25 @@ export function Trips() {
       <ErrorBanner msg={err} />
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Tur</th><th>Rute</th><th>Kunde</th><th>Sjåfør</th><th>Status</th><th className="right">Pris</th><th>Tid</th></tr></thead>
+          <thead><tr><th>Tur</th><th>Rute</th><th>Kunde</th><th>Sjåfør</th><th>Status</th><th>Betaling</th><th className="right">Pris</th><th>Tid</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
+            {loading ? <tr><td colSpan={8}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
               <tr key={t.trip_id} className="click" onClick={() => setSel(t)}>
                 <td className="mono dim">{String(t.trip_id).slice(0, 6)}</td>
                 <td><div>{t.pickup_address}</div><div className="cell-sub">→ {t.dropoff_address}</div></td>
                 <td>{t.passenger_name || '—'}</td>
                 <td>{t.driver_name || <span className="dim">—</span>}</td>
                 <td><Pill status={t.status} /></td>
+                <td><Pill status={t.payment_status || 'pending'} label={
+                  t.payment_status === 'paid' ? 'Betalt'
+                  : t.payment_status === 'requires_action' ? 'Krever handling'
+                  : t.payment_status === 'failed' ? 'Feilet'
+                  : 'Venter'
+                } /></td>
                 <td className="right mono">{fmtMoney(t.price)}</td>
                 <td className="dim nowrap">{fmtDate(t.created_at)}</td>
               </tr>
-            )) : <tr><td colSpan={7}><Empty title="Ingen turer funnet" /></td></tr>}
+            )) : <tr><td colSpan={8}><Empty title="Ingen turer funnet" /></td></tr>}
           </tbody>
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
@@ -284,11 +332,20 @@ function TripDrawer({ trip, onClose, onChanged }: any) {
       <div style={{ marginBottom: 14 }}><Pill status={trip.status} /></div>
       <Card style={{ marginBottom: 16 }}><RouteView from={trip.pickup_address} to={trip.dropoff_address} /></Card>
       <KV k="Pris" v={<span className="mono">{fmtMoney(trip.price)}</span>} />
-      <KV k="Sjåførandel" v={<span className="mono">{fmtMoney(trip.driver_earnings)}</span>} />
+      <KV k="Sjåførandel" v={
+        trip.driver_earnings != null
+          ? <span className="mono">{fmtMoney(trip.driver_earnings)}</span>
+          : <span className="dim">{isPaid ? 'Ikke beregnet' : 'Venter på betaling'}</span>
+      } />
       <KV k="Distanse / tid" v={`${trip.distance_km ?? '—'} km · ${trip.duration_min ?? '—'} min`} />
       <KV k="Kunde" v={trip.passenger_name} />
       <KV k="Sjåfør" v={trip.driver_name ? `${trip.driver_name} · ${trip.driver_car || ''} ${trip.driver_plate || ''}` : '—'} />
       <KV k="Betaling" v={<Pill status={trip.payment_status || 'pending'} />} />
+      <KV k="Kvittering" v={trip.receipt_id ? (
+        <Btn variant="sm" onClick={() => { window.location.hash = `/receipts?q=${encodeURIComponent(trip.receipt_id)}`; }}>
+          {trip.receipt_id}
+        </Btn>
+      ) : (isPaid ? 'Kvittering mangler · undersøk' : 'Venter på betaling')} />
       <KV k="Kjøretøyklasse" v={trip.vehicle_type} />
       <KV k="Prisversjon" v={trip.pricing_version ?? '—'} />
       <KV k="Serviceavgift" v={trip.commission_rate != null ? `${Math.round(Number(trip.commission_rate) * 1000) / 10}%` : '—'} />
@@ -567,7 +624,7 @@ export function Documents() {
             {loading ? <tr><td colSpan={6}><Loader /></td></tr> : rows.length ? rows.map((d: any) => (
               <tr key={d.id}>
                 <td>{d.filename || '—'}</td>
-                <td className="dim">{d.scope}</td>
+                <td className="dim">{d.owner_type === 'vehicle' ? `Kjøretøy · ${({ registration: 'Vognkort', insurance: 'Forsikring', inspection: 'EU-kontroll' } as any)[d.doc_type] || d.doc_type || 'Dokument'}` : d.scope}</td>
                 <td>{d.owner_name || d.owner_email || '—'}</td>
                 <td className="dim nowrap">{d.expiry ? fmtDay(d.expiry) : '—'}</td>
                 <td><Pill status={d.compliance} /></td>
@@ -594,9 +651,27 @@ function ReviewModal({ doc, onClose, onDone }: any) {
     try { await api.reviewDoc(doc.id, { status, expiry: expiry || null, reason: reason || null }); onDone(); }
     catch (e: any) { setErr(e?.response?.data?.detail || 'Feil'); setBusy(false); }
   };
+  const openDocument = async () => {
+    if (!doc.storage_path) return;
+    const popup = window.open('', '_blank');
+    try {
+      const blob = await api.secureFile(doc.storage_path);
+      const url = URL.createObjectURL(blob);
+      if (popup) popup.location.href = url;
+      else {
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      if (popup) popup.close();
+      setErr(apiError(e));
+    }
+  };
   return (
-    <Modal title="Vurder dokument" sub={doc.filename} onClose={onClose}>
+    <Modal title="Vurder dokument" sub={doc.owner_type === 'vehicle' ? `${doc.owner_name || 'Kjøretøy'} · ${doc.filename || ''}` : doc.filename} onClose={onClose}>
       {err && <div className="error-banner">{err}</div>}
+      {doc.storage_path ? <div style={{ marginBottom: 12 }}><Btn variant="sm" onClick={() => void openDocument()}>Åpne dokument</Btn></div> : null}
       <div className="field"><label className="label">Status</label>
         <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="valid">Godkjenn (gyldig)</option>
@@ -779,6 +854,7 @@ function RefundModal({ onClose, onDone }: any) {
 export function Support() {
   const [status, setStatus] = useState('open');
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<any>(null);
   useEffect(() => { setPage(1); }, [status]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/support/tickets', { status, page, page_size: PAGE });
   const setTicket = async (id: string, s: string) => { try { await api.updateTicket(id, { status: s }); reload(); } catch {} };
@@ -798,7 +874,16 @@ export function Support() {
           <tbody>
             {loading ? <tr><td colSpan={6}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
               <tr key={t.id}>
-                <td className="strong">{t.subject}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(t)}
+                    style={{ appearance: 'none', border: 0, background: 'transparent', padding: 0, color: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <span className="strong">{t.subject}</span>
+                    {(t.contact || t.contact_email) ? <div className="cell-sub">{t.contact || t.contact_email}</div> : null}
+                  </button>
+                </td>
                 <td className="dim">{t.category}</td>
                 <td><Pill status="gray" label={t.priority} /></td>
                 <td><Pill status={t.status} /></td>
@@ -814,6 +899,22 @@ export function Support() {
         </table>
         <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
       </div>
+      {selected ? (
+        <Modal title={selected.subject || 'Supportsak'} sub={`Referanse ${String(selected.id || '').slice(0, 8)}`} onClose={() => setSelected(null)}>
+          <div className="grid" style={{ gap: 12 }}>
+            <KV label="Kategori" value={selected.category || '—'} />
+            <KV label="Prioritet" value={selected.priority || '—'} />
+            <KV label="Status" value={selected.status || '—'} />
+            <KV label="Navn" value={selected.name || '—'} />
+            <KV label="Kontakt" value={selected.contact || selected.contact_email || '—'} />
+            <KV label="Kilde" value={selected.source || 'admin'} />
+            <div>
+              <div className="dim" style={{ marginBottom: 6 }}>Melding</div>
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{selected.message || selected.body || 'Ingen melding registrert.'}</div>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -930,6 +1031,7 @@ export function Settings() {
   const readiness = useAsync(() => api.betaReadiness(), []);
   const [comm, setComm] = useState('');
   const [pricing, setPricing] = useState<any>({});
+  const [features, setFeatures] = useState<any>({});
   const [compliance, setCompliance] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -941,6 +1043,7 @@ export function Settings() {
   useEffect(() => {
     if (data?.default_commission != null) setComm(String(Math.round(data.default_commission * 100)));
     if (data?.pricing) setPricing(data.pricing);
+    if (data?.features) setFeatures(data.features);
     if (data?.compliance) setCompliance(data.compliance);
   }, [data]);
 
@@ -981,6 +1084,19 @@ export function Settings() {
       await api.patchSettings({ default_commission: Number(comm) / 100, pricing });
       setMsg('Lagret – nye bestillinger bruker ny prisversjon. Eksisterende turer beholder pris og provisjon fra bestillingstidspunktet.');
       await Promise.all([reload(), history.reload(), readiness.reload()]);
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
+    finally { setBusy(false); }
+  };
+
+  const saveOperations = async () => {
+    if (!isSuper) return;
+    const nextEnabled = features?.booking_enabled !== false;
+    if (!nextEnabled && !window.confirm('Sette nye KJAPP-bestillinger på pause? Pågående turer påvirkes ikke.')) return;
+    setBusy(true); setMsg('');
+    try {
+      await api.patchSettings({ features });
+      setMsg(nextEnabled ? 'Nye bestillinger er åpne.' : 'Nye bestillinger er satt på pause. Pågående turer fortsetter.');
+      await Promise.all([reload(), readiness.reload()]);
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Feil'); }
     finally { setBusy(false); }
   };
@@ -1064,11 +1180,33 @@ export function Settings() {
         <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
           <KV k="Produksjonsmiljø" v={<Pill status={checks.production_env ? 'completed' : 'pending'} label={checks.production_env ? 'Ja' : 'Nei'} />} />
           <KV k="Stripe + webhook" v={<Pill status={checks.stripe_configured ? 'completed' : 'pending'} label={checks.stripe_configured ? 'Klar' : 'Mangler'} />} />
-          <KV k="Native push" v={<Pill status={checks.native_push_configured ? 'completed' : 'pending'} label={checks.native_push_configured ? 'Klar' : 'Mangler'} />} />
+          <KV k="Native push" v={<Pill status={checks.native_push_backend_ready ? 'completed' : 'pending'} label={checks.native_push_backend_ready ? 'Klar' : 'Mangler'} />} />
           <KV k="Admin 2FA" v={<Pill status={checks.admin_2fa_enabled ? 'completed' : 'pending'} label={checks.admin_2fa_enabled ? 'Aktiv' : 'Mangler'} />} />
         </div>
         {!!readiness.data?.blockers?.length && <div className="error-banner" style={{ marginTop: 12 }}>{readiness.data.blockers.join(' · ')}</div>}
         <div className="dim" style={{ marginTop: 10, fontSize: 12 }}>Dette viser teknisk driftsstatus. Løyver, forsikring, avtaler og øvrig norsk regelverk må godkjennes separat.</div>
+      </Card>
+
+      <div className="section-title">Operatørkontroll</div>
+      <Card>
+        <div className="grid" style={{ gridTemplateColumns: '1fr auto', gap: 18, alignItems: 'center' }}>
+          <div>
+            <div className="strong">Nye bestillinger</div>
+            <div className="dim" style={{ marginTop: 5, lineHeight: 1.5 }}>
+              Nødstopp for nye turer ved alvorlig GPS-, betalings- eller dispatch-hendelse. Pågående turer fortsetter og kan håndteres i Live drift.
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isSuper ? 'pointer' : 'default' }}>
+            <input
+              type="checkbox"
+              checked={features?.booking_enabled !== false}
+              disabled={!isSuper || busy}
+              onChange={(e) => setFeatures((x: any) => ({ ...x, booking_enabled: e.target.checked }))}
+            />
+            <span className="strong">{features?.booking_enabled !== false ? 'ÅPEN' : 'PAUSET'}</span>
+          </label>
+        </div>
+        {isSuper ? <div style={{ marginTop: 14 }}><Btn onClick={saveOperations} disabled={busy}>{busy ? 'Lagrer…' : 'Lagre driftstatus'}</Btn></div> : null}
       </Card>
 
       <div className="section-title">Manuelle beta-gates</div>

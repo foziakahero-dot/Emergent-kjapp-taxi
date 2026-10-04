@@ -143,7 +143,7 @@ export default function PaymentMethods() {
               <View style={s.emptyCard}>
                 <Icon name="card" size={24} color={colors.accent} />
                 <Text style={s.emptyTitle}>Ingen verifisert betalingsmåte</Text>
-                <Text style={s.empty}>Legg til et kort via Stripe før du bestiller din første tur.</Text>
+                <Text style={s.empty}>Legg til et kort via Stripe før du bestiller din første tur. Når automatisk betaling aktiveres for betaen, kan avtalt turbeløp belastes etter fullført tur.</Text>
               </View>
             ) : null}
 
@@ -154,7 +154,7 @@ export default function PaymentMethods() {
 
             <View style={s.securityNote}>
               <Icon name="shield" size={15} color={colors.online} />
-              <Text style={s.note}>Kortopplysninger håndteres av Stripe. KJAPP lagrer ikke kortnummer eller CVC i appen.</Text>
+              <Text style={s.note}>Kortopplysninger håndteres av Stripe. KJAPP lagrer ikke kortnummer eller CVC. Hvis automatisk betaling er aktivert, forsøker KJAPP å belaste det avtalte turbeløpet når turen er ferdig; hvis banken krever ny godkjenning, får du beskjed og kan betale fra kvitteringen.</Text>
             </View>
             <Text style={s.vippsNote}>Vipps aktiveres først når produksjonsintegrasjonen er konfigurert og verifisert.</Text>
           </>
@@ -183,7 +183,7 @@ const useStyles = makeStyles((c) => ({
   verifiedText: { color: c.online, fontFamily: font.bold, fontSize: 10 },
   unverified: { backgroundColor: c.dangerSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   unverifiedText: { color: c.danger, fontFamily: font.bold, fontSize: 10 },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(57,229,140,0.28)' },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: c.line },
   noticeText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, flex: 1 },
   error: { color: c.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   emptyCard: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 20, marginBottom: 12 },

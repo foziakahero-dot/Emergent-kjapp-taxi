@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
-import { driverApi, KJAPP_DEFAULT_COMMISSION_PCT } from '@/src/lib/api';
+import { driverApi } from '@/src/lib/api';
 import { kr } from '@/src/lib/format';
 
 type Filter = 'all' | 'week' | 'today';
@@ -37,10 +37,7 @@ export default function DriverTrips() {
   const [filter, setFilter] = useState<Filter>('all');
   const [detail, setDetail] = useState<any>(null);
 
-  const { data: hist, isLoading } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
-  const { data: payouts } = useQuery({ queryKey: ['driver-payouts'], queryFn: driverApi.payouts });
-  const commissionPct = payouts?.commission_pct ?? KJAPP_DEFAULT_COMMISSION_PCT;
-  const commission = commissionPct / 100;
+  const { data: hist, isLoading, isError } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
   const all = hist?.trips || hist?.history || (Array.isArray(hist) ? hist : []);
 
   const trips = useMemo(() => {
@@ -50,8 +47,6 @@ export default function DriverTrips() {
       : new Date(Date.now() - 7 * 864e5).toISOString();
     return all.filter((t: any) => (t.created_at || '') >= since);
   }, [all, filter]);
-
-  const net = (p: number) => Math.round((p || 0) * (1 - commission));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
@@ -73,6 +68,8 @@ export default function DriverTrips() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}>
         {isLoading ? (
           <View style={{ paddingTop: 60 }}><Loader /></View>
+        ) : isError ? (
+          <Text style={s.empty}>Kunne ikke hente turhistorikken. Prøv igjen når forbindelsen er tilbake.</Text>
         ) : trips.length ? (
           trips.map((t: any, i: number) => {
             const st = STATUS[t.status] || { label: t.status, color: colors.textMuted };
@@ -84,7 +81,7 @@ export default function DriverTrips() {
                   <Text style={s.rowSub}>{fmtDate(t.created_at)} · {t.distance_km} km</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={s.rowPrice}>{kr(net(t.price))}</Text>
+                  <Text style={s.rowPrice}>{t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'}</Text>
                   <Text style={[s.rowStatus, { color: st.color }]}>{st.label}</Text>
                 </View>
               </Pressable>
@@ -117,9 +114,18 @@ export default function DriverTrips() {
 
                 <View style={s.breakCard}>
                   <BreakRow label="Bruttopris" value={kr(detail.price)} s={s} />
-                  <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.round((detail.price || 0) * commission))}`} muted s={s} />
-                  <View style={s.breakDivider} />
-                  <BreakRow label="Din inntekt" value={kr(net(detail.price))} bold s={s} />
+                  {detail.driver_earnings != null ? (
+                    <>
+                      <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.max(0, (detail.price || 0) - detail.driver_earnings))}`} muted s={s} />
+                      <View style={s.breakDivider} />
+                      <BreakRow label="Din inntekt" value={kr(detail.driver_earnings)} bold s={s} />
+                    </>
+                  ) : (
+                    <>
+                      <View style={s.breakDivider} />
+                      <BreakRow label="Betaling" value="Venter på bekreftet betaling" muted s={s} />
+                    </>
+                  )}
                 </View>
               </>
             ) : null}
@@ -149,21 +155,21 @@ function BreakRow({ label, value, muted, bold, s }: any) {
 
 const useStyles = makeStyles((c) => ({
   header: { paddingHorizontal: 20, paddingBottom: 14, gap: 16 },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line },
+  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
   title: { fontFamily: font.display, fontSize: 26, color: c.text },
-  segs: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 999, padding: 4, marginHorizontal: 20, marginBottom: 8 },
+  segs: { flexDirection: 'row', backgroundColor: c.cardSubtle, borderRadius: 999, padding: 4, marginHorizontal: 20, marginBottom: 8 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
   segOn: { backgroundColor: c.online },
   segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
   segTextOn: { color: c.accentOn },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.line },
-  rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center' },
+  rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { color: c.text, fontSize: 14 },
   rowSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
   rowPrice: { color: c.text, fontFamily: font.mono, fontSize: 15 },
   rowStatus: { fontSize: 11, marginTop: 2 },
   empty: { color: c.textMuted, fontSize: 14, marginTop: 40, textAlign: 'center' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(3,6,7,0.6)' },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)' },
   detailSheet: { backgroundColor: c.elevated, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: c.line, paddingHorizontal: 22, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
   detailDate: { color: c.textMuted, fontSize: 13 },

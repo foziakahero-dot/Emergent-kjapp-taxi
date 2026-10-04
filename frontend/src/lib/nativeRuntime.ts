@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { api } from '@/src/lib/api';
 
@@ -10,6 +11,15 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+async function getExpoPushTokenData() {
+  const projectId =
+    (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
+    (Constants as any)?.easConfig?.projectId;
+  if (!projectId) return null;
+  const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
+  return expoToken.data || null;
+}
 
 export async function registerNativePush() {
   if (Platform.OS === 'web') return false;
@@ -31,24 +41,49 @@ export async function registerNativePush() {
   }
   if (status !== 'granted') return false;
 
-  const nativeToken = await Notifications.getDevicePushTokenAsync();
-  const token = typeof nativeToken.data === 'string'
-    ? nativeToken.data
-    : JSON.stringify(nativeToken.data);
+  try {
+    const token = await getExpoPushTokenData();
+    if (!token) return false;
+    await api.post('/push/native-subscribe', {
+      platform: Platform.OS,
+      provider: 'expo',
+      token,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  await api.post('/push/native-subscribe', {
-    platform: Platform.OS,
-    token,
-  });
-  return true;
+export async function unregisterNativePush() {
+  if (Platform.OS === 'web') return false;
+  try {
+    const permission = await Notifications.getPermissionsAsync();
+    if (permission.status !== 'granted') return false;
+    const token = await getExpoPushTokenData();
+    if (!token) return false;
+    await api.post('/push/native-unsubscribe', {
+      platform: Platform.OS,
+      provider: 'expo',
+      token,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function normalizeCustomerNotificationUrl(url: unknown) {
   if (typeof url !== 'string') return null;
-  if (url === '/app' || url === '/' || url === '/home') return '/(app)/home';
-  if (url.startsWith('/trips/') || url.startsWith('/booking/')) {
-    const id = url.split('/').filter(Boolean).pop();
+  const normalized = url.startsWith('/app/') ? url.slice(4) : url;
+  if (normalized === '/app' || normalized === '/' || normalized === '/home') return '/(app)/home';
+  if (normalized.startsWith('/trips/') || normalized.startsWith('/booking/')) {
+    const id = normalized.split('/').filter(Boolean).pop();
     return id ? `/booking/${id}` : '/(app)/home';
   }
-  return url;
+  if (normalized.startsWith('/receipt/')) {
+    const id = normalized.split('/').filter(Boolean).pop();
+    return id ? `/receipt/${id}` : '/(app)/home';
+  }
+  return normalized;
 }

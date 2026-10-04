@@ -9,7 +9,7 @@ Path: `frontend/`
 - App name: `KJAPP`
 - Expo slug: `kjapp`
 - Android package: `no.kjapp.app`
-- iOS bundle identifier: `no.kjapp.app`
+- iOS bundle identifier: `no.nexorahub.kjapp.customer`
 - Expo project ID: `3631002e-5b25-4847-b5d8-05ec2ef304b5`
 - EAS build profile: `apk`
 - EAS workflow: `frontend/.eas/workflows/build-apk.yml`
@@ -23,7 +23,7 @@ Path: `driver-app/`
 - App name: `KJAPP Driver`
 - Expo slug: `kjapp-driver`
 - Android package: `no.kjapp.driver`
-- iOS bundle identifier: `no.kjapp.driver`
+- iOS bundle identifier: `no.nexorahub.kjapp.driver`
 - Expo project ID: `1dec8949-0423-4fbf-a080-0703f93519d7`
 - EAS build profile: `apk`
 - EAS workflow: `driver-app/.eas/workflows/build-apk.yml`

@@ -54,8 +54,13 @@ export const api = {
   twofaDisable: (password: string, code: string) => http.post('/auth/2fa/disable', { password, code }).then((r) => r.data),
 
   overview: () => http.get('/admin/overview').then((r) => r.data),
+  betaHealth: (days = 7) => http.get('/admin/beta-health', { params: { days } }).then((r) => r.data),
+  clientErrors: (page_size = 8) => http.get('/admin/client-errors', { params: { page: 1, page_size } }).then((r) => r.data),
   live: () => http.get('/admin/live').then((r) => r.data),
   finance: (days = 30) => http.get('/admin/finance', { params: { days } }).then((r) => r.data),
+  receipts: (params: any = {}) => http.get('/admin/receipts', { params }).then((r) => r.data),
+  receipt: (id: string) => http.get(`/admin/receipts/${encodeURIComponent(id)}`).then((r) => r.data),
+  backfillReceipts: (limit = 500) => http.post('/admin/receipts/backfill', null, { params: { limit } }).then((r) => r.data),
 
   list: (path: string, params: any) => http.get(path, { params }).then((r) => r.data),
   timeline: (id: string) => http.get(`/admin/trips/${id}/timeline`).then((r) => r.data),
@@ -63,6 +68,18 @@ export const api = {
     http.post(`/admin/drivers/${id}/set-status`, { approved }).then((r) => r.data),
   setDriverCapabilities: (id: string, capabilities: string[]) =>
     http.patch(`/admin/drivers/${id}/capabilities`, { capabilities }).then((r) => r.data),
+  identityVerifications: (status = 'pending_review', page = 1, page_size = 50) =>
+    http.get('/admin/identity-verifications', { params: { status, page, page_size } }).then((r) => r.data),
+  reviewIdentityVerification: (id: string, status: 'verified' | 'retry_required', reason?: string) =>
+    http.post(`/admin/identity-verifications/${id}/review`, { status, reason: reason || null }).then((r) => r.data),
+  identityRetention: () =>
+    http.get('/admin/identity-verifications/retention').then((r) => r.data),
+  purgeExpiredIdentitySelfies: (dry_run = true, limit = 100) =>
+    http.post('/admin/identity-verifications/purge-expired', { dry_run, limit }).then((r) => r.data),
+  requestIdentityRecheck: (driver_id: string, reason: string) =>
+    http.post(`/admin/drivers/${driver_id}/identity-recheck`, { reason }).then((r) => r.data),
+  secureFile: (path: string) =>
+    http.get(`/files/${encodeStoragePath(path)}`, { responseType: 'blob' }).then((r) => r.data as Blob),
   interveneTrip: (id: string, body: any) =>
     http.post(`/admin/trips/${id}/intervene`, body).then((r) => r.data),
   setUserStatus: (id: string, disabled: boolean, reason = '') =>

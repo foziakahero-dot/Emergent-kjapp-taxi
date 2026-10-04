@@ -9,6 +9,7 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
+import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
 
 const queryClient = new QueryClient({
@@ -64,6 +65,7 @@ function NativeRuntimeBridge() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts(FONT_ASSETS);
+  useEffect(() => installClientErrorMonitor(), []);
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
 
   return (
@@ -72,7 +74,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <NativeRuntimeBridge />
-            <StatusBar style="light" />
+            <StatusBar style="dark" />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -83,6 +85,9 @@ export default function RootLayout() {
               <Stack.Screen name="index" />
               <Stack.Screen name="login" />
               <Stack.Screen name="register" />
+              <Stack.Screen name="forgot-password" />
+              <Stack.Screen name="reset-password/[token]" />
+              <Stack.Screen name="legal-consent" />
               <Stack.Screen name="(app)" />
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />

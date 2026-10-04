@@ -1,0 +1,91 @@
+name: KJAPP signed iOS EAS build
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: App to build
+        required: true
+        default: customer
+        type: choice
+        options:
+          - customer
+          - driver
+          - all
+      submit_to_testflight:
+        description: Submit the successful signed build to App Store Connect / TestFlight
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kjapp-eas-ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  customer-ios:
+    name: Customer signed iOS build
+    if: ${{ inputs.target == 'customer' || inputs.target == 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require Expo token
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "Missing GitHub secret EXPO_TOKEN"
+            exit 1
+          fi
+      - run: npm install --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
+      - run: npx expo config --type public
+      - run: npx eas-cli@latest build --platform ios --profile testflight-beta --non-interactive --wait
+      - name: Submit latest build to TestFlight
+        if: ${{ inputs.submit_to_testflight }}
+        run: npx eas-cli@latest submit --platform ios --profile production --latest --non-interactive
+
+  driver-ios:
+    name: Driver signed iOS build
+    if: ${{ inputs.target == 'driver' || inputs.target == 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: driver-app
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require Expo token
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "Missing GitHub secret EXPO_TOKEN"
+            exit 1
+          fi
+      - run: npm install --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx expo-doctor@latest
+      - run: npx expo config --type public
+      - run: npx eas-cli@latest build --platform ios --profile testflight-beta --non-interactive --wait
+      - name: Submit latest build to TestFlight
+        if: ${{ inputs.submit_to_testflight }}
+        run: npx eas-cli@latest submit --platform ios --profile production --latest --non-interactive

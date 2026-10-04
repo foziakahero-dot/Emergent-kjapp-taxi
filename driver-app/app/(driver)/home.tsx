@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -8,9 +8,11 @@ import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
-import { driverApi, safetyApi } from '@/src/lib/api';
+import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 import { storage } from '@/src/utils/storage';
+import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
+import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripReceipt } from '@/src/lib/tripSummary';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -23,6 +25,9 @@ function hoursLabel(min?: number) {
 type CriticalTripAction = 'at_pickup' | 'start' | 'arrive';
 type QueuedTripAction = { trip_id: string; action: CriticalTripAction; queued_at: string };
 const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
+const MINIMIZED_TRIP_KEY = 'kjapp_driver_minimized_active_trip_v1';
+const ACTIVE_STATUSES = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
+const FINISHED_STATUSES = new Set(['arrived', 'completed', 'rated']);
 
 async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
   if (action === 'at_pickup') return driverApi.atPickup(tripId);
@@ -38,7 +43,7 @@ function actionAlreadyApplied(action: CriticalTripAction, status?: string) {
 
 function actionCanRetry(action: CriticalTripAction, status?: string) {
   if (action === 'at_pickup') return status === 'driver_on_way';
-  if (action === 'start') return status === 'driver_on_way' || status === 'at_pickup';
+  if (action === 'start') return status === 'at_pickup';
   return status === 'in_trip';
 }
 
@@ -49,20 +54,31 @@ export default function DriverHome() {
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>(null);
+  const [completedTrip, setCompletedTrip] = useState<any>(null);
+  const [tripMinimized, setTripMinimized] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
+  const [offerClock, setOfferClock] = useState(Date.now());
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
+  const completedSummaryVisible = !current && !(pending[0] && online);
 
   const poll = useCallback(async () => {
+    if (!user?.id) return;
     try {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
-      setCurrent(normalized);
+      if (normalized && FINISHED_STATUSES.has(normalized.status)) {
+        const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
+        setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
+      } else if (normalized && ACTIVE_STATUSES.has(normalized.status)) {
+        setCompletedTrip(null);
+      }
+      setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
 
       if (!actionRetrying.current) {
         const raw = await storage.getItem(QUEUED_TRIP_ACTION_KEY);
@@ -82,10 +98,20 @@ export default function DriverHome() {
                   await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
                   const refreshed = await driverApi.current();
                   normalized = refreshed?.trip || refreshed || normalized;
-                  setCurrent(normalized);
+                  if (normalized && FINISHED_STATUSES.has(normalized.status)) {
+                    const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
+                    setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
+                  }
+                  setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
                   setError('');
-                } catch {
-                  // Keep the queued action. A later poll retries after connectivity returns.
+                } catch (e: any) {
+                  if (e?.response) {
+                    // The server answered: this is a semantic/state/GPS rejection, not an
+                    // offline transport failure. Do not hammer the same invalid action forever.
+                    await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+                    setError(apiError(e));
+                  }
+                  // With no HTTP response we are still offline; keep the queued action.
                 } finally {
                   actionRetrying.current = false;
                 }
@@ -102,12 +128,15 @@ export default function DriverHome() {
     try {
       const p = await driverApi.pending();
       setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
+      if (p?.gps_stale) {
+        setError('GPS-posisjonen er for gammel. KJAPP sender ikke nye turer før en fersk posisjon er registrert.');
+      }
     } catch { setPending([]); }
     driverApi.summary().then((r) => {
       setSummary(r);
       if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
     }).catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,6 +145,18 @@ export default function DriverHome() {
       return () => clearInterval(i);
     }, [poll]),
   );
+
+  useEffect(() => {
+    const i = setInterval(() => setOfferClock(Date.now()), 500);
+    return () => clearInterval(i);
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void poll();
+    });
+    return () => sub.remove();
+  }, [poll]);
 
   useEffect(() => {
     let active = true;
@@ -165,15 +206,32 @@ export default function DriverHome() {
         gpsBlocked.current = false;
         setLoc(p);
         setError('');
-        driverApi.location(p.lat, p.lng, p.heading || 0, pos.coords.speed || 0).catch(() => {});
+        driverApi.location(
+          p.lat,
+          p.lng,
+          p.heading || 0,
+          Math.max(0, pos.coords.speed || 0),
+          new Date(pos.timestamp).toISOString(),
+        ).catch(() => {});
 
+        const activeTrip = ['driver_on_way', 'at_pickup', 'in_trip'].includes(current?.status || '');
         const subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, distanceInterval: 15, timeInterval: 6000 },
+          {
+            accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
+            distanceInterval: activeTrip ? 5 : 40,
+            timeInterval: activeTrip ? 3000 : 12000,
+          },
           (u) => {
             if (!active) return;
             const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
             setLoc(np);
-            driverApi.location(np.lat, np.lng, np.heading || 0, u.coords.speed || 0).catch(() => {});
+            driverApi.location(
+              np.lat,
+              np.lng,
+              np.heading || 0,
+              Math.max(0, u.coords.speed || 0),
+              new Date(u.timestamp).toISOString(),
+            ).catch(() => {});
           },
         );
         if (!active) subscription.remove();
@@ -191,7 +249,7 @@ export default function DriverHome() {
       active = false;
       stopWatching();
     };
-  }, [online]);
+  }, [online, current?.status]);
 
   const toggleOnline = async () => {
     const next = !online;
@@ -208,8 +266,26 @@ export default function DriverHome() {
 
   const accept = async (tripId: string) => {
     setBusy(true);
-    try { await driverApi.accept(tripId); await poll(); } catch (e) { setError(apiError(e)); }
-    finally { setBusy(false); }
+    setError('');
+    try {
+      await driverApi.accept(tripId);
+      await poll();
+    } catch (e) {
+      // If the accept reached the backend but the response was lost, /driver/current
+      // is canonical and prevents the app from showing a false failed-accept state.
+      try {
+        const confirmed = await driverApi.current();
+        if (confirmed?.trip_id === tripId) {
+          setCurrent(confirmed);
+          setPending([]);
+          return;
+        }
+      } catch {}
+      setError(apiError(e));
+      await poll().catch(() => {});
+    } finally {
+      setBusy(false);
+    }
   };
 
   const decline = async (tripId: string) => {
@@ -225,21 +301,85 @@ export default function DriverHome() {
       : null;
     if (!action) return;
 
-    setBusy(true);
-    try {
-      await applyCriticalTripAction(action, current.trip_id);
-      await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
-      setError('');
-      await poll();
-    } catch (e: any) {
-      if (!e?.response) {
-        const queued: QueuedTripAction = { trip_id: current.trip_id, action, queued_at: new Date().toISOString() };
-        await storage.setItem(QUEUED_TRIP_ACTION_KEY, JSON.stringify(queued));
-        setError('Midlertidig nettfeil. Handlingen er lagret på telefonen og sendes automatisk når forbindelsen er tilbake.');
-      } else {
-        setError(apiError(e));
+    const execute = async () => {
+      setBusy(true);
+      try {
+        await applyCriticalTripAction(action, current.trip_id);
+        await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+        setError('');
+        await poll();
+      } catch (e: any) {
+        if (!e?.response) {
+          const queued: QueuedTripAction = { trip_id: current.trip_id, action, queued_at: new Date().toISOString() };
+          await storage.setItem(QUEUED_TRIP_ACTION_KEY, JSON.stringify(queued));
+          setError('Midlertidig nettfeil. Handlingen er lagret på telefonen og sendes automatisk når forbindelsen er tilbake.');
+        } else {
+          setError(apiError(e));
+        }
+      } finally {
+        setBusy(false);
       }
-    } finally { setBusy(false); }
+    };
+
+    if (action === 'arrive') {
+      Alert.alert(
+        'Fullføre turen?',
+        'KJAPP kontrollerer at du er nær destinasjonen før turen avsluttes og betaling kan starte.',
+        [
+          { text: 'Fortsett turen', style: 'cancel' },
+          { text: 'Fullfør turen', onPress: () => { void execute(); } },
+        ],
+      );
+      return;
+    }
+
+    await execute();
+  };
+
+  useEffect(() => {
+    let active = true;
+    if (!current?.trip_id) { setTripMinimized(false); return; }
+    storage.getItem(MINIMIZED_TRIP_KEY).then((id) => {
+      if (active) setTripMinimized(id === current.trip_id);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [current?.trip_id]);
+
+  useEffect(() => {
+    if (!user?.id || !completedTrip?.trip_id || !canAutoDismissFinishedTrip(completedTrip, completedSummaryVisible)) return;
+    const receipt = finishedTripReceipt(completedTrip);
+    const timer = setTimeout(() => {
+      void storage.setItem(finishedTripDismissalKey(user.id), receipt).catch(() => {});
+      setCompletedTrip((trip: any) => trip && finishedTripReceipt(trip) === receipt ? null : trip);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [user?.id, completedTrip?.trip_id, completedTrip?.payment_status, completedSummaryVisible]);
+
+  const noShow = async () => {
+    if (!current || current.status !== 'at_pickup' || busy) return;
+    Alert.alert(
+      'Kunden kom ikke?',
+      'No-show kan bare registreres etter ventetiden ved hentestedet. KJAPP kontrollerer ankomsttid og GPS på serveren.',
+      [
+        { text: 'Fortsett å vente', style: 'cancel' },
+        {
+          text: 'Registrer no-show',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            setError('');
+            try {
+              await driverApi.noShow(current.trip_id);
+              await poll();
+            } catch (e) {
+              setError(apiError(e));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const emergency = async () => {
@@ -251,6 +391,46 @@ export default function DriverHome() {
       });
     } catch {}
     Linking.openURL('tel:112').catch(() => {});
+  };
+
+  const openNavigation = async () => {
+    if (!current) return;
+    const toPickup = current.status === 'driver_on_way';
+    const lat = Number(toPickup ? current.pickup_lat : current.dropoff_lat);
+    const lng = Number(toPickup ? current.pickup_lng : current.dropoff_lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setError('Mangler gyldige koordinater for navigasjon.');
+      return;
+    }
+
+    const stops: any[] = !toPickup && Array.isArray(current.stops) ? current.stops : [];
+    const validStops = stops.filter((stop) =>
+      Number.isFinite(Number(stop?.lat)) && Number.isFinite(Number(stop?.lng))
+    );
+    const waypoints = validStops
+      .map((stop) => `${Number(stop.lat)},${Number(stop.lng)}`)
+      .join('|');
+
+    const fallback =
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
+      (waypoints ? `&waypoints=${encodeURIComponent(waypoints)}` : '') +
+      '&travelmode=driving';
+    const cached = user?.id ? await storage.getItem(navigationStorageKey(user.id)).catch(() => null) : null;
+    const serverChoice = isNavigationApp(cached) ? cached :
+      await settingsApi.get().then((r: any) => (r?.settings || r)?.navigation_app).catch(() => null);
+    const preferred = isNavigationApp(serverChoice) ? serverChoice : 'google';
+    const native = validStops.length ? fallback
+      : preferred === 'waze' ? `waze://?ll=${lat},${lng}&navigate=yes`
+      : preferred === 'apple' && Platform.OS === 'ios' ? `maps://?daddr=${lat},${lng}&dirflg=d`
+      : Platform.OS === 'android' ? `google.navigation:q=${lat},${lng}&mode=d`
+      : `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`;
+
+    try {
+      const supported = await Linking.canOpenURL(native);
+      await Linking.openURL(supported ? native : fallback);
+    } catch {
+      Linking.openURL(fallback).catch(() => setError('Kunne ikke åpne navigasjon på telefonen.'));
+    }
   };
 
   const actionLabel =
@@ -271,6 +451,24 @@ export default function DriverHome() {
   };
 
   const firstOffer = pending[0];
+  const offerExpiresMs = firstOffer?.offer_expires_at ? Date.parse(firstOffer.offer_expires_at) : NaN;
+  const offerRemaining = Number.isFinite(offerExpiresMs)
+    ? Math.max(0, Math.ceil((offerExpiresMs - offerClock) / 1000))
+    : null;
+  const offerExpired = offerRemaining !== null && offerRemaining <= 0;
+  const pickupRoute = firstOffer?.pickup_route;
+  const offerDistance = pickupRoute?.distance_km ?? firstOffer?.offer_km ?? null;
+  const offerDuration = pickupRoute?.duration_min ?? null;
+
+  useEffect(() => {
+    if (!firstOffer?.offer_expires_at) return;
+    const expires = Date.parse(firstOffer.offer_expires_at);
+    if (!Number.isFinite(expires)) return;
+    const delay = Math.min(30000, Math.max(500, expires - Date.now() + 500));
+    const timer = setTimeout(() => { void poll(); }, delay);
+    return () => clearTimeout(timer);
+  }, [firstOffer?.trip_id, firstOffer?.offer_expires_at, poll]);
+
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
   const mapDropoff = current && current.status === 'in_trip'
     ? { lat: current.dropoff_lat, lng: current.dropoff_lng }
@@ -330,15 +528,36 @@ export default function DriverHome() {
         <Text style={s.mapStatusText}>{operationalLabel}</Text>
       </View>
 
-      <View style={[s.sheet, { paddingBottom: insets.bottom + 12 }]}>
+      <ScrollView
+        style={s.sheet}
+        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 12 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={s.handle} />
         {error ? <Text style={s.error} testID="driver-error">{error}</Text> : null}
 
-        {current ? (
+        {current && tripMinimized ? (
+          <Pressable testID="driver-active-trip-minimized" onPress={async () => {
+            setTripMinimized(false);
+            await storage.removeItem(MINIMIZED_TRIP_KEY);
+          }} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.overlineOnline}>AKTIV TUR · TRYKK FOR Å ÅPNE</Text>
+              <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
+            </View>
+            <Icon name="chevron-up" size={20} color={colors.text} />
+          </Pressable>
+        ) : current ? (
           <View testID="driver-active-trip">
             <View style={s.sectionHeading}>
               <Text style={s.overlineOnline}>AKTIV TUR</Text>
               <Text style={s.tripPrice}>{kr(current.price)}</Text>
+              <Pressable testID="driver-trip-minimize" accessibilityLabel="Minimer turkort" onPress={async () => {
+                setTripMinimized(true);
+                await storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id);
+              }} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="chevron-down" size={20} color={colors.text} />
+              </Pressable>
             </View>
             <View style={[s.epRow, { marginTop: 12 }]}>
               <View style={s.beacon} />
@@ -349,8 +568,22 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
+            <Text style={s.offerMeta} testID="driver-current-customer">{current.customer?.name || 'Kundenavn utilgjengelig'}</Text>
+            {current.customer?.phone ? (
+              <Pressable testID="driver-call-customer" onPress={() => Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))}>
+                <Text style={s.navBtnText}>Ring kunde · {current.customer.phone}</Text>
+              </Pressable>
+            ) : null}
             {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
             {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
+            {['driver_on_way', 'in_trip'].includes(current.status) ? (
+              <Pressable style={s.navBtn} onPress={openNavigation} testID="driver-navigation">
+                <Icon name="navigation" size={17} color={colors.online} />
+                <Text style={s.navBtnText}>
+                  {current.status === 'driver_on_way' ? 'Naviger til henting' : 'Naviger til destinasjon'}
+                </Text>
+              </Pressable>
+            ) : null}
             <View style={s.tripActions}>
               <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
                 <Icon name="message" size={17} color={colors.text} />
@@ -358,10 +591,16 @@ export default function DriverHome() {
               </Pressable>
               {actionLabel ? (
                 <Pressable style={s.action} onPress={advance} disabled={busy} testID="driver-advance">
-                  {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.actionText}>{actionLabel}</Text>}
+                  {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.actionText}>{actionLabel}</Text>}
                 </Pressable>
               ) : null}
             </View>
+            {current.status === 'at_pickup' ? (
+              <Pressable style={s.noShowBtn} onPress={noShow} disabled={busy} testID="driver-no-show">
+                <Icon name="clock" size={15} color={colors.textMuted} />
+                <Text style={s.noShowText}>Kunden kom ikke · registrer no-show</Text>
+              </Pressable>
+            ) : null}
             <Pressable style={s.driverSafetyBtn} onPress={emergency} testID="driver-safety-112">
               <Icon name="shield" size={16} color={colors.danger} />
               <Text style={s.driverSafetyText}>Sikkerhet · Ring 112</Text>
@@ -382,18 +621,46 @@ export default function DriverHome() {
               <View style={s.square} />
               <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
             </View>
-            <Text style={s.offerMeta}>{firstOffer.distance_km} km · {firstOffer.duration_min} min estimert</Text>
+            <Text style={s.offerMeta}>
+              {offerDistance != null ? `${Number(offerDistance).toFixed(1)} km til henting` : 'Beregner avstand til henting'}
+              {offerDuration != null ? ` · ${Math.max(1, Math.round(Number(offerDuration)))} min` : ''}
+            </Text>
+            <Text style={[s.offerCountdown, offerExpired && s.offerCountdownExpired]} testID="driver-offer-countdown">
+              {offerRemaining != null
+                ? (offerExpired ? 'Tilbudet sendes videre…' : `Sendes videre om ${offerRemaining} sek`)
+                : 'Åpen for alle ledige sjåfører'}
+            </Text>
+            <Text style={s.offerMeta} testID="driver-offer-customer">{firstOffer.customer?.name || 'Kundenavn utilgjengelig'}</Text>
             {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
             {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
             <View style={s.offerBtns}>
               <Pressable style={s.declineBtn} onPress={() => decline(firstOffer.trip_id)} testID={`driver-decline-${firstOffer.trip_id}`}>
                 <Text style={s.declineText}>Avslå</Text>
               </Pressable>
-              <Pressable style={s.acceptBtn} onPress={() => accept(firstOffer.trip_id)} disabled={busy} testID={`driver-accept-${firstOffer.trip_id}`}>
-                {busy ? <ActivityIndicator color="#03120B" /> : <Text style={s.acceptText}>Godta tur</Text>}
+              <Pressable
+                style={[s.acceptBtn, offerExpired && s.acceptBtnDisabled]}
+                onPress={() => accept(firstOffer.trip_id)}
+                disabled={busy || offerExpired}
+                testID={`driver-accept-${firstOffer.trip_id}`}
+              >
+                {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.acceptText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
               </Pressable>
             </View>
           </View>
+        ) : completedTrip ? (
+          <Pressable testID="driver-trip-completed" onPress={async () => {
+            if (!user?.id) return;
+            await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
+            setCompletedTrip(null);
+          }} style={{ paddingVertical: 16 }}>
+            <Text style={s.overlineOnline}>TUR AVSLUTTET</Text>
+            <Text style={s.epText}>Klar for neste tur</Text>
+            <Text style={s.offerMeta}>{completedTrip.payment_status === 'paid'
+              ? `Din opptjening · ${kr(completedTrip.driver_earnings)}`
+              : completedTrip.estimated_driver_earnings != null
+                ? `Estimert opptjening · ${kr(completedTrip.estimated_driver_earnings)} · betaling avventer`
+                : 'Betaling avventer'}</Text>
+          </Pressable>
         ) : (
           <View>
             <View style={s.summaryRow}>
@@ -415,9 +682,9 @@ export default function DriverHome() {
               </View>
             ) : (
               <Pressable style={s.goOnline} onPress={toggleOnline} disabled={busy} testID="driver-go-online">
-                {busy ? <ActivityIndicator color="#03120B" /> : (
+                {busy ? <ActivityIndicator color={colors.accentOn} /> : (
                   <>
-                    <Icon name="power" size={19} color="#03120B" />
+                    <Icon name="power" size={19} color={colors.accentOn} />
                     <Text style={s.goOnlineText}>Gå online</Text>
                   </>
                 )}
@@ -425,7 +692,7 @@ export default function DriverHome() {
             )}
           </View>
         )}
-      </View>
+      </ScrollView>
 
       {current ? (
         <ChatSheet
@@ -433,7 +700,7 @@ export default function DriverHome() {
           role="driver"
           visible={chatOpen}
           onClose={() => setChatOpen(false)}
-          peerName="Kunde"
+          peerName={current.customer?.name || 'Kunde'}
         />
       ) : null}
     </View>
@@ -456,36 +723,38 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: 16, paddingBottom: 8,
   },
   identityPanel: {
-    minHeight: 48, justifyContent: 'center', backgroundColor: 'rgba(3,6,7,0.91)',
-    borderRadius: 14, paddingHorizontal: 14, borderWidth: 1, borderColor: c.line,
+    minHeight: 48, justifyContent: 'center', backgroundColor: c.surface,
+    borderRadius: 18, paddingHorizontal: 14, borderWidth: 1, borderColor: c.line,
+    shadowColor: c.text, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   productLabel: { color: c.online, fontSize: 10, lineHeight: 13, letterSpacing: 1.6, fontWeight: '700' },
   driverName: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any, maxWidth: 140 },
   onlineControl: {
     minWidth: 108, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: 'rgba(3,6,7,0.91)', borderRadius: 14, borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.surface, borderRadius: 18, borderWidth: 1, borderColor: c.line,
   },
-  onlineControlOn: { borderColor: 'rgba(57,229,140,0.46)', backgroundColor: 'rgba(5,24,17,0.92)' },
+  onlineControlOn: { borderColor: c.online, backgroundColor: c.onlineSoft },
   statusDot: { width: 9, height: 9, borderRadius: 5 },
   onlineText: { color: c.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.1 },
   mapStatus: {
     position: 'absolute', left: 16, zIndex: 9, minHeight: 36,
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(3,6,7,0.88)',
-    borderRadius: 12, borderWidth: 1, borderColor: c.line, paddingHorizontal: 11,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface,
+    borderRadius: 16, borderWidth: 1, borderColor: c.line, paddingHorizontal: 11,
   },
   mapStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   mapStatusDivider: { width: 1, height: 16, backgroundColor: c.line, marginHorizontal: 9 },
   mapStatusText: { color: c.textSecondary, fontSize: 11, fontWeight: '600' },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(6,12,15,0.98)',
-    borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: c.line,
-    paddingHorizontal: 18, paddingTop: 10,
+    position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '78%', backgroundColor: c.surface,
+    borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: c.line,
+    shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8,
   },
+  sheetContent: { paddingHorizontal: 18, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, marginBottom: 12 },
   summaryRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.025)',
-    borderRadius: 14, borderWidth: 1, borderColor: c.line, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
+    borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingVertical: 14,
   },
   vDivider: { width: 1, height: 32, backgroundColor: c.line },
   statValue: { color: c.text, fontFamily: font.mono, fontSize: 17, fontWeight: '600' },
@@ -498,33 +767,43 @@ const useStyles = makeStyles((c) => ({
   beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.online },
   square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
   epText: { color: c.text, fontSize: 14, flex: 1 },
-  tripActions: { flexDirection: 'row', gap: 10, marginTop: 15 },
+  navBtn: {
+    minHeight: 50, marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: c.lineStrong,
+    backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center',
+  },
+  navBtnText: { color: c.text, fontSize: 14, fontWeight: '700' },
+  tripActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   msgBtn: {
     minWidth: 112, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: c.line,
+    borderRadius: 18, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
   },
   msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  noShowBtn: { minHeight: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  noShowText: { color: c.textSecondary, fontSize: 12, fontWeight: '600' },
   driverSafetyBtn: { height: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
   driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
-  action: { flex: 1, height: 56, borderRadius: 14, backgroundColor: c.online, alignItems: 'center', justifyContent: 'center' },
-  actionText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  action: { flex: 1, height: 56, borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  actionText: { color: c.accentOn, fontSize: 16, fontWeight: '800' },
   offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
+  offerCountdown: { color: c.online, fontSize: 12, fontWeight: '700', marginTop: 8 },
+  offerCountdownExpired: { color: c.textMuted },
   offerBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: c.lineStrong },
+  declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong },
   declineText: { color: c.textSecondary, fontSize: 15, fontWeight: '600' },
-  acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: c.online },
-  acceptText: { color: '#03120B', fontSize: 15, fontWeight: '800' },
+  acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
+  acceptBtnDisabled: { opacity: 0.45 },
+  acceptText: { color: c.accentOn, fontSize: 15, fontWeight: '800' },
   waiting: {
     flexDirection: 'row', alignItems: 'center', gap: 13, minHeight: 72, marginTop: 12,
-    paddingHorizontal: 14, borderRadius: 14, backgroundColor: 'rgba(57,229,140,0.055)',
-    borderWidth: 1, borderColor: 'rgba(57,229,140,0.16)',
+    paddingHorizontal: 14, borderRadius: 18, backgroundColor: c.onlineSoft,
+    borderWidth: 1, borderColor: c.line,
   },
   waitIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center' },
   waitTitle: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any },
   waitSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
   goOnline: {
-    flexDirection: 'row', gap: 10, marginTop: 14, height: 56, borderRadius: 14,
+    flexDirection: 'row', gap: 10, marginTop: 14, height: 56, borderRadius: 28,
     backgroundColor: c.online, alignItems: 'center', justifyContent: 'center',
   },
-  goOnlineText: { color: '#03120B', fontSize: 16, fontWeight: '800' },
+  goOnlineText: { color: c.accentOn, fontSize: 16, fontWeight: '800' },
 }));

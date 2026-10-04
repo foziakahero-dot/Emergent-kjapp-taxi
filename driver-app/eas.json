@@ -1,12 +1,13 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "apk": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "android": {
         "buildType": "apk"
@@ -15,16 +16,43 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+      },
+      "ios": {
+        "image": "latest"
       }
     },
     "ios-simulator": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "ios": {
         "simulator": true
+      }
+    },
+    "testflight-beta": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+      },
+      "ios": {
+        "image": "latest"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleTeamId": "KUPTFG8BZ2",
+        "ascAppId": "6815872647"
+      }
+    },
+    "testflight-beta": {
+      "ios": {
+        "appleTeamId": "KUPTFG8BZ2",
+        "ascAppId": "6815872647"
       }
     }
   }

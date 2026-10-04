@@ -1,15 +1,45 @@
-name: KJAPP Expo iOS (manual smoke build)
+name: KJAPP iOS smoke builds
 
 on:
+  push:
+    branches:
+      - main
+      - beta/oslo-production-ready
+      - snar/mobile-ui-review-20260930
+    paths:
+      - 'frontend/**'
+      - 'driver-app/**'
+      - '.github/workflows/ios-build.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kjapp-ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ios-smoke:
-    runs-on: macos-14
-    timeout-minutes: 45
+    name: ${{ matrix.label }} iOS simulator compile
+    runs-on: macos-26
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: frontend
+            label: Customer
+          - dir: driver-app
+            label: Driver
     env:
       CI: '1'
-      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ vars.MAPBOX_PUBLIC_TOKEN }}
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
 
     steps:
       - name: Checkout
@@ -21,30 +51,44 @@ jobs:
           node-version: 22
 
       - name: Install app dependencies
-        working-directory: frontend
-        run: npm install
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Expo Doctor
+        run: npx expo-doctor@latest
 
       - name: Validate Expo project
-        working-directory: frontend
         run: npx expo config --type public
 
-      - name: Generate native iOS project from Expo
-        working-directory: frontend
+      - name: Generate native iOS project
         run: npx expo prebuild --platform ios --clean
 
       - name: Install CocoaPods
-        working-directory: frontend/ios
+        working-directory: ${{ matrix.dir }}/ios
         run: pod install
 
       - name: Compile unsigned simulator build
-        working-directory: frontend/ios
+        working-directory: ${{ matrix.dir }}/ios
         run: |
-          set -o pipefail
+          set -euo pipefail
+          workspace="$(find . -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          if [ -z "$workspace" ]; then
+            echo "No Xcode workspace generated"
+            exit 1
+          fi
+          scheme="$(xcodebuild -workspace "$workspace" -list -json | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d.get("workspace",{}).get("schemes",[]); print(next((x for x in s if not x.startswith("Pods-")), s[0] if s else ""))')"
+          if [ -z "$scheme" ]; then
+            echo "No Xcode scheme found"
+            exit 1
+          fi
+          echo "Building workspace=$workspace scheme=$scheme"
           xcodebuild \
-            -workspace KJAPP.xcworkspace \
-            -scheme KJAPP \
+            -workspace "$workspace" \
+            -scheme "$scheme" \
             -configuration Debug \
             -sdk iphonesimulator \
-            -derivedDataPath "$RUNNER_TEMP/KJAPPDerivedData" \
+            -derivedDataPath "$RUNNER_TEMP/KJAPP-${{ matrix.label }}-DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build

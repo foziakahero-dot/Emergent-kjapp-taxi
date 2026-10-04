@@ -1,8 +1,16 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
-const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://github-app-builder-28.emergent.host').replace(/\/$/, '');
+const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
+
+export const tripDriverPhotoSource = async (tripId: string) => {
+  const token = await storage.getItem(TOKEN_KEY);
+  return {
+    uri: `${BACKEND}/api/trips/${encodeURIComponent(tripId)}/driver-photo`,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  } as any;
+};
 
 export const api = axios.create({
   baseURL: `${BACKEND}/api`,
@@ -18,9 +26,15 @@ api.interceptors.request.use(async (config) => {
 export const authApi = {
   register: (data: any) => api.post('/auth/register', data).then((r) => r.data),
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'customer' }).then((r) => r.data),
+  checkResetToken: (token: string) => api.get(`/auth/reset-password/${token}`).then((r) => r.data),
+  resetPassword: (token: string, new_password: string) => api.post('/auth/reset-password', { token, new_password }).then((r) => r.data),
+  acceptLegal: (legal_version = '2026-09') => api.post('/auth/accept-legal', { accepted_terms: true, legal_version }).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
+  appleSignIn: (data: { identity_token: string; fullName?: string; email?: string | null }) =>
+    api.post('/auth/apple', data).then((r) => r.data),
 };
 
 export const tripsApi = {
@@ -51,7 +65,6 @@ export const placesApi = {
 
 export const paymentApi = {
   list: () => api.get('/payment-methods').then((r) => r.data),
-  add: (data: any) => api.post('/payment-methods', data).then((r) => r.data),
   remove: (id: string) => api.delete(`/payment-methods/${id}`).then((r) => r.data),
   cardSetup: (origin_url: string) => api.post('/payments/card/setup', { origin_url }).then((r) => r.data),
   cardSetupStatus: (session_id: string) => api.get(`/payments/card/setup/${session_id}`).then((r) => r.data),

@@ -6,12 +6,18 @@ KJAPP mobile består nå av **to separate Expo / React Native-apper**. Den gamle
 
 | App | Mappe | Android | iOS | Expo project |
 | --- | --- | --- | --- | --- |
-| KJAPP Customer | `frontend/` | `no.kjapp.app` | `no.kjapp.app` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
-| KJAPP Driver | `driver-app/` | `no.kjapp.driver` | `no.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
+| KJAPP Customer | `frontend/` | `no.kjapp.app` | `no.nexorahub.kjapp.customer` | `3631002e-5b25-4847-b5d8-05ec2ef304b5` |
+| KJAPP Driver | `driver-app/` | `no.kjapp.driver` | `no.nexorahub.kjapp.driver` | `1dec8949-0423-4fbf-a080-0703f93519d7` |
 
-Begge bruker samme produksjonsbackend:
+Den kontrollerte **betaen/TestFlight** bruker fortsatt den kjente Emergent-backenden:
 
 `https://github-app-builder-28.emergent.host/api`
+
+Den langsiktige produksjonsprofilen er allerede konfigurert mot KJAPPs permanente API-navn:
+
+`https://api.kjappapp.no`
+
+`api.kjappapp.no` skal først peke til en verifisert backend før offentlig store-release. Selve backend-migreringen bort fra Emergent gjøres separat etter beta-stabilisering.
 
 Admin, Fleet og backend er separate systemer og skal ikke pakkes inn i mobilappene.
 
@@ -46,6 +52,25 @@ npx expo start
 ```
 
 Bakgrunnsposisjon og native push må testes i en development build / installert APK eller IPA, ikke bare Expo Go.
+
+## Lokal full beta-gate på Windows
+
+Når GitHub Actions ikke starter jobs, kan den samme kildekodekontrollen kjøres lokalt fra repo-roten uten å deploye eller endre produksjonsdata:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\beta_local_gate.ps1
+```
+
+Scriptet krever at aktiv branch er `beta/oslo-production-ready` og kjører:
+- `git diff --check`
+- Python compile
+- fokuserte sikkerhets-unit-tester
+- Admin build
+- Marketing build
+- Customer TypeScript + Expo Doctor + Expo config
+- Driver TypeScript + Expo Doctor + Expo config
+
+Det gjør **ikke** merge, deploy, Stripe-trekk eller produksjonsendringer.
 
 ## Android test-APK
 
@@ -85,17 +110,155 @@ eas build --platform ios --profile production
 
 ## Native push
 
-Mobilklienten bruker `expo-notifications` og registrerer native APNs/FCM-token mot:
+Mobilklientene bruker `expo-notifications` og registrerer **Expo Push tokens** mot:
 
 `POST /api/push/native-subscribe`
 
-Backenden har allerede native push-sender. For faktisk FCM-levering på Android må Firebase være riktig konfigurert for app-ID-ene og serveren må ha gyldig Firebase service-account-konfigurasjon. Ikke legg private service-account-nøkler i Git.
+Dette gir ekte native varsler: Expo Push leverer videre via **APNs på iOS** og **FCM på Android**. Backenden kan fortsatt sende til eldre direkte FCM-tokens, men nye Customer/Driver-builds bruker Expo-token slik at iOS ikke feilaktig behandles som et FCM-token.
 
-`google-services.json` er klientkonfigurasjon og må høre til riktig Firebase Android-app. Når den brukes med EAS/CNG, sett `android.googleServicesFile` til riktig filbane i app-configen.
+På iOS må APNs/push-capability være knyttet til riktige bundle-ID-er og EAS/Apple credentials. På Android må FCM være konfigurert for riktig Expo/Firebase-prosjekt før butikk-release.
 
-På iOS må APNs/push-capability være knyttet til de riktige bundle-ID-ene og EAS/Apple credentials.
+Driver har i tillegg en on-shift fallback: mens bakgrunnsposisjon kjører, kontrolleres ekte pending trips og en lokal varsling kan vises ved nytt tilbud. Native push er fortsatt primær kanal.
 
-Driver har i tillegg en on-shift fallback: mens bakgrunnsposisjon kjører, kontrolleres ekte pending trips og en lokal varsling kan vises ved nytt tilbud. FCM/APNs er fortsatt primær kanal.
+## Apple Developer / TestFlight
+
+Kontoen skal ha to eksplisitte App IDs:
+
+- Customer: `no.nexorahub.kjapp.customer`
+- Driver: `no.nexorahub.kjapp.driver`
+
+Aktiver capabilities slik:
+
+**Customer**
+- Push Notifications
+- Sign in with Apple
+
+**Driver**
+- Push Notifications
+- Background Modes / Location (genereres av Expo config)
+- Background remote notifications
+
+Customer-appen har `ios.usesAppleSignIn=true` og bruker Apples native Sign in with Apple-komponent. Backenden godtar native Apple-token med `aud=no.nexorahub.kjapp.customer` når følgende finnes i backend-miljøet:
+
+```
+APPLE_BUNDLE_ID=no.nexorahub.kjapp.customer
+```
+
+For web-basert Apple-innlogging senere kan `APPLE_CLIENT_ID` (Services ID) legges til separat.
+
+En APNs auth key (.p8) kan brukes gjennom EAS credentials for begge appene dersom Apple-kontoen/Teamet tillater det. Ikke legg .p8-filen i Git.
+
+### Første Apple/EAS-kobling
+
+Kjør dette separat i hver appmappe med din egen Expo/Apple-innlogging:
+
+```bash
+cd frontend
+npx eas-cli@latest credentials -p ios
+
+cd ../driver-app
+npx eas-cli@latest credentials -p ios
+```
+
+La EAS knytte riktige distribution/provisioning/APNs-credentials til bundle-ID-en for den aktuelle appen. Apple-passord, .p8-fil og private nøkler skal aldri limes inn i kode, chat eller Git.
+
+Når credentials er klare kan kontrollert TestFlight-build kjøres:
+
+```bash
+cd frontend
+npx eas-cli@latest build --platform ios --profile testflight-beta
+
+cd ../driver-app
+npx eas-cli@latest build --platform ios --profile testflight-beta
+```
+
+Etter en vellykket signert build:
+
+```bash
+npx eas-cli@latest submit --platform ios --profile production --latest
+```
+
+Alternativt kan den manuelle GitHub-workflowen `KJAPP signed iOS EAS build` bygge Customer, Driver eller begge. Den krever GitHub-secret `EXPO_TOKEN`; selve Apple-signeringen må allerede være konfigurert i EAS.
+
+### Direkte EAS Workflows — anbefalt før merge
+
+Fordi de nye GitHub `workflow_dispatch`-filene først er fullt tilgjengelige fra default branch og GitHub Actions for tiden har et startup-problem, kan signert beta bygges **direkte i EAS** fra denne branchen etter at Apple/EAS credentials er konfigurert.
+
+Customer -> build + TestFlight:
+
+```bash
+cd frontend
+npx eas-cli@latest workflow:run .eas/workflows/testflight-beta.yml
+```
+
+Driver -> build + TestFlight:
+
+```bash
+cd driver-app
+npx eas-cli@latest workflow:run .eas/workflows/testflight-beta.yml
+```
+
+Disse workflowene bruker `testflight-beta`-profilen og den nåværende Emergent beta-API-en. De merger eller deployer ikke backend.
+
+Android APK kan på samme måte kjøres direkte i EAS:
+
+```bash
+cd frontend
+npx eas-cli@latest workflow:run .eas/workflows/customer-apk.yml
+
+cd ../driver-app
+npx eas-cli@latest workflow:run .eas/workflows/build-apk.yml
+```
+
+## Automatisk betaling etter tur
+
+Kodebanen for Bolt/Uber-lignende automatisk kortbetaling er implementert, men er **av som standard**.
+
+Aktiver først etter Stripe test-E2E og eksplisitt beta-beslutning:
+
+```
+KJAPP_AUTO_CHARGE_ENABLED=true
+```
+
+Flyt:
+- bruker legger til/verifiserer kort via Stripe Setup
+- turen avsluttes
+- backend forsøker en idempotent off-session PaymentIntent mot det lagrede kortet
+- ved success: turens `payment_status=paid`, kvittering/push sendes
+- ved bank/3DS-krav eller feil: forsøket fullføres ikke, og kunden faller tilbake til eksisterende sikre Stripe Checkout fra kvitteringen
+- ride lifecycle `status` endres aldri av betalingshendelsen
+
+Ikke aktiver dette med live Stripe-nøkler før testkort/Connect/webhook/idempotency er verifisert.
+
+## Driver pickup / no-show sikkerhetsgrenser
+
+Backend håndhever disse grensene selv; UI-knapper kan ikke omgå dem:
+
+```
+KJAPP_PICKUP_ARRIVAL_RADIUS_M=400
+KJAPP_NO_SHOW_WAIT_MINUTES=5
+```
+
+- Sjåføren må ha fersk GPS og være innenfor radiusen før «Jeg er fremme» godtas.
+- «Start turen» krever at turen allerede er i `at_pickup`.
+- No-show kan først registreres etter ventetiden regnet fra serverens registrerte ankomsttid.
+- Verdiene kan justeres uten app-release.
+
+## Oslo beta serviceområde
+
+Backenden har en launch-gate for **hentested**. Destinasjonen kan fortsatt være utenfor sonen.
+
+Aktiver i Emergent beta/produksjonsmiljøet:
+
+```
+KJAPP_SERVICE_AREA_ENFORCE=true
+KJAPP_SERVICE_AREA_CENTER_LAT=59.9139
+KJAPP_SERVICE_AREA_CENTER_LNG=10.7522
+KJAPP_SERVICE_AREA_RADIUS_KM=45
+```
+
+Radiusen er konfigurerbar uten kodeendring. `GET /api/service-area` viser aktiv konfigurasjon.
+Når `KJAPP_SERVICE_AREA_ENFORCE=false` er funksjonen bygget, men ingen bestilling blokkeres.
 
 ## Bakgrunnsposisjon — Driver
 

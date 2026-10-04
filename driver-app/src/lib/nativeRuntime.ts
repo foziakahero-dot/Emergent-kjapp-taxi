@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -7,7 +8,9 @@ import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
 const LAST_BACKGROUND_OFFER_KEY = 'kjapp_last_background_offer';
+const LAST_BACKGROUND_PENDING_CHECK_KEY = 'kjapp_last_background_pending_check_at';
 let backgroundPermissionRequestedThisSession = false;
+let backgroundLocationMode: 'idle' | 'active' | null = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -20,6 +23,11 @@ Notifications.setNotificationHandler({
 
 async function notifyPendingTripFromBackground() {
   try {
+    const now = Date.now();
+    const previousCheck = Number(await storage.getItem(LAST_BACKGROUND_PENDING_CHECK_KEY) || 0);
+    if (Number.isFinite(previousCheck) && now - previousCheck < 8000) return;
+    await storage.setItem(LAST_BACKGROUND_PENDING_CHECK_KEY, String(now));
+
     const response = await api.get('/driver/pending');
     const payload = response.data;
     const pending = payload?.trips || payload?.pending || (Array.isArray(payload) ? payload : []);
@@ -61,13 +69,23 @@ if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         heading: pos.coords.heading || 0,
-        speed: pos.coords.speed || 0,
+        speed: Math.max(0, pos.coords.speed || 0),
+        recorded_at: new Date(pos.timestamp).toISOString(),
       });
     } catch {
       // Foreground polling will recover on the next active session.
     }
     await notifyPendingTripFromBackground();
   });
+}
+
+async function getExpoPushTokenData() {
+  const projectId =
+    (Constants as any)?.expoConfig?.extra?.eas?.projectId ||
+    (Constants as any)?.easConfig?.projectId;
+  if (!projectId) return null;
+  const expoToken = await Notifications.getExpoPushTokenAsync({ projectId });
+  return expoToken.data || null;
 }
 
 export async function registerNativePush() {
@@ -91,24 +109,40 @@ export async function registerNativePush() {
   if (status !== 'granted') return false;
 
   try {
-    const nativeToken = await Notifications.getDevicePushTokenAsync();
-    const token = typeof nativeToken.data === 'string'
-      ? nativeToken.data
-      : JSON.stringify(nativeToken.data);
-
+    const token = await getExpoPushTokenData();
+    if (!token) return false;
     await api.post('/push/native-subscribe', {
       platform: Platform.OS,
+      provider: 'expo',
       token,
     });
     return true;
   } catch {
-    // The app remains usable if FCM/APNs credentials are not provisioned yet.
+    // The app remains usable if push credentials are not provisioned yet.
     // On-shift Driver notifications also have a background-location fallback.
     return false;
   }
 }
 
-export async function startDriverBackgroundLocation() {
+export async function unregisterNativePush() {
+  if (Platform.OS === 'web') return false;
+  try {
+    const permission = await Notifications.getPermissionsAsync();
+    if (permission.status !== 'granted') return false;
+    const token = await getExpoPushTokenData();
+    if (!token) return false;
+    await api.post('/push/native-unsubscribe', {
+      platform: Platform.OS,
+      provider: 'expo',
+      token,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function startDriverBackgroundLocation(mode: 'idle' | 'active' = 'idle') {
   if (Platform.OS === 'web') return { foreground: false, background: false };
 
   const foregroundCurrent = await Location.getForegroundPermissionsAsync();
@@ -128,39 +162,53 @@ export async function startDriverBackgroundLocation() {
     return { foreground: true, background: false };
   }
 
-  const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  let running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  if (running && backgroundLocationMode !== mode) {
+    await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+    running = false;
+  }
+
   if (!running) {
+    const activeTrip = mode === 'active';
     await Location.startLocationUpdatesAsync(DRIVER_LOCATION_TASK, {
-      accuracy: Location.Accuracy.BestForNavigation,
+      accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
       activityType: Location.ActivityType.AutomotiveNavigation,
-      distanceInterval: 15,
-      timeInterval: 6000,
-      deferredUpdatesDistance: 30,
-      deferredUpdatesInterval: 12000,
+      distanceInterval: activeTrip ? 5 : 50,
+      timeInterval: activeTrip ? 3000 : 15000,
+      deferredUpdatesDistance: activeTrip ? 10 : 100,
+      deferredUpdatesInterval: activeTrip ? 5000 : 30000,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: 'KJAPP Driver er på skift',
-        notificationBody: 'Posisjonen deles for å motta og gjennomføre turer.',
+        notificationTitle: activeTrip ? 'KJAPP Driver · aktiv tur' : 'KJAPP Driver er på skift',
+        notificationBody: activeTrip
+          ? 'Posisjonen deles live under den aktive turen.'
+          : 'Posisjonen deles for å motta turer i nærheten.',
         notificationColor: '#00E5F5',
         killServiceOnDestroy: false,
       },
     });
   }
+  backgroundLocationMode = mode;
 
-  return { foreground: true, background: true };
+  return { foreground: true, background: true, mode };
 }
 
 export async function stopDriverBackgroundLocation() {
   if (Platform.OS === 'web') return;
   const running = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK);
   if (running) await Location.stopLocationUpdatesAsync(DRIVER_LOCATION_TASK);
+  backgroundLocationMode = null;
   await storage.removeItem(LAST_BACKGROUND_OFFER_KEY);
+  await storage.removeItem(LAST_BACKGROUND_PENDING_CHECK_KEY);
 }
 
 export function normalizeDriverNotificationUrl(url: unknown) {
   if (typeof url !== 'string') return null;
-  if (url === '/driver' || url === '/app' || url === '/') return '/(driver)/home';
+  if (url === '/driver' || url === '/app' || url === '/' || url.startsWith('/driver/trip/')) {
+    return '/(driver)/home';
+  }
+  if (url === '/driver/trip') return '/(driver)/home';
   if (url.startsWith('/driver/trips')) return '/driver-trips';
   if (url.startsWith('/driver/settings')) return '/driver-settings';
   return url;

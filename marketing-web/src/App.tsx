@@ -3,6 +3,10 @@ import { Link, Route, Routes } from 'react-router-dom';
 import { ApplyPage } from './ApplyPage';
 import PremiumHome from './PremiumHome';
 import { TripSharePage } from './TripSharePage';
+import { PaymentReturnPage } from './PaymentReturnPage';
+import HelpPage from './HelpPage';
+import LegalPage from './LegalPage';
+import PasswordResetPage from './PasswordResetPage';
 
 const FLEET_URL = 'https://fleet.kjappapp.no';
 const EMAILS = {
@@ -28,7 +32,7 @@ function PartnerHeader() {
         <a href={`mailto:${EMAILS.driver}`} onClick={() => setMenuOpen(false)}>Sjåfører</a>
         <Link to="/loyvehaver" onClick={() => setMenuOpen(false)}>Løyvehavere</Link>
         <a href={FLEET_URL} onClick={() => setMenuOpen(false)}>Fleet Panel</a>
-        <a href={`mailto:${EMAILS.support}`} onClick={() => setMenuOpen(false)}>Hjelp</a>
+        <Link to="/help" onClick={() => setMenuOpen(false)}>Hjelp</Link>
         <Link className="mk-pill mk-pill-gold" to="/loyvehaver/soknad" onClick={() => setMenuOpen(false)}>Bli partner</Link>
       </nav>
       <button className="mk-menu-button" type="button" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>Meny</button>
@@ -205,6 +209,15 @@ export default function App() {
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
       <Route path="/tur/:token" element={<TripSharePage />} />
+      <Route path="/payment/success" element={<PaymentReturnPage kind="trip-success" />} />
+      <Route path="/payment/cancel" element={<PaymentReturnPage kind="trip-cancel" />} />
+      <Route path="/payment/setup-success" element={<PaymentReturnPage kind="setup-success" />} />
+      <Route path="/payment/setup-cancel" element={<PaymentReturnPage kind="setup-cancel" />} />
+      <Route path="/help" element={<HelpPage />} />
+      <Route path="/hjelp" element={<HelpPage />} />
+      <Route path="/personvern" element={<LegalPage kind="privacy" />} />
+      <Route path="/vilkar" element={<LegalPage kind="terms" />} />
+      <Route path="/reset-password/:token" element={<PasswordResetPage />} />
       <Route path="*" element={<PremiumHome />} />
     </Routes>
   );

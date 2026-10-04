@@ -3,7 +3,7 @@
     "apk": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "android": {
         "buildType": "apk",
@@ -12,23 +12,50 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "android": {
         "image": "latest"
       },
       "ios": {
         "image": "latest"
-      }
+      },
+      "autoIncrement": true
     },
     "ios-simulator": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://github-app-builder-28.emergent.host"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
       },
       "ios": {
         "simulator": true,
         "image": "latest"
+      }
+    },
+    "testflight-beta": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+      },
+      "ios": {
+        "image": "latest"
+      }
+    }
+  },
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6815866825"
+      }
+    },
+    "testflight-beta": {
+      "ios": {
+        "ascAppId": "6815866825"
       }
     }
   }

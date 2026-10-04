@@ -1,12 +1,12 @@
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { useAuth } from '@/src/context/AuthContext';
-import { authApi, driverApi } from '@/src/lib/api';
+import { authApi, authenticatedFileSource, driverApi } from '@/src/lib/api';
 import { vehicleMeta } from '@/src/lib/format';
 
 export default function DriverProfile() {
@@ -21,13 +21,23 @@ export default function DriverProfile() {
 
   const initials = (u.fullName || 'S').split(' ').map((p: string) => p[0]).slice(0, 2).join('').toUpperCase();
   const vName = vehicleMeta(u.vehicle_type || 'ai-first').name;
+  const { data: profilePhotoSource } = useQuery({
+    queryKey: ['driver-profile-photo-source', u.profile_photo_path],
+    queryFn: () => authenticatedFileSource(u.profile_photo_path),
+    enabled: !!u.profile_photo_path,
+  });
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24, paddingHorizontal: 20 }}>
       <Text style={s.title}>Profil</Text>
 
       <View style={s.card}>
-        <View style={s.avatar}><Text style={s.avatarText}>{initials}</Text></View>
+        <Pressable style={s.avatarWrap} onPress={() => router.push('/driver-profile-photo')} testID="driver-profile-photo-open">
+          <View style={s.avatar}>
+            {profilePhotoSource ? <Image source={profilePhotoSource} style={s.avatarImage} /> : <Text style={s.avatarText}>{initials}</Text>}
+          </View>
+          <View style={s.photoBadge}><Icon name="user" size={12} color={colors.accentOn} /></View>
+        </Pressable>
         <Text style={s.name}>{u.fullName || 'Sjåfør'}</Text>
         <Text style={s.email}>{u.email}</Text>
         <View style={s.badgeRow}>
@@ -42,13 +52,20 @@ export default function DriverProfile() {
         </View>
       </View>
 
-      <Text style={s.section}>Kjøretøy</Text>
-      <View style={s.infoCard}>
-        <Info label="Bil" value={u.car || '—'} s={s} />
-        <Info label="Skilt" value={u.plate || '—'} s={s} border />
-        <Info label="Klasse" value={vName} s={s} border />
-        <Info label="Status" value="Aktiv" valueColor={colors.online} s={s} border />
+      <Text style={s.section}>Løyvehaver</Text>
+      <View style={s.infoCard} testID="driver-fleet-card">
+        <Info label="Firma" value={u.fleet_name || 'Ikke tilknyttet'} s={s} />
+        <Info label="Org.nr." value={u.fleet_org_number || '—'} s={s} border />
       </View>
+
+      <Text style={s.section}>Aktiv bil</Text>
+      <View style={s.infoCard} testID="driver-assigned-vehicle-card">
+        <Info label="Bil" value={u.car || 'Ingen bil tildelt'} s={s} />
+        <Info label="Skilt" value={u.plate || '—'} s={s} border />
+        <Info label="Klasse" value={u.vehicle_id ? vName : '—'} s={s} border />
+        <Info label="Tildeling" value={u.vehicle_id ? 'Tildelt av løyvehaver' : 'Mangler tildeling'} valueColor={u.vehicle_id ? colors.online : colors.danger} s={s} border />
+      </View>
+      <Text style={s.vehicleHint}>Løyvehaveren bestemmer hvilke biler du kan bruke. Du velger aktiv bil i «Mine biler» før du går online.</Text>
 
       <Text style={s.section}>Personlig</Text>
       <View style={s.infoCard}>
@@ -58,7 +75,10 @@ export default function DriverProfile() {
       </View>
 
       <View style={[s.infoCard, { marginTop: 20 }]}>
-        <MenuRow icon="history" label="Mine turer" onPress={() => router.push('/driver-trips')} s={s} testID="profile-trips" />
+        <MenuRow icon="car" label="Mine biler" onPress={() => router.push('/driver-vehicles')} s={s} testID="profile-vehicles" />
+        <MenuRow icon="user" label="Profilbilde" onPress={() => router.push('/driver-profile-photo')} s={s} border testID="profile-photo" />
+        <MenuRow icon="shield" label="Identitetskontroll" onPress={() => router.push('/driver-identity')} s={s} border testID="profile-identity" />
+        <MenuRow icon="history" label="Mine turer" onPress={() => router.push('/driver-trips')} s={s} border testID="profile-trips" />
         <MenuRow icon="settings" label="Innstillinger" onPress={() => router.push('/driver-settings')} s={s} border testID="profile-settings" />
       </View>
 
@@ -92,7 +112,10 @@ function MenuRow({ icon, label, onPress, border, s, testID }: { icon: IconName; 
 const useStyles = makeStyles((c) => ({
   title: { color: c.text, fontFamily: font.display, fontSize: 28, marginBottom: 20 },
   card: { backgroundColor: c.driverCard, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 24, alignItems: 'center' },
-  avatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  avatarWrap: { width: 82, height: 82, marginBottom: 14, position: 'relative' },
+  avatar: { width: 76, height: 76, borderRadius: 38, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarImage: { width: 76, height: 76, borderRadius: 38 },
+  photoBadge: { position: 'absolute', right: 0, bottom: 2, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: c.online, borderWidth: 2, borderColor: c.driverCard },
   avatarText: { color: c.online, fontFamily: font.display, fontSize: 28 },
   name: { color: c.text, fontFamily: font.display, fontSize: 22 },
   email: { color: c.textMuted, fontSize: 14, marginTop: 4 },
@@ -100,6 +123,7 @@ const useStyles = makeStyles((c) => ({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accentSoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   badgeText: { color: c.accent, fontSize: 12 },
   section: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 26, marginBottom: 8 },
+  vehicleHint: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 8, paddingHorizontal: 4 },
   infoCard: { backgroundColor: c.driverCard, borderRadius: 20, borderWidth: 1, borderColor: c.line, paddingHorizontal: 16 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 16 },
   infoBorder: { borderTopWidth: 1, borderTopColor: c.line },

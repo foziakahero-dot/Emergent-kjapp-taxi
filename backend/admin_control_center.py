@@ -64,8 +64,10 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     try:
         driver = await db.users.find_one({"_id": ObjectId(str(driver_id)), "role": "driver"})
     except Exception:
-        return None
-    fleet_id = (driver or {}).get("fleet_id")
+        driver = None
+    # The trip-time fleet snapshot is canonical. A later driver transfer must never
+    # redirect an old fare to the driver's new fleet.
+    fleet_id = trip.get("fleet_id") or (driver or {}).get("fleet_id")
     if not fleet_id:
         return None
     try:
@@ -92,7 +94,9 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     )
     if not snap["ready"]:
         return None
-    rate = float((fleet or {}).get("commission_rate", 0.10) or 0.10)
+    # Preserve the commission agreed/snapshotted on the ride. Changing fleet pricing
+    # after booking must not change settlement for an already accepted trip.
+    rate = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)) or 0.10)
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
@@ -133,16 +137,12 @@ def install_admin_control_center(
 
     class FleetDriverInvite(BaseModel):
         email: str
-        car: str
-        plate: str
-        vehicle_type: str = "ai-first"
+        vehicle_id: str
         note: Optional[str] = ""
 
     class FleetVehicleUpdate(BaseModel):
         driver_user_id: str
-        car: str
-        plate: str
-        vehicle_type: str = "ai-first"
+        vehicle_id: str
 
     def clean_permissions(values: list[str]) -> list[str]:
         unknown = sorted(set(values) - set(ADMIN_PERMISSIONS))
@@ -439,13 +439,35 @@ def install_admin_control_center(
     @api.post("/admin/control/fleets/{fleet_id}/driver-invites")
     async def invite_driver_for_fleet(fleet_id: str, body: FleetDriverInvite, current=Depends(require_admin)):
         fleet = await fleet_or_404(fleet_id)
+        try:
+            vehicle = await db.fleet_vehicles.find_one({"_id": ObjectId(str(body.vehicle_id)), "fleet_id": fleet_id})
+        except Exception:
+            vehicle = None
+        if not vehicle:
+            raise HTTPException(404, "Bilen finnes ikke hos denne løyvehaveren")
+        if vehicle.get("active") is False:
+            raise HTTPException(409, "Bilen er parkert")
+        if vehicle.get("assigned_driver_id"):
+            raise HTTPException(409, "Bilen er allerede tildelt en sjåfør")
+        if await db.driver_invites.find_one({
+            "fleet_id": fleet_id,
+            "vehicle_id": str(vehicle["_id"]),
+            "used": False,
+            "expires_at": {"$gt": _now()},
+        }):
+            raise HTTPException(409, "Det finnes allerede en aktiv invitasjon for denne bilen")
+
         token = secrets.token_urlsafe(24)
         email = body.email.strip().lower()
+        canonical_car = str(vehicle.get("car") or "").strip()
+        canonical_plate = str(vehicle.get("plate") or "").strip().upper()
+        canonical_type = vehicle.get("vehicle_type") or "ai-first"
         doc = {
             "token": token,
-            "car": body.car.strip(),
-            "plate": body.plate.strip().upper(),
-            "vehicle_type": body.vehicle_type,
+            "vehicle_id": str(vehicle["_id"]),
+            "car": canonical_car,
+            "plate": canonical_plate,
+            "vehicle_type": canonical_type,
             "note": body.note or "",
             "email": email,
             "created_by": current["id"],
@@ -459,8 +481,8 @@ def install_admin_control_center(
         base = os.getenv("KJAPP_PUBLIC_URL", "https://kjappapp.no").rstrip("/")
         invite_url = f"{base}/driver-signup/{token}"
         safe_name = html.escape(str(fleet.get("name") or "KJAPP-flåten"))
-        safe_car = html.escape(body.car)
-        safe_plate = html.escape(body.plate.upper())
+        safe_car = html.escape(canonical_car)
+        safe_plate = html.escape(canonical_plate)
         mail = (
             "<div style='font-family:Arial,sans-serif;background:#071015;color:#e9edf1;padding:28px'>"
             "<h2 style='color:#72dce8'>KJAPP sjåførinvitasjon</h2>"
@@ -472,7 +494,7 @@ def install_admin_control_center(
         sent = await asyncio.to_thread(send_email, email, "Invitasjon: Bli sjåfør for KJAPP", mail)
         if sent:
             await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
-        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {"email": email, "plate": body.plate.upper()})
+        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {"email": email, "vehicle_id": str(vehicle["_id"]), "plate": canonical_plate})
         return {"ok": True, "email_sent": bool(sent), "expires_at": doc["expires_at"]}
 
     @api.post("/admin/control/fleets/{fleet_id}/vehicle")
@@ -481,11 +503,53 @@ def install_admin_control_center(
         driver = await db.users.find_one({"_id": _oid(body.driver_user_id), "role": "driver", "fleet_id": fleet_id})
         if not driver:
             raise HTTPException(404, "Sjåføren tilhører ikke denne løyvehaveren")
-        before = {"car": driver.get("car"), "plate": driver.get("plate"), "vehicle_type": driver.get("vehicle_type")}
-        after = {"car": body.car.strip(), "plate": body.plate.strip().upper(), "vehicle_type": body.vehicle_type}
-        await db.users.update_one({"_id": driver["_id"]}, {"$set": after})
-        await audit(current, "fleet.vehicle_update", "fleet", fleet_id, before, after)
-        return {"ok": True}
+        if driver.get("online"):
+            raise HTTPException(409, "Sjåføren må gå offline før bilbytte")
+        vehicle = await db.fleet_vehicles.find_one({"_id": _oid(body.vehicle_id), "fleet_id": fleet_id})
+        if not vehicle:
+            raise HTTPException(404, "Bilen finnes ikke hos denne løyvehaveren")
+        if vehicle.get("active") is False:
+            raise HTTPException(409, "Bilen er parkert")
+        previous_driver_id = vehicle.get("assigned_driver_id")
+        if previous_driver_id and previous_driver_id != body.driver_user_id:
+            previous_driver = await db.users.find_one({"_id": _oid(previous_driver_id), "role": "driver", "fleet_id": fleet_id})
+            if previous_driver and previous_driver.get("online"):
+                raise HTTPException(409, "Nåværende sjåfør må gå offline før bilen kan omfordeles")
+        else:
+            previous_driver = None
+
+        before = {
+            "driver_vehicle_id": driver.get("vehicle_id"),
+            "target_vehicle_id": body.vehicle_id,
+            "target_previous_driver_id": previous_driver_id,
+        }
+        now = _now()
+        await db.fleet_vehicles.update_many(
+            {"fleet_id": fleet_id, "assigned_driver_id": body.driver_user_id, "_id": {"$ne": vehicle["_id"]}},
+            {"$unset": {"assigned_driver_id": "", "assigned_driver_name": ""}, "$set": {"updated_at": now}},
+        )
+        await db.fleet_vehicles.update_one(
+            {"_id": vehicle["_id"], "fleet_id": fleet_id},
+            {"$set": {
+                "assigned_driver_id": body.driver_user_id,
+                "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
+                "updated_at": now,
+            }},
+        )
+        after = {
+            "vehicle_id": str(vehicle["_id"]),
+            "car": vehicle.get("car"),
+            "plate": vehicle.get("plate"),
+            "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        }
+        await db.users.update_one({"_id": driver["_id"], "fleet_id": fleet_id}, {"$set": after})
+        if previous_driver:
+            await db.users.update_one(
+                {"_id": previous_driver["_id"], "fleet_id": fleet_id},
+                {"$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}, "$set": {"online": False}},
+            )
+        await audit(current, "fleet.vehicle_assign", "fleet", fleet_id, before, {**after, "driver_user_id": body.driver_user_id})
+        return {"ok": True, **after}
 
     # ---------------- Communications ----------------
     async def recipient_users(audience: str, fleet_id: Optional[str]):

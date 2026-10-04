@@ -420,7 +420,8 @@ class TestRegressions:
         email = f"TEST_gdpr7_{uuid.uuid4().hex[:8]}@kjapp.no"
         rr = requests.post(f"{API}/auth/register",
                            json={"email": email, "password": "test1234",
-                                 "fullName": "TEST_GDPR", "phone": "+4790000000"},
+                                 "fullName": "TEST_GDPR", "phone": "+4790000000",
+                                 "accepted_terms": True, "legal_version": "test"},
                            timeout=15)
         assert rr.status_code == 200
         tok = rr.json()["token"]
@@ -454,7 +455,8 @@ def _register_throwaway():
     r = requests.post(
         f"{API}/auth/register",
         json={"email": email, "password": "test1234",
-              "fullName": "TEST_Iter8", "phone": "+4790000000"},
+              "fullName": "TEST_Iter8", "phone": "+4790000000",
+              "accepted_terms": True, "legal_version": "test"},
         timeout=15,
     )
     assert r.status_code == 200, r.text
