@@ -14,7 +14,7 @@ export async function payNative(tripId: string): Promise<boolean | null> {
   if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');
   const initialized = await initPaymentSheet({
     merchantDisplayName: 'SNAR', paymentIntentClientSecret: intent.client_secret,
-    returnURL: 'kjapp://payment/success', allowsDelayedPaymentMethods: false,
+    returnURL: `kjapp://receipt/${encodeURIComponent(tripId)}`, allowsDelayedPaymentMethods: false,
     applePay: compiledMerchant && compiledMerchant === config.apple_merchant_id
       ? { merchantCountryCode: 'NO' } : undefined,
     googlePay: config.google_pay_enabled ? { merchantCountryCode: 'NO', currencyCode: 'NOK', testEnv: config.test_mode } : undefined,

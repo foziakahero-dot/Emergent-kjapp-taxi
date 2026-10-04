@@ -13,7 +13,7 @@ const api={
  carsApi:{nearby:async()=>({cars:[]})},mePlacesApi:{list:async()=>({places:[]})},placesApi:{list:async()=>({places:[]}),reverse:async()=>({label:'GPS address'}),search:async()=>({results:[]})},
  paymentApi:{list:async()=>[{id:'test-method',is_default:true}],nativeConfig:async()=>stripeConfig,nativeIntent:async()=>{intentCalls++;return {payment_intent_id:'pi_unit',client_secret:'unit'}},nativeStatus:async()=>({payment_status:settled?'paid':'unpaid'})}
 };
-const stripe={StripeProvider:({children,...props})=>React.createElement('StripeProvider',props,children),handleURLCallback:async url=>urls.push(url),initStripe:async()=>{},initPaymentSheet:async()=>({}),presentPaymentSheet:async()=>paymentResult};
+const stripe={StripeProvider:({children,...props})=>React.createElement('StripeProvider',props,children),handleURLCallback:async url=>urls.push(url),initStripe:async()=>{},initPaymentSheet:async options=>{assert.equal(options.returnURL,'kjapp://receipt/unit');return {}},presentPaymentSheet:async()=>paymentResult};
 const color=new Proxy({}, {get:()=> '#000000'});
 const navigations=[];const testRouter={push(p){navigations.push(p)},replace(p){navigations.push(p)}};
 const old=Module._load;

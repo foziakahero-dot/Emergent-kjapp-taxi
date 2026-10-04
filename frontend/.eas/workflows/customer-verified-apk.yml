@@ -1,0 +1,46 @@
+name: Customer signed APK and startup verification
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fingerprint:
+    type: fingerprint
+    environment: preview
+    env:
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+  compatible_android:
+    needs: [fingerprint]
+    type: get-build
+    params:
+      platform: android
+      profile: apk
+      fingerprint_hash: ${{ needs.fingerprint.outputs.android_fingerprint_hash }}
+  repack_android:
+    needs: [compatible_android]
+    if: ${{ needs.compatible_android.outputs.build_id }}
+    type: repack
+    environment: preview
+    env:
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+    params:
+      build_id: ${{ needs.compatible_android.outputs.build_id }}
+      profile: apk
+      message: Customer TEST payment callback and compact search
+  build_android:
+    needs: [compatible_android]
+    if: ${{ !needs.compatible_android.outputs.build_id }}
+    type: build
+    environment: preview
+    params:
+      platform: android
+      profile: apk
+  startup:
+    after: [repack_android, build_android]
+    if: ${{ after.repack_android.status == 'success' || after.build_android.status == 'success' }}
+    type: maestro
+    environment: preview
+    params:
+      build_id: ${{ needs.repack_android.outputs.build_id || needs.build_android.outputs.build_id }}
+      flow_path: .maestro/customer-startup.yml
+      record_screen: true
