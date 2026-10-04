@@ -1,56 +1,84 @@
-import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import ReactDOMClient from 'react-dom/client';
-import { BrowserRouter, Link, useLocation } from 'react-router-dom';
-import App from './App';
-import HelpPage from './HelpPage';
-import { setPageSeo } from './seo';
-import CookieConsent from './CookieConsent';
-import './styles.css';
-import './responsive-fixes.css';
-import './support-footer.css';
-import './production-readiness.css';
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import ReactDOMClient from "react-dom/client";
+import { BrowserRouter, Link, useLocation } from "react-router-dom";
+import App from "./App";
+import HelpPage from "./HelpPage";
+import { setPageSeo } from "./seo";
+import CookieConsent from "./CookieConsent";
+import "./snar-tokens.css";
 
-const SUPPORT_EMAIL = 'support@kjappapp.no';
+import "./production-readiness.css";
+import "./snar-landing.css";
+
+const SUPPORT_EMAIL = "support@kjappapp.no";
 
 function RouteMetadata() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
 
   useEffect(() => {
-    if (pathname === '/help') {
+    if (hash) {
+      requestAnimationFrame(() =>
+        document.getElementById(hash.slice(1))?.scrollIntoView(),
+      );
+    } else {
+      window.scrollTo(0, 0);
+    }
+    if (pathname === "/personvern" || pathname === "/vilkar") {
       setPageSeo({
-        title: 'SNAR Hjelp & support',
-        description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.',
-        canonical: 'https://kjappapp.no/help',
+        title: pathname === "/personvern" ? "SNAR Personvern" : "SNAR Vilkår",
+        description: "Informasjon for SNAR beta.",
+        canonical: "https://kjappapp.no" + pathname,
+      });
+      return;
+    }
+    if (pathname.startsWith("/tur/")) {
+      setPageSeo({
+        title: "SNAR Delt tur",
+        description: "Delt turstatus.",
+        canonical: "https://kjappapp.no" + pathname,
+        robots: "noindex,nofollow",
+      });
+      return;
+    }
+    if (pathname === "/help") {
+      setPageSeo({
+        title: "SNAR Hjelp & support",
+        description:
+          "Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.",
+        canonical: "https://kjappapp.no/help",
       });
       return;
     }
 
-    if (pathname === '/loyvehaver') {
+    if (pathname === "/loyvehaver") {
       setPageSeo({
-        title: 'SNAR for løyvehavere — Fleet Panel og norsk oppfølging',
-        description: 'Bli SNAR-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.',
-        canonical: 'https://kjappapp.no/loyvehaver',
+        title: "SNAR for løyvehavere — Fleet Panel og norsk oppfølging",
+        description:
+          "Bli SNAR-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.",
+        canonical: "https://kjappapp.no/loyvehaver",
       });
       return;
     }
 
-    if (pathname === '/loyvehaver/soknad') {
+    if (pathname === "/loyvehaver/soknad") {
       setPageSeo({
-        title: 'SNAR Partner — løyvehaversøknad',
-        description: 'Søk om å bli SNAR-partner og send nødvendig dokumentasjon for kontroll før Fleet-tilgang aktiveres.',
-        canonical: 'https://kjappapp.no/loyvehaver/soknad',
-        robots: 'noindex,nofollow',
+        title: "SNAR Partner — løyvehaversøknad",
+        description:
+          "Søk om å bli SNAR-partner og send nødvendig dokumentasjon for kontroll før Fleet-tilgang aktiveres.",
+        canonical: "https://kjappapp.no/loyvehaver/soknad",
+        robots: "noindex,nofollow",
       });
       return;
     }
 
     setPageSeo({
-      title: 'SNAR – Reis smart',
-      description: 'SNAR er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.',
-      canonical: 'https://kjappapp.no/',
+      title: "SNAR – Reis smart",
+      description:
+        "SNAR er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.",
+      canonical: "https://kjappapp.no/",
     });
-  }, [pathname]);
+  }, [pathname, hash]);
 
   return null;
 }
@@ -60,13 +88,13 @@ function SupportFooterPortal() {
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (pathname === '/help') {
+    if (pathname === "/help") {
       setTarget(null);
       return;
     }
 
     const timer = window.setTimeout(() => {
-      setTarget(document.querySelector<HTMLElement>('.mk-footer'));
+      setTarget(document.querySelector<HTMLElement>(".mk-footer"));
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -85,10 +113,10 @@ function SupportFooterPortal() {
 
 function RootContent() {
   const { pathname } = useLocation();
-  return pathname === '/help' ? <HelpPage /> : <App />;
+  return pathname === "/help" ? <HelpPage /> : <App />;
 }
 
-ReactDOMClient.createRoot(document.getElementById('root')!).render(
+ReactDOMClient.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <RouteMetadata />
