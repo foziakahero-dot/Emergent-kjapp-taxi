@@ -1,3 +1,5 @@
+require('./apply-customer-beta-hotfix.cjs');
+
 const fs = require('fs');
 const path = require('path');
 const gate = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'customer-build-gate.json'), 'utf8'));
