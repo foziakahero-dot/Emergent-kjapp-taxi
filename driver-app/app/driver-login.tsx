@@ -41,7 +41,7 @@ export default function DriverLogin() {
         setError('Denne kontoen er ikke godkjent som KJAPP-sjåfør.');
         return;
       }
-      router.replace('/(driver)/home');
+      router.replace(res?.approved === true ? '/(driver)/home' : '/driver-status');
     } catch (e) {
       setError(apiError(e));
     } finally {

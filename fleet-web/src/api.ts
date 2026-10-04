@@ -33,6 +33,10 @@ http.interceptors.response.use(
 export const apiError = (e: any) => {
   const d = e?.response?.data?.detail;
   if (typeof d === 'string') return d;
+  if (d && typeof d === 'object') {
+    if (typeof d.message === 'string') return d.message;
+    try { return JSON.stringify(d); } catch {}
+  }
   return e?.message || 'Noe gikk galt';
 };
 
@@ -111,6 +115,13 @@ export type PublicDriverInvite = {
   vehicle_type?: string;
   fleet_name?: string;
   expires_at?: string;
+  prefill?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    drivers_license_number?: string;
+    taxi_license_number?: string;
+  };
 };
 
 export const api = {
@@ -121,6 +132,11 @@ export const api = {
   checkResetToken: (token: string) => http.get(`/auth/reset-password/${token}`).then((r) => r.data),
   resetPassword: (token: string, new_password: string) =>
     http.post('/auth/reset-password', { token, new_password }).then((r) => r.data),
+  twofaStatus: () => http.get('/auth/2fa/status').then((r) => r.data),
+  twofaSetup: () => http.post('/auth/2fa/setup').then((r) => r.data),
+  twofaEnable: (code: string) => http.post('/auth/2fa/enable', { code }).then((r) => r.data),
+  twofaVerifyLogin: (twofa_token: string, code: string) =>
+    http.post('/auth/2fa/verify-login', { twofa_token, code }).then((r) => r.data),
 
   fleetMe: (): Promise<FleetMe> => http.get('/fleet/me').then((r) => r.data),
   overview: (): Promise<FleetOverview> => http.get('/fleet/overview').then((r) => r.data),
@@ -140,8 +156,11 @@ export const api = {
     email: string;
     phone: string;
     password: string;
+    drivers_license_number?: string;
+    taxi_license_number?: string;
     drivers_license_path: string;
     taxi_license_path: string;
+    police_certificate_path: string;
     profile_photo_path: string;
   }) => http.post('/driver-invites/accept', body).then((r) => r.data),
   uploadDriverDoc: (file: File, inviteToken: string, docType: string) => {

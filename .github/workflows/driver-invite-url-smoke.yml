@@ -1,0 +1,23 @@
+name: Driver invite URL smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'fleet-web/**'
+      - 'backend/admin_control_center.py'
+      - 'backend/scripts/smoke_driver_invite_url.py'
+      - '.github/workflows/driver-invite-url-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      KJAPP_PUBLIC_URL: ${{ vars.KJAPP_PUBLIC_URL || 'https://fleet.kjappapp.no' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python backend/scripts/smoke_driver_invite_url.py

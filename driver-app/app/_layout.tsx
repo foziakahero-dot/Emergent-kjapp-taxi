@@ -2,13 +2,14 @@ import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, router } from 'expo-router';
+import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS } from '@/src/theme';
+import { NetworkBanner } from '@/src/components/NetworkBanner';
 import { driverApi } from '@/src/lib/api';
 import {
   normalizeDriverNotificationUrl,
@@ -26,10 +27,10 @@ function NativeRuntimeBridge() {
 
   useEffect(() => {
     if (user?.role === 'driver') registerNativePush().catch(() => {});
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
-    if (user?.role !== 'driver') {
+    if (user?.role !== 'driver' || user?.approved !== true) {
       stopDriverBackgroundLocation().catch(() => {});
       return;
     }
@@ -52,24 +53,66 @@ function NativeRuntimeBridge() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.approved]);
 
   useEffect(() => {
+    if (user?.role !== 'driver' || !user?.id) return;
+
+    let alive = true;
+    let sub: Notifications.EventSubscription | undefined;
+
     const open = (notification?: Notifications.Notification | null) => {
-      const target = normalizeDriverNotificationUrl(notification?.request.content.data?.url);
-      if (target) router.push(target as any);
+      if (!alive || !notification) return;
+      try {
+        const target = normalizeDriverNotificationUrl(notification.request.content.data?.url);
+        if (target) router.push(target as any);
+      } catch {
+        // A malformed notification must never crash the native root.
+      }
     };
 
-    const last = Notifications.getLastNotificationResponse();
-    if (last?.notification) open(last.notification);
+    const boot = async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (alive && last?.notification) open(last.notification);
+      } catch {
+        // Native notification state is optional; driver app stays usable without it.
+      }
 
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      open(response.notification);
-    });
-    return () => sub.remove();
-  }, []);
+      try {
+        sub = Notifications.addNotificationResponseReceivedListener((response) => {
+          open(response.notification);
+        });
+      } catch {
+        // Listener registration failure must not terminate app startup.
+      }
+    };
+
+    void boot();
+    return () => {
+      alive = false;
+      try { sub?.remove(); } catch {}
+    };
+  }, [user?.id, user?.role]);
 
   return null;
+}
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.driverBg, alignItems: 'center', justifyContent: 'center', padding: 28 }}>
+      <Text style={{ color: colors.text, fontSize: 22, fontWeight: '700', textAlign: 'center' }}>KJAPP kunne ikke åpne denne skjermen</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 10 }}>
+        {__DEV__ ? error.message : 'En feil oppstod i appen. Prøv å åpne skjermen på nytt.'}
+      </Text>
+      <Pressable
+        onPress={retry}
+        style={{ marginTop: 20, minHeight: 48, paddingHorizontal: 22, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Text style={{ color: colors.accentOn, fontWeight: '700' }}>Prøv igjen</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 export default function RootLayout() {
@@ -79,6 +122,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.driverBg }}>
       <SafeAreaProvider>
+        <NetworkBanner />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <NativeRuntimeBridge />
@@ -94,6 +138,7 @@ export default function RootLayout() {
               <Stack.Screen name="driver-login" />
               <Stack.Screen name="(driver)" />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-status" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>

@@ -120,6 +120,7 @@ export const driverApi = {
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
   ratings: () => api.get('/driver/ratings').then((r) => r.data),
+  documents: () => api.get('/driver/documents').then((r) => r.data),
   payouts: () => api.get('/driver/payouts')
     .then((r) => normalizePayouts(r.data))
     .catch(() => normalizePayouts()),

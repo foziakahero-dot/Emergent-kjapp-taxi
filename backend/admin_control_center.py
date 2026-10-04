@@ -137,6 +137,10 @@ def install_admin_control_center(
         plate: str
         vehicle_type: str = "ai-first"
         note: Optional[str] = ""
+        full_name: Optional[str] = ""
+        phone: Optional[str] = ""
+        drivers_license_number: Optional[str] = ""
+        taxi_license_number: Optional[str] = ""
 
     class FleetVehicleUpdate(BaseModel):
         driver_user_id: str
@@ -448,6 +452,10 @@ def install_admin_control_center(
             "vehicle_type": body.vehicle_type,
             "note": body.note or "",
             "email": email,
+            "fullName": (body.full_name or "").strip(),
+            "phone": (body.phone or "").strip(),
+            "drivers_license_number": (body.drivers_license_number or "").strip(),
+            "taxi_license_number": (body.taxi_license_number or "").strip(),
             "created_by": current["id"],
             "fleet_id": fleet_id,
             "created_at": _now(),
@@ -456,7 +464,7 @@ def install_admin_control_center(
             "email_sent": False,
         }
         await db.driver_invites.insert_one(doc)
-        base = os.getenv("KJAPP_PUBLIC_URL", "https://kjappapp.no").rstrip("/")
+        base = os.getenv("KJAPP_PUBLIC_URL", "https://fleet.kjappapp.no").rstrip("/")
         invite_url = f"{base}/driver-signup/{token}"
         safe_name = html.escape(str(fleet.get("name") or "KJAPP-flåten"))
         safe_car = html.escape(body.car)
@@ -472,7 +480,12 @@ def install_admin_control_center(
         sent = await asyncio.to_thread(send_email, email, "Invitasjon: Bli sjåfør for KJAPP", mail)
         if sent:
             await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
-        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {"email": email, "plate": body.plate.upper()})
+        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {
+            "email": email,
+            "plate": body.plate.upper(),
+            "full_name": (body.full_name or "").strip(),
+            "phone": (body.phone or "").strip(),
+        })
         return {"ok": True, "email_sent": bool(sent), "expires_at": doc["expires_at"]}
 
     @api.post("/admin/control/fleets/{fleet_id}/vehicle")
