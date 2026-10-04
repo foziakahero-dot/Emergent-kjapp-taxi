@@ -147,7 +147,7 @@ export default function Home() {
     }
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });
     load();
-    const i = setInterval(load, 8000);
+    const i = setInterval(load, 4000);
     return () => { mounted = false; clearInterval(i); };
   }, [locationReady, loc.lat, loc.lng]);
 
