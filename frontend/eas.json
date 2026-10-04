@@ -9,7 +9,8 @@
         "buildType": "apk",
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "environment": "preview"
     },
     "production": {
       "env": {
@@ -21,7 +22,8 @@
       "ios": {
         "image": "latest"
       },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production"
     },
     "ios-simulator": {
       "distribution": "internal",
@@ -42,7 +44,8 @@
       "ios": {
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "environment": "production"
     }
   },
   "cli": {
