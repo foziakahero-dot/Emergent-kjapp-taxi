@@ -32,7 +32,6 @@ export default function BookingFlow() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const [minimized, setMinimized] = useState(false);
   const [trip, setTrip] = useState<any>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -232,11 +231,18 @@ export default function BookingFlow() {
         testID="booking-map"
       />
 
-      {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
-      {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
-        <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
-        <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
-      </View> : trip.status === 'searching' || trip.status === 'booking' ? (
+      {LIVE_TRIP_STATUSES.includes(trip.status) ? (
+        <Pressable
+          testID="active-trip-minimize"
+          accessibilityRole="button"
+          accessibilityLabel="Minimer tur og gå til hjemkart"
+          onPress={() => router.replace('/(app)/home')}
+          style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center', borderRadius: 24, backgroundColor: colors.surface }}
+        >
+          <Text>Minimer</Text>
+        </Pressable>
+      ) : null}
+      {trip.status === 'searching' || trip.status === 'booking' ? (
         <View style={s.matchingOverlay} testID="matching-overlay">
           <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
           <View style={s.matchingCard}>
