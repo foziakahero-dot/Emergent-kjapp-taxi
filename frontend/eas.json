@@ -50,6 +50,18 @@
         "resourceClass": "medium"
       },
       "environment": "production"
+    },
+    "ios-internal": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoia2phcHAiLCJhIjoiY21uOWN4NGFwMDVxbDJwc2gyNTNqbGNleiJ9.lZ8hI2Mdv1AzcyFlonX0Sw"
+      },
+      "ios": {
+        "image": "latest",
+        "resourceClass": "medium"
+      },
+      "environment": "preview"
     }
   },
   "cli": {
