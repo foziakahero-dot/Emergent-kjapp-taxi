@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { Brand } from './SnarUI';
 import { getSharedTrip } from './api';
 
 const STATUS: Record<string,string> = {
@@ -35,11 +36,11 @@ export function TripSharePage() {
     return () => { active = false; window.clearInterval(timer); };
   }, [token]);
 
-  return <main style={{minHeight:'100vh',background:'var(--snar-surface)',color:'var(--snar-navy)',fontFamily:'Inter,system-ui,sans-serif',padding:'28px 18px'}}>
+  return <main style={{minHeight:'100vh',background:'var(--snar-surface)',color:'var(--snar-navy)',fontFamily:'var(--snar-font)',padding:'28px 18px'}}>
     <div style={{width:'min(720px,100%)',margin:'0 auto'}}>
-      <Link to="/" style={{color:'#ff0000',textDecoration:'none',fontWeight:900,letterSpacing:'-.04em',fontSize:24}}>SNAR</Link>
-      <div style={{marginTop:56,border:'1px solid var(--snar-line)',borderRadius:28,background:'var(--snar-surface)',padding:'28px',boxShadow:'0 24px 80px rgba(0,31,63,.08)'}}>
-        <div style={{fontSize:10,letterSpacing:'.18em',fontWeight:800,color:'#ff0000'}}>DELT LIVE-TUR</div>
+      <Brand />
+      <div style={{marginTop:56,border:'1px solid var(--snar-line)',borderRadius:24,background:'var(--snar-surface)',padding:'28px',boxShadow:'0 24px 80px rgba(0,31,63,.08)'}}>
+        <div style={{fontSize:10,letterSpacing:'.18em',fontWeight:800,color:'var(--snar-red-deep)'}}>DELT LIVE-TUR</div>
         {error ? <>
           <h1 style={{fontSize:30,margin:'16px 0 0'}}>Lenken er ikke tilgjengelig</h1>
           <p style={{color:'var(--snar-secondary)',lineHeight:1.6}}>{error}</p>
@@ -63,6 +64,6 @@ export function TripSharePage() {
   </main>;
 }
 
-const card = {display:'grid',gap:6,border:'1px solid var(--snar-line)',background:'var(--snar-surface)',borderRadius:16,padding:'16px'} as const;
-const label = {color:'#ff0000',fontSize:9,letterSpacing:'.14em',fontWeight:800} as const;
+const card = {display:'grid',gap:6,border:'1px solid var(--snar-line)',background:'var(--snar-surface)',borderRadius:18,padding:'16px'} as const;
+const label = {color:'var(--snar-red-deep)',fontSize:9,letterSpacing:'.14em',fontWeight:800} as const;
 

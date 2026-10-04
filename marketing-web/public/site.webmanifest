@@ -4,8 +4,8 @@
   "description": "SNAR – norsk taxi med smart bestilling.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F7F8FA",
-  "theme_color": "#F7F8FA",
+  "background_color": "#F4F6FA",
+  "theme_color": "#F4F6FA",
   "icons": [
     {
       "src": "/assets/figma/logo.svg",
@@ -14,3 +14,4 @@
     }
   ]
 }
+
