@@ -21,9 +21,8 @@ jobs:
     env:
       CI: "1"
       EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
-      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
-      RNMAPBOX_MAPS_DOWNLOAD_TOKEN: ${{ secrets.RNMAPBOX_MAPS_DOWNLOAD_TOKEN || secrets.MAPBOX_DOWNLOADS_TOKEN }}
-      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN || secrets.RNMAPBOX_MAPS_DOWNLOAD_TOKEN }}
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN }}
+      RNMAPBOX_MAPS_DOWNLOAD_TOKEN: ${{ secrets.RNMAPBOX_MAPS_DOWNLOAD_TOKEN }}
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
     steps:
       - name: Checkout
@@ -33,7 +32,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN" ]; then
-            echo "Missing EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN / MAPBOX_ACCESS_TOKEN / MAPBOX_PUBLIC_TOKEN GitHub secret"
+            echo "Missing GitHub secret: EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN"
             exit 1
           fi
           echo "Mapbox runtime token is configured"
