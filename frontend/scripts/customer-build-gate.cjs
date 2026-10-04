@@ -11,6 +11,7 @@ if (internalApk) {
   console.warn('SNAR Customer INTERNAL TEST APK authorized by user on 2026-10-04; release gate remains BLOCKED.');
   for (const [name, status] of incomplete) console.warn(`${name}: ${status}`);
   for (const blocker of [...gate.p0, ...gate.p1]) console.warn(blocker);
+  require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'customer-config-probe.cjs')], { stdio: 'inherit', timeout: 20000 });
   process.exit(0);
 }
 if (gate.p0.length || gate.p1.length || incomplete.length || gate.customerBuildAuthorized !== true) {
