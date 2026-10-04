@@ -289,11 +289,8 @@ const act = renderer.act;
   let booking;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => booking.root.findByProps({ testID: 'active-trip-minimize' }).props.onPress());
-  assert.equal(booking.root.findAllByProps({ testID: 'active-trip-reopen' }).length, 1);
-  assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Venter på oppdatert sjåførposisjon'), 'Stale GPS must remain distinct from a failed trip-status request');
-  assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0);
-  await act(async () => booking.root.findByProps({ testID: 'active-trip-reopen' }).props.onPress());
-  assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1);
+  assert.ok(navigations.includes('/(app)/home'), 'Minimize must return to the home map; Home recovers the canonical active trip and exposes ActiveTripCard for reopen.');
+  assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1, 'Minimize is navigation, not a second local trip state.');
   await act(async () => booking.unmount());
   // Failed cancellation cannot exit; duplicate confirmation must not submit twice.
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
