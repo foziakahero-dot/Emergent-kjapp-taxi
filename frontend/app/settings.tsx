@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -38,7 +40,36 @@ export default function Settings() {
       const d = await gdprApi.export();
       const trips = (d.trips || []).length;
       const payments = (d.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjappapp.no for en full kopi på e-post.`);
+
+      // Convert GDPR data to JSON string
+      const dataJson = JSON.stringify(d, null, 2);
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const filename = `SNAR-persondata-${timestamp}.json`;
+
+      try {
+        // Create file using modern FileSystem API
+        const file = new File(Paths.cache, filename);
+        await file.create();
+        await file.write(dataJson);
+
+        // Share the file using expo-sharing
+        try {
+          await Sharing.shareAsync(file.uri, {
+            mimeType: 'application/json',
+            dialogTitle: 'Mine SNAR-data'
+          });
+          setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Filen er delt via systemets delingsfunksjon.`);
+        } catch (sharingError) {
+          // If sharing fails, provide fallback info
+          console.warn('File sharing failed:', sharingError);
+          setExportInfo(`Dataene dine er lagret: ${trips} turer, ${payments} betalinger. Filen er lagret på enheten og kan deles manuelt fra ${Paths.cache}`);
+        }
+
+      } catch (fileError) {
+        // Handle file writing errors
+        console.warn('File writing failed:', fileError);
+        setExportInfo(`Kunne ikke lagre datafil akkurat nå. Prøv igjen senere.`);
+      }
     } catch {
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {

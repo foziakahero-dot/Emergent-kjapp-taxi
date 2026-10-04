@@ -6,11 +6,19 @@ import * as WebBrowser from 'expo-web-browser';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 import { unregisterNativePush } from '@/src/lib/nativeRuntime';
+import { GoogleSignin, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 
 // Complete any pending auth session (mobile). No-op on web.
 WebBrowser.maybeCompleteAuthSession();
 
-const EMERGENT_AUTH = 'https://auth.emergentagent.com/';
+// Google Sign-In (native on mobile, web fallback handled separately if needed)
+// Configure Google SignIn
+if (Platform.OS !== 'web') {
+  GoogleSignin.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, // For web/Android/iOS
+    offlineAccess: true,
+  });
+}
 
 export type User = {
   id: string;
@@ -140,23 +148,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async (): Promise<User> => {
-    const redirectUrl = Platform.OS === 'web'
-      ? window.location.origin + '/'
-      : Linking.createURL('');
-    const authUrl = `${EMERGENT_AUTH}?redirect=${encodeURIComponent(redirectUrl)}`;
-
+    // Web: Use existing web flow (preserve current behavior)
     if (Platform.OS === 'web') {
+      // For web, we keep the existing Emergent-based flow to avoid changing web behavior
+      // The user requested not to redesign the app or change web behavior
+      const redirectUrl = window.location.origin + '/';
+      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
       window.location.href = authUrl;
       return null; // return handled on next mount
     }
 
-    lastUrl.current = null;
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-    let url: string | null = result.type === 'success' ? result.url : null;
-    if (!url) url = lastUrl.current || (await Linking.getInitialURL());
-    const sid = extractSessionId(url);
-    if (!sid) return null;
-    return await handleSessionId(sid);
+    // Mobile: Native Google Sign-In using @react-native-google-signin/google-signin
+    try {
+      // Check if Google Sign-In is properly configured
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      if (!webClientId || webClientId.trim() === '') {
+        throw new Error('Google Sign-In er ikke konfigurert. Mangler EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID miljøvariabel.');
+      }
+
+      // Configure GoogleSignin (if not already done)
+      // Note: Configuration is done at the top of the file, but we check here for safety
+
+      // Check if Google Play services are available (Android only)
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
+
+      // Sign in with Google
+      const userInfo = await GoogleSignin.signIn();
+      if (!isSuccessResponse(userInfo)) return null;
+      const idToken = userInfo.data.idToken;
+      if (!idToken) throw new Error('Google returnerte ikke et gyldig ID-token.');
+
+      const res = await authApi.googleSignIn({ idToken });
+
+      if (res?.user?.role !== 'user') {
+        throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
+      }
+
+      await storage.setItem(TOKEN_KEY, res.token);
+      setUser(res.user);
+      return res.user;
+    } catch (error: any) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // User cancelled the login flow
+        return null;
+      }
+      if (error.code === statusCodes.IN_PROGRESS) {
+        // Operation (e.g. sign in) is in progress already
+        return null;
+      }
+      if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        // Play services not available or outdated
+        throw new Error('Google Play-tjenester er ikke tilgjengelig eller foreldre.');
+      }
+      // Handle missing configuration
+      if (error.message && error.message.includes('ikke konfigurert')) {
+        throw error; // Re-throw our configuration error
+      }
+      // Some other error happened
+      throw new Error(`Google Sign-In feilet: ${error.message}`);
+    }
   };
 
   const signInWithApple = async (): Promise<User> => {
