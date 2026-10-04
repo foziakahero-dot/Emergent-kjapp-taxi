@@ -88,8 +88,19 @@ export function MapboxInteractiveMap({
     if (pickup) points.push(pickup);
     if (dropoff) points.push(dropoff);
     if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
+
+    // On the idle customer map, include the nearest live available cars in the
+    // camera bounds. Previously the camera ignored cars completely and could
+    // stay locked on the passenger even when /cars/nearby returned vehicles.
+    if (!dropoff && !activeCar) {
+      cars.slice(0, 8).forEach((car) => {
+        if (Number.isFinite(car?.lat) && Number.isFinite(car?.lng)) {
+          points.push({ lat: car.lat, lng: car.lng });
+        }
+      });
+    }
     return points;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -99,8 +110,8 @@ export function MapboxInteractiveMap({
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
-        zoomLevel: 13.4,
-        pitch: 0,
+        zoomLevel: 14.2,
+        pitch: 52,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -109,8 +120,8 @@ export function MapboxInteractiveMap({
     if (focus.length === 1) {
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
-        zoomLevel: 13.4,
-        pitch: 0,
+        zoomLevel: 14.2,
+        pitch: 52,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -121,6 +132,11 @@ export function MapboxInteractiveMap({
     const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
     const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
     camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
+    camera.setCamera?.({
+      pitch: 52,
+      animationDuration: duration,
+      animationMode: 'easeTo',
+    });
   }, [focusKey]);
 
   useEffect(() => {
@@ -197,8 +213,8 @@ export function MapboxInteractiveMap({
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [user?.lng ?? OSLO.lng, user?.lat ?? OSLO.lat],
-            zoomLevel: 13.4,
-            pitch: 0,
+            zoomLevel: 14.2,
+            pitch: 52,
           }}
           minZoomLevel={3}
           maxZoomLevel={20}
@@ -210,10 +226,10 @@ export function MapboxInteractiveMap({
           config={{
             lightPreset: 'day',
             theme: 'monochrome',
-            show3dObjects: false,
-            show3dBuildings: false,
-            show3dLandmarks: false,
-            show3dTrees: false,
+            show3dObjects: true,
+            show3dBuildings: true,
+            show3dLandmarks: true,
+            show3dTrees: true,
             showPlaceLabels: true,
             showPointOfInterestLabels: false,
             showRoadLabels: true,
