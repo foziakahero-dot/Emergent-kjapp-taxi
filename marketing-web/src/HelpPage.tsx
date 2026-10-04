@@ -15,7 +15,7 @@ const topics = [
 ];
 
 function Wordmark() {
-  return <Link className="help-wordmark" to="/" aria-label="SNAR forside"><span>KJ</span><em>A</em><span>PP</span></Link>;
+  return <Link className="help-wordmark" to="/" aria-label="SNAR forside"><span>SNAR</span></Link>;
 }
 
 export default function HelpPage() {
