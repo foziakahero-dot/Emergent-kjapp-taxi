@@ -64,6 +64,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "postinstall": "node scripts/apply-customer-beta-hotfix.cjs",
     "test:design": "node ../scripts/verify-figma-mobile.cjs",
     "icons:figma": "node ../scripts/generate-figma-icons.cjs",
     "audit:customer": "node ../scripts/customer-inventory.cjs && python ../scripts/customer-contract-audit.py && python ../scripts/customer-screen-audit.py",
