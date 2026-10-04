@@ -1,5 +1,10 @@
 name: SNAR Customer Android + iOS
 
+on:
+  push:
+    branches:
+      - audit/customer-prebuild-snar-20261003
+
 jobs:
   build_customer_android_apk:
     name: Build SNAR Customer Android APK
@@ -14,4 +19,3 @@ jobs:
     params:
       platform: ios
       profile: testflight-beta
-# retrigger: 2026-10-04 customer native
