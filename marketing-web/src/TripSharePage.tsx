@@ -37,7 +37,7 @@ export function TripSharePage() {
 
   return <main style={{minHeight:'100vh',background:'#050a0f',color:'#f4f8fb',fontFamily:'Inter,system-ui,sans-serif',padding:'28px 18px'}}>
     <div style={{width:'min(720px,100%)',margin:'0 auto'}}>
-      <Link to="/" style={{color:'#00e5f5',textDecoration:'none',fontWeight:900,letterSpacing:'-.04em',fontSize:24}}>KJAPP</Link>
+      <Link to="/" style={{color:'#00e5f5',textDecoration:'none',fontWeight:900,letterSpacing:'-.04em',fontSize:24}}>SNAR</Link>
       <div style={{marginTop:56,border:'1px solid #1e313c',borderRadius:28,background:'#09131a',padding:'28px',boxShadow:'0 24px 80px rgba(0,0,0,.35)'}}>
         <div style={{fontSize:10,letterSpacing:'.18em',fontWeight:800,color:'#00e5f5'}}>DELT LIVE-TUR</div>
         {error ? <>
@@ -58,7 +58,7 @@ export function TripSharePage() {
           <div style={{marginTop:22,color:'#71848f',fontSize:12,lineHeight:1.6}}>Lenken viser kun turinformasjon og sjåførens posisjon. Kundens identitet og kontaktinformasjon deles ikke. Lenken utløper automatisk.</div>
         </>}
       </div>
-      <p style={{color:'#657782',fontSize:12,textAlign:'center',marginTop:24}}>Ved akutt fare: ring 112. KJAPP-support erstatter ikke nødetatene.</p>
+      <p style={{color:'#657782',fontSize:12,textAlign:'center',marginTop:24}}>Ved akutt fare: ring 112. SNAR-support erstatter ikke nødetatene.</p>
     </div>
   </main>;
 }
