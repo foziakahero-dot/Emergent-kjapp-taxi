@@ -65,7 +65,9 @@ index 6c98fda..0000000 100644
            </View>
  
            <Pressable
-@@ -611,11 +633,31 @@ const useStyles = makeStyles((c) => ({
+@@ -611,11 +633,30 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any
+ }
+ 
  const useStyles = makeStyles((c) => ({
    searchBarWrap: { position: 'absolute', left: 16, right: 16, zIndex: 20 },
 +  expandedSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -89,9 +91,7 @@ index 6c98fda..0000000 100644
 +    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10,
 +    shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
 +  },
-+  collapsedSearchText: {
-+    color: c.text, fontFamily: font.semibold, fontSize: 13,
-+  },
++  collapsedSearchText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
    locationFab: {
      position: 'absolute', right: 16, zIndex: 21, width: 44, height: 44, borderRadius: 22,
      alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.96)',
