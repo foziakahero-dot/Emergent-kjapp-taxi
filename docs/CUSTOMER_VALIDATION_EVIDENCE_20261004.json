@@ -174,7 +174,7 @@
       37087528954,
       37087526771
     ],
-    "rootCause": "UNVERIFIED; connector has no jobs and check-suite read unsupported",
+    "rootCause": "CONFIRMED in signed-in GitHub run annotation: recent account payment failure or spending limit prevents jobs from starting",
     "editedWorkflowYaml": "PASS local parse",
     "continuationSourceCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052",
     "continuationRuns": [
@@ -182,7 +182,9 @@
       37165253215,
       37165272537
     ],
-    "continuationStatus": "startup_failure; queried run 37165253215 has zero jobs"
+    "continuationStatus": "startup_failure; queried run 37165253215 has zero jobs",
+    "browserVerifiedRun": 37165253215,
+    "verifiedAt": "2026-10-04T00:57:27.061102+00:00"
   },
   "continuationBaseCommit": "7eceba2bca157b4a182a55c659f9a29f9394f845",
   "continuationChecks": {
@@ -204,5 +206,18 @@
     "iosHermesExport": "PASS final source",
     "webExport": "PASS final source (source export only)"
   },
-  "customerContinuationCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052"
+  "customerContinuationCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052",
+  "configurationInspection": {
+    "renderBackendMissingKeys": [
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_IOS_CLIENT_ID",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_PUBLISHABLE_KEY",
+      "SENDGRID_API_KEY"
+    ],
+    "githubActionsRepositorySecrets": "NONE",
+    "githubActionsRepositoryVariables": "NONE",
+    "renderMapboxValidationEnv": "NONE",
+    "secretValuesReadOrExposed": false
+  }
 }

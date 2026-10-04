@@ -96,8 +96,12 @@ Unauthenticated live smoke confirms health/auth boundaries/configuration availab
 
 ## Remote CI status
 
-GitHub Actions runs `37163387691` (push) and `37163390226` (PR) report `startup_failure`, path `BuildFailed`, with no jobs started. The same startup failure is present on the unchanged PR #65 head (runs `37097397045`, `37087528954`, `37087526771`). The connector exposes no diagnostic jobs and rejects check-suite detail retrieval, so the root cause is **unverified**; do not infer billing or a particular YAML error. The five edited build workflow files parse as valid YAML locally. Continuation source `56682d2e24e164acfad3ce06fa52df3f2c649052` also reports `startup_failure` for push `37165251333` and PR runs `37165253215` / `37165272537`; the queried run has zero jobs. Remote CI is not a PASS and must be restored before gate approval. No native compile/EAS build was launched by these runs.
+GitHub Actions runs `37163387691` (push) and `37163390226` (PR) report `startup_failure`, path `BuildFailed`, with no jobs started. The same startup failure is present on the unchanged PR #65 head (runs `37097397045`, `37087528954`, `37087526771`). The connector exposes no diagnostic jobs and rejects check-suite detail retrieval. Signed-in GitHub inspection subsequently confirmed the annotation: recent account payment failure or a spending limit prevents Actions from starting. No YAML/build-job failure was reached. The five edited build workflow files parse as valid YAML locally. Continuation source `56682d2e24e164acfad3ce06fa52df3f2c649052` also reports `startup_failure` for push `37165251333` and PR runs `37165253215` / `37165272537`; the queried run has zero jobs. Remote CI is not a PASS and must be restored before gate approval. No native compile/EAS build was launched by these runs.
 
 ## Build decision
 
 P0 > 0. API runtime and native/device gates are not PASS. **Do not build APK/TestFlight.** EAS build ID, workflow build ID and install artifacts: **not created**. Complete external setup and the above acceptance evidence, resolve P1 review, then explicitly refresh the checked-in gate; a JSON PASS requires real evidence, not a source-route count.
+
+## Render source validation recovery
+
+`scripts/customer-render-validation.sh` runs isolated Customer backend tests, TypeScript, actual component tests, Expo Doctor, source API mapping and Android/iOS Hermes exports in Render. It publishes only a minimal source-validation result and cannot authorize APK/TestFlight. No live DB or payment keys are supplied. See `CUSTOMER_RENDER_VALIDATION_20261004.md` for the verified service/deploy result.

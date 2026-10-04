@@ -35,7 +35,7 @@
     "Figma pixel parity and realistic category renders not complete",
     "Expanded legacy suite remains non-green: 3 unchanged Driver failures; baseline 10 failures, 82 passed; current 89 passed",
     "Apple Merchant capability, native payment callbacks and FCM/APNs not physically verified",
-    "GitHub Actions startup_failure with no jobs, also present at PR #65 baseline; root cause unverified",
+    "GitHub Actions blocked by account payment failure/spending limit; source validation recovery via Render tracked separately",
     "Public privacy/terms contain beta placeholders; approved legal content required before commercial public release"
   ]
 }
