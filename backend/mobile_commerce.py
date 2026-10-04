@@ -201,6 +201,95 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     async def native_config():
         return payment_config()
 
+    async def _stripe_customer_for_user(current):
+        user = await db.users.find_one({"_id": ObjectId(current["id"])})
+        if not user:
+            raise HTTPException(404, "Bruker ikke funnet")
+        customer_id = (user or {}).get("stripe_customer_id")
+        if not customer_id:
+            customer = await asyncio.to_thread(
+                stripe.Customer.create,
+                email=user.get("email"),
+                name=user.get("fullName") or user.get("email"),
+                metadata={"user_id": current["id"]},
+            )
+            customer_id = customer.id
+            await db.users.update_one(
+                {"_id": ObjectId(current["id"])},
+                {"$set": {"stripe_customer_id": customer_id}},
+            )
+        return customer_id
+
+    @api.post("/payments/native/setup-intent")
+    async def native_setup_intent(request: Request, current=Depends(require_customer)):
+        await rate_limit(request, "native-card-setup", 20, 900)
+        config = payment_config()
+        if not config["enabled"] or not config["test_mode"]:
+            raise HTTPException(503, "Native Stripe testbetaling er ikke aktivert")
+        customer_id = await _stripe_customer_for_user(current)
+        setup = await asyncio.to_thread(
+            stripe.SetupIntent.create,
+            customer=customer_id,
+            payment_method_types=["card"],
+            usage="off_session",
+            metadata={"user_id": current["id"], "source": "kjapp_native_setup"},
+        )
+        return {"client_secret": setup.client_secret, "setup_intent_id": setup.id}
+
+    @api.get("/payments/native/setup-intent/{setup_intent_id}")
+    async def native_setup_status(setup_intent_id: str, current=Depends(require_customer)):
+        customer_id = await _stripe_customer_for_user(current)
+        try:
+            setup = await asyncio.to_thread(stripe.SetupIntent.retrieve, setup_intent_id)
+        except Exception:
+            raise HTTPException(404, "Fant ikke kortverifiseringen")
+        if (setup.get("metadata") or {}).get("user_id") != current["id"] or str(setup.get("customer") or "") != customer_id:
+            raise HTTPException(404, "Fant ikke kortverifiseringen")
+        if setup.get("status") != "succeeded" or not setup.get("payment_method"):
+            return {"ready": False, "status": setup.get("status")}
+
+        pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, setup["payment_method"])
+        card = pm.get("card") or {}
+        pm_id = pm.get("id")
+        existing = await db.payment_methods.find_one({
+            "user_id": current["id"],
+            "stripe_payment_method_id": pm_id,
+        })
+        if existing:
+            await db.payment_methods.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {
+                    "setup_status": "succeeded",
+                    "verified": True,
+                    "stripe_setup_intent_id": setup_intent_id,
+                }},
+            )
+            existing["id"] = str(existing["_id"])
+            existing.pop("_id", None)
+            existing.update({"setup_status": "succeeded", "verified": True, "stripe_setup_intent_id": setup_intent_id})
+            return {"ready": True, "verified": True, "card": existing}
+
+        has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
+        doc = {
+            "user_id": current["id"],
+            "type": card.get("brand") or "card",
+            "label": str(card.get("brand") or "Kort").capitalize(),
+            "last4": card.get("last4") or "",
+            "exp_month": card.get("exp_month"),
+            "exp_year": card.get("exp_year"),
+            "stripe_payment_method_id": pm_id,
+            "stripe_customer_id": customer_id,
+            "stripe_setup_intent_id": setup_intent_id,
+            "setup_status": "succeeded",
+            "verified": True,
+            "is_default": not has_any,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        result = await db.payment_methods.insert_one(doc)
+        doc["id"] = str(result.inserted_id)
+        doc.pop("_id", None)
+        return {"ready": True, "verified": True, "card": doc}
+
     async def reconcile_native(pi, record):
         if (pi.get("amount") != record["amount_ore"] or pi.get("currency") != "nok"
                 or (pi.get("metadata") or {}).get("trip_id") != record["trip_id"]
