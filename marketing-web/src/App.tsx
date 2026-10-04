@@ -23,28 +23,30 @@ const onboardingSteps = [
     "Godkjente partnere får tilgang til fleet.kjappapp.no.",
   ],
 ];
+
 const partnerValues = [
   [
-    "10 %",
+    "12 %",
     "SERVICEAVGIFT",
-    "En tydelig modell for beta. 90 % av turinntekten beholdes hos sjåfør/løyvehaver før øvrige egne kostnader.",
+    "En enkel og tydelig sats. Mer av turinntekten blir igjen i virksomheten.",
   ],
   [
-    "7 DAG",
-    "UKENTLIG OPPGJØR",
+    "UKENTLIG",
+    "OPPGJØR",
     "Digitale betalinger kan avregnes automatisk hver uke.",
   ],
   [
     "ÉN",
-    "SAMLET OVERSIKT",
-    "Sjåfører, turer, kjøretøy, økonomi og dokumentstatus i Fleet Panel.",
+    "FLEET-OVERSIKT",
+    "Sjåfører, turer, kjøretøy, økonomi og dokumentstatus samlet på ett sted.",
   ],
   [
-    "NO",
-    "NORSK OPPFØLGING",
-    "Direkte kontakt når konto, dokumentasjon eller oppgjør må avklares.",
+    "NORSK",
+    "PARTNERSTØTTE",
+    "Direkte oppfølging når konto, dokumentasjon eller oppgjør må avklares.",
   ],
 ];
+
 function PartnerPage() {
   return (
     <div className="snar-page">
@@ -54,14 +56,15 @@ function PartnerPage() {
           <div>
             <span className="snar-kicker">FOR LØYVEHAVERE</span>
             <h1>
-              Din flåte.
+              Behold mer.
               <br />
-              Din kontroll.
+              Jobb smartere.
             </h1>
             <p>
-              SNAR gir løyvehavere et moderne system for sjåfører, turer,
-              kjøretøy, dokumentasjon og oppgjør — uten å ta virksomheten fra
-              deg.
+              SNAR er bygget for løyvehavere som vil bruke mindre tid på
+              administrasjon og beholde mer av verdien de skaper. Du får
+              booking, betaling og flåteverktøy i én løsning — med 12 %
+              serviceavgift og ukentlig oppgjør.
             </p>
             <div className="snar-actions">
               <Link
@@ -78,8 +81,7 @@ function PartnerPage() {
               </a>
             </div>
             <p className="snar-caption">
-              10 % serviceavgift i beta · Ukentlig digitalt oppgjør · Norsk
-              oppfølging
+              12 % serviceavgift · Ukentlig digitalt oppgjør · Full flåteoversikt
             </p>
           </div>
           <Card>
@@ -89,21 +91,25 @@ function PartnerPage() {
               <br />
               Dokumenter. Oppgjør.
             </h3>
-            <p>Reelle flåtedata vises først etter innlogging.</p>
+            <p>
+              Alt du trenger for å følge driften — uten å gi fra deg kontrollen
+              over virksomheten.
+            </p>
           </Card>
         </section>
+
         <section className="snar-section snar-shell">
           <div className="snar-section-copy">
-            <span className="snar-kicker">PARTNERMODELL</span>
+            <span className="snar-kicker">MER IGJEN PER TUR</span>
             <h2>
-              Mindre administrasjon.
+              Hvorfor gi fra deg
               <br />
-              Mer kontroll.
+              mer enn nødvendig?
             </h2>
             <p>
-              SNAR skal gjøre det enklere å drive en moderne taxiflåte.
-              Partneren beholder løyvet, sjåførene og virksomheten. SNAR leverer
-              teknologien rundt turene.
+              Moderne teknologi trenger ikke bety at plattformen tar en stor del
+              av verdien rundt hver tur. Med SNAR får du en tydelig 12 %
+              serviceavgift og verktøyene du trenger for å drive effektivt.
             </p>
           </div>
           <div className="snar-partner-value-grid">
@@ -116,8 +122,24 @@ function PartnerPage() {
             ))}
           </div>
         </section>
+
         <section className="snar-section snar-vehicles">
           <div className="snar-shell">
+            <div className="snar-section-copy">
+              <span className="snar-kicker">DIN VIRKSOMHET</span>
+              <h2>Teknologien skal jobbe for deg.</h2>
+              <p>
+                Du beholder løyvene, bilene, sjåførene og virksomheten. SNAR
+                leverer teknologien rundt booking, betaling, dokumentasjon og
+                drift — slik at du kan bruke mer tid på flåten og mindre tid på
+                administrasjon.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="snar-section snar-shell">
+          <div className="snar-section-copy">
             <span className="snar-kicker">SLIK BLIR DU PARTNER</span>
             <h2>Én kontrollert vei inn.</h2>
             <p>
@@ -125,23 +147,24 @@ function PartnerPage() {
               kontrollert. Det gir en ryddig onboarding for både SNAR og
               løyvehaveren.
             </p>
-            <div className="snar-partner-value-grid">
-              {onboardingSteps.map(([n, title, copy]) => (
-                <article key={n}>
-                  <span className="snar-number">{n}</span>
-                  <h3>{title}</h3>
-                  <p>{copy}</p>
-                </article>
-              ))}
-            </div>
+          </div>
+          <div className="snar-partner-value-grid">
+            {onboardingSteps.map(([n, title, copy]) => (
+              <article key={n}>
+                <span className="snar-number">{n}</span>
+                <h3>{title}</h3>
+                <p>{copy}</p>
+              </article>
+            ))}
           </div>
         </section>
+
         <section className="snar-section snar-shell">
           <span className="snar-kicker">KLAR FOR NESTE STEG?</span>
           <h2>Bli SNAR-partner.</h2>
           <p>
-            Søknaden gir ikke automatisk tilgang. Fleet-konto aktiveres etter
-            kontroll og godkjenning av dokumentasjonen.
+            Bygg videre på virksomheten du allerede har — med lavere
+            plattformfriksjon, tydelig økonomi og moderne verktøy rundt turene.
           </p>
           <div className="snar-actions">
             <Link className="snar-btn snar-btn-primary" to="/loyvehaver/soknad">
@@ -160,6 +183,7 @@ function PartnerPage() {
     </div>
   );
 }
+
 export default function App() {
   return (
     <Routes>
