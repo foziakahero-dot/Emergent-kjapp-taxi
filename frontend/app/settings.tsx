@@ -1,9 +1,11 @@
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Share, Switch, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
@@ -45,46 +47,41 @@ export default function Settings() {
     setExportInfo('');
     try {
       const d = await gdprApi.export();
-      const fullMessage = JSON.stringify(d, null, 2);
-      const androidSafeLimit = 700_000;
-      let message = fullMessage;
-      let compacted = false;
+      const trips = Array.isArray((d as any)?.trips) ? (d as any).trips.length : 0;
+      const payments = Array.isArray((d as any)?.payments) ? (d as any).payments.length : 0;
+      const dataJson = JSON.stringify(d, null, 2);
 
-      if (fullMessage.length > androidSafeLimit) {
-        compacted = true;
-        message = JSON.stringify(d, (key, value) => {
-          if (key === 'data_base64') return '[utelatt fra deling: binær bildedata finnes i original eksport]';
-          return value;
-        }, 2);
+      // expo-sharing cannot share local file URIs on web. Keep the GDPR export
+      // file-based on native so large exports never go through an Android Intent message.
+      if (Platform.OS === 'web') {
+        setExportInfo('Filbasert dataeksport er tilgjengelig i SNAR-mobilappen.');
+        return;
       }
 
-      if (message.length > androidSafeLimit) {
-        message = JSON.stringify(d, (key, value) => {
-          if (key === 'data_base64') return '[utelatt fra deling: binær bildedata finnes i original eksport]';
-          if (['route_geometry', 'route_geojson', 'geometry', 'polyline'].includes(key)) {
-            return '[utelatt fra deling: stor rutegeometri finnes i original eksport]';
-          }
-          return value;
-        }, 2);
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        setExportInfo('Deling er ikke tilgjengelig på denne enheten. Prøv igjen på Android eller iPhone.');
+        return;
       }
 
-      if (message.length > androidSafeLimit) {
-        message = JSON.stringify({
-          export_notice: 'SNAR hentet hele eksporten, men datasettet er for stort for Android-delingsarket. Kontakt support for sikker filutlevering av hele eksporten.',
-          generated_at: new Date().toISOString(),
-          summary: {
-            trips: Array.isArray((d as any)?.trips) ? (d as any).trips.length : undefined,
-            messages: Array.isArray((d as any)?.messages) ? (d as any).messages.length : undefined,
-            payments: Array.isArray((d as any)?.payments) ? (d as any).payments.length : undefined,
-          },
-        }, null, 2);
-      }
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const file = new File(Paths.cache, `SNAR-persondata-${timestamp}.json`);
+      file.create({ overwrite: true });
+      file.write(dataJson);
 
-      await Share.share({ title: 'Mine SNAR-data', message });
-      setExportInfo(compacted
-        ? 'Dataeksporten er hentet. Store bilde- eller rutedata ble utelatt fra delingsarket for å unngå Android-feil.'
-        : 'Dataeksporten er hentet.');
-    } catch {
+      try {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Mine SNAR-data',
+          UTI: 'public.json',
+        });
+        setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Velg hvor du vil lagre eller dele JSON-filen.`);
+      } catch (sharingError) {
+        console.warn('GDPR file sharing failed:', sharingError);
+        setExportInfo('Datafilen ble opprettet, men delingen kunne ikke åpnes. Prøv igjen.');
+      }
+    } catch (error) {
+      console.warn('GDPR export failed:', error);
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {
       exportLock.current = false;
