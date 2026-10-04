@@ -14,96 +14,13 @@
       "id": "dep-db0p9hgu01pc73bcinc0",
       "status": "live",
       "finishedAt": "2026-10-03T23:51:50.849371Z"
-    }
-  ],
-  "publicLiveSmoke": [
-    {
-      "method": "GET",
-      "path": "/health",
-      "status": 200,
-      "body": {
-        "app": "KJAPP",
-        "status": "ok",
-        "db": true,
-        "time": "2026-10-03T23:45:09.984992+00:00"
-      }
     },
     {
-      "method": "GET",
-      "path": "/ready",
-      "status": 200,
-      "body": {
-        "app": "KJAPP",
-        "ready": false,
-        "status": "not_ready",
-        "checks": {
-          "database": true,
-          "production_mode": false,
-          "demo_data_disabled": true,
-          "jwt_configured": true,
-          "admin_identity_configured": true,
-          "stripe_key_configured": false,
-          "stripe_webhook_configured": true,
-          "email_configured": false,
-          "public_web_origin_configured": true,
-          "expo_push_sender": true,
-          "identity_recheck_policy_days": [
-            30,
-            90
-          ],
-          "identity_inactivity_days": 30,
-          "apple_native_auth_configured": true,
-          "apple_bundle_env_matches": true,
-          "object_storage_configured": false,
-          "service_area_enforced": true,
-          "auto_charge_enabled": false,
-          "booking_enabled": true
-        },
-        "blockers": [
-          "production_mode",
-          "stripe_key_configured",
-          "email_configured"
-        ],
-        "time": "2026-10-03T23:45:17.293964+00:00"
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/auth/native/config",
-      "status": 200,
-      "body": {
-        "google_enabled": false,
-        "google_web_client_id": "",
-        "google_ios_client_id": ""
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/payments/native/config",
-      "status": 200,
-      "body": {
-        "enabled": false,
-        "publishable_key": "",
-        "test_mode": false,
-        "apple_merchant_id": "",
-        "google_pay_enabled": false
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/me/profile-photo",
-      "status": 401,
-      "body": {
-        "detail": "Ikke innlogget"
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/auth/google/link",
-      "status": 401,
-      "body": {
-        "detail": "Ikke innlogget"
-      }
+      "id": "dep-db0qgfc9v7es73cjova0",
+      "status": "live",
+      "finishedAt": "2026-10-04T01:14:56.366675Z",
+      "commit": "865023425d48acc5c0c665ae248d828a689fceb0",
+      "purpose": "Activate existing matching Stripe TEST keys and native/Google Pay test flags; no payment created"
     }
   ],
   "checks": {
@@ -117,7 +34,9 @@
     "iosHermesExport": "PASS",
     "physicalDevice": "UNVERIFIED",
     "nativeCompilation": "UNVERIFIED",
-    "EASBuild": "NOT STARTED"
+    "EASBuild": "NOT STARTED",
+    "stripeTestConfiguration": "PASS live API",
+    "googlePayConfiguration": "PASS live API; physical wallet acceptance UNVERIFIED"
   },
   "legacySuite": {
     "baseline": "10 failed, 82 passed",
@@ -208,16 +127,191 @@
   },
   "customerContinuationCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052",
   "configurationInspection": {
-    "renderBackendMissingKeys": [
+    "githubActionsRepositorySecrets": "NONE",
+    "githubActionsRepositoryVariables": "NONE",
+    "renderMapboxValidationEnv": "NONE",
+    "secretValuesReadOrExposed": false,
+    "initialRenderBackendMissingKeys": [
       "GOOGLE_CLIENT_ID",
       "GOOGLE_IOS_CLIENT_ID",
       "STRIPE_SECRET_KEY",
       "STRIPE_PUBLISHABLE_KEY",
       "SENDGRID_API_KEY"
     ],
-    "githubActionsRepositorySecrets": "NONE",
-    "githubActionsRepositoryVariables": "NONE",
-    "renderMapboxValidationEnv": "NONE",
-    "secretValuesReadOrExposed": false
-  }
+    "renderBackendMissingKeys": [
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_IOS_CLIENT_ID",
+      "SENDGRID_API_KEY"
+    ]
+  },
+  "renderSourceValidation": {
+    "status": "PASS",
+    "service": "srv-db0q908u01pc73bgc6ig",
+    "deploy": "dep-db0qj4vavr4c738tve8g",
+    "commit": "ecd22ceb414533454e64c8024e0d68674c2b345c",
+    "finishedAt": "2026-10-04T01:21:31.361078Z",
+    "deploymentStatus": "live",
+    "terminalBuildMarker": "SNAR_CUSTOMER_SOURCE_VALIDATION_PASS; NATIVE_BUILD_BLOCKED",
+    "scope": "47 isolated backend tests, Customer TypeScript/components, Expo Doctor, source API mapping and Android/iOS Hermes exports; read-only live TEST configuration smoke",
+    "nativeCompilation": "NOT STARTED",
+    "nativeBuildAuthorized": false,
+    "initialSuccessfulRun": {
+      "deploy": "dep-db0q90gu01pc73bgc790",
+      "commit": "88f29335676d14390f00c22d33cbe8b3272e3af6",
+      "finishedAt": "2026-10-04T00:59:32.900576Z",
+      "publicHTTP": {
+        "status": 200,
+        "sourceValidation": "PASS",
+        "commit": "88f29335676d14390f00c22d33cbe8b3272e3af6",
+        "nativeBuildAuthorized": false
+      }
+    },
+    "runtimeSmokeLogVerifiedAt": "2026-10-04T01:21:30.10946263Z"
+  },
+  "stripeBrowserInspection": {
+    "account": "acct_1TGAN5KFJCRyVUgj",
+    "livemode": false,
+    "keyTypes": [
+      "Publishable key",
+      "Secret key"
+    ],
+    "keyValuesExposed": false,
+    "configuredInRender": true,
+    "limitation": "Broad inspection/extra secret reads were rejected; direct UI transfer completed through a materially safer path. No key values written to Git, chat or artifacts. No test charge or physical wallet acceptance performed.",
+    "transfer": "Existing same-account TEST keys copied directly from Stripe UI to Render fields without outputting their values; TEST prefixes verified as booleans"
+  },
+  "initialPublicLiveSmoke": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "body": {
+        "app": "KJAPP",
+        "status": "ok",
+        "db": true,
+        "time": "2026-10-03T23:45:09.984992+00:00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/ready",
+      "status": 200,
+      "body": {
+        "app": "KJAPP",
+        "ready": false,
+        "status": "not_ready",
+        "checks": {
+          "database": true,
+          "production_mode": false,
+          "demo_data_disabled": true,
+          "jwt_configured": true,
+          "admin_identity_configured": true,
+          "stripe_key_configured": false,
+          "stripe_webhook_configured": true,
+          "email_configured": false,
+          "public_web_origin_configured": true,
+          "expo_push_sender": true,
+          "identity_recheck_policy_days": [
+            30,
+            90
+          ],
+          "identity_inactivity_days": 30,
+          "apple_native_auth_configured": true,
+          "apple_bundle_env_matches": true,
+          "object_storage_configured": false,
+          "service_area_enforced": true,
+          "auto_charge_enabled": false,
+          "booking_enabled": true
+        },
+        "blockers": [
+          "production_mode",
+          "stripe_key_configured",
+          "email_configured"
+        ],
+        "time": "2026-10-03T23:45:17.293964+00:00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/auth/native/config",
+      "status": 200,
+      "body": {
+        "google_enabled": false,
+        "google_web_client_id": "",
+        "google_ios_client_id": ""
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/payments/native/config",
+      "status": 200,
+      "body": {
+        "enabled": false,
+        "publishable_key": "",
+        "test_mode": false,
+        "apple_merchant_id": "",
+        "google_pay_enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/me/profile-photo",
+      "status": 401,
+      "body": {
+        "detail": "Ikke innlogget"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/auth/google/link",
+      "status": 401,
+      "body": {
+        "detail": "Ikke innlogget"
+      }
+    }
+  ],
+  "publicLiveSmoke": [
+    {
+      "path": "/health",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "db": true
+      }
+    },
+    {
+      "path": "/ready",
+      "status": 200,
+      "body": {
+        "ready": false,
+        "blockers": [
+          "production_mode",
+          "email_configured"
+        ],
+        "stripe_key_configured": true,
+        "email_configured": false
+      }
+    },
+    {
+      "path": "/payments/native/config",
+      "status": 200,
+      "body": {
+        "enabled": true,
+        "test_mode": true,
+        "test_publishable_key_present": true,
+        "google_pay_enabled": true,
+        "apple_merchant_present": false
+      }
+    },
+    {
+      "path": "/auth/native/config",
+      "status": 200,
+      "body": {
+        "google_enabled": false,
+        "google_web_client_present": false,
+        "google_ios_client_present": false
+      }
+    }
+  ],
+  "publicLiveSmokeVerifiedAt": "2026-10-04T01:21:30.10946263Z"
 }
