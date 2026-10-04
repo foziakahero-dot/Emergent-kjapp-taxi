@@ -3,7 +3,8 @@
     "apk": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoia2phcHAiLCJhIjoiY21uOWN4NGFwMDVxbDJwc2gyNTNqbGNleiJ9.lZ8hI2Mdv1AzcyFlonX0Sw"
       },
       "android": {
         "buildType": "apk",
@@ -14,7 +15,8 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoia2phcHAiLCJhIjoiY21uOWN4NGFwMDVxbDJwc2gyNTNqbGNleiJ9.lZ8hI2Mdv1AzcyFlonX0Sw"
       },
       "android": {
         "image": "latest"
@@ -28,7 +30,8 @@
     "ios-simulator": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoia2phcHAiLCJhIjoiY21uOWN4NGFwMDVxbDJwc2gyNTNqbGNleiJ9.lZ8hI2Mdv1AzcyFlonX0Sw"
       },
       "ios": {
         "simulator": true,
@@ -39,7 +42,8 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1Ijoia2phcHAiLCJhIjoiY21uOWN4NGFwMDVxbDJwc2gyNTNqbGNleiJ9.lZ8hI2Mdv1AzcyFlonX0Sw"
       },
       "ios": {
         "image": "latest",
