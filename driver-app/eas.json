@@ -43,6 +43,16 @@
         "image": "latest",
         "resourceClass": "medium"
       }
+    },
+    "ios-internal": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+      },
+      "ios": {
+        "image": "latest",
+        "resourceClass": "medium"
+      }
     }
   },
   "submit": {

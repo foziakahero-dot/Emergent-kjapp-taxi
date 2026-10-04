@@ -1,0 +1,21 @@
+name: KJAPP Driver Android + iOS
+
+on:
+  push:
+    branches:
+      - fix/driver-final-clean-20261004
+
+jobs:
+  build_driver_android_apk:
+    name: Build KJAPP Driver Android APK
+    type: build
+    params:
+      platform: android
+      profile: apk
+
+  build_driver_ios:
+    name: Build KJAPP Driver iOS
+    type: build
+    params:
+      platform: ios
+      profile: testflight-beta

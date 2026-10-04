@@ -18,6 +18,7 @@ import { apiError, kr } from '@/src/lib/format';
 import { storage } from '@/src/utils/storage';
 import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
 import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripReceipt } from '@/src/lib/tripSummary';
+import { notifyPendingTripFromForeground } from '@/src/lib/nativeRuntime';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -71,6 +72,7 @@ export default function DriverHome() {
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
+  const seenPendingTripIds = useRef<Set<string> | null>(null);
   const completedSummaryVisible = !current && !(pending[0] && online);
   useHideTabBar(Boolean((current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
 
@@ -134,15 +136,40 @@ export default function DriverHome() {
     }
     try {
       const p = await driverApi.pending();
-      setPending(p?.trips || p?.pending || (Array.isArray(p) ? p : []));
+      const nextPending = p?.trips || p?.pending || (Array.isArray(p) ? p : []);
+      setPending(nextPending);
+
+      const validOffers = (Array.isArray(nextPending) ? nextPending : [])
+        .filter((offer: any) => !!offer?.trip_id);
+      if (seenPendingTripIds.current === null) {
+        // Initial hydration is silent: an offer already on screen must not beep again
+        // just because the app mounted or resumed.
+        seenPendingTripIds.current = new Set(validOffers.map((offer: any) => String(offer.trip_id)));
+      } else {
+        const unseen = validOffers.filter((offer: any) => !seenPendingTripIds.current!.has(String(offer.trip_id)));
+        for (const offer of unseen) seenPendingTripIds.current.add(String(offer.trip_id));
+        if (unseen[0]) void notifyPendingTripFromForeground(unseen[0]);
+      }
+
       if (p?.gps_stale) {
         setError('GPS-posisjonen er for gammel. KJAPP sender ikke nye turer før en fersk posisjon er registrert.');
       }
-    } catch { setPending([]); }
+    } catch {
+      // Preserve the last pending state on a transient network error. Seen IDs stay
+      // in memory so a reconnect cannot replay the same alert every four seconds.
+    }
     driverApi.summary().then((r) => {
       setSummary(r);
-      if (typeof r?.online === 'boolean' && !gpsBlocked.current) setOnline(r.online);
+      if (typeof r?.online === 'boolean') {
+        // Never let a stale server ONLINE value override a local GPS safety block.
+        // The block is cleared only after a fresh foreground GPS fix succeeds.
+        if (!gpsBlocked.current || r.online === false) setOnline(r.online);
+      }
     }).catch(() => {});
+  }, [user?.id]);
+
+  useEffect(() => {
+    seenPendingTripIds.current = null;
   }, [user?.id]);
 
   useFocusEffect(
@@ -262,7 +289,6 @@ export default function DriverHome() {
     const next = !online;
     setError('');
     setBusy(true);
-    if (next) gpsBlocked.current = false;
     try {
       await driverApi.online(next);
       setOnline(next);

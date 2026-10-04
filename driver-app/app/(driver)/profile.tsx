@@ -118,6 +118,14 @@ export default function DriverProfile() {
       </View>
       <Section>Kjøretøy</Section>
       <Text style={[s.sub, { marginTop: 4 }]}>Velg blant kjøretøy tildelt av flåteeier.</Text>
+      <View style={[s.card, { marginTop: 12 }]} testID="driver-active-vehicle-card">
+        <Text style={s.label}>Aktiv bil</Text>
+        <Text style={[s.sub, { marginTop: 4 }]}>
+          {u.vehicle_id
+            ? `${u.car || 'Bil uten modellnavn'} · ${u.plate || 'Uten skilt'} · ${vehicleMeta(u.vehicle_type || 'ai-first').name}`
+            : 'Ingen aktiv bil valgt'}
+        </Text>
+      </View>
       <View style={{ gap: 8, marginTop: 12 }}>
         {vehicles.isLoading ? <Loader /> : vehicles.isError ? <Text style={s.error}>Kunne ikke hente tildelte kjøretøy.</Text> : (vehicles.data?.vehicles || []).map((v: any) => <Pressable key={v.id} testID={`driver-profile-vehicle-${v.id}`} accessibilityRole="radio" accessibilityState={{ selected: !!v.selected, disabled: v.active === false || !!busyId }} disabled={v.active === false || !!busyId || v.selected} onPress={() => void selectVehicle(v)} style={[s.row, { marginTop: 0, borderColor: v.selected ? colors.accent : colors.lineStrong, boxShadow: v.selected ? '0 0 0 4px rgba(255,0,0,0.1)' : undefined, opacity: v.active === false ? 0.55 : 1 }]}>
           <View style={[s.roundIcon, { backgroundColor: v.selected ? colors.accentSoft : colors.cardSubtle }]}><Icon name="car" size={20} color={v.selected ? colors.accent : colors.textSecondary} /></View>
