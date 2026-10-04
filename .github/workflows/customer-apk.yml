@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - audit/customer-prebuild-snar-20261003
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/customer-apk.yml'
   workflow_dispatch:
 
 concurrency:
