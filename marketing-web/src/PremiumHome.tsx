@@ -24,14 +24,14 @@ const steps = [
 ];
 
 const vehicles = [
-  ["SNAR", "Til hverdagen", "/assets/snar/standard-3d.svg"],
+  ["SNAR", "Rask og enkel", "/assets/snar/standard-3d.svg"],
   ["SNAR XL", "Mer plass · opptil 7 seter", "/assets/snar/xl-3d.svg"],
   ["Premium", "Ekstra komfort", "/assets/snar/premium-3d.svg"],
 ];
 
 const safety = [
   "Lisensierte sjåfører",
-  "Sjåfør, bil og registreringsnummer etter aksept",
+  "Sjåfør, bil og skilt før henting",
   "Live-posisjon under reisen",
   "Mulighet til å dele reisen",
   "Norsk kundestøtte",
@@ -80,9 +80,7 @@ export default function PremiumHome() {
               <br />
               Bare enklere.
             </h1>
-            <p className="snar-lead">
-              Bestill, se prisen og følg bilen hele veien.
-            </p>
+            <p className="snar-lead">Bestill. Se prisen. Følg bilen.</p>
             <div className="snar-actions snar-hero-actions-simple">
               <button
                 type="button"
@@ -103,7 +101,7 @@ export default function PremiumHome() {
           className="snar-trust-strip snar-shell"
           aria-label="Dette får du med SNAR"
         >
-          <span>Norske løyvehavere</span>
+          <span>Lokale taxiselskaper</span>
           <span>Lisensierte sjåfører</span>
           <span>Pris før bestilling</span>
           <span>Live sporing</span>
@@ -116,7 +114,7 @@ export default function PremiumHome() {
         >
           <div className="snar-section-copy">
             <span className="snar-kicker">SLIK FUNGERER SNAR</span>
-            <h2 id="how-title">Fra destinasjon til bil på tre steg.</h2>
+            <h2 id="how-title">Bestill på tre enkle steg.</h2>
           </div>
           <ol className="snar-process" aria-label="Tre steg for å bestille med SNAR">
             {steps.map(([n, title, copy]) => (
@@ -168,10 +166,7 @@ export default function PremiumHome() {
           <div>
             <span className="snar-kicker">SNAR ASSIST</span>
             <h2 id="voice-title">Bare si hvor du skal.</h2>
-            <p>
-              Fortell hvor du vil reise. SNAR gjør bestillingen klar, og du ser
-              over destinasjon, bilvalg og prisestimat før du bekrefter.
-            </p>
+            <p>SNAR gjør bestillingen klar. Du ser over og bekrefter.</p>
           </div>
           <Card className="snar-voice-card">
             <img src="/assets/figma/mic.svg" width="40" height="40" alt="" />
@@ -214,9 +209,9 @@ export default function PremiumHome() {
           aria-labelledby="beta-heading"
         >
           <Badge>OSLO FØRST</Badge>
-          <h2 id="beta-heading">Bli blant de første som kjører med SNAR.</h2>
+          <h2 id="beta-heading">Bli blant de første som prøver SNAR i Oslo.</h2>
           <p>
-            Vi starter i Oslo. Meld interesse, så kontakter vi deg når beta-tilgang åpner.
+            Meld interesse, så kontakter vi deg når beta-tilgang åpner.
           </p>
           <div className="snar-actions">
             <button
