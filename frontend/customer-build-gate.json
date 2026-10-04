@@ -39,5 +39,11 @@
     "Apple Merchant capability, native payment callbacks and FCM/APNs not physically verified",
     "GitHub Actions blocked by account payment failure/spending limit; source validation recovery via Render tracked separately",
     "Public privacy/terms contain beta placeholders; approved legal content required before commercial public release"
-  ]
+  ],
+  "nativeTestBuildAuthorized": true,
+  "nativeTestBuildProfiles": [
+    "apk",
+    "testflight-beta"
+  ],
+  "nativeTestBuildAuthorization": "User explicitly authorized native Android APK and Customer TestFlight builds on 2026-10-04. Device acceptance remains pending; no public release approval is implied."
 }

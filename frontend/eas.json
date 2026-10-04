@@ -9,7 +9,8 @@
         "buildType": "apk",
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "environment": "preview"
     },
     "production": {
       "env": {
@@ -42,7 +43,8 @@
       "ios": {
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "environment": "production"
     }
   },
   "cli": {

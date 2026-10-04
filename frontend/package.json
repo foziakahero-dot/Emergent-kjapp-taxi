@@ -70,7 +70,8 @@
     "check:customer-build": "node scripts/customer-build-gate.cjs",
     "eas-build-pre-install": "node scripts/customer-build-gate.cjs",
     "preandroid": "node scripts/customer-build-gate.cjs",
-    "preios": "node scripts/customer-build-gate.cjs"
+    "preios": "node scripts/customer-build-gate.cjs",
+    "eas-build-post-install": "npx tsc --noEmit && npx expo install --check"
   },
   "private": true
 }

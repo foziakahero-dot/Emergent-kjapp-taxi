@@ -35,6 +35,8 @@ export default function Home() {
   const [activeTripOffline, setActiveTripOffline] = useState(false);
   const [activeTripChecked, setActiveTripChecked] = useState(false);
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
+  const [selectedPickup, setSelectedPickup] = useState<{ name: string; lat: number; lng: number } | null>(null);
+  const pickupPoint = selectedPickup || loc;
   const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
   const [locDenied, setLocDenied] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
@@ -53,7 +55,7 @@ export default function Home() {
   const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [reviewing, setReviewing] = useState(false);
   useHideTabBar(reviewing);
-  const [searchTarget, setSearchTarget] = useState<'dropoff' | 'stop'>('dropoff');
+  const [searchTarget, setSearchTarget] = useState<'pickup' | 'dropoff' | 'stop'>('dropoff');
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
@@ -157,13 +159,13 @@ export default function Home() {
     setEstimate(null);
     if (!dropoff || !locationReady) return;
     tripsApi.estimate({
-      pickup_lat: loc.lat, pickup_lng: loc.lng,
+      pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
       stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
     }).then(result => { if (current) { setEstimate(result); setError(''); } })
       .catch(error => { if (current) setError(apiError(error)); });
     return () => { current = false; };
-  }, [dropoff, locationReady, loc.lat, loc.lng, stops]);
+  }, [dropoff, locationReady, pickupPoint.lat, pickupPoint.lng, stops]);
 
   const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
   const nearest = etaValues.length ? Math.min(...etaValues) : null;
@@ -198,9 +200,9 @@ export default function Home() {
     setBooking(true);
     try {
       const trip = await tripsApi.request({
-        pickup_address: pickupLabel,
-        pickup_lat: loc.lat,
-        pickup_lng: loc.lng,
+        pickup_address: selectedPickup?.name || pickupLabel,
+        pickup_lat: pickupPoint.lat,
+        pickup_lng: pickupPoint.lng,
         dropoff_address: dropoff.name,
         dropoff_lat: dropoff.lat,
         dropoff_lng: dropoff.lng,
@@ -243,7 +245,7 @@ export default function Home() {
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={locationReady ? loc : null}
-        pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : dropoff && locationReady ? loc : null}
+        pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : dropoff && locationReady ? pickupPoint : null}
         dropoff={activeTrip ? { lat: activeTrip.dropoff_lat, lng: activeTrip.dropoff_lng } : dropoff}
         route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
         cars={activeTrip || dropoff ? [] : cars}
@@ -474,7 +476,7 @@ export default function Home() {
           <View style={s.routeCard}>
             <View style={s.routeRow}>
               <View style={[s.routeDot, { backgroundColor: colors.online }]} />
-              <Text style={s.routeText} numberOfLines={1}>{pickupLabel}</Text>
+              <Text style={s.routeText} numberOfLines={1}>{selectedPickup?.name || pickupLabel}</Text>
             </View>
             <View style={s.routeConnector} />
             <View style={s.routeRow}>
@@ -529,8 +531,14 @@ export default function Home() {
         <SearchSheet
           onClose={() => setSearchOpen(false)}
           onVoice={openVoice}
+          target={searchTarget}
+          pickupLabel={selectedPickup?.name || pickupLabel}
+          onPickup={() => setSearchTarget('pickup')}
+          onDestination={() => setSearchTarget('dropoff')}
           onSelect={(d: any) => {
-            if (searchTarget === 'stop') {
+            if (searchTarget === 'pickup') {
+              setSelectedPickup(d);
+            } else if (searchTarget === 'stop') {
               setStops((prev) => prev.length < 3 ? [...prev, d] : prev);
             } else {
               setDropoff(d);
@@ -538,6 +546,7 @@ export default function Home() {
             }
             setSearchTarget('dropoff');
             setSearchOpen(false);
+            setSearchCollapsed(true);
           }}
           featured={featured}
           insets={insets}
@@ -547,9 +556,10 @@ export default function Home() {
   );
 }
 
-export function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
+export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
+  useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -581,7 +591,7 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: an
           <TextInput
             testID="search-input"
             autoFocus
-            placeholder="Hvor skal du?"
+            placeholder={target === 'pickup' ? 'Hvor skal du hentes?' : 'Hvor skal du?'}
             placeholderTextColor={colors.textMuted}
             style={s.searchInput}
             value={q}
@@ -605,6 +615,10 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: an
         </Pressable>
       </View>
 
+      {onPickup ? <View style={{ flexDirection: 'row', padding: 16, gap: 12 }}>
+        <Pressable testID="search-pickup" accessibilityRole="button" onPress={onPickup} style={{ flex: 1, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text numberOfLines={1}>Hentested: {pickupLabel}</Text></Pressable>
+        <Pressable testID="search-destination" accessibilityRole="button" onPress={onDestination} style={{ padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text>Destinasjon</Text></Pressable>
+      </View> : null}
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.searchResults}>
         {items.map((r: any, i: number) => (
           <Pressable
@@ -760,3 +774,4 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
+

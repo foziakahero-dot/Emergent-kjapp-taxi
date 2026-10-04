@@ -1,4 +1,5 @@
 import { useReducedMotion } from '@/src/components/Motion';
+import { NativePaymentProvider } from '@/src/components/NativePaymentProvider';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -86,6 +87,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <NativePaymentProvider>
             <SessionGate>
             <NativeRuntimeBridge />
             <StatusBar style="dark" />
@@ -112,6 +114,7 @@ export default function RootLayout() {
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             </Stack>
             </SessionGate>
+            </NativePaymentProvider>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

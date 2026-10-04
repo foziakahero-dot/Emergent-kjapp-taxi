@@ -5,12 +5,13 @@ import { paymentApi } from './api';
 // never open a second payment flow automatically, even after a network error.
 export async function payNative(tripId: string): Promise<boolean | null> {
   const config = await paymentApi.nativeConfig();
-  if (!config.enabled) return null;
+  if (!config.enabled) throw new Error('Testbetaling er midlertidig utilgjengelig. Prøv igjen senere.');
   if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');
   const compiledMerchant = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || '';
   await initStripe({ publishableKey: config.publishable_key, urlScheme: 'kjapp',
     merchantIdentifier: compiledMerchant || undefined });
   const intent = await paymentApi.nativeIntent(tripId);
+  if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');
   const initialized = await initPaymentSheet({
     merchantDisplayName: 'SNAR', paymentIntentClientSecret: intent.client_secret,
     returnURL: 'kjapp://payment/success', allowsDelayedPaymentMethods: false,
@@ -28,3 +29,4 @@ export async function payNative(tripId: string): Promise<boolean | null> {
   const status = await paymentApi.nativeStatus(intent.payment_intent_id);
   return status.payment_status === 'paid';
 }
+

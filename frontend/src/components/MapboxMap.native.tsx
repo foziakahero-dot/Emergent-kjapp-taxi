@@ -85,7 +85,7 @@ export function MapboxInteractiveMap({
   const focus = useMemo(() => {
     const points: LL[] = [];
     if (user) points.push(user);
-    if (pickup) points.push(pickup);
+    if (pickup && (!user || Math.abs(pickup.lat - user.lat) > 1e-7 || Math.abs(pickup.lng - user.lng) > 1e-7)) points.push(pickup);
     if (dropoff) points.push(dropoff);
     if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
     return points;
@@ -99,8 +99,8 @@ export function MapboxInteractiveMap({
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
-        zoomLevel: 13.4,
-        pitch: 0,
+        zoomLevel: activeCar ? 16.5 : 15.8,
+        pitch: activeCar ? 40 : 25,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -109,8 +109,8 @@ export function MapboxInteractiveMap({
     if (focus.length === 1) {
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
-        zoomLevel: 13.4,
-        pitch: 0,
+        zoomLevel: activeCar ? 16.5 : 15.8,
+        pitch: activeCar ? 40 : 25,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -197,8 +197,8 @@ export function MapboxInteractiveMap({
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [user?.lng ?? OSLO.lng, user?.lat ?? OSLO.lat],
-            zoomLevel: 13.4,
-            pitch: 0,
+            zoomLevel: user ? 15.8 : 13.4,
+            pitch: user ? 25 : 0,
           }}
           minZoomLevel={3}
           maxZoomLevel={20}
@@ -210,9 +210,9 @@ export function MapboxInteractiveMap({
           config={{
             lightPreset: 'day',
             theme: 'monochrome',
-            show3dObjects: false,
-            show3dBuildings: false,
-            show3dLandmarks: false,
+            show3dObjects: true,
+            show3dBuildings: true,
+            show3dLandmarks: true,
             show3dTrees: false,
             showPlaceLabels: true,
             showPointOfInterestLabels: false,
@@ -313,4 +313,5 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 export const Map = MapboxInteractiveMap;
 export const InteractiveMap = MapboxInteractiveMap;
 export default MapboxInteractiveMap;
+
 
