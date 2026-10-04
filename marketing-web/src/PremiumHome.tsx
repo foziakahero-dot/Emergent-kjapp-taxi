@@ -70,8 +70,8 @@ export default function PremiumHome() {
               uten omveier.
             </h1>
             <p className="snar-lead">
-              Kartet først. Bestill med tekst eller stemme. Velg bilen som
-              passer, se estimatet før du bekrefter — og følg reisen live.
+              Skriv eller si hvor du skal. Velg bil, se prisestimatet
+              og følg reisen i appen.
             </p>
             <div className="snar-actions">
               <button
@@ -86,16 +86,20 @@ export default function PremiumHome() {
               </Link>
             </div>
             <a className="snar-voice-link" href="#voice">
-              Se voice booking →
+              Utforsk stemmebestilling →
             </a>
             <p className="snar-hero-note">
-              Lisensierte sjåfører · Tydelig estimat
-              <br />
-              Live sporing · Norsk support
+              Beta i Oslo. Vi kontakter deg når du får tilgang.
             </p>
           </div>
           <ProductPreview />
         </section>
+        <div className="snar-trust-strip snar-shell" aria-label="Dette får du med SNAR">
+          <span>Lisensierte sjåfører</span>
+          <span>Tydelig prisestimat</span>
+          <span>Live sporing</span>
+          <span>Norsk support</span>
+        </div>
         <section
           id="how"
           className="snar-section snar-shell"
@@ -132,15 +136,16 @@ export default function PremiumHome() {
               SNAR ordner resten.
             </h2>
             <p>
-              Stemmen er en snarvei inn i bestillingen, ikke en egen chatbot.
-              SNAR finner destinasjonen og gjør turen klar, mens pris og
-              hentetid alltid kommer fra selve SNAR-systemet.
+              Fortell hvor du vil reise. SNAR gjør bestillingen klar,
+              og du ser over destinasjon, bilvalg og prisestimat
+              før du bekrefter.
             </p>
           </div>
           <Card className="snar-voice-card">
             <img src="/assets/figma/mic.svg" width="40" height="40" alt="" />
             <blockquote>«Kjør meg til Gardermoen.»</blockquote>
-            <p>Destinasjon · Bilvalg · Estimat · Bekreft</p>
+            <div className="snar-voice-wave" aria-hidden="true">{[18, 30, 46, 26, 56, 38, 22, 44, 28, 16, 34, 20].map((height, i) => <i key={i} style={{ height, animationDelay: `${i * 70}ms` }} />)}</div>
+            <p>Si destinasjonen. Se over. Bekreft.</p>
           </Card>
         </section>
         <section
@@ -153,8 +158,8 @@ export default function PremiumHome() {
               <span className="snar-kicker">VELG DIN SNAR</span>
               <h2 id="vehicles-title">Tre måter å reise.</h2>
               <p>
-                Samme tydelige bestilling. Ulik plass og komfort. Velg kategori
-                etter reisen — ikke etter kompliserte produktnavn.
+                Til hverdagen, når dere er flere, eller når du ønsker
+                litt ekstra komfort. Velg bilen som passer reisen.
               </p>
             </div>
             <div className="snar-vehicle-grid">
@@ -190,9 +195,8 @@ export default function PremiumHome() {
               Bare smartere og nærmere.
             </h2>
             <p>
-              SNAR kombinerer lokale løyvehavere og lisensierte sjåfører med en
-              moderne bestillingsopplevelse bygget for Norge. Teknologien skal
-              gjøre turen enklere — ikke gjøre appen mer komplisert.
+              Lokale løyvehavere. Lisensierte sjåfører. En enklere
+              bestilling bygget for norske reisende.
             </p>
           </div>
           <div className="snar-value-grid">
@@ -217,9 +221,8 @@ export default function PremiumHome() {
               Moderne verktøy rundt turene.
             </h2>
             <p>
-              SNAR gir sjåfører og løyvehavere et samlet økosystem for turer,
-              aktivitet, dokumentasjon og oppgjør — uten at partnerbudskapet tar
-              over kundeopplevelsen.
+              Samle sjåfører, turer, dokumentasjon og oppgjør i Fleet Panel.
+              Få oversikt over driften og norsk oppfølging som SNAR-partner.
             </p>
             <div className="snar-actions">
               <Link className="snar-btn snar-btn-primary" to="/loyvehaver">
@@ -252,11 +255,11 @@ export default function PremiumHome() {
           aria-labelledby="beta-heading"
         >
           <Badge>OSLO FØRST · BETA</Badge>
-          <h2 id="beta-heading">Klar når du er.</h2>
+          <h2 id="beta-heading">Bli med på de første turene.</h2>
           <p>
-            SNAR er i beta. Meld interesse nå, så kontakter vi deg når tilgang
-            åpner for din gruppe. Ekte nedlastingslenker vises først når de er
-            aktive.
+            Vi starter i Oslo. Meld interesse som passasjer, sjåfør
+            eller løyvehaver, så kontakter vi deg når beta-tilgang åpner
+            for din gruppe.
           </p>
           <div className="snar-actions">
             <button
