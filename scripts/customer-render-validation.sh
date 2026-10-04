@@ -28,6 +28,9 @@ npx expo export --platform android --output-dir /tmp/snar-customer-android-sourc
 npx expo export --platform ios --output-dir /tmp/snar-customer-ios-source
 cd "$task_root"
 
+# Live configuration checks are read-only and output booleans, never key values.
+python3 scripts/customer-public-config-smoke.py
+
 # Publish only a minimal validation result, never source bundles or private data.
 python3 - <<'PY'
 import json, os
