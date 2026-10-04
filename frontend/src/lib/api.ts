@@ -72,6 +72,8 @@ export const placesApi = {
 
 export const paymentApi = {
   nativeConfig: () => api.get('/payments/native/config').then((r) => r.data),
+  nativeSetupIntent: () => api.post('/payments/native/setup-intent').then((r) => r.data),
+  nativeSetupStatus: (setup_intent_id: string) => api.get(`/payments/native/setup-intent/${setup_intent_id}`).then((r) => r.data),
   nativeIntent: (trip_id: string) => api.post('/payments/native/intent', { trip_id }).then((r) => r.data),
   nativeStatus: (id: string) => api.get(`/payments/native/intent/${id}`).then((r) => r.data),
   list: () => api.get('/payment-methods').then((r) => r.data),
