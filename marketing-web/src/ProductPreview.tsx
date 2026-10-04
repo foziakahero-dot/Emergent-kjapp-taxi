@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { SnarMark } from "./SnarUI";
+import { SnarMark, SnarWordmark } from "./SnarUI";
 
 const views = ["Destinasjon", "Bilvalg", "Stemme"];
 const cars = [
@@ -19,7 +19,7 @@ export default function ProductPreview() {
       <div className="snar-phone">
         <div className="snar-phone-screen snar-app-preview">
           <div className="snar-island" aria-hidden="true" />
-          <div className="snar-preview-brand"><SnarMark size={24} /><strong>SNAR</strong><span>OSLO · BETA</span></div>
+          <div className="snar-preview-brand"><SnarMark size={24} /><SnarWordmark height={13} /><span>OSLO · BETA</span></div>
           <svg className="snar-preview-map" viewBox="0 0 360 660" aria-hidden="true">
             <rect width="360" height="660" fill="#EEF1F5" />
             <g fill="#E1E9E3">
