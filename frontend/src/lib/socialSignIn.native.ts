@@ -4,8 +4,13 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 
 export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }) {
   if (!config.google_web_client_id) throw new Error('Google-innlogging er ikke konfigurert ennå.');
-  if (Platform.OS === 'ios' && (!config.google_ios_client_id || config.google_ios_client_id !== process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID)) throw new Error('Google-innlogging for iPhone er ikke konfigurert ennå.');
-  GoogleSignin.configure({ webClientId: config.google_web_client_id, iosClientId: config.google_ios_client_id || undefined });
+  if (Platform.OS === 'ios' && !config.google_ios_client_id) {
+    throw new Error('Google-innlogging for iPhone mangler iOS OAuth Client ID på serveren.');
+  }
+  GoogleSignin.configure({
+    webClientId: config.google_web_client_id,
+    iosClientId: Platform.OS === 'ios' ? config.google_ios_client_id : undefined,
+  });
   if (Platform.OS === 'android') await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const result = await GoogleSignin.signIn();
   if (isCancelledResponse(result)) return null;
