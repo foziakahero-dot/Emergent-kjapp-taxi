@@ -1,0 +1,15 @@
+name: KJAPP Driver iOS Internal
+
+on:
+  push:
+    branches:
+      - fix/driver-final-clean-20261004
+
+jobs:
+  build_driver_ios_internal:
+    name: Build KJAPP Driver iOS Internal
+    type: build
+    params:
+      platform: ios
+      profile: ios-internal
+      refresh_ad_hoc_provisioning_profile: true
