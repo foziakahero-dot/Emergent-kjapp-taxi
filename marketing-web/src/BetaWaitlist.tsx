@@ -146,7 +146,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
         ref={dialogRef}
       >
         <button type="button" className="mk-beta-close" onClick={onClose} aria-label="Lukk beta-påmelding">×</button>
-        <span className="mk-beta-kicker">KJAPP BETA</span>
+        <span className="mk-beta-kicker">SNAR BETA</span>
         <h2 id="beta-title">Få tilgang til beta</h2>
         <p id="beta-description">Meld interesse som passasjer, sjåfør eller løyvehaver. Vi bruker opplysningene kun for å følge opp beta-tilgang.</p>
 
@@ -229,7 +229,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
             <button className="mk-pill mk-pill-primary mk-beta-submit" type="submit" disabled={status === 'submitting'}>
               {status === 'submitting' ? 'Sender…' : 'Meld interesse'}
             </button>
-            <p className="mk-beta-privacy">Ved å sende inn ber du KJAPP kontakte deg om beta. Spørsmål om personvern: <a href="mailto:privacy@kjappapp.no">privacy@kjappapp.no</a>.</p>
+            <p className="mk-beta-privacy">Ved å sende inn ber du SNAR kontakte deg om beta. Spørsmål om personvern: <a href="mailto:privacy@kjappapp.no">privacy@kjappapp.no</a>.</p>
           </form>
         )}
       </div>

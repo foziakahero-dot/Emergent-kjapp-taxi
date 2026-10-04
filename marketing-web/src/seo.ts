@@ -46,8 +46,8 @@ export function setPageSeo({
     'og:url': canonical,
     'og:type': 'website',
     'og:image': image,
-    'og:image:alt': 'KJAPP taxi-app',
-    'og:site_name': 'KJAPP',
+    'og:image:alt': 'SNAR taxi-app',
+    'og:site_name': 'SNAR',
     'og:locale': 'nb_NO',
   };
 

@@ -19,8 +19,8 @@ function RouteMetadata() {
   useEffect(() => {
     if (pathname === '/help') {
       setPageSeo({
-        title: 'KJAPP Hjelp & support',
-        description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. KJAPP support svarer på support@kjappapp.no.',
+        title: 'SNAR Hjelp & support',
+        description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.',
         canonical: 'https://kjappapp.no/help',
       });
       return;
@@ -28,8 +28,8 @@ function RouteMetadata() {
 
     if (pathname === '/loyvehaver') {
       setPageSeo({
-        title: 'KJAPP for løyvehavere — Fleet Panel og norsk oppfølging',
-        description: 'Bli KJAPP-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.',
+        title: 'SNAR for løyvehavere — Fleet Panel og norsk oppfølging',
+        description: 'Bli SNAR-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.',
         canonical: 'https://kjappapp.no/loyvehaver',
       });
       return;
@@ -37,8 +37,8 @@ function RouteMetadata() {
 
     if (pathname === '/loyvehaver/soknad') {
       setPageSeo({
-        title: 'KJAPP Partner — løyvehaversøknad',
-        description: 'Søk om å bli KJAPP-partner og send nødvendig dokumentasjon for kontroll før Fleet-tilgang aktiveres.',
+        title: 'SNAR Partner — løyvehaversøknad',
+        description: 'Søk om å bli SNAR-partner og send nødvendig dokumentasjon for kontroll før Fleet-tilgang aktiveres.',
         canonical: 'https://kjappapp.no/loyvehaver/soknad',
         robots: 'noindex,nofollow',
       });
@@ -46,8 +46,8 @@ function RouteMetadata() {
     }
 
     setPageSeo({
-      title: 'KJAPP – Reis smart',
-      description: 'KJAPP er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.',
+      title: 'SNAR – Reis smart',
+      description: 'SNAR er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.',
       canonical: 'https://kjappapp.no/',
     });
   }, [pathname]);
@@ -75,7 +75,7 @@ function SupportFooterPortal() {
   if (!target) return null;
 
   return createPortal(
-    <div className="mk-support-footer" aria-label="KJAPP support">
+    <div className="mk-support-footer" aria-label="SNAR support">
       <Link to="/help">Hjelp & support</Link>
       <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
     </div>,
