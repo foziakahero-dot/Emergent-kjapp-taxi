@@ -9,6 +9,7 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
 import { paymentApi } from '@/src/lib/api';
+import { setupNativeCard } from '@/src/lib/nativePayment';
 import { apiError } from '@/src/lib/format';
 
 const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjappapp.no';
@@ -73,6 +74,20 @@ export default function PaymentMethods() {
     setNotice('');
     setError('');
     try {
+      if (Platform.OS !== 'web') {
+        const nativeResult = await setupNativeCard();
+        if (nativeResult !== null) {
+          if (nativeResult) {
+            await qc.invalidateQueries({ queryKey: ['payment-methods'] });
+            setNotice('Testkortet er verifisert med Stripe PaymentSheet og klart i SNAR.');
+            setError('');
+          } else {
+            setNotice('Stripe-testen ble avbrutt. Ingen kortdata ble lagret.');
+          }
+          return;
+        }
+      }
+
       const { checkout_url, session_id: stripeSessionId } = await paymentApi.cardSetup(CHECKOUT_ORIGIN);
       if (!checkout_url || !stripeSessionId) throw new Error('Stripe svarte uten verifiseringslenke.');
 
