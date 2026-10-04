@@ -36,7 +36,7 @@ export default function DriverLogin() {
       }
       if (res?.role !== 'driver') {
         await logout();
-        setError('Denne kontoen er ikke en KJAPP-sjåførkonto.');
+        setError('Denne kontoen er ikke en SNAR-sjåførkonto.');
         return;
       }
       if (res?.approved !== true) {
@@ -64,7 +64,7 @@ export default function DriverLogin() {
         <Rise style={s.identity}>
           <BrandBadge size={48} />
           <View>
-            <Text style={s.eyebrow}>KJAPP SJÅFØR</Text>
+            <Text style={s.eyebrow}>SNAR SJÅFØR</Text>
             <Text style={s.title}>Logg inn</Text>
           </View>
         </Rise>
