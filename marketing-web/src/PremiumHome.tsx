@@ -44,9 +44,9 @@ const values = [
   ],
 ];
 const vehicles = [
-  ["SNAR", "Rask og enkel", "/assets/snar/standard.svg"],
-  ["SNAR XL", "Mer plass · opptil 7 seter", "/assets/snar/xl.svg"],
-  ["Premium", "Premium komfort", "/assets/snar/premium.svg"],
+  ["SNAR", "Rask og enkel", "/assets/snar/standard-3d.svg"],
+  ["SNAR XL", "Mer plass · opptil 7 seter", "/assets/snar/xl-3d.svg"],
+  ["Premium", "Premium komfort", "/assets/snar/premium-3d.svg"],
 ];
 const env = import.meta.env;
 export default function PremiumHome() {
