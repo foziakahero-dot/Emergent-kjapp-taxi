@@ -1,0 +1,35 @@
+src/lib/BackgroundLocation.ts(44,50): error TS2339: Property 'ios' does not exist on type 'Platform'.
+  Property 'ios' does not exist on type 'PlatformIOSStatic'.
+src/lib/BackgroundLocation.ts(49,22): error TS2551: Property 'isTaskRegistered' does not exist on type 'typeof import("C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-task-manager/build/TaskManager")'. Did you mean 'isTaskRegisteredAsync'?
+src/lib/BackgroundLocation.ts(50,56): error TS2345: Argument of type '({ data, error }: any) => void' is not assignable to parameter of type 'TaskManagerTaskExecutor<unknown>'.
+  Type 'void' is not assignable to type 'Promise<any>'.
+src/lib/BackgroundLocation.ts(108,37): error TS2339: Property 'hasServicesAsync' does not exist on type 'typeof import("C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-location/build/index")'.
+src/lib/BiometricAuth.ts(4,38): error TS2307: Cannot find module 'expo-local-authentication' or its corresponding type declarations.
+src/lib/BiometricAuth.ts(5,25): error TS2307: Cannot find module 'expo-crypto' or its corresponding type declarations.
+src/lib/BiometricAuth.ts(6,30): error TS2307: Cannot find module 'expo-secure-store' or its corresponding type declarations.
+src/lib/BiometricAuth.ts(57,17): error TS18046: 'b' is of type 'unknown'.
+src/lib/BiometricAuth.ts(131,23): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'Error'.
+src/lib/Connectivity.ts(4,26): error TS2307: Cannot find module 'expo-network' or its corresponding type declarations.
+src/lib/Connectivity.ts(21,20): error TS2551: Property 'isTaskRegistered' does not exist on type 'typeof import("C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-task-manager/build/TaskManager")'. Did you mean 'isTaskRegisteredAsync'?
+src/lib/Connectivity.ts(22,47): error TS2345: Argument of type '({ data, error }: any) => void' is not assignable to parameter of type 'TaskManagerTaskExecutor<unknown>'.
+  Type 'void' is not assignable to type 'Promise<any>'.
+src/lib/Connectivity.ts(38,41): error TS7006: Parameter 'state' implicitly has an 'any' type.
+src/lib/EnhancedNotifications.ts(5,25): error TS2307: Cannot find module 'expo-device' or its corresponding type declarations.
+src/lib/EnhancedNotifications.ts(10,35): error TS2322: Type 'Promise<{ shouldShowAlert: true; shouldPlaySound: true; shouldSetBadge: true; }>' is not assignable to type 'Promise<NotificationBehavior>'.
+  Type '{ shouldShowAlert: true; shouldPlaySound: true; shouldSetBadge: true; }' is missing the following properties from type 'NotificationBehavior': shouldShowBanner, shouldShowList
+src/lib/EnhancedNotifications.ts(68,26): error TS2694: Namespace '"C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-notifications/build/index"' has no exported member 'InputTrigger'.
+src/lib/EnhancedNotifications.ts(184,3): error TS2322: Type '{ title: string; body: string; data: { passengerName?: string; driverName?: string; pickupLocation?: string; dropoffLocation?: string; tripId?: string; eta?: number; status?: string; }; }' is not assignable to type 'NotificationContent'.
+  Type '{ title: string; body: string; data: { passengerName?: string; driverName?: string; pickupLocation?: string; dropoffLocation?: string; tripId?: string; eta?: number; status?: string; }; }' is not assignable to type '{ title: string | null; subtitle: string | null; body: string | null; data?: Record<string, unknown> | undefined; categoryIdentifier: string | null; sound: "default" | "defaultCritical" | "custom" | "defaultRingtone" | null; } & NotificationContentAndroid'.
+    Type '{ title: string; body: string; data: { passengerName?: string | undefined; driverName?: string | undefined; pickupLocation?: string | undefined; dropoffLocation?: string | undefined; tripId?: string | undefined; eta?: number | undefined; status?: string | undefined; }; }' is missing the following properties from type '{ title: string | null; subtitle: string | null; body: string | null; data?: Record<string, unknown> | undefined; categoryIdentifier: string | null; sound: "default" | "defaultCritical" | "custom" | "defaultRingtone" | null; }': subtitle, categoryIdentifier, sound
+src/lib/EnhancedNotifications.ts(224,29): error TS2694: Namespace '"C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-notifications/build/index"' has no exported member 'NotificationImportance'.
+src/lib/EnhancedNotifications.ts(224,68): error TS2339: Property 'NotificationImportance' does not exist on type 'typeof import("C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-notifications/build/index")'.
+src/lib/EnhancedNotifications.ts(228,27): error TS2339: Property 'createChannelAndroidAsync' does not exist on type 'typeof import("C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-notifications/build/index")'.
+src/lib/EnhancedNotifications.ts(242,45): error TS2339: Property 'isDevicePushNotificationEnabledAsync' does not exist on type 'typeof import("C:/Users/Elite transport/Desktop/FAIRFLOW/driver-app/node_modules/expo-notifications/build/index")'.
+src/lib/plugins/withBackgroundLocation.ts(4,10): error TS2305: Module '"@expo/config-plugins"' has no exported member 'ExpoConfig'.
+src/lib/plugins/withBackgroundLocation.ts(21,5): error TS2322: Type 'string[]' is not assignable to type '("location" | "audio")[]'.
+  Type 'string' is not assignable to type '"location" | "audio"'.
+src/lib/plugins/withBackgroundLocation.ts(24,5): error TS2322: Type 'string' is not assignable to type '"location" | "mediaProjection" | "mediaPlayback"'.
+src/lib/plugins/withBiometricAuth.ts(4,10): error TS2305: Module '"@expo/config-plugins"' has no exported member 'ExpoConfig'.
+src/lib/plugins/withConnectivity.ts(4,10): error TS2305: Module '"@expo/config-plugins"' has no exported member 'ExpoConfig'.
+src/lib/plugins/withEnhancedNotifications.ts(4,10): error TS2305: Module '"@expo/config-plugins"' has no exported member 'ExpoConfig'.
+src/lib/plugins/withPaymentHelper.ts(5,10): error TS2305: Module '"@expo/config-plugins"' has no exported member 'ExpoConfig'.
