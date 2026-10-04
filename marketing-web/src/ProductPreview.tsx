@@ -52,7 +52,7 @@ export default function ProductPreview() {
                 <div className="snar-preview-sheet-title"><h3>Velg reise</h3><span>SNAR</span></div>
                 <div className="snar-preview-cars">{cars.map(([name, copy, asset], index) => (
                   <div className={`snar-preview-car${index === 0 ? " is-selected" : ""}`} key={name}>
-                    <img src={`/assets/snar/${asset}.svg`} width="78" height="42" alt="" />
+                    <img src={`/assets/snar/${asset}-3d.svg`} width="78" height="42" alt="" />
                     <div><strong>{name}</strong><span>{copy}</span></div>
                     <span className="snar-preview-radio" aria-hidden="true" />
                   </div>
