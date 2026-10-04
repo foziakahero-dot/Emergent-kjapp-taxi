@@ -84,21 +84,25 @@ export function MapboxInteractiveMap({
 
   const focus = useMemo(() => {
     const points: LL[] = [];
+    const liveCars = cars
+      .filter((car) => Number.isFinite(car?.lat) && Number.isFinite(car?.lng))
+      .slice(0, 8);
+
+    // Idle/browsing Customer map: live available cars are the primary subject.
+    // Keep the passenger location only as context so the camera cannot collapse
+    // to a single blue/user marker while real cars are available.
+    if (!activeCar && liveCars.length) {
+      liveCars.forEach((car) => points.push({ lat: car.lat, lng: car.lng }));
+      if (user) points.push(user);
+      if (pickup) points.push(pickup);
+      if (dropoff) points.push(dropoff);
+      return points;
+    }
+
     if (user) points.push(user);
     if (pickup) points.push(pickup);
     if (dropoff) points.push(dropoff);
     if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
-
-    // On the idle customer map, include the nearest live available cars in the
-    // camera bounds. Previously the camera ignored cars completely and could
-    // stay locked on the passenger even when /cars/nearby returned vehicles.
-    if (!dropoff && !activeCar) {
-      cars.slice(0, 8).forEach((car) => {
-        if (Number.isFinite(car?.lat) && Number.isFinite(car?.lng)) {
-          points.push({ lat: car.lat, lng: car.lng });
-        }
-      });
-    }
     return points;
   }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars]);
 
@@ -110,8 +114,8 @@ export function MapboxInteractiveMap({
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
-        zoomLevel: 14.2,
-        pitch: 52,
+        zoomLevel: 15.2,
+        pitch: 58,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -120,8 +124,8 @@ export function MapboxInteractiveMap({
     if (focus.length === 1) {
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
-        zoomLevel: 14.2,
-        pitch: 52,
+        zoomLevel: 15.2,
+        pitch: 58,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -133,7 +137,7 @@ export function MapboxInteractiveMap({
     const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
     camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
     camera.setCamera?.({
-      pitch: 52,
+      pitch: 58,
       heading: activeCar && Number.isFinite(Number(activeCar.heading)) ? Number(activeCar.heading) : 0,
       animationDuration: duration,
       animationMode: 'easeTo',
@@ -214,8 +218,8 @@ export function MapboxInteractiveMap({
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [user?.lng ?? OSLO.lng, user?.lat ?? OSLO.lat],
-            zoomLevel: 14.2,
-            pitch: 52,
+            zoomLevel: 15.2,
+            pitch: 58,
           }}
           minZoomLevel={3}
           maxZoomLevel={20}
