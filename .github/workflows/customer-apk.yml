@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - audit/customer-prebuild-snar-20261003
+      - fix/customer-search-mapbox-stripe-20261004
   pull_request:
     branches:
       - main
@@ -16,14 +17,26 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       CI: "1"
       EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_ACCESS_TOKEN || secrets.MAPBOX_PUBLIC_TOKEN }}
+      RNMAPBOX_MAPS_DOWNLOAD_TOKEN: ${{ secrets.RNMAPBOX_MAPS_DOWNLOAD_TOKEN || secrets.MAPBOX_DOWNLOADS_TOKEN }}
+      MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN || secrets.RNMAPBOX_MAPS_DOWNLOAD_TOKEN }}
       CMAKE_BUILD_PARALLEL_LEVEL: "2"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Require Mapbox runtime token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN" ]; then
+            echo "Missing EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN / MAPBOX_ACCESS_TOKEN / MAPBOX_PUBLIC_TOKEN GitHub secret"
+            exit 1
+          fi
+          echo "Mapbox runtime token is configured"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -43,7 +56,12 @@ jobs:
         shell: bash
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platform-tools"             "platforms;android-36"             "build-tools;36.0.0"             "cmake;3.22.1"             "ndk;27.1.12297006"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.1.12297006"
 
       - name: Install Customer dependencies
         working-directory: frontend
@@ -65,15 +83,15 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
           test -s app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-arm64.apk
-          sha256sum ../../SNAR-Customer-arm64.apk > ../../SNAR-Customer-arm64.apk.sha256
+          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-Mapbox-Stripe-arm64.apk
+          sha256sum ../../SNAR-Customer-Mapbox-Stripe-arm64.apk > ../../SNAR-Customer-Mapbox-Stripe-arm64.apk.sha256
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SNAR-Customer-arm64
+          name: SNAR-Customer-Mapbox-Stripe-arm64
           path: |
-            SNAR-Customer-arm64.apk
-            SNAR-Customer-arm64.apk.sha256
+            SNAR-Customer-Mapbox-Stripe-arm64.apk
+            SNAR-Customer-Mapbox-Stripe-arm64.apk.sha256
           if-no-files-found: error
           retention-days: 14
