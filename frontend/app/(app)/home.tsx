@@ -47,6 +47,7 @@ export default function Home() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchCollapsed, setSearchCollapsed] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(false);
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   const [recommendationIndex, setRecommendationIndex] = useState(0);
@@ -209,8 +210,6 @@ export default function Home() {
       });
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
-      // The request may have reached the server even if the response was lost.
-      // Reconcile against canonical backend state before presenting a failure or allowing another booking.
       try {
         const active = await tripsApi.active();
         if (active?.trip_id) {
@@ -258,18 +257,42 @@ export default function Home() {
       {!reviewing && !activeTrip ? (
         <>
           <View style={[s.searchBarWrap, { top: insets.top + 12 }]}>
-            <Pressable
-              style={s.floatingSearch}
-              onPress={() => setSearchOpen(true)}
-              testID="home-where-to"
-              accessibilityRole="button"
-              accessibilityLabel="Søk etter destinasjon"
-            >
-              <Icon name="search" size={20} color={colors.textMuted} />
-              <Text style={[s.floatingSearchText, dropoff && { color: colors.text }]} numberOfLines={1}>
-                {dropoff?.name || 'Hvor skal du?'}
-              </Text>
-            </Pressable>
+            {searchCollapsed ? (
+              <Pressable
+                style={s.collapsedSearchButton}
+                onPress={() => setSearchCollapsed(false)}
+                testID="home-search-expand"
+                accessibilityRole="button"
+                accessibilityLabel="Utvid søkefeltet"
+              >
+                <Icon name="search" size={19} color={colors.accent} />
+                <Text style={s.collapsedSearchText}>Søk</Text>
+              </Pressable>
+            ) : (
+              <View style={s.expandedSearchRow}>
+                <Pressable
+                  style={s.floatingSearch}
+                  onPress={() => setSearchOpen(true)}
+                  testID="home-where-to"
+                  accessibilityRole="button"
+                  accessibilityLabel="Søk etter destinasjon"
+                >
+                  <Icon name="search" size={20} color={colors.textMuted} />
+                  <Text style={[s.floatingSearchText, dropoff && { color: colors.text }]} numberOfLines={1}>
+                    {dropoff?.name || 'Hvor skal du?'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={s.searchMinimizeButton}
+                  onPress={() => setSearchCollapsed(true)}
+                  testID="home-search-collapse"
+                  accessibilityRole="button"
+                  accessibilityLabel="Minimer søkefeltet"
+                >
+                  <Icon name="minus" size={19} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+            )}
           </View>
 
           <Pressable
@@ -613,13 +636,27 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: an
 
 const useStyles = makeStyles((c) => ({
   searchBarWrap: { position: 'absolute', left: 16, right: 16, zIndex: 20 },
+  expandedSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   floatingSearch: {
-    minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12,
+    flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.96)',
     borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10,
     shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
   },
   floatingSearchText: { flex: 1, color: c.textMuted, fontFamily: font.medium, fontSize: 15 },
+  searchMinimizeButton: {
+    width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line,
+    shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 }, elevation: 5,
+  },
+  collapsedSearchButton: {
+    alignSelf: 'flex-start', minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10,
+    shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
+  },
+  collapsedSearchText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
   locationFab: {
     position: 'absolute', right: 16, zIndex: 21, width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.96)',
@@ -723,5 +760,3 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
-
-
