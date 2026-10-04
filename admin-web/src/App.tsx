@@ -8,7 +8,7 @@ import FleetApplications from './FleetApplications';
 import IdentityVerifications from './IdentityVerifications';
 import Receipts from './Receipts';
 import {
-  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
+  Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings, AiAssistant,
 } from './pages';
 import {
   FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
@@ -19,6 +19,7 @@ const NAV = [
     { to: '/', label: 'Dashbord', ic: '▤', end: true, perm: 'operations' },
     { to: '/live', label: 'Live drift', ic: '◉', perm: 'operations' },
     { to: '/actions', label: 'Krever handling', ic: '!', perm: 'operations' },
+    { to: '/assistant', label: 'AI-assistent', ic: '🤖', perm: 'operations' },
   ]},
   { group: 'Drift', items: [
     { to: '/trips', label: 'Turer', ic: '⇄', perm: 'operations' },
@@ -181,6 +182,7 @@ function Shell() {
             <Route path="/support" element={gate('support', <Support />)} />
             <Route path="/audit" element={gate('system', <Audit />)} />
             <Route path="/settings" element={gate('system', <Settings />)} />
+            <Route path="/assistant" element={gate('operations', <AiAssistant />)} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
         </div>

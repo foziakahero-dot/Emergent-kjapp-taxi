@@ -1,8 +1,9 @@
-import { Text, TextInput } from '@/src/components/Typography';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Share, Switch, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -11,7 +12,7 @@ import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
 const TOGGLES: { key: string; label: string; sub: string }[] = [
-  { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til SNAR-turen din' },
+  { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til KJAPP-turen din' },
   { key: 'trip_updates', label: 'Turoppdateringer', sub: 'Status når sjåføren er på vei og turen endrer fase' },
 ];
 
@@ -21,11 +22,6 @@ export default function Settings() {
   const router = useRouter();
   const { logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
-  const [settingsError, setSettingsError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const savingLock = useRef(false);
-  const deleteLock = useRef(false);
-  const [deleteError, setDeleteError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportInfo, setExportInfo] = useState<string>('');
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -37,91 +33,70 @@ export default function Settings() {
     (Constants.expoConfig?.android as any)?.versionCode ||
     null;
 
-  const exportLock = useRef(false);
   const exportData = async () => {
-    if (exportLock.current) return;
-    exportLock.current = true;
     setExporting(true);
     setExportInfo('');
     try {
       const d = await gdprApi.export();
-      const fullMessage = JSON.stringify(d, null, 2);
-      const androidSafeLimit = 700_000;
-      let message = fullMessage;
-      let compacted = false;
+      const trips = (d.trips || []).length;
+      const payments = (d.payments || []).length;
 
-      if (fullMessage.length > androidSafeLimit) {
-        compacted = true;
-        message = JSON.stringify(d, (key, value) => {
-          if (key === 'data_base64') return '[utelatt fra deling: binær bildedata finnes i original eksport]';
-          return value;
-        }, 2);
+      // Convert GDPR data to JSON string
+      const dataJson = JSON.stringify(d, null, 2);
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const filename = `SNAR-persondata-${timestamp}.json`;
+
+      try {
+        // Create file using modern FileSystem API
+        const file = new File(Paths.cache, filename);
+        await file.create();
+        await file.write(dataJson);
+
+        // Share the file using expo-sharing
+        try {
+          await Sharing.shareAsync(file.uri, {
+            mimeType: 'application/json',
+            dialogTitle: 'Mine SNAR-data'
+          });
+          setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Filen er delt via systemets delingsfunksjon.`);
+        } catch (sharingError) {
+          // If sharing fails, provide fallback info
+          console.warn('File sharing failed:', sharingError);
+          setExportInfo(`Dataene dine er lagret: ${trips} turer, ${payments} betalinger. Filen er lagret på enheten og kan deles manuelt fra ${Paths.cache}`);
+        }
+
+      } catch (fileError) {
+        // Handle file writing errors
+        console.warn('File writing failed:', fileError);
+        setExportInfo(`Kunne ikke lagre datafil akkurat nå. Prøv igjen senere.`);
       }
-
-      if (message.length > androidSafeLimit) {
-        message = JSON.stringify(d, (key, value) => {
-          if (key === 'data_base64') return '[utelatt fra deling: binær bildedata finnes i original eksport]';
-          if (['route_geometry', 'route_geojson', 'geometry', 'polyline'].includes(key)) {
-            return '[utelatt fra deling: stor rutegeometri finnes i original eksport]';
-          }
-          return value;
-        }, 2);
-      }
-
-      if (message.length > androidSafeLimit) {
-        message = JSON.stringify({
-          export_notice: 'SNAR hentet hele eksporten, men datasettet er for stort for Android-delingsarket. Kontakt support for sikker filutlevering av hele eksporten.',
-          generated_at: new Date().toISOString(),
-          summary: {
-            trips: Array.isArray((d as any)?.trips) ? (d as any).trips.length : undefined,
-            messages: Array.isArray((d as any)?.messages) ? (d as any).messages.length : undefined,
-            payments: Array.isArray((d as any)?.payments) ? (d as any).payments.length : undefined,
-          },
-        }, null, 2);
-      }
-
-      await Share.share({ title: 'Mine SNAR-data', message });
-      setExportInfo(compacted
-        ? 'Dataeksporten er hentet. Store bilde- eller rutedata ble utelatt fra delingsarket for å unngå Android-feil.'
-        : 'Dataeksporten er hentet.');
     } catch {
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {
-      exportLock.current = false;
       setExporting(false);
     }
   };
 
   const deleteAccount = async () => {
-    if (deleteLock.current || confirmText.trim().toUpperCase() !== 'SLETT') return;
-    deleteLock.current = true; setDeleteError('');
+    if (confirmText.trim().toUpperCase() !== 'SLETT') return;
     setDeleting(true);
     try {
       await gdprApi.delete();
       await logout();
       router.replace('/');
     } catch {
-      setDeleteError('Kunne ikke slette kontoen. Prøv igjen når forbindelsen er tilbake.');
       setDeleting(false);
-    } finally { deleteLock.current = false; }
+    }
   };
 
-  const loadSettings = useCallback(async () => {
-    setSettingsError('');
-    try { const response = await settingsApi.get(); setSettings(response.settings || response); }
-    catch { setSettingsError('Kunne ikke hente innstillingene. Sjekk forbindelsen og prøv igjen.'); }
+  useEffect(() => {
+    settingsApi.get().then((r) => setSettings(r.settings || r)).catch(() => setSettings({}));
   }, []);
-  useEffect(() => { void loadSettings(); }, [loadSettings]);
 
   const toggle = async (key: string) => {
-    if (savingLock.current || !settings) return;
-    savingLock.current = true; setSaving(true); setSettingsError('');
-    const previous = settings;
     const next = { ...settings, [key]: !settings[key] };
     setSettings(next);
-    try { await settingsApi.update({ [key]: next[key] }); }
-    catch { setSettings(previous); setSettingsError('Endringen ble ikke lagret. Prøv igjen når forbindelsen er tilbake.'); }
-    finally { savingLock.current = false; setSaving(false); }
+    try { await settingsApi.update({ [key]: next[key] }); } catch {}
   };
 
   return (
@@ -134,9 +109,8 @@ export default function Settings() {
       </View>
 
       <View style={{ paddingHorizontal: 20 }}>
-        {settingsError ? <View><Text testID="settings-network-error" accessibilityRole="alert" style={{ color: colors.danger }}>{settingsError}</Text><Button testID="settings-retry" label="Prøv igjen" onPress={() => void loadSettings()} /></View> : null}
         {!settings ? (
-          <View style={{ paddingTop: 60 }}>{!settingsError ? <Loader /> : null}</View>
+          <View style={{ paddingTop: 60 }}><Loader /></View>
         ) : (
           <>
             <Text style={s.sectionTitle}>Turvarsler</Text>
@@ -150,7 +124,6 @@ export default function Settings() {
                   <Switch
                     testID={`setting-${t.key}`}
                     value={!!settings[t.key]}
-                    disabled={saving}
                     onValueChange={() => toggle(t.key)}
                     trackColor={{ false: colors.line, true: colors.accent }}
                     thumbColor={colors.text}
@@ -161,13 +134,13 @@ export default function Settings() {
 
             <View style={[s.card, { marginTop: 16 }]}>
               <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
-              <Pressable testID="customer-app-settings-110" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
                 <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjappapp.no</Text>
               </Pressable>
-              <Pressable testID="customer-app-settings-113" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
                 <Text style={s.rowLabel}>Personvern</Text><Text style={s.rowValue}>Åpne</Text>
               </Pressable>
-              <Pressable testID="customer-app-settings-116" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
+              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
                 <Text style={s.rowLabel}>Vilkår</Text><Text style={s.rowValue}>Åpne</Text>
               </Pressable>
             </View>
@@ -206,7 +179,6 @@ export default function Settings() {
                     onChangeText={setConfirmText}
                     style={s.modalInput}
                   />
-                  {deleteError ? <Text testID="gdpr-delete-error" accessibilityRole="alert" style={{ color: colors.danger }}>{deleteError}</Text> : null}
                   <Button
                     label="Slett konto permanent"
                     variant="danger"

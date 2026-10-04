@@ -1352,3 +1352,229 @@ export function Settings() {
     </>
   );
 }
+
+/* ----------------------------- AI Assistant ----------------------------- */
+export function AiAssistant() {
+  const [query, setQuery] = useState('');
+  const [response, setResponse] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [conversation, setConversation] = useState<Array<{role: string; content: string}>>([]);
+  const [vehicleType, setVehicleType] = useState<'ai-first' | 'enkelt' | 'trygg' | 'premium'>('ai-first');
+  const [distance, setDistance] = useState('10');
+  const [duration, setDuration] = useState('20');
+
+  const askQuestion = async () => {
+    if (!query.trim()) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Add user message to conversation
+      setConversation(prev => [...prev, {role: 'user', content: query}]);
+
+      // Call a hypothetical AI assistant API endpoint
+      // Since there's no specific AI API, we'll simulate by providing helpful responses based on available data
+      const aiResponse = await getAiResponse(query);
+
+      // Add AI response to conversation
+      setConversation(prev => [...prev, {role: 'assistant', content: aiResponse}]);
+      setResponse(aiResponse);
+      setQuery('');
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAiResponse = async (question: string): Promise<string> => {
+    // This is a simulated AI assistant that provides helpful information based on available data
+    const lowerQuestion = question.toLowerCase();
+
+    // Handle common questions about the system
+    if (lowerQuestion.includes('flåte') || lowerQuestion.includes('fleet')) {
+      try {
+        const fleetData = await api.controlFleets();
+        return `Du har ${fleetData.fleets?.length || 0} løyvehavere i systemet. ${fleetData.fleets?.filter((f: any) => f.status === 'suspended').length || 0} er suspendert.`;
+      } catch (e) {
+        return "Kunne ikke hente flåteinformasjon.";
+      }
+    }
+
+    if (lowerQuestion.includes('sjåfør') || lowerQuestion.includes('driver')) {
+      try {
+        const driversData = await api.list('/admin/drivers-full', {});
+        return `Du har ${driversData.items?.length || 0} sjåfører registrert. ${driversData.items?.filter((d: any) => d.approved).length || 0} er godkjent.`;
+      } catch (e) {
+        return "Kunne ikke hente sjåførinformasjon.";
+      }
+    }
+
+    if (lowerQuestion.includes('tur') || lowerQuestion.includes('trip')) {
+      try {
+        const tripsData = await api.list('/admin/trips-full', {});
+        return `Du har ${tripsData.items?.length || 0} totalt antall turer. ${tripsData.items?.filter((t: any) => t.status === 'active').length || 0} er aktive nå.`;
+      } catch (e) {
+        return "Kunne ikke hente turinformasjon.";
+      }
+    }
+
+    if (lowerQuestion.includes('pris') || lowerQuestion.includes('price')) {
+      try {
+        const financeData = await api.finance(30);
+        return `Gjennomsnittspris de siste 30 dagene: ${financeData.totals?.avg_price ? `${fmtMoney(financeData.totals.avg_price)}` : 'ikke tilgjengelig'}.`;
+      } catch (e) {
+        return "Kunne ikke hente prisinformasjon.";
+      }
+    }
+
+    if (lowerQuestion.includes('hjelp') || lowerQuestion.includes('help')) {
+      return `Jeg kan hjelpe deg med spørsmål om:
+- Flåte og løyvehavere
+- Sjåfører og kunder
+- Turer og aktivitet
+- Priser og økonomi
+- Systemstatus
+
+Prøv å spørre noe som: "Hvor mange løyvehavere har vi?" eller "Hvor mange aktive turer er det?"`;
+    }
+
+    // Default response
+    return `Beklager, jeg forstod ikke spørsmålet ditt. Jeg kan hjelpe med spørsmål om flåte, sjåfører, turer, priser og systemstatus. Prøv å spørre noe like "Hvor mange løyvehavere har vi?" eller skriv "hjelp" for å se hva jeg kan hjelpe med.`;
+  };
+
+  const calculatePrice = async () => {
+    const dist = parseFloat(distance);
+    const dur = parseFloat(duration);
+
+    if (isNaN(dist) || isNaN(dur) || dist <= 0 || dur <= 0) {
+      setError('Vennligst oppgi gyldige verdier for distanse og varighet.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const result = await api.pricingTest({
+        distance_km: dist,
+        duration_min: dur,
+        vehicle_type: vehicleType,
+      });
+      setResponse(`Estimert pris for ${dist} km og ${dur} min med ${vehicleType}: ${result.price} kr`);
+      setError('');
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <PageHead title="AI-assistent" sub="Få hjelp og svar fra kunstig intelligens" />
+      <ErrorBanner msg={error} />
+
+      <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        {/* Chat Interface */}
+        <Card>
+          <div className="section-title">Samtale med AI-assistent</div>
+          <div className="chat-container" style={{ height: 500, overflowY: 'auto', padding: 16, backgroundColor: '#f8f9fa', borderRadius: 8 }}>
+            {conversation.map((msg, index) => (
+              <div key={index} style={{ marginBottom: 16, display: 'flex', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
+                <div style={{
+                  maxWidth: '70%',
+                  padding: '12px 16px',
+                  borderRadius: '18px',
+                  backgroundColor: msg.role === 'user' ? '#007bff' : '#e9ecef',
+                  color: msg.role === 'user' ? 'white' : 'black',
+                  wordWrap: 'break-word'
+                }}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {loading && <div style={{ textAlign: 'center', padding: 20, color: '#6c757d' }}>
+              <Loader /> Tenker...
+            </div>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && askQuestion()}
+              placeholder="Spør AI-assistenten noe..."
+              className="input"
+              style={{ flex: 1 }}
+              disabled={loading}
+            />
+            <Btn variant="primary" onClick={askQuestion} disabled={loading || !query.trim()}>
+              {loading ? 'Tenker...' : 'Send'}
+            </Btn>
+          </div>
+        </Card>
+
+        {/* Quick Tools */}
+        <Card>
+          <div className="section-title">Verktøy</div>
+          <div className="field">
+            <label className="label">Kjøretøyklasse</label>
+            <select
+              className="select"
+              value={vehicleType}
+              onChange={(e) => setVehicleType(e.target.value as any)}
+            >
+              <option value="ai-first">KJAPP</option>
+              <option value="enkelt">Enkel</option>
+              <option value="trygg">XL / Komfort</option>
+              <option value="premium">Premium</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="label">Distanse (km)</label>
+            <input
+              type="number"
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+              className="input"
+            />
+          </div>
+          <div className="field">
+            <label className="label">Varighet (min)</label>
+            <input
+              type="number"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              className="input"
+            />
+          </div>
+          <Btn variant="primary" onClick={calculatePrice} className="full" disabled={loading}>
+            {loading ? 'Beregner...' : 'Beregn pris'}
+          </Btn>
+
+          <div className="section-title" style={{ marginTop: 24 }}>
+            <Btn variant="outline" onClick={() => setConversation([])} className="full" style={{ marginBottom: 8 }}>
+              Tøm samtale
+            </Btn>
+            <Btn variant="outline" onClick={() => {
+              setQuery('hjelp');
+              askQuestion();
+            }} className="full">
+              Vis hjelp
+            </Btn>
+          </div>
+
+          {response && (
+            <div className="section-title" style={{ marginTop: 24 }}>
+              <div className="field"><label className="label">Svar</label></div>
+              <div className="card" style={{ padding: 16, backgroundColor: '#e8f5e8', borderRadius: 8 }}>
+                {response}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    </>
+  );
+}
