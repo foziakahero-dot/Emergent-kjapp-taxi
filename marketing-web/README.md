@@ -1,10 +1,10 @@
-# KJAPP Marketing Web
+# SNAR Marketing Web
 
 Public website for `kjappapp.no`.
 
 ## Routes
 
-- `/` — customer-facing KJAPP landing page
+- `/` — customer-facing SNAR landing page
 - `/loyvehaver` — løyvehaver/partner information
 - `/loyvehaver/soknad` — controlled partner application + document upload
 
@@ -14,7 +14,7 @@ The website is intentionally separate from the Customer/Driver mobile apps and f
 
 - Public site: `kjappapp.no`
 - Fleet owner portal: `fleet.kjappapp.no`
-- KJAPP admin: `admin.kjappapp.no`
+- SNAR admin: `admin.kjappapp.no`
 - API: `https://github-app-builder-28.emergent.host/api`
 
 The application flow reuses the existing production API:
@@ -27,7 +27,7 @@ The application flow reuses the existing production API:
 
 ## Commission
 
-Public copy is locked to **12% KJAPP commission** for approved fleet owners.
+Public copy is locked to **10% SNAR serviceavgift** for approved fleet owners.
 
 ## Local build
 
