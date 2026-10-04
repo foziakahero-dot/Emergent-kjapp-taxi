@@ -50,7 +50,8 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchCollapsed, setSearchCollapsed] = useState(false);
-  const [sheetCollapsed, setSheetCollapsed] = useState(false);
+  const [sheetCollapsed, setSheetCollapsed] = useState(true);
+  useEffect(() => { if (dropoff) setSearchCollapsed(true); }, [dropoff]);
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [reviewing, setReviewing] = useState(false);
