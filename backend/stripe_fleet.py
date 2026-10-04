@@ -3,6 +3,33 @@ import asyncio
 from datetime import datetime, timezone
 from fastapi import HTTPException
 
+# Stripe Checkout setup-mode compatibility.
+# The deployed Stripe API rejects setup_intent_data[usage]. Checkout mode="setup"
+# already creates a SetupIntent suitable for saving the card, so strip only that
+# unsupported nested field. server.py imports this module at startup, making this
+# patch deterministic on Render without exposing or changing any secret values.
+try:
+    import stripe as _stripe
+
+    _original_checkout_session_create = _stripe.checkout.Session.create
+
+    def _checkout_session_create_compat(*args, **kwargs):
+        if kwargs.get("mode") == "setup":
+            setup_data = kwargs.get("setup_intent_data")
+            if isinstance(setup_data, dict) and "usage" in setup_data:
+                sanitized = dict(setup_data)
+                sanitized.pop("usage", None)
+                if sanitized:
+                    kwargs["setup_intent_data"] = sanitized
+                else:
+                    kwargs.pop("setup_intent_data", None)
+        return _original_checkout_session_create(*args, **kwargs)
+
+    _stripe.checkout.Session.create = _checkout_session_create_compat
+    print("[stripe-compat] saved-card Checkout compatibility enabled")
+except Exception as exc:
+    print(f"[stripe-compat] compatibility patch unavailable: {type(exc).__name__}")
+
 
 async def ensure_fleet_account(db, stripe, fleet, owner_email=None):
     if not stripe.api_key:
