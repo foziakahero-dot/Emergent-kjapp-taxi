@@ -47,22 +47,29 @@ export default function Settings() {
       const filename = `SNAR-persondata-${timestamp}.json`;
 
       try {
-        // Create file using modern FileSystem API
+        // Create/replace a temporary JSON file using the modern FileSystem API.
+        // overwrite=true makes repeated exports on the same day safe.
         const file = new File(Paths.cache, filename);
-        await file.create();
-        await file.write(dataJson);
+        file.create({ overwrite: true });
+        file.write(dataJson);
 
-        // Share the file using expo-sharing
+        // Sharing local file URIs is supported on native Android/iOS. Check availability
+        // before opening the system share sheet so unsupported environments fail cleanly.
+        const canShare = await Sharing.isAvailableAsync();
+        if (!canShare) {
+          setExportInfo('Datafilen er opprettet, men deling er ikke tilgjengelig på denne enheten. Prøv igjen på Android eller iPhone.');
+          return;
+        }
+
         try {
           await Sharing.shareAsync(file.uri, {
             mimeType: 'application/json',
-            dialogTitle: 'Mine SNAR-data'
+            dialogTitle: 'Mine SNAR-data',
           });
-          setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Filen er delt via systemets delingsfunksjon.`);
+          setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Velg hvor du vil lagre eller dele JSON-filen.`);
         } catch (sharingError) {
-          // If sharing fails, provide fallback info
           console.warn('File sharing failed:', sharingError);
-          setExportInfo(`Dataene dine er lagret: ${trips} turer, ${payments} betalinger. Filen er lagret på enheten og kan deles manuelt fra ${Paths.cache}`);
+          setExportInfo('Datafilen ble opprettet, men delingen kunne ikke åpnes. Prøv igjen.');
         }
 
       } catch (fileError) {
