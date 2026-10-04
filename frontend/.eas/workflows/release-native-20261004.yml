@@ -14,3 +14,4 @@ jobs:
     params:
       platform: ios
       profile: testflight-beta
+# retrigger: 2026-10-04 customer native
