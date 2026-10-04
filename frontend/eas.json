@@ -43,6 +43,14 @@
         "image": "latest",
         "resourceClass": "medium"
       }
+    },
+    "apk-internal-20261004": {
+      "extends": "apk",
+      "environment": "preview",
+      "node": "22.16.0",
+      "env": {
+        "CUSTOMER_INTERNAL_APK_AUTHORIZATION": "20261004"
+      }
     }
   },
   "cli": {
