@@ -57,7 +57,7 @@ function load(app, file) {
     }
     throw new Error(`Unexpected dependency in component check: ${name}`);
   };
-  vm.runInNewContext(compiled, { require: localRequire, module: result, exports: result.exports, console,
+  vm.runInNewContext(compiled, { require: localRequire, module: result, exports: result.exports, console, process: { env: {} },
     setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, at: clock + delay }); return id; },
     clearTimeout: id => timers.delete(id),
     setInterval: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, at: Infinity }); return id; },
@@ -268,11 +268,21 @@ const act = renderer.act;
   // Customer active trip: minimize/reopen retains canonical server state; completion exits.
   native.Image = 'Image'; native.Modal = 'Modal';
   native.AppState = { currentState: 'active', addEventListener: () => ({ remove() {} }) };
-  native.Share = { share: async () => ({}) }; native.Alert = { alert() {} };
+  const dialogs = [], callsToDialer = [];
+  native.Share = { share: async () => ({}) }; native.Alert = { alert: (...args) => dialogs.push(args) };
+  native.Linking = { openURL: async url => { callsToDialer.push(url); } };
   let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
   const navigations = [];
-  stubs.set('expo-router', { useLocalSearchParams: () => ({ tripId: 'unit-trip' }), useRouter: () => ({ replace: url => navigations.push(url) }) });
-  stubs.set('@/src/lib/api', { tripsApi: { get: async () => serverTrip }, tripDriverPhotoSource: async () => ({ uri: 'fixture' }) });
+  const bookingRouter = { replace: url => navigations.push(url) };
+  stubs.set('expo-router', { useLocalSearchParams: () => ({ tripId: 'unit-trip' }), useRouter: () => bookingRouter });
+  let cancelRequests = 0, previews = 0, cancellationMode = 'reject', shareRequests = 0, safetyMode = 'reject';
+  stubs.set('@/src/lib/api', {
+    tripsApi: { get: async () => serverTrip, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
+      cancel: async () => { cancelRequests++; if (cancellationMode === 'lost-response') serverTrip = { ...serverTrip, status: 'cancelled' }; throw new Error('Network failed'); } },
+    safetyApi: { shareLink: async () => { shareRequests++; throw new Error('Network failed'); },
+      log: () => safetyMode === 'never-resolve' ? new Promise(() => {}) : Promise.reject(new Error('Network failed')) },
+    tripDriverPhotoSource: async () => ({ uri: 'fixture' }),
+  });
   stubs.set('@/src/components/Map', { Map: 'Map' });
   stubs.set('@/src/components/ChatSheet', { ChatSheet: 'ChatSheet' });
   const Booking = load('frontend', 'app/booking/[tripId].tsx').default;
@@ -280,15 +290,147 @@ const act = renderer.act;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => booking.root.findByProps({ testID: 'active-trip-minimize' }).props.onPress());
   assert.equal(booking.root.findAllByProps({ testID: 'active-trip-reopen' }).length, 1);
+  assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Venter på oppdatert sjåførposisjon'), 'Stale GPS must remain distinct from a failed trip-status request');
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0);
   await act(async () => booking.root.findByProps({ testID: 'active-trip-reopen' }).props.onPress());
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1);
   await act(async () => booking.unmount());
+  // Failed cancellation cannot exit; duplicate confirmation must not submit twice.
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => { const cancel = booking.root.findByProps({ testID: 'assigned-trip-cancel' }).props.onPress; cancel(); cancel(); });
+  assert.equal(previews, 1);
+  await act(async () => { const confirm = dialogs.at(-1)[2][1].onPress; confirm(); confirm(); });
+  assert.equal(cancelRequests, 1);
+  assert.equal(navigations.length, 0, 'A rejected/unconfirmed cancellation must retain the trip');
+  assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'booking-action-error').length, 1);
+  await act(async () => booking.unmount());
+  // A lost response is reconciled from actual backend status before returning home.
+  cancellationMode = 'lost-response';
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => booking.root.findByProps({ testID: 'assigned-trip-cancel' }).props.onPress());
+  await act(async () => dialogs.at(-1)[2][1].onPress());
+  assert.ok(navigations.includes('/(app)/home'));
+  await act(async () => booking.unmount());
+  // Sharing/report errors stay visible; double taps issue one request.
+  serverTrip = { ...serverTrip, status: 'in_trip' };
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => { const share = booking.root.findByProps({ testID: 'ontrip-share' }).props.onPress; share(); share(); });
+  assert.equal(shareRequests, 1);
+  assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'booking-action-error').length, 1);
+  await act(async () => booking.root.findByProps({ testID: 'ontrip-safety' }).props.onPress());
+  await act(async () => booking.root.findByProps({ testID: 'safety-report' }).props.onPress());
+  assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'safety-action-error').length, 1);
+  assert.equal(booking.root.findByType('Modal').props.visible, true);
+  safetyMode = 'never-resolve';
+  await act(async () => booking.root.findByProps({ testID: 'safety-call-112' }).props.onPress());
+  assert.ok(callsToDialer.includes('tel:112'), 'Emergency dialer must not wait for backend logging');
+  await act(async () => booking.unmount());
+  // Missing/invalid/old/future GPS never produces a current ETA.
+  const { driverPresence } = load('frontend', 'src/lib/tripPresence.ts');
+  const now = Date.now(), position = { driver_lat: 59.9, driver_lng: 10.7 };
+  assert.equal(driverPresence({ ...position, driver_location_at: new Date(now).toISOString() }, now).fresh, true);
+  for (const stamp of [undefined, 'invalid', new Date(now - 31000).toISOString(), new Date(now + 6000).toISOString()]) {
+    const result = driverPresence({ ...position, driver_location_at: stamp }, now);
+    assert.equal(result.hasPosition, true); assert.equal(result.fresh, false);
+  }
+  assert.equal(driverPresence({ driver_lat: null, driver_lng: null }, now).hasPosition, false);
+  assert.equal(driverPresence({ driver_lat: 91, driver_lng: 10.7 }, now).hasPosition, false);
   serverTrip = { ...serverTrip, status: 'completed' };
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   assert.ok(navigations.includes('/receipt/unit-trip'));
   await act(async () => booking.unmount());
+  // Real AuthProvider: stale refresh responses cannot resurrect or revoke another session.
+  let savedToken = 'old-token', pendingMe, latestAuth, unblockPush;
+  const revokedTokens = [], unregisteredTokens = [];
+  const customer = { id: 'fresh-customer', email: 'fresh@example.test', role: 'user' };
+  const memoryStorage = { getItem: async () => savedToken, setItem: async (_key, value) => { savedToken = value; }, removeItem: async () => { savedToken = null; } };
+  stubs.set('@/src/utils/storage', { storage: memoryStorage });
+  stubs.set('@/src/lib/api', { TOKEN_KEY: 'test-token-key', authApi: {
+    me: () => new Promise((resolve, reject) => { pendingMe = { resolve, reject }; }),
+    login: async () => ({ token: 'fresh-token', user: customer }),
+    logout: async token => { revokedTokens.push(token); },
+  } });
+  stubs.set('@/src/lib/nativeRuntime', { unregisterNativePush: token => { unregisteredTokens.push(token); return new Promise(resolve => { unblockPush = resolve; }); } });
+  stubs.set('@/src/lib/socialSignIn', { googleIdentity: async () => null, appleIdentity: async () => null });
+  const authModule = load('frontend', 'src/context/AuthContext.tsx');
+  function SessionProbe() { latestAuth = authModule.useAuth(); return React.createElement('Session', { user: latestAuth.user }); }
+  let authTree;
+  await act(async () => { authTree = renderer.create(React.createElement(authModule.AuthProvider, {}, React.createElement(SessionProbe))); });
+  const staleMe = pendingMe;
+  await act(async () => latestAuth.logout());
+  assert.equal(savedToken, null); assert.equal(latestAuth.user, null, 'Local logout cannot wait for a hung remote push request');
+  await act(async () => latestAuth.login('fresh@example.test', 'fixture-password'));
+  await act(async () => staleMe.resolve({ id: 'old-customer', role: 'user' }));
+  assert.equal(latestAuth.user.id, customer.id, 'Old refresh must not restore the signed-out user');
+  assert.equal(savedToken, 'fresh-token');
+  await act(async () => unblockPush());
+  assert.deepEqual(unregisteredTokens, ['old-token']); assert.deepEqual(revokedTokens, ['old-token']);
+  await act(async () => authTree.unmount());
+  savedToken = 'old-token';
+  await act(async () => { authTree = renderer.create(React.createElement(authModule.AuthProvider, {}, React.createElement(SessionProbe))); });
+  const staleFailure = pendingMe;
+  await act(async () => latestAuth.login('fresh@example.test', 'fixture-password'));
+  await act(async () => staleFailure.reject({ response: { status: 401 } }));
+  assert.equal(savedToken, 'fresh-token', '401 for an old request cannot erase a newer login');
+  assert.equal(latestAuth.user.id, customer.id);
+  await act(async () => authTree.unmount());
+  savedToken = 'offline-token';
+  await act(async () => { authTree = renderer.create(React.createElement(authModule.AuthProvider, {}, React.createElement(SessionProbe))); });
+  await act(async () => pendingMe.reject(new Error('Network failed')));
+  assert.equal(savedToken, 'offline-token'); assert.equal(latestAuth.user, undefined); assert.ok(latestAuth.sessionError);
+  await act(async () => { void latestAuth.refresh(); });
+  await act(async () => pendingMe.resolve(customer));
+  assert.equal(latestAuth.user.id, customer.id); assert.equal(latestAuth.sessionError, '');
+  await act(async () => authTree.unmount());
+  // The actual axios interceptor must preserve cleanup's explicit old-token header.
+  let requestInterceptor, logoutRequest;
+  stubs.set('axios', { __esModule: true, default: { create: () => ({
+    interceptors: { request: { use: callback => { requestInterceptor = callback; } } },
+    post: async (...args) => { logoutRequest = args; return { data: { ok: true } }; },
+  }) } });
+  const actualApi = load('frontend', 'src/lib/api.ts');
+  savedToken = 'fresh-token';
+  const explicit = { headers: { Authorization: 'Bearer old-token' } };
+  assert.equal((await requestInterceptor(explicit)).headers.Authorization, 'Bearer old-token');
+  assert.equal((await requestInterceptor({ headers: {} })).headers.Authorization, 'Bearer fresh-token');
+  await actualApi.authApi.logout('old-token');
+  assert.equal(logoutRequest[0], '/auth/logout'); assert.equal(logoutRequest[2].headers.Authorization, 'Bearer old-token');
+  // Actual destination search ignores stale responses and distinguishes outages from zero matches.
+  const searchRequests = [];
+  stubs.set('expo-location', {});
+  stubs.set('@/src/components/FloatingTabBar', { useHideTabBar() {} });
+  stubs.set('@/src/lib/api', { placesApi: { search: query => new Promise((resolve, reject) => searchRequests.push({ query, resolve, reject })) } });
+  const { SearchSheet } = load('frontend', 'app/(app)/home.tsx');
+  let search;
+  const searchProps = { onClose() {}, onSelect() {}, onVoice() {}, featured: [], insets: { top: 0, bottom: 0 } };
+  await act(async () => { search = renderer.create(React.createElement(SearchSheet, searchProps)); });
+  await act(async () => search.root.findByProps({ testID: 'search-input' }).props.onChangeText('Oslo'));
+  await act(async () => advance(350));
+  await act(async () => search.root.findByProps({ testID: 'search-input' }).props.onChangeText('Bergen'));
+  await act(async () => advance(350));
+  assert.deepEqual(searchRequests.map(x => x.query), ['Oslo', 'Bergen']);
+  await act(async () => searchRequests[1].resolve({ results: [{ name: 'Bergen fixture', lat: 60.39, lng: 5.32 }] }));
+  await act(async () => searchRequests[0].resolve({ results: [{ name: 'Oslo old fixture', lat: 59.91, lng: 10.75 }] }));
+  assert.ok(search.root.findAllByType('NativeText').some(node => node.props.children === 'Bergen fixture'));
+  assert.equal(search.root.findAllByType('NativeText').some(node => node.props.children === 'Oslo old fixture'), false);
+  await act(async () => search.root.findByProps({ testID: 'search-input' }).props.onChangeText('Outage'));
+  await act(async () => advance(350));
+  await act(async () => searchRequests[2].reject(new Error('Network failed')));
+  assert.equal(search.root.findAllByType('NativeText').filter(node => node.props.testID === 'search-network-error').length, 1);
+  assert.equal(search.root.findAllByType('NativeText').some(node => node.props.children === 'Fant ingen steder'), false);
+  await act(async () => search.root.findByProps({ testID: 'search-retry' }).props.onPress());
+  await act(async () => advance(350));
+  await act(async () => searchRequests[3].resolve({ results: [] }));
+  assert.ok(search.root.findAllByType('NativeText').some(node => node.props.children === 'Fant ingen steder'));
+  await act(async () => search.root.findByProps({ testID: 'search-input' }).props.onChangeText('Unmount'));
+  await act(async () => search.unmount());
+  await act(async () => advance(350));
+  assert.equal(searchRequests.length, 4, 'Unmount must cancel an unsent search');
+  const { recentDestinations } = load('frontend', 'src/lib/recentPlaces.ts');
+  const finished = { trip_id: 'fixture-trip', status: 'completed', dropoff_address: 'Actual destination', dropoff_lat: 59.91, dropoff_lng: 10.75 };
+  const recent = recentDestinations([null, finished, { ...finished, trip_id: 'duplicate' }, { ...finished, status: 'cancelled', dropoff_address: 'Not reached' }, { ...finished, dropoff_lat: NaN }, { ...finished, dropoff_address: '' }]);
+  assert.equal(recent.length, 1); assert.equal(recent[0].name, 'Actual destination'); assert.equal(recent[0].icon, 'clock');
   assert.equal(timers.size, 0);
   assert.equal(nativeListeners, 0);
-  console.log('PASS: Customer minimize/reopen/completion; fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, duplicate guards, privacy export, permission-gated server-confirmed Driver alerts, unmount cancellation, error recovery and address edit identity.');
+  console.log('PASS: Customer search race/offline/retry, actual trip-history recents, session race protection, immediate logout/old-token cleanup, cancellation reconciliation, duplicate guards, safety/network errors, immediate emergency dialer, GPS freshness, minimize/reopen/completion; fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, duplicate guards, privacy export, permission-gated server-confirmed Driver alerts, unmount cancellation, error recovery and address edit identity.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { console.error = originalError; });

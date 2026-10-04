@@ -1,3 +1,4 @@
+import { recentDestinations } from '@/src/lib/recentPlaces';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { VehicleGlyph } from '@/src/components/VehicleGlyph';
@@ -56,6 +57,9 @@ export default function Home() {
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
+  const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
+  const [quickPlacesIssue, setQuickPlacesIssue] = useState(false);
+  const placesSequence = useRef(0);
 
   useEffect(() => {
     if (dropoff || searchOpen) return;
@@ -67,13 +71,19 @@ export default function Home() {
     paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});
   }, []);
 
-  const loadPlaces = useCallback(() => {
-    mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});
+  const loadPlaces = useCallback(async () => {
+    const sequence = ++placesSequence.current;
+    const [saved, history] = await Promise.allSettled([mePlacesApi.list(), tripsApi.list()]);
+    if (sequence !== placesSequence.current) return;
+    if (saved.status === 'fulfilled') setMyPlaces(saved.value.places || []);
+    if (history.status === 'fulfilled') setRecentPlaces(recentDestinations(Array.isArray(history.value) ? history.value : []));
+    setQuickPlacesIssue(saved.status === 'rejected' || history.status === 'rejected');
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      setActiveTripChecked(false);
       loadMethods();
       loadPlaces();
       let fetching = false;
@@ -158,7 +168,7 @@ export default function Home() {
   const nearest = etaValues.length ? Math.min(...etaValues) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const payMethod = methods.find((m) => m.is_default) || methods[0];
-  const quickPlaces = myPlaces.length ? myPlaces : featured;
+  const quickPlaces = [...myPlaces, ...recentPlaces].filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
   const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
 
   const openVoice = () => {
@@ -304,7 +314,7 @@ export default function Home() {
 
           {!dropoff ? (
             <View style={[s.browseSheet, { paddingBottom: insets.bottom + (sheetCollapsed ? 32 : 112) }]} testID="home-browse-sheet">
-              <Pressable testID="customer-app-app-home-307"
+              <Pressable testID={sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}
                 style={s.sheetHandleButton}
                 onPress={() => setSheetCollapsed((v) => !v)}
                 accessibilityRole="button"
@@ -319,6 +329,7 @@ export default function Home() {
               </Pressable>
 
               <Collapse open={!sheetCollapsed}>
+                {quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID="home-places-error" accessibilityRole="alert" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable testID="home-places-retry" onPress={() => void loadPlaces()}><Text style={{ color: colors.accent }}>Prøv igjen</Text></Pressable></View> : !quickPlaces.length ? <Text testID="home-places-empty" style={{ padding: 16, color: colors.textSecondary }}>Ingen nylige reisemål eller favoritter ennå.</Text> : null}
                 <View style={s.placeList}>
                   {quickPlaces.slice(0, 4).map((p: any, i: number) => (
                     <Pressable
@@ -336,7 +347,7 @@ export default function Home() {
                       </View>
                       <View style={s.placeTextWrap}>
                         <Text style={s.placeTitle} numberOfLines={1}>{p.label || p.name}</Text>
-                        <Text style={s.placeSub} numberOfLines={1}>{p.name}</Text>
+                        <Text style={s.placeSub} numberOfLines={1}>{p.description || p.name}</Text>
                       </View>
                     </Pressable>
                   ))}
@@ -513,25 +524,27 @@ export default function Home() {
   );
 }
 
-function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
+export function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
   const s = useStyles();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const timer = useRef<any>(null);
+  const [searchError, setSearchError] = useState('');
+  const [retrySearch, setRetrySearch] = useState(0);
 
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) { setResults([]); return; }
+    let current = true;
+    setResults([]); setSearchError('');
+    if (q.trim().length < 2) { setLoading(false); return; }
     setLoading(true);
-    timer.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       placesApi.search(q.trim())
-        .then((r) => setResults(r.results || []))
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+        .then((r) => { if (current) setResults(r.results || []); })
+        .catch((error) => { if (current) setSearchError(apiError(error)); })
+        .finally(() => { if (current) setLoading(false); });
     }, 350);
-    return () => timer.current && clearTimeout(timer.current);
-  }, [q]);
+    return () => { current = false; clearTimeout(timer); };
+  }, [q, retrySearch]);
 
   const items = q.trim().length < 2
     ? (featured || []).map((p: any) => ({ name: p.name, lat: p.lat, lng: p.lng, saved: true }))
@@ -585,7 +598,8 @@ function SearchSheet({ onClose, onSelect, onVoice, featured, insets }: any) {
             </View>
           </Pressable>
         ))}
-        {!items.length && q.trim().length >= 2 && !loading ? (
+        {searchError ? <View style={{ padding: 16 }}><Text testID="search-network-error" accessibilityRole="alert" style={{ color: colors.danger }}>{searchError}</Text><Pressable testID="search-retry" onPress={() => setRetrySearch(value => value + 1)}><Text style={{ color: colors.accent }}>Prøv igjen</Text></Pressable></View> : null}
+        {!searchError && !items.length && q.trim().length >= 2 && !loading ? (
           <View style={s.emptySearch}>
             <View style={s.emptySearchIcon}><Icon name="search" size={24} color={colors.textMuted} /></View>
             <Text style={s.emptyTitle}>Fant ingen steder</Text>

@@ -55,7 +55,7 @@ export async function registerNativePush() {
   }
 }
 
-export async function unregisterNativePush() {
+export async function unregisterNativePush(sessionToken?: string) {
   if (Platform.OS === 'web') return false;
   try {
     const permission = await Notifications.getPermissionsAsync();
@@ -66,7 +66,7 @@ export async function unregisterNativePush() {
       platform: Platform.OS,
       provider: 'expo',
       token,
-    });
+    }, sessionToken ? { headers: { Authorization: `Bearer ${sessionToken}` } } : undefined);
     return true;
   } catch {
     return false;

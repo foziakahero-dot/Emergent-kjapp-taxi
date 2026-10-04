@@ -1,3 +1,5 @@
+import { driverPresence } from '@/src/lib/tripPresence';
+import { apiError } from '@/src/lib/format';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useReducedMotion } from '@/src/components/Motion';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
@@ -35,6 +37,10 @@ export default function BookingFlow() {
   const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [safetyBusy, setSafetyBusy] = useState(false);
+  const safetyLock = useRef(false);
+  const cancelPhase = useRef<'idle' | 'preview' | 'confirm' | 'submitting'>('idle');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
@@ -109,57 +115,77 @@ export default function BookingFlow() {
     return () => { mounted = false; };
   }, [trip?.driver_id, trip?.status, tripId]);
 
+  const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };
   const cancel = async () => {
+    if (cancelPhase.current !== 'idle') return;
+    cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');
     try {
       const preview = await tripsApi.cancelPreview(tripId!);
-      const fee = Number(preview?.cancellation_fee || 0);
-      Alert.alert(
-        'Avbestille tur?',
-        fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.',
-        [
-          { text: 'Behold tur', style: 'cancel' },
-          { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
-            try { await tripsApi.cancel(tripId!); } finally { router.replace('/(app)/home'); }
-          } },
-        ],
-      );
-    } catch {
-      Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilkårene. Prøv igjen.');
+      const fee = Number(preview?.cancellation_fee ?? 0);
+      if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilkår.');
+      cancelPhase.current = 'confirm';
+      Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.', [
+        { text: 'Behold tur', style: 'cancel', onPress: releaseCancel },
+        { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
+          if (cancelPhase.current !== 'confirm') return;
+          cancelPhase.current = 'submitting';
+          try {
+            const result = await tripsApi.cancel(tripId!);
+            if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');
+            router.replace('/(app)/home');
+          } catch (error) {
+            // A response can be lost after the server commits cancellation.
+            try {
+              const canonical = await tripsApi.get(tripId!);
+              if (['cancelled', 'cancelled_by_driver'].includes(canonical?.status)) {
+                router.replace('/(app)/home'); return;
+              }
+            } catch {}
+            setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);
+          } finally { releaseCancel(); }
+        } },
+      ], { cancelable: true, onDismiss: () => { if (cancelPhase.current === 'confirm') releaseCancel(); } });
+    } catch (error) {
+      setActionError(`Kunne ikke hente avbestillingsvilkårene. ${apiError(error)}`);
+      releaseCancel();
     }
   };
 
   const callEmergency = async () => {
-    setSafetyBusy(true);
-    try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}
-    finally {
-      setSafetyBusy(false);
-      setSafetyOpen(false);
-      Linking.openURL('tel:112').catch(() => {});
-    }
+    if (safetyLock.current) return;
+    safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);
+    // The dialer must open immediately even if logging cannot reach the server.
+    void safetyApi.log(tripId!, { kind: 'emergency' }).catch(() => {});
+    try { await Linking.openURL('tel:112'); }
+    catch { setActionError('Kunne ikke åpne telefonappen. Ring 112 direkte.'); }
+    finally { safetyLock.current = false; setSafetyBusy(false); }
   };
 
   const reportSafety = async () => {
-    setSafetyBusy(true);
+    if (safetyLock.current) return;
+    safetyLock.current = true; setActionError(''); setSafetyBusy(true);
     try {
       await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
       setSafetyOpen(false);
-    } catch {}
-    finally { setSafetyBusy(false); }
+    } catch (error) { setActionError(`Rapporten ble ikke sendt. ${apiError(error)}`); }
+    finally { safetyLock.current = false; setSafetyBusy(false); }
   };
 
   const callDriver = () => {
     const phone = trip?.driver?.phone;
-    if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});
+    if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => setActionError('Kunne ikke åpne telefonappen. Prøv igjen.'));
   };
 
   const shareTrip = async () => {
-    setSafetyBusy(true);
+    if (safetyLock.current) return;
+    safetyLock.current = true; setActionError(''); setSafetyBusy(true);
     try {
       const shared = await safetyApi.shareLink(tripId!);
-      await safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
+      if (typeof shared?.url !== 'string' || !/^https:\/\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');
+      void safetyApi.log(tripId!, { kind: 'share' }).catch(() => {});
       await Share.share({ title: 'Følg SNAR-turen min', message: `Følg turen min live: ${shared.url}`, url: shared.url });
-    } catch {}
-    finally { setSafetyBusy(false); }
+    } catch (error) { setActionError(`Kunne ikke dele turen. ${apiError(error)}`); }
+    finally { safetyLock.current = false; setSafetyBusy(false); }
   };
 
   if (!trip) {
@@ -180,25 +206,23 @@ export default function BookingFlow() {
 
   const meta = META[trip.status] || META.searching;
   const route = trip.geometry?.coordinates || null;
-  const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && trip.driver_lat != null;
+  const presence = driverPresence(trip);
+  const driverGpsFresh = presence.fresh;
+  const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
   const canCancel = ['searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status);
   const etaValue = Number(trip.eta_min);
-  const etaMinutes = Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
+  const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
   const driverDistance = Number(trip.driver_distance_to_pickup_km);
-  const driverDistanceLabel = Number.isFinite(driverDistance) && driverDistance >= 0
+  const driverDistanceLabel = !networkIssue && driverGpsFresh && Number.isFinite(driverDistance) && driverDistance >= 0
     ? `${driverDistance.toFixed(driverDistance < 10 ? 1 : 0)} km unna`
     : null;
   const spinDeg = matchingSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  let driverGpsFresh = true;
-  if (trip.driver_location_at && ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status)) {
-    const stamp = Date.parse(trip.driver_location_at);
-    if (Number.isFinite(stamp)) driverGpsFresh = Date.now() - stamp <= 30000;
-  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {actionError ? <View style={{ position: 'absolute', zIndex: 100, top: insets.top + 60, left: 16, right: 16, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text testID="booking-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text></View> : null}
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
@@ -210,7 +234,7 @@ export default function BookingFlow() {
 
       {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
       {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
-        <ActiveTripCard trip={trip} offline={networkIssue || !driverGpsFresh} onOpen={() => setMinimized(false)} />
+        <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
       </View> : trip.status === 'searching' || trip.status === 'booking' ? (
         <View style={s.matchingOverlay} testID="matching-overlay">
@@ -222,7 +246,7 @@ export default function BookingFlow() {
             </View>
             <Text style={s.matchingTitle}>Finner din sjåfør…</Text>
             <Text style={s.matchingSub}>Matcher med nærmeste ledige SNAR-bil</Text>
-            <Pressable onPress={cancel} testID="searching-cancel" style={s.matchingCancel}>
+            <Pressable onPress={cancel} disabled={cancelBusy} testID="searching-cancel" style={s.matchingCancel}>
               <Text style={s.matchingCancelText}>Avbryt søk</Text>
             </Pressable>
           </View>
@@ -262,7 +286,7 @@ export default function BookingFlow() {
               </View>
             ) : null}
             <View style={s.inRideActions}>
-              <Pressable style={s.rideAction} onPress={shareTrip} testID="ontrip-share">
+              <Pressable style={s.rideAction} onPress={shareTrip} disabled={safetyBusy} testID="ontrip-share">
                 <Icon name="shield" size={20} color={colors.accent} />
                 <Text style={s.rideActionText}>Del tur</Text>
               </Pressable>
@@ -298,9 +322,9 @@ export default function BookingFlow() {
             <View style={s.driverCard}>
               <View style={s.driverAvatar}>
                 {driverPhotoSource ? (
-                  <Image source={driverPhotoSource} style={s.driverAvatarImage} resizeMode="cover" onError={() => setDriverPhotoSource(null)} />
+                  <Image testID="customer-driver-photo" source={driverPhotoSource} style={s.driverAvatarImage} resizeMode="cover" onError={() => setDriverPhotoSource(null)} />
                 ) : (
-                  <Text style={s.driverAvatarText}>{(trip.driver?.name || 'KJ').slice(0, 1).toUpperCase()}</Text>
+                  <Text style={s.driverAvatarText}>{(trip.driver?.name || 'S').slice(0, 1).toUpperCase()}</Text>
                 )}
               </View>
               <View style={s.driverInfo}>
@@ -320,7 +344,7 @@ export default function BookingFlow() {
               </View>
             </View>
             <View style={s.contactRow}>
-              <Pressable style={s.contactButton} onPress={callDriver} testID="action-call-driver">
+              <Pressable style={s.contactButton} onPress={callDriver} disabled={!trip.driver?.phone} accessibilityState={{ disabled: !trip.driver?.phone }} testID="action-call-driver">
                 <Icon name="phone" size={18} color={colors.text} />
                 <Text style={s.contactText}>Ring</Text>
               </Pressable>
@@ -329,13 +353,14 @@ export default function BookingFlow() {
                 <Text style={s.contactText}>Melding</Text>
               </Pressable>
             </View>
+            {canCancel ? <Pressable testID="assigned-trip-cancel" disabled={cancelBusy} onPress={cancel} style={{ padding: 12, alignItems: 'center' }}><Text style={{ color: colors.textSecondary }}>{cancelBusy ? 'Avventer avbestilling…' : 'Avbestill tur'}</Text></Pressable> : null}
           </View>
         </>
       )}
 
       <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
         <Pressable testID="customer-app-booking-tripId-337" style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
-          <Pressable testID="customer-app-booking-tripId-338" style={s.safetySheet} onPress={() => {}}>
+          <View style={s.safetySheet} onStartShouldSetResponder={() => true}>
             <View style={s.safetyHead}>
               <View>
                 <Text style={s.safetyOverline}>SNAR SIKKERHET</Text>
@@ -345,10 +370,11 @@ export default function BookingFlow() {
                 <Icon name="x" size={20} color={colors.text} />
               </Pressable>
             </View>
+            {actionError ? <Text testID="safety-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text> : null}
             <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. SNAR-support erstatter ikke nødetatene.</Text>
             <Pressable style={s.emergencyAction} onPress={callEmergency} disabled={safetyBusy} testID="safety-call-112">
               <Icon name="phone" size={18} color={colors.text} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Hendelsen logges også på turen</Text></View>
+              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Åpne telefonappen og ring nødnummeret</Text></View>
             </Pressable>
             <Pressable style={s.safetyAction} onPress={shareTrip} disabled={safetyBusy} testID="safety-share-trip">
               <Icon name="navigation" size={18} color={colors.accent} />
@@ -358,7 +384,7 @@ export default function BookingFlow() {
               <Icon name="flag" size={18} color={colors.accent} />
               <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til SNAR</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
             </Pressable>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -449,6 +475,4 @@ const useStyles = makeStyles((c) => ({
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
-
-
 

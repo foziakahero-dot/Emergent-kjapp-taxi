@@ -50,70 +50,77 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 66,
+    "line": 70,
     "api": "paymentApi",
     "method": "list",
     "args": ""
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 70,
+    "line": 76,
     "api": "mePlacesApi",
     "method": "list",
     "args": ""
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 84,
+    "line": 76,
+    "api": "tripsApi",
+    "method": "list",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 94,
     "api": "tripsApi",
     "method": "active",
     "args": ""
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 114,
+    "line": 124,
     "api": "placesApi",
     "method": "reverse",
     "args": "p.lat, p.lng"
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 126,
+    "line": 136,
     "api": "placesApi",
     "method": "list",
     "args": "true"
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 138,
+    "line": 148,
     "api": "carsApi",
     "method": "nearby",
     "args": "loc.lat, loc.lng"
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 147,
+    "line": 157,
     "api": "tripsApi",
     "method": "estimate",
     "args": "{\n      pickup_lat: loc.lat, pickup_lng: loc.lng,\n      dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,\n      stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\n    }"
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 189,
+    "line": 199,
     "api": "tripsApi",
     "method": "request",
     "args": "{\n        pickup_address: pickupLabel,\n        pickup_lat: loc.lat,\n        pickup_lng: loc.lng,\n        dropoff_address: dropoff.name,\n        dropoff_lat: dropoff.lat,\n        dropoff_lng: dropoff.lng,\n        vehicle_type: selType,\n        stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\n        special_needs: specialNeeds,\n      }"
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 205,
+    "line": 215,
     "api": "tripsApi",
     "method": "active",
     "args": ""
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 527,
+    "line": 540,
     "api": "placesApi",
     "method": "search",
     "args": "q.trim()"
@@ -148,49 +155,56 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 71,
+    "line": 77,
     "api": "tripsApi",
     "method": "get",
     "args": "tripId!"
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 114,
+    "line": 123,
     "api": "tripsApi",
     "method": "cancelPreview",
     "args": "tripId!"
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 122,
+    "line": 133,
     "api": "tripsApi",
     "method": "cancel",
     "args": "tripId!"
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 133,
+    "line": 139,
+    "api": "tripsApi",
+    "method": "get",
+    "args": "tripId!"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 158,
     "api": "safetyApi",
     "method": "log",
     "args": "tripId!, { kind: 'emergency' }"
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 144,
+    "line": 168,
     "api": "safetyApi",
     "method": "log",
     "args": "tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' }"
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 158,
+    "line": 183,
     "api": "safetyApi",
     "method": "shareLink",
     "args": "tripId!"
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 159,
+    "line": 185,
     "api": "safetyApi",
     "method": "log",
     "args": "tripId!, { kind: 'share' }"
@@ -393,52 +407,52 @@
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 46,
+    "line": 49,
     "api": "authApi",
     "method": "me",
     "args": ""
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 66,
+    "line": 74,
     "api": "authApi",
     "method": "login",
     "args": "{ email, password, client: 'customer' }"
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 75,
+    "line": 86,
     "api": "authApi",
     "method": "register",
     "args": "data"
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 83,
+    "line": 97,
     "api": "authApi",
     "method": "acceptLegal",
     "args": "'2026-09'"
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 90,
+    "line": 106,
     "api": "authApi",
     "method": "nativeConfig",
     "args": ""
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 92,
+    "line": 108,
     "api": "authApi",
     "method": "nativeSignIn",
     "args": "provider, identity"
   },
   {
     "file": "frontend/src/context/AuthContext.tsx",
-    "line": 103,
+    "line": 130,
     "api": "authApi",
     "method": "logout",
-    "args": ""
+    "args": "token"
   },
   {
     "file": "frontend/src/lib/api.ts",
@@ -529,7 +543,7 @@
     "line": 41,
     "api": "api",
     "method": "post",
-    "args": "'/auth/logout'"
+    "args": "'/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined"
   },
   {
     "file": "frontend/src/lib/api.ts",
@@ -970,7 +984,7 @@
     "line": 65,
     "api": "api",
     "method": "post",
-    "args": "'/push/native-unsubscribe', {\n      platform: Platform.OS,\n      provider: 'expo',\n      token,\n    }"
+    "args": "'/push/native-unsubscribe', {\n      platform: Platform.OS,\n      provider: 'expo',\n      token,\n    }, sessionToken ? { headers: { Authorization: `Bearer ${sessionToken}` } } : undefined"
   },
   {
     "file": "frontend/src/lib/socialSignIn.web.ts",

@@ -736,120 +736,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -868,8 +872,9 @@
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -885,7 +890,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -900,120 +906,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -1025,15 +1035,16 @@
       "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
     },
     "STATUS": "PARTIAL",
-    "FIX REQUIRED": "Search latency/zero-results/offline acceptance",
+    "FIX REQUIRED": "Stale-response, offline/retry/zero-results and unmount tests PASS; physical search acceptance pending",
     "ACTION INVENTORY IDS": [
       "\"home-where-to\"",
       "\"home-recenter\"",
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -1049,7 +1060,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -1057,129 +1069,132 @@
     "COMPONENT": "frontend/app/(app)/home.tsx",
     "USER ACTION": "Select real recent or saved destination",
     "ROUTE": "/(app)/home",
-    "API CALL": "tripsApi.list mePlacesApi.list placesApi.list",
+    "API CALL": "tripsApi.list mePlacesApi.list",
     "BACKEND ENDPOINT": [
       "GET /api/me/places",
-      "GET /api/places",
       "GET /api/trips"
     ],
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -1191,15 +1206,16 @@
       "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
     },
     "STATUS": "PARTIAL",
-    "FIX REQUIRED": "Verify real customer history; no demo places",
+    "FIX REQUIRED": "Recents derive only from valid finished customer trips; local filter/dedup tests PASS; real history/device acceptance pending",
     "ACTION INVENTORY IDS": [
       "\"home-where-to\"",
       "\"home-recenter\"",
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -1215,7 +1231,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -1355,120 +1372,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -1487,8 +1508,9 @@
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -1504,7 +1526,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -1519,120 +1542,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -1651,8 +1678,9 @@
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -1668,7 +1696,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -1684,120 +1713,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -1816,8 +1849,9 @@
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -1833,7 +1867,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -1849,120 +1884,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -1981,8 +2020,9 @@
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -1998,7 +2038,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -2015,100 +2056,112 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 14,
+        "line": 16,
         "source": "import { Loader } from '@/src/components/ui';"
       },
       {
-        "line": 37,
+        "line": 39,
         "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
       },
       {
-        "line": 132,
-        "source": "setSafetyBusy(true);"
+        "line": 42,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
       },
       {
-        "line": 135,
-        "source": "setSafetyBusy(false);"
+        "line": 118,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
       },
       {
-        "line": 142,
-        "source": "setSafetyBusy(true);"
-      },
-      {
-        "line": 147,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
         "line": 156,
-        "source": "setSafetyBusy(true);"
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
       },
       {
-        "line": 162,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 161,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
       },
       {
-        "line": 168,
-        "source": "<View style={s.loading} testID=\"booking-load-error\">"
+        "line": 166,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       },
       {
-        "line": 178,
-        "source": "return <View style={s.loading}><Loader label=\"\u00c5pner turen din\u2026\" /></View>;"
+        "line": 171,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 181,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 24,
+        "line": 26,
         "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
       },
       {
-        "line": 118,
-        "source": "fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.',"
+        "line": 127,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 171,
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 184,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 197,
         "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 6,
+        "line": 2,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 8,
         "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 81,
+        "line": 43,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 87,
         "source": "} catch {"
       },
       {
-        "line": 106,
+        "line": 112,
         "source": "}).catch(() => {"
       },
       {
-        "line": 116,
-        "source": "Alert.alert("
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
-        "line": 126,
-        "source": "} catch {"
+        "line": 125,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
       },
       {
         "line": 127,
-        "source": "Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilk\u00e5rene. Pr\u00f8v igjen.');"
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 133,
-        "source": "try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}"
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
       },
       {
-        "line": 137,
-        "source": "Linking.openURL('tel:112').catch(() => {});"
-      },
-      {
-        "line": 146,
-        "source": "} catch {}"
-      },
-      {
-        "line": 152,
-        "source": "if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});"
+        "line": 136,
+        "source": "} catch (error) {"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -2120,7 +2173,7 @@
       "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
     },
     "STATUS": "PARTIAL",
-    "FIX REQUIRED": "Real available driver accepts; no timed fake state",
+    "FIX REQUIRED": "Failed/lost-response cancellation reconciliation and duplicate guards PASS locally; real driver/device acceptance pending",
     "ACTION INVENTORY IDS": [
       "\"booking-retry-load\"",
       "\"active-trip-minimize\"",
@@ -2132,8 +2185,8 @@
       "\"ontrip-safety\"",
       "\"action-call-driver\"",
       "\"action-message\"",
+      "\"assigned-trip-cancel\"",
       "\"customer-app-booking-tripId-337\"",
-      "\"customer-app-booking-tripId-338\"",
       "\"customer-app-booking-tripId-344\"",
       "\"safety-call-112\"",
       "\"safety-share-trip\"",
@@ -2153,100 +2206,112 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 14,
+        "line": 16,
         "source": "import { Loader } from '@/src/components/ui';"
       },
       {
-        "line": 37,
+        "line": 39,
         "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
       },
       {
-        "line": 132,
-        "source": "setSafetyBusy(true);"
+        "line": 42,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
       },
       {
-        "line": 135,
-        "source": "setSafetyBusy(false);"
+        "line": 118,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
       },
       {
-        "line": 142,
-        "source": "setSafetyBusy(true);"
-      },
-      {
-        "line": 147,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
         "line": 156,
-        "source": "setSafetyBusy(true);"
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
       },
       {
-        "line": 162,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 161,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
       },
       {
-        "line": 168,
-        "source": "<View style={s.loading} testID=\"booking-load-error\">"
+        "line": 166,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       },
       {
-        "line": 178,
-        "source": "return <View style={s.loading}><Loader label=\"\u00c5pner turen din\u2026\" /></View>;"
+        "line": 171,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 181,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 24,
+        "line": 26,
         "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
       },
       {
-        "line": 118,
-        "source": "fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.',"
+        "line": 127,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 171,
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 184,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 197,
         "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 6,
+        "line": 2,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 8,
         "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 81,
+        "line": 43,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 87,
         "source": "} catch {"
       },
       {
-        "line": 106,
+        "line": 112,
         "source": "}).catch(() => {"
       },
       {
-        "line": 116,
-        "source": "Alert.alert("
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
-        "line": 126,
-        "source": "} catch {"
+        "line": 125,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
       },
       {
         "line": 127,
-        "source": "Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilk\u00e5rene. Pr\u00f8v igjen.');"
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 133,
-        "source": "try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}"
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
       },
       {
-        "line": 137,
-        "source": "Linking.openURL('tel:112').catch(() => {});"
-      },
-      {
-        "line": 146,
-        "source": "} catch {}"
-      },
-      {
-        "line": 152,
-        "source": "if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});"
+        "line": 136,
+        "source": "} catch (error) {"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -2258,7 +2323,7 @@
       "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
     },
     "STATUS": "PARTIAL",
-    "FIX REQUIRED": "Real location/heading/ETA/photo on device",
+    "FIX REQUIRED": "Invalid/missing/stale/future GPS hides ETA; photo failure uses actual-name initial; real movement/photo acceptance pending",
     "ACTION INVENTORY IDS": [
       "\"booking-retry-load\"",
       "\"active-trip-minimize\"",
@@ -2270,8 +2335,8 @@
       "\"ontrip-safety\"",
       "\"action-call-driver\"",
       "\"action-message\"",
+      "\"assigned-trip-cancel\"",
       "\"customer-app-booking-tripId-337\"",
-      "\"customer-app-booking-tripId-338\"",
       "\"customer-app-booking-tripId-344\"",
       "\"safety-call-112\"",
       "\"safety-share-trip\"",
@@ -2290,100 +2355,112 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 14,
+        "line": 16,
         "source": "import { Loader } from '@/src/components/ui';"
       },
       {
-        "line": 37,
+        "line": 39,
         "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
       },
       {
-        "line": 132,
-        "source": "setSafetyBusy(true);"
+        "line": 42,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
       },
       {
-        "line": 135,
-        "source": "setSafetyBusy(false);"
+        "line": 118,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
       },
       {
-        "line": 142,
-        "source": "setSafetyBusy(true);"
-      },
-      {
-        "line": 147,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
         "line": 156,
-        "source": "setSafetyBusy(true);"
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
       },
       {
-        "line": 162,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 161,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
       },
       {
-        "line": 168,
-        "source": "<View style={s.loading} testID=\"booking-load-error\">"
+        "line": 166,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       },
       {
-        "line": 178,
-        "source": "return <View style={s.loading}><Loader label=\"\u00c5pner turen din\u2026\" /></View>;"
+        "line": 171,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 181,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 24,
+        "line": 26,
         "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
       },
       {
-        "line": 118,
-        "source": "fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.',"
+        "line": 127,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 171,
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 184,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 197,
         "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 6,
+        "line": 2,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 8,
         "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 81,
+        "line": 43,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 87,
         "source": "} catch {"
       },
       {
-        "line": 106,
+        "line": 112,
         "source": "}).catch(() => {"
       },
       {
-        "line": 116,
-        "source": "Alert.alert("
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
-        "line": 126,
-        "source": "} catch {"
+        "line": 125,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
       },
       {
         "line": 127,
-        "source": "Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilk\u00e5rene. Pr\u00f8v igjen.');"
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 133,
-        "source": "try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}"
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
       },
       {
-        "line": 137,
-        "source": "Linking.openURL('tel:112').catch(() => {});"
-      },
-      {
-        "line": 146,
-        "source": "} catch {}"
-      },
-      {
-        "line": 152,
-        "source": "if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});"
+        "line": 136,
+        "source": "} catch (error) {"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -2407,8 +2484,8 @@
       "\"ontrip-safety\"",
       "\"action-call-driver\"",
       "\"action-message\"",
+      "\"assigned-trip-cancel\"",
       "\"customer-app-booking-tripId-337\"",
-      "\"customer-app-booking-tripId-338\"",
       "\"customer-app-booking-tripId-344\"",
       "\"safety-call-112\"",
       "\"safety-share-trip\"",
@@ -2428,100 +2505,112 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 14,
+        "line": 16,
         "source": "import { Loader } from '@/src/components/ui';"
       },
       {
-        "line": 37,
+        "line": 39,
         "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
       },
       {
-        "line": 132,
-        "source": "setSafetyBusy(true);"
+        "line": 42,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
       },
       {
-        "line": 135,
-        "source": "setSafetyBusy(false);"
+        "line": 118,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
       },
       {
-        "line": 142,
-        "source": "setSafetyBusy(true);"
-      },
-      {
-        "line": 147,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
         "line": 156,
-        "source": "setSafetyBusy(true);"
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
       },
       {
-        "line": 162,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 161,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
       },
       {
-        "line": 168,
-        "source": "<View style={s.loading} testID=\"booking-load-error\">"
+        "line": 166,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       },
       {
-        "line": 178,
-        "source": "return <View style={s.loading}><Loader label=\"\u00c5pner turen din\u2026\" /></View>;"
+        "line": 171,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 181,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 24,
+        "line": 26,
         "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
       },
       {
-        "line": 118,
-        "source": "fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.',"
+        "line": 127,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 171,
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 184,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 197,
         "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 6,
+        "line": 2,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 8,
         "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 81,
+        "line": 43,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 87,
         "source": "} catch {"
       },
       {
-        "line": 106,
+        "line": 112,
         "source": "}).catch(() => {"
       },
       {
-        "line": 116,
-        "source": "Alert.alert("
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
-        "line": 126,
-        "source": "} catch {"
+        "line": 125,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
       },
       {
         "line": 127,
-        "source": "Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilk\u00e5rene. Pr\u00f8v igjen.');"
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 133,
-        "source": "try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}"
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
       },
       {
-        "line": 137,
-        "source": "Linking.openURL('tel:112').catch(() => {});"
-      },
-      {
-        "line": 146,
-        "source": "} catch {}"
-      },
-      {
-        "line": 152,
-        "source": "if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});"
+        "line": 136,
+        "source": "} catch (error) {"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -2545,8 +2634,8 @@
       "\"ontrip-safety\"",
       "\"action-call-driver\"",
       "\"action-message\"",
+      "\"assigned-trip-cancel\"",
       "\"customer-app-booking-tripId-337\"",
-      "\"customer-app-booking-tripId-338\"",
       "\"customer-app-booking-tripId-344\"",
       "\"safety-call-112\"",
       "\"safety-share-trip\"",
@@ -2671,100 +2760,112 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 14,
+        "line": 16,
         "source": "import { Loader } from '@/src/components/ui';"
       },
       {
-        "line": 37,
+        "line": 39,
         "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
       },
       {
-        "line": 132,
-        "source": "setSafetyBusy(true);"
+        "line": 42,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
       },
       {
-        "line": 135,
-        "source": "setSafetyBusy(false);"
+        "line": 118,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
       },
       {
-        "line": 142,
-        "source": "setSafetyBusy(true);"
-      },
-      {
-        "line": 147,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
         "line": 156,
-        "source": "setSafetyBusy(true);"
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
       },
       {
-        "line": 162,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 161,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
       },
       {
-        "line": 168,
-        "source": "<View style={s.loading} testID=\"booking-load-error\">"
+        "line": 166,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       },
       {
-        "line": 178,
-        "source": "return <View style={s.loading}><Loader label=\"\u00c5pner turen din\u2026\" /></View>;"
+        "line": 171,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 181,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 24,
+        "line": 26,
         "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
       },
       {
-        "line": 118,
-        "source": "fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.',"
+        "line": 127,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 171,
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 184,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 197,
         "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 6,
+        "line": 2,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 8,
         "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 81,
+        "line": 43,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 87,
         "source": "} catch {"
       },
       {
-        "line": 106,
+        "line": 112,
         "source": "}).catch(() => {"
       },
       {
-        "line": 116,
-        "source": "Alert.alert("
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
-        "line": 126,
-        "source": "} catch {"
+        "line": 125,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
       },
       {
         "line": 127,
-        "source": "Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilk\u00e5rene. Pr\u00f8v igjen.');"
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 133,
-        "source": "try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}"
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
       },
       {
-        "line": 137,
-        "source": "Linking.openURL('tel:112').catch(() => {});"
-      },
-      {
-        "line": 146,
-        "source": "} catch {}"
-      },
-      {
-        "line": 152,
-        "source": "if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});"
+        "line": 136,
+        "source": "} catch (error) {"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -2776,7 +2877,7 @@
       "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
     },
     "STATUS": "PARTIAL",
-    "FIX REQUIRED": "Native call/share and trip-link permissions",
+    "FIX REQUIRED": "Visible failures/duplicate guards and immediate dialer before backend logging PASS locally; actual OS share/dialer and trip-link permissions pending",
     "ACTION INVENTORY IDS": [
       "\"booking-retry-load\"",
       "\"active-trip-minimize\"",
@@ -2788,8 +2889,8 @@
       "\"ontrip-safety\"",
       "\"action-call-driver\"",
       "\"action-message\"",
+      "\"assigned-trip-cancel\"",
       "\"customer-app-booking-tripId-337\"",
-      "\"customer-app-booking-tripId-338\"",
       "\"customer-app-booking-tripId-344\"",
       "\"safety-call-112\"",
       "\"safety-share-trip\"",
@@ -2808,100 +2909,112 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 14,
+        "line": 16,
         "source": "import { Loader } from '@/src/components/ui';"
       },
       {
-        "line": 37,
+        "line": 39,
         "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
       },
       {
-        "line": 132,
-        "source": "setSafetyBusy(true);"
+        "line": 42,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
       },
       {
-        "line": 135,
-        "source": "setSafetyBusy(false);"
+        "line": 118,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
       },
       {
-        "line": 142,
-        "source": "setSafetyBusy(true);"
-      },
-      {
-        "line": 147,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
         "line": 156,
-        "source": "setSafetyBusy(true);"
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
       },
       {
-        "line": 162,
-        "source": "finally { setSafetyBusy(false); }"
+        "line": 161,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
       },
       {
-        "line": 168,
-        "source": "<View style={s.loading} testID=\"booking-load-error\">"
+        "line": 166,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       },
       {
-        "line": 178,
-        "source": "return <View style={s.loading}><Loader label=\"\u00c5pner turen din\u2026\" /></View>;"
+        "line": 171,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 181,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 24,
+        "line": 26,
         "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
       },
       {
-        "line": 118,
-        "source": "fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.',"
+        "line": 127,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 171,
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 184,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 197,
         "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 6,
+        "line": 2,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 8,
         "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 81,
+        "line": 43,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 87,
         "source": "} catch {"
       },
       {
-        "line": 106,
+        "line": 112,
         "source": "}).catch(() => {"
       },
       {
-        "line": 116,
-        "source": "Alert.alert("
+        "line": 121,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
       },
       {
-        "line": 126,
-        "source": "} catch {"
+        "line": 125,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
       },
       {
         "line": 127,
-        "source": "Alert.alert('Kunne ikke avbestille', 'Vi fikk ikke bekreftet avbestillingsvilk\u00e5rene. Pr\u00f8v igjen.');"
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
       },
       {
-        "line": 133,
-        "source": "try { await safetyApi.log(tripId!, { kind: 'emergency' }); } catch {}"
+        "line": 134,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
       },
       {
-        "line": 137,
-        "source": "Linking.openURL('tel:112').catch(() => {});"
-      },
-      {
-        "line": 146,
-        "source": "} catch {}"
-      },
-      {
-        "line": 152,
-        "source": "if (phone) Linking.openURL(`tel:${String(phone).replace(/[^+0-9]/g, '')}`).catch(() => {});"
+        "line": 136,
+        "source": "} catch (error) {"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -2925,8 +3038,8 @@
       "\"ontrip-safety\"",
       "\"action-call-driver\"",
       "\"action-message\"",
+      "\"assigned-trip-cancel\"",
       "\"customer-app-booking-tripId-337\"",
-      "\"customer-app-booking-tripId-338\"",
       "\"customer-app-booking-tripId-344\"",
       "\"safety-call-112\"",
       "\"safety-share-trip\"",
@@ -2945,120 +3058,124 @@
     "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
     "LOADING STATE": [
       {
-        "line": 8,
+        "line": 9,
         "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
       },
       {
-        "line": 489,
+        "line": 500,
         "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
       },
       {
-        "line": 520,
+        "line": 531,
         "source": "const [loading, setLoading] = useState(false);"
       },
       {
-        "line": 526,
+        "line": 538,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 539,
         "source": "setLoading(true);"
       },
       {
-        "line": 531,
-        "source": ".finally(() => setLoading(false));"
+        "line": 544,
+        "source": ".finally(() => { if (current) setLoading(false); });"
       },
       {
-        "line": 555,
+        "line": 568,
         "source": "{loading ? ("
       },
       {
-        "line": 556,
+        "line": 569,
         "source": "<ActivityIndicator color={colors.accent} />"
       },
       {
-        "line": 588,
-        "source": "{!items.length && q.trim().length >= 2 && !loading ? ("
+        "line": 602,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
       }
     ],
     "EMPTY STATE": [
       {
-        "line": 158,
+        "line": 168,
         "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
       },
       {
-        "line": 161,
-        "source": "const quickPlaces = myPlaces.length ? myPlaces : featured;"
+        "line": 332,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
       },
       {
-        "line": 344,
+        "line": 355,
         "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
       },
       {
-        "line": 345,
+        "line": 356,
         "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
       },
       {
-        "line": 589,
+        "line": 603,
         "source": "<View style={s.emptySearch}>"
       },
       {
-        "line": 590,
+        "line": 604,
         "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
       },
       {
-        "line": 591,
+        "line": 605,
         "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
       },
       {
-        "line": 592,
+        "line": 606,
         "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
       },
       {
-        "line": 707,
+        "line": 721,
         "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
       },
       {
-        "line": 708,
+        "line": 722,
         "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
       }
     ],
     "ERROR STATE": [
       {
-        "line": 17,
+        "line": 18,
         "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
       },
       {
-        "line": 47,
+        "line": 48,
         "source": "const [error, setError] = useState('');"
       },
       {
-        "line": 67,
+        "line": 71,
         "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
       },
       {
-        "line": 71,
-        "source": "mePlacesApi.list().then((r) => setMyPlaces(r.places || [])).catch(() => {});"
-      },
-      {
-        "line": 90,
+        "line": 100,
         "source": "} catch { if (active) setActiveTripOffline(true); }"
       },
       {
-        "line": 115,
+        "line": 125,
         "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
       },
       {
-        "line": 117,
+        "line": 127,
         "source": "} catch {"
       },
       {
-        "line": 127,
+        "line": 137,
         "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
       },
       {
-        "line": 138,
+        "line": 148,
         "source": "const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });"
       },
       {
-        "line": 152,
+        "line": 162,
         "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 163,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -3077,8 +3194,9 @@
       "\"customer-app-app-home-287\"",
       "\"recommendation-select\"",
       "\"customer-app-app-home-299\"",
-      "\"customer-app-app-home-307\"",
+      "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
       "\"customer-app-app-home-316\"",
+      "\"home-places-retry\"",
       "{`quick-${p.label || i}`}",
       "\"customer-app-app-home-343\"",
       "\"customer-app-app-home-351\"",
@@ -3094,7 +3212,8 @@
       "\"customer-app-app-home-557\"",
       "\"customer-app-app-home-561\"",
       "\"search-close\"",
-      "{`search-result-${i}`}"
+      "{`search-result-${i}`}",
+      "\"search-retry\""
     ]
   },
   {
@@ -4262,7 +4381,23 @@
     ],
     "EMPTY STATE": [
       {
-        "line": 93,
+        "line": 75,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 79,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 87,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');"
+      },
+      {
+        "line": 90,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');"
+      },
+      {
+        "line": 110,
         "source": "if (!res.token || res.user?.role !== 'user') throw new Error('Innloggingen kunne ikke bekreftes.');"
       }
     ],
@@ -4272,40 +4407,40 @@
         "source": "sessionError: string;"
       },
       {
-        "line": 35,
+        "line": 36,
         "source": "const [sessionError, setSessionError] = useState('');"
       },
       {
-        "line": 39,
+        "line": 41,
         "source": "setSessionError('');"
       },
       {
-        "line": 53,
+        "line": 58,
         "source": "} catch (error: any) {"
       },
       {
-        "line": 54,
+        "line": 60,
         "source": "if (error?.response?.status === 401) {"
       },
       {
-        "line": 58,
+        "line": 65,
         "source": "setSessionError('Kan ikke kontakte SNAR. Sjekk forbindelsen og pr\u00f8v igjen.');"
       },
       {
-        "line": 68,
+        "line": 75,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 77,
         "source": "if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i SNAR kundeappen.');"
       },
       {
-        "line": 76,
-        "source": "if (res?.user?.role !== 'user') throw new Error('Kun kundekonto kan registreres i kundeappen.');"
+        "line": 79,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
       },
       {
-        "line": 93,
-        "source": "if (!res.token || res.user?.role !== 'user') throw new Error('Innloggingen kunne ikke bekreftes.');"
-      },
-      {
-        "line": 102,
-        "source": "try { await unregisterNativePush(); } catch {}"
+        "line": 80,
+        "source": "setSessionError(''); setUser(res.user);"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
@@ -4317,7 +4452,7 @@
       "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
     },
     "STATUS": "PARTIAL",
-    "FIX REQUIRED": "Transient session failure preserves token; physical outage sequence still pending",
+    "FIX REQUIRED": "Offline cold retry and stale refresh/401 after new login PASS locally; logout remote cleanup preserves old token; physical outage sequence pending",
     "ACTION INVENTORY IDS": []
   },
   {

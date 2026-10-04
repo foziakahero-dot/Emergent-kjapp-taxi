@@ -23,6 +23,10 @@
 - Native Stripe requires matching test publishable/secret or restricted keys. Live native key combinations are refused. Existing server fare, fleet split, shared trip lock, deterministic idempotency, webhook/retrieval reconciliation and PaymentSheet flow are retained. The UI reports actual wallet availability; it does not claim wallets are operative. No live payments or activation flags were enabled.
 - Customer-visible branding migrated to SNAR. Bundle identifier, Android package, EAS project, `kjapp` URL scheme/token storage and existing domains remain compatible. Customer receipt email subject uses SNAR.
 - Transient auth/network failure preserves the stored session and offers retry; actual 401 clears it. Estimate responses cannot overwrite newer destination estimates. Duplicate booking/payment/chat/export/delete/link actions have guards. Chat errors are visible. History opens live/cancelled trips instead of doing nothing. Settings read failures show retry, failed updates roll back and deletion failures are visible. GDPR export shares actual JSON, including the protected photo, rather than only counts.
+- Cancellation stays on the current trip unless the server confirms success or a fresh canonical read confirms cancellation after a lost response. Preview/confirm/submit guards prevent duplicate dialogs and requests; assigned trips expose cancellation with server fee preview. Safety share/report errors stay visible, double taps are guarded, and opening the emergency dialer does not wait for network logging. No actual emergency call was made by validation.
+- Driver ETA/distance require valid coordinates and a server GPS timestamp within 30 seconds (up to 5 seconds clock tolerance). Missing, invalid, stale or future GPS reports a location wait rather than a current ETA; network failure is a separate status. Driver photo load failure falls back to the actual name initial.
+- Search ignores responses for older queries, distinguishes a network failure from zero results, offers retry and cancels unsent work on unmount. Home recents now come only from valid finished customer trips, deduplicated by destination; public featured places are not relabeled as personal history. Home reconfirms canonical active state on every focus before enabling booking.
+- Session generation guards prevent old refresh success/401 from changing a newer login. Logout completes local sign-out without waiting for remote cleanup; push unregister and backend logout keep the captured old session header. Cold offline launch retains the token and offers retry. These boundaries pass isolated component tests; full native lifecycle acceptance remains open.
 - Fail-closed gate is checked by `eas-build-pre-install`, `npm run android`, `npm run ios` and the Customer jobs in existing Android/iOS GitHub build workflows. Its current refusal was exercised. Gate state is `frontend/customer-build-gate.json`; code is `frontend/scripts/customer-build-gate.cjs`.
 
 ## Quality gates and evidence
@@ -39,12 +43,13 @@
 | iOS native prebuild | PASS | `npx expo prebuild --platform ios --no-install`; no Xcode compilation/signing/IPA |
 | Android Hermes export | PASS | `npx expo export --platform android`; includes native dependency imports; does not compile native SDKs |
 | iOS Hermes export | PASS | `npx expo export --platform ios`; same limitation |
-| Broader available legacy suite | FAIL / incomplete | Both starting checkpoint and changed source: 11 failed, 60 passed. Includes old source-string assertions, missing Fleet fixtures, test harness `ROOT`/`Path` errors and Driver checks outside this scope. No clean full-suite claim. Details in evidence JSON; investigate with a complete checkout before clearing gate |
+| Broader available legacy suite | FAIL | Same expanded 92-test selection: starting checkpoint 10 failed / 82 passed; changed source 3 failed / 89 passed. Restored exact source fixtures and repaired seven harness/obsolete Customer assertions. Remaining three failures are unchanged Driver assertions; Driver source was verified against the original audit blobs and not modified. Full suite is not green |
+| Static beta policy | PASS / release warning | Source policy passes with real fixtures. Existing beta placeholder privacy/terms text remains a blocker for public commercial release |
 | API contract result | FAIL | All 77 source contracts map to routes, including support/push/protected image GETs. Required authenticated/native runtime acceptance is missing; source presence alone cannot yield PASS |
 | Figma parity | PARTIAL | Shared colors/fonts/motion source checked; latest category paths ported. No per-screen native pixel comparison |
 | Customer E2E | PARTIAL | Tested individual backend/component boundaries; 31-step physical rider/driver/payment sequence not executed |
 
-Full matrices: `CUSTOMER_SCREEN_MATRIX_20261004.json` (43 rows, every requested column), companion Markdown, `CUSTOMER_ACTION_INVENTORY_20261004.json` (182 actions), `CUSTOMER_API_CALLERS_20261004.json`, `CUSTOMER_API_CONTRACT_20261004.json` (77 contracts), `CUSTOMER_BACKEND_ROUTES_20261004.json` (216 routes).
+Full matrices: `CUSTOMER_SCREEN_MATRIX_20261004.json` (43 rows, every requested column), companion Markdown, `CUSTOMER_ACTION_INVENTORY_20261004.json` (184 actions), `CUSTOMER_API_CALLERS_20261004.json` (143 callers), `CUSTOMER_API_CONTRACT_20261004.json` (77 contracts), `CUSTOMER_BACKEND_ROUTES_20261004.json` (216 routes).
 
 Regenerate source inventories with `npm run audit:customer`. JSON states are deliberately PARTIAL wherever device/runtime evidence is missing. Disabled prototype-only accessibility choices and unavailable rewards are identified in source; no success is fabricated.
 
@@ -61,7 +66,8 @@ Regenerate source inventories with `npm run audit:customer`. JSON states are del
 - Pixel comparison of every native screen to the latest source remains open. Latest ZIP's category artwork is vector silhouettes and its tiers are Standard/Comfort/Premium/Van/accessible; the earlier requirement asks for three primary categories and realistic renders. Three existing backend IDs were retained and latest provided paths used. Realistic renders/full tier redesign were not invented. Confirm final asset/tier specification before pixel approval.
 - Apple Pay registered Merchant ID, Stripe Apple Pay certificate, provisioning and merchant entitlement are absent. Google Pay runtime activation is absent. Sign in with Apple entitlement is generated, but App Store capability/provisioning and hidden-email/existing-account physical login are unverified.
 - FCM/APNs delivery, push permission/token registration, external payment browser callbacks, reset/universal links, authenticated Image transport, keyboard/safe areas and OS export sharing remain unverified.
-- Available legacy regression result is not green; incomplete local fixture coverage and defective source assertions must be reviewed, not waived as a production pass.
+- Three existing Driver-only regression assertions still fail. No Driver implementation was changed; these remain tracked rather than waived as a green full-suite result.
+- Existing public privacy/terms pages still contain beta placeholder text. Source static policy permits controlled beta; commercial public release requires actual approved legal content.
 - Reward redemption and app-specific high-contrast/haptic preferences remain explicitly unavailable. Native OS accessibility settings are linked. These UI surfaces do not claim a backend success.
 
 ## External configuration still needed
@@ -83,7 +89,8 @@ Service `kjapp-beta-api`, My Workspace, existing branch `fix/beta-mobile-firebas
 
 - `4d4dd5050c3d225b07a6892ef8c4b74477ee9c92`: protected photo routes/storage/GDPR, explicit Google linking, available-car filtering, test-only native payment config, receipt subject and tests. Deploy `dep-db0p65vavr4c738o8g9g` verified **live**; post-deploy health 200/db true, protected photo/link routes 401 without session, and no error logs in the checked startup interval.
 - `865023425d48acc5c0c665ae248d828a689fceb0`: SNAR branding for Customer identity errors; Driver response branding preserved. Final deploy status is recorded in `CUSTOMER_VALIDATION_EVIDENCE_20261004.json`.
-- Customer implementation commit: `92b957e4f0581811bcdb6895551ca3b2940679b8`, draft PR [#67](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/67). All commits include `[eas skip]`.
+- Continuation review includes the network/cancellation/search/session/GPS fixes above and an updated source matrix; PR #67 head records the exact continuation commit. Evidence documentation checkpoint: `7eceba2bca157b4a182a55c659f9a29f9394f845`. No backend runtime change or additional Render deployment was needed for this continuation.
+- Initial Customer implementation commit: `92b957e4f0581811bcdb6895551ca3b2940679b8`, draft PR [#67](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/67). All commits include `[eas skip]`.
 
 Unauthenticated live smoke confirms health/auth boundaries/configuration availability. It does **not** validate a logged-in upload, link, booking or payment. No new test users, live charges or fake nearby cars were created.
 

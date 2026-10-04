@@ -189,7 +189,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 251,
+    "line": 261,
     "component": "Pressable",
     "testID": "\"home-where-to\"",
     "label": "\"Søk etter destinasjon\"",
@@ -206,7 +206,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 265,
+    "line": 275,
     "component": "Pressable",
     "testID": "\"home-recenter\"",
     "label": "\"Sentrer kartet på min posisjon\"",
@@ -223,7 +223,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 287,
+    "line": 297,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-287\"",
     "label": "\"Lukk anbefaling\"",
@@ -240,7 +240,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 296,
+    "line": 306,
     "component": "Pressable",
     "testID": "\"recommendation-select\"",
     "label": "text child/dynamic",
@@ -257,7 +257,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 299,
+    "line": 309,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-299\"",
     "label": "text child/dynamic",
@@ -274,9 +274,9 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 307,
+    "line": 317,
     "component": "Pressable",
-    "testID": "\"customer-app-app-home-307\"",
+    "testID": "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
     "label": "{sheetCollapsed ? 'Utvid nylige steder' : 'Minimer nylige steder'}",
     "handlers": {
       "onPress": "{() => setSheetCollapsed((v) => !v)}"
@@ -291,7 +291,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 316,
+    "line": 326,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-316\"",
     "label": "text child/dynamic",
@@ -308,7 +308,24 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 323,
+    "line": 332,
+    "component": "Pressable",
+    "testID": "\"home-places-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void loadPlaces()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 334,
     "component": "Pressable",
     "testID": "{`quick-${p.label || i}`}",
     "label": "text child/dynamic",
@@ -325,7 +342,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 343,
+    "line": 354,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-343\"",
     "label": "text child/dynamic",
@@ -342,7 +359,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 351,
+    "line": 362,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-351\"",
     "label": "text child/dynamic",
@@ -359,7 +376,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 354,
+    "line": 365,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-354\"",
     "label": "text child/dynamic",
@@ -376,7 +393,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 365,
+    "line": 376,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-365\"",
     "label": "text child/dynamic",
@@ -393,7 +410,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 371,
+    "line": 382,
     "component": "Pressable",
     "testID": "\"booking-change-dest\"",
     "label": "text child/dynamic",
@@ -410,7 +427,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 388,
+    "line": 399,
     "component": "Pressable",
     "testID": "{`vehicle-${v.type}`}",
     "label": "text child/dynamic",
@@ -427,7 +444,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 417,
+    "line": 428,
     "component": "Pressable",
     "testID": "\"booking-review\"",
     "label": "text child/dynamic",
@@ -444,7 +461,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 434,
+    "line": 445,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-434\"",
     "label": "\"Tilbake til bilvalg\"",
@@ -461,7 +478,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 473,
+    "line": 484,
     "component": "Pressable",
     "testID": "\"booking-payment-row\"",
     "label": "text child/dynamic",
@@ -478,7 +495,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 482,
+    "line": 493,
     "component": "Pressable",
     "testID": "\"booking-confirm\"",
     "label": "text child/dynamic",
@@ -495,7 +512,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 545,
+    "line": 558,
     "component": "TextInput",
     "testID": "\"search-input\"",
     "label": "text child/dynamic",
@@ -512,7 +529,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 557,
+    "line": 570,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-557\"",
     "label": "\"Tøm søk\"",
@@ -529,7 +546,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 561,
+    "line": 574,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-561\"",
     "label": "\"Bestill med stemmen\"",
@@ -546,7 +563,7 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 567,
+    "line": 580,
     "component": "Pressable",
     "testID": "\"search-close\"",
     "label": "text child/dynamic",
@@ -563,12 +580,29 @@
   },
   {
     "file": "frontend/app/(app)/home.tsx",
-    "line": 573,
+    "line": 586,
     "component": "Pressable",
     "testID": "{`search-result-${i}`}",
     "label": "text child/dynamic",
     "handlers": {
       "onPress": "{() => onSelect({ name: r.name, lat: r.lat, lng: r.lng })}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 601,
+    "component": "Pressable",
+    "testID": "\"search-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setRetrySearch(value => value + 1)}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -733,7 +767,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 172,
+    "line": 198,
     "component": "Pressable",
     "testID": "\"booking-retry-load\"",
     "label": "text child/dynamic",
@@ -750,7 +784,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 211,
+    "line": 235,
     "component": "Pressable",
     "testID": "\"active-trip-minimize\"",
     "label": "\"Minimer tur\"",
@@ -767,7 +801,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 214,
+    "line": 238,
     "component": "Pressable",
     "testID": "\"active-trip-home\"",
     "label": "text child/dynamic",
@@ -784,7 +818,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 225,
+    "line": 249,
     "component": "Pressable",
     "testID": "\"searching-cancel\"",
     "label": "text child/dynamic",
@@ -793,7 +827,7 @@
     },
     "destination": "handler/local state",
     "authenticated": true,
-    "disabled": "not declared",
+    "disabled": "{cancelBusy}",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
     "success": "SOURCE ONLY; see screen matrix",
     "error": "SOURCE ONLY; see screen matrix",
@@ -801,7 +835,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 238,
+    "line": 262,
     "component": "Pressable",
     "testID": "\"booking-home\"",
     "label": "text child/dynamic",
@@ -818,7 +852,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 265,
+    "line": 289,
     "component": "Pressable",
     "testID": "\"ontrip-share\"",
     "label": "text child/dynamic",
@@ -827,7 +861,7 @@
     },
     "destination": "handler/local state",
     "authenticated": true,
-    "disabled": "not declared",
+    "disabled": "{safetyBusy}",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
     "success": "SOURCE ONLY; see screen matrix",
     "error": "SOURCE ONLY; see screen matrix",
@@ -835,7 +869,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 269,
+    "line": 293,
     "component": "Pressable",
     "testID": "\"ontrip-chat\"",
     "label": "text child/dynamic",
@@ -852,7 +886,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 273,
+    "line": 297,
     "component": "Pressable",
     "testID": "\"ontrip-safety\"",
     "label": "text child/dynamic",
@@ -869,7 +903,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 323,
+    "line": 347,
     "component": "Pressable",
     "testID": "\"action-call-driver\"",
     "label": "text child/dynamic",
@@ -878,7 +912,7 @@
     },
     "destination": "handler/local state",
     "authenticated": true,
-    "disabled": "not declared",
+    "disabled": "{!trip.driver?.phone}",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
     "success": "SOURCE ONLY; see screen matrix",
     "error": "SOURCE ONLY; see screen matrix",
@@ -886,7 +920,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 327,
+    "line": 351,
     "component": "Pressable",
     "testID": "\"action-message\"",
     "label": "text child/dynamic",
@@ -903,7 +937,24 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 337,
+    "line": 356,
+    "component": "Pressable",
+    "testID": "\"assigned-trip-cancel\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{cancel}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "{cancelBusy}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 362,
     "component": "Pressable",
     "testID": "\"customer-app-booking-tripId-337\"",
     "label": "text child/dynamic",
@@ -920,24 +971,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 338,
-    "component": "Pressable",
-    "testID": "\"customer-app-booking-tripId-338\"",
-    "label": "text child/dynamic",
-    "handlers": {
-      "onPress": "{() => {}}"
-    },
-    "destination": "handler/local state",
-    "authenticated": true,
-    "disabled": "not declared",
-    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
-    "success": "SOURCE ONLY; see screen matrix",
-    "error": "SOURCE ONLY; see screen matrix",
-    "verification": "SOURCE INVENTORY; device behavior unverified"
-  },
-  {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 344,
+    "line": 369,
     "component": "Pressable",
     "testID": "\"customer-app-booking-tripId-344\"",
     "label": "\"Lukk sikkerhetsmeny\"",
@@ -954,7 +988,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 349,
+    "line": 375,
     "component": "Pressable",
     "testID": "\"safety-call-112\"",
     "label": "text child/dynamic",
@@ -971,7 +1005,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 353,
+    "line": 379,
     "component": "Pressable",
     "testID": "\"safety-share-trip\"",
     "label": "text child/dynamic",
@@ -988,7 +1022,7 @@
   },
   {
     "file": "frontend/app/booking/[tripId].tsx",
-    "line": 357,
+    "line": 383,
     "component": "Pressable",
     "testID": "\"safety-report\"",
     "label": "text child/dynamic",
@@ -2280,7 +2314,7 @@
   },
   {
     "file": "frontend/src/components/ActiveTripCard.tsx",
-    "line": 10,
+    "line": 12,
     "component": "Pressable",
     "testID": "\"active-trip-reopen\"",
     "label": "\"Åpne aktiv tur\"",
