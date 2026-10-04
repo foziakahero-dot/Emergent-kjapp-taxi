@@ -31,8 +31,11 @@ const NAV = [
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand snar-brand ${compact ? 'compact' : ''}`} aria-label="SNAR Fleet">
-      <div className="brand-word" aria-hidden="true">SNAR</div>
-      <div className="brand-sub">FLEET</div>
+      <span className="snar-brand-mark" aria-hidden="true"><i /><i /></span>
+      <span className="snar-brand-type">
+        <span className="brand-word">SNAR</span>
+        <span className="brand-sub">FLEET</span>
+      </span>
     </div>
   );
 }
