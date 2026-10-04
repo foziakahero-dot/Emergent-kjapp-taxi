@@ -1056,3 +1056,5 @@ h3 {
   .snar-voice-wave i { animation: none; }
   .snar-vehicle-card:hover img { transform: none; }
 }
+
+.snar-preview-search > img, .snar-voice-card > img { filter: brightness(0) saturate(100%); }
