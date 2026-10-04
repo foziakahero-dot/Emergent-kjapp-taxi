@@ -68,7 +68,7 @@
     "icons:figma": "node ../scripts/generate-figma-icons.cjs",
     "audit:customer": "node ../scripts/customer-inventory.cjs && python ../scripts/customer-contract-audit.py && python ../scripts/customer-screen-audit.py",
     "check:customer-build": "node scripts/customer-build-gate.cjs",
-    "eas-build-pre-install": "node scripts/customer-build-gate.cjs",
+    "eas-build-pre-install": "node scripts/customer-eas-pre-install.cjs",
     "preandroid": "node scripts/customer-build-gate.cjs",
     "preios": "node scripts/customer-build-gate.cjs"
   },
