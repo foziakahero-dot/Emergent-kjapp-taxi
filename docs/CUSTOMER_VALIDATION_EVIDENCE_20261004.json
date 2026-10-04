@@ -175,7 +175,14 @@
       37087526771
     ],
     "rootCause": "UNVERIFIED; connector has no jobs and check-suite read unsupported",
-    "editedWorkflowYaml": "PASS local parse"
+    "editedWorkflowYaml": "PASS local parse",
+    "continuationSourceCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052",
+    "continuationRuns": [
+      37165251333,
+      37165253215,
+      37165272537
+    ],
+    "continuationStatus": "startup_failure; queried run 37165253215 has zero jobs"
   },
   "continuationBaseCommit": "7eceba2bca157b4a182a55c659f9a29f9394f845",
   "continuationChecks": {
@@ -196,5 +203,6 @@
     "androidHermesExport": "PASS final source",
     "iosHermesExport": "PASS final source",
     "webExport": "PASS final source (source export only)"
-  }
+  },
+  "customerContinuationCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052"
 }

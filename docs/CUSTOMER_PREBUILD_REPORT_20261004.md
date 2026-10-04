@@ -89,14 +89,14 @@ Service `kjapp-beta-api`, My Workspace, existing branch `fix/beta-mobile-firebas
 
 - `4d4dd5050c3d225b07a6892ef8c4b74477ee9c92`: protected photo routes/storage/GDPR, explicit Google linking, available-car filtering, test-only native payment config, receipt subject and tests. Deploy `dep-db0p65vavr4c738o8g9g` verified **live**; post-deploy health 200/db true, protected photo/link routes 401 without session, and no error logs in the checked startup interval.
 - `865023425d48acc5c0c665ae248d828a689fceb0`: SNAR branding for Customer identity errors; Driver response branding preserved. Final deploy status is recorded in `CUSTOMER_VALIDATION_EVIDENCE_20261004.json`.
-- Continuation review includes the network/cancellation/search/session/GPS fixes above and an updated source matrix; PR #67 head records the exact continuation commit. Evidence documentation checkpoint: `7eceba2bca157b4a182a55c659f9a29f9394f845`. No backend runtime change or additional Render deployment was needed for this continuation.
+- Continuation review includes the network/cancellation/search/session/GPS fixes above and an updated source matrix; Customer continuation source commit: `56682d2e24e164acfad3ce06fa52df3f2c649052`. Evidence documentation checkpoint: `7eceba2bca157b4a182a55c659f9a29f9394f845`. No backend runtime change or additional Render deployment was needed for this continuation.
 - Initial Customer implementation commit: `92b957e4f0581811bcdb6895551ca3b2940679b8`, draft PR [#67](https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/67). All commits include `[eas skip]`.
 
 Unauthenticated live smoke confirms health/auth boundaries/configuration availability. It does **not** validate a logged-in upload, link, booking or payment. No new test users, live charges or fake nearby cars were created.
 
 ## Remote CI status
 
-GitHub Actions runs `37163387691` (push) and `37163390226` (PR) report `startup_failure`, path `BuildFailed`, with no jobs started. The same startup failure is present on the unchanged PR #65 head (runs `37097397045`, `37087528954`, `37087526771`). The connector exposes no diagnostic jobs and rejects check-suite detail retrieval, so the root cause is **unverified**; do not infer billing or a particular YAML error. The five edited build workflow files parse as valid YAML locally. Remote CI is not a PASS and must be restored before gate approval. No native compile/EAS build was launched by these runs.
+GitHub Actions runs `37163387691` (push) and `37163390226` (PR) report `startup_failure`, path `BuildFailed`, with no jobs started. The same startup failure is present on the unchanged PR #65 head (runs `37097397045`, `37087528954`, `37087526771`). The connector exposes no diagnostic jobs and rejects check-suite detail retrieval, so the root cause is **unverified**; do not infer billing or a particular YAML error. The five edited build workflow files parse as valid YAML locally. Continuation source `56682d2e24e164acfad3ce06fa52df3f2c649052` also reports `startup_failure` for push `37165251333` and PR runs `37165253215` / `37165272537`; the queried run has zero jobs. Remote CI is not a PASS and must be restored before gate approval. No native compile/EAS build was launched by these runs.
 
 ## Build decision
 
