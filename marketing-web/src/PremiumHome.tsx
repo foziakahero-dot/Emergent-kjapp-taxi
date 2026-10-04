@@ -102,7 +102,7 @@ function PhoneDemo() {
                 ) : (
                   <div className="snar-driver-card">
                     <span className="snar-driver-avatar">A</span>
-                    <span><strong>Amir H.</strong><small>⭐ 4,9 · Tesla Model Y · SNAR01</small></span>
+                    <span><strong>Amir H.</strong><small>⭐ 4,9 · Tesla Model Y · Eksempelbil</small></span>
                     <button type="button" aria-label="Kontakt sjåfør">☎</button>
                   </div>
                 )}
@@ -115,7 +115,7 @@ function PhoneDemo() {
           </div>
         </div>
       </div>
-      <p className="snar-product-note">Interaktiv produktdemo · designet etter SNAR kundeappen</p>
+      <p className="snar-product-note">Illustrativ produktdemo · ingen live-data</p>
     </div>
   );
 }
@@ -242,9 +242,9 @@ export default function PremiumHome() {
           </div>
         </div>
         <div className="snar-fleet-preview">
-          <div className="snar-fleet-head"><SnarBrand compact /><span>FLEET · LIVE</span></div>
-          <div className="snar-fleet-metrics"><article><small>SJÅFØRER</small><strong>48</strong><span>41 online</span></article><article><small>TURER I DAG</small><strong>126</strong><span>Live oversikt</span></article></div>
-          <div className="snar-fleet-list"><span>Dokumenter <b>Oppdatert</b></span><span>Ukentlig oppgjør <b>Klar</b></span><span>Kjøretøy <b>12 aktive</b></span></div>
+          <div className="snar-fleet-head"><SnarBrand compact /><span>FLEET PANEL</span></div>
+          <div className="snar-fleet-metrics"><article><small>SJÅFØRER</small><strong>Status</strong><span>Online og tilgang</span></article><article><small>TURER</small><strong>Oversikt</strong><span>Aktive og historikk</span></article></div>
+          <div className="snar-fleet-list"><span>Dokumenter <b>Kontroll</b></span><span>Ukentlig oppgjør <b>Oversikt</b></span><span>Kjøretøy <b>Administrasjon</b></span></div>
         </div>
       </section>
 
