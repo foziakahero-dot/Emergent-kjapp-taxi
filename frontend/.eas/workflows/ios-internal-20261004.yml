@@ -1,0 +1,15 @@
+name: SNAR Customer iOS Internal
+
+on:
+  push:
+    branches:
+      - audit/customer-prebuild-snar-20261003
+
+jobs:
+  build_customer_ios_internal:
+    name: Build SNAR Customer iOS Internal
+    type: build
+    params:
+      platform: ios
+      profile: ios-internal
+      refresh_ad_hoc_provisioning_profile: true
