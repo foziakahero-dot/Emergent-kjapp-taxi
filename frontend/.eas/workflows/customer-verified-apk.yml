@@ -41,6 +41,6 @@ jobs:
     type: maestro
     environment: preview
     params:
-      build_id: ${{ needs.repack_android.outputs.build_id || needs.build_android.outputs.build_id }}
+      build_id: ${{ after.repack_android.outputs.build_id || after.build_android.outputs.build_id }}
       flow_path: .maestro/customer-startup.yml
       record_screen: true
