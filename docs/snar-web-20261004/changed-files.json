@@ -1,0 +1,130 @@
+[
+  {
+    "path": "marketing-web/.env.example",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/.gitignore",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/PRODUCTION_READINESS.md",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/README.md",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/api/waitlist.js",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/index.html",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/public/assets/figma/logo.svg",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/public/assets/snar/premium.svg",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/assets/snar/standard.svg",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/assets/snar/xl.svg",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/fonts/Inter-LICENSE.txt",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/fonts/JetBrainsMono-LICENSE.txt",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/fonts/inter-latin-wght-normal.woff2",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/fonts/jetbrains-mono-latin-500-normal.woff2",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/public/site.webmanifest",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/App.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/ApplyPage.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/BetaWaitlist.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/HelpPage.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/LegalPage.tsx",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/src/PremiumHome.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/ProductPreview.tsx",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/src/SnarUI.tsx",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/src/TripSharePage.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/api.ts",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/help.css",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/main.tsx",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/seo.ts",
+    "status": "modified"
+  },
+  {
+    "path": "marketing-web/src/snar-landing.css",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/src/snar-tokens.css",
+    "status": "added"
+  },
+  {
+    "path": "marketing-web/src/support-footer.css",
+    "status": "modified"
+  },
+  {
+    "path": "netlify.toml",
+    "status": "modified"
+  }
+]

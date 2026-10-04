@@ -6,6 +6,21 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# Marketing waitlist uses a dedicated backend route.
+[[redirects]]
+  from = "/api/waitlist"
+  to = "https://api.kjappapp.no/api/marketing/waitlist"
+  status = 200
+  force = true
+
+# Keep browser traffic same-origin on both production and Deploy Previews.
+[[redirects]]
+  from = "/api/*"
+  to = "https://api.kjappapp.no/api/:splat"
+  status = 200
+  force = true
+
+# React Router SPA fallback must stay last.
 [[redirects]]
   from = "/*"
   to = "/index.html"

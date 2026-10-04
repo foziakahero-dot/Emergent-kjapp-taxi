@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     return send(res, 400, { error: 'Kontroller feltene og prøv igjen.' });
   }
 
-  const apiBase = (process.env.KJAPP_API_BASE_URL || 'https://github-app-builder-28.emergent.host/api').replace(/\/$/, '');
+  const apiBase = (process.env.KJAPP_API_BASE_URL || 'https://api.kjappapp.no/api').replace(/\/$/, '');
   let endpoint;
   try {
     endpoint = new URL(`${apiBase}/marketing/waitlist`);

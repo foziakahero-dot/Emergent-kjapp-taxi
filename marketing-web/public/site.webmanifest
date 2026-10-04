@@ -1,11 +1,11 @@
 {
-  "name": "KJAPP",
-  "short_name": "KJAPP",
-  "description": "KJAPP – norsk taxi med smart bestilling.",
+  "name": "SNAR",
+  "short_name": "SNAR",
+  "description": "SNAR – norsk taxi med smart bestilling.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#050A0F",
-  "theme_color": "#050A0F",
+  "background_color": "#F4F6FA",
+  "theme_color": "#F4F6FA",
   "icons": [
     {
       "src": "/assets/figma/logo.svg",
@@ -14,3 +14,4 @@
     }
   ]
 }
+

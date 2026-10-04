@@ -1,0 +1,48 @@
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(/fonts/inter-latin-wght-normal.woff2) format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/jetbrains-mono-latin-500-normal.woff2) format("woff2");
+}
+/* Source: Customer theme.ts / ui.tsx at 66bb81e1. */
+:root {
+  color-scheme: light;
+  --snar-bg: #f4f6fa;
+  --snar-surface: #fff;
+  --snar-subtle: #eef1f5;
+  --snar-navy: #001f3f;
+  --snar-secondary: #4a5a6e;
+  --snar-red: #ff0000;
+  --snar-red-bright: #ff3b3b;
+  --snar-red-deep: #cc0000;
+  --snar-red-soft: #ffe6e6;
+  --snar-line: rgba(0, 31, 63, 0.1);
+  --snar-line-strong: rgba(0, 31, 63, 0.18);
+  --snar-radius-sm: 8px;
+  --snar-radius-md: 12px;
+  --snar-radius-lg: 18px;
+  --snar-radius-xl: 24px;
+  --snar-radius-pill: 999px;
+  --snar-space-xs: 8px;
+  --snar-space-sm: 12px;
+  --snar-space-md: 16px;
+  --snar-space-lg: 20px;
+  --snar-space-xl: 24px;
+  --snar-space-xxl: 32px;
+  --snar-space-hero: 64px;
+  --snar-button-height: 52px;
+  --snar-fast: 160ms;
+  --snar-base: 300ms;
+  --snar-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --snar-font:
+    Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --snar-mono: "JetBrains Mono", ui-monospace, monospace;
+}
