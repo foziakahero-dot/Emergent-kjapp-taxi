@@ -157,32 +157,60 @@
 }
 
 @media (max-width: 680px) {
+  .snar-streamlined-page .snar-section {
+    padding-block: 52px;
+  }
+
   .snar-streamlined-page .snar-hero {
-    padding-block: 48px 44px;
+    padding-block: 42px 38px;
+    gap: 30px;
+  }
+
+  .snar-streamlined-page .snar-hero h1 {
+    font-size: clamp(42px, 12vw, 58px);
+    margin-bottom: 16px;
   }
 
   .snar-streamlined-page .snar-lead {
     font-size: 18px;
+    line-height: 1.45;
   }
 
   .snar-hero-actions-simple {
     align-items: stretch !important;
+    margin-top: 22px !important;
   }
 
   .snar-text-link {
     justify-content: center;
   }
 
+  .snar-streamlined-page .snar-product-story .snar-phone {
+    width: min(278px, 100%);
+  }
+
+  .snar-streamlined-page .snar-preview-controls,
+  .snar-streamlined-page .snar-product-story figcaption {
+    display: none;
+  }
+
+  .snar-streamlined-page .snar-trust-strip {
+    grid-template-columns: 1fr 1fr;
+    padding-block: 20px;
+    gap: 14px 12px;
+    font-size: 11px;
+  }
+
   .snar-process {
     grid-template-columns: 1fr;
-    margin-top: 36px;
+    margin-top: 32px;
   }
 
   .snar-process-step,
   .snar-process-step + .snar-process-step,
   .snar-process-step:first-child {
     min-height: 0;
-    padding: 26px 0;
+    padding: 22px 0;
     border-left: 0;
   }
 
@@ -201,20 +229,45 @@
   }
 
   .snar-process-step h3 {
-    margin-top: 16px;
+    margin-top: 14px;
   }
 
   .snar-process-step p {
     max-width: 520px;
   }
 
+  .snar-streamlined-page .snar-vehicle-grid {
+    gap: 16px;
+  }
+
+  .snar-streamlined-page .snar-vehicle-card {
+    padding-bottom: 16px;
+  }
+
+  .snar-streamlined-page .snar-vehicle-card img {
+    height: 150px;
+  }
+
+  .snar-streamlined-page .snar-voice {
+    gap: 22px;
+  }
+
+  .snar-streamlined-page .snar-voice-card {
+    padding: 24px;
+  }
+
   .snar-safety {
     grid-template-columns: 1fr;
-    gap: 28px;
+    gap: 24px;
   }
 
   .snar-safety-list {
     margin-top: 0;
+  }
+
+  .snar-safety-list li {
+    min-height: 56px;
+    font-size: 15px;
   }
 
   .snar-streamlined-header .snar-brand svg:first-child {
@@ -225,5 +278,22 @@
   .snar-streamlined-header .snar-header-actions .snar-btn {
     font-size: 13px;
     padding-inline: 15px;
+  }
+
+  .snar-streamlined-page .snar-final-cta {
+    padding-top: 56px;
+    padding-bottom: 56px;
+  }
+
+  .snar-streamlined-page .snar-footer {
+    padding-top: 36px;
+  }
+
+  .snar-streamlined-page .snar-footer nav {
+    gap: 8px 18px;
+  }
+
+  .snar-streamlined-page .snar-contacts {
+    display: none;
   }
 }
