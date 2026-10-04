@@ -292,6 +292,7 @@ const act = renderer.act;
   assert.ok(navigations.includes('/(app)/home'), 'Minimize must return to the home map; Home recovers the canonical active trip and exposes ActiveTripCard for reopen.');
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1, 'Minimize is navigation, not a second local trip state.');
   await act(async () => booking.unmount());
+  navigations.length = 0;
   // Failed cancellation cannot exit; duplicate confirmation must not submit twice.
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => { const cancel = booking.root.findByProps({ testID: 'assigned-trip-cancel' }).props.onPress; cancel(); cancel(); });
