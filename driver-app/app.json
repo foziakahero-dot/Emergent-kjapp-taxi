@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "KJAPP Driver",
+    "name": "SNAR Driver",
     "slug": "kjapp-driver",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,14 +16,14 @@
           "comgooglemaps",
           "maps"
         ],
-        "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer.",
+        "NSLocationWhenInUseUsageDescription": "SNAR Driver bruker posisjonen din for å finne og gjennomføre turer.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SNAR Driver bruker posisjonen din under aktive skift og turer.",
         "UIBackgroundModes": [
           "location",
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll.",
+        "NSCameraUsageDescription": "SNAR Driver bruker kameraet for å ta en selfie til identitetskontroll.",
         "MGLMapboxMetricsEnabledSettingShownInApp": true
       }
     },
@@ -60,7 +60,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "KJAPP Driver bruker posisjonen din for å finne turer i nærheten.",
+          "locationWhenInUsePermission": "SNAR Driver bruker posisjonen din for å finne turer i nærheten.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
@@ -78,7 +78,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "KJAPP Driver bruker kameraet for å ta en selfie til identitetskontroll.",
+          "cameraPermission": "SNAR Driver bruker kameraet for å ta en selfie til identitetskontroll.",
           "recordAudioAndroid": false
         }
       ],
