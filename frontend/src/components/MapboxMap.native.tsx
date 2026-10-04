@@ -134,6 +134,7 @@ export function MapboxInteractiveMap({
     camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
     camera.setCamera?.({
       pitch: 52,
+      heading: activeCar && Number.isFinite(Number(activeCar.heading)) ? Number(activeCar.heading) : 0,
       animationDuration: duration,
       animationMode: 'easeTo',
     });
