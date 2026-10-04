@@ -43,7 +43,7 @@ async function driverNotificationPrefs() {
 async function ensureDriverNotificationChannels() {
   if (Platform.OS !== 'android') return;
   const common = {
-    name: 'KJAPP turer',
+    name: 'SNAR turer',
     description: 'Nye turer og viktige oppdateringer mens du er på skift.',
     importance: Notifications.AndroidImportance.MAX,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
@@ -273,7 +273,7 @@ export async function startDriverBackgroundLocation(mode: 'idle' | 'active' = 'i
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: activeTrip ? 'KJAPP Driver · aktiv tur' : 'KJAPP Driver er på skift',
+        notificationTitle: activeTrip ? 'SNAR Driver · aktiv tur' : 'SNAR Driver er på skift',
         notificationBody: activeTrip
           ? 'Posisjonen deles live under den aktive turen.'
           : 'Posisjonen deles for å motta turer i nærheten.',
