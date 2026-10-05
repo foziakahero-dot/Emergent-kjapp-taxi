@@ -5,13 +5,13 @@ import { useAuth } from './auth';
 import DriverSignup from './DriverSignup';
 import {
   BedriftPage,
-  DriversPage,
   DocumentsPage,
   FinancePage,
   LiveOpsPage,
   TripsPage,
   VehiclesPage,
 } from './pages';
+import { DriversV2Page } from './FleetV2DriversPage';
 import { Driver360Page, InvitationsPage, OperationsDashboardPage } from './FleetV2Pages';
 import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
 
@@ -102,7 +102,7 @@ function PortalShell() {
         <Routes>
           <Route path="/" element={<OperationsDashboardPage />} />
           <Route path="/live" element={<LiveOpsPage />} />
-          <Route path="/sjaforer" element={<DriversPage />} />
+          <Route path="/sjaforer" element={<DriversV2Page />} />
           <Route path="/sjaforer/:driverId" element={<Driver360Page />} />
           <Route path="/kjoretoy" element={<VehiclesPage />} />
           <Route path="/invitasjoner" element={<InvitationsPage />} />
