@@ -3013,17 +3013,29 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
     return {"ok": True}
 
 
+def _customer_cancellable_statuses(trip: dict):
+    statuses = ["searching", "booking", "driver_on_way", "at_pickup"]
+    # Started test rides can be reset without pretending the car reached its destination.
+    if (trip.get("internal_beta_test") is True and ride_testing.enabled()
+            and ride_testing.is_test_customer(trip.get("user_id"))
+            and str(trip.get("driver_id") or "") in ride_testing.driver_ids()):
+        statuses.append("in_trip")
+    return statuses
+
+
 @api.get("/trips/{trip_id}/cancel-preview")
 async def cancel_trip_preview(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
-    if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
+    if trip.get("status") == "cancelled":
+        return {"ok": True, "already_applied": True, "cancellation_fee": int(trip.get("cancellation_fee") or 0), "currency": "NOK"}
+    if trip.get("status") not in _customer_cancellable_statuses(trip):
         raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
     pricing = trip.get("pricing_snapshot") or await active_pricing()
     fee = 0
     free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
-    if trip.get("driver_id"):
+    if trip.get("driver_id") and "in_trip" not in _customer_cancellable_statuses(trip):
         accepted_at = trip.get("driver_route_started_at") or trip.get("updated_at") or trip.get("created_at")
         try:
             accepted_dt = datetime.fromisoformat(str(accepted_at).replace("Z", "+00:00"))
@@ -3040,11 +3052,13 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
     if not trip:
         raise HTTPException(404, "Tur ikke funnet")
-    if trip.get("status") not in ("searching", "booking", "driver_on_way", "at_pickup"):
+    if trip.get("status") == "cancelled":
+        return {"ok": True, "already_applied": True, "cancellation_fee": int(trip.get("cancellation_fee") or 0), "currency": "NOK"}
+    if trip.get("status") not in _customer_cancellable_statuses(trip):
         raise HTTPException(400, "Turen kan ikke avbestilles i denne statusen")
     pricing = trip.get("pricing_snapshot") or await active_pricing()
     fee = 0
-    if trip.get("driver_id"):
+    if trip.get("driver_id") and "in_trip" not in _customer_cancellable_statuses(trip):
         free_minutes = int(pricing.get("free_cancel_minutes", 2) or 0)
         accepted_at = trip.get("driver_route_started_at") or trip.get("updated_at") or trip.get("created_at")
         try:
@@ -3059,7 +3073,7 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
         _real_trip_filter({
             "trip_id": trip_id,
             "user_id": current["id"],
-            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup"]},
+            "status": {"$in": _customer_cancellable_statuses(trip)},
         }),
         {"$set": {
             "status": "cancelled", "cancelled_at": now_iso, "cancelled_by": "customer",
@@ -8464,10 +8478,14 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     """Sjåfør avbryter tur (kunden dukket ikke opp / feil informasjon)."""
     driver_id = current["id"]
     original = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "driver_id": driver_id}))
-    pricing = (original or {}).get("pricing_snapshot") or await active_pricing()
-    penalty = int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
+    if not original:
+        raise HTTPException(status_code=404, detail="Fant ikke turen")
+    if original.get("status") == "cancelled_by_driver":
+        return {"ok": True, "already_applied": True}
+    pricing = original.get("pricing_snapshot") or await active_pricing()
+    penalty = 0 if "in_trip" in _customer_cancellable_statuses(original) else int(round(float(pricing.get("late_driver_cancellation_fee", 0) or 0)))
     result = await db.trips.update_one(
-        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "in_trip"]}}),
+        _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
         {"$set": {
             "status": "cancelled_by_driver",
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
