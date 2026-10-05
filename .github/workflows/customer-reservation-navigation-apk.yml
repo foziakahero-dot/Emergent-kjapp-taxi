@@ -39,3 +39,5 @@ jobs:
       - run: npx tsc --noEmit
       - run: node scripts/customer-build-gate.cjs
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
+
+# Build trigger: receipt/activity refresh fix 2026-10-05
