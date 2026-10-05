@@ -44,7 +44,7 @@ function Pulse({ delay }: { delay: number }) {
 export function SplashBrand() {
   return <Rise style={{ alignItems: 'center' }}>
     <View style={{ width: 104, height: 104 }}><Pulse delay={0} /><Pulse delay={1200} /><BrandBadge size={104} float /></View>
-    <Text style={{ marginTop: 36, fontFamily: font.bold, fontSize: 60, lineHeight: 60, letterSpacing: -1.5, color: colors.text }} testID="ob-brand">KJAPP</Text>
+    <Text style={{ marginTop: 36, fontFamily: font.bold, fontSize: 60, lineHeight: 60, letterSpacing: -1.5, color: colors.text }} testID="ob-brand">SNAR</Text>
   </Rise>;
 }
 

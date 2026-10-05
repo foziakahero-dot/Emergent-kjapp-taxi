@@ -43,19 +43,19 @@ export default function DriverLegalConsent() {
   return (
     <View style={[s.screen, { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 24 }]}>
       <View>
-        <Text style={s.eyebrow}>KJAPP DRIVER · KONTO</Text>
+        <Text style={s.eyebrow}>SNAR DRIVER · KONTO</Text>
         <Text style={s.title}>Før du går på skift</Text>
         <Text style={s.sub}>
-          Godkjente sjåfører må bekrefte gjeldende KJAPP-vilkår og personvern før appen kan starte posisjonsdeling eller motta turer.
+          Godkjente sjåfører må bekrefte gjeldende SNAR-vilkår og personvern før appen kan starte posisjonsdeling eller motta turer.
         </Text>
 
         <View style={s.links}>
-          <Pressable style={s.linkRow} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
+          <Pressable style={s.linkRow} onPress={() => Linking.openURL('https://snarapp.no/vilkar')}>
             <Icon name="file-text" size={19} color={colors.online} />
             <Text style={s.linkLabel}>Les sjåførvilkår</Text>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />
           </Pressable>
-          <Pressable style={[s.linkRow, s.linkBorder]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
+          <Pressable style={[s.linkRow, s.linkBorder]} onPress={() => Linking.openURL('https://snarapp.no/personvern')}>
             <Icon name="shield" size={19} color={colors.online} />
             <Text style={s.linkLabel}>Les personvern</Text>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />

@@ -46,7 +46,7 @@ export default function DriverForgotPassword() {
             <Pressable style={s.secondaryButton} onPress={() => router.replace('/driver-login')}><Text style={s.secondaryText}>Tilbake til innlogging</Text></Pressable>
           </> : <>
             <BrandBadge size={44} />
-            <Text style={s.eyebrow}>KJAPP SJÅFØR</Text>
+            <Text style={s.eyebrow}>SNAR SJÅFØR</Text>
             <Text style={s.title}>Glemt passord?</Text>
             <Text style={s.sub}>Skriv inn e-posten knyttet til sjåførkontoen.</Text>
             <Text style={s.fieldLabel}>E-POST</Text>

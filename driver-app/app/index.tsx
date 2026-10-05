@@ -44,8 +44,8 @@ export default function Index() {
           <Text style={s.title}>{pendingApproval ? 'Kontoen venter på godkjenning' : 'Denne appen er kun for sjåfører'}</Text>
           <Text style={s.subtitle}>
             {pendingApproval
-              ? 'Du får tilgang til turer og posisjonsdeling når KJAPP har godkjent sjåførkontoen og dokumentasjonen.'
-              : 'Logg ut og bruk en godkjent KJAPP-sjåførkonto.'}
+              ? 'Du får tilgang til turer og posisjonsdeling når SNAR har godkjent sjåførkontoen og dokumentasjonen.'
+              : 'Logg ut og bruk en godkjent SNAR-sjåførkonto.'}
           </Text>
         </View>
         {pendingApproval ? (

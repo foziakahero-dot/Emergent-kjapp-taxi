@@ -99,7 +99,7 @@ export default function DriverEarnings() {
 
       <View style={s.card}>
         <BreakRow label="Bruttoinntekt" value={kr(period_data.gross)} s={s} />
-        <BreakRow label="KJAPP serviceavgift" value={`− ${kr(period_data.fee)}`} muted s={s} />
+        <BreakRow label="SNAR serviceavgift" value={`− ${kr(period_data.fee)}`} muted s={s} />
         {period_data.bonus ? <BreakRow label="Bonus" value={`+ ${kr(period_data.bonus)}`} accentGreen s={s} /> : null}
         <View style={s.breakDivider} />
         <BreakRow label="Netto" value={kr(period_data.net)} bold s={s} />

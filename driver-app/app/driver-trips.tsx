@@ -117,7 +117,7 @@ export default function DriverTrips() {
                   <BreakRow label="Bruttopris" value={kr(detail.price)} s={s} />
                   {detail.driver_earnings != null ? (
                     <>
-                      <BreakRow label="KJAPP serviceavgift" value={`− ${kr(Math.max(0, (detail.price || 0) - detail.driver_earnings))}`} muted s={s} />
+                      <BreakRow label="SNAR serviceavgift" value={`− ${kr(Math.max(0, (detail.price || 0) - detail.driver_earnings))}`} muted s={s} />
                       <View style={s.breakDivider} />
                       <BreakRow label="Din inntekt" value={kr(detail.driver_earnings)} bold s={s} />
                     </>

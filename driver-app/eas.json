@@ -7,7 +7,8 @@
     "apk": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
       },
       "android": {
         "buildType": "apk",
@@ -18,7 +19,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
       },
       "ios": {
         "image": "latest"
@@ -27,7 +29,8 @@
     "ios-simulator": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
       },
       "ios": {
         "simulator": true
@@ -37,7 +40,8 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
       },
       "ios": {
         "image": "latest",
@@ -47,7 +51,8 @@
     "ios-internal": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
       },
       "ios": {
         "image": "latest",

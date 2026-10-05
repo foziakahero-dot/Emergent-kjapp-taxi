@@ -79,7 +79,7 @@ export default function DriverProfilePhoto() {
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={s.title}>Profilbilde</Text>
-            <Text style={s.subtitle}>Bildet vises på din KJAPP-sjåførprofil</Text>
+            <Text style={s.subtitle}>Bildet vises på din SNAR-sjåførprofil</Text>
           </View>
         </View>
 

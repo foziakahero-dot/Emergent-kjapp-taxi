@@ -152,7 +152,7 @@ export default function DriverHome() {
       }
 
       if (p?.gps_stale) {
-        setError('GPS-posisjonen er for gammel. KJAPP sender ikke nye turer før en fersk posisjon er registrert.');
+        setError('GPS-posisjonen er for gammel. SNAR sender ikke nye turer før en fersk posisjon er registrert.');
       }
     } catch {
       // Preserve the last pending state on a transient network error. Seen IDs stay
@@ -216,7 +216,7 @@ export default function DriverHome() {
       setOnline(false);
       setError(backendOffline
         ? `${message} Du er satt OFFLINE.`
-        : `${message} KJAPP kunne ikke bekrefte OFFLINE-status mot serveren. Prøv igjen før du tar turer.`);
+        : `${message} SNAR kunne ikke bekrefte OFFLINE-status mot serveren. Prøv igjen før du tar turer.`);
     };
 
     const startTracking = async () => {
@@ -230,7 +230,7 @@ export default function DriverHome() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (!active) return;
         if (status !== 'granted') {
-          await forceOffline('Posisjon må være aktiv for at KJAPP skal kunne sende turer og dele korrekt henteposisjon.');
+          await forceOffline('Posisjon må være aktiv for at SNAR skal kunne sende turer og dele korrekt henteposisjon.');
           return;
         }
 
@@ -357,7 +357,7 @@ export default function DriverHome() {
     if (action === 'arrive') {
       Alert.alert(
         'Fullføre turen?',
-        'KJAPP kontrollerer at du er nær destinasjonen før turen avsluttes og betaling kan starte.',
+        'SNAR kontrollerer at du er nær destinasjonen før turen avsluttes og betaling kan starte.',
         [
           { text: 'Fortsett turen', style: 'cancel' },
           { text: 'Fullfør turen', onPress: () => { void execute(); } },
@@ -392,7 +392,7 @@ export default function DriverHome() {
     if (!current || current.status !== 'at_pickup' || busy) return;
     Alert.alert(
       'Kunden kom ikke?',
-      'No-show kan bare registreres etter ventetiden ved hentestedet. KJAPP kontrollerer ankomsttid og GPS på serveren.',
+      'No-show kan bare registreres etter ventetiden ved hentestedet. SNAR kontrollerer ankomsttid og GPS på serveren.',
       [
         { text: 'Fortsett å vente', style: 'cancel' },
         {
@@ -536,7 +536,7 @@ export default function DriverHome() {
           <View style={s.driverIdentity}>
             <BrandBadge size={34} />
             <View>
-              <Text style={s.headerName} numberOfLines={1}>{user?.fullName || 'KJAPP-sjåfør'}</Text>
+              <Text style={s.headerName} numberOfLines={1}>{user?.fullName || 'SNAR-sjåfør'}</Text>
               <Text style={[s.headerStatus, { color: online ? colors.online : colors.textMuted }]}>
                 {online ? '● ONLINE' : 'OFFLINE'}
               </Text>

@@ -25,22 +25,22 @@ type Verification = {
 const STATUS: Record<string, { title: string; body: string; tone: 'good' | 'warn' | 'neutral' }> = {
   not_submitted: {
     title: 'Selfie mangler',
-    body: 'Ta en fersk selfie slik at KJAPP kan kontrollere at riktig person bruker sjåførkontoen.',
+    body: 'Ta en fersk selfie slik at SNAR kan kontrollere at riktig person bruker sjåførkontoen.',
     tone: 'neutral',
   },
   pending_review: {
     title: 'Til kontroll',
-    body: 'Selfien er mottatt og venter på kontroll hos KJAPP.',
+    body: 'Selfien er mottatt og venter på kontroll hos SNAR.',
     tone: 'warn',
   },
   verified: {
     title: 'Identitet verifisert',
-    body: 'KJAPP har godkjent den siste identitetskontrollen.',
+    body: 'SNAR har godkjent den siste identitetskontrollen.',
     tone: 'good',
   },
   retry_required: {
     title: 'Ny selfie kreves',
-    body: 'KJAPP trenger en ny selfie før kontrollen kan fullføres.',
+    body: 'SNAR trenger en ny selfie før kontrollen kan fullføres.',
     tone: 'warn',
   },
   recheck_required: {
@@ -140,7 +140,7 @@ export default function DriverIdentity() {
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={s.title}>Identitetskontroll</Text>
-            <Text style={s.subtitle}>Selfie ID · KJAPP Driver</Text>
+            <Text style={s.subtitle}>Selfie ID · SNAR Driver</Text>
           </View>
         </View>
 
@@ -153,7 +153,7 @@ export default function DriverIdentity() {
               <View style={{ flex: 1 }}>
                 <Text style={s.statusTitle}>{meta.title}</Text>
                 <Text style={s.statusBody}>{meta.body}</Text>
-                {verification.review_reason ? <Text style={s.reason}>KJAPP: {verification.review_reason}</Text> : null}
+                {verification.review_reason ? <Text style={s.reason}>SNAR: {verification.review_reason}</Text> : null}
                 {verification.recheck_reason ? <Text style={s.reason}>Kontrollårsak: {verification.recheck_reason}</Text> : null}
                 {verification.recheck_deferred_until_trip_end ? <Text style={s.reason}>Kontrollen aktiveres når den aktive turen er avsluttet.</Text> : null}
                 {verification.next_identity_check_at && status === 'verified' ? (
@@ -167,7 +167,7 @@ export default function DriverIdentity() {
               <Text style={s.rule}>• Bruk frontkamera og godt lys.</Text>
               <Text style={s.rule}>• Se rett i kameraet og ha hele ansiktet synlig.</Text>
               <Text style={s.rule}>• Ikke bruk solbriller, maske eller filter.</Text>
-              <Text style={s.rule}>• Bildet brukes bare til identitetskontroll hos KJAPP.</Text>
+              <Text style={s.rule}>• Bildet brukes bare til identitetskontroll hos SNAR.</Text>
             </View>
 
             {cameraOpen ? (
@@ -183,7 +183,7 @@ export default function DriverIdentity() {
             ) : photo ? (
               <View style={s.previewCard}>
                 <Image source={{ uri: photo }} style={s.preview} resizeMode="cover" />
-                <Button label={busy ? 'Sender…' : 'Send til KJAPP for kontroll'} onPress={() => void submit()} disabled={busy} />
+                <Button label={busy ? 'Sender…' : 'Send til SNAR for kontroll'} onPress={() => void submit()} disabled={busy} />
                 <Pressable style={s.cancel} onPress={() => void openCamera()}>
                   <Text style={s.cancelText}>Ta nytt bilde</Text>
                 </Pressable>
@@ -199,7 +199,7 @@ export default function DriverIdentity() {
             <View style={s.privacy}>
               <Icon name="shield" size={18} color={colors.textMuted} />
               <Text style={s.privacyText}>
-                Løyvehaver ser bare verifiseringsstatus. Selve selfie-bildet er privat og kan bare åpnes av deg og KJAPP-administratorer.
+                Løyvehaver ser bare verifiseringsstatus. Selve selfie-bildet er privat og kan bare åpnes av deg og SNAR-administratorer.
               </Text>
             </View>
           </>

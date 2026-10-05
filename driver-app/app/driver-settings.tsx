@@ -101,7 +101,7 @@ export default function DriverSettings() {
       const data = await gdprApi.export();
       const trips = (data?.trips || []).length;
       const payments = (data?.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjappapp.no hvis du trenger kopi på e-post.`);
+      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@snarapp.no hvis du trenger kopi på e-post.`);
     } catch {
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {
@@ -192,20 +192,21 @@ export default function DriverSettings() {
           <View style={s.card}>
             <LinkRow icon="map-pin" label="Posisjonstilgang" onPress={() => Linking.openSettings()} s={s} testID="ds-location" />
             <LinkRow icon="file-text" label={exporting ? 'Henter data…' : 'Last ned mine data'} onPress={() => void exportData()} border s={s} testID="ds-gdpr" />
-            <LinkRow icon="shield" label="Personvern" onPress={() => Linking.openURL('https://kjappapp.no/personvern')} border s={s} testID="ds-privacy" />
+            <LinkRow icon="shield" label="Personvern" onPress={() => Linking.openURL('https://snarapp.no/personvern')} border s={s} testID="ds-privacy" />
           </View>
           {exportInfo ? <Text style={s.exportInfo} testID="ds-gdpr-info">{exportInfo}</Text> : null}
 
           <Text style={s.sectionTitle}>Hjelp</Text>
           <View style={s.card}>
-            <LinkRow icon="help" label="Kontakt KJAPP" onPress={() => Linking.openURL('https://kjappapp.no/help')} s={s} testID="ds-support" />
+            <LinkRow icon="help" label="Kontakt SNAR" onPress={() => Linking.openURL('https://snarapp.no/help')} s={s} testID="ds-support" />
             <LinkRow icon="shield" label="Nødhjelp (112)" onPress={() => Linking.openURL('tel:112')} border s={s} testID="ds-emergency" />
           </View>
 
           <Text style={s.sectionTitle}>Om appen</Text>
           <View style={s.card}>
             <View style={s.linkRow}><Text style={s.linkLabel}>Versjon</Text><Text style={s.linkValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
-            <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>kjappapp.no/vilkar</Text></View>
+            <View style={s.linkRow}><Text style={s.linkLabel}>Kilde</Text><Text style={s.linkValue}>Byggekilde: {Constants.expoConfig?.extra?.EXPO_PUBLIC_SOURCE_SHA?.slice(0, 8) ?? 'ukjent'}</Text></View>
+            <View style={[s.linkRow, s.rowBorder]}><Text style={s.linkLabel}>Vilkår</Text><Text style={s.linkValue} onPress={() => Linking.openURL('https://snarapp.no/vilkar')}>snarapp.no/vilkar</Text></View>
           </View>
 
           <Pressable style={s.logout} onPress={logout} testID="ds-logout">

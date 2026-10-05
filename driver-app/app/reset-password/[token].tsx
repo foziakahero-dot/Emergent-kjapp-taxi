@@ -55,14 +55,14 @@ export default function DriverResetPassword() {
             <Pressable style={s.secondaryButton} onPress={() => router.replace('/forgot-password')}><Text style={s.secondaryText}>Be om ny lenke</Text></Pressable>
           </> : null}
           {state==='form' ? <>
-            <BrandBadge size={44} /><Text style={s.eyebrow}>KJAPP SJÅFØR</Text><Text style={s.title}>Velg nytt passord</Text><Text style={s.sub}>Det nye passordet gjelder straks.</Text>
+            <BrandBadge size={44} /><Text style={s.eyebrow}>SNAR SJÅFØR</Text><Text style={s.title}>Velg nytt passord</Text><Text style={s.sub}>Det nye passordet gjelder straks.</Text>
             <Text style={s.fieldLabel}>NYTT PASSORD</Text><View style={s.field}><TextInput value={password} onChangeText={setPassword} secureTextEntry placeholder="Minst 8 tegn" placeholderTextColor={colors.textMuted} autoComplete="new-password" style={s.input}/></View>
             <Text style={[s.fieldLabel,{marginTop:16}]}>GJENTA PASSORD</Text><View style={s.field}><TextInput value={again} onChangeText={setAgain} secureTextEntry placeholder="Gjenta passord" placeholderTextColor={colors.textMuted} autoComplete="new-password" style={s.input}/></View>
             {error ? <Text style={s.error}>{error}</Text> : null}
             <Pressable onPress={submit} disabled={busy} style={{marginTop:18}}><LinearGradient colors={busy?[colors.lineStrong,colors.lineStrong]:['#012A54','#001F3F']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}><Text style={s.primaryText}>{busy?'Lagrer…':'Lagre nytt passord'}</Text></LinearGradient></Pressable>
           </> : null}
           {state==='done' ? <>
-            <View style={s.doneCircle}><Icon name="check" size={24} color={colors.accentOn}/></View><Text style={s.title}>Passordet er endret</Text><Text style={s.sub}>Du kan nå logge inn i KJAPP Driver.</Text>
+            <View style={s.doneCircle}><Icon name="check" size={24} color={colors.accentOn}/></View><Text style={s.title}>Passordet er endret</Text><Text style={s.sub}>Du kan nå logge inn i SNAR Driver.</Text>
             <Pressable style={s.secondaryButton} onPress={() => router.replace('/driver-login')}><Text style={s.secondaryText}>Logg inn</Text></Pressable>
           </> : null}
         </View>
