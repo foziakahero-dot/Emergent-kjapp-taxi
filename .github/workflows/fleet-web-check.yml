@@ -1,0 +1,32 @@
+name: Fleet web build check
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'fleet-web/**'
+      - '.github/workflows/fleet-web-check.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'fleet-web/**'
+      - '.github/workflows/fleet-web-check.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fleet-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Build Fleet web
+        run: npm run build
