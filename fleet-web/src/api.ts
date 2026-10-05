@@ -4,7 +4,7 @@ const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
-const isProductionFleetHost = host === 'fleet.kjappapp.no';
+const isProductionFleetHost = host === 'fleet.kjappapp.no' || host === 'fleet.snarapp.no';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
 
 // Never proxy a preview deployment into production. Configure VITE_API_BASE to a staging API when needed.
@@ -306,4 +306,3 @@ export const api = {
     return http.post('/upload/driver-doc', form).then((r) => r.data);
   },
 };
-
