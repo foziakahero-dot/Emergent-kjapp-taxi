@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-04",
+  "purpose": "Replace landing and phone-preview cartoon vehicles with realistic 3D renders approved by the user",
+  "prompts": [
+    {
+      "name": "standard",
+      "prompt": "Use case: product-mockup. Asset type: premium Norwegian taxi app / landing-page vehicle category image. Create ONE isolated highly photorealistic automotive CGI 3D vehicle render with real production-car proportions, precise body panels, realistic windows, LED headlights, detailed wheels and rubber tires. Premium automotive configurator quality, absolutely not a drawing, cartoon, icon, toy, clay, low-poly or vector illustration. Camera: low front three-quarter view, camera on vehicle front-left, nose points toward right of frame; full vehicle, all wheels and mirrors intact, moderate telephoto perspective, grounded proportions. Uniform neutral studio lighting, crisp materials and elegant natural highlights. Wide landscape framing, car fills 82 percent of width with generous clear transparent margin on all sides. True transparent alpha background with only a subtle soft contact shadow under the vehicle; no floor plane, no scenery, no text, no logos, no brand badges, no license-plate writing, no border. Body color: deep graphite metallic, black glass trim, realistic silver alloy wheels. Subject: contemporary compact electric family sedan / fastback, comfortable 4-passenger taxi, elegant practical silhouette, moderate wheelbase, five doors, premium yet approachable, realistic 18-inch multi-spoke wheels.",
+      "asset": "marketing-web/public/assets/snar/standard-3d.svg",
+      "generatedWith": "built-in image_gen",
+      "format": "Transparent WebP raster embedded in SVG, 960×480"
+    },
+    {
+      "name": "xl",
+      "prompt": "Use case: product-mockup. Asset type: premium Norwegian taxi app / landing-page vehicle category image. Create ONE isolated highly photorealistic automotive CGI 3D vehicle render with real production-car proportions, precise body panels, realistic windows, LED headlights, detailed wheels and rubber tires. Premium automotive configurator quality, absolutely not a drawing, cartoon, icon, toy, clay, low-poly or vector illustration. Camera: low front three-quarter view, camera on vehicle front-left, nose points toward right of frame; full vehicle, all wheels and mirrors intact, moderate telephoto perspective, grounded proportions. Uniform neutral studio lighting, crisp materials and elegant natural highlights. Wide landscape framing, car fills 82 percent of width with generous clear transparent margin on all sides. True transparent alpha background with only a subtle soft contact shadow under the vehicle; no floor plane, no scenery, no text, no logos, no brand badges, no license-plate writing, no border. Body color: deep graphite metallic, black glass trim, realistic silver alloy wheels. Subject: upscale seven-seat passenger minivan / spacious MPV for taxi groups, clearly taller roof, longer body and cabin than a sedan, sliding rear doors, generous real passenger windows, realistic 18-inch multi-spoke wheels. It must look like a real modern passenger minivan, not a delivery van or an SUV.",
+      "asset": "marketing-web/public/assets/snar/xl-3d.svg",
+      "generatedWith": "built-in image_gen",
+      "format": "Transparent WebP raster embedded in SVG, 960×480"
+    },
+    {
+      "name": "premium",
+      "prompt": "Use case: product-mockup. Asset type: premium Norwegian taxi app / landing-page vehicle category image. Create ONE isolated highly photorealistic automotive CGI 3D vehicle render with real production-car proportions, precise body panels, realistic windows, LED headlights, detailed wheels and rubber tires. Premium automotive configurator quality, absolutely not a drawing, cartoon, icon, toy, clay, low-poly or vector illustration. Camera: low front three-quarter view, camera on vehicle front-left, nose points toward right of frame; full vehicle, all wheels and mirrors intact, moderate telephoto perspective, grounded proportions. Uniform neutral studio lighting, crisp materials and elegant natural highlights. Wide landscape framing, car fills 82 percent of width with generous clear transparent margin on all sides. True transparent alpha background with only a subtle soft contact shadow under the vehicle; no floor plane, no scenery, no text, no logos, no brand badges, no license-plate writing, no border. Body color: deep graphite metallic, black glass trim, realistic silver alloy wheels. Subject: executive luxury sedan, noticeably long wheelbase, sleek elegant low roof, confident premium body proportions, fine metallic trim and refined 20-inch multi-spoke wheels, understated luxury and sophisticated headlight treatment. A real-world-looking flagship chauffeur sedan, not a sports supercar.",
+      "asset": "marketing-web/public/assets/snar/premium-3d.svg",
+      "generatedWith": "built-in image_gen",
+      "format": "Transparent WebP raster embedded in SVG, 960×480"
+    }
+  ]
+}

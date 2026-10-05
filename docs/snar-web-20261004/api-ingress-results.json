@@ -1,0 +1,32 @@
+[
+  {
+    "path": "/api/health",
+    "case": "read",
+    "status": 200,
+    "content": "{\"app\":\"KJAPP\",\"status\":\"ok\",\"db\":true,\"time\":\"2026-10-04T16:09:34.413502+00:00\"}"
+  },
+  {
+    "path": "/api/waitlist",
+    "case": "validation",
+    "status": 422,
+    "content": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"name\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"phone\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"city\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"role\"],\"msg\":\"Field required\",\"input\":{}}]}"
+  },
+  {
+    "path": "/api/waitlist",
+    "case": "no-storage",
+    "status": 201,
+    "content": "{\"ok\":true,\"status\":\"registered\"}"
+  },
+  {
+    "path": "/api/fleet-applications/draft",
+    "case": "validation",
+    "status": 422,
+    "content": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"company_name\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"org_number\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"contact_name\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"contact_email\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"contact_phone\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"license_count\"],\"msg\":\"Field required\",\"input\":{}},{\"type\":\"missing\",\"loc\":[\"body\",\"vehicle_count\"],\"msg\":\"Field required\",\"input\":{}},{\"type"
+  },
+  {
+    "path": "/api/trips/share/qa-invalid-token",
+    "case": "read",
+    "status": 404,
+    "content": "{\"detail\":\"Delingslenken er utl\u00f8pt eller ugyldig\"}"
+  }
+]

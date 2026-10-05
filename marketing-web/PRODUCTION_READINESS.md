@@ -1,10 +1,10 @@
-# KJAPP landing – production readiness
+# SNAR landing – production readiness
 
 Scope: `marketing-web/` only. No Customer, Driver, Admin, Fleet or payment-system redesign is part of this change.
 
 ## Audit
 
-- Runtime: Vite + React + TypeScript, deployed from the `kjapp-home-beta` Vercel project.
+- Runtime: Vite + React + TypeScript, deployed from the `kjapp-home-beta` Netlify project.
 - Public root: `src/PremiumHome.tsx`.
 - Partner/application routes remain unchanged.
 - Existing Android/iOS beta URLs are environment-driven.
@@ -16,8 +16,8 @@ Scope: `marketing-web/` only. No Customer, Driver, Admin, Fleet or payment-syste
 
 - Primary landing CTAs use “Få tilgang til beta” and open the accessible waitlist modal.
 - Waitlist success is only shown after `POST /api/waitlist` confirms persistence.
-- The Vercel function validates inputs and forwards server-side to the existing KJAPP API.
-- The KJAPP backend stores beta interest idempotently in MongoDB (`beta_waitlist`).
+- The Netlify proxy validates inputs and forwards server-side to the existing SNAR API.
+- The SNAR backend stores beta interest idempotently in MongoDB (`beta_waitlist`).
 - Duplicate submissions return the same generic success response and do not create duplicate records.
 - A honeypot and a Mongo-backed global rate limit protect the public intake without client-side secrets.
 - Android/TestFlight links remain disabled/status-only unless their public env URLs are configured.
@@ -25,12 +25,12 @@ Scope: `marketing-web/` only. No Customer, Driver, Admin, Fleet or payment-syste
 - Canonical, Open Graph, Twitter/X metadata and web manifest are present.
 - Vehicle imagery and the approved premium landing visual identity are preserved.
 
-## Vercel environment
+## Netlify environment
 
-The waitlist proxy defaults to the current KJAPP API. Override only if the backend URL changes:
+The waitlist proxy defaults to the current SNAR API. Override only if the backend URL changes:
 
 ```
-KJAPP_API_BASE_URL=https://github-app-builder-28.emergent.host/api
+SNAR_API_BASE_URL=https://api.kjappapp.no/api
 ```
 
 Public only when real distribution links exist:
@@ -48,6 +48,6 @@ VITE_IOS_TESTFLIGHT_URL=https://...
 
 ## Validation gate
 
-The PR must stay unmerged until the latest Vercel preview is READY. A READY Vercel build runs the project's `npm run build`, which includes `tsc --noEmit && vite build`.
+The PR must stay unmerged until the latest Netlify preview is READY. A READY Netlify build runs the project's `npm run build`, which includes `tsc --noEmit && vite build`.
 
 The repository currently has no marketing-web lint or test script. Do not report lint/tests as passed when no such command exists.

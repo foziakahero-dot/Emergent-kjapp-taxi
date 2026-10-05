@@ -1,0 +1,555 @@
+.snar-streamlined-page {
+  overflow-x: hidden;
+}
+
+.snar-streamlined-page .snar-hero {
+  padding-block: 78px 88px;
+}
+
+.snar-hero-clean {
+  min-height: min(820px, calc(100vh - 76px));
+  align-items: center;
+}
+
+.snar-streamlined-page .snar-hero h1 {
+  max-width: 620px;
+  margin-top: 20px;
+  margin-bottom: 18px;
+  font-size: clamp(58px, 7.4vw, 108px);
+  line-height: .91;
+  letter-spacing: -.07em;
+}
+
+.snar-streamlined-page .snar-lead {
+  max-width: 430px;
+  margin-bottom: 0;
+  font-size: 21px;
+  line-height: 1.5;
+}
+
+.snar-hero-actions-simple {
+  align-items: center;
+  gap: 22px;
+  margin-top: 30px;
+}
+
+.snar-hero-note {
+  margin: 26px 0 0;
+  color: var(--snar-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .02em;
+}
+
+.snar-text-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 4px;
+  color: var(--snar-navy);
+  font-size: 14px;
+  font-weight: 700;
+  text-underline-offset: 4px;
+}
+
+.snar-text-link:hover {
+  text-decoration: underline;
+}
+
+.snar-product-story {
+  margin-inline: auto;
+}
+
+.snar-streamlined-page .snar-product-story .snar-phone {
+  width: min(326px, 100%);
+  transform: rotate(1.1deg);
+  box-shadow: 0 34px 90px rgba(0, 31, 63, .14), 0 9px 26px rgba(0, 31, 63, .08);
+}
+
+.snar-streamlined-page .snar-product-halo {
+  opacity: .7;
+  transform: scale(.94);
+}
+
+.snar-preview-eyebrow {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--snar-secondary);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.snar-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.snar-preview-meta strong {
+  color: var(--snar-navy);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.snar-how-simple {
+  padding-top: 100px;
+  padding-bottom: 108px;
+}
+
+.snar-how-simple .snar-section-copy {
+  max-width: 680px;
+}
+
+.snar-how-simple .snar-section-copy h2 {
+  max-width: 650px;
+}
+
+.snar-process {
+  list-style: none;
+  padding: 0;
+  margin: 58px 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--snar-line-strong);
+  border-bottom: 1px solid var(--snar-line-strong);
+}
+
+.snar-process-step {
+  position: relative;
+  min-height: 214px;
+  padding: 30px 50px 34px 0;
+}
+
+.snar-process-step + .snar-process-step {
+  padding-left: 50px;
+  border-left: 1px solid var(--snar-line);
+}
+
+.snar-process-step:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  right: 17px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--snar-red-deep);
+  font-size: 20px;
+}
+
+.snar-process-step .snar-number {
+  opacity: .8;
+}
+
+.snar-process-step h3 {
+  margin: 28px 0 9px;
+  font-size: clamp(20px, 2vw, 26px);
+}
+
+.snar-process-step p {
+  margin: 0;
+  max-width: 260px;
+  color: var(--snar-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.snar-vehicles-clean {
+  padding-block: 106px 112px;
+  background: linear-gradient(180deg, rgba(238, 241, 245, .72), rgba(244, 246, 250, .9));
+  border-block: 1px solid var(--snar-line);
+}
+
+.snar-section-copy-centered {
+  max-width: 720px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.snar-section-copy-centered p {
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.snar-vehicle-grid-clean {
+  gap: 18px;
+  margin-top: 54px;
+}
+
+.snar-vehicle-card-clean {
+  min-height: 292px;
+  padding: 28px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(0, 31, 63, .08);
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 16px 42px rgba(0, 31, 63, .045);
+  transition: transform var(--snar-base) var(--snar-ease), box-shadow var(--snar-base) var(--snar-ease);
+}
+
+.snar-vehicle-card-clean:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 58px rgba(0, 31, 63, .08);
+}
+
+.snar-vehicle-card-clean img {
+  width: min(260px, 100%);
+  height: 145px;
+  margin-inline: auto;
+  object-fit: contain;
+}
+
+.snar-vehicle-card-clean h3 {
+  margin: 12px 0 5px;
+  font-size: 22px;
+}
+
+.snar-vehicle-card-clean p {
+  margin: 0;
+  color: var(--snar-secondary);
+  font-size: 14px;
+}
+
+.snar-feature-duo {
+  padding-top: 116px;
+  padding-bottom: 120px;
+}
+
+.snar-feature-intro {
+  max-width: 760px;
+  margin-bottom: 48px;
+}
+
+.snar-feature-intro h2 {
+  max-width: 720px;
+  margin-bottom: 18px;
+}
+
+.snar-feature-intro p {
+  max-width: 650px;
+  color: var(--snar-secondary);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.snar-feature-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.snar-feature-grid > .snar-card {
+  min-height: 430px;
+  padding: 38px;
+  border: 1px solid var(--snar-line);
+  box-shadow: none;
+}
+
+.snar-assist-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 92% 2%, rgba(255, 0, 0, .09), transparent 18rem),
+    #fff;
+}
+
+.snar-feature-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 36px;
+  border-radius: 18px;
+  background: var(--snar-red-soft);
+}
+
+.snar-assist-panel h3,
+.snar-safety-panel h3 {
+  max-width: 470px;
+  margin: 16px 0 18px;
+  font-size: clamp(30px, 3vw, 42px);
+  line-height: 1.02;
+  letter-spacing: -.045em;
+}
+
+.snar-assist-panel blockquote {
+  margin: 24px 0 10px;
+  color: var(--snar-navy);
+  font-size: clamp(20px, 2.5vw, 28px);
+  font-weight: 700;
+  letter-spacing: -.025em;
+}
+
+.snar-assist-panel > p {
+  max-width: 500px;
+  margin-top: 22px;
+  color: var(--snar-secondary);
+  line-height: 1.7;
+}
+
+.snar-assist-panel .snar-voice-wave {
+  max-width: 290px;
+}
+
+.snar-safety-panel {
+  background: #fff;
+}
+
+.snar-safety-list {
+  list-style: none;
+  padding: 0;
+  margin: 30px 0 0;
+  border-top: 1px solid var(--snar-line-strong);
+}
+
+.snar-safety-list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 65px;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--snar-line);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.snar-safety-list li span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  border-radius: 50%;
+  background: var(--snar-red-soft);
+  color: var(--snar-red-deep);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.snar-final-cta {
+  margin-bottom: 70px;
+  padding-top: 90px;
+  padding-bottom: 90px;
+  border-top: 1px solid var(--snar-line);
+  border-bottom: 1px solid var(--snar-line);
+}
+
+.snar-final-cta h2 {
+  max-width: 760px;
+  margin-bottom: 18px;
+}
+
+.snar-final-cta > p {
+  max-width: 570px;
+  color: var(--snar-secondary);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.snar-final-cta .snar-actions {
+  align-items: center;
+  gap: 24px;
+  margin-top: 28px;
+}
+
+@media (max-width: 900px) {
+  .snar-hero-clean {
+    min-height: auto;
+  }
+
+  .snar-streamlined-header .snar-header-actions {
+    display: block;
+    margin-left: auto;
+  }
+
+  .snar-streamlined-header .snar-header-actions .snar-btn {
+    min-height: 44px;
+    padding: 10px 18px;
+  }
+
+  .snar-process-step,
+  .snar-process-step + .snar-process-step {
+    padding-inline: 28px;
+  }
+
+  .snar-process-step:first-child {
+    padding-left: 0;
+  }
+
+  .snar-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .snar-feature-grid > .snar-card {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  .snar-streamlined-page .snar-section {
+    padding-block: 58px;
+  }
+
+  .snar-streamlined-page .snar-hero {
+    padding-block: 46px 48px;
+    gap: 38px;
+  }
+
+  .snar-streamlined-page .snar-hero h1 {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    font-size: clamp(48px, 14.5vw, 66px);
+    line-height: .94;
+  }
+
+  .snar-streamlined-page .snar-lead {
+    font-size: 18px;
+    line-height: 1.45;
+  }
+
+  .snar-hero-actions-simple,
+  .snar-final-cta .snar-actions {
+    align-items: stretch !important;
+    margin-top: 24px !important;
+  }
+
+  .snar-text-link {
+    justify-content: center;
+  }
+
+  .snar-hero-note {
+    text-align: center;
+    line-height: 1.55;
+  }
+
+  .snar-streamlined-page .snar-product-story .snar-phone {
+    width: min(284px, 100%);
+    transform: none;
+  }
+
+  .snar-process {
+    grid-template-columns: 1fr;
+    margin-top: 34px;
+  }
+
+  .snar-process-step,
+  .snar-process-step + .snar-process-step,
+  .snar-process-step:first-child {
+    min-height: 0;
+    padding: 24px 0;
+    border-left: 0;
+  }
+
+  .snar-process-step + .snar-process-step {
+    border-top: 1px solid var(--snar-line);
+  }
+
+  .snar-process-step:not(:last-child)::after {
+    content: "↓";
+    right: 2px;
+    top: auto;
+    bottom: -13px;
+    transform: none;
+    background: var(--snar-bg);
+    padding: 0 6px;
+  }
+
+  .snar-process-step h3 {
+    margin-top: 13px;
+  }
+
+  .snar-process-step p {
+    max-width: 520px;
+  }
+
+  .snar-vehicles-clean {
+    padding-block: 64px !important;
+  }
+
+  .snar-section-copy-centered {
+    text-align: left;
+  }
+
+  .snar-section-copy-centered p {
+    margin-inline: 0;
+  }
+
+  .snar-vehicle-grid-clean {
+    gap: 14px;
+    margin-top: 34px;
+  }
+
+  .snar-vehicle-card-clean {
+    min-height: 0;
+    padding: 22px 20px 19px;
+  }
+
+  .snar-vehicle-card-clean img {
+    height: 135px;
+  }
+
+  .snar-feature-duo {
+    padding-block: 70px !important;
+  }
+
+  .snar-feature-intro {
+    margin-bottom: 30px;
+  }
+
+  .snar-feature-intro p {
+    font-size: 15px;
+  }
+
+  .snar-feature-grid {
+    gap: 14px;
+  }
+
+  .snar-feature-grid > .snar-card {
+    padding: 26px 22px;
+  }
+
+  .snar-feature-icon {
+    margin-bottom: 26px;
+  }
+
+  .snar-assist-panel h3,
+  .snar-safety-panel h3 {
+    font-size: 30px;
+  }
+
+  .snar-safety-list li {
+    min-height: 58px;
+    font-size: 14px;
+  }
+
+  .snar-streamlined-header .snar-brand svg:first-child {
+    width: 34px;
+    height: 34px;
+  }
+
+  .snar-streamlined-header .snar-header-actions .snar-btn {
+    font-size: 13px;
+    padding-inline: 15px;
+  }
+
+  .snar-streamlined-page .snar-final-cta {
+    margin-bottom: 28px;
+    padding-top: 60px;
+    padding-bottom: 60px;
+  }
+
+  .snar-streamlined-page .snar-footer {
+    padding-top: 36px;
+  }
+
+  .snar-streamlined-page .snar-footer nav {
+    gap: 8px 18px;
+  }
+
+  .snar-streamlined-page .snar-contacts {
+    display: none;
+  }
+}
