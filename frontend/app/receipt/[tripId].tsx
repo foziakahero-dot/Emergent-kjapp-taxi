@@ -150,18 +150,24 @@ export default function Receipt() {
 
   const v = vehicleMeta(trip.vehicle_type);
   const isPaid = trip.payment_status === 'paid';
+  const automaticPayment = trip.payment_flow === 'reservation';
   const paymentNeedsAction = trip.payment_status === 'requires_action' || trip.payment_status === 'failed';
-  const paymentLabel = isPaid ? 'Betalt' : paymentNeedsAction ? 'Betaling må fullføres' : 'Venter på betaling';
-  const paymentHint = paymentNeedsAction
+  const paymentLabel = isPaid ? 'Betalt' : automaticPayment ? 'Betaling behandles automatisk' : paymentNeedsAction ? 'Betaling må fullføres' : 'Venter på betaling';
+  const paymentHint = automaticPayment
+    ? 'Turbeløpet ble reservert før turstart. SNAR trekker beløpet automatisk og oppdaterer kvitteringen. Du skal ikke betale på nytt.'
+    : paymentNeedsAction
     ? 'Automatisk betaling kunne ikke fullføres uten ny godkjenning. Du kan betale sikkert med kort nedenfor.'
     : 'Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.';
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
-      contentContainerStyle={[s.screen, { paddingTop: insets.top + 22, paddingBottom: insets.bottom + 24 }]}
+      contentContainerStyle={[s.screen, { paddingTop: insets.top + 22, paddingBottom: insets.bottom + 36 }]}
       showsVerticalScrollIndicator={false}
     >
+      <Pressable onPress={() => router.replace('/(app)/home')} accessibilityRole="button" accessibilityLabel="Tilbake til hjem" testID="receipt-back" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, marginBottom: 12 }}>
+        <Icon name="arrow-left" size={20} color={colors.text} /><Text>Tilbake til hjem</Text>
+      </Pressable>
       <View style={s.receiptHeader}>
         <View style={[s.statusCheck, !isPaid && s.pendingCircle]}>
           <Icon name={isPaid ? 'check' : 'card'} size={20} color={isPaid ? colors.accentOn : colors.accent} />
@@ -194,11 +200,11 @@ export default function Receipt() {
           <View style={s.paymentHead}>
             <View style={s.paymentIcon}><Icon name="lock" size={18} color={colors.accent} /></View>
             <View style={{ flex: 1 }}>
-              <Text style={s.paymentTitle}>Betal turen sikkert</Text>
+              <Text style={s.paymentTitle}>{automaticPayment ? 'Betales automatisk' : 'Betal turen sikkert'}</Text>
               <Text style={s.paymentSub}>{paymentHint}</Text>
             </View>
           </View>
-          <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} />
+          {!automaticPayment ? <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} /> : null}
           <Pressable onPress={loadTrip} disabled={paying} style={s.refreshPayment} testID="receipt-check-payment">
             <Icon name="history" size={15} color={colors.textSecondary} />
             <Text style={s.refreshText}>Sjekk betaling</Text>
@@ -233,8 +239,8 @@ export default function Receipt() {
         )}
       </View>
 
-      {isPaid ? (
-        <Button label="Ferdig" onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 22 }} />
+      {true ? (
+        <Button label={isPaid ? 'Ferdig' : 'Til hjem'} onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 22 }} />
       ) : null}
     </ScrollView>
   );
