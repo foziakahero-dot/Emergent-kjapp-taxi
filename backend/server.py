@@ -4418,21 +4418,32 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
                 "ended_early": trip.get("ended_early", False), "warning": trip.get("early_end_warning")}
     if trip.get("status") != "in_trip":
         raise HTTPException(status_code=409, detail="Turen må være startet før den kan avsluttes")
-    if not _fresh_driver_location(current.get("last_location_at")):
-        raise HTTPException(status_code=409, detail="Oppdater GPS-posisjonen før du avslutter turen")
-
     d_lat, d_lng = current.get("last_lat"), current.get("last_lng")
-    if d_lat is None or d_lng is None:
-        raise HTTPException(status_code=409, detail="Mangler gyldig GPS-posisjon")
-    dropoff_distance_m = haversine_km(d_lat, d_lng, trip["dropoff_lat"], trip["dropoff_lng"]) * 1000
-    ended_early = dropoff_distance_m > DROPOFF_ARRIVAL_RADIUS_M
-    warning = "Turen er avsluttet før avtalt destinasjon. Turprisen må kontrolleres av SNAR før betaling."
+    location_verified = bool(
+        _fresh_driver_location(current.get("last_location_at"))
+        and d_lat is not None and d_lng is not None
+    )
+    dropoff_distance_m = (
+        haversine_km(d_lat, d_lng, trip["dropoff_lat"], trip["dropoff_lng"]) * 1000
+        if location_verified else None
+    )
+    ended_early = not location_verified or dropoff_distance_m > DROPOFF_ARRIVAL_RADIUS_M
+    warning = (
+        "Sjåføren har avsluttet turen manuelt uten bekreftet GPS-posisjon. SNAR må kontrollere turen og turprisen før betaling."
+        if not location_verified else
+        "Turen er avsluttet før avtalt destinasjon. Turprisen må kontrolleres av SNAR før betaling."
+    )
     updates = {
         "status": "arrived",
         "arrived_at": datetime.now(timezone.utc).isoformat(),
-        "dropoff_arrival_distance_m": int(round(dropoff_distance_m)),
-        "actual_dropoff_lat": d_lat,
-        "actual_dropoff_lng": d_lng,
+        "dropoff_arrival_distance_m": int(round(dropoff_distance_m)) if location_verified else None,
+        "actual_dropoff_lat": d_lat if location_verified else None,
+        "actual_dropoff_lng": d_lng if location_verified else None,
+        "dropoff_location_verified": location_verified,
+        "last_known_driver_lat": d_lat,
+        "last_known_driver_lng": d_lng,
+        "last_known_driver_location_at": current.get("last_location_at"),
+        "end_reason": "gps_unavailable" if not location_verified else ("before_destination" if ended_early else "destination_reached"),
         "ended_early": ended_early,
         "ended_by": "driver",
     }
@@ -4457,7 +4468,7 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         # Notify both parties independently; a push failure must not undo the ride ending.
         for recipient, url in ((t["user_id"], f"/receipt/{trip_id}"), (driver_id, "/driver")):
             try:
-                await send_push_to_user(recipient, "Turen er avsluttet tidlig", warning,
+                await send_push_to_user(recipient, "Turen er avsluttet manuelt" if not location_verified else "Turen er avsluttet tidlig", warning,
                                         url, "trip_ended_early", require_interaction=True)
             except Exception:
                 logging.exception("Early-end notification failed for trip %s", trip_id)
@@ -4470,7 +4481,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         payment = await _attempt_trip_auto_charge(t)
     # Bonus evaluation happens only from the canonical payment-success transition.
     return {"ok": True, "bonuses": [], "payment": payment,
-            "ended_early": ended_early, "warning": warning if ended_early else None}
+            "ended_early": ended_early, "location_verified": location_verified,
+            "warning": warning if ended_early else None}
 
 
 @api.get("/driver/demand")
@@ -9816,6 +9828,8 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "early_end_warning": t.get("early_end_warning"),
             "actual_dropoff_lat": t.get("actual_dropoff_lat"),
             "actual_dropoff_lng": t.get("actual_dropoff_lng"),
+            "dropoff_location_verified": t.get("dropoff_location_verified"),
+            "end_reason": t.get("end_reason"),
             "refunded_total": t.get("refunded_total", 0),
             "receipt_id": t.get("receipt_id"),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
