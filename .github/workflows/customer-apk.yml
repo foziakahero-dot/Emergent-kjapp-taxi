@@ -1,0 +1,80 @@
+name: Customer Android APK
+
+on:
+  push:
+    branches:
+      - audit/customer-prebuild-snar-20261003
+      - fix/customer-search-mapbox-stripe-20261004
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: customer-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: "1"
+      EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
+      CMAKE_BUILD_PARALLEL_LEVEL: "2"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platform-tools"             "platforms;android-36"             "build-tools;36.0.0"             "cmake;3.22.1"             "ndk;27.1.12297006"
+
+      - name: Install Customer dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Expo prebuild Android
+        working-directory: frontend
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build release APK
+        working-directory: frontend/android
+        shell: bash
+        run: |
+          printf '\norg.gradle.workers.max=2\norg.gradle.parallel=false\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
+          test -s app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-arm64.apk
+          sha256sum ../../SNAR-Customer-arm64.apk > ../../SNAR-Customer-arm64.apk.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SNAR-Customer-arm64
+          path: |
+            SNAR-Customer-arm64.apk
+            SNAR-Customer-arm64.apk.sha256
+          if-no-files-found: error
+          retention-days: 14

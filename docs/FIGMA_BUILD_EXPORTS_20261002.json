@@ -1,0 +1,26 @@
+{
+  "frontend-android": {
+    "hermes_bundle": "entry-236e6eabd1753620b8b6afe2eecad75e.hbc",
+    "bytes": 5207632,
+    "sha256": "8311789a13e7d2e02ccf32236b7f5c80bea1a23c1d82c205720928715fb11841",
+    "asset_count": 38
+  },
+  "frontend-ios": {
+    "hermes_bundle": "entry-6391e82c3cf5048a3585ebb40ad80081.hbc",
+    "bytes": 5005601,
+    "sha256": "fd5efa112da2b8626f55e3c0d7b82066c54758877d652a70c60251756ef43134",
+    "asset_count": 34
+  },
+  "driver-app-android": {
+    "hermes_bundle": "entry-0212b7e3068927b3407590e504471980.hbc",
+    "bytes": 4937062,
+    "sha256": "7ef18490a3ce591b8816feb3463caa261c62c06c0f2d7320078c22d401b1b4fd",
+    "asset_count": 38
+  },
+  "driver-app-ios": {
+    "hermes_bundle": "entry-b7bf6f8bce41cd65307c1929e6f6c8e5.hbc",
+    "bytes": 4738991,
+    "sha256": "95f09ed75116ba7aa7def4c4d959563d788b1747305552c33cca35213ec8d926",
+    "asset_count": 34
+  }
+}

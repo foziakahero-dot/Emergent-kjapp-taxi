@@ -1,11 +1,16 @@
+import { SlideConfirm } from '@/src/components/SlideConfirm';
+import { useHideTabBar } from '@/src/components/FloatingTabBar';
+import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
+import { BrandBadge } from '@/src/components/BrandBadge';
 import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
@@ -61,11 +66,13 @@ export default function DriverHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
+  const [declineReasonsOpen, setDeclineReasonsOpen] = useState(false);
   const [offerClock, setOfferClock] = useState(Date.now());
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
   const completedSummaryVisible = !current && !(pending[0] && online);
+  useHideTabBar(Boolean((current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
 
   const poll = useCallback(async () => {
     if (!user?.id) return;
@@ -484,215 +491,237 @@ export default function DriverHome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
-      <Map
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        user={!current ? loc : null}
-        pickup={current ? mapPickup : null}
-        dropoff={current ? mapDropoff : null}
-        route={current ? mapRoute : null}
-        activeCar={current && loc ? loc : null}
-        testID="driver-map"
-      />
+      {(online || current || firstOffer) ? (
+        <Map
+          style={StyleSheet.absoluteFill}
+          user={!current ? loc : null}
+          pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
+          dropoff={current ? mapDropoff : (firstOffer ? { lat: firstOffer.dropoff_lat, lng: firstOffer.dropoff_lng } : null)}
+          route={current ? mapRoute : firstOffer?.geometry?.coordinates}
+          activeCar={current && loc ? loc : null}
+          testID="driver-map"
+        />
+      ) : (
+        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
+      )}
 
-      <View style={[s.topBar, { paddingTop: insets.top + 8 }]}>
-        <View style={s.identityPanel}>
-          <Text style={s.productLabel}>KJAPP DRIVER</Text>
-          <Text style={s.driverName} numberOfLines={1}>{user?.fullName?.split(' ')[0] || 'Sjåfør'}</Text>
-        </View>
-        <Pressable
-          style={[s.onlineControl, online && s.onlineControlOn]}
-          onPress={toggleOnline}
-          disabled={busy}
-          testID="driver-online-toggle"
-          accessibilityRole="switch"
-          accessibilityState={{ checked: online, disabled: busy }}
-          accessibilityLabel={online ? 'Gå offline' : 'Gå online'}
-        >
-          {busy ? (
-            <ActivityIndicator color={online ? colors.online : colors.text} />
-          ) : (
-            <>
-              <View style={[s.statusDot, { backgroundColor: online ? colors.online : colors.textMuted }]} />
-              <Text style={[s.onlineText, online && { color: colors.online }]}>{online ? 'ONLINE' : 'OFFLINE'}</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
-
-      <View style={[s.mapStatus, { top: insets.top + 66, pointerEvents: 'none' }]}>
-        <View style={s.mapStatusItem}>
-          <Icon name="crosshair" size={14} color={online && loc ? colors.online : colors.textMuted} />
-          <Text style={s.mapStatusText}>{gpsLabel}</Text>
-        </View>
-        <View style={s.mapStatusDivider} />
-        <Text style={s.mapStatusText}>{operationalLabel}</Text>
-      </View>
-
-      <ScrollView
-        style={s.sheet}
-        contentContainerStyle={[s.sheetContent, { paddingBottom: insets.bottom + 12 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={s.handle} />
-        {error ? <Text style={s.error} testID="driver-error">{error}</Text> : null}
-
-        {current && tripMinimized ? (
-          <Pressable testID="driver-active-trip-minimized" onPress={async () => {
-            setTripMinimized(false);
-            await storage.removeItem(MINIMIZED_TRIP_KEY);
-          }} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.overlineOnline}>AKTIV TUR · TRYKK FOR Å ÅPNE</Text>
-              <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
+      <View style={[s.driverHeaderWrap, { top: insets.top + 12 }]}>
+        <View style={s.driverHeader}>
+          <View style={s.driverIdentity}>
+            <BrandBadge size={34} />
+            <View>
+              <Text style={s.headerName} numberOfLines={1}>{user?.fullName || 'KJAPP-sjåfør'}</Text>
+              <Text style={[s.headerStatus, { color: online ? colors.online : colors.textMuted }]}>
+                {online ? '● ONLINE' : 'OFFLINE'}
+              </Text>
             </View>
-            <Icon name="chevron-up" size={20} color={colors.text} />
+          </View>
+          <Pressable
+            style={[s.switchTrack, online && s.switchTrackOn]}
+            onPress={toggleOnline}
+            disabled={busy || Boolean(current)}
+            testID="driver-online-toggle"
+            accessibilityRole="switch"
+            accessibilityState={{ checked: online, disabled: busy || Boolean(current) }}
+          >
+            <View style={[s.switchKnob, online && s.switchKnobOn]} />
           </Pressable>
-        ) : current ? (
-          <View testID="driver-active-trip">
-            <View style={s.sectionHeading}>
-              <Text style={s.overlineOnline}>AKTIV TUR</Text>
-              <Text style={s.tripPrice}>{kr(current.price)}</Text>
-              <Pressable testID="driver-trip-minimize" accessibilityLabel="Minimer turkort" onPress={async () => {
-                setTripMinimized(true);
-                await storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id);
-              }} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="chevron-down" size={20} color={colors.text} />
-              </Pressable>
+        </View>
+      </View>
+
+      {error ? <View style={[s.errorBanner, { top: insets.top + 76 }]}><Text style={s.errorText}>{error}</Text></View> : null}
+
+      {current?.status === 'driver_on_way' ? (
+        <>
+          <View style={[s.navInstruction, { top: insets.top + 82 }]} testID="driver-topickup-instruction">
+            <View style={s.navIcon}><Icon name="navigation" size={20} color={colors.accentOn} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.navTitle}>Kjør til hentested</Text>
+              <Text style={s.navSub} numberOfLines={1}>{current.pickup_address}</Text>
             </View>
-            <View style={[s.epRow, { marginTop: 12 }]}>
-              <View style={s.beacon} />
-              <Text style={s.epText} numberOfLines={1}>{current.pickup_address}</Text>
-            </View>
-            <View style={s.epLine} />
-            <View style={s.epRow}>
-              <View style={s.square} />
-              <Text style={s.epText} numberOfLines={1}>{current.dropoff_address}</Text>
-            </View>
-            <Text style={s.offerMeta} testID="driver-current-customer">{current.customer?.name || 'Kundenavn utilgjengelig'}</Text>
-            {current.customer?.phone ? (
-              <Pressable testID="driver-call-customer" onPress={() => Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))}>
-                <Text style={s.navBtnText}>Ring kunde · {current.customer.phone}</Text>
-              </Pressable>
-            ) : null}
-            {tripExtras(current) ? <Text style={s.offerMeta} testID="driver-active-trip-extras">{tripExtras(current)}</Text> : null}
-            {current.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {current.passenger_note}</Text> : null}
-            {['driver_on_way', 'in_trip'].includes(current.status) ? (
-              <Pressable style={s.navBtn} onPress={openNavigation} testID="driver-navigation">
-                <Icon name="navigation" size={17} color={colors.online} />
-                <Text style={s.navBtnText}>
-                  {current.status === 'driver_on_way' ? 'Naviger til henting' : 'Naviger til destinasjon'}
-                </Text>
-              </Pressable>
-            ) : null}
-            <View style={s.tripActions}>
-              <Pressable style={s.msgBtn} onPress={() => setChatOpen(true)} testID="driver-chat">
-                <Icon name="message" size={17} color={colors.text} />
-                <Text style={s.msgBtnText}>Melding</Text>
-              </Pressable>
-              {actionLabel ? (
-                <Pressable style={s.action} onPress={advance} disabled={busy} testID="driver-advance">
-                  {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.actionText}>{actionLabel}</Text>}
-                </Pressable>
-              ) : null}
-            </View>
-            {current.status === 'at_pickup' ? (
-              <Pressable style={s.noShowBtn} onPress={noShow} disabled={busy} testID="driver-no-show">
-                <Icon name="clock" size={15} color={colors.textMuted} />
-                <Text style={s.noShowText}>Kunden kom ikke · registrer no-show</Text>
-              </Pressable>
-            ) : null}
-            <Pressable style={s.driverSafetyBtn} onPress={emergency} testID="driver-safety-112">
-              <Icon name="shield" size={16} color={colors.danger} />
-              <Text style={s.driverSafetyText}>Sikkerhet · Ring 112</Text>
+            <Pressable style={s.navOpen} onPress={openNavigation} testID="driver-navigation">
+              <Text style={s.navOpenText}>ÅPNE</Text>
             </Pressable>
           </View>
-        ) : firstOffer && online ? (
-          <View testID={`driver-offer-${firstOffer.trip_id}`}>
-            <View style={s.sectionHeading}>
-              <Text style={s.overlineOnline}>NY TUR</Text>
-              <Text style={s.tripPrice}>{kr(firstOffer.price)}</Text>
-            </View>
-            <View style={[s.epRow, { marginTop: 12 }]}>
-              <View style={s.beacon} />
-              <Text style={s.epText} numberOfLines={1}>{firstOffer.pickup_address}</Text>
-            </View>
-            <View style={s.epLine} />
-            <View style={s.epRow}>
-              <View style={s.square} />
-              <Text style={s.epText} numberOfLines={1}>{firstOffer.dropoff_address}</Text>
-            </View>
-            <Text style={s.offerMeta}>
-              {offerDistance != null ? `${Number(offerDistance).toFixed(1)} km til henting` : 'Beregner avstand til henting'}
-              {offerDuration != null ? ` · ${Math.max(1, Math.round(Number(offerDuration)))} min` : ''}
-            </Text>
-            <Text style={[s.offerCountdown, offerExpired && s.offerCountdownExpired]} testID="driver-offer-countdown">
-              {offerRemaining != null
-                ? (offerExpired ? 'Tilbudet sendes videre…' : `Sendes videre om ${offerRemaining} sek`)
-                : 'Åpen for alle ledige sjåfører'}
-            </Text>
-            <Text style={s.offerMeta} testID="driver-offer-customer">{firstOffer.customer?.name || 'Kundenavn utilgjengelig'}</Text>
-            {tripExtras(firstOffer) ? <Text style={s.offerMeta} testID="driver-offer-extras">{tripExtras(firstOffer)}</Text> : null}
-            {firstOffer.passenger_note ? <Text style={s.offerMeta} numberOfLines={2}>Notat: {firstOffer.passenger_note}</Text> : null}
-            <View style={s.offerBtns}>
-              <Pressable style={s.declineBtn} onPress={() => decline(firstOffer.trip_id)} testID={`driver-decline-${firstOffer.trip_id}`}>
-                <Text style={s.declineText}>Avslå</Text>
+
+          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-topickup-sheet">
+            <View style={s.handle} />
+            <Text style={s.stateEyebrow}>HENTING</Text>
+            <Text style={s.stateTitle}>{current.customer?.name || 'Kunde'}</Text>
+            <Text style={s.stateAddress}>{current.pickup_address}</Text>
+            {tripExtras(current) ? <Text style={s.stateMeta}>{tripExtras(current)}</Text> : null}
+            {current.passenger_note ? <Text style={s.stateMeta}>Notat: {current.passenger_note}</Text> : null}
+
+            <View style={s.contactGrid}>
+              <Pressable style={s.contactAction} onPress={() => current.customer?.phone && Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))} disabled={!current.customer?.phone} testID="driver-call-customer">
+                <Icon name="phone" size={19} color={colors.accent} />
+                <Text style={s.contactActionText}>Ring</Text>
               </Pressable>
-              <Pressable
-                style={[s.acceptBtn, offerExpired && s.acceptBtnDisabled]}
-                onPress={() => accept(firstOffer.trip_id)}
-                disabled={busy || offerExpired}
-                testID={`driver-accept-${firstOffer.trip_id}`}
-              >
-                {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.acceptText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
+              <Pressable style={s.contactAction} onPress={() => setChatOpen(true)} testID="driver-chat">
+                <Icon name="message" size={19} color={colors.accent} />
+                <Text style={s.contactActionText}>Melding</Text>
               </Pressable>
             </View>
+
+            <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Skyv når du er fremme" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
           </View>
-        ) : completedTrip ? (
-          <Pressable testID="driver-trip-completed" onPress={async () => {
-            if (!user?.id) return;
-            await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
-            setCompletedTrip(null);
-          }} style={{ paddingVertical: 16 }}>
-            <Text style={s.overlineOnline}>TUR AVSLUTTET</Text>
-            <Text style={s.epText}>Klar for neste tur</Text>
-            <Text style={s.offerMeta}>{completedTrip.payment_status === 'paid'
-              ? `Din opptjening · ${kr(completedTrip.driver_earnings)}`
-              : completedTrip.estimated_driver_earnings != null
-                ? `Estimert opptjening · ${kr(completedTrip.estimated_driver_earnings)} · betaling avventer`
-                : 'Betaling avventer'}</Text>
+        </>
+      ) : current?.status === 'at_pickup' ? (
+        <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-pickup-confirm">
+          <View style={s.handle} />
+          <Text style={s.stateEyebrow}>BEKREFT PASSASJER</Text>
+          <Text style={s.stateTitle}>{current.customer?.name || 'Kunde'}</Text>
+          <View style={s.destinationCard}>
+            <Text style={s.destinationLabel}>DESTINASJON</Text>
+            <Text style={s.destinationValue}>{current.dropoff_address}</Text>
+          </View>
+          {tripExtras(current) ? <Text style={s.stateMeta}>{tripExtras(current)}</Text> : null}
+          <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Start tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
+          <Pressable style={s.noShowLink} onPress={noShow} disabled={busy} testID="driver-no-show">
+            <Text style={s.noShowLinkText}>Kunden kom ikke?</Text>
           </Pressable>
-        ) : (
-          <View>
-            <View style={s.summaryRow}>
-              <Stat label="Turer" value={String(summary?.trips ?? 0)} s={s} />
-              <View style={s.vDivider} />
-              <Stat label="I dag" value={kr(summary?.trip_income ?? 0)} s={s} />
-              <View style={s.vDivider} />
-              <Stat label="Online" value={hoursLabel(summary?.online_minutes)} s={s} />
+        </View>
+      ) : current?.status === 'in_trip' ? (
+        <>
+          <View style={[s.navInstruction, { top: insets.top + 82 }]} testID="driver-intrip-instruction">
+            <View style={s.navIcon}><Icon name="navigation" size={20} color={colors.accentOn} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.navTitle}>Til destinasjon</Text>
+              <Text style={s.navSub} numberOfLines={1}>{current.dropoff_address}</Text>
             </View>
-            {online ? (
-              <View style={s.waiting} testID="driver-waiting">
-                <View style={s.waitIcon}>
-                  <Icon name="navigation" size={21} color={colors.online} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.waitTitle}>Klar for neste tur</Text>
-                  <Text style={s.waitSub}>{loc ? 'Posisjonen din deles med dispatch.' : 'Kobler til posisjon…'}</Text>
-                </View>
-              </View>
-            ) : (
-              <Pressable style={s.goOnline} onPress={toggleOnline} disabled={busy} testID="driver-go-online">
-                {busy ? <ActivityIndicator color={colors.accentOn} /> : (
-                  <>
-                    <Icon name="power" size={19} color={colors.accentOn} />
-                    <Text style={s.goOnlineText}>Gå online</Text>
-                  </>
-                )}
-              </Pressable>
-            )}
+            <Pressable style={s.navOpen} onPress={openNavigation} testID="driver-navigation">
+              <Text style={s.navOpenText}>ÅPNE</Text>
+            </Pressable>
           </View>
-        )}
-      </ScrollView>
+
+          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-intrip-sheet">
+            <View style={s.handle} />
+            <View style={s.inTripControls}>
+              <Pressable style={s.tripTool} onPress={() => setChatOpen(true)} testID="driver-chat">
+                <Icon name="message" size={20} color={colors.accent} />
+                <Text style={s.tripToolText}>Melding</Text>
+              </Pressable>
+              <Pressable style={s.tripTool} onPress={openNavigation}>
+                <Icon name="navigation" size={20} color={colors.accent} />
+                <Text style={s.tripToolText}>Navigasjon</Text>
+              </Pressable>
+              <Pressable style={s.sosTool} onPress={emergency} testID="driver-safety-112">
+                <Icon name="shield" size={20} color={colors.accentOn} />
+                <Text style={s.sosToolText}>SOS</Text>
+              </Pressable>
+            </View>
+            <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Avslutt tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
+          </View>
+        </>
+      ) : firstOffer && online ? (
+        <>
+          <View style={s.mapDim} pointerEvents="none" />
+          <View style={[s.offerSheet, { paddingBottom: insets.bottom + 32 }]} testID={`driver-offer-${firstOffer.trip_id}`}>
+            <View style={s.handle} />
+            <View style={s.offerHead}>
+              <View>
+                <Text style={s.offerEyebrow}>NY TUR</Text>
+                <Text style={s.offerCustomer}>{firstOffer.customer?.name || 'Kunde'}</Text>
+              </View>
+              <View style={s.offerCountdownCircle}>
+                <Text style={[s.offerCountdownNum, offerExpired && { color: colors.textMuted }]}>
+                  {offerRemaining != null ? offerRemaining : '—'}
+                </Text>
+                <Text style={s.offerCountdownUnit}>SEK</Text>
+              </View>
+            </View>
+            <View style={s.offerPriceRow}>
+              <Text style={s.offerPrice}>{kr(firstOffer.price)}</Text>
+              <Text style={s.offerRouteMeta}>
+                {offerDistance != null ? `${Number(offerDistance).toFixed(1)} km til henting` : 'Beregner avstand'}
+                {offerDuration != null ? ` · ${Math.max(1, Math.round(Number(offerDuration)))} min` : ''}
+              </Text>
+            </View>
+            <View style={s.routeBox}>
+              <View style={s.routePointRow}><View style={[s.routeDot, { backgroundColor: colors.online }]} /><Text style={s.routePointText} numberOfLines={1}>{firstOffer.pickup_address}</Text></View>
+              <View style={s.routeLine} />
+              <View style={s.routePointRow}><View style={[s.routeDot, { backgroundColor: colors.accent }]} /><Text style={s.routePointText} numberOfLines={1}>{firstOffer.dropoff_address}</Text></View>
+            </View>
+            {tripExtras(firstOffer) ? <Text style={s.stateMeta}>{tripExtras(firstOffer)}</Text> : null}
+            {firstOffer.passenger_note ? <Text style={s.stateMeta}>Notat: {firstOffer.passenger_note}</Text> : null}
+            <View style={s.offerButtons}>
+              <Pressable style={s.declineButton} onPress={() => setDeclineReasonsOpen(true)} testID={`driver-decline-${firstOffer.trip_id}`}>
+                <Text style={s.declineButtonText}>Avslå</Text>
+              </Pressable>
+              <Pressable style={[s.acceptButton, offerExpired && s.acceptButtonDisabled]} onPress={() => accept(firstOffer.trip_id)} disabled={busy || offerExpired} testID={`driver-accept-${firstOffer.trip_id}`}>
+                {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.acceptButtonText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </>
+      ) : completedTrip ? (
+        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={[StyleSheet.absoluteFill, s.completeWrap]}>
+          <View style={[s.completeContent, { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 26 }]}>
+            <Text style={s.completeEyebrow}>TUR FULLFØRT</Text>
+            <Text style={s.completeAmount}>
+              {completedTrip.payment_status === 'paid' ? `+${kr(completedTrip.driver_earnings)}` : 'Betaling avventer'}
+            </Text>
+            <View style={s.completeCard}>
+              <View style={s.completeRow}><Text style={s.completeLabel}>Distanse</Text><Text style={s.completeValue}>{completedTrip.distance_km ?? '—'} km</Text></View>
+              <View style={s.completeRow}><Text style={s.completeLabel}>Tid</Text><Text style={s.completeValue}>{completedTrip.duration_min ?? '—'} min</Text></View>
+              <View style={s.completeRow}><Text style={s.completeLabel}>Status</Text><Text style={s.completeValue}>{completedTrip.payment_status === 'paid' ? 'Betalt' : 'Avventer'}</Text></View>
+            </View>
+            <View style={s.completeButtons}>
+              <Pressable style={s.pauseButton} onPress={async () => {
+                if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
+                setCompletedTrip(null);
+                if (online) await toggleOnline();
+              }}>
+                <Text style={s.pauseButtonText}>Ta pause</Text>
+              </Pressable>
+              <Pressable style={s.continueButton} onPress={async () => {
+                if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
+                setCompletedTrip(null);
+                if (!online) await toggleOnline();
+              }}>
+                <Text style={s.continueButtonText}>Fortsett online</Text>
+              </Pressable>
+            </View>
+          </View>
+        </LinearGradient>
+      ) : online ? (
+        <View style={[s.waitingSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-waiting">
+          <View style={s.handle} />
+          <View style={s.waitingInner}>
+            <View style={s.waitingIcon}><Icon name="navigation" size={20} color={colors.online} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.waitingTitle}>Klar for neste tur</Text>
+              <Text style={s.waitingSub}>{loc ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <View style={[s.offlineContent, { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 26 }]}>
+          <Text style={s.offlineEyebrow}>INNTJENING I DAG</Text>
+          <Text style={s.offlineAmount}>{kr(summary?.trip_income ?? 0)}</Text>
+          <View style={s.summaryCards}>
+            <View style={s.summaryCard}><Text style={s.summaryValue}>{String(summary?.trips ?? 0)}</Text><Text style={s.summaryLabel}>Turer</Text></View>
+            <View style={s.summaryCard}><Text style={s.summaryValue}>{hoursLabel(summary?.online_minutes)}</Text><Text style={s.summaryLabel}>Online</Text></View>
+          </View>
+          <Pressable style={s.goOnlineButton} onPress={toggleOnline} disabled={busy} testID="driver-go-online">
+            {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.goOnlineButtonText}>Gå online</Text>}
+          </Pressable>
+        </View>
+      )}
+
+      {declineReasonsOpen && firstOffer ? (
+        <View style={s.declineOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDeclineReasonsOpen(false)} />
+          <View style={[s.declineSheet, { paddingBottom: insets.bottom + 32 }]}>
+            <View style={s.declineHead}><Text style={s.declineTitle}>Hvorfor avslår du?</Text><Pressable style={s.closeReason} onPress={() => setDeclineReasonsOpen(false)}><Icon name="x" size={18} color={colors.text} /></Pressable></View>
+            {['For langt å kjøre', 'Ikke egnet bil', 'Skal snart av vakt', 'Annet'].map((reason) => (
+              <Pressable key={reason} style={s.reasonRow} onPress={async () => { setDeclineReasonsOpen(false); await decline(firstOffer.trip_id); }}>
+                <Text style={s.reasonText}>{reason}</Text><Icon name="chevron-right" size={17} color={colors.textMuted} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {current ? (
         <ChatSheet
@@ -707,103 +736,100 @@ export default function DriverHome() {
   );
 }
 
-function Stat({ label, value, s }: any) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const useStyles = makeStyles((c) => ({
-  topBar: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 8,
-  },
-  identityPanel: {
-    minHeight: 48, justifyContent: 'center', backgroundColor: c.surface,
-    borderRadius: 18, paddingHorizontal: 14, borderWidth: 1, borderColor: c.line,
-    shadowColor: c.text, shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3,
-  },
-  productLabel: { color: c.online, fontSize: 10, lineHeight: 13, letterSpacing: 1.6, fontWeight: '700' },
-  driverName: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any, maxWidth: 140 },
-  onlineControl: {
-    minWidth: 108, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: c.surface, borderRadius: 18, borderWidth: 1, borderColor: c.line,
-  },
-  onlineControlOn: { borderColor: c.online, backgroundColor: c.onlineSoft },
-  statusDot: { width: 9, height: 9, borderRadius: 5 },
-  onlineText: { color: c.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.1 },
-  mapStatus: {
-    position: 'absolute', left: 16, zIndex: 9, minHeight: 36,
-    flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface,
-    borderRadius: 16, borderWidth: 1, borderColor: c.line, paddingHorizontal: 11,
-  },
-  mapStatusItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  mapStatusDivider: { width: 1, height: 16, backgroundColor: c.line, marginHorizontal: 9 },
-  mapStatusText: { color: c.textSecondary, fontSize: 11, fontWeight: '600' },
-  sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '78%', backgroundColor: c.surface,
-    borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 1, borderColor: c.line,
-    shadowColor: c.text, shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -10 }, elevation: 8,
-  },
-  sheetContent: { paddingHorizontal: 18, paddingTop: 10 },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18, marginBottom: 12 },
-  summaryRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: c.cardSubtle,
-    borderRadius: 18, borderWidth: 1, borderColor: c.line, paddingVertical: 14,
-  },
-  vDivider: { width: 1, height: 32, backgroundColor: c.line },
-  statValue: { color: c.text, fontFamily: font.mono, fontSize: 17, fontWeight: '600' },
-  statLabel: { color: c.textMuted, fontSize: 10.5, marginTop: 4 },
-  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  overlineOnline: { color: c.online, fontSize: 11, letterSpacing: 1.8, fontWeight: '800' },
-  tripPrice: { color: c.text, fontFamily: font.mono, fontSize: 18, fontWeight: '700' },
-  epRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 28 },
-  epLine: { width: 1, height: 14, backgroundColor: c.lineStrong, marginLeft: 5, marginVertical: 2 },
-  beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.online },
-  square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
-  epText: { color: c.text, fontSize: 14, flex: 1 },
-  navBtn: {
-    minHeight: 50, marginTop: 14, borderRadius: 18, borderWidth: 1, borderColor: c.lineStrong,
-    backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center',
-  },
-  navBtnText: { color: c.text, fontSize: 14, fontWeight: '700' },
-  tripActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  msgBtn: {
-    minWidth: 112, height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 18, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
-  },
-  msgBtnText: { color: c.text, fontSize: 14, fontWeight: '600' },
-  noShowBtn: { minHeight: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.cardSubtle, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  noShowText: { color: c.textSecondary, fontSize: 12, fontWeight: '600' },
-  driverSafetyBtn: { height: 44, marginTop: 9, borderRadius: 12, borderWidth: 1, borderColor: c.danger, backgroundColor: c.dangerSoft, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
-  driverSafetyText: { color: c.text, fontSize: 12, fontWeight: '700' },
-  action: { flex: 1, height: 56, borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  actionText: { color: c.accentOn, fontSize: 16, fontWeight: '800' },
-  offerMeta: { color: c.textMuted, fontSize: 12, marginTop: 10 },
-  offerCountdown: { color: c.online, fontSize: 12, fontWeight: '700', marginTop: 8 },
-  offerCountdownExpired: { color: c.textMuted },
-  offerBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  declineBtn: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong },
-  declineText: { color: c.textSecondary, fontSize: 15, fontWeight: '600' },
-  acceptBtn: { flex: 2, height: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
-  acceptBtnDisabled: { opacity: 0.45 },
-  acceptText: { color: c.accentOn, fontSize: 15, fontWeight: '800' },
-  waiting: {
-    flexDirection: 'row', alignItems: 'center', gap: 13, minHeight: 72, marginTop: 12,
-    paddingHorizontal: 14, borderRadius: 18, backgroundColor: c.onlineSoft,
-    borderWidth: 1, borderColor: c.line,
-  },
-  waitIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.onlineSoft, alignItems: 'center', justifyContent: 'center' },
-  waitTitle: { color: c.text, fontFamily: font.display, fontSize: 16, fontWeight: '650' as any },
-  waitSub: { color: c.textMuted, fontSize: 12, marginTop: 3 },
-  goOnline: {
-    flexDirection: 'row', gap: 10, marginTop: 14, height: 56, borderRadius: 28,
-    backgroundColor: c.online, alignItems: 'center', justifyContent: 'center',
-  },
-  goOnlineText: { color: c.accentOn, fontSize: 16, fontWeight: '800' },
+    driverHeaderWrap: { position: 'absolute', left: 16, right: 16, zIndex: 50 },
+    driverHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+    driverIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+    headerName: { color: c.text, fontFamily: font.semibold, fontSize: 14, maxWidth: 180 },
+    headerStatus: { fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4, marginTop: 2 },
+    switchTrack: { width: 56, height: 32, borderRadius: 16, backgroundColor: c.lineStrong, padding: 2 },
+    switchTrackOn: { backgroundColor: c.online },
+    switchKnob: { width: 28, height: 28, borderRadius: 14, backgroundColor: c.surface },
+    switchKnobOn: { marginLeft: 24 },
+    errorBanner: { position: 'absolute', left: 16, right: 16, zIndex: 55, borderRadius: 12, padding: 10, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger },
+    errorText: { color: c.danger, fontSize: 12, textAlign: 'center' },
+    navInstruction: { position: 'absolute', left: 16, right: 16, zIndex: 30, minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+    navIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
+    navTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
+    navSub: { color: c.textSecondary, fontSize: 11, marginTop: 2 },
+    navOpen: { minHeight: 36, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+    navOpenText: { color: c.accent, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.2 },
+    stateSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+    handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 16 },
+    stateEyebrow: { color: c.online, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    stateTitle: { color: c.text, fontFamily: font.semibold, fontSize: 21, marginTop: 4 },
+    stateAddress: { color: c.textSecondary, fontSize: 13, marginTop: 3 },
+    stateMeta: { color: c.textMuted, fontSize: 11.5, lineHeight: 17, marginTop: 8 },
+    contactGrid: { flexDirection: 'row', gap: 10, marginTop: 15 },
+    contactAction: { flex: 1, minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+    contactActionText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+    noShowLink: { minHeight: 38, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+    noShowLinkText: { color: c.textMuted, fontSize: 12, textDecorationLine: 'underline' },
+    destinationCard: { marginTop: 14, borderRadius: 16, padding: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+    destinationLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4 },
+    destinationValue: { color: c.text, fontFamily: font.medium, fontSize: 14, marginTop: 5 },
+    inTripControls: { flexDirection: 'row', gap: 10 },
+    tripTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+    tripToolText: { color: c.text, fontFamily: font.medium, fontSize: 11.5 },
+    sosTool: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: '#E11D48' },
+    sosToolText: { color: c.accentOn, fontFamily: font.bold, fontSize: 11.5 },
+    mapDim: { ...StyleSheet.absoluteFill, zIndex: 20, backgroundColor: 'rgba(11,14,20,0.28)' },
+    offerSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 40, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: c.surface, shadowColor: '#0B0E14', shadowOpacity: 0.26, shadowRadius: 28, shadowOffset: { width: 0, height: -12 }, elevation: 12 },
+    offerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    offerEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    offerCustomer: { color: c.text, fontFamily: font.semibold, fontSize: 21, marginTop: 3 },
+    offerCountdownCircle: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.accent, backgroundColor: c.accentSoft },
+    offerCountdownNum: { color: c.accent, fontFamily: font.bold, fontSize: 20, lineHeight: 21 },
+    offerCountdownUnit: { color: c.textMuted, fontFamily: font.mono, fontSize: 7, letterSpacing: 1.2 },
+    offerPriceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 14 },
+    offerPrice: { color: c.text, fontFamily: font.semibold, fontSize: 25 },
+    offerRouteMeta: { color: c.textSecondary, fontSize: 11 },
+    routeBox: { marginTop: 13, borderRadius: 16, padding: 14, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+    routePointRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    routeDot: { width: 10, height: 10, borderRadius: 5 },
+    routeLine: { width: 1, height: 17, backgroundColor: c.lineStrong, marginLeft: 4.5 },
+    routePointText: { flex: 1, color: c.text, fontSize: 13 },
+    offerButtons: { flexDirection: 'row', gap: 10, marginTop: 16 },
+    declineButton: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface },
+    declineButtonText: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 14 },
+    acceptButton: { flex: 2, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
+    acceptButtonDisabled: { opacity: 0.45 },
+    acceptButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
+    waitingSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
+    waitingInner: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 13 },
+    waitingIcon: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: c.onlineSoft },
+    waitingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
+    waitingSub: { color: c.textSecondary, fontSize: 12, marginTop: 3 },
+    offlineContent: { flex: 1, paddingHorizontal: 28 },
+    offlineEyebrow: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    offlineAmount: { color: c.text, fontFamily: font.semibold, fontSize: 36, lineHeight: 40, marginTop: 4 },
+    summaryCards: { flexDirection: 'row', gap: 12, marginTop: 20 },
+    summaryCard: { flex: 1, minHeight: 96, borderRadius: 18, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+    summaryValue: { color: c.text, fontFamily: font.semibold, fontSize: 24, lineHeight: 32 },
+    summaryLabel: { color: c.textMuted, fontSize: 11, marginTop: 7 },
+    goOnlineButton: { minHeight: 56, marginTop: 'auto', borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.30, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    goOnlineButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
+    completeWrap: { zIndex: 25 },
+    completeContent: { flex: 1, paddingHorizontal: 28 },
+    completeEyebrow: { color: c.online, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
+    completeAmount: { color: c.text, fontFamily: font.semibold, fontSize: 34, marginTop: 4 },
+    completeCard: { marginTop: 20, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+    completeRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    completeLabel: { color: c.textSecondary, fontSize: 13 },
+    completeValue: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+    completeButtons: { flexDirection: 'row', gap: 10, marginTop: 'auto' },
+    pauseButton: { flex: 1, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
+    pauseButtonText: { color: c.text, fontFamily: font.medium, fontSize: 13 },
+    continueButton: { flex: 1.6, minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent, shadowColor: c.accent, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 },
+    continueButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
+    declineOverlay: { ...StyleSheet.absoluteFill, zIndex: 80, justifyContent: 'flex-end', backgroundColor: 'rgba(11,14,20,0.35)' },
+    declineSheet: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: c.surface },
+    declineHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+    declineTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20 },
+    closeReason: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
+    reasonRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: c.line },
+    reasonText: { color: c.text, fontFamily: font.medium, fontSize: 14 }
 }));
+
+
+

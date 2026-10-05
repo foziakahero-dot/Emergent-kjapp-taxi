@@ -355,7 +355,8 @@ def test_customer_booking_shows_real_driver_photo_with_initials_fallback():
     assert "tripDriverPhotoSource" in customer_api
     assert "/driver-photo" in customer_api
     assert 'testID="customer-driver-photo"' in booking
-    assert "trip.driver?.photo || 'SJ'" in booking
+    assert "onError={() => setDriverPhotoSource(null)}" in booking
+    assert "(trip.driver?.name || 'S').slice(0, 1).toUpperCase()" in booking
 
 
 def test_fleet_ui_distinguishes_selected_from_extra_assigned_cars():

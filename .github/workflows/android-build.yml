@@ -6,6 +6,7 @@ on:
       - main
       - beta/oslo-production-ready
       - snar/mobile-ui-review-20260930
+      - design/figma-make-pixel-match-20261002
     paths:
       - 'frontend/**'
       - 'driver-app/**'
@@ -41,6 +42,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Enforce SNAR Customer pre-build gate
+        run: node scripts/customer-build-gate.cjs
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -48,7 +52,7 @@ jobs:
           java-version: 17
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -99,7 +103,7 @@ jobs:
           java-version: 17
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -126,3 +130,5 @@ jobs:
           path: driver-app/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+

@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
@@ -111,3 +112,4 @@ const useStyles = makeStyles((c) => ({
   logout: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   logoutText: { color: c.textMuted, fontSize: 14 },
 }));
+

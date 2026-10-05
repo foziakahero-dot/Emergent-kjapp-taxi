@@ -38,13 +38,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce SNAR Customer pre-build gate
+        run: node scripts/customer-build-gate.cjs
       - name: Require Expo token
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             echo "Missing GitHub secret EXPO_TOKEN"
             exit 1
           fi
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npx expo-doctor@latest
       - run: npx expo config --type public
@@ -73,8 +75,9 @@ jobs:
             echo "Missing GitHub secret EXPO_TOKEN"
             exit 1
           fi
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npx expo-doctor@latest
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
+

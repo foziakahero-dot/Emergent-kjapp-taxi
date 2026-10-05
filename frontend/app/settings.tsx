@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Text, TextInput } from '@/src/components/Typography';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, Modal, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
@@ -10,7 +13,7 @@ import { gdprApi, settingsApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
 const TOGGLES: { key: string; label: string; sub: string }[] = [
-  { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til KJAPP-turen din' },
+  { key: 'notifications', label: 'Varsler', sub: 'Varsler knyttet til SNAR-turen din' },
   { key: 'trip_updates', label: 'Turoppdateringer', sub: 'Status når sjåføren er på vei og turen endrer fase' },
 ];
 
@@ -20,6 +23,11 @@ export default function Settings() {
   const router = useRouter();
   const { logout } = useAuth();
   const [settings, setSettings] = useState<any>(null);
+  const [settingsError, setSettingsError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
+  const deleteLock = useRef(false);
+  const [deleteError, setDeleteError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportInfo, setExportInfo] = useState<string>('');
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -31,41 +39,86 @@ export default function Settings() {
     (Constants.expoConfig?.android as any)?.versionCode ||
     null;
 
+  const exportLock = useRef(false);
   const exportData = async () => {
+    if (exportLock.current) return;
+    exportLock.current = true;
     setExporting(true);
     setExportInfo('');
     try {
       const d = await gdprApi.export();
-      const trips = (d.trips || []).length;
-      const payments = (d.payments || []).length;
-      setExportInfo(`Dataene dine er hentet: ${trips} turer, ${payments} betalinger. Kontakt support@kjappapp.no for en full kopi på e-post.`);
-    } catch {
+      const trips = Array.isArray((d as any)?.trips) ? (d as any).trips.length : 0;
+      const payments = Array.isArray((d as any)?.payments) ? (d as any).payments.length : 0;
+      const dataJson = JSON.stringify(d, null, 2);
+
+      // expo-sharing cannot share local file URIs on web. Keep the GDPR export
+      // file-based on native so large exports never go through an Android Intent message.
+      if (Platform.OS === 'web') {
+        setExportInfo('Filbasert dataeksport er tilgjengelig i SNAR-mobilappen.');
+        return;
+      }
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        setExportInfo('Deling er ikke tilgjengelig på denne enheten. Prøv igjen på Android eller iPhone.');
+        return;
+      }
+
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const file = new File(Paths.cache, `SNAR-persondata-${timestamp}.json`);
+      file.create({ overwrite: true });
+      file.write(dataJson);
+
+      try {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Mine SNAR-data',
+          UTI: 'public.json',
+        });
+        setExportInfo(`Dataene dine er eksportert: ${trips} turer, ${payments} betalinger. Velg hvor du vil lagre eller dele JSON-filen.`);
+      } catch (sharingError) {
+        console.warn('GDPR file sharing failed:', sharingError);
+        setExportInfo('Datafilen ble opprettet, men delingen kunne ikke åpnes. Prøv igjen.');
+      }
+    } catch (error) {
+      console.warn('GDPR export failed:', error);
       setExportInfo('Kunne ikke hente data akkurat nå. Prøv igjen senere.');
     } finally {
+      exportLock.current = false;
       setExporting(false);
     }
   };
 
   const deleteAccount = async () => {
-    if (confirmText.trim().toUpperCase() !== 'SLETT') return;
+    if (deleteLock.current || confirmText.trim().toUpperCase() !== 'SLETT') return;
+    deleteLock.current = true; setDeleteError('');
     setDeleting(true);
     try {
       await gdprApi.delete();
       await logout();
       router.replace('/');
     } catch {
+      setDeleteError('Kunne ikke slette kontoen. Prøv igjen når forbindelsen er tilbake.');
       setDeleting(false);
-    }
+    } finally { deleteLock.current = false; }
   };
 
-  useEffect(() => {
-    settingsApi.get().then((r) => setSettings(r.settings || r)).catch(() => setSettings({}));
+  const loadSettings = useCallback(async () => {
+    setSettingsError('');
+    try { const response = await settingsApi.get(); setSettings(response.settings || response); }
+    catch { setSettingsError('Kunne ikke hente innstillingene. Sjekk forbindelsen og prøv igjen.'); }
   }, []);
+  useEffect(() => { void loadSettings(); }, [loadSettings]);
 
   const toggle = async (key: string) => {
+    if (savingLock.current || !settings) return;
+    savingLock.current = true; setSaving(true); setSettingsError('');
+    const previous = settings;
     const next = { ...settings, [key]: !settings[key] };
     setSettings(next);
-    try { await settingsApi.update({ [key]: next[key] }); } catch {}
+    try { await settingsApi.update({ [key]: next[key] }); }
+    catch { setSettings(previous); setSettingsError('Endringen ble ikke lagret. Prøv igjen når forbindelsen er tilbake.'); }
+    finally { savingLock.current = false; setSaving(false); }
   };
 
   return (
@@ -78,8 +131,9 @@ export default function Settings() {
       </View>
 
       <View style={{ paddingHorizontal: 20 }}>
+        {settingsError ? <View><Text testID="settings-network-error" accessibilityRole="alert" style={{ color: colors.danger }}>{settingsError}</Text><Button testID="settings-retry" label="Prøv igjen" onPress={() => void loadSettings()} /></View> : null}
         {!settings ? (
-          <View style={{ paddingTop: 60 }}><Loader /></View>
+          <View style={{ paddingTop: 60 }}>{!settingsError ? <Loader /> : null}</View>
         ) : (
           <>
             <Text style={s.sectionTitle}>Turvarsler</Text>
@@ -93,6 +147,7 @@ export default function Settings() {
                   <Switch
                     testID={`setting-${t.key}`}
                     value={!!settings[t.key]}
+                    disabled={saving}
                     onValueChange={() => toggle(t.key)}
                     trackColor={{ false: colors.line, true: colors.accent }}
                     thumbColor={colors.text}
@@ -103,13 +158,13 @@ export default function Settings() {
 
             <View style={[s.card, { marginTop: 16 }]}>
               <View style={s.infoRow}><Text style={s.rowLabel}>Versjon</Text><Text style={s.rowValue}>{version}{buildNumber ? ` (${buildNumber})` : ''}</Text></View>
-              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
+              <Pressable testID="customer-app-settings-110" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/help')}>
                 <Text style={s.rowLabel}>Support</Text><Text style={s.rowValue}>support@kjappapp.no</Text>
               </Pressable>
-              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
+              <Pressable testID="customer-app-settings-113" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
                 <Text style={s.rowLabel}>Personvern</Text><Text style={s.rowValue}>Åpne</Text>
               </Pressable>
-              <Pressable style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
+              <Pressable testID="customer-app-settings-116" style={[s.infoRow, { borderTopWidth: 1, borderTopColor: colors.line }]} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
                 <Text style={s.rowLabel}>Vilkår</Text><Text style={s.rowValue}>Åpne</Text>
               </Pressable>
             </View>
@@ -148,6 +203,7 @@ export default function Settings() {
                     onChangeText={setConfirmText}
                     style={s.modalInput}
                   />
+                  {deleteError ? <Text testID="gdpr-delete-error" accessibilityRole="alert" style={{ color: colors.danger }}>{deleteError}</Text> : null}
                   <Button
                     label="Slett konto permanent"
                     variant="danger"

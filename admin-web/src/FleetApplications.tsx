@@ -19,6 +19,7 @@ export default function FleetApplications() {
   const [apps, setApps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [notes, setNotes] = useState('');
@@ -69,7 +70,10 @@ export default function FleetApplications() {
     setBusy(true);
     setErr('');
     try {
-      await api.approveFleetApplication(selected.id, notes);
+      const result = await api.approveFleetApplication(selected.id, notes);
+      setNotice(result.stripe_onboarding_status === 'onboarding'
+        ? 'Løyvehaver godkjent. Stripe-konto er opprettet; eieren må fullføre bank og verifisering under Økonomi i flåtepanelet.'
+        : 'Løyvehaver godkjent. Stripe-oppsett gjenstår og kan startes fra flåtepanelet.');
       close();
       await load();
     } catch (e) {
@@ -137,6 +141,7 @@ export default function FleetApplications() {
       </div>
 
       <ErrorBanner msg={err} />
+      {notice && <div className="info-banner">{notice}</div>}
 
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>

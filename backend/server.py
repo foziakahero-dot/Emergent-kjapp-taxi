@@ -14,6 +14,9 @@ import bcrypt
 import jwt
 import httpx
 import stripe
+from stripe_fleet import ensure_fleet_account
+from mobile_commerce import install_mobile_commerce
+from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
@@ -1618,11 +1621,15 @@ async def cars_nearby(body: NearbyCarsRequest):
         "approved": True,
         "accepted_terms_at": {"$exists": True, "$ne": None},
         "online": True,
+        "internal_test_account": {"$ne": True},
+        "active_trip_id": {"$in": [None, ""]},
         "disabled": {"$ne": True},
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
     }):
+        if await db.trips.find_one(_real_trip_filter({"driver_id": str(u["_id"]), "status": {"$in": ["booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}), {"_id": 1}):
+            continue
         lat = u.get("last_lat")
         lng = u.get("last_lng")
         if lat is None or lng is None or await _fleet_is_suspended(u.get("fleet_id")):
@@ -2378,7 +2385,11 @@ async def me(current=Depends(get_current_user)):
             current["car"] = vehicle.get("car")
             current["plate"] = vehicle.get("plate")
             current["vehicle_type"] = vehicle.get("vehicle_type") or "ai-first"
-    return user_public(current)
+    public = user_public(current)
+    if current.get("role", "user") in ("user", "customer"):
+        photo = await db.customer_photos.find_one({"_id": current["id"]}, {"version": 1})
+        public["customer_photo_version"] = (photo or {}).get("version")
+    return public
 
 
 # ---- Trips ----
@@ -4947,7 +4958,7 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
     from jwt.algorithms import RSAAlgorithm
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
     try:
-        claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id)
+        claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id, options={"require": ["exp", "aud", "sub", "iss"]})
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Ugyldig Google-token: {e}")
     if claims.get("iss") not in GOOGLE_ISSUERS:
@@ -5088,7 +5099,7 @@ class FleetCreateRequest(BaseModel):
     name: str
     org_number: Optional[str] = ""
     owner_email: str
-    commission_rate: float = 0.10
+    commission_rate: float = Field(default=0.10, ge=0, le=0.50)
 
 
 @api.post("/admin/fleets")
@@ -5126,6 +5137,15 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     fres = await db.fleets.insert_one(fleet_doc)
     fleet_id = str(fres.inserted_id)
     await db.users.update_one({"_id": ObjectId(owner_id)}, {"$set": {"fleet_id": fleet_id}})
+    fleet_doc["stripe_connect_status"] = "not_configured"
+    if stripe.api_key:
+        try:
+            fleet_doc["_id"] = fres.inserted_id
+            fleet_doc["stripe_account_id"] = await ensure_fleet_account(db, stripe, fleet_doc, owner_email)
+            fleet_doc["stripe_connect_status"] = "onboarding"
+        except HTTPException:
+            fleet_doc["stripe_connect_status"] = "retry_required"
+            await db.fleets.update_one({"_id": fres.inserted_id}, {"$set": {"stripe_connect_status": "retry_required"}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
     onboarding_email_sent = False
@@ -7697,7 +7717,7 @@ async def send_trip_receipts(trip_id: str):
     customer_sent_at = await deliver_once(
         "customer",
         (passenger or {}).get("email"),
-        f"KJAPP-kvittering · {price} kr",
+        f"SNAR-kvittering · {price} kr",
         f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
         f"<p>{route}</p><p><strong>Total: {price} kr</strong></p>"
         f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
@@ -7733,6 +7753,28 @@ AUTO_CHARGE_ENABLED = str(os.environ.get("KJAPP_AUTO_CHARGE_ENABLED", "false")).
 
 
 async def _attempt_trip_auto_charge(trip: dict) -> dict:
+    if not AUTO_CHARGE_ENABLED or not trip or not trip.get("trip_id"):
+        return {"attempted": False, "reason": "disabled_or_missing"}
+    lock = secrets.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+    locked = await db.trips.update_one(_real_trip_filter({"trip_id": trip["trip_id"],
+        "payment_status": {"$ne": "paid"},
+        "$or": [{"payment_checkout_lock": {"$exists": False}}, {"payment_checkout_lock": None},
+            {"payment_checkout_locked_at": {"$lt": now - timedelta(minutes=2)}}]}),
+        {"$set": {"payment_checkout_lock": lock, "payment_checkout_locked_at": now}})
+    if locked.modified_count != 1:
+        return {"attempted": False, "reason": "payment_in_progress"}
+    try:
+        if await db.payment_transactions.find_one({"trip_id": trip["trip_id"],
+                "status": {"$in": ["initiated", "awaiting_payment", "completed"]}}):
+            return {"attempted": False, "reason": "payment_already_started"}
+        return await _attempt_trip_auto_charge_locked(trip)
+    finally:
+        await db.trips.update_one({"trip_id": trip["trip_id"], "payment_checkout_lock": lock},
+            {"$unset": {"payment_checkout_lock": "", "payment_checkout_locked_at": ""}})
+
+
+async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     """Charge a previously verified saved card after arrival.
 
     Disabled by default. When enabled, Stripe is the source of truth and a deterministic
@@ -7777,6 +7819,8 @@ async def _attempt_trip_auto_charge(trip: dict) -> dict:
     if not pm:
         return {"attempted": False, "reason": "no_verified_payment_method"}
 
+    if await db.payment_transactions.find_one({"trip_id": trip_id, "kind": "native_payment"}):
+        return {"attempted": False, "reason": "native_payment_started"}
     payment_method_id = pm.get("stripe_payment_method_id")
     metadata = {"trip_id": trip_id, "user_id": user_id, "source": "kjapp_auto_charge"}
     kwargs = {
@@ -7981,6 +8025,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         except stripe.error.StripeError:
             pass
 
+    if await db.payment_transactions.find_one({"trip_id": body.trip_id, "kind": "native_payment"}):
+        raise HTTPException(409, "Mobilbetaling er allerede startet. Sjekk betalingen i appen.")
     origin = _trusted_checkout_origin(body.origin_url)
     connect_destination = await stripe_destination_for_trip(db, stripe, trip)
     metadata = {"trip_id": body.trip_id, "user_id": current["id"]}
@@ -8046,6 +8092,12 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
 
     session = None
     try:
+        if await db.payment_transactions.find_one({"trip_id": body.trip_id, "kind": "native_payment"}):
+            raise HTTPException(409, "Mobilbetaling er allerede startet")
+        # Recheck after obtaining the shared payment lock, including paid autocharges.
+        latest = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
+        if latest and latest.get("payment_status") == "paid":
+            raise HTTPException(409, "Turen er allerede betalt")
         session = stripe.checkout.Session.create(**checkout_kwargs)
         await db.payment_transactions.insert_one({
             "session_id": session.id,
@@ -8137,6 +8189,8 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Invalid signature")
     except Exception:
         raise HTTPException(400, "Webhook error")
+    if await handle_native_payment_webhook(event):
+        return {"status": "ok"}
     obj, t = event["data"]["object"], event["type"]
     if t == "checkout.session.completed" and obj.get("payment_status") == "paid":
         existing = await db.payment_transactions.find_one({"session_id": obj["id"]})
@@ -8227,7 +8281,8 @@ async def gdpr_export(current=Depends(get_current_user)):
         "user": user,
         "trips": trips,
         "ai_messages": messages,
-        "payments": payments,
+        "payments": [{k: v for k, v in p.items() if k not in ("client_secret", "stripe_client_secret")} for p in payments],
+        "customer_photo": await export_customer_photo(db, uid),
     }
 
 
@@ -8252,6 +8307,7 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
         }},
     )
     # Delete personal data
+    await delete_customer_photo(db, uid)
     await db.chat_messages.delete_many({"user_id": uid})
     await db.trip_messages.update_many(
         {"from_user_id": uid},
@@ -9061,7 +9117,7 @@ class FleetApplicationSubmitRequest(BaseModel):
 
 class FleetApplicationDecisionRequest(BaseModel):
     review_notes: Optional[str] = ""
-    commission_rate: Optional[float] = 0.10
+    commission_rate: Optional[float] = Field(default=0.10, ge=0, le=0.50)
 
 
 @api.post("/fleet-applications/draft")
@@ -9236,13 +9292,23 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
             "fleet_owner_user_id": owner_id,
         }},
     )
+    stripe_onboarding_status = "not_configured"
+    if stripe.api_key:
+        try:
+            fleet_doc["_id"] = fres.inserted_id
+            await ensure_fleet_account(db, stripe, fleet_doc, owner_email)
+            stripe_onboarding_status = "onboarding"
+        except HTTPException:
+            stripe_onboarding_status = "retry_required"
+            await db.fleets.update_one({"_id": fres.inserted_id}, {"$set": {"stripe_connect_status": "retry_required"}})
+    # The owner completes bank/KYC in their authenticated Fleet portal.
     # Email the applicant
     send_email(
         owner_email,
         "KJAPP: Løyvehaver-søknaden er godkjent",
         _fleet_application_decision_html(app_doc.get("company_name", ""), True, body.review_notes or "", temp_pw),
     )
-    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw}
+    return {"ok": True, "fleet_id": fleet_id, "fleet_owner_user_id": owner_id, "temp_password": temp_pw, "stripe_onboarding_status": stripe_onboarding_status}
 
 
 @api.post("/superadmin/fleet-applications/{app_id}/reject")
@@ -10796,6 +10862,18 @@ install_admin_control_center(
     audit=_audit,
 )
 
+handle_native_payment_webhook = install_mobile_commerce(
+    api, db, stripe=stripe, get_current_user=get_current_user, require_customer=require_customer,
+    require_fleet_owner=require_fleet_owner, rate_limit=_enforce_rate_limit,
+    verify_google=_verify_google_id_token, apple_keys=_get_apple_keys, hash_password=hash_password,
+    create_access_token=create_access_token, create_twofa_token=create_twofa_token,
+    set_auth_cookie=set_auth_cookie, user_public=user_public, apply_driver_risk=_apply_driver_identity_risk,
+    require_active_fleet=_require_active_fleet, real_trip_filter=_real_trip_filter,
+    mark_paid=_mark_trip_paid_and_complete, send_receipts=send_trip_receipts,
+)
+
+install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
+
 app.include_router(api)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
@@ -10811,3 +10889,4 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+

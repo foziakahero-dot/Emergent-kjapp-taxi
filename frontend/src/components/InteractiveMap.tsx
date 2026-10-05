@@ -1,14 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Image,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleProp,
-  Text,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
@@ -240,11 +232,7 @@ export function InteractiveMap({
   }
 
   const routeLine = (
-    route && route.length
-      ? route
-      : pickup && dropoff
-        ? [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]]
-        : []
+    route && route.length > 1 ? route : []
   )
     .map(([lng, lat]) => `${sx(lng).toFixed(1)},${sy(lat).toFixed(1)}`)
     .join(' ');
@@ -313,8 +301,8 @@ export function InteractiveMap({
 
             {user ? (
               <G>
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(64,145,255,0.16)" />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill="#4091FF" stroke="#FFFFFF" strokeWidth={2.5} />
+                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(255,0,0,0.16)" />
+                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={3} fill="#FFFFFF" />
                 <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill={colors.text} fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>
@@ -362,3 +350,4 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 
 export const Map = InteractiveMap;
 export default InteractiveMap;
+

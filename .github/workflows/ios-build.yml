@@ -6,6 +6,7 @@ on:
       - main
       - beta/oslo-production-ready
       - snar/mobile-ui-review-20260930
+      - design/figma-make-pixel-match-20261002
     paths:
       - 'frontend/**'
       - 'driver-app/**'
@@ -50,8 +51,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Enforce SNAR Customer pre-build gate
+        if: ${{ matrix.dir == 'frontend' }}
+        run: node scripts/customer-build-gate.cjs
+
       - name: Install app dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -92,3 +97,5 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/KJAPP-${{ matrix.label }}-DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+

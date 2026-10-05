@@ -1,16 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
-import * as Linking from 'expo-linking';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import * as WebBrowser from 'expo-web-browser';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 import { unregisterNativePush } from '@/src/lib/nativeRuntime';
 
-// Complete any pending auth session (mobile). No-op on web.
-WebBrowser.maybeCompleteAuthSession();
-
-const EMERGENT_AUTH = 'https://auth.emergentagent.com/';
+import { googleIdentity, appleIdentity } from '@/src/lib/socialSignIn';
 
 export type User = {
   id: string;
@@ -20,9 +13,12 @@ export type User = {
   role?: string;
   driver_id?: string;
   legal_accepted?: boolean;
+  customer_photo_version?: string;
+  google_linked?: boolean;
 } | null;
 
 type AuthCtx = {
+  sessionError: string;
   user: User | undefined; // undefined = loading, null = signed out
   login: (email: string, password: string) => Promise<any>;
   register: (data: any) => Promise<any>;
@@ -35,174 +31,108 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx>(null as any);
 
-function extractSessionId(url?: string | null): string | null {
-  if (!url) return null;
-  const m = url.match(/[?#&]session_id=([^&#]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const sessionEpoch = useRef(0);
+  const [sessionError, setSessionError] = useState('');
   const [user, setUser] = useState<User | undefined>(undefined);
-  const processed = useRef<Set<string>>(new Set());
-  const lastUrl = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
+    const epoch = ++sessionEpoch.current;
+    setSessionError('');
     const token = await storage.getItem(TOKEN_KEY);
+    if (epoch !== sessionEpoch.current) return;
     if (!token) {
       setUser(null);
       return;
     }
     try {
       const u = await authApi.me();
+      if (epoch !== sessionEpoch.current) return;
       if (u?.role !== 'user') {
         await storage.removeItem(TOKEN_KEY);
+        if (epoch !== sessionEpoch.current) return;
         setUser(null);
         return;
       }
       setUser(u);
-    } catch {
-      await storage.removeItem(TOKEN_KEY);
-      setUser(null);
-    }
-  }, []);
-
-  // Exchange an Emergent session_id for our JWT (once per session_id).
-  const handleSessionId = useCallback(async (sid: string): Promise<User> => {
-    if (processed.current.has(sid)) return null;
-    processed.current.add(sid);
-    try {
-      const res = await authApi.googleSession(sid);
-      if (res?.user?.role !== 'user') return null;
-      await storage.setItem(TOKEN_KEY, res.token);
-      setUser(res.user);
-      return res.user;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // Boot: process a returning session_id first, else restore existing session.
-  useEffect(() => {
-    let sub: { remove: () => void } | undefined;
-    (async () => {
-      if (Platform.OS === 'web') {
-        const href = typeof window !== 'undefined' ? window.location.href : '';
-        const sid = extractSessionId(href);
-        if (sid) {
-          await handleSessionId(sid);
-          // strip session_id, preserve everything else
-          try {
-            const clean = href.replace(/([?#&])session_id=[^&#]*/, '$1').replace(/[?#&]$/, '');
-            window.history.replaceState(window.history.state, '', clean);
-          } catch {}
-          return;
-        }
-        await refresh();
+    } catch (error: any) {
+      if (epoch !== sessionEpoch.current) return;
+      if (error?.response?.status === 401) {
+        await storage.removeItem(TOKEN_KEY);
+        if (epoch !== sessionEpoch.current) return;
+        setUser(null);
       } else {
-        const initial = await Linking.getInitialURL();
-        const sid = extractSessionId(initial);
-        if (sid) { await handleSessionId(sid); return; }
-        await refresh();
+        setSessionError('Kan ikke kontakte SNAR. Sjekk forbindelsen og prøv igjen.');
       }
-    })();
-
-    if (Platform.OS !== 'web') {
-      sub = Linking.addEventListener('url', (e) => {
-        lastUrl.current = e.url;
-        const sid = extractSessionId(e.url);
-        if (sid) handleSessionId(sid);
-      });
     }
-    return () => { sub && sub.remove(); };
-  }, [refresh, handleSessionId]);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   const login = async (email: string, password: string) => {
+    const epoch = ++sessionEpoch.current;
     const res = await authApi.login({ email, password, client: 'customer' });
+    if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');
     if (res.twofa_required) return res;
-    if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
+    if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i SNAR kundeappen.');
     await storage.setItem(TOKEN_KEY, res.token);
-    setUser(res.user);
+    if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');
+    setSessionError(''); setUser(res.user);
     return res.user;
   };
 
   const register = async (data: any) => {
+    const epoch = ++sessionEpoch.current;
     const res = await authApi.register(data);
+    if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');
     if (res?.user?.role !== 'user') throw new Error('Kun kundekonto kan registreres i kundeappen.');
     await storage.setItem(TOKEN_KEY, res.token);
-    setUser(res.user);
+    if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');
+    setSessionError(''); setUser(res.user);
     return res.user;
   };
 
   const acceptLegal = async (): Promise<User> => {
+    const epoch = ++sessionEpoch.current;
     const updated = await authApi.acceptLegal('2026-09');
+    if (epoch !== sessionEpoch.current) return null;
     setUser(updated);
     return updated;
   };
 
-  const signInWithGoogle = async (): Promise<User> => {
-    const redirectUrl = Platform.OS === 'web'
-      ? window.location.origin + '/'
-      : Linking.createURL('');
-    const authUrl = `${EMERGENT_AUTH}?redirect=${encodeURIComponent(redirectUrl)}`;
-
-    if (Platform.OS === 'web') {
-      window.location.href = authUrl;
-      return null; // return handled on next mount
-    }
-
-    lastUrl.current = null;
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-    let url: string | null = result.type === 'success' ? result.url : null;
-    if (!url) url = lastUrl.current || (await Linking.getInitialURL());
-    const sid = extractSessionId(url);
-    if (!sid) return null;
-    return await handleSessionId(sid);
+  const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
+    const epoch = ++sessionEpoch.current;
+    const identity = provider === 'google'
+      ? await googleIdentity(await authApi.nativeConfig()) : await appleIdentity();
+    if (!identity || epoch !== sessionEpoch.current) return null;
+    const res = typeof identity === 'string' ? await authApi.nativeSignIn(provider, identity) : identity.session;
+    if (epoch !== sessionEpoch.current) return null;
+    if (!res.token || res.user?.role !== 'user') throw new Error('Innloggingen kunne ikke bekreftes.');
+    await storage.setItem(TOKEN_KEY, res.token);
+    if (epoch !== sessionEpoch.current) return null;
+    setSessionError(''); setUser(res.user);
+    return res.user;
   };
-
-  const signInWithApple = async (): Promise<User> => {
-    if (Platform.OS !== 'ios') return null;
-    try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      if (!credential.identityToken) {
-        throw new Error('Apple returnerte ikke et gyldig identity token.');
-      }
-      const fullName = [
-        credential.fullName?.givenName,
-        credential.fullName?.middleName,
-        credential.fullName?.familyName,
-      ].filter(Boolean).join(' ').trim() || undefined;
-      const res = await authApi.appleSignIn({
-        identity_token: credential.identityToken,
-        fullName,
-        email: credential.email,
-      });
-      if (res.twofa_required) {
-        throw new Error('Kontoen krever tofaktor — logg inn via web-portalen.');
-      }
-      if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i KJAPP kundeappen.');
-      await storage.setItem(TOKEN_KEY, res.token);
-      setUser(res.user);
-      return res.user;
-    } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') return null;
-      throw e;
-    }
-  };
+  const signInWithGoogle = () => socialLogin('google');
+  const signInWithApple = () => socialLogin('apple');
 
   const logout = async () => {
-    try { await unregisterNativePush(); } catch {}
-    try { await authApi.logout(); } catch {}
+    const epoch = ++sessionEpoch.current;
+    const token = await storage.getItem(TOKEN_KEY);
+    if (epoch !== sessionEpoch.current) return;
     await storage.removeItem(TOKEN_KEY);
-    setUser(null);
+    if (epoch !== sessionEpoch.current) return;
+    setSessionError(''); setUser(null);
+    // Remote cleanup uses the old session and cannot delay local sign-out or
+    // revoke a new login that starts while these requests are still in flight.
+    if (token) void (async () => {
+      try { await unregisterNativePush(token); } catch {}
+      try { await authApi.logout(token); } catch {}
+    })();
   };
 
   return (
-    <Ctx.Provider value={{ user, login, register, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
+    <Ctx.Provider value={{ sessionError, user, login, register, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
       {children}
     </Ctx.Provider>
   );

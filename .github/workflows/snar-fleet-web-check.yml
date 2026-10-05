@@ -1,0 +1,45 @@
+name: SNAR Fleet web check
+
+on:
+  push:
+    branches:
+      - design/snar-fleet-theme-20261005
+    paths:
+      - 'fleet-web/**'
+      - '.github/workflows/snar-fleet-web-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fleet-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: fleet-web/package.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript + Vite production build
+        run: npm run build
+
+      - name: Upload production bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: snar-fleet-dist
+          path: fleet-web/dist
+          if-no-files-found: error
+          retention-days: 7

@@ -1,5 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ export default function PaymentMethods() {
   const [error, setError] = useState('');
 
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });
+  const { data: nativeConfig } = useQuery({ queryKey: ['native-payment-config'], queryFn: paymentApi.nativeConfig });
   const methods = data?.payment_methods || data?.methods || (Array.isArray(data) ? data : []);
 
   const verifySetup = async (sessionId: string) => {
@@ -33,7 +35,7 @@ export default function PaymentMethods() {
         if (result?.ready) {
           await qc.invalidateQueries({ queryKey: ['payment-methods'] });
           if (result?.verified) {
-            setNotice('Kortet er verifisert og klart for KJAPP-bestillinger.');
+            setNotice('Kortet er verifisert og klart for SNAR-bestillinger.');
             setError('');
           } else {
             setError('Kortet ble ikke verifisert av Stripe. Prøv et annet kort.');
@@ -154,8 +156,11 @@ export default function PaymentMethods() {
 
             <View style={s.securityNote}>
               <Icon name="shield" size={15} color={colors.online} />
-              <Text style={s.note}>Kortopplysninger håndteres av Stripe. KJAPP lagrer ikke kortnummer eller CVC. Hvis automatisk betaling er aktivert, forsøker KJAPP å belaste det avtalte turbeløpet når turen er ferdig; hvis banken krever ny godkjenning, får du beskjed og kan betale fra kvitteringen.</Text>
+              <Text style={s.note}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Hvis automatisk betaling er aktivert, forsøker SNAR å belaste det avtalte turbeløpet når turen er ferdig; hvis banken krever ny godkjenning, får du beskjed og kan betale fra kvitteringen.</Text>
             </View>
+            <Text style={s.vippsNote} testID="wallet-native-status">{nativeConfig?.enabled && nativeConfig?.test_mode
+              ? 'Native kortbetaling er konfigurert i testmodus. Lommebokbetaling krever støtte på enheten.'
+              : 'Google Pay og Apple Pay er ikke aktivert. Kort kan legges til via Stripe når testintegrasjonen er konfigurert.'}</Text>
             <Text style={s.vippsNote}>Vipps aktiveres først når produksjonsintegrasjonen er konfigurert og verifisert.</Text>
           </>
         )}
