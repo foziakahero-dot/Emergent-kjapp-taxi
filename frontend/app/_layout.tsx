@@ -1,4 +1,5 @@
 import { useReducedMotion } from '@/src/components/Motion';
+import { GlobalCustomerShell } from '@/src/components/GlobalCustomerShell';
 import { NativePaymentProvider } from '@/src/components/NativePaymentProvider';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -91,6 +92,7 @@ export default function RootLayout() {
             <SessionGate>
             <NativeRuntimeBridge />
             <StatusBar style="dark" />
+            <GlobalCustomerShell>
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -113,6 +115,7 @@ export default function RootLayout() {
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             </Stack>
+            </GlobalCustomerShell>
             </SessionGate>
             </NativePaymentProvider>
           </AuthProvider>
