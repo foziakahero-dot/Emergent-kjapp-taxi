@@ -151,7 +151,7 @@ export default function Home() {
     }
     const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });
     load();
-    const i = setInterval(load, 8000);
+    const i = setInterval(load, 4000);
     return () => { mounted = false; clearInterval(i); };
   }, [locationReady, loc.lat, loc.lng]);
 
@@ -171,7 +171,8 @@ export default function Home() {
   const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
   const nearest = etaValues.length ? Math.min(...etaValues) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
-  const payMethod = methods.find((m) => m.is_default) || methods[0];
+  const verifiedMethods = methods.filter((m: any) => m?.verified === true && m?.setup_status === 'succeeded');
+  const payMethod = verifiedMethods.find((m: any) => m.is_default) || verifiedMethods[0];
   const quickPlaces = [...myPlaces, ...recentPlaces].filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
   const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
 
@@ -192,7 +193,7 @@ export default function Home() {
       return;
     }
     if (!payMethod) {
-      setError('Legg til et betalingskort før du bestiller.');
+      setError('Legg til og verifiser et betalingskort før du bestiller.');
       router.push('/payment-methods');
       return;
     }
@@ -221,7 +222,7 @@ export default function Home() {
         }
       } catch {}
       if (e?.response?.status === 402) {
-        setError('Legg til et betalingskort før du bestiller.');
+        setError('Kortet må være verifisert før du kan bestille.');
         setTimeout(() => router.push('/payment-methods'), 700);
       } else if (e?.response?.status === 409) {
         setError('En bestilling behandles allerede. SNAR sjekker den aktive turen automatisk.');
@@ -235,6 +236,20 @@ export default function Home() {
   };
 
   const routeGeom = estimate?.geometry?.coordinates;
+  const rideStarted = activeTrip?.status === 'in_trip';
+  const mapPickup = activeTrip
+    ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng }
+    : dropoff && locationReady ? pickupPoint : null;
+  const mapDropoff = activeTrip
+    ? rideStarted ? { lat: activeTrip.dropoff_lat, lng: activeTrip.dropoff_lng } : null
+    : dropoff;
+  const mapRoute = activeTrip
+    ? rideStarted ? activeTrip.geometry?.coordinates : null
+    : routeGeom;
+  const showAssignedCar = Boolean(
+    activeTrip && ['driver_on_way', 'at_pickup', 'in_trip'].includes(activeTrip.status)
+    && activeTrip.driver_lat != null && activeTrip.driver_lng != null,
+  );
   const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
   const selectedCopy = vehicleCopy(selType);
   const selectedPrice = priceFor(selType);
@@ -246,11 +261,11 @@ export default function Home() {
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={locationReady ? loc : null}
-        pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : dropoff && locationReady ? pickupPoint : null}
-        dropoff={activeTrip ? { lat: activeTrip.dropoff_lat, lng: activeTrip.dropoff_lng } : dropoff}
-        route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
-        cars={activeTrip || dropoff ? [] : cars}
-        activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
+        pickup={mapPickup}
+        dropoff={mapDropoff}
+        route={mapRoute}
+        cars={activeTrip ? [] : cars}
+        activeCar={showAssignedCar ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
 
@@ -510,7 +525,7 @@ export default function Home() {
           <Pressable style={s.paymentRow} onPress={() => router.push('/payment-methods')} testID="booking-payment-row">
             <Icon name={payMethod?.type === 'vipps' ? 'wallet' : 'card'} size={19} color={colors.textSecondary} />
             <Text style={s.paymentText} numberOfLines={1}>
-              {payMethod ? (payMethod.type === 'vipps' ? 'Vipps' : `${payMethod.label} ••${payMethod.last4}`) : 'Legg til betalingsmåte'}
+              {payMethod ? (payMethod.type === 'vipps' ? 'Vipps' : `${payMethod.label} ••${payMethod.last4}`) : 'Legg til verifisert betalingskort'}
             </Text>
             <Text style={s.changeMono}>ENDRE</Text>
           </Pressable>
@@ -775,4 +790,3 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
-
