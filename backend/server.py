@@ -9,6 +9,7 @@ import secrets
 import json
 import base64
 import traceback
+import logging
 import re
 import bcrypt
 import jwt
@@ -4413,7 +4414,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     if not trip:
         raise HTTPException(status_code=404, detail="Fant ikke turen")
     if trip.get("status") in ("arrived", "completed", "rated"):
-        return {"ok": True, "already_applied": True, "bonuses": []}
+        return {"ok": True, "already_applied": True, "bonuses": [],
+                "ended_early": trip.get("ended_early", False), "warning": trip.get("early_end_warning")}
     if trip.get("status") != "in_trip":
         raise HTTPException(status_code=409, detail="Turen må være startet før den kan avsluttes")
     if not _fresh_driver_location(current.get("last_location_at")):
@@ -4423,19 +4425,26 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     if d_lat is None or d_lng is None:
         raise HTTPException(status_code=409, detail="Mangler gyldig GPS-posisjon")
     dropoff_distance_m = haversine_km(d_lat, d_lng, trip["dropoff_lat"], trip["dropoff_lng"]) * 1000
-    if dropoff_distance_m > DROPOFF_ARRIVAL_RADIUS_M:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Du er for langt fra destinasjonen til å avslutte turen ({int(round(dropoff_distance_m))} m)",
-        )
-
+    ended_early = dropoff_distance_m > DROPOFF_ARRIVAL_RADIUS_M
+    warning = "Turen er avsluttet før avtalt destinasjon. Turprisen må kontrolleres av SNAR før betaling."
+    updates = {
+        "status": "arrived",
+        "arrived_at": datetime.now(timezone.utc).isoformat(),
+        "dropoff_arrival_distance_m": int(round(dropoff_distance_m)),
+        "actual_dropoff_lat": d_lat,
+        "actual_dropoff_lng": d_lng,
+        "ended_early": ended_early,
+        "ended_by": "driver",
+    }
+    if ended_early:
+        updates.update({
+            "early_end_warning": warning,
+            "price_review_required": True,
+            "requires_manual_settlement": True,
+        })
     result = await db.trips.update_one(
         _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"}),
-        {"$set": {
-            "status": "arrived",
-            "arrived_at": datetime.now(timezone.utc).isoformat(),
-            "dropoff_arrival_distance_m": int(round(dropoff_distance_m)),
-        }},
+        {"$set": updates},
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen endret status før den kunne avsluttes")
@@ -4444,13 +4453,24 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
     )
     t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
-    await send_push_to_user(
-        t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
-        f"/receipt/{trip_id}", "trip_arrived",
-    )
-    payment = await _attempt_trip_auto_charge(t)
+    if ended_early:
+        # Notify both parties independently; a push failure must not undo the ride ending.
+        for recipient, url in ((t["user_id"], f"/receipt/{trip_id}"), (driver_id, "/driver")):
+            try:
+                await send_push_to_user(recipient, "Turen er avsluttet tidlig", warning,
+                                        url, "trip_ended_early", require_interaction=True)
+            except Exception:
+                logging.exception("Early-end notification failed for trip %s", trip_id)
+        payment = {"attempted": False, "reason": "price_review_required"}
+    else:
+        await send_push_to_user(
+            t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
+            f"/receipt/{trip_id}", "trip_arrived",
+        )
+        payment = await _attempt_trip_auto_charge(t)
     # Bonus evaluation happens only from the canonical payment-success transition.
-    return {"ok": True, "bonuses": [], "payment": payment}
+    return {"ok": True, "bonuses": [], "payment": payment,
+            "ended_early": ended_early, "warning": warning if ended_early else None}
 
 
 @api.get("/driver/demand")
@@ -7897,6 +7917,8 @@ AUTO_CHARGE_ENABLED = str(os.environ.get("KJAPP_AUTO_CHARGE_ENABLED", "false")).
 
 
 async def _attempt_trip_auto_charge(trip: dict) -> dict:
+    if trip and trip.get("price_review_required"):
+        return {"attempted": False, "reason": "price_review_required"}
     if not AUTO_CHARGE_ENABLED or not trip or not trip.get("trip_id"):
         return {"attempted": False, "reason": "disabled_or_missing"}
     lock = secrets.token_urlsafe(16)
@@ -8143,6 +8165,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(status_code=400, detail="Turen er ikke ferdig ennå")
+    if trip.get("price_review_required"):
+        raise HTTPException(status_code=409, detail="Turen ble avsluttet tidlig. SNAR må kontrollere turprisen før betaling.")
     if trip.get("payment_status") == "paid":
         raise HTTPException(status_code=400, detail="Turen er allerede betalt")
     amount_nok = int(trip.get("price") or 0)
@@ -9787,6 +9811,11 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "stops": t.get("stops") or [], "special_needs": t.get("special_needs") or [],
             "pricing_version": t.get("pricing_version"), "commission_rate": t.get("commission_rate"),
             "requires_manual_settlement": t.get("requires_manual_settlement", False),
+            "ended_early": t.get("ended_early", False),
+            "price_review_required": t.get("price_review_required", False),
+            "early_end_warning": t.get("early_end_warning"),
+            "actual_dropoff_lat": t.get("actual_dropoff_lat"),
+            "actual_dropoff_lng": t.get("actual_dropoff_lng"),
             "refunded_total": t.get("refunded_total", 0),
             "receipt_id": t.get("receipt_id"),
             "passenger_name": (users.get(t.get("user_id")) or {}).get("name"),
@@ -10026,6 +10055,7 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
                 "manual_price_adjustment": adjustment,
                 "updated_at": now_iso,
                 "requires_manual_settlement": False,
+                "price_review_required": False,
             }, "$push": {"operator_interventions": {"action": body.action, **adjustment}}},
         )
         if price_result.modified_count != 1:
