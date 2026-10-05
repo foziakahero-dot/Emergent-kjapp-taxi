@@ -21,7 +21,7 @@ class Collection:
   return SimpleNamespace(modified_count=1)
 async def pricing():return {'customer_cancellation_fee':50,'late_driver_cancellation_fee':75,'free_cancel_minutes':2}
 async def push(*args):pass
-ns=dict(ride_testing=ride_testing,HTTPException=HTTPException,datetime=datetime,timezone=timezone,active_pricing=pricing,send_push_to_user=push,ObjectId=str,InvalidId=ValueError,_real_trip_filter=lambda x:x)
+ns=dict(ride_reservations=SimpleNamespace(release=push),ride_testing=ride_testing,HTTPException=HTTPException,datetime=datetime,timezone=timezone,active_pricing=pricing,send_push_to_user=push,ObjectId=str,InvalidId=ValueError,_real_trip_filter=lambda x:x)
 server_tree=ast.parse((BACKEND / 'server.py').read_text())
 names={'_customer_cancellable_statuses','cancel_trip_preview','cancel_trip','driver_cancel'}
 tree=ast.Module(body=[n for n in server_tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names],type_ignores=[])
