@@ -6,12 +6,13 @@ import App from "./App";
 import HelpPage from "./HelpPage";
 import { setPageSeo } from "./seo";
 import CookieConsent from "./CookieConsent";
+import { contactEmail, PUBLIC_SITE_URL } from "./siteConfig";
 import "./snar-tokens.css";
-
 import "./production-readiness.css";
 import "./snar-landing.css";
 
-const SUPPORT_EMAIL = "support@kjappapp.no";
+const SUPPORT_EMAIL = contactEmail("support");
+const canonical = (path = "/") => `${PUBLIC_SITE_URL}${path === "/" ? "/" : path}`;
 
 function RouteMetadata() {
   const { pathname, hash } = useLocation();
@@ -24,29 +25,32 @@ function RouteMetadata() {
     } else {
       window.scrollTo(0, 0);
     }
+
     if (pathname === "/personvern" || pathname === "/vilkar") {
       setPageSeo({
         title: pathname === "/personvern" ? "SNAR Personvern" : "SNAR Vilkår",
         description: "Informasjon for SNAR beta.",
-        canonical: "https://kjappapp.no" + pathname,
+        canonical: canonical(pathname),
       });
       return;
     }
+
     if (pathname.startsWith("/tur/")) {
       setPageSeo({
         title: "SNAR Delt tur",
         description: "Delt turstatus.",
-        canonical: "https://kjappapp.no" + pathname,
+        canonical: canonical(pathname),
         robots: "noindex,nofollow",
       });
       return;
     }
+
     if (pathname === "/help") {
       setPageSeo({
         title: "SNAR Hjelp & support",
         description:
-          "Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.",
-        canonical: "https://kjappapp.no/help",
+          `Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på ${SUPPORT_EMAIL}.`,
+        canonical: canonical("/help"),
       });
       return;
     }
@@ -56,7 +60,7 @@ function RouteMetadata() {
         title: "SNAR for løyvehavere — Fleet Panel og norsk oppfølging",
         description:
           "Bli SNAR-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.",
-        canonical: "https://kjappapp.no/loyvehaver",
+        canonical: canonical("/loyvehaver"),
       });
       return;
     }
@@ -66,17 +70,17 @@ function RouteMetadata() {
         title: "SNAR Partner — løyvehaversøknad",
         description:
           "Søk om å bli SNAR-partner og send nødvendig dokumentasjon for kontroll før Fleet-tilgang aktiveres.",
-        canonical: "https://kjappapp.no/loyvehaver/soknad",
+        canonical: canonical("/loyvehaver/soknad"),
         robots: "noindex,nofollow",
       });
       return;
     }
 
     setPageSeo({
-      title: "SNAR – Reis smart",
+      title: "SNAR – Taxi. Bare enklere.",
       description:
-        "SNAR er en norsk taxi-app med smart bestilling, tydelige prisestimater og løsninger for passasjerer, sjåfører og løyvehavere.",
-      canonical: "https://kjappapp.no/",
+        "SNAR er en norsk taxi-app med tydelige prisestimater, live sporing og en enklere bestillingsopplevelse.",
+      canonical: canonical("/"),
     });
   }, [pathname, hash]);
 
