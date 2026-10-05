@@ -211,7 +211,8 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
-  const canCancel = ['searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status);
+  const canCancel = ['searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
+    || (trip.internal_beta_test === true && trip.status === 'in_trip');
   const etaValue = Number(trip.eta_min);
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
   const driverDistance = Number(trip.driver_distance_to_pickup_km);
