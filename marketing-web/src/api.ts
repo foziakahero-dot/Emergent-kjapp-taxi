@@ -1,4 +1,4 @@
-const RAW_BASE = import.meta.env.VITE_API_BASE_URL || 'https://github-app-builder-28.emergent.host/api';
+const RAW_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 export const API_BASE = RAW_BASE.replace(/\/$/, '');
 
 export type FleetDraft = {

@@ -15,7 +15,7 @@ const topics = [
 ];
 
 function Wordmark() {
-  return <Link className="help-wordmark" to="/" aria-label="KJAPP forside"><span>KJ</span><em>A</em><span>PP</span></Link>;
+  return <Link className="help-wordmark" to="/" aria-label="SNAR forside"><span>SNAR</span></Link>;
 }
 
 export default function HelpPage() {
@@ -28,8 +28,8 @@ export default function HelpPage() {
 
   useEffect(() => {
     setPageSeo({
-      title: 'KJAPP Hjelp & support',
-      description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. KJAPP support svarer på support@kjappapp.no.',
+      title: 'SNAR Hjelp & support',
+      description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.',
       canonical: 'https://kjappapp.no/help',
     });
   }, []);
@@ -38,7 +38,7 @@ export default function HelpPage() {
 
   const sendSupportEmail = (event: FormEvent) => {
     event.preventDefault();
-    const subject = `[KJAPP Support] ${topicLabel}`;
+    const subject = `[SNAR Support] ${topicLabel}`;
     const body = [
       `Kategori: ${topicLabel}`,
       `Navn: ${name || '-'}`,
@@ -66,7 +66,7 @@ export default function HelpPage() {
 
       <section className="help-hero help-shell">
         <div>
-          <span className="help-kicker">KJAPP SUPPORT</span>
+          <span className="help-kicker">SNAR SUPPORT</span>
           <h1>Hva kan vi<br />hjelpe deg med?</h1>
           <p>Velg hva saken gjelder og beskriv problemet. E-posten blir automatisk adressert til <strong>{SUPPORT_EMAIL}</strong>.</p>
         </div>
@@ -94,7 +94,7 @@ export default function HelpPage() {
         <form className="help-form" onSubmit={sendSupportEmail}>
           <div className="help-form-head">
             <span>NY SUPPORTSAK</span>
-            <h2>Send til KJAPP Support</h2>
+            <h2>Send til SNAR Support</h2>
             <p>Vi fyller inn mottaker og saksinformasjon automatisk. Du godkjenner og sender fra ditt eget e-postprogram.</p>
           </div>
 
@@ -122,13 +122,13 @@ export default function HelpPage() {
 
       <section className="help-emergency help-shell">
         <div><span>SIKKERHET</span><h2>Akutt situasjon?</h2></div>
-        <p>Ved fare for liv eller helse skal du kontakte nødetatene direkte. Supportkanalen er for KJAPP-saker og erstatter ikke nødnummer.</p>
+        <p>Ved fare for liv eller helse skal du kontakte nødetatene direkte. Supportkanalen er for SNAR-saker og erstatter ikke nødnummer.</p>
       </section>
 
       <footer className="help-footer help-shell">
         <div><Wordmark /><p>Norsk taxi. Uten omveier.</p></div>
         <nav><Link to="/">Forside</Link><Link to="/loyvehaver">Løyvehaver</Link><a href={`mailto:${SUPPORT_EMAIL}`}>support@kjappapp.no</a></nav>
-        <span>© 2026 KJAPP · NexoraHub AS</span>
+        <span>© 2026 SNAR · NexoraHub AS</span>
       </footer>
     </main>
   );
