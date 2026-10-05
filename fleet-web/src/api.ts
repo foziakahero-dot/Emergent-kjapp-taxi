@@ -4,11 +4,22 @@ const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
-const isProductionFleetHost = host === 'fleet.kjappapp.no' || host === 'fleet.snarapp.no';
+const isLegacyProductionFleetHost = host === 'fleet.kjappapp.no';
+const isSnarFleetHost = host === 'fleet.snarapp.no';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
 
-// Never proxy a preview deployment into production. Configure VITE_API_BASE to a staging API when needed.
-export const API_BASE = configuredBase || (isProductionFleetHost ? productionBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
+// SNAR Fleet on Netlify uses the same-origin /api proxy from public/_redirects.
+// Legacy fleet.kjappapp.no keeps its already-proven direct production API path.
+// Preview deployments never proxy into production unless VITE_API_BASE is explicitly configured.
+export const API_BASE = configuredBase || (
+  isSnarFleetHost
+    ? `${window.location.origin}/api`
+    : isLegacyProductionFleetHost
+      ? productionBackend
+      : isVercelPreviewHost
+        ? '/__preview_api_disabled__'
+        : `${window.location.origin}/api`
+);
 export const TOKEN_KEY = 'kjapp_fleet_token';
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 30000 });
