@@ -225,12 +225,15 @@ export type DriverInvite = {
   vehicle_type?: string;
   email?: string;
   email_sent?: boolean;
+  email_status?: 'sent' | 'not_requested' | 'not_configured' | 'failed';
+  invite_url?: string;
   used?: boolean;
   created_at?: string;
   expires_at?: string;
 };
 
 export type PublicDriverInvite = {
+  email?: string;
   vehicle_id?: string;
   car?: string;
   plate?: string;
@@ -281,6 +284,7 @@ export const api = {
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
   createInvite: (body: { vehicle_id: string; email?: string; note?: string }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
+  resendInvite: (token: string): Promise<DriverInvite> => http.post(`/fleet/driver-invites/${encodeURIComponent(token)}/resend`).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
 
@@ -306,3 +310,4 @@ export const api = {
     return http.post('/upload/driver-doc', form).then((r) => r.data);
   },
 };
+

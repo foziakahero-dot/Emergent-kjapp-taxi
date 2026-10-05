@@ -330,7 +330,18 @@ export function LiveOpsPage() {
   </div>;
 }
 
-function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; onClose: () => void; onDone: () => void }) {
+function inviteMessage(invite: DriverInvite) {
+  if (invite.email_sent) return 'Invitasjonen er sendt til e-posttjenesten. Sjåføren må fullføre registreringen før admin kan godkjenne kontoen.';
+  if (invite.email_status === 'not_configured') return 'Invitasjonen er opprettet, men e-posttjenesten er ikke konfigurert. Kopier lenken og del den med sjåføren.';
+  if (invite.email) return 'Invitasjonen er opprettet, men e-posten ble ikke sendt. Kopier lenken eller prøv å sende på nytt.';
+  return 'Invitasjonen er opprettet. Kopier lenken og del den med sjåføren.';
+}
+
+function inviteLink(invite: DriverInvite) {
+  return invite.invite_url || `${window.location.origin}/driver-signup/${encodeURIComponent(invite.token)}`;
+}
+
+function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; onClose: () => void; onDone: (invite: DriverInvite) => void }) {
   const [vehicleId, setVehicleId] = useState(vehicles[0]?.id || '');
   const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
@@ -340,7 +351,7 @@ function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; 
     e.preventDefault();
     if (!vehicleId) { setErr('Registrer en ledig bil under Kjøretøy før du inviterer sjåføren.'); return; }
     setErr(''); setBusy(true);
-    try { await api.createInvite({ vehicle_id: vehicleId, email: email || undefined, note }); onDone(); }
+    try { const result = await api.createInvite({ vehicle_id: vehicleId, email: email.trim() || undefined, note }); onDone(result); }
     catch (e) { setErr(apiError(e)); }
     finally { setBusy(false); }
   };
@@ -349,11 +360,11 @@ function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; 
     <p>Velg en registrert, ledig bil fra flåten. Bil, skilt og klasse følger kjøretøyregisteret og kan ikke skrives inn manuelt her.</p>
     {vehicles.length ? <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required>
       {vehicles.map((v) => <option key={v.id} value={v.id}>{v.car || 'Bil'} · {v.plate || '—'} · {v.vehicle_type || 'KJAPP'}</option>)}
-    </select> : <div className="empty-state padded">Ingen ledige biler. <a href="#/vehicles">Registrer eller frigjør en bil først.</a></div>}
+    </select> : <div className="empty-state padded">Ingen ledige biler. <Link to="/kjoretoy">Registrer eller frigjør en bil først.</Link></div>}
     <input type="email" placeholder="Sjåførens e-post (valgfritt)" value={email} onChange={(e) => setEmail(e.target.value)} />
     <textarea placeholder="Kort notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
     <ErrorBox message={err} />
-    <button className="primary-button" disabled={busy || !vehicleId}>{busy ? 'Oppretter…' : 'Opprett invitasjon'}</button>
+    <button className="primary-button" disabled={busy || !vehicleId}>{busy ? 'Oppretter…' : email.trim() ? 'Opprett og send invitasjon' : 'Opprett invitasjonslenke'}</button>
   </form></div>;
 }
 
@@ -361,6 +372,8 @@ export function DriversPage() {
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
   const [invites, setInvites] = useState<DriverInvite[]>([]);
   const [copiedInvite, setCopiedInvite] = useState('');
+  const [inviteResult, setInviteResult] = useState<DriverInvite | null>(null);
+  const [resending, setResending] = useState('');
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
   const [q, setQ] = useState('');
   const [modal, setModal] = useState(false);
@@ -382,7 +395,7 @@ export function DriversPage() {
   const filtered = drivers.filter((d) =>
     `${nameOf(d)} ${d.car || ''} ${d.plate || ''}`.toLowerCase().includes(q.toLowerCase())
   );
-  const invitedVehicleIds = new Set(invites.filter((i) => !i.used).map((i) => i.vehicle_id).filter(Boolean));
+  const invitedVehicleIds = new Set(invites.filter((i) => !i.used && (!i.expires_at || new Date(i.expires_at).getTime() > Date.now())).map((i) => i.vehicle_id).filter(Boolean));
   const availableVehicles = vehicles.filter((v) => v.active !== false && !v.driver_id && !invitedVehicleIds.has(v.id));
 
   return <div className="page-content">
@@ -405,13 +418,14 @@ export function DriversPage() {
       </div>
     </div>
     <section className="invites-section">
-      <h2>Invitasjoner</h2><p>Opprett en invitasjon og send den til ny sjåfør.</p>
-      {invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => {
+      <h2>Invitasjoner</h2><p>Sjåføren fyller ut mobil og e-post og laster opp profilbilde, førerkort og kjøreseddel. Registreringen sendes automatisk til admin for godkjenning.</p>
+      {inviteResult ? <div className="invite-result" role="status"><p>{inviteMessage(inviteResult)}</p><label>Invitasjonslenke<input aria-label="Invitasjonslenke" readOnly value={inviteLink(inviteResult)} onFocus={(e) => e.currentTarget.select()} /></label></div> : null}
+      {invites.length ? <div className="invite-chips">{invites.map((i) => {
         const expired = !!i.expires_at && new Date(i.expires_at).getTime() <= Date.now();
         const active = !i.used && !expired;
-        const inviteUrl = `${window.location.origin}/driver-signup/${encodeURIComponent(i.token)}`;
+        const inviteUrl = inviteLink(i);
         return <div className="invite-chip" key={i.token}>
-          <span>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : expired ? 'Utløpt' : i.email_sent ? 'E-post sendt' : 'Lenke må deles'}</span>
+          <span>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Registrering mottatt' : expired ? 'Utløpt' : i.email_sent ? 'E-post sendt' : 'Lenke må deles'}</span>
           {active ? <>
             <button type="button" onClick={async () => {
               try {
@@ -422,13 +436,19 @@ export function DriversPage() {
                 setErr('Nettleseren kunne ikke kopiere lenken. Åpne invitasjonen og kopier adressen derfra.');
               }
             }}>{copiedInvite === i.token ? 'Kopiert' : 'Kopier lenke'}</button>
+            {i.email ? <button type="button" disabled={!!resending} onClick={async () => {
+              setResending(i.token); setErr('');
+              try { const result = await api.resendInvite(i.token); setInviteResult(result); await load(); }
+              catch (e) { setErr(apiError(e)); }
+              finally { setResending(''); }
+            }}>{resending === i.token ? 'Sender…' : 'Send e-post på nytt'}</button> : null}
             <a href={inviteUrl} target="_blank" rel="noreferrer">Åpne</a>
           </> : null}
         </div>;
       })}</div> : null}
     </section>
     <ErrorBox message={err} />
-    {modal ? <InviteModal vehicles={availableVehicles} onClose={() => setModal(false)} onDone={() => { setModal(false); load(); }} /> : null}
+    {modal ? <InviteModal vehicles={availableVehicles} onClose={() => setModal(false)} onDone={(result) => { setInviteResult(result); setModal(false); load(); }} /> : null}
     {detailBusy ? <div className="modal-backdrop"><div className="modal-card"><Loading /></div></div> : null}
     {selected ? <DriverDetailModal driver={selected} onClose={() => setSelected(null)} /> : null}
   </div>;
@@ -801,3 +821,4 @@ export function BedriftPage() {
   </div>;
 }
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) { return <div className="info-row"><span>{label}</span><b>{value}</b></div>; }
+
