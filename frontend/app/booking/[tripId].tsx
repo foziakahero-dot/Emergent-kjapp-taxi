@@ -1,6 +1,6 @@
 import { driverPresence } from '@/src/lib/tripPresence';
 import { apiError } from '@/src/lib/format';
-import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
+import { LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useReducedMotion } from '@/src/components/Motion';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
@@ -32,7 +32,6 @@ export default function BookingFlow() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const [minimized, setMinimized] = useState(false);
   const [trip, setTrip] = useState<any>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -80,8 +79,6 @@ export default function BookingFlow() {
         setNetworkIssue(false);
         if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
           nav.current = true;
-          // Server state is canonical. "arrived" means the physical ride ended but
-          // payment may still be unresolved; the receipt screen handles real payment.
           router.replace(`/receipt/${tripId}`);
         }
       } catch {
@@ -134,7 +131,6 @@ export default function BookingFlow() {
             if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');
             router.replace('/(app)/home');
           } catch (error) {
-            // A response can be lost after the server commits cancellation.
             try {
               const canonical = await tripsApi.get(tripId!);
               if (['cancelled', 'cancelled_by_driver'].includes(canonical?.status)) {
@@ -154,7 +150,6 @@ export default function BookingFlow() {
   const callEmergency = async () => {
     if (safetyLock.current) return;
     safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);
-    // The dialer must open immediately even if logging cannot reach the server.
     void safetyApi.log(tripId!, { kind: 'emergency' }).catch(() => {});
     try { await Linking.openURL('tel:112'); }
     catch { setActionError('Kunne ikke åpne telefonappen. Ring 112 direkte.'); }
@@ -205,7 +200,8 @@ export default function BookingFlow() {
   }
 
   const meta = META[trip.status] || META.searching;
-  const route = trip.geometry?.coordinates || null;
+  const rideStarted = trip.status === 'in_trip';
+  const route = rideStarted ? trip.geometry?.coordinates || null : null;
   const presence = driverPresence(trip);
   const driverGpsFresh = presence.fresh;
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
@@ -226,17 +222,14 @@ export default function BookingFlow() {
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-        dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+        dropoff={rideStarted ? { lat: trip.dropoff_lat, lng: trip.dropoff_lng } : null}
         route={route}
         activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading } : null}
         testID="booking-map"
       />
 
-      {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
-      {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
-        <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
-        <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
-      </View> : trip.status === 'searching' || trip.status === 'booking' ? (
+      {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur og gå til hjemkart" onPress={() => router.replace('/(app)/home')} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
+      {trip.status === 'searching' || trip.status === 'booking' ? (
         <View style={s.matchingOverlay} testID="matching-overlay">
           <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
           <View style={s.matchingCard}>
@@ -475,4 +468,3 @@ const useStyles = makeStyles((c) => ({
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
-
