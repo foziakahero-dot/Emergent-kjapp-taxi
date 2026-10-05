@@ -44,9 +44,33 @@ export const authApi = {
     api.post('/auth/apple', data).then((r) => r.data),
 };
 
+async function withReservation(request: () => Promise<any>) {
+  try { return (await request()).data; }
+  catch (error: any) {
+    const detail = error?.response?.data?.detail;
+    if (detail?.code !== 'reservation_requires_action') throw error;
+    const { approveReservation } = await import('./nativeReservation');
+    let approved: boolean;
+    try { approved = await approveReservation(detail); }
+    catch (approvalError) { await api.post(`/trips/${detail.trip_id}/cancel`).catch(() => {}); throw approvalError; }
+    if (!approved) {
+      await api.post(`/trips/${detail.trip_id}/cancel`).catch(() => {});
+      throw new Error('Kortreservasjonen ble avbrutt. Ingen tur er bestilt.');
+    }
+    try { return (await api.post(`/trips/${detail.trip_id}/authorization/confirm`)).data; }
+    catch (confirmationError) {
+      const trip = (await api.get(`/trips/${detail.trip_id}`)).data;
+      if (trip.payment_status === 'reserved' && trip.status !== 'payment_authorizing') return trip;
+      throw confirmationError;
+    }
+  }
+}
+
 export const tripsApi = {
   estimate: (data: any) => api.post('/trips/estimate', data).then((r) => r.data),
-  request: (data: any) => api.post('/trips/request', data).then((r) => r.data),
+  request: (data: any) => withReservation(() => api.post('/trips/request', data)),
+  authorize: (id: string) => withReservation(() => api.post(`/trips/${id}/authorization/retry`)),
+  retryPayment: (id: string) => api.post(`/trips/${id}/payment/retry`).then(r => r.data),
   active: () => api.get('/trips/active').then((r) => r.data),
   get: (id: string) => api.get(`/trips/${id}`).then((r) => r.data),
   complete: (id: string) => api.post(`/trips/${id}/complete`).then((r) => r.data),
