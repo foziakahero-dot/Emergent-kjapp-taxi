@@ -325,6 +325,32 @@ export default function DriverHome() {
     try { await driverApi.decline(tripId); setPending((p) => p.filter((t) => t.trip_id !== tripId)); } catch {}
   };
 
+  const cancelCurrentTrip = () => {
+    if (!current || busy) return;
+    const tripId = current.trip_id;
+    Alert.alert('Avbryte turen?', 'Turen avbrytes for både deg og kunden. Den blir ikke registrert som fullført.', [
+      { text: 'Behold tur', style: 'cancel' },
+      { text: 'Avbryt tur', style: 'destructive', onPress: async () => {
+        setBusy(true); setError('');
+        try {
+          await driverApi.cancel(tripId);
+          await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+          await poll();
+        } catch (e) {
+          // Canonical polling recovers a committed cancellation with a lost response.
+          try {
+            const confirmed = await driverApi.current();
+            if (!confirmed || confirmed.trip_id !== tripId || ['cancelled', 'cancelled_by_driver'].includes(confirmed.status)) {
+              await storage.removeItem(QUEUED_TRIP_ACTION_KEY);
+              await poll(); return;
+            }
+          } catch {}
+          setError(apiError(e));
+        } finally { setBusy(false); }
+      } },
+    ]);
+  };
+
   const advance = async () => {
     if (!current) return;
     const action: CriticalTripAction | null =
@@ -590,6 +616,9 @@ export default function DriverHome() {
             </View>
 
             <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Skyv når du er fremme" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
+          <Pressable style={s.noShowLink} onPress={cancelCurrentTrip} disabled={busy} testID="driver-cancel-trip">
+            <Text style={s.noShowLinkText}>Avbryt tur</Text>
+          </Pressable>
           </View>
         </>
       ) : current?.status === 'at_pickup' ? (
@@ -603,6 +632,9 @@ export default function DriverHome() {
           </View>
           {tripExtras(current) ? <Text style={s.stateMeta}>{tripExtras(current)}</Text> : null}
           <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Start tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
+          <Pressable style={s.noShowLink} onPress={cancelCurrentTrip} disabled={busy} testID="driver-cancel-trip">
+            <Text style={s.noShowLinkText}>Avbryt tur</Text>
+          </Pressable>
           <Pressable style={s.noShowLink} onPress={noShow} disabled={busy} testID="driver-no-show">
             <Text style={s.noShowLinkText}>Kunden kom ikke?</Text>
           </Pressable>
@@ -637,6 +669,9 @@ export default function DriverHome() {
               </Pressable>
             </View>
             <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Avslutt tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
+          <Pressable style={s.noShowLink} onPress={cancelCurrentTrip} disabled={busy} testID="driver-cancel-trip">
+            <Text style={s.noShowLinkText}>Avbryt tur</Text>
+          </Pressable>
           </View>
         </>
       ) : firstOffer && online ? (
