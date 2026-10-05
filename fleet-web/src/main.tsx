@@ -6,6 +6,7 @@ import { AuthProvider } from './auth';
 import './styles.css';
 import './mobile-overview-fix.css';
 import './snar-theme.css';
+import './fleet-v2.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
