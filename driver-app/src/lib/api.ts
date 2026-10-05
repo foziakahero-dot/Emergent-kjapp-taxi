@@ -138,6 +138,7 @@ export const driverApi = {
   current: () => api.get('/driver/current').then((r) => r.data),
   atPickup: (id: string) => api.post(`/driver/trip/${id}/at-pickup`).then((r) => r.data),
   start: (id: string) => api.post(`/driver/trip/${id}/start`).then((r) => r.data),
+  cancel: (id: string) => api.post(`/driver/trip/${id}/cancel`).then((r) => r.data),
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
