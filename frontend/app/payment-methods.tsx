@@ -1,7 +1,6 @@
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +8,7 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
 import { paymentApi } from '@/src/lib/api';
+import { setupNativeCard } from '@/src/lib/nativePayment';
 import { apiError } from '@/src/lib/format';
 
 const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjappapp.no';
@@ -34,6 +34,7 @@ export default function PaymentMethods() {
         const result = await paymentApi.cardSetupStatus(sessionId);
         if (result?.ready) {
           await qc.invalidateQueries({ queryKey: ['payment-methods'] });
+          await refetch();
           if (result?.verified) {
             setNotice('Kortet er verifisert og klart for SNAR-bestillinger.');
             setError('');
@@ -49,6 +50,7 @@ export default function PaymentMethods() {
   };
 
   useEffect(() => {
+    // Retained for web Checkout callbacks. Native card setup never leaves the app.
     if (setup === 'success' && session_id) {
       setBusy(true);
       verifySetup(session_id).finally(() => setBusy(false));
@@ -62,6 +64,7 @@ export default function PaymentMethods() {
     try {
       await paymentApi.remove(id);
       await qc.invalidateQueries({ queryKey: ['payment-methods'] });
+      await refetch();
     } catch (e) {
       setError(apiError(e));
     }
@@ -73,16 +76,23 @@ export default function PaymentMethods() {
     setNotice('');
     setError('');
     try {
-      const { checkout_url, session_id: stripeSessionId } = await paymentApi.cardSetup(CHECKOUT_ORIGIN);
-      if (!checkout_url || !stripeSessionId) throw new Error('Stripe svarte uten verifiseringslenke.');
-
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') window.location.assign(checkout_url);
+      if (Platform.OS !== 'web') {
+        const verified = await setupNativeCard();
+        if (!verified) {
+          setNotice('Kortverifiseringen ble avbrutt. Ingen kortdata ble lagret.');
+          return;
+        }
+        await qc.invalidateQueries({ queryKey: ['payment-methods'] });
+        await refetch();
+        setNotice('Kortet er verifisert og klart for SNAR-bestillinger.');
         return;
       }
 
-      await WebBrowser.openBrowserAsync(checkout_url);
-      await verifySetup(stripeSessionId);
+      // Browser Checkout is web-only. Android/iOS must never be sent to kjappapp.no
+      // after card verification; native PaymentSheet above stays inside SNAR.
+      const { checkout_url } = await paymentApi.cardSetup(CHECKOUT_ORIGIN);
+      if (!checkout_url) throw new Error('Stripe svarte uten verifiseringslenke.');
+      if (typeof window !== 'undefined') window.location.assign(checkout_url);
     } catch (e) {
       setError(apiError(e));
     } finally {
@@ -123,7 +133,7 @@ export default function PaymentMethods() {
             {error ? <Text style={s.error} testID="pm-error">{error}</Text> : null}
 
             {methods.map((m: any) => {
-              const verified = m.verified !== false;
+              const verified = m.verified === true;
               return (
                 <View key={m.id} style={s.card} testID={`pm-${m.id}`}>
                   <View style={s.cardIcon}><Icon name={m.type === 'vipps' ? 'wallet' : 'card'} size={20} color={colors.accent} /></View>
@@ -141,7 +151,7 @@ export default function PaymentMethods() {
               );
             })}
 
-            {!methods.length ? (
+            {!methods.some((m: any) => m.verified === true) ? (
               <View style={s.emptyCard}>
                 <Icon name="card" size={24} color={colors.accent} />
                 <Text style={s.emptyTitle}>Ingen verifisert betalingsmåte</Text>
@@ -159,8 +169,8 @@ export default function PaymentMethods() {
               <Text style={s.note}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Hvis automatisk betaling er aktivert, forsøker SNAR å belaste det avtalte turbeløpet når turen er ferdig; hvis banken krever ny godkjenning, får du beskjed og kan betale fra kvitteringen.</Text>
             </View>
             <Text style={s.vippsNote} testID="wallet-native-status">{nativeConfig?.enabled && nativeConfig?.test_mode
-              ? 'Native kortbetaling er konfigurert i testmodus. Lommebokbetaling krever støtte på enheten.'
-              : 'Google Pay og Apple Pay er ikke aktivert. Kort kan legges til via Stripe når testintegrasjonen er konfigurert.'}</Text>
+              ? 'Native kortbetaling er konfigurert i testmodus. Kortverifisering skjer inne i SNAR.'
+              : 'Google Pay og Apple Pay er ikke aktivert. Native Stripe må være konfigurert før kort kan verifiseres i appen.'}</Text>
             <Text style={s.vippsNote}>Vipps aktiveres først når produksjonsintegrasjonen er konfigurert og verifisert.</Text>
           </>
         )}
