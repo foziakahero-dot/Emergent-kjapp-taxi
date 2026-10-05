@@ -40,9 +40,8 @@ const customerGlyphs: Record<string, React.ReactNode> = {
 
 export function FloatingTabBar({ state, descriptors, navigation, driver = false }: BottomTabBarProps & { driver?: boolean }) {
   const insets = useSafeAreaInsets();
-  const { hidden, targets } = useContext(Visibility);
+  const { targets } = useContext(Visibility);
   const focused = state.routes[state.index];
-  if (hidden && focused.name === 'home') return null;
   const visible = state.routes.filter(route => (driver ? ['home', 'earnings', 'profile'] : ['home', 'history', 'wallet', 'profile']).includes(route.name));
   return <View style={{ position: 'absolute', left: 16, right: 16, bottom: insets.bottom + 16, borderRadius: 26, boxShadow: '0 16px 40px rgba(11,14,20,0.14)' }}>
     <View style={{ overflow: 'hidden', borderRadius: 26, borderWidth: 1, borderColor: colors.line, backgroundColor: driver ? 'rgba(255,255,255,0.94)' : 'rgba(255,255,255,0.92)', paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' }}>
