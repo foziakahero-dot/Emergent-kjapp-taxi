@@ -16,6 +16,7 @@ import httpx
 import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
+import internal_ride_testing as ride_testing
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
@@ -1692,9 +1693,13 @@ GPS_FRESH_SECONDS = 60  # a driver marker disappears when the GPS heartbeat is o
 
 
 @api.post("/cars/nearby")
-async def cars_nearby(body: NearbyCarsRequest):
+async def cars_nearby(body: NearbyCarsRequest, request: Request):
     """ONLY real, approved, on-duty drivers with a live GPS heartbeat (<60s) within ~10km.
     Simulated/demo driver records are never returned — an empty list is an honest 'no cars' answer."""
+    test_customer = False
+    if _auth_token_from_request(request):
+        caller = await get_current_user(request)
+        test_customer = ride_testing.is_test_customer(caller.get("id"))
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
     cars = []
     async for u in db.users.find({
@@ -1702,7 +1707,7 @@ async def cars_nearby(body: NearbyCarsRequest):
         "approved": True,
         "accepted_terms_at": {"$exists": True, "$ne": None},
         "online": True,
-        "internal_test_account": {"$ne": True},
+        **ride_testing.driver_supply_filter(test_customer),
         "active_trip_id": {"$in": [None, ""]},
         "disabled": {"$ne": True},
         "demo": {"$ne": True},
@@ -2482,6 +2487,9 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(settings.get("features") or {})}
     if features.get("booking_enabled") is False:
         raise HTTPException(status_code=503, detail="KJAPP tar midlertidig ikke imot nye bestillinger. Prøv igjen litt senere.")
+    test_customer = ride_testing.is_test_customer(current["id"])
+    if test_customer and not ride_testing.enabled():
+        raise HTTPException(status_code=503, detail="Intern turtest er deaktivert eller Stripe er ikke i testmodus")
     _require_launch_pickup(body.pickup_lat, body.pickup_lng)
     # Server-side duplicate guard: one passenger cannot create overlapping active rides.
     existing_active = await db.trips.find_one(
@@ -2557,6 +2565,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
+        "internal_beta_test": test_customer,
         "pickup_address": body.pickup_address,
         "pickup_lat": body.pickup_lat,
         "pickup_lng": body.pickup_lng,
@@ -3754,7 +3763,7 @@ ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
-async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, vehicle_type: Optional[str] = None) -> list:
+async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, vehicle_type: Optional[str] = None, customer_id: Optional[str] = None) -> list:
     """Real, available drivers sorted by actual distance to pickup.
 
     Equipment-bound needs (wheelchair/child seat) are hard requirements. Ride class is
@@ -3763,6 +3772,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
     """
     if lat is None or lng is None:
         return []
+    test_customer = ride_testing.is_test_customer(customer_id)
     required = set(required_capabilities or [])
     fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
     busy = set()
@@ -3773,6 +3783,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
     async for d in db.users.find(
         {"role": "driver", "approved": True, "accepted_terms_at": {"$exists": True, "$ne": None},
          "online": True, "disabled": {"$ne": True},
+         **ride_testing.driver_supply_filter(test_customer),
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
         {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1},
     ):
@@ -3808,6 +3819,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
         trip.get("pickup_lng"),
         _required_driver_capabilities(trip.get("special_needs")),
         trip.get("vehicle_type") or "ai-first",
+        customer_id=trip.get("user_id"),
     )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
@@ -3963,8 +3975,10 @@ async def driver_pending(current=Depends(require_driver)):
         {"driver_id": current["id"], "declined_at": {"$gte": decline_cut}}, {"trip_id": 1}
     ):
         declined.add(d["trip_id"])
+    internal_driver, _ = await _internal_driver_context(current, assigned_vehicle)
     trips = []
     async for t in db.trips.find({
+        **ride_testing.pending_customer_filter(internal_driver),
         "status": {"$in": ["searching", "booking"]},
         "driver_id": None,
         # Sequential dispatch: only the driver the trip is currently offered to sees it.
@@ -4046,6 +4060,9 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     }))
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    internal_driver, _ = await _internal_driver_context(current, assigned_vehicle)
+    if not ride_testing.trip_allowed(internal_driver, trip_pre.get("user_id")):
+        raise HTTPException(status_code=403, detail="Turen tilhører en annen test-/driftsgruppe")
     if (trip_pre.get("vehicle_type") or "ai-first") != (assigned_vehicle.get("vehicle_type") or "ai-first"):
         raise HTTPException(status_code=409, detail="Turen krever en annen kjøretøyklasse enn bilen du er tildelt")
     if not _driver_supports_special_needs(current, trip_pre.get("special_needs")):
@@ -6057,6 +6074,24 @@ def _compliance_message(result: dict) -> str:
     return "Dokumentkontroll: " + (", ".join(problems) if problems else "ikke godkjent")
 
 
+async def _internal_driver_context(driver: dict, assigned_vehicle: Optional[dict] = None):
+    """Read immutable test markers from Mongo; never trust client/public account fields."""
+    driver_id = str(driver.get("id") or driver.get("_id") or "")
+    try:
+        account = await db.users.find_one({"_id": ObjectId(driver_id), "role": "driver"}) or {}
+    except (InvalidId, TypeError):
+        return False, False
+    internal = account.get("internal_test_account") is True
+    if not internal or not ride_testing.enabled():
+        return internal, False
+    try:
+        fleet = await db.fleets.find_one({"_id": ObjectId(account.get("fleet_id"))}) or {}
+    except (InvalidId, TypeError):
+        return True, False
+    vehicle = assigned_vehicle or await _assigned_fleet_vehicle(account, required=False)
+    return True, ride_testing.driver_allowed(account, fleet, vehicle or {})
+
+
 async def _driver_shift_compliance(driver: dict, assigned_vehicle: Optional[dict] = None) -> dict:
     driver_id = str(driver.get("id") or driver.get("_id") or "")
     fleet_id = str(driver.get("fleet_id") or "")
@@ -6097,7 +6132,18 @@ async def _driver_shift_compliance(driver: dict, assigned_vehicle: Optional[dict
         "profile_photo_ok": profile_photo_ok,
         "vehicle_id": str(vehicle["_id"]) if vehicle else None,
     }
-    result["message"] = _compliance_message(result)
+    internal, test_ready = await _internal_driver_context(driver, vehicle)
+    if internal and test_ready:
+        # This is permission for an isolated physical test, never document verification.
+        result["operational"] = True
+        result["internal_beta_test"] = True
+        result["documents_verified"] = False
+        result["message"] = ""
+    elif internal:
+        result["operational"] = False
+        result["message"] = "Intern turtest er deaktivert eller kontoen/bilen er ikke tillatt"
+    else:
+        result["message"] = _compliance_message(result)
     return result
 
 
