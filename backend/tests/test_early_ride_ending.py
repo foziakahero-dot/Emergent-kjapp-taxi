@@ -43,13 +43,18 @@ async def main():
  db,c=setup(km=.02);r=await ns['driver_arrive']('t',c);assert not r['ended_early'];assert len(charges)==1;assert notifications[0][0][1]=='Du er fremme'
  db,c=setup();c['id']='other';await reject(c,404);assert db.trips.doc['status']=='in_trip'
  db,c=setup('at_pickup');await reject(c,409)
- db,c=setup();c['last_location_at']='stale';await reject(c,409);assert db.users.doc['active_trip_id']=='t'
- db,c=setup();c['last_lat']=None;await reject(c,409)
+ db,c=setup();c['last_location_at']='stale';r=await ns['driver_arrive']('t',c)
+ assert r['ok'] and not r['location_verified'];assert db.trips.doc['actual_dropoff_lat'] is None
+ assert db.trips.doc['last_known_driver_lat']==c['last_lat'];assert db.trips.doc['end_reason']=='gps_unavailable'
+ assert db.trips.doc['price_review_required'] and not charges and len(notifications)==2
+ assert 'active_trip_id' not in db.users.doc
+ db,c=setup();c['last_lat']=None;r=await ns['driver_arrive']('t',c)
+ assert r['ok'] and db.trips.doc['actual_dropoff_lat'] is None and not charges
  db,c=setup();db.trips.race=True;await reject(c,409);assert not notifications and not charges;assert db.users.doc['active_trip_id']=='t'
  db,c=setup();global push_fails;push_fails=True
  logging.disable(logging.CRITICAL)
  r=await ns['driver_arrive']('t',c);assert r['ok'] and len(notifications)==2 and not charges
- print('9 early-end checks passed: ownership, GPS, race, retry, both alerts, actual position, price hold and normal arrival.')
+ print('9 ride-end checks passed, including stale/missing GPS manual ending, unknown actual position, both alerts and payment hold.')
 def test_early_ride_ending():
  try:
   asyncio.run(main())
