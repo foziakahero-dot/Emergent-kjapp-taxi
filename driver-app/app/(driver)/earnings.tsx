@@ -1,8 +1,8 @@
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,12 +26,31 @@ export default function DriverEarnings() {
   const s = useStyles();
   const router = useRouter();
   const [period] = useState<Period>('week');
+  const [focused, setFocused] = useState(false);
 
-  const summaryQ = useQuery({ queryKey: ['driver-summary'], queryFn: driverApi.summary });
-  const weeklyQ = useQuery({ queryKey: ['driver-weekly'], queryFn: driverApi.weekly });
-  const payoutsQ = useQuery({ queryKey: ['driver-payouts'], queryFn: driverApi.payouts });
-  const historyQ = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
+  const summaryQ = useQuery({ queryKey: ['driver-summary'], queryFn: driverApi.summary, refetchInterval: focused ? 5000 : false });
+  const weeklyQ = useQuery({ queryKey: ['driver-weekly'], queryFn: driverApi.weekly, refetchInterval: focused ? 5000 : false });
+  const payoutsQ = useQuery({ queryKey: ['driver-payouts'], queryFn: driverApi.payouts, refetchInterval: focused ? 5000 : false });
+  const historyQ = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history, refetchInterval: focused ? 5000 : false });
 
+  const refreshEarnings = useCallback(async () => {
+    await Promise.allSettled([summaryQ.refetch(), weeklyQ.refetch(), payoutsQ.refetch(), historyQ.refetch()]);
+  }, [summaryQ.refetch, weeklyQ.refetch, payoutsQ.refetch, historyQ.refetch]);
+
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    void refreshEarnings();
+    return () => setFocused(false);
+  }, [refreshEarnings]));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && focused) void refreshEarnings();
+    });
+    return () => subscription.remove();
+  }, [focused, refreshEarnings]);
+
+  const refreshing = summaryQ.isRefetching || weeklyQ.isRefetching || payoutsQ.isRefetching || historyQ.isRefetching;
   const summary = summaryQ.data;
   const weekly = weeklyQ.data;
   const payouts = payoutsQ.data;
@@ -81,7 +100,7 @@ export default function DriverEarnings() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refreshEarnings()} tintColor={colors.accent} />} style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
       <Text style={s.title}>Inntjening</Text>
 
       <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.hero}>
