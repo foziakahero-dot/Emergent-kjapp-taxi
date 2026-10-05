@@ -1,13 +1,6 @@
 name: Customer Android APK
 
 on:
-  push:
-    branches:
-      - audit/customer-prebuild-snar-20261003
-      - fix/customer-search-mapbox-stripe-20261004
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -44,7 +37,12 @@ jobs:
         shell: bash
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platform-tools"             "platforms;android-36"             "build-tools;36.0.0"             "cmake;3.22.1"             "ndk;27.1.12297006"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.1.12297006"
 
       - name: Install Customer dependencies
         working-directory: frontend
