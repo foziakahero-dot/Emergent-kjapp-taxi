@@ -1705,7 +1705,8 @@ async def cars_nearby(body: NearbyCarsRequest, request: Request):
     async for u in db.users.find({
         "role": "driver",
         "approved": True,
-        "accepted_terms_at": {"$exists": True, "$ne": None},
+        **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
+           {"accepted_terms_at": {"$exists": True, "$ne": None}}),
         "online": True,
         **ride_testing.driver_supply_filter(test_customer),
         "active_trip_id": {"$in": [None, ""]},
@@ -3781,7 +3782,9 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
             busy.add(t["driver_id"])
     out = []
     async for d in db.users.find(
-        {"role": "driver", "approved": True, "accepted_terms_at": {"$exists": True, "$ne": None},
+        {"role": "driver", "approved": True,
+         **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
+            {"accepted_terms_at": {"$exists": True, "$ne": None}}),
          "online": True, "disabled": {"$ne": True},
          **ride_testing.driver_supply_filter(test_customer),
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
