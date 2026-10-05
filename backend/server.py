@@ -3,6 +3,7 @@ load_dotenv()
 
 import os
 import asyncio
+import html as html_escape
 import math
 import random
 import secrets
@@ -992,6 +993,7 @@ def send_email(to_email: str, subject: str, html: str) -> bool:
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
+    car, plate, invite_url, note = (html_escape.escape(str(v), quote=True) for v in (car, plate, invite_url, note))
     note_html = f"<p style='color:#a1a7ab;font-size:13px'>Notat fra flåte-eier: {note}</p>" if note else ""
     return f"""
     <div style="font-family:'Segoe UI',Arial,sans-serif;background:#050708;color:#e6ecef;padding:32px;border-radius:16px;max-width:520px;margin:auto;">
@@ -7329,7 +7331,7 @@ class DriverInviteRequest(BaseModel):
     vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
-    email: Optional[str] = None  # if set, send invite via SendGrid
+    email: Optional[EmailStr] = None  # if set, send invite via SendGrid
 
 
 class DriverSignupRequest(BaseModel):
@@ -7450,6 +7452,8 @@ async def get_driver_invite(token: str):
 
     return {
         "token": inv["token"],
+        "email": inv.get("email"),
+        "expires_at": inv.get("expires_at"),
         "vehicle_id": str(vehicle["_id"]),
         "car": str(vehicle.get("car") or ""),
         "plate": str(vehicle.get("plate") or "").upper(),
@@ -7467,6 +7471,9 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
     inv = await db.driver_invites.find_one({"token": body.token})
     if not inv or inv.get("used") or _invite_expired(inv):
         raise HTTPException(status_code=410, detail="Invitasjon ugyldig")
+    await get_driver_invite(body.token)
+    if not body.fullName.strip() or not body.phone.strip():
+        raise HTTPException(400, "Fyll ut navn og mobilnummer")
     email = body.email.strip().lower()
     if inv.get("email") and inv["email"] != email:
         raise HTTPException(status_code=403, detail="Invitasjonen er knyttet til en annen e-postadresse")
@@ -9633,6 +9640,34 @@ def _fleet_application_decision_html(company: str, approved: bool, notes: str, t
 # ============================================================
 # Fleet-owner driver invites (extends /admin/driver-invites)
 # ============================================================
+def _driver_invite_url(token: str) -> str:
+    # Never use Origin/Referer: invitation links must open the public fleet signup route.
+    base = os.environ.get("KJAPP_FLEET_URL", "https://fleet.kjappapp.no").strip().rstrip("/")
+    return f"{base}/driver-signup/{token}"
+
+
+def _driver_invite_result(invite: dict) -> dict:
+    result = {k: v for k, v in invite.items() if k != "_id"}
+    result["invite_url"] = _driver_invite_url(invite["token"])
+    result["email_status"] = ("sent" if invite.get("email_sent") else
+                              "not_requested" if not invite.get("email") else
+                              "not_configured" if not os.environ.get("SENDGRID_API_KEY", "").strip() else "failed")
+    return result
+
+
+async def _deliver_driver_invite(invite: dict) -> dict:
+    sent = False
+    if invite.get("email"):
+        sent = await asyncio.to_thread(
+            send_email, invite["email"], "Invitasjon: Registrer deg som sjåfør",
+            email_driver_invite_html(invite.get("car", ""), invite.get("plate", ""),
+                                     _driver_invite_url(invite["token"]), invite.get("note", "")),
+        )
+    invite["email_sent"] = bool(sent)
+    await db.driver_invites.update_one({"token": invite["token"]}, {"$set": {"email_sent": bool(sent)}})
+    return _driver_invite_result(invite)
+
+
 @api.post("/fleet/driver-invites")
 async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request, current=Depends(require_fleet_owner)):
     fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
@@ -9681,20 +9716,22 @@ async def fleet_create_driver_invite(body: DriverInviteRequest, request: Request
         "email_sent": False,
     }
     await db.driver_invites.insert_one(doc)
-    if body.email:
-        origin = str(request.base_url).rstrip("/").replace("/api", "")
-        frontend = request.headers.get("origin") or request.headers.get("referer", "").split("/api")[0] or origin
-        invite_url = f"{frontend.rstrip('/')}/driver-signup/{token}"
-        ok = send_email(
-            body.email,
-            "Invitasjon: Bli sjåfør for KJAPP",
-            email_driver_invite_html(canonical_car, canonical_plate, invite_url, body.note or ""),
-        )
-        if ok:
-            await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
-            doc["email_sent"] = True
-    doc.pop("_id", None)
-    return doc
+    return await _deliver_driver_invite(doc)
+
+
+@api.post("/fleet/driver-invites/{token}/resend")
+async def fleet_resend_driver_invite(token: str, request: Request, current=Depends(require_fleet_owner)):
+    await _enforce_rate_limit(request, "fleet-invite-resend", 10, 3600)
+    fleet_id = (await db.users.find_one({"_id": ObjectId(current["id"])}) or {}).get("fleet_id")
+    if not fleet_id:
+        raise HTTPException(403, "Du er ikke tilknyttet en flåte")
+    invite = await db.driver_invites.find_one({"token": token, "fleet_id": fleet_id})
+    if not invite:
+        raise HTTPException(404, "Invitasjon ikke funnet")
+    await get_driver_invite(token)
+    if not invite.get("email"):
+        raise HTTPException(400, "Invitasjonen mangler e-postadresse. Del lenken direkte.")
+    return await _deliver_driver_invite(invite)
 
 
 @api.get("/fleet/driver-invites")
@@ -9704,7 +9741,7 @@ async def fleet_list_driver_invites(current=Depends(require_fleet_owner)):
     out = []
     async for i in db.driver_invites.find(q).sort("created_at", -1).limit(100):
         i["id"] = str(i["_id"]); i.pop("_id", None)
-        out.append(i)
+        out.append(_driver_invite_result(i))
     return {"invites": out}
 
 
@@ -11178,5 +11215,6 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+
 
 

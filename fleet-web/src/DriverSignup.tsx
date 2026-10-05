@@ -24,7 +24,7 @@ function UploadRow({ item, value, busy, onFile, onRemove }: {
     <div className={`driver-doc-mark ${value ? 'done' : ''}`}>{value ? '✓' : '□'}</div>
     <div className="driver-doc-copy"><strong>{item.label}</strong><span>{value?.original_filename || item.sub}</span></div>
     {value ? <button type="button" className="driver-doc-action" onClick={onRemove}>Fjern</button> : <button type="button" className="driver-doc-action" disabled={busy} onClick={() => ref.current?.click()}>{busy ? 'Laster…' : 'Last opp'}</button>}
-    <input ref={ref} type="file" accept="image/*,application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+    <input ref={ref} type="file" accept={item.key === 'profile_photo' ? 'image/*' : 'image/*,application/pdf'} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
   </div>;
 }
 
@@ -42,7 +42,7 @@ export default function DriverSignup() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   useEffect(() => {
-    api.publicDriverInvite(token).then(setInvite).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
+    api.publicDriverInvite(token).then((value) => { setInvite(value); setForm((s) => ({ ...s, email: value.email || '' })); }).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
   }, [token]);
 
   const next = (e: FormEvent) => {
@@ -64,6 +64,7 @@ export default function DriverSignup() {
   };
 
   const submit = async () => {
+    if (busy || Object.values(uploading).some(Boolean)) return;
     setErr('');
     const missing = DOCS.filter((d) => !uploads[d.key]);
     if (missing.length) { setErr(`Mangler: ${missing.map((d) => d.label).join(', ')}`); return; }
@@ -72,6 +73,9 @@ export default function DriverSignup() {
       await api.acceptDriverInvite({
         token,
         ...form,
+        fullName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
         accepted_terms: true,
         legal_version: '2026-09',
         drivers_license_path: uploads.drivers_license!.storage_path,
@@ -95,7 +99,7 @@ export default function DriverSignup() {
       <div className="assigned-car"><span>BIL TILDELT</span><strong>{invite.car || 'KJAPP-bil'}{invite.plate ? ` · ${invite.plate}` : ''}</strong>{invite.fleet_name ? <small>{invite.fleet_name}</small> : null}</div>
       {step === 1 ? <form onSubmit={next} className="driver-signup-form">
         <input placeholder="Fullt navn" value={form.fullName} onChange={(e) => setForm((s) => ({ ...s, fullName: e.target.value }))} required />
-        <input type="email" placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
+        <input type="email" aria-label="E-post" readOnly={!!invite.email} placeholder="E-post" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
         <input type="tel" placeholder="Telefonnummer" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} required />
         <input type="password" placeholder="Passord · minst 8 tegn" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required />
         <label className="driver-legal">
@@ -108,10 +112,11 @@ export default function DriverSignup() {
         <p className="driver-doc-intro">Førerkort, kjøreseddel og profilbilde må være mottatt før kontoen kan godkjennes.</p>
         {DOCS.map((d) => <UploadRow key={d.key} item={d} value={uploads[d.key]} busy={uploading[d.key]} onFile={(f) => upload(d.key, f)} onRemove={() => setUploads((s) => ({ ...s, [d.key]: undefined }))} />)}
         {err ? <div className="error-box">{err}</div> : null}
-        <button className="primary-button" disabled={busy} onClick={submit}>{busy ? 'Sender…' : 'Send til godkjenning'}</button>
+        <button className="primary-button" disabled={busy || Object.values(uploading).some(Boolean)} onClick={submit}>{busy ? 'Sender…' : 'Send til godkjenning'}</button>
         <button className="driver-back" onClick={() => setStep(1)}>Tilbake</button>
       </div>}
       <Link className="driver-invite-help" to="/login">Er du løyvehaver? Logg inn i Partner</Link>
     </div>
   </div>;
 }
+
