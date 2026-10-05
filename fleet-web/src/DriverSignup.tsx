@@ -7,6 +7,8 @@ type DocKey = 'drivers_license' | 'taxi_license' | 'profile_photo';
 type Uploaded = { storage_path: string; original_filename?: string };
 type Step = 'invite' | 'contact' | 'password' | 'documents' | 'selfie' | 'vehicle';
 
+const PUBLIC_SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL || 'https://kjappapp.no').replace(/\/$/, '');
+
 const DOCS: Array<{ key: Exclude<DocKey, 'profile_photo'>; label: string; sub: string }> = [
   { key: 'drivers_license', label: 'Førerkort', sub: 'Forside og bakside' },
   { key: 'taxi_license', label: 'Kjøreseddel', sub: 'Gyldig kjøreseddel for taxi' },
@@ -23,7 +25,7 @@ const STEP_INDEX: Record<Step, number> = {
 
 function Mark({ size = 40 }: { size?: number }) {
   return (
-    <span className="driver-mark" style={{ width: size, height: size, borderRadius: size * 0.28 }} aria-label="KJAPP">
+    <span className="driver-mark" style={{ width: size, height: size, borderRadius: size * 0.28 }} aria-label="SNAR">
       <svg width={size * .52} height={size * .52} viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 5l7 7-7 7" stroke="rgba(255,255,255,.55)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M12 5l7 7-7 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -33,7 +35,7 @@ function Mark({ size = 40 }: { size?: number }) {
 }
 
 function Header() {
-  return <div className="driver-invite-header"><Mark /><span>KJAPP SJÅFØR</span></div>;
+  return <div className="driver-invite-header"><Mark /><span>SNAR SJÅFØR</span></div>;
 }
 
 function Steps({ step }: { step: Step }) {
@@ -151,7 +153,7 @@ export default function DriverSignup() {
         <span className="driver-status-circle error">!</span>
         <h1>Lenken virker ikke</h1>
         <p>{err || 'Invitasjonen er brukt, utløpt eller ugyldig.'}</p>
-        <a className="driver-navy-button link-button" href="https://kjappapp.no">Til KJAPP</a>
+        <a className="driver-navy-button link-button" href={PUBLIC_SITE_URL}>Til SNAR</a>
       </div>
     </div>
   </div>;
@@ -162,18 +164,18 @@ export default function DriverSignup() {
       <div className="driver-centered-state">
         <span className="driver-status-circle">✓</span>
         <h1>Sendt til godkjenning</h1>
-        <p>{invite.fleet_name || 'Løyvehaveren'} og KJAPP går gjennom søknaden din. Du får beskjed når sjåførkontoen er klar til bruk.</p>
+        <p>{invite.fleet_name || 'Løyvehaveren'} og SNAR går gjennom søknaden din. Du får beskjed når sjåførkontoen er klar til bruk.</p>
         <div className="driver-pending-card">
           <div><span>Identitet</span><strong>Til kontroll</strong></div>
           <div><span>Dokumenter</span><strong>Mottatt</strong></div>
           <div><span>Kjøretøy</span><strong>Bekreftet</strong></div>
         </div>
-        <a className="driver-navy-button link-button" href="https://kjappapp.no/sjafor">Om KJAPP Driver</a>
+        <a className="driver-navy-button link-button" href={PUBLIC_SITE_URL}>Til SNAR</a>
       </div>
     </div>
   </div>;
 
-  const assigned = `${invite.car || 'KJAPP-bil'}${invite.plate ? ` · ${invite.plate}` : ''}`;
+  const assigned = `${invite.car || 'SNAR-bil'}${invite.plate ? ` · ${invite.plate}` : ''}`;
 
   return <div className="driver-signup-screen">
     <div className="driver-phone-shell">
@@ -181,11 +183,11 @@ export default function DriverSignup() {
       <Steps step={step} />
 
       {step === 'invite' ? <section className="driver-step">
-        <h1>Du er invitert til KJAPP</h1>
+        <h1>Du er invitert til SNAR</h1>
         <p>Bekreft invitasjonen fra løyvehaveren for å aktivere sjåførkontoen.</p>
         <div className="driver-info-card">
           <span className="driver-card-label">INVITERT AV</span>
-          <strong>{invite.fleet_name || 'KJAPP-flåte'}</strong>
+          <strong>{invite.fleet_name || 'SNAR-flåte'}</strong>
           {invite.fleet_org_number ? <small>Org.nr {invite.fleet_org_number}</small> : null}
         </div>
         <div className="driver-info-card">
@@ -209,11 +211,11 @@ export default function DriverSignup() {
 
       {step === 'password' ? <section className="driver-step">
         <h1>Lag et passord</h1>
-        <p>Dette bruker du til å logge inn i den separate KJAPP Driver-appen.</p>
+        <p>Dette bruker du til å logge inn i den separate SNAR Driver-appen.</p>
         <form className="driver-form" onSubmit={goDocuments}>
           <label><span>PASSORD</span><input type="password" value={form.password} onChange={(e)=>setForm(s=>({...s,password:e.target.value}))} placeholder="Minst 8 tegn" /></label>
           <label><span>GJENTA PASSORD</span><input type="password" value={form.passwordAgain} onChange={(e)=>setForm(s=>({...s,passwordAgain:e.target.value}))} placeholder="Gjenta passord" /></label>
-          <label className="driver-terms"><input type="checkbox" checked={acceptedTerms} onChange={(e)=>setAcceptedTerms(e.target.checked)} /><span>Jeg godtar <a href="https://kjappapp.no/vilkar" target="_blank" rel="noreferrer">sjåførvilkårene</a> og har lest <a href="https://kjappapp.no/personvern" target="_blank" rel="noreferrer">personvernerklæringen</a>.</span></label>
+          <label className="driver-terms"><input type="checkbox" checked={acceptedTerms} onChange={(e)=>setAcceptedTerms(e.target.checked)} /><span>Jeg godtar <a href={`${PUBLIC_SITE_URL}/vilkar`} target="_blank" rel="noreferrer">sjåførvilkårene</a> og har lest <a href={`${PUBLIC_SITE_URL}/personvern`} target="_blank" rel="noreferrer">personvernerklæringen</a>.</span></label>
           {err ? <div className="driver-error">{err}</div> : null}
           <NavyButton type="submit">Fortsett</NavyButton>
         </form>
@@ -231,7 +233,7 @@ export default function DriverSignup() {
 
       {step === 'selfie' ? <section className="driver-step">
         <h1>Ta et profilbilde</h1>
-        <p>Profilbildet brukes i KJAPP og inngår i identitetskontrollen.</p>
+        <p>Profilbildet brukes i SNAR og inngår i identitetskontrollen.</p>
         <SelfieUpload value={uploads.profile_photo} busy={uploading.profile_photo} onFile={(file)=>upload('profile_photo',file)} onRemove={()=>setUploads(s=>({...s,profile_photo:undefined}))} />
         {err ? <div className="driver-error">{err}</div> : null}
         <NavyButton disabled={!uploads.profile_photo} onClick={()=>setStep('vehicle')}>Fortsett</NavyButton>
@@ -242,7 +244,7 @@ export default function DriverSignup() {
         <p>Kjøretøyet er tildelt av {invite.fleet_name || 'løyvehaveren'} og kan ikke endres i denne registreringen.</p>
         <div className="driver-vehicle-card">
           <span className="driver-vehicle-icon">››</span>
-          <div><strong>{invite.car || 'KJAPP-bil'}</strong><span>{invite.plate || 'Registreringsnummer mangler'}</span></div>
+          <div><strong>{invite.car || 'SNAR-bil'}</strong><span>{invite.plate || 'Registreringsnummer mangler'}</span></div>
           <span className="driver-check">✓</span>
         </div>
         {err ? <div className="driver-error">{err}</div> : null}
@@ -254,7 +256,7 @@ export default function DriverSignup() {
         setErr(''); setStep(prev[step as Exclude<Step,'invite'>]);
       }}>Tilbake</button> : null}
 
-      <Link className="driver-invite-help" to="/login">Er du løyvehaver? Logg inn i Partner</Link>
+      <Link className="driver-invite-help" to="/login">Er du løyvehaver? Logg inn i SNAR Fleet</Link>
     </div>
   </div>;
 }
