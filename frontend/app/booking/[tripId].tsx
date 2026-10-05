@@ -17,6 +17,7 @@ import { Loader } from '@/src/components/ui';
 import { safetyApi, tripDriverPhotoSource, tripsApi } from '@/src/lib/api';
 
 const META: Record<string, { title: string; sub: string }> = {
+  payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sjåfør bestilles før banken har godkjent turbeløpet' },
   searching: { title: 'Søker sjåfør', sub: 'Vi varsler ledige sjåfører nær deg' },
   booking: { title: 'Bestiller for deg', sub: 'Vi finner nærmeste sjåfør' },
   driver_on_way: { title: 'Sjåfør på vei', sub: 'Følg bilen live på kartet' },
@@ -211,7 +212,7 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
-  const canCancel = ['searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
+  const canCancel = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
   const etaValue = Number(trip.eta_min);
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
