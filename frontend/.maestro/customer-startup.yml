@@ -1,0 +1,16 @@
+appId: no.kjapp.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: onboarding-next
+    timeout: 30000
+- takeScreenshot: customer-startup
+- tapOn:
+    id: onboarding-next
+- extendedWaitUntil:
+    visible:
+      id: permissions-continue
+    timeout: 15000
+- takeScreenshot: customer-permissions

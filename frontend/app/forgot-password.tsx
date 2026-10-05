@@ -37,7 +37,7 @@ export default function ForgotPassword() {
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[s.wrap, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 24 }]}>
-        <Pressable onPress={() => router.back()} style={s.backLink} accessibilityRole="button" accessibilityLabel="Tilbake">
+        <Pressable testID="customer-app-forgot-password-40" onPress={() => router.back()} style={s.backLink} accessibilityRole="button" accessibilityLabel="Tilbake">
           <Text style={s.backLinkText}>‹  Tilbake</Text>
         </Pressable>
 
@@ -47,7 +47,7 @@ export default function ForgotPassword() {
               <View style={s.mailCircle}><Icon name="mail" size={24} color={colors.accent} /></View>
               <Text style={s.title}>Sjekk e-posten din</Text>
               <Text style={s.sub}>Hvis kontoen finnes, har vi sendt en sikker lenke for å velge nytt passord.</Text>
-              <Pressable onPress={() => router.replace('/login')} style={s.secondaryButton}>
+              <Pressable testID="customer-app-forgot-password-50" onPress={() => router.replace('/login')} style={s.secondaryButton}>
                 <Text style={s.secondaryText}>Tilbake til innlogging</Text>
               </Pressable>
             </View>

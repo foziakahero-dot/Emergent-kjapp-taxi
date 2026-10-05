@@ -43,19 +43,19 @@ export default function LegalConsent() {
   return (
     <View style={[s.screen, { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 24 }]}>
       <View>
-        <Text style={s.eyebrow}>KJAPP · KONTO</Text>
+        <Text style={s.eyebrow}>SNAR · KONTO</Text>
         <Text style={s.title}>Før du fortsetter</Text>
         <Text style={s.sub}>
-          Vi trenger din bekreftelse på KJAPPs vilkår og personvern før denne kontoen kan brukes videre i kundeappen.
+          Vi trenger din bekreftelse på SNARs vilkår og personvern før denne kontoen kan brukes videre i kundeappen.
         </Text>
 
         <View style={s.links}>
-          <Pressable style={s.linkRow} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
+          <Pressable testID="customer-app-legal-consent-53" style={s.linkRow} onPress={() => Linking.openURL('https://kjappapp.no/vilkar')}>
             <Icon name="file-text" size={19} color={colors.accent} />
             <Text style={s.linkLabel}>Les vilkår</Text>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />
           </Pressable>
-          <Pressable style={[s.linkRow, s.linkBorder]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
+          <Pressable testID="customer-app-legal-consent-58" style={[s.linkRow, s.linkBorder]} onPress={() => Linking.openURL('https://kjappapp.no/personvern')}>
             <Icon name="shield" size={19} color={colors.accent} />
             <Text style={s.linkLabel}>Les personvern</Text>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />

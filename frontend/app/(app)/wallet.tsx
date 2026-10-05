@@ -27,14 +27,14 @@ export default function Wallet() {
       <Text style={s.title}>Lommebok</Text>
 
       <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.creditCard}>
-        <Text style={s.creditEyebrow}>KJAPP-KREDITT</Text>
+        <Text style={s.creditEyebrow}>SNAR-KREDITT</Text>
         <Text style={s.creditTitle}>Kommer snart</Text>
         <Text style={s.creditSub}>Kreditt og verving er ikke aktivert i beta.</Text>
       </FigmaGradient>
 
       <View style={s.list}>
         {methods.map((m, i) => (
-          <Pressable key={m.id || i} style={s.methodRow} onPress={() => router.push('/payment-methods')}>
+          <Pressable testID="customer-app-app-wallet-36" key={m.id || i} style={s.methodRow} onPress={() => router.push('/payment-methods')}>
             <View style={s.methodIcon}><Icon name="card" size={19} color={colors.textSecondary} /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.methodTitle}>{m.type === 'vipps' ? 'Vipps' : (m.label || 'Betalingskort')}</Text>

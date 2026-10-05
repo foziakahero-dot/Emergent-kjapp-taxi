@@ -1,0 +1,21 @@
+name: SNAR Customer Latest Android + iOS
+
+on:
+  push:
+    branches:
+      - audit/customer-prebuild-snar-20261003
+
+jobs:
+  build_customer_android_apk:
+    name: Build SNAR Customer Android APK
+    type: build
+    params:
+      platform: android
+      profile: apk
+
+  build_customer_ios:
+    name: Build SNAR Customer iOS
+    type: build
+    params:
+      platform: ios
+      profile: testflight-beta

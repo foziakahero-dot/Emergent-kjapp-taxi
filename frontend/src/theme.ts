@@ -8,7 +8,7 @@ import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 
-/** KJAPP mobile — light surfaces, navy ink, red actions and green operational status. */
+/** SNAR mobile — light surfaces, navy ink, red actions and green operational status. */
 export const colors = {
   bg: '#F4F6FA',
   surface: '#FFFFFF',

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "KJAPP",
+    "name": "SNAR",
     "slug": "kjapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,10 +12,10 @@
       "bundleIdentifier": "no.nexorahub.kjapp.customer",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
-        "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
+        "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med SNAR Assist og bestille taxi.",
         "ITSAppUsesNonExemptEncryption": false,
         "MGLMapboxMetricsEnabledSettingShownInApp": true,
-        "NSCameraUsageDescription": "KJAPP bruker kameraet når du velger å skanne et betalingskort for å betale for taxiturer."
+        "NSCameraUsageDescription": "Ta et profilbilde eller skann betalingskort i SNAR."
       },
       "usesAppleSignIn": true
     },
@@ -44,6 +44,12 @@
           "RNMapboxMapsVersion": "11.31.1"
         }
       ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": true
+        }
+      ],
       "expo-router",
       "expo-font",
       [
@@ -62,7 +68,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
+          "microphonePermission": "Bruk stemmen for å snakke med SNAR Assist og bestille taxi.",
           "recordAudioAndroid": true
         }
       ],
@@ -75,6 +81,13 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 104,
           "backgroundColor": "#F4F6FA"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Velg et profilbilde i SNAR.",
+          "cameraPermission": "Ta et profilbilde i SNAR."
         }
       ]
     ],

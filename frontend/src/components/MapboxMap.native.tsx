@@ -1,6 +1,6 @@
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox, {
   Camera,
   LineLayer,
@@ -10,13 +10,14 @@ import Mapbox, {
   StyleImport,
 } from '@rnmapbox/maps';
 import Svg, { Circle, Rect } from 'react-native-svg';
+import { Text } from './Typography';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
 import { useSmoothPosition } from './useSmoothPosition';
-import { InteractiveMap as RasterInteractiveMap } from './InteractiveMap';
+import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { id?: string; lat: number; lng: number; heading?: number };
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -38,8 +39,10 @@ type Props = {
   interactive?: boolean;
 };
 
-function MarkerCar({ car }: { car: Car; active?: boolean }) {
-  return <MapCar heading={car.heading || 0} />;
+function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+  const smooth = useSmoothPosition(car);
+  if (!smooth) return null;
+  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
@@ -61,6 +64,10 @@ function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
   );
 }
 
+function validPoint(point: any): point is LL {
+  return Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng));
+}
+
 export function MapboxInteractiveMap({
   pickup,
   dropoff,
@@ -75,28 +82,47 @@ export function MapboxInteractiveMap({
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
+  const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
 
+  // /cars/nearby is already backend-filtered to real, fresh and operational cars.
+  // Keep a small nearby set in camera framing so the map actually communicates availability.
+  const visibleCars = useMemo(
+    () => cars.filter(validPoint).slice(0, 8),
+    [cars],
+  );
+
   const focus = useMemo(() => {
     const points: LL[] = [];
-    if (user) points.push(user);
-    if (pickup) points.push(pickup);
-    if (dropoff) points.push(dropoff);
-    if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
+    if (activeCar) {
+      if (pickup && validPoint(pickup)) points.push(pickup);
+      if (validPoint(activeCar)) points.push({ lat: activeCar.lat, lng: activeCar.lng });
+      // Home/booking only provide dropoff once the ride is in progress.
+      if (dropoff && validPoint(dropoff)) points.push(dropoff);
+      return points;
+    }
+
+    if (user && validPoint(user)) points.push(user);
+    if (pickup && validPoint(pickup) && (!user || Math.abs(pickup.lat - user.lat) > 1e-7 || Math.abs(pickup.lng - user.lng) > 1e-7)) points.push(pickup);
+    if (dropoff && validPoint(dropoff)) points.push(dropoff);
+
+    // Before assignment, real available cars are first-class map context rather than decorative markers.
+    visibleCars.forEach((car) => points.push({ lat: car.lat, lng: car.lng }));
     return points;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, visibleCars]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
   const fitFocus = useCallback((duration = 450) => {
     const camera = cameraRef.current;
     if (!camera) return;
+    const pitch = activeCar ? 58 : 52;
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
-        zoomLevel: 13.4,
-        pitch: 0,
+        zoomLevel: 13.8,
+        pitch,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -105,8 +131,8 @@ export function MapboxInteractiveMap({
     if (focus.length === 1) {
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
-        zoomLevel: 13.4,
-        pitch: 0,
+        zoomLevel: activeCar ? 16.8 : 15.8,
+        pitch,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -116,8 +142,9 @@ export function MapboxInteractiveMap({
     const lats = focus.map((p) => p.lat);
     const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
     const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
-    camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
-  }, [focusKey]);
+    camera.setCamera?.({ pitch, animationDuration: 0 });
+    camera.fitBounds?.(ne, sw, [96, 64, 180, 64], duration);
+  }, [focusKey, Boolean(activeCar)]);
 
   useEffect(() => {
     if (!mapReady || manual) return;
@@ -125,12 +152,7 @@ export function MapboxInteractiveMap({
   }, [mapReady, manual, fitFocus]);
 
   const routeShape = useMemo(() => {
-    const coordinates =
-      route && route.length > 1
-        ? route
-        : pickup && dropoff
-          ? [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]]
-          : [];
+    const coordinates = route?.filter(p => p.length >= 2 && p.every(Number.isFinite)) || [];
     if (coordinates.length < 2) return null;
     return {
       type: 'Feature',
@@ -139,8 +161,9 @@ export function MapboxInteractiveMap({
     } as any;
   }, [route, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng]);
 
-  if (!TOKEN) {
+  if (!TOKEN || mapError) {
     return (
+      <View style={[{ overflow: 'hidden' }, style]}>
       <RasterInteractiveMap
         pickup={pickup}
         dropoff={dropoff}
@@ -148,10 +171,15 @@ export function MapboxInteractiveMap({
         cars={cars}
         activeCar={activeCar}
         user={user}
-        style={style}
+        style={{ flex: 1 }}
         testID={testID}
         interactive={interactive}
       />
+      <View testID="map-error" style={{ position: 'absolute', left: 16, right: 16, top: 62, backgroundColor: colors.surface, padding: 10, borderRadius: 16 }}>
+        <Text accessibilityRole="alert">{TOKEN ? 'Mapbox er midlertidig utilgjengelig. Viser reservekart.' : 'Viser reservekart. Mapbox mangler konfigurasjon.'}</Text>
+        {TOKEN ? <Pressable testID="map-retry" onPress={() => { setMapError(false); setMapReady(false); }}><Text>Prøv igjen</Text></Pressable> : null}
+      </View>
+      </View>
     );
   }
 
@@ -183,6 +211,7 @@ export function MapboxInteractiveMap({
         attributionEnabled
         logoEnabled
         onDidFinishLoadingMap={() => setMapReady(true)}
+        onMapLoadingError={() => setMapError(true)}
         onCameraChanged={(state: any) => {
           if (state?.gestures?.isGestureActive) setManual(true);
         }}
@@ -191,8 +220,8 @@ export function MapboxInteractiveMap({
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [user?.lng ?? OSLO.lng, user?.lat ?? OSLO.lat],
-            zoomLevel: 13.4,
-            pitch: 0,
+            zoomLevel: user ? 15.8 : 13.8,
+            pitch: user ? 52 : 42,
           }}
           minZoomLevel={3}
           maxZoomLevel={20}
@@ -204,10 +233,10 @@ export function MapboxInteractiveMap({
           config={{
             lightPreset: 'day',
             theme: 'monochrome',
-            show3dObjects: false,
-            show3dBuildings: false,
-            show3dLandmarks: false,
-            show3dTrees: false,
+            show3dObjects: true,
+            show3dBuildings: true,
+            show3dLandmarks: true,
+            show3dTrees: true,
             showPlaceLabels: true,
             showPointOfInterestLabels: false,
             showRoadLabels: true,
@@ -243,16 +272,12 @@ export function MapboxInteractiveMap({
           </ShapeSource>
         ) : null}
 
-        {cars.map((car, index) => (
-          <MarkerView key={`car-${index}`} coordinate={[car.lng, car.lat]} allowOverlap>
-            <MarkerCar car={car} />
-          </MarkerView>
+        {visibleCars.map((car, index) => (
+          <MarkerCar key={car.id || `car-${index}`} car={car} />
         ))}
 
         {smoothCar ? (
-          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap>
-            <MarkerCar car={smoothCar} active />
-          </MarkerView>
+          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap><MapCar heading={smoothCar.heading} active /></MarkerView>
         ) : null}
 
         {pickup ? (
@@ -274,6 +299,7 @@ export function MapboxInteractiveMap({
         ) : null}
       </MapView>
 
+      {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
       {interactive ? (
         <View style={{ position: 'absolute', right: 14, top: 116, gap: 8 }} pointerEvents="box-none">
           <Ctrl name="plus" onPress={() => void zoomBy(1)} testID="map-zoom-in" />
@@ -310,4 +336,3 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 export const Map = MapboxInteractiveMap;
 export const InteractiveMap = MapboxInteractiveMap;
 export default MapboxInteractiveMap;
-

@@ -34,7 +34,7 @@ export default function Login() {
       await logout();
       setError(
         u?.role === 'driver'
-          ? 'Dette er en sjåførkonto. Bruk KJAPP Driver.'
+          ? 'Dette er en sjåførkonto. Bruk SNAR Driver.'
           : 'Denne kontotypen kan ikke brukes i kundeappen.',
       );
       return;
@@ -105,7 +105,7 @@ export default function Login() {
 
         <Rise style={s.brandBlock}>
           <KjappMark size={64} float />
-          <Text style={s.title}>Velkommen til KJAPP</Text>
+          <Text style={s.title}>Velkommen til SNAR</Text>
           <Text style={s.sub}>Bestill. Følg. Betal.</Text>
         </Rise>
 
@@ -151,7 +151,7 @@ export default function Login() {
           testID="login-to-register"
         >
           <Text style={s.footerText}>
-            Ny hos KJAPP? <Text style={s.footerLink}>Opprett konto</Text>
+            Ny hos SNAR? <Text style={s.footerLink}>Opprett konto</Text>
           </Text>
         </Pressable>
       </ScrollView>

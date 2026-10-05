@@ -1,11 +1,12 @@
 import { useReducedMotion } from '@/src/components/Motion';
+import { NativePaymentProvider } from '@/src/components/NativePaymentProvider';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { View, Pressable, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
@@ -16,6 +17,17 @@ import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
+
+function SessionGate({ children }: { children: React.ReactNode }) {
+  const { user, sessionError, refresh } = useAuth();
+  if (user === undefined && sessionError) return <View style={{ flex: 1, justifyContent: 'center', padding: 28, gap: 16 }}>
+    <Text accessibilityRole="alert" style={{ color: colors.text }}>{sessionError}</Text>
+    <Pressable onPress={() => void refresh()} testID="session-retry" accessibilityRole="button" style={{ padding: 16, backgroundColor: colors.accent, borderRadius: 24 }}>
+      <Text style={{ color: '#FFFFFF', textAlign: 'center' }}>Prøv igjen</Text>
+    </Pressable>
+  </View>;
+  return <>{children}</>;
+}
 
 function NativeRuntimeBridge() {
   const { user } = useAuth();
@@ -75,6 +87,8 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <NativePaymentProvider>
+            <SessionGate>
             <NativeRuntimeBridge />
             <StatusBar style="dark" />
             <Stack
@@ -99,6 +113,8 @@ export default function RootLayout() {
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             </Stack>
+            </SessionGate>
+            </NativePaymentProvider>
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

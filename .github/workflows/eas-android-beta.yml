@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Enforce SNAR Customer pre-build gate
+        run: node scripts/customer-build-gate.cjs
       - name: Require Expo token
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
@@ -78,3 +80,4 @@ jobs:
       - run: npx expo-doctor@latest
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
+

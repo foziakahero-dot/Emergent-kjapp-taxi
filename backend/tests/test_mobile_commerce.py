@@ -204,3 +204,40 @@ def test_other_fleet_cannot_be_onboarded(env):
     env.current['id'] = str(ObjectId())
     assert env.client.post('/fleet/stripe/onboarding').status_code == 404
     env.stripe.Account.create.assert_not_called()
+
+
+
+def test_authenticated_customer_can_explicitly_link_third_party_google_email(env):
+    env.current['email'] = 'person@company.example'
+    env.verify.return_value['email'] = env.current['email']
+    result = env.client.post('/auth/google/link', json={'identity_token': 'verified-token', 'client': 'customer'})
+    assert result.status_code == 200
+    assert env.db.raw.users.find_one({'_id': env.uid})['google_sub'] == 'google-1'
+
+
+def test_google_link_rejects_wrong_email_and_existing_different_identity(env):
+    env.verify.return_value['email'] = 'someoneelse@gmail.com'
+    assert env.client.post('/auth/google/link', json={'identity_token': 'verified-token'}).status_code == 409
+    env.verify.return_value['email'] = env.current['email']
+    env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'google_sub': 'previous-link'}})
+    assert env.client.post('/auth/google/link', json={'identity_token': 'verified-token'}).status_code == 409
+    assert env.db.raw.users.find_one({'_id': env.uid})['google_sub'] == 'previous-link'
+
+
+def test_google_link_never_takes_another_users_identity(env):
+    env.db.raw.users.insert_one({'google_sub': 'google-1', 'email': 'another@gmail.com', 'role': 'user'})
+    assert env.client.post('/auth/google/link', json={'identity_token': 'verified-token'}).status_code == 409
+    assert not env.db.raw.users.find_one({'_id': env.uid}).get('google_sub')
+
+
+def test_native_beta_payment_rejects_live_keys(env, monkeypatch):
+    env.stripe.api_key = 'sk_live_fixture'
+    monkeypatch.setenv('STRIPE_PUBLISHABLE_KEY', 'pk_live_fixture')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    assert env.client.post('/payments/native/intent', json={'trip_id': 'ride-1'}).status_code == 503
+    env.stripe.PaymentIntent.create.assert_not_called()
+
+
+def test_native_beta_supports_restricted_test_key(env):
+    env.stripe.api_key = 'rk_test_fixture'
+    assert env.client.get('/payments/native/config').json()['enabled'] is True

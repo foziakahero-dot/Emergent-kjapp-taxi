@@ -51,6 +51,10 @@ jobs:
         with:
           node-version: 22
 
+      - name: Enforce SNAR Customer pre-build gate
+        if: ${{ matrix.dir == 'frontend' }}
+        run: node scripts/customer-build-gate.cjs
+
       - name: Install app dependencies
         run: npm ci --no-audit --no-fund
 
@@ -93,4 +97,5 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/KJAPP-${{ matrix.label }}-DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build
+
 

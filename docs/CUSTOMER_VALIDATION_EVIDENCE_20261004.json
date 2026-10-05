@@ -1,0 +1,317 @@
+{
+  "timezone": "Europe/Oslo",
+  "date": "2026-10-04",
+  "backendCommits": [
+    "4d4dd5050c3d225b07a6892ef8c4b74477ee9c92",
+    "865023425d48acc5c0c665ae248d828a689fceb0"
+  ],
+  "renderDeploys": [
+    {
+      "id": "dep-db0p65vavr4c738o8g9g",
+      "status": "live"
+    },
+    {
+      "id": "dep-db0p9hgu01pc73bcinc0",
+      "status": "live",
+      "finishedAt": "2026-10-03T23:51:50.849371Z"
+    },
+    {
+      "id": "dep-db0qgfc9v7es73cjova0",
+      "status": "live",
+      "finishedAt": "2026-10-04T01:14:56.366675Z",
+      "commit": "865023425d48acc5c0c665ae248d828a689fceb0",
+      "purpose": "Activate existing matching Stripe TEST keys and native/Google Pay test flags; no payment created"
+    }
+  ],
+  "checks": {
+    "backendFocused": "47 passed, Pillow 11.3.0; isolated local fixtures, no live E2E",
+    "typescript": "PASS",
+    "components": "PASS",
+    "expoDoctor": "21/21",
+    "androidPrebuild": "PASS --no-install",
+    "iosPrebuild": "PASS --no-install",
+    "androidHermesExport": "PASS",
+    "iosHermesExport": "PASS",
+    "physicalDevice": "UNVERIFIED",
+    "nativeCompilation": "UNVERIFIED",
+    "EASBuild": "NOT STARTED",
+    "stripeTestConfiguration": "PASS live API",
+    "googlePayConfiguration": "PASS live API; physical wallet acceptance UNVERIFIED"
+  },
+  "legacySuite": {
+    "baseline": "10 failed, 82 passed",
+    "changed": "3 failed, 89 passed",
+    "failedTests": [
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_driver_app_does_not_mask_money_failures_or_recompute_trip_earnings",
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_driver_bundle_contains_no_google_or_self_registration_auth_path",
+      "FAILED kjapp/backend/tests/test_beta_trip_integrity_contract.py::test_driver_app_exposes_vehicle_selector_and_profile_photo_without_redesign"
+    ],
+    "limitation": "Same expanded 92-test selection at both checkpoints; exact Driver/Fleet source fixtures restored. Three remaining failures concern unchanged Driver source. No clean full-suite claim.",
+    "historicalPartialFixtureRun": {
+      "baseline": "11 failed, 60 passed",
+      "changed": "11 failed, 60 passed",
+      "limitation": "Partial local repo fixture set; source assertion/harness errors and out-of-scope Driver/Fleet checks. Not a clean full-suite result."
+    },
+    "selection": [
+      "test_security_regressions_unit.py",
+      "test_receipt_identity_recheck_contract.py",
+      "test_real_trip_integrity_contract.py",
+      "test_beta_trip_integrity_contract.py",
+      "test_beta_trip_lifecycle_contract.py",
+      "test_settlement_truth_contract.py"
+    ],
+    "harnessCorrections": "Defined ROOT/read actual SOURCE; checked seed insertion labels separately from legacy-label migration selectors; updated fleet scoped OR marker, whitespace-only sent marker and actual Customer photo fallback assertion. Driver assertions untouched."
+  },
+  "logSha256": {
+    "android-prebuild.log": "07819c69a477be4341498eb37152f9b524479e3fc6d71e80fa4dd3ac47dde350",
+    "ios-prebuild.log": "ea6a31fac96c2ca8aa33201b283d2020b59853c916c0edb77185e1ae23ac5b40",
+    "android-export-final.log": "550d32380598ed23408df046063c821e9c1621ec75a868291fd1c3ed93dc955c",
+    "ios-export-final.log": "8215b89a582d05d6c1c98116ad534c162abe8ed412ddbb541a94cddb4b9c4e86",
+    "baseline-regressions.log": "9d5432ed789042b301bb23dd6fdd3556f8dc12232b609e26421a3be21a71b4fd",
+    "current-regressions.log": "45094a0078f046d59ab3fa5b83790fc34f928ef042d60745d41672cf88685f2a",
+    "baseline-regressions-expanded.log": "b0ac37053ff8422c3d3beb34d834910a0c789f1fb53106f0b43aed220ea2d3c3",
+    "current-regressions-after.log": "e5cd463bbec0d272901de09e78fc1b961b82c34ca4cc3e2546f6f29ac0f51615",
+    "component-continuation.log": "d1c5915e9164b8abe13b89c3e500481bb6181a4aa1d57eef64cbfe7b8d289b64",
+    "typescript-continuation.log": "7125f194612fcff2f454c05d848e7cb71facc1967b4d5017e25b34fdee3ba74f",
+    "static-policy-continuation.log": "d10ec99700e8c632d5e051238de9d853a3ba3c61db48ea3ac0ab286730c4a6da",
+    "build-gate-continuation.log": "e031ae1a9119729b6da9a6c1eb7ee1b180cb8b1a54177c62db5103855066d40d",
+    "android-export-continuation-final.log": "58491080b8125fc25e6cf3224c9229b0d2dfdc2a7db742c89147a9a6247688d4",
+    "ios-export-continuation-final.log": "54e2f5796b7a9f8dd91d29e96385a2f99d6bd3f168f56afa65637228d34c5017",
+    "hermes-export-final.log": "7e42e8e5c82948d48821346d78ec8748a9ab783dad17814fea74792f401eec1a"
+  },
+  "retainedIconSha256": "d4a29f74eac608c11f8cb220296e98e75a476e6145396306b24198e34423e70f",
+  "customerImplementationCommit": "92b957e4f0581811bcdb6895551ca3b2940679b8",
+  "customerPR": "https://github.com/foziakahero-dot/Emergent-kjapp-taxi/pull/67",
+  "remoteCI": {
+    "status": "startup_failure; no jobs started",
+    "runs": [
+      37163387691,
+      37163390226
+    ],
+    "baselineSameFailure": [
+      37097397045,
+      37087528954,
+      37087526771
+    ],
+    "rootCause": "CONFIRMED in signed-in GitHub run annotation: recent account payment failure or spending limit prevents jobs from starting",
+    "editedWorkflowYaml": "PASS local parse",
+    "continuationSourceCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052",
+    "continuationRuns": [
+      37165251333,
+      37165253215,
+      37165272537
+    ],
+    "continuationStatus": "startup_failure; queried run 37165253215 has zero jobs",
+    "browserVerifiedRun": 37165253215,
+    "verifiedAt": "2026-10-04T00:57:27.061102+00:00"
+  },
+  "continuationBaseCommit": "7eceba2bca157b4a182a55c659f9a29f9394f845",
+  "continuationChecks": {
+    "typescript": "PASS",
+    "components": "PASS: actual Customer cancellation/lost response/duplicates, safety errors, immediate dialer, GPS freshness, old session responses/cleanup token, search stale responses/offline/retry/unmount and personal recents",
+    "staticBetaPolicy": "PASS with commercial-release privacy/terms placeholder warning",
+    "buildGate": "Expected refusal, exit 1; no native build started",
+    "sourceInventory": {
+      "actions": 184,
+      "apiCallers": 143,
+      "contracts": 77,
+      "unmapped": 0,
+      "backendRoutes": 216,
+      "screens": 43
+    },
+    "deviceAcceptance": "UNVERIFIED",
+    "backendRuntimeChanged": false,
+    "androidHermesExport": "PASS final source",
+    "iosHermesExport": "PASS final source",
+    "webExport": "PASS final source (source export only)"
+  },
+  "customerContinuationCommit": "56682d2e24e164acfad3ce06fa52df3f2c649052",
+  "configurationInspection": {
+    "githubActionsRepositorySecrets": "NONE",
+    "githubActionsRepositoryVariables": "NONE",
+    "renderMapboxValidationEnv": "NONE",
+    "secretValuesReadOrExposed": false,
+    "initialRenderBackendMissingKeys": [
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_IOS_CLIENT_ID",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_PUBLISHABLE_KEY",
+      "SENDGRID_API_KEY"
+    ],
+    "renderBackendMissingKeys": [
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_IOS_CLIENT_ID",
+      "SENDGRID_API_KEY"
+    ]
+  },
+  "renderSourceValidation": {
+    "status": "PASS",
+    "service": "srv-db0q908u01pc73bgc6ig",
+    "deploy": "dep-db0qj4vavr4c738tve8g",
+    "commit": "ecd22ceb414533454e64c8024e0d68674c2b345c",
+    "finishedAt": "2026-10-04T01:21:31.361078Z",
+    "deploymentStatus": "live",
+    "terminalBuildMarker": "SNAR_CUSTOMER_SOURCE_VALIDATION_PASS; NATIVE_BUILD_BLOCKED",
+    "scope": "47 isolated backend tests, Customer TypeScript/components, Expo Doctor, source API mapping and Android/iOS Hermes exports; read-only live TEST configuration smoke",
+    "nativeCompilation": "NOT STARTED",
+    "nativeBuildAuthorized": false,
+    "initialSuccessfulRun": {
+      "deploy": "dep-db0q90gu01pc73bgc790",
+      "commit": "88f29335676d14390f00c22d33cbe8b3272e3af6",
+      "finishedAt": "2026-10-04T00:59:32.900576Z",
+      "publicHTTP": {
+        "status": 200,
+        "sourceValidation": "PASS",
+        "commit": "88f29335676d14390f00c22d33cbe8b3272e3af6",
+        "nativeBuildAuthorized": false
+      }
+    },
+    "runtimeSmokeLogVerifiedAt": "2026-10-04T01:21:30.10946263Z"
+  },
+  "stripeBrowserInspection": {
+    "account": "acct_1TGAN5KFJCRyVUgj",
+    "livemode": false,
+    "keyTypes": [
+      "Publishable key",
+      "Secret key"
+    ],
+    "keyValuesExposed": false,
+    "configuredInRender": true,
+    "limitation": "Broad inspection/extra secret reads were rejected; direct UI transfer completed through a materially safer path. No key values written to Git, chat or artifacts. No test charge or physical wallet acceptance performed.",
+    "transfer": "Existing same-account TEST keys copied directly from Stripe UI to Render fields without outputting their values; TEST prefixes verified as booleans"
+  },
+  "initialPublicLiveSmoke": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "body": {
+        "app": "KJAPP",
+        "status": "ok",
+        "db": true,
+        "time": "2026-10-03T23:45:09.984992+00:00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/ready",
+      "status": 200,
+      "body": {
+        "app": "KJAPP",
+        "ready": false,
+        "status": "not_ready",
+        "checks": {
+          "database": true,
+          "production_mode": false,
+          "demo_data_disabled": true,
+          "jwt_configured": true,
+          "admin_identity_configured": true,
+          "stripe_key_configured": false,
+          "stripe_webhook_configured": true,
+          "email_configured": false,
+          "public_web_origin_configured": true,
+          "expo_push_sender": true,
+          "identity_recheck_policy_days": [
+            30,
+            90
+          ],
+          "identity_inactivity_days": 30,
+          "apple_native_auth_configured": true,
+          "apple_bundle_env_matches": true,
+          "object_storage_configured": false,
+          "service_area_enforced": true,
+          "auto_charge_enabled": false,
+          "booking_enabled": true
+        },
+        "blockers": [
+          "production_mode",
+          "stripe_key_configured",
+          "email_configured"
+        ],
+        "time": "2026-10-03T23:45:17.293964+00:00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/auth/native/config",
+      "status": 200,
+      "body": {
+        "google_enabled": false,
+        "google_web_client_id": "",
+        "google_ios_client_id": ""
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/payments/native/config",
+      "status": 200,
+      "body": {
+        "enabled": false,
+        "publishable_key": "",
+        "test_mode": false,
+        "apple_merchant_id": "",
+        "google_pay_enabled": false
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/me/profile-photo",
+      "status": 401,
+      "body": {
+        "detail": "Ikke innlogget"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/auth/google/link",
+      "status": 401,
+      "body": {
+        "detail": "Ikke innlogget"
+      }
+    }
+  ],
+  "publicLiveSmoke": [
+    {
+      "path": "/health",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "db": true
+      }
+    },
+    {
+      "path": "/ready",
+      "status": 200,
+      "body": {
+        "ready": false,
+        "blockers": [
+          "production_mode",
+          "email_configured"
+        ],
+        "stripe_key_configured": true,
+        "email_configured": false
+      }
+    },
+    {
+      "path": "/payments/native/config",
+      "status": 200,
+      "body": {
+        "enabled": true,
+        "test_mode": true,
+        "test_publishable_key_present": true,
+        "google_pay_enabled": true,
+        "apple_merchant_present": false
+      }
+    },
+    {
+      "path": "/auth/native/config",
+      "status": 200,
+      "body": {
+        "google_enabled": false,
+        "google_web_client_present": false,
+        "google_ios_client_present": false
+      }
+    }
+  ],
+  "publicLiveSmokeVerifiedAt": "2026-10-04T01:21:30.10946263Z"
+}

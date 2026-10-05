@@ -37,9 +37,9 @@ export default function Index() {
       <View style={[s.splash, { paddingBottom: insets.bottom + 40, paddingTop: insets.top + 24 }]}>
         <View style={s.center}>
           <SplashBrand />
-          <Text style={s.title}>Denne kontoen bruker en annen KJAPP-app</Text>
+          <Text style={s.title}>Denne kontoen bruker en annen SNAR-app</Text>
           <Text style={s.subtitle}>
-            Sjåfører logger inn i KJAPP Driver. Admin- og flåtekontoer bruker sine egne portaler.
+            Sjåfører logger inn i SNAR Driver. Admin- og flåtekontoer bruker sine egne portaler.
           </Text>
         </View>
         <Button
