@@ -64,6 +64,10 @@ function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
   );
 }
 
+function validPoint(point: any): point is LL {
+  return Number.isFinite(Number(point?.lat)) && Number.isFinite(Number(point?.lng));
+}
+
 export function MapboxInteractiveMap({
   pickup,
   dropoff,
@@ -82,25 +86,43 @@ export function MapboxInteractiveMap({
   const [mapReady, setMapReady] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
 
+  // /cars/nearby is already backend-filtered to real, fresh and operational cars.
+  // Keep a small nearby set in camera framing so the map actually communicates availability.
+  const visibleCars = useMemo(
+    () => cars.filter(validPoint).slice(0, 8),
+    [cars],
+  );
+
   const focus = useMemo(() => {
     const points: LL[] = [];
-    if (user) points.push(user);
-    if (pickup && (!user || Math.abs(pickup.lat - user.lat) > 1e-7 || Math.abs(pickup.lng - user.lng) > 1e-7)) points.push(pickup);
-    if (dropoff) points.push(dropoff);
-    if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
+    if (activeCar) {
+      if (pickup && validPoint(pickup)) points.push(pickup);
+      if (validPoint(activeCar)) points.push({ lat: activeCar.lat, lng: activeCar.lng });
+      // Home/booking only provide dropoff once the ride is in progress.
+      if (dropoff && validPoint(dropoff)) points.push(dropoff);
+      return points;
+    }
+
+    if (user && validPoint(user)) points.push(user);
+    if (pickup && validPoint(pickup) && (!user || Math.abs(pickup.lat - user.lat) > 1e-7 || Math.abs(pickup.lng - user.lng) > 1e-7)) points.push(pickup);
+    if (dropoff && validPoint(dropoff)) points.push(dropoff);
+
+    // Before assignment, real available cars are first-class map context rather than decorative markers.
+    visibleCars.forEach((car) => points.push({ lat: car.lat, lng: car.lng }));
     return points;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, visibleCars]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
   const fitFocus = useCallback((duration = 450) => {
     const camera = cameraRef.current;
     if (!camera) return;
+    const pitch = activeCar ? 58 : 52;
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
-        zoomLevel: activeCar ? 16.5 : 15.8,
-        pitch: activeCar ? 40 : 25,
+        zoomLevel: 13.8,
+        pitch,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -109,8 +131,8 @@ export function MapboxInteractiveMap({
     if (focus.length === 1) {
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
-        zoomLevel: activeCar ? 16.5 : 15.8,
-        pitch: activeCar ? 40 : 25,
+        zoomLevel: activeCar ? 16.8 : 15.8,
+        pitch,
         animationDuration: duration,
         animationMode: 'easeTo',
       });
@@ -120,8 +142,9 @@ export function MapboxInteractiveMap({
     const lats = focus.map((p) => p.lat);
     const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
     const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
-    camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
-  }, [focusKey]);
+    camera.setCamera?.({ pitch, animationDuration: 0 });
+    camera.fitBounds?.(ne, sw, [96, 64, 180, 64], duration);
+  }, [focusKey, Boolean(activeCar)]);
 
   useEffect(() => {
     if (!mapReady || manual) return;
@@ -197,8 +220,8 @@ export function MapboxInteractiveMap({
           ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [user?.lng ?? OSLO.lng, user?.lat ?? OSLO.lat],
-            zoomLevel: user ? 15.8 : 13.4,
-            pitch: user ? 25 : 0,
+            zoomLevel: user ? 15.8 : 13.8,
+            pitch: user ? 52 : 42,
           }}
           minZoomLevel={3}
           maxZoomLevel={20}
@@ -213,7 +236,7 @@ export function MapboxInteractiveMap({
             show3dObjects: true,
             show3dBuildings: true,
             show3dLandmarks: true,
-            show3dTrees: false,
+            show3dTrees: true,
             showPlaceLabels: true,
             showPointOfInterestLabels: false,
             showRoadLabels: true,
@@ -249,7 +272,7 @@ export function MapboxInteractiveMap({
           </ShapeSource>
         ) : null}
 
-        {cars.map((car, index) => (
+        {visibleCars.map((car, index) => (
           <MarkerCar key={car.id || `car-${index}`} car={car} />
         ))}
 
@@ -313,5 +336,3 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 export const Map = MapboxInteractiveMap;
 export const InteractiveMap = MapboxInteractiveMap;
 export default MapboxInteractiveMap;
-
-
