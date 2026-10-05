@@ -18,6 +18,7 @@ import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
 import internal_ride_testing as ride_testing
+from ride_reservations import RideReservations
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
@@ -1490,6 +1491,29 @@ async def lifespan(app: FastAPI):
                 "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
                 "online": False,
             }})
+        owner_email = (os.environ.get("KJAPP_TEST_FLEET_OWNER_EMAIL") or "").strip().lower()
+        owner_password = os.environ.get("KJAPP_TEST_FLEET_OWNER_PASSWORD") or ""
+        if owner_email and owner_password:
+            owner = await db.users.find_one({"email": owner_email})
+            # Never promote an existing ordinary account through test provisioning.
+            if owner is None or (owner.get("internal_test_account") is True and owner.get("role") == "fleet_owner"):
+                owner_fields = {
+                    "email": owner_email, "password_hash": hash_password(owner_password),
+                    "fullName": "Beta Løyvehaver", "phone": "",
+                    "role": "fleet_owner", "approved": True, "disabled": False,
+                    "fleet_id": fleet_id, "fleet_active": True, "internal_test_account": True,
+                    "legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                if owner:
+                    await db.users.update_one({"_id": owner["_id"]}, {"$set": owner_fields})
+                    owner_id = str(owner["_id"])
+                else:
+                    owner_fields["created_at"] = datetime.now(timezone.utc).isoformat()
+                    owner_result = await db.users.insert_one(owner_fields)
+                    owner_id = str(owner_result.inserted_id)
+                await db.fleets.update_one({"_id": fleet["_id"], "internal_test_fleet": True},
+                                          {"$set": {"owner_user_id": owner_id, "active": True}})
         print("[seed] internal beta driver accounts provisioned (offline; credentials not logged)")
 
     # Initialize object storage
@@ -1569,10 +1593,13 @@ async def lifespan(app: FastAPI):
 
     # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
     dispatch_task = asyncio.create_task(dispatch_loop())
+    reservation_task = asyncio.create_task(ride_reservations.reconcile_loop())
 
     yield
 
     dispatch_task.cancel()
+    reservation_task.cancel()
+    await asyncio.gather(dispatch_task, reservation_task, return_exceptions=True)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -2497,7 +2524,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     existing_active = await db.trips.find_one(
         _real_trip_filter({
             "user_id": current["id"],
-            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
+            "status": {"$in": ["payment_authorizing", "searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
         }),
         {"trip_id": 1, "status": 1},
     )
@@ -2539,7 +2566,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     existing_after_lock = await db.trips.find_one(
         _real_trip_filter({
             "user_id": current["id"],
-            "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
+            "status": {"$in": ["payment_authorizing", "searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]},
         }),
         {"trip_id": 1},
     )
@@ -2588,8 +2615,9 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
-        "status": "searching",
-        "payment_status": "unpaid",
+        "status": "payment_authorizing",
+        "payment_status": "authorizing",
+        "payment_flow": "reservation",
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -2606,20 +2634,60 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         {"_id": user_oid, "booking_request_lock": trip_id},
         {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
     )
-    # Trip stays in "searching" — a real driver must accept via /api/driver/accept.
-    # Nearest-driver-first: offer it to the closest available driver, forward automatically on timeout.
     try:
-        await offer_trip_to_next_driver(trip)
-    except Exception as e:
-        print(f"dispatch on request failed: {e}")
+        await ride_reservations.authorize(trip)
+    except HTTPException as exc:
+        needs_action = isinstance(exc.detail, dict) and exc.detail.get("code") == "reservation_requires_action"
+        if not needs_action:
+            await db.trips.update_one({"trip_id": trip_id, "status": "payment_authorizing"}, {"$set": {
+                "status": "cancelled", "cancelled_by": "system", "cancel_reason": "payment_authorization_failed",
+                "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            }})
+            await ride_reservations.release(trip)
+        raise
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
     return trip
+
+
+@api.post("/trips/{trip_id}/authorization/confirm")
+async def confirm_trip_authorization(trip_id: str, current=Depends(require_customer)):
+    return await ride_reservations.confirm(trip_id, current["id"])
+
+
+@api.post("/trips/{trip_id}/authorization/retry")
+async def retry_trip_authorization(trip_id: str, current=Depends(require_customer)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"], "status": "payment_authorizing"})
+    if not trip:
+        raise HTTPException(409, "Turen venter ikke på kortgodkjenning")
+    await ride_reservations.authorize(trip)
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    trip.pop("_id", None)
+    return trip
+
+
+@api.post("/trips/{trip_id}/payment/retry")
+async def retry_reserved_payment(trip_id: str, current=Depends(require_customer)):
+    trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
+    if not trip or trip.get("status") not in ("arrived", "completed", "rated"):
+        raise HTTPException(409, "Turen er ikke avsluttet")
+    if trip.get("payment_status") == "paid":
+        return {"ok": True, "paid": True}
+    if trip.get("payment_flow") != "reservation":
+        # Only migrate explicit internal test rides, never silently charge old live rides.
+        if trip.get("internal_beta_test") is not True or not ride_testing.enabled() or not ride_testing.is_test_customer(current["id"]):
+            raise HTTPException(409, "Turen har ingen kortreservasjon. Kontakt SNAR.")
+        existing = await db.payment_transactions.find_one({"trip_id": trip_id, "kind": {"$ne": "ride_reservation"}, "status": {"$in": ["initiated", "awaiting_payment", "completed"]}})
+        if existing:
+            raise HTTPException(409, "Et annet betalingsforsøk finnes allerede")
+        await ride_reservations.authorize(trip)
+    return await ride_reservations.capture(trip)
 
 
 @api.get("/trips/active")
 async def active_trip(current=Depends(require_customer)):
     trip = await db.trips.find_one(
-        _real_trip_filter({"user_id": current["id"], "status": {"$in": ["searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}),
+        _real_trip_filter({"user_id": current["id"], "status": {"$in": ["payment_authorizing", "searching", "booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}),
         sort=[("created_at", -1)],
     )
     if not trip:
@@ -3015,7 +3083,7 @@ async def driver_rate_passenger(trip_id: str, body: DriverRatePassengerRequest, 
 
 
 def _customer_cancellable_statuses(trip: dict):
-    statuses = ["searching", "booking", "driver_on_way", "at_pickup"]
+    statuses = ["payment_authorizing", "searching", "booking", "driver_on_way", "at_pickup"]
     # Started test rides can be reset without pretending the car reached its destination.
     if (trip.get("internal_beta_test") is True and ride_testing.enabled()
             and ride_testing.is_test_customer(trip.get("user_id"))
@@ -3084,6 +3152,7 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
     if result.modified_count != 1:
         raise HTTPException(status_code=409, detail="Turen har endret status og kan ikke avbestilles nå")
 
+    await ride_reservations.release(trip)
     # Re-read after the atomic transition. A driver may have been assigned between the
     # initial read and cancellation; cleanup must use canonical post-update ownership.
     cancelled_trip = await db.trips.find_one(
@@ -4339,6 +4408,7 @@ async def driver_start(trip_id: str, current=Depends(require_driver)):
             status_code=409,
             detail=f"Du er for langt fra hentestedet til å starte turen ({int(round(pickup_distance_m))} m)",
         )
+    await ride_reservations.require_reserved(trip)
     result = await db.trips.update_one(
         _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "at_pickup"}),
         {"$set": {
@@ -4414,6 +4484,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     if not trip:
         raise HTTPException(status_code=404, detail="Fant ikke turen")
     if trip.get("status") in ("arrived", "completed", "rated"):
+        if trip.get("payment_flow") == "reservation" and trip.get("payment_status") != "paid":
+            await ride_reservations.capture(trip)
         return {"ok": True, "already_applied": True, "bonuses": [],
                 "ended_early": trip.get("ended_early", False), "warning": trip.get("early_end_warning")}
     if trip.get("status") != "in_trip":
@@ -4433,6 +4505,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
         if not location_verified else
         "Turen er avsluttet før avtalt destinasjon. Turprisen må kontrolleres av SNAR før betaling."
     )
+    if trip.get("payment_flow") == "reservation":
+        warning = "Sjåføren har avsluttet turen manuelt. Avtalt turpris trekkes automatisk fra kortreservasjonen, og kvitteringen kommer i SNAR."
     updates = {
         "status": "arrived",
         "arrived_at": datetime.now(timezone.utc).isoformat(),
@@ -4453,6 +4527,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
             "price_review_required": True,
             "requires_manual_settlement": True,
         })
+    if trip.get("payment_flow") == "reservation":
+        updates.update({"price_review_required": False, "requires_manual_settlement": False,
+                        "payment_status": "capture_pending"})
     result = await db.trips.update_one(
         _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"}),
         {"$set": updates},
@@ -4478,7 +4555,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
             t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
             f"/receipt/{trip_id}", "trip_arrived",
         )
-        payment = await _attempt_trip_auto_charge(t)
+        payment = {"attempted": False} if trip.get("payment_flow") == "reservation" else await _attempt_trip_auto_charge(t)
+    if trip.get("payment_flow") == "reservation":
+        payment = await ride_reservations.capture(t)
     # Bonus evaluation happens only from the canonical payment-success transition.
     return {"ok": True, "bonuses": [], "payment": payment,
             "ended_early": ended_early, "location_verified": location_verified,
@@ -8177,6 +8256,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(status_code=400, detail="Turen er ikke ferdig ennå")
+    if trip.get("payment_flow") == "reservation":
+        raise HTTPException(409, "Turen betales automatisk fra kortreservasjonen. Ingen ny betaling skal startes.")
     if trip.get("price_review_required"):
         raise HTTPException(status_code=409, detail="Turen ble avsluttet tidlig. SNAR må kontrollere turprisen før betaling.")
     if trip.get("payment_status") == "paid":
@@ -8369,6 +8450,8 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Invalid signature")
     except Exception:
         raise HTTPException(400, "Webhook error")
+    if await ride_reservations.webhook(event):
+        return {"status": "ok"}
     if await handle_native_payment_webhook(event):
         return {"status": "ok"}
     obj, t = event["data"]["object"], event["type"]
@@ -8533,6 +8616,7 @@ async def driver_cancel(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke avbryte turen")
+    await ride_reservations.release(original)
     await db.users.update_one(
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
@@ -9825,6 +9909,9 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "requires_manual_settlement": t.get("requires_manual_settlement", False),
             "ended_early": t.get("ended_early", False),
             "price_review_required": t.get("price_review_required", False),
+            "payment_flow": t.get("payment_flow"),
+            "reservation_status": t.get("reservation_status"),
+            "authorized_amount_ore": t.get("authorized_amount_ore"),
             "early_end_warning": t.get("early_end_warning"),
             "actual_dropoff_lat": t.get("actual_dropoff_lat"),
             "actual_dropoff_lng": t.get("actual_dropoff_lng"),
@@ -11053,6 +11140,16 @@ install_admin_control_center(
     hash_password=hash_password,
     audit=_audit,
 )
+
+async def _reservation_destination(trip):
+    return await stripe_destination_for_trip(db, stripe, trip)
+
+
+ride_reservations = RideReservations(
+    db, stripe, mark_paid=_mark_trip_paid_and_complete, receipts=send_trip_receipts,
+    push=send_push_to_user, dispatch=offer_trip_to_next_driver, destination=_reservation_destination,
+)
+
 
 handle_native_payment_webhook = install_mobile_commerce(
     api, db, stripe=stripe, get_current_user=get_current_user, require_customer=require_customer,
