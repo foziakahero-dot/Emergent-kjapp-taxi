@@ -1,8 +1,8 @@
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { FlatList, Pressable, RefreshControl, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { colors, font, makeStyles } from '@/src/theme';
@@ -30,6 +30,12 @@ export default function History() {
     queryKey: ['trips'],
     queryFn: tripsApi.list,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
 
   const trips = (data?.trips || []).filter((t: any) => t.status !== 'searching' && t.status !== 'booking');
 
@@ -62,25 +68,35 @@ export default function History() {
           }
           renderItem={({ item }) => {
             const receiptState = ['completed', 'rated', 'arrived'].includes(item.status);
+            const tripId = item.trip_id || item.id;
             const statusLabel = item.status === 'arrived' && item.payment_status !== 'paid'
-              ? 'Betaling gjenstår'
+              ? 'Betaling behandles'
               : STATUS_LABEL[item.status] || item.status;
             return (
               <Pressable
                 style={s.row}
-                testID={`trip-${item.trip_id}`}
-                onPress={() => router.push(receiptState ? `/receipt/${item.trip_id}` : `/booking/${item.trip_id}`)}
+                testID={`trip-${tripId || 'unknown'}`}
+                onPress={() => tripId && router.push(receiptState ? `/receipt/${tripId}` : `/booking/${tripId}`)}
+                disabled={!tripId}
               >
                 <View style={s.rowIcon}>
-                  <Icon name="navigation" size={18} color={colors.accent} />
+                  <Icon name={receiptState ? 'file-text' : 'navigation'} size={18} color={colors.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.rowTitle} numberOfLines={1}>{item.dropoff_address}</Text>
                   <Text style={s.rowSub} numberOfLines={1}>
                     {new Date(item.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })} · {statusLabel}
                   </Text>
+                  {receiptState ? (
+                    <Text style={s.receiptLink} testID={`receipt-link-${tripId || 'unknown'}`}>
+                      {item.payment_status === 'paid' ? 'Betalt · Se kvittering' : 'Se kvittering'}
+                    </Text>
+                  ) : null}
                 </View>
-                <Text style={s.rowPrice}>{kr(item.price)}</Text>
+                <View style={s.trailing}>
+                  <Text style={s.rowPrice}>{kr(item.price)}</Text>
+                  {receiptState ? <Icon name="chevron-right" size={16} color={colors.textMuted} /> : null}
+                </View>
               </Pressable>
             );
           }}
@@ -104,6 +120,7 @@ const useStyles = makeStyles((c) => ({
   rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   rowSub: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 0 },
+  receiptLink: { color: c.accent, fontFamily: font.semibold, fontSize: 12, lineHeight: 16, marginTop: 4 },
+  trailing: { alignItems: 'flex-end', justifyContent: 'center', gap: 4 },
   rowPrice: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
 }));
-
