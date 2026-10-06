@@ -9,6 +9,7 @@ import './snar-theme.css';
 import './fleet-v2.css';
 import './fleet-v2-drivers.css';
 import './figma-fleet.css';
+import './figma-documents.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
