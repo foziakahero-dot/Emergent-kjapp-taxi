@@ -143,7 +143,7 @@ export default function FleetApplications() {
           <div>
             <div className="section-title" style={{ margin: 0 }}>Fast partnerprovisjon</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-              Nye godkjente løyvehavere opprettes med KJAPP-serviceavgift på 10 %.
+              Nye godkjente løyvehavere opprettes med SNAR-serviceavgift på 10 %.
             </div>
           </div>
           <div className="mono" style={{ fontSize: 26, color: 'var(--gold)', fontWeight: 700 }}>
@@ -235,7 +235,7 @@ export default function FleetApplications() {
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
                   <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>KJAPP-provisjon ved godkjenning</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>SNAR-provisjon ved godkjenning</div>
                     <div style={{ marginTop: 4, fontWeight: 700 }}>Fast onboarding-sats</div>
                   </div>
                   <div className="mono" style={{ fontSize: 24, color: 'var(--gold)', fontWeight: 700 }}>10%</div>
