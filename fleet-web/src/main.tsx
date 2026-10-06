@@ -11,6 +11,7 @@ import './fleet-v2-drivers.css';
 import './figma-fleet.css';
 import './figma-documents.css';
 import './figma-settings.css';
+import './figma-operations.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
