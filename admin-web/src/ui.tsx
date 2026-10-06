@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { http, apiError } from './api';
 
 export const fmtMoney = (v: any) =>
@@ -146,24 +146,67 @@ export function Pagination({ page, totalPages, total, onPage }: any) {
 
 // ---- data hooks ----
 export function useAsync<T = any>(fn: () => Promise<T>, deps: any[] = []) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
+  const [state, setState] = useState<{ data: T | null; loading: boolean; refreshing: boolean; err: string }>({
+    data: null,
+    loading: true,
+    refreshing: false,
+    err: '',
+  });
+  const requestSeq = useRef(0);
+
   const reload = useCallback(() => {
-    setLoading(true); setErr('');
-    fn().then((d) => setData(d)).catch((e) => setErr(apiError(e))).finally(() => setLoading(false));
+    const seq = ++requestSeq.current;
+    setState((s) => ({ ...s, loading: s.data === null, refreshing: s.data !== null, err: '' }));
+    fn()
+      .then((data) => {
+        if (seq !== requestSeq.current) return;
+        setState({ data, loading: false, refreshing: false, err: '' });
+      })
+      .catch((e) => {
+        if (seq !== requestSeq.current) return;
+        setState((s) => ({ ...s, loading: false, refreshing: false, err: apiError(e) }));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  useEffect(() => { reload(); }, [reload]);
-  return { data, loading, err, reload, setData };
+
+  useEffect(() => {
+    reload();
+    return () => { requestSeq.current += 1; };
+  }, [reload]);
+
+  const setData = useCallback((data: T | null) => {
+    setState((s) => ({ ...s, data }));
+  }, []);
+
+  return { ...state, reload, setData };
 }
 
 export function usePaged(path: string, params: any) {
-  const [state, setState] = useState<any>({ rows: [], total: 0, page: 1, pageSize: params.page_size || 50, totalPages: 1, loading: true, err: '', extra: {} });
+  const [state, setState] = useState<any>({
+    rows: [],
+    total: 0,
+    page: 1,
+    pageSize: params.page_size || 50,
+    totalPages: 1,
+    loading: true,
+    refreshing: false,
+    err: '',
+    extra: {},
+  });
   const key = JSON.stringify({ path, params });
+  const requestSeq = useRef(0);
+  const previousKey = useRef(key);
+
   const reload = useCallback(() => {
-    setState((s: any) => ({ ...s, loading: true, err: '' }));
+    const seq = ++requestSeq.current;
+    const keyChanged = previousKey.current !== key;
+    previousKey.current = key;
+    setState((s: any) => keyChanged
+      ? { ...s, rows: [], total: 0, loading: true, refreshing: false, err: '' }
+      : { ...s, loading: s.rows.length === 0, refreshing: s.rows.length > 0, err: '' });
+
     http.get(path, { params }).then((r) => {
+      if (seq !== requestSeq.current) return;
       const d = r.data;
       // The current production backend returns legacy, endpoint-specific keys
       // (for example `trips` and `drivers`). Newer deployments also expose
@@ -180,12 +223,21 @@ export function usePaged(path: string, params: any) {
         pageSize: d?.page_size || (params.page_size || 50),
         totalPages: d?.total_pages || Math.max(1, Math.ceil(total / (d?.page_size || params.page_size || 50))),
         loading: false,
+        refreshing: false,
         err: '',
         extra: d || {},
       });
-    }).catch((e) => setState((s: any) => ({ ...s, loading: false, err: apiError(e) })));
+    }).catch((e) => {
+      if (seq !== requestSeq.current) return;
+      setState((s: any) => ({ ...s, loading: false, refreshing: false, err: apiError(e) }));
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  useEffect(() => { reload(); }, [reload]);
+
+  useEffect(() => {
+    reload();
+    return () => { requestSeq.current += 1; };
+  }, [reload]);
+
   return { ...state, reload };
 }
