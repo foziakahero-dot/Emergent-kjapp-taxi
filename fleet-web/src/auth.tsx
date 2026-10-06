@@ -20,7 +20,7 @@ const AuthContext = createContext<AuthContextValue>(null as any);
 
 function assertFleetOwner(user: FleetUser | undefined | null) {
   if (!user || user.role !== 'fleet_owner') {
-    throw new Error('Denne kontoen har ikke tilgang til KJAPP Partner.');
+    throw new Error('Denne kontoen har ikke tilgang til SNAR Fleet.');
   }
   if (user.approved === false) {
     throw new Error('Løyvehaverkontoen venter på godkjenning.');
