@@ -33,7 +33,7 @@ export default function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="brand"><div className="brand-mark">K</div><div className="brand-name">KJAPP</div></div>
+        <div className="brand"><div className="brand-mark">S</div><div className="brand-name">SNAR</div></div>
         <div className="auth-sub">Kontrollsenter · kun for administratorer</div>
 
         {err && <div className="error-banner">{err}</div>}
@@ -43,7 +43,7 @@ export default function Login() {
             <div className="field">
               <label className="label">E-post</label>
               <input className="input" type="email" autoFocus value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="admin@kjapp.no" />
+                onChange={(e) => setEmail(e.target.value)} placeholder="admin@snar.no" />
             </div>
             <div className="field">
               <label className="label">Passord</label>
