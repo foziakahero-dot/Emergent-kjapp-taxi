@@ -39,3 +39,5 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx expo config --type public
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
+
+# Build trigger: latest approved mobile state 2026-10-06
