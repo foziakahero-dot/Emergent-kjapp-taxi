@@ -4,7 +4,6 @@ import { api, FleetMe } from './api';
 import { useAuth } from './auth';
 import DriverSignup from './DriverSignup';
 import {
-  BedriftPage,
   FinancePage,
   LiveOpsPage,
   TripsPage,
@@ -13,6 +12,7 @@ import {
 import { DriversV2Page } from './FleetV2DriversPage';
 import { Driver360Page, InvitationsPage, OperationsDashboardPage } from './FleetV2Pages';
 import FigmaDocumentsPage from './FigmaDocumentsPage';
+import FigmaSettingsPage from './FigmaSettingsPage';
 import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
 import SupportAiPage from './SupportAiPage';
 
@@ -112,7 +112,7 @@ function PortalShell() {
           <Route path="/dokumenter" element={<FigmaDocumentsPage />} />
           <Route path="/okonomi" element={<FinancePage />} />
           <Route path="/meldinger" element={<SupportAiPage />} />
-          <Route path="/bedrift" element={<BedriftPage />} />
+          <Route path="/bedrift" element={<FigmaSettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
