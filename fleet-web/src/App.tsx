@@ -3,17 +3,13 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { api, FleetMe } from './api';
 import { useAuth } from './auth';
 import DriverSignup from './DriverSignup';
-import {
-  BedriftPage,
-  DocumentsPage,
-  FinancePage,
-  LiveOpsPage,
-  TripsPage,
-  VehiclesPage,
-} from './pages';
 import { DriversV2Page } from './FleetV2DriversPage';
 import { Driver360Page, InvitationsPage, OperationsDashboardPage } from './FleetV2Pages';
+import FigmaDocumentsPage from './FigmaDocumentsPage';
+import FigmaSettingsPage from './FigmaSettingsPage';
+import { FigmaFinancePage, FigmaLiveOpsPage, FigmaTripsPage, FigmaVehiclesPage } from './FigmaOperationsPages';
 import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
+import SupportAiPage from './SupportAiPage';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true, icon: '⌂' },
@@ -24,6 +20,7 @@ const NAV = [
   { to: '/turer', label: 'Turer', icon: '↗' },
   { to: '/okonomi', label: 'Økonomi', icon: '○' },
   { to: '/dokumenter', label: 'Dokumenter', icon: '▤' },
+  { to: '/meldinger', label: 'Meldinger / SNAR AI', icon: '✦' },
   { to: '/bedrift', label: 'Innstillinger', icon: '□' },
 ];
 
@@ -96,20 +93,21 @@ function PortalShell() {
 
       <main className="portal-main">
         <div className="portal-topbar" aria-hidden="true">
-          <span>SNAR Fleet</span>
+          <span>{fleet?.name || 'SNAR Fleet'}</span>
           <span className="portal-topbar-status"><i /> System online</span>
         </div>
         <Routes>
           <Route path="/" element={<OperationsDashboardPage />} />
-          <Route path="/live" element={<LiveOpsPage />} />
+          <Route path="/live" element={<FigmaLiveOpsPage />} />
           <Route path="/sjaforer" element={<DriversV2Page />} />
           <Route path="/sjaforer/:driverId" element={<Driver360Page />} />
-          <Route path="/kjoretoy" element={<VehiclesPage />} />
+          <Route path="/kjoretoy" element={<FigmaVehiclesPage />} />
           <Route path="/invitasjoner" element={<InvitationsPage />} />
-          <Route path="/turer" element={<TripsPage />} />
-          <Route path="/dokumenter" element={<DocumentsPage />} />
-          <Route path="/okonomi" element={<FinancePage />} />
-          <Route path="/bedrift" element={<BedriftPage />} />
+          <Route path="/turer" element={<FigmaTripsPage />} />
+          <Route path="/dokumenter" element={<FigmaDocumentsPage />} />
+          <Route path="/okonomi" element={<FigmaFinancePage />} />
+          <Route path="/meldinger" element={<SupportAiPage />} />
+          <Route path="/bedrift" element={<FigmaSettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
