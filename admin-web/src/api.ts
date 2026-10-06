@@ -9,8 +9,8 @@ const isProductionAdminHost = host === 'admin.kjappapp.no';
 const isRenderStagingHost = host === 'kjapp-admin-beta.onrender.com';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
 
-// Production uses the production API directly. Vercel previews are intentionally isolated:
-// they can only talk to an API when VITE_API_BASE is explicitly configured (e.g. staging).
+// Production uses the stable SNAR API hostname. Preview hosts remain isolated unless
+// VITE_API_BASE is explicitly configured.
 export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : isRenderStagingHost ? stagingBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
 export const TOKEN_KEY = 'kjapp_admin_token';
 
@@ -35,9 +35,30 @@ http.interceptors.response.use(
   },
 );
 
+const detailText = (detail: any): string => {
+  if (!detail) return '';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => {
+      if (typeof item === 'string') return item;
+      const loc = Array.isArray(item?.loc) ? item.loc.filter((x: any) => x !== 'body').join('.') : '';
+      const msg = item?.msg || item?.message || 'Ugyldig verdi';
+      return loc ? `${loc}: ${msg}` : msg;
+    }).filter(Boolean).join(' · ');
+  }
+  if (typeof detail === 'object') return detail.message || detail.msg || JSON.stringify(detail);
+  return String(detail);
+};
+
 export const apiError = (e: any) => {
-  if (e?.response?.status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
-  return e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+  const status = e?.response?.status;
+  const detail = detailText(e?.response?.data?.detail);
+  if (detail) return detail;
+  if (status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
+  if (status === 409) return 'Handlingen kan ikke utføres i nåværende status. Oppdater data og prøv igjen.';
+  if (status === 422) return 'Skjemaet inneholder ugyldige eller manglende felt.';
+  if (!e?.response) return 'Kan ikke kontakte SNAR API akkurat nå. Kontroller nettverket og prøv igjen.';
+  return e?.message || 'Noe gikk galt';
 };
 
 const encodeStoragePath = (path: string) =>
@@ -99,7 +120,7 @@ export const api = {
   betaReadiness: () => http.get('/admin/beta-readiness').then((r) => r.data),
   search: (q: string) => http.get('/admin/search', { params: { q } }).then((r) => r.data),
 
-  // KJAPP Operations OS
+  // Operations OS
   runtimeConfig: () => http.get('/admin/operations/runtime-config').then((r) => r.data),
   patchRuntimeConfig: (body: any) => http.patch('/admin/operations/runtime-config', body).then((r) => r.data),
   runtimeConfigHistory: (limit = 30) => http.get('/admin/operations/runtime-config/history', { params: { limit } }).then((r) => r.data),
@@ -130,18 +151,29 @@ export const api = {
     http.post(`/superadmin/fleet-applications/${id}/reject`, { review_notes }).then((r) => r.data),
   applicationFile: (path: string) =>
     http.get(`/files/${encodeStoragePath(path)}`, { responseType: 'blob' }).then((r) => r.data as Blob),
+
   // Admin Control Center
   controlActionCenter: () => http.get('/admin/control/action-center').then((r) => r.data),
   controlIntegrations: () => http.get('/admin/control/integrations').then((r) => r.data),
   controlFleets: () => http.get('/admin/fleets-full').then((r) => r.data),
   createFleet: (body: any) => http.post('/admin/fleets', body).then((r) => r.data),
   fleetDetail: (id: string) => http.get(`/admin/fleets/${id}`).then((r) => r.data),
+  fleetVehicles: (id: string) => http.get(`/admin/control/fleets/${id}/vehicles`).then((r) => r.data),
   suspendFleet: (id: string, reason = '') => http.post(`/admin/fleets/${id}/suspend`, { reason }).then((r) => r.data),
   reactivateFleet: (id: string) => http.post(`/admin/fleets/${id}/reactivate`).then((r) => r.data),
   updateFleetCommission: (id: string, commission_rate: number, reason = '') =>
     http.post(`/admin/fleets/${id}/commission`, { commission_rate, reason }).then((r) => r.data),
   inviteFleetDriver: (id: string, body: any) =>
-    http.post(`/admin/control/fleets/${id}/driver-invites`, body).then((r) => r.data),
+    http.post(`/admin/control/fleets/${id}/driver-invites`, body).then((r) => {
+      const data = r.data;
+      if (data?.ok && data?.email_sent === false && data?.invite_url) {
+        const error = new Error(`Invitasjonen ble opprettet, men e-posten ble ikke sendt. Del lenken manuelt: ${data.invite_url}`) as any;
+        error.inviteCreated = true;
+        error.inviteUrl = data.invite_url;
+        throw error;
+      }
+      return data;
+    }),
   updateFleetVehicle: (id: string, body: any) =>
     http.post(`/admin/control/fleets/${id}/vehicle`, body).then((r) => r.data),
   stripeFleets: () => http.get('/admin/control/stripe-fleets').then((r) => r.data),
@@ -154,5 +186,4 @@ export const api = {
   adminUsers: () => http.get('/admin/control/admin-users').then((r) => r.data),
   createAdminUser: (body: any) => http.post('/admin/control/admin-users', body).then((r) => r.data),
   updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
-
 };
