@@ -26,8 +26,10 @@ export default function DriverLegalConsent() {
     setBusy(true);
     setError('');
     try {
-      await acceptLegal();
-      router.replace('/(driver)/home');
+      const updated = await acceptLegal();
+      const identityStatus = updated?.identity_verification_status || 'not_submitted';
+      const identityGate = Boolean(updated?.identity_recheck_required) || identityStatus !== 'verified';
+      router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
     } catch (e) {
       setError(apiError(e));
     } finally {
@@ -46,7 +48,7 @@ export default function DriverLegalConsent() {
         <Text style={s.eyebrow}>SNAR DRIVER · KONTO</Text>
         <Text style={s.title}>Før du går på skift</Text>
         <Text style={s.sub}>
-          Godkjente sjåfører må bekrefte gjeldende SNAR-vilkår og personvern før appen kan starte posisjonsdeling eller motta turer.
+          Godkjente sjåfører må bekrefte gjeldende SNAR-vilkår og personvern før appen kan starte posisjonsdeling eller motta turer. Deretter gjennomføres Selfie ID dersom enheten ikke allerede er verifisert.
         </Text>
 
         <View style={s.links}>
@@ -112,4 +114,3 @@ const useStyles = makeStyles((c) => ({
   logout: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   logoutText: { color: c.textMuted, fontSize: 14 },
 }));
-
