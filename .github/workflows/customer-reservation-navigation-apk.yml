@@ -40,4 +40,4 @@ jobs:
       - run: node scripts/customer-build-gate.cjs
       - run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
 
-# Build trigger: receipt/activity refresh fix 2026-10-05
+# Build trigger: latest approved mobile state 2026-10-06
