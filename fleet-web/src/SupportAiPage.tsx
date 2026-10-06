@@ -41,6 +41,29 @@ function makeSession(prefix: string, fleetId?: string) {
   return created;
 }
 
+function cleanHistoryMessage(item: any): ChatMessage | null {
+  const role: 'user' | 'assistant' = item?.role === 'assistant' ? 'assistant' : 'user';
+  let content = String(item?.content || '').trim();
+  if (!content) return null;
+
+  if (role === 'user' && content.includes('[SNAR_FLEET_CONTEXT')) {
+    const marker = 'Spørsmål fra løyvehaver: ';
+    const start = content.indexOf(marker);
+    if (start >= 0) {
+      const after = content.slice(start + marker.length);
+      const endMarker = '\nSvar kort på norsk.';
+      const end = after.indexOf(endMarker);
+      content = (end >= 0 ? after.slice(0, end) : after).trim();
+    } else {
+      return null;
+    }
+  }
+
+  // Support conversations have their own session and must never leak into the AI transcript.
+  if (role === 'user' && content.startsWith('[FLEET_SUPPORT]')) return null;
+  return { role, content, created_at: item?.created_at };
+}
+
 function serializeFleetContext(fleet: FleetMe | null, ctx: FleetAiContext | null) {
   if (!ctx) return 'Fleet-data kunne ikke lastes akkurat nå.';
   const drivers = Array.isArray(ctx.live?.drivers) ? ctx.live.drivers : [];
@@ -112,7 +135,10 @@ export function SupportAiPage() {
 
   useEffect(() => {
     http.get('/ai/history', { params: { session_id: aiSession } })
-      .then((r) => setMessages(Array.isArray(r.data?.messages) ? r.data.messages : []))
+      .then((r) => {
+        const rows = Array.isArray(r.data?.messages) ? r.data.messages : [];
+        setMessages(rows.map(cleanHistoryMessage).filter(Boolean) as ChatMessage[]);
+      })
       .catch(() => {});
   }, [aiSession]);
 
