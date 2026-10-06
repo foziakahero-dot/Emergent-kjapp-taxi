@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { googleIdentity, appleIdentity } from '@/src/lib/socialSignIn';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 import { stopDriverBackgroundLocation, unregisterNativePush } from '@/src/lib/nativeRuntime';
@@ -32,8 +31,6 @@ export type User = {
 type AuthCtx = {
   user: User | undefined; // undefined = loading, null = signed out
   login: (identifier: string, password: string) => Promise<any>;
-  signInWithGoogle: () => Promise<User>;
-  signInWithApple: () => Promise<User>;
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -84,27 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   const login = async (identifier: string, password: string) => {
+    // Driver authentication is deliberately password-only. The persistent,
+    // app-generated installation id is only a privacy-preserving signal used by
+    // the backend to require Selfie ID again on a new installation/device.
     const device_id = await getDriverInstallationId();
     const res = await authApi.login({ email: identifier, password, client: 'driver', device_id });
     if (res.twofa_required) return res;
-    await storage.setItem(TOKEN_KEY, res.token);
-    setUser(res.user);
-    return res.user;
-  };
-
-  const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
-    const identity = provider === 'google'
-      ? await googleIdentity(await authApi.nativeConfig()) : await appleIdentity();
-    if (!identity) return null;
-    const res = await authApi.nativeSignIn(provider, identity, await getDriverInstallationId());
-    if (!res.token || res.user?.role !== 'driver' || res.user?.approved !== true)
+    if (!res?.token || res?.user?.role !== 'driver' || res?.user?.approved !== true) {
       throw new Error('Sjåførkontoen må være invitert og godkjent.');
+    }
     await storage.setItem(TOKEN_KEY, res.token);
     setUser(res.user);
     return res.user;
   };
-  const signInWithGoogle = () => socialLogin('google');
-  const signInWithApple = () => socialLogin('apple');
 
   const acceptLegal = async (): Promise<User> => {
     const updated = await authApi.acceptLegal('2026-09');
@@ -121,11 +110,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, signInWithGoogle, signInWithApple, acceptLegal, logout, refresh }}>
+    <Ctx.Provider value={{ user, login, acceptLegal, logout, refresh }}>
       {children}
     </Ctx.Provider>
   );
 }
 
 export const useAuth = () => useContext(Ctx);
-
