@@ -5,7 +5,6 @@ import { useAuth } from './auth';
 import DriverSignup from './DriverSignup';
 import {
   BedriftPage,
-  DocumentsPage,
   FinancePage,
   LiveOpsPage,
   TripsPage,
@@ -13,6 +12,7 @@ import {
 } from './pages';
 import { DriversV2Page } from './FleetV2DriversPage';
 import { Driver360Page, InvitationsPage, OperationsDashboardPage } from './FleetV2Pages';
+import FigmaDocumentsPage from './FigmaDocumentsPage';
 import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
 import SupportAiPage from './SupportAiPage';
 
@@ -109,7 +109,7 @@ function PortalShell() {
           <Route path="/kjoretoy" element={<VehiclesPage />} />
           <Route path="/invitasjoner" element={<InvitationsPage />} />
           <Route path="/turer" element={<TripsPage />} />
-          <Route path="/dokumenter" element={<DocumentsPage />} />
+          <Route path="/dokumenter" element={<FigmaDocumentsPage />} />
           <Route path="/okonomi" element={<FinancePage />} />
           <Route path="/meldinger" element={<SupportAiPage />} />
           <Route path="/bedrift" element={<BedriftPage />} />
