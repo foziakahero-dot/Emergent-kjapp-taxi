@@ -1,7 +1,7 @@
 import { DesignField } from '@/src/components/DesignField';
 import { Rise } from '@/src/components/Motion';
 import { Button } from '@/src/components/ui';
-import { Text, TextInput } from '@/src/components/Typography';
+import { Text } from '@/src/components/Typography';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -23,7 +23,6 @@ export default function DriverLogin() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
 
   const submit = async () => {
     setError('');
@@ -48,7 +47,9 @@ export default function DriverLogin() {
         router.replace('/driver-legal-consent');
         return;
       }
-      router.replace('/(driver)/home');
+      const identityStatus = res?.identity_verification_status || 'not_submitted';
+      const identityGate = Boolean(res?.identity_recheck_required) || identityStatus !== 'verified';
+      router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
     } catch (e) {
       setError(apiError(e));
     } finally {
@@ -60,7 +61,6 @@ export default function DriverLogin() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.driverBg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={s.bgGradient} pointerEvents="none" />
       <ScrollView contentContainerStyle={[s.wrap, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
-
         <Rise style={s.identity}>
           <BrandBadge size={48} />
           <View>
@@ -88,6 +88,7 @@ export default function DriverLogin() {
         </Pressable>
 
         <View style={s.note}>
+          <Text style={s.noteText}>Sjåfører logger alltid inn med eget passord. Første innlogging og nye telefoner kan kreve Selfie ID-kontroll.</Text>
           <Text style={s.noteText}>Har du ikke fått tilgang? Sjåførkonto opprettes via invitasjon fra flåteeier.</Text>
           <Text style={s.helpText}>Trenger du hjelp?</Text>
         </View>
@@ -109,10 +110,7 @@ const useStyles = makeStyles((c) => ({
     forgot: { minHeight: 20, alignSelf: 'center', justifyContent: 'center', marginTop: 20 },
     forgotText: { color: c.text, fontFamily: font.medium, fontSize: 14, lineHeight: 20 },
     error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 12 },
-    note: { marginTop: 40, borderRadius: 16, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+    note: { marginTop: 40, borderRadius: 16, padding: 16, gap: 8, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
     noteText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-    helpText: { color: c.text, fontFamily: font.semibold, fontSize: 12, textAlign: 'center', marginTop: 8 }
+    helpText: { color: c.text, fontFamily: font.semibold, fontSize: 12, textAlign: 'center', marginTop: 2 }
 }));
-
-
-
