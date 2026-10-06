@@ -2,15 +2,21 @@ import axios from 'axios';
 
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
-const productionBackend = 'https://github-app-builder-28.emergent.host/api';
+const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
 const isProductionAdminHost = host === 'admin.kjappapp.no';
-const isVercelPreviewHost = host.endsWith('.vercel.app');
+const isHostedPreview = host.endsWith('.netlify.app') || host.endsWith('.vercel.app');
 
-// Production uses the production API directly. Vercel previews are intentionally isolated:
-// they can only talk to an API when VITE_API_BASE is explicitly configured (e.g. staging).
-export const API_BASE = configuredBase || (isProductionAdminHost ? productionBackend : isVercelPreviewHost ? '/__preview_api_disabled__' : window.location.origin + '/api');
-export const TOKEN_KEY = 'kjapp_admin_token';
+// SNAR uses one canonical FastAPI backend in production. Hosted previews are
+// intentionally isolated unless VITE_API_BASE is explicitly configured.
+export const API_BASE = configuredBase || (
+  isProductionAdminHost
+    ? productionBackend
+    : isHostedPreview
+      ? '/__preview_api_disabled__'
+      : window.location.origin + '/api'
+);
+export const TOKEN_KEY = 'kjapp_admin_token'; // internal compatibility key; not user-facing branding
 
 export const http = axios.create({ baseURL: API_BASE, timeout: 20000 });
 
@@ -34,8 +40,18 @@ http.interceptors.response.use(
 );
 
 export const apiError = (e: any) => {
-  if (e?.response?.status === 404) return 'Denne delen er ikke aktivert i produksjons-API-et ennå.';
-  return e?.response?.data?.detail || e?.message || 'Noe gikk galt';
+  if (!e?.response) return 'Kan ikke nå SNAR API. Kontroller nettverk og prøv igjen.';
+  const status = Number(e.response.status || 0);
+  const detail = e?.response?.data?.detail;
+  if (detail) return typeof detail === 'string' ? detail : 'Forespørselen ble avvist av serveren.';
+  if (status === 401) return 'Økten er utløpt. Logg inn på nytt.';
+  if (status === 403) return 'Du har ikke tilgang til denne handlingen.';
+  if (status === 404) return 'Denne delen er ikke tilgjengelig i aktivt SNAR API.';
+  if (status === 409) return 'Dataene ble endret av en annen handling. Oppdater og prøv igjen.';
+  if (status === 422) return 'Noen av feltene er ugyldige. Kontroller informasjonen og prøv igjen.';
+  if (status === 429) return 'For mange forespørsler. Vent litt og prøv igjen.';
+  if (status >= 500) return 'SNAR API har en midlertidig serverfeil. Ingen handling regnes som lagret før serveren bekrefter den.';
+  return e?.message || 'Noe gikk galt';
 };
 
 const encodeStoragePath = (path: string) =>
@@ -118,5 +134,4 @@ export const api = {
   adminUsers: () => http.get('/admin/control/admin-users').then((r) => r.data),
   createAdminUser: (body: any) => http.post('/admin/control/admin-users', body).then((r) => r.data),
   updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
-
 };
