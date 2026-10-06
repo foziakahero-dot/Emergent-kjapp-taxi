@@ -3,6 +3,8 @@ const path = require('path');
 
 const homePath = path.join(__dirname, '..', 'app', '(app)', 'home.tsx');
 let source = fs.readFileSync(homePath, 'utf8');
+const originalEol = source.includes('\r\n') ? '\r\n' : '\n';
+source = source.replace(/\r\n/g, '\n');
 
 // Idempotent: once the source is folded in permanently, do nothing without
 // terminating the parent process. This module is required by the build gate,
@@ -31,6 +33,7 @@ if (source.includes('const [rideSheetCollapsed, setRideSheetCollapsed]')) {
   if (!source.includes(closeBefore)) throw new Error('Ride-sheet closing anchor not found.');
   source = source.replace(closeBefore, closeAfter);
 
+  if (originalEol === '\r\n') source = source.replace(/\n/g, '\r\n');
   fs.writeFileSync(homePath, source, 'utf8');
   console.log('Applied Customer ride-sheet minimize/restore fix for native build.');
 }
