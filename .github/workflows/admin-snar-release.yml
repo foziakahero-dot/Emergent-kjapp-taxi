@@ -1,0 +1,121 @@
+name: SNAR Admin release
+
+on:
+  push:
+    branches:
+      - release/admin-snar-clean-20261006
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize-build-deploy:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NETLIFY_SITE_ID: b93e4ef0-cf6e-4453-bb93-925d1230354b
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/admin-snar-clean-20261006
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-web/package-lock.json
+
+      - name: Apply approved SNAR Admin-only changes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          root = Path('admin-web')
+
+          # Canonical production API. Keep TOKEN_KEY and technical/internal IDs unchanged.
+          api = root / 'src' / 'api.ts'
+          text = api.read_text(encoding='utf-8')
+          text = text.replace("const productionBackend = 'https://github-app-builder-28.emergent.host/api';", "const productionBackend = 'https://api.kjappapp.no/api';")
+          text = re.sub(r"\n\s*drivers:\s*\(\)\s*=>\s*http\.get\('/admin/drivers-full'\)\.then\(\(r\)\s*=>\s*r\.data\),?", "", text)
+          api.write_text(text, encoding='utf-8')
+
+          # User-facing branding only. Lowercase technical identifiers such as kjapp_revenue stay untouched.
+          for rel in [
+              'src/pages.tsx',
+              'src/controlCenter.tsx',
+              'src/FleetApplications.tsx',
+              'index.html',
+              'api/[...path].js',
+          ]:
+              p = root / rel
+              if p.exists():
+                  s = p.read_text(encoding='utf-8')
+                  s = s.replace('KJAPP', 'SNAR')
+                  p.write_text(s, encoding='utf-8')
+
+          login = root / 'src' / 'Login.tsx'
+          s = login.read_text(encoding='utf-8')
+          s = s.replace('<div className="brand-mark">K</div><div className="brand-name">KJAPP</div>', '<div className="brand-mark">S</div><div className="brand-name">SNAR</div>')
+          s = s.replace('admin@kjapp.no', 'admin@snar.no')
+          login.write_text(s, encoding='utf-8')
+
+      - name: Verify forbidden production backend is gone from Admin source
+        run: |
+          if grep -R "github-app-builder-28.emergent.host/api" admin-web/src admin-web/api admin-web/index.html; then
+            echo "Legacy production backend still referenced in Admin source"
+            exit 1
+          fi
+
+      - name: Install Admin dependencies
+        working-directory: admin-web
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript check
+        working-directory: admin-web
+        run: npx tsc --noEmit
+
+      - name: Build production Admin
+        working-directory: admin-web
+        run: npm run build
+
+      - name: Verify production bundle branding and API
+        shell: bash
+        run: |
+          test -d admin-web/dist
+          grep -R "https://api.kjappapp.no/api" admin-web/dist >/dev/null
+          if grep -R "github-app-builder-28.emergent.host/api" admin-web/dist; then
+            echo "Legacy API leaked into bundle"
+            exit 1
+          fi
+
+      - name: Commit finalized Admin source to release branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add admin-web/src/api.ts admin-web/src/pages.tsx admin-web/src/controlCenter.tsx admin-web/src/FleetApplications.tsx admin-web/src/Login.tsx admin-web/index.html 'admin-web/api/[...path].js'
+          if git diff --cached --quiet; then
+            echo "No source changes to commit"
+          else
+            git commit -m "fix(admin): finalize SNAR branding and production API"
+            git push origin HEAD:release/admin-snar-clean-20261006
+          fi
+
+      - name: Require Netlify auth for production deploy
+        shell: bash
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ]; then
+            echo "NETLIFY_AUTH_TOKEN GitHub secret is not configured"
+            exit 2
+          fi
+
+      - name: Deploy existing Admin site to production
+        working-directory: admin-web
+        run: npx --yes netlify-cli@latest deploy --dir=dist --prod --site="$NETLIFY_SITE_ID" --auth="$NETLIFY_AUTH_TOKEN" --message="SNAR Admin release $GITHUB_SHA"
