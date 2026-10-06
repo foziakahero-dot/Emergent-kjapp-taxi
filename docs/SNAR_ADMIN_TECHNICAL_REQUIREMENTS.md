@@ -21,8 +21,10 @@ Status: normative beta requirements for Admin Control Center. Runtime items rema
 | ADM-ID-001 | P0 | Identity/selfie review shall be authenticated, private and Admin-reviewable when enabled. | VERIFIED_SOURCE | upload/review/access-control test | Only authorized Admin can review; another Driver cannot fetch selfie/private file. |
 | ADM-FLT-001 | P0 | Admin shall list/create/open/suspend/reactivate fleets from canonical backend data. | VERIFIED_SOURCE | fleet regression | Changes are visible in Admin and Fleet Web from same backend state. |
 | ADM-FLT-002 | P0 | Commission changes shall persist with audit history and be used by finance/settlement logic. | VERIFIED_SOURCE | change rate + finance test | New applicable rides use correct frozen commission basis; historical paid rides remain immutable. |
-| ADM-FLT-003 | P0 | Driver invitations shall be bound to the intended fleet and never silently succeed when delivery/creation fails. | PARTIAL | invite success/failure regression | Fleet ID/token are correct; failure stays visible; copy-link fallback exists when mail delivery fails. |
+| ADM-FLT-003 | P0 | Driver invitations shall be bound to the intended fleet and never silently succeed when delivery/creation fails. | VERIFIED_SOURCE | invite success/failure regression | Fleet ID/token are correct; delivery failure leaves a manual invite URL available instead of silently closing the flow. |
+| ADM-FLT-004 | P0 | Rolling Admin/backend versions shall agree on vehicle assignment and invitation payloads. | VERIFIED_SOURCE | legacy + canonical payload regression | Canonical `vehicle_id` works; deployed legacy `{car,plate,vehicle_type}` Admin payload is reconciled to same-fleet `fleet_vehicles` without HTTP 422. |
 | ADM-VEH-001 | P0 | Vehicle records and assignment shall be fleet-scoped and canonical. | VERIFIED_SOURCE | cross-fleet assignment test | A Driver cannot be assigned or select a vehicle owned by another fleet. |
+| ADM-VEH-002 | P0 | Admin shall be able to enumerate canonical vehicle IDs for a selected fleet. | VERIFIED_SOURCE | `GET /admin/control/fleets/{fleet_id}/vehicles` | Only vehicles from the requested fleet are returned, with assignment/active state. |
 | ADM-DOC-001 | P0 | Admin shall review/reject/pending compliance documents and optionally set expiry. | VERIFIED_SOURCE | document review test | Review state persists, audit is recorded, eligibility reacts when policy requires. |
 | ADM-TRIP-001 | P0 | Admin trip operations shall use server-authoritative trip state and be audited. | VERIFIED_SOURCE | cancel/release/adjust/refund regression | Invalid transitions fail; successful interventions are visible after canonical refetch. |
 | ADM-PAY-001 | P0 | Stripe/finance controls shall never expose server secrets to the browser. | VERIFIED_SOURCE | source/build secret scan | No secret/restricted key appears in Admin source, bundle or browser responses. |
@@ -30,8 +32,8 @@ Status: normative beta requirements for Admin Control Center. Runtime items rema
 | ADM-PERF-001 | P0 | Admin shall not blank already-loaded screens during same-query refresh. | VERIFIED_SOURCE | network throttling + refresh | Cached rows/data remain visible while refresh runs. |
 | ADM-PERF-002 | P0 | Stale/out-of-order requests shall not overwrite newer filter/search results. | VERIFIED_SOURCE | rapid filter/search test | Latest request wins; old response is ignored. |
 | ADM-PERF-003 | P1 | Only Live operations may use short polling by default; normal tables should refetch on demand/focus/invalidation. | PARTIAL | browser network audit | No unnecessary recurring requests from standard tables. |
-| ADM-PERF-004 | P1 | Heavy Admin backend endpoints shall avoid N+1 queries and unbounded collection scans. | UNVERIFIED_RUNTIME | Mongo/query profiling | Latency remains within agreed beta threshold at expected fleet/driver volume. |
-| ADM-ERR-001 | P0 | Admin actions shall show understandable Norwegian error states and must not claim writes succeeded without server confirmation. | PARTIAL | force 401/403/409/422/429/500/offline | User sees actionable status and failed mutation is not represented as saved. |
+| ADM-PERF-004 | P1 | Heavy Admin backend endpoints shall avoid N+1 queries and serial independent count waterfalls. | VERIFIED_SOURCE | source + Mongo/query profiling | Action Center counts are concurrent and Fleet/Stripe owner lookup is batched; runtime latency still needs measurement. |
+| ADM-ERR-001 | P0 | Admin actions shall show understandable Norwegian error states and must not claim writes succeeded without server confirmation. | VERIFIED_SOURCE | force 401/403/409/422/429/500/offline | Validation arrays and network failures are normalized to readable messages; failed mutation is not represented as saved. |
 | ADM-BRAND-001 | P1 | All user-facing Admin branding shall display SNAR; legacy internal compatibility IDs may remain. | PARTIAL | static scan + visual QA | No visible KJAPP labels remain in production Admin. |
 | ADM-AUDIT-001 | P0 | Privileged mutations shall create audit entries with actor/action/entity/timestamp. | VERIFIED_SOURCE | mutation + audit query | Every required mutation is traceable in audit log. |
 
@@ -45,5 +47,7 @@ Required runtime chain for every critical mutation:
 ## Current audit notes
 - The active Render/backend branch already contains the canonical production API base in `admin-web/src/api.ts`.
 - The published Netlify Admin deploy inspected during this audit was a manual upload without branch/commit metadata, so deploy provenance is currently insufficient for ADM-DEPLOY-002.
-- Admin data hooks have been hardened on the audit branch to preserve loaded data during same-query refresh and reject stale out-of-order responses.
-- Do not deploy this audit branch until TypeScript/build/runtime checks pass and concurrent Claude work has been reconciled.
+- Admin data hooks preserve loaded data during same-query refresh and reject stale out-of-order responses.
+- Fleet invite/vehicle contract drift is repaired in source: backend accepts canonical IDs and the currently deployed legacy Admin payload during migration, while enforcing same-fleet vehicle ownership.
+- Driver invite responses now include `invite_url`; the Admin API wrapper leaves the form open with the manual link when e-mail delivery fails.
+- GitHub Actions still ends in `startup_failure` before jobs start, so source changes require deploy/runtime verification before production-ready claims.
