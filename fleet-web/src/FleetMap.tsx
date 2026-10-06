@@ -7,12 +7,12 @@ const OSLO: [number, number] = [59.9139, 10.7522];
 
 function statusMeta(status?: string) {
   switch (status) {
-    case 'available': return { label: 'Ledig', color: '#34d399' };
-    case 'driver_on_way': return { label: 'På vei til kunde', color: '#fbbf24' };
-    case 'at_pickup': return { label: 'Ved hentested', color: '#f59e0b' };
-    case 'in_trip': return { label: 'På tur', color: '#60a5fa' };
-    case 'gps_stale': return { label: 'GPS utløpt', color: '#94a3b8' };
-    default: return { label: 'Offline', color: '#64748b' };
+    case 'available': return { label: 'Ledig', color: '#18a66a' };
+    case 'driver_on_way': return { label: 'På vei til kunde', color: '#d58a00' };
+    case 'at_pickup': return { label: 'Ved hentested', color: '#ef8f00' };
+    case 'in_trip': return { label: 'På tur', color: '#2b65c8' };
+    case 'gps_stale': return { label: 'GPS utløpt', color: '#8a99aa' };
+    default: return { label: 'Offline', color: '#68788b' };
   }
 }
 
@@ -20,6 +20,19 @@ function safe(value: unknown) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
   }[ch] || ch));
+}
+
+function vehicleIcon(driver: FleetLiveDriver) {
+  const meta = statusMeta(driver.operational_status);
+  const heading = Number.isFinite(Number(driver.heading)) ? Number(driver.heading) : 0;
+  const stale = !driver.gps_fresh || driver.operational_status === 'gps_stale';
+  return L.divIcon({
+    className: 'snar-car-marker',
+    html: `<div class="snar-car-marker-inner${stale ? ' snar-car-marker-stale' : ''}" style="transform:rotate(${heading}deg);--marker-color:${meta.color}"><div class="snar-car-marker-body"></div></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
+  });
 }
 
 export function FleetMap({ drivers }: { drivers: FleetLiveDriver[] }) {
@@ -68,13 +81,7 @@ export function FleetMap({ drivers }: { drivers: FleetLiveDriver[] }) {
       const lng = Number(driver.lng);
       bounds.push([lat, lng]);
       const meta = statusMeta(driver.operational_status);
-      const marker = L.circleMarker([lat, lng], {
-        radius: 8,
-        color: meta.color,
-        fillColor: meta.color,
-        fillOpacity: driver.gps_fresh ? 0.95 : 0.42,
-        weight: 2,
-      });
+      const marker = L.marker([lat, lng], { icon: vehicleIcon(driver), keyboard: true });
       const last = driver.last_location_at
         ? new Date(driver.last_location_at).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         : 'ukjent';
@@ -97,5 +104,5 @@ export function FleetMap({ drivers }: { drivers: FleetLiveDriver[] }) {
     }
   }, [drivers]);
 
-  return <div ref={el} className="fleet-real-map" aria-label="Live kart over egne KJAPP-biler" />;
+  return <div ref={el} className="fleet-real-map" aria-label="Live kart over egne SNAR-biler" />;
 }
