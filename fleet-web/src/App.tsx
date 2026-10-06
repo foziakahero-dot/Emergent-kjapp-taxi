@@ -14,6 +14,7 @@ import {
 import { DriversV2Page } from './FleetV2DriversPage';
 import { Driver360Page, InvitationsPage, OperationsDashboardPage } from './FleetV2Pages';
 import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
+import SupportAiPage from './SupportAiPage';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true, icon: '⌂' },
@@ -24,6 +25,7 @@ const NAV = [
   { to: '/turer', label: 'Turer', icon: '↗' },
   { to: '/okonomi', label: 'Økonomi', icon: '○' },
   { to: '/dokumenter', label: 'Dokumenter', icon: '▤' },
+  { to: '/meldinger', label: 'Meldinger / SNAR AI', icon: '✦' },
   { to: '/bedrift', label: 'Innstillinger', icon: '□' },
 ];
 
@@ -96,7 +98,7 @@ function PortalShell() {
 
       <main className="portal-main">
         <div className="portal-topbar" aria-hidden="true">
-          <span>SNAR Fleet</span>
+          <span>{fleet?.name || 'SNAR Fleet'}</span>
           <span className="portal-topbar-status"><i /> System online</span>
         </div>
         <Routes>
@@ -109,6 +111,7 @@ function PortalShell() {
           <Route path="/turer" element={<TripsPage />} />
           <Route path="/dokumenter" element={<DocumentsPage />} />
           <Route path="/okonomi" element={<FinancePage />} />
+          <Route path="/meldinger" element={<SupportAiPage />} />
           <Route path="/bedrift" element={<BedriftPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
