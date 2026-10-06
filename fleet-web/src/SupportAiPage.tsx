@@ -9,6 +9,14 @@ type ChatMessage = {
 
 type SupportCategory = 'teknisk' | 'betaling' | 'dokumenter' | 'sjåfør' | 'annet';
 
+type FleetAiContext = {
+  overview?: any;
+  live?: any;
+  documents?: any;
+  payouts?: any;
+  captured_at: string;
+};
+
 const QUICK_PROMPTS = [
   'Hvor mange sjåfører er online akkurat nå?',
   'Hvilke dokumenter krever oppfølging?',
@@ -33,9 +41,43 @@ function makeSession(prefix: string, fleetId?: string) {
   return created;
 }
 
+function serializeFleetContext(fleet: FleetMe | null, ctx: FleetAiContext | null) {
+  if (!ctx) return 'Fleet-data kunne ikke lastes akkurat nå.';
+  const drivers = Array.isArray(ctx.live?.drivers) ? ctx.live.drivers : [];
+  const trips = Array.isArray(ctx.live?.trips) ? ctx.live.trips : [];
+  const docSummary = ctx.documents?.summary || {};
+  const payouts = Array.isArray(ctx.payouts?.payouts) ? ctx.payouts.payouts.slice(0, 5) : [];
+  const compactDrivers = drivers.slice(0, 30).map((d: any) => ({
+    id: d.id,
+    name: d.name || d.email,
+    car: d.car,
+    plate: d.plate,
+    online: Boolean(d.online),
+    gps_fresh: Boolean(d.gps_fresh),
+    status: d.operational_status,
+    last_location_at: d.last_location_at,
+  }));
+  return JSON.stringify({
+    source: 'SNAR Fleet authenticated APIs',
+    captured_at: ctx.captured_at,
+    fleet: { id: fleet?.id, name: fleet?.name, org_number: fleet?.org_number },
+    overview: ctx.overview || null,
+    live: {
+      drivers_total: drivers.length,
+      online: drivers.filter((d: any) => d.online).length,
+      gps_stale: drivers.filter((d: any) => d.operational_status === 'gps_stale' || (d.online && !d.gps_fresh)).length,
+      active_trips: trips.length,
+      drivers: compactDrivers,
+    },
+    documents: docSummary,
+    payouts,
+  });
+}
+
 export function SupportAiPage() {
   const [tab, setTab] = useState<'ai' | 'support'>('ai');
   const [fleet, setFleet] = useState<FleetMe | null>(null);
+  const [fleetContext, setFleetContext] = useState<FleetAiContext | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -49,8 +91,23 @@ export function SupportAiPage() {
   const supportSession = useMemo(() => makeSession('support', fleet?.id), [fleet?.id]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  const refreshFleetContext = async () => {
+    const [overview, live, documents, payouts] = await Promise.all([
+      api.overview().catch(() => null),
+      api.live().catch(() => null),
+      api.documents().catch(() => null),
+      api.payouts().catch(() => null),
+    ]);
+    const next = { overview, live, documents, payouts, captured_at: new Date().toISOString() };
+    setFleetContext(next);
+    return next;
+  };
+
   useEffect(() => {
     api.fleetMe().then(setFleet).catch(() => setFleet(null));
+    void refreshFleetContext();
+    const timer = window.setInterval(() => void refreshFleetContext(), 30_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -72,7 +129,16 @@ export function SupportAiPage() {
     setMessages((prev) => [...prev, { role: 'user', content: clean }]);
     setMessage('');
     try {
-      const result = await http.post('/ai/chat', { message: clean, session_id: aiSession }).then((r) => r.data);
+      const fresh = await refreshFleetContext().catch(() => fleetContext);
+      const groundedMessage = [
+        '[SNAR_FLEET_CONTEXT — data fra autentiserte Fleet API-er; bruk disse tallene som fasit]',
+        serializeFleetContext(fleet, fresh),
+        '[/SNAR_FLEET_CONTEXT]',
+        '',
+        `Spørsmål fra løyvehaver: ${clean}`,
+        'Svar kort på norsk. Hvis nødvendig data mangler i konteksten, si tydelig at den ikke er tilgjengelig i stedet for å gjette.',
+      ].join('\n');
+      const result = await http.post('/ai/chat', { message: groundedMessage, session_id: aiSession }).then((r) => r.data);
       setMessages((prev) => [...prev, { role: 'assistant', content: result?.reply || 'Jeg fikk ikke et svar akkurat nå.' }]);
     } catch (e) {
       setError(apiError(e));
@@ -103,8 +169,6 @@ export function SupportAiPage() {
       supportBody.trim(),
     ].join('\n');
     try {
-      // Reuse the authenticated SNAR conversation backend so the message is persisted
-      // under the fleet owner's account instead of creating a parallel data store.
       await http.post('/ai/chat', { message: structured, session_id: supportSession });
       setSupportSent(true);
       setSupportSubject('');
@@ -123,7 +187,7 @@ export function SupportAiPage() {
         <h1>SNAR AI & support</h1>
         <p>Spør om flåten din eller send en melding til SNAR fra samme arbeidsflate.</p>
       </div>
-      <div className="figma-head-status"><i /> System online</div>
+      <div className="figma-head-status"><i /> Fleet-data live</div>
     </div>
 
     <div className="figma-tabs" role="tablist">
@@ -135,14 +199,14 @@ export function SupportAiPage() {
       <section className="figma-card ai-chat-card">
         <div className="ai-chat-head">
           <div className="ai-orb">✦</div>
-          <div><strong>SNAR AI</strong><span>Assistent for drift og flåte</span></div>
+          <div><strong>SNAR AI</strong><span>Assistent med ekte Fleet-kontekst</span></div>
           <span className="ai-live"><i /> Online</span>
         </div>
         <div className="ai-messages" ref={scrollRef}>
           {!messages.length ? <div className="ai-welcome">
             <div className="ai-orb large">✦</div>
             <h2>Hva vil du vite om flåten?</h2>
-            <p>Bruk SNAR AI for raske forklaringer og hjelp. Kritiske handlinger skal fortsatt bekreftes av deg.</p>
+            <p>SNAR AI får sanntidskontekst fra flåtens oversikt, GPS-status, dokumenter og payouts før hvert spørsmål.</p>
           </div> : null}
           {messages.map((item, index) => <div key={`${item.role}-${index}`} className={`ai-message ${item.role}`}>
             <span>{item.content}</span>
@@ -161,7 +225,7 @@ export function SupportAiPage() {
         <div className="ai-prompts">
           {QUICK_PROMPTS.map((prompt) => <button key={prompt} onClick={() => void sendAi(prompt)}>{prompt}<span>→</span></button>)}
         </div>
-        <div className="ai-safety-note"><strong>Handlinger krever bekreftelse</strong><p>SNAR AI skal ikke deaktivere sjåfører, endre utbetaling eller gjøre andre sensitive handlinger automatisk.</p></div>
+        <div className="ai-safety-note"><strong>Handlinger krever bekreftelse</strong><p>SNAR AI leser Fleet-kontekst, men skal ikke deaktivere sjåfører, endre utbetaling eller gjøre andre sensitive handlinger automatisk.</p></div>
       </aside>
     </div> : null}
 
