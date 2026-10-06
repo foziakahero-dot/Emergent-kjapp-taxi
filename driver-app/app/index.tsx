@@ -16,10 +16,9 @@ export default function Index() {
 
   useEffect(() => {
     if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) {
-      const identityStatus = user.identity_verification_status || '';
-      const mustRecheck = Boolean(user.identity_recheck_required)
-        || ['recheck_required', 'retry_required', 'pending_review'].includes(identityStatus);
-      router.replace(mustRecheck ? '/driver-identity' : '/(driver)/home');
+      const identityStatus = user.identity_verification_status || 'not_submitted';
+      const identityGate = Boolean(user.identity_recheck_required) || identityStatus !== 'verified';
+      router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
     } else if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted !== true) {
       router.replace('/driver-legal-consent');
     }
@@ -94,4 +93,3 @@ const useStyles = makeStyles((c) => ({
     title: { color: c.text, fontFamily: font.display, fontSize: 24, textAlign: 'center', marginTop: 32 },
     subtitle: { color: c.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginTop: 12, maxWidth: 320 }
 }));
-
