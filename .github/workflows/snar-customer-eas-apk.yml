@@ -1,0 +1,47 @@
+name: SNAR Customer EAS APK
+
+on:
+  push:
+    branches:
+      - fix/customer-search-mapbox-stripe-20261004
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snar-customer-eas-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build SNAR Customer APK with EAS
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Require Expo authentication
+        run: |
+          test -n "$EXPO_TOKEN" || (echo "Missing GitHub secret EXPO_TOKEN" && exit 1)
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Expo doctor
+        run: npx expo-doctor@latest
+      - name: Show public Expo config
+        run: npx expo config --type public
+      - name: Build Android APK on EAS
+        run: npx eas-cli@latest build --platform android --profile apk --non-interactive --wait
