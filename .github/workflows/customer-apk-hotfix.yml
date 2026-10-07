@@ -2,6 +2,12 @@ name: KJAPP Customer Android APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/customer-search-mapbox-stripe-20261004
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/customer-apk-hotfix.yml'
 
 permissions:
   contents: read
@@ -65,4 +71,3 @@ jobs:
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
-
