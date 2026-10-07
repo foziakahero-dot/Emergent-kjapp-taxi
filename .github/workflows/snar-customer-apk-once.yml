@@ -1,6 +1,6 @@
 name: SNAR Customer APK - one time
 
-# Retry trigger: Customer beta APK with Stripe/backend-compatible flow and ride-sheet minimize fix.
+# Retry trigger: Customer beta APK after live-car map and vehicle artwork update.
 on:
   push:
     branches:
