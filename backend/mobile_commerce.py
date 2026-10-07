@@ -158,7 +158,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     async def fleet_onboarding(current=Depends(require_fleet_owner)):
         fleet = await own_fleet(current)
         account_id = await ensure_fleet_account(db, stripe, fleet, current.get("email"))
-        public = os.getenv("FLEET_PUBLIC_URL", "https://fleet.kjappapp.no").rstrip("/")
+        public = os.getenv("FLEET_PUBLIC_URL", "https://fleet.snarapp.no").rstrip("/")
         try:
             link = await asyncio.to_thread(stripe.AccountLink.create, account=account_id,
                 refresh_url=f"{public}/okonomi?stripe=refresh",
@@ -393,4 +393,5 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return True
 
     return handle_native_webhook
+
 

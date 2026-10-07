@@ -64,7 +64,14 @@ class RideReservations:
             }, sort=[("is_default", -1), ("created_at", -1)])
             if not pm or not user.get("stripe_customer_id"):
                 raise HTTPException(402, "Legg til og bekreft et betalingskort før du bestiller")
-            amount = int(trip["price"]) * 100
+            amount = int(trip.get("reservation_limit_ore", int(trip["price"]) * 100))
+            # A larger hold is permitted only when the rider accepted the disclosed
+            # pickup policy. Unused waiting funds are released by partial capture.
+            if amount != int(trip["price"]) * 100 and not (
+                trip.get("waiting_policy_accepted_at") and trip.get("waiting_policy")
+                and amount == (int(trip["price"]) + int(trip["waiting_policy"]["max_fee"])) * 100
+            ):
+                raise HTTPException(409, "Reservasjonsbeløpet er ikke bekreftet av kunden")
             if amount <= 0:
                 raise HTTPException(400, "Ugyldig turpris")
             record = {"trip_id": trip["trip_id"], "user_id": trip["user_id"],
@@ -309,3 +316,4 @@ class RideReservations:
             except Exception:
                 logging.warning("Ride reservation reconciliation unavailable")
             await asyncio.sleep(30)
+
