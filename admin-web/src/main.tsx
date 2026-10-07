@@ -5,6 +5,7 @@ import { AuthProvider } from './auth';
 import App from './App';
 import './styles.css';
 import './snar-control-center-v2.css';
+import './snar-production.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -15,3 +16,4 @@ createRoot(document.getElementById('root')!).render(
     </HashRouter>
   </React.StrictMode>,
 );
+

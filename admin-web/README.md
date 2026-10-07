@@ -46,3 +46,32 @@ This app deploys **independently** of the backend (e.g. Vercel / Netlify / any s
 Dashbord, Live drift, Turer (+detalj/tidslinje), Sjåfører (godkjenn/suspender), Kunder,
 Løyvehavere, Kjøretøy, Dokumenter (vurder + utløp), Økonomi (oversikt/transaksjoner/refusjoner),
 Support, Audit-logg, Innstillinger. Global søk i topplinjen.
+
+
+## SNAR Control Center v2 design revision
+
+The design branch now uses the exported Figma typography, tokens, SVG brand/icons,
+login, navigation, responsive shell, KPI cards, and shared page controls. Dashboard,
+live operations, applications, support, action center and integrations have dedicated
+layouts connected to the existing API. The other operational tables, detail panels
+and pricing/security forms retain their existing fields and actions within the new
+design system; prototype fixtures and simulated login are not included.
+
+Authentication, 2FA, session token storage, RBAC and backend authorization remain in
+place. Unknown routes use the same operations permission gate as the dashboard.
+The admin gateway targets `https://api.kjappapp.no`, allows auth/admin/superadmin
+routes and read-only document downloads, and forwards authorization to the backend.
+Password recovery links point to SNAR Fleet. `/login` serves the SPA; internal
+navigation continues to use hash routes.
+
+Preview deployments retain API isolation unless `VITE_API_BASE` is explicitly
+configured for a test backend. No preview API setting was broadened by this revision.
+The original design task requested branch-only delivery, so this revision does not
+merge to `main` or change the production alias.
+
+Validation: locked dependency install, Vite production build, TypeScript check,
+proxy routing/body/header/error tests, and isolated React rendering of all 19 routes,
+RBAC, rejection of fleet-owner sessions, and login/2FA token sequencing. The React
+checks use synthetic data and a stub map, and do not replace signed-in live acceptance
+testing or a visual review of each screen. No financial, broadcast or approval action
+was executed against production during these checks.

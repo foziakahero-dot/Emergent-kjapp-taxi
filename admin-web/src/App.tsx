@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { api } from './api';
 import { Loader } from './ui';
 import Login from './Login';
+import { Icon, SnarMark } from './snar-ui';
 import FleetApplications from './FleetApplications';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
@@ -14,33 +15,33 @@ import {
 
 const NAV = [
   { group: 'Oversikt', items: [
-    { to: '/', label: 'Dashbord', ic: '▤', end: true, perm: 'operations' },
-    { to: '/live', label: 'Live drift', ic: '◉', perm: 'operations' },
-    { to: '/actions', label: 'Krever handling', ic: '!', perm: 'operations' },
+    { to: '/', label: 'Dashbord', ic: 'grid', end: true, perm: 'operations' },
+    { to: '/live', label: 'Live drift', ic: 'map', perm: 'operations' },
+    { to: '/actions', label: 'Krever handling', ic: 'alert', perm: 'operations' },
   ]},
   { group: 'Drift', items: [
-    { to: '/trips', label: 'Turer', ic: '⇄', perm: 'operations' },
-    { to: '/drivers', label: 'Sjåfører', ic: '☗', perm: 'operations' },
-    { to: '/customers', label: 'Kunder', ic: '☺', perm: 'operations' },
-    { to: '/fleet-applications', label: 'Løyvesøknader', ic: '◇', superadminOnly: true },
-    { to: '/fleets', label: 'Løyvehavere', ic: '⌂', perm: 'operations' },
-    { to: '/vehicles', label: 'Kjøretøy', ic: '⛚', perm: 'operations' },
+    { to: '/trips', label: 'Turer', ic: 'route', perm: 'operations' },
+    { to: '/drivers', label: 'Sjåfører', ic: 'users', perm: 'operations' },
+    { to: '/customers', label: 'Kunder', ic: 'user', perm: 'operations' },
+    { to: '/fleet-applications', label: 'Løyvesøknader', ic: 'file', superadminOnly: true },
+    { to: '/fleets', label: 'Løyvehavere', ic: 'building', perm: 'operations' },
+    { to: '/vehicles', label: 'Kjøretøy', ic: 'car', perm: 'operations' },
   ]},
   { group: 'Økonomi', items: [
-    { to: '/finance', label: 'Økonomi', ic: '≣', perm: 'finance' },
-    { to: '/payments', label: 'Betaling & oppgjør', ic: '₭', perm: 'finance' },
-    { to: '/pricing', label: 'Prissetting', ic: '◈', perm: 'system' },
+    { to: '/finance', label: 'Økonomi', ic: 'wallet', perm: 'finance' },
+    { to: '/payments', label: 'Betaling & oppgjør', ic: 'creditcard', perm: 'finance' },
+    { to: '/pricing', label: 'Prissetting', ic: 'tag', perm: 'system' },
   ]},
   { group: 'Kommunikasjon & support', items: [
-    { to: '/communications', label: 'Kommunikasjon', ic: '✉', perm: 'communications' },
-    { to: '/support', label: 'Support', ic: '✆', perm: 'support' },
-    { to: '/documents', label: 'Dokumenter', ic: '❑', perm: 'operations' },
+    { to: '/communications', label: 'Kommunikasjon', ic: 'send', perm: 'communications' },
+    { to: '/support', label: 'Support', ic: 'chat', perm: 'support' },
+    { to: '/documents', label: 'Dokumenter', ic: 'file', perm: 'operations' },
   ]},
   { group: 'System', items: [
-    { to: '/integrations', label: 'Integrasjoner', ic: '◎', perm: 'system' },
-    { to: '/admins', label: 'Administratorer', ic: '♙', superadminOnly: true },
-    { to: '/audit', label: 'Audit-logg', ic: '⌘', perm: 'system' },
-    { to: '/settings', label: 'Innstillinger', ic: '⚙', perm: 'system' },
+    { to: '/integrations', label: 'Integrasjoner', ic: 'plug', perm: 'system' },
+    { to: '/admins', label: 'Administratorer', ic: 'shield', superadminOnly: true },
+    { to: '/audit', label: 'Audit-logg', ic: 'log', perm: 'system' },
+    { to: '/settings', label: 'Innstillinger', ic: 'settings', perm: 'system' },
   ]},
 ]
 
@@ -65,8 +66,8 @@ function GlobalSearch() {
   const go = (path: string) => { setOpen(false); setQ(''); nav(path); };
 
   return (
-    <div className="search" onBlur={() => setTimeout(() => setOpen(false), 150)}>
-      <input placeholder="Søk turer, sjåfører, kunder, løyvehavere…" value={q}
+    <div className="search global-search" onBlur={() => setTimeout(() => setOpen(false), 150)}>
+      <Icon name="search" size={16}/><input aria-label="Globalt søk" placeholder="Søk turer, sjåfører, kunder, løyvehavere…" value={q}
         onFocus={() => (res || error) && setOpen(true)} onChange={(e) => setQ(e.target.value)} />
       {open && (res || error) && (
         <div className="search-pop">
@@ -112,17 +113,20 @@ function Shell() {
     const allowed = superadminOnly ? user?.role === 'superadmin' : can(perm);
     return allowed ? node : <div className="error-banner" role="alert">Du har ikke tilgang til denne delen av administrasjonspanelet.</div>;
   };
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [counts, setCounts] = useState<any>({});
   useEffect(() => { api.overview().then(setCounts).catch(() => {}); }, []);
   const initials = (user?.fullName || user?.email || 'A').slice(0, 2).toUpperCase();
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">K</div><div className="brand-name">KJAPP</div></div>
+    <div className="app-shell">
+      {mobileOpen && <button className="sidebar-backdrop" aria-label="Lukk meny" onClick={() => setMobileOpen(false)}/>}
+      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+        <div className="brand-row"><div className="brand-lockup"><SnarMark/><div className="brand-text"><strong>SNAR</strong><span>CONTROL CENTER</span></div></div><button className="icon-btn sidebar-close" aria-label="Lukk meny" onClick={() => setMobileOpen(false)}><Icon name="close"/></button></div>
+        <nav className="sidebar-nav" aria-label="Hovedmeny">
         {NAV.map((g) => (
           <div className="nav-group" key={g.group}>
-            <div className="nav-group-title">{g.group}</div>
+            <div className="nav-group-label">{g.group}</div>
             {g.items
               .filter((it: any) => {
                 if (it.superadminOnly && user?.role !== 'superadmin') return false;
@@ -131,9 +135,9 @@ function Shell() {
                 return user.permissions.includes(it.perm);
               })
               .map((it: any) => (
-              <NavLink key={it.to} to={it.to} end={it.end}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <span className="nav-ic">{it.ic}</span>{it.label}
+              <NavLink onClick={() => setMobileOpen(false)} key={it.to} to={it.to} end={it.end}
+                className={({ isActive }) => `nav-item ${isActive ? 'nav-active' : ''}`}>
+                <Icon name={it.ic}/>{it.label}
                 {it.to === '/drivers' && counts?.drivers?.pending ? <span className="nav-badge">{counts.drivers.pending}</span> : null}
                 {it.to === '/fleet-applications' && counts?.fleets?.pending_applications ? <span className="nav-badge">{counts.fleets.pending_applications}</span> : null}
                 {it.to === '/support' && counts?.support?.open ? <span className="nav-badge">{counts.support.open}</span> : null}
@@ -141,20 +145,19 @@ function Shell() {
             ))}
           </div>
         ))}
-        <div style={{ flex: 1 }} />
-        <div style={{ padding: 14, color: 'var(--muted)', fontSize: 11 }}>v1.1 · BETA OPS · {user?.role}</div>
+        </nav><div className="sidebar-foot"><div className="admin-profile"><div className="avatar av-sm">{initials}</div><div className="admin-profile-info"><strong>{user?.fullName || user?.email}</strong><span>{user?.role === "superadmin" ? "Superadministrator" : "Administrator"}</span></div><button className="icon-btn" aria-label="Logg ut" onClick={logout}><Icon name="logout" size={16}/></button></div></div>
       </aside>
 
-      <div className="main">
+      <div className="app-main">
         <div className="topbar">
-          {can('operations') ? <GlobalSearch /> : <div />}
-          <div className="who">
+          <div className="topbar-left"><button className="icon-btn mobile-menu" aria-label="Åpne meny" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}><Icon name="menu"/></button>{can('operations') ? <GlobalSearch /> : <span>SNAR Control Center</span>}</div>
+          <div className="topbar-right">
             <span className="who-email">{user?.email}</span>
-            <div className="avatar">{initials}</div>
-            <button className="btn sm ghost" onClick={logout}>Logg ut</button>
+            <div className="avatar av-sm">{initials}</div>
+            <button className="btn btn-ghost btn-sm" onClick={logout}>Logg ut</button>
           </div>
         </div>
-        <div className="content">
+        <main className="main-content">
           <Routes>
             <Route path="/" element={gate('operations', <Dashboard />)} />
             <Route path="/live" element={gate('operations', <Live />)} />
@@ -175,9 +178,9 @@ function Shell() {
             <Route path="/support" element={gate('support', <Support />)} />
             <Route path="/audit" element={gate('system', <Audit />)} />
             <Route path="/settings" element={gate('system', <Settings />)} />
-            <Route path="*" element={<Dashboard />} />
+            <Route path="*" element={gate('operations', <Dashboard />)} />
           </Routes>
-        </div>
+        </main><footer className="app-footer"><span>SNAR Control Center v2.0</span><span>{user?.role}</span></footer>
       </div>
     </div>
   );
@@ -189,3 +192,4 @@ export default function App() {
   if (!user) return <Login />;
   return <Shell />;
 }
+

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
-const productionBackend = 'https://github-app-builder-28.emergent.host/api';
+const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
 const isProductionAdminHost = host === 'admin.kjappapp.no';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
@@ -120,3 +120,4 @@ export const api = {
   updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
 
 };
+

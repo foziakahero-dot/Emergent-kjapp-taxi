@@ -1,0 +1,80 @@
+/* Production adapters: keep real tables, forms and workflows in the Figma system. */
+:root { --bg:var(--canvas); --panel:var(--surface); --panel-2:#f7f9fc; --panel-3:#edf2f7; --line:var(--border); --line-2:var(--border-strong); --text:var(--ink); --text-2:var(--muted); --accent:var(--red); --accent-2:var(--navy-900); --accent-soft:var(--red-bg); --green-soft:var(--green-bg); --red-soft:var(--red-bg); --amber-soft:var(--amber-bg); --blue-soft:var(--blue-bg); --gold:var(--purple); }
+body { color:var(--ink); }
+.sidebar .nav-group { padding:0; }
+.sidebar .nav-item { margin-bottom:0; }
+.sidebar .icon-btn { color:#8facbe; }
+.topbar { flex-shrink:0; }
+.search { position:relative; max-width:none; }
+.search input { padding:0; height:auto; border-radius:0; }
+.search-pop { top:44px; min-width: min(440px,80vw); background:white; border-color:var(--border-strong); box-shadow:var(--shadow-lg); z-index:40; }
+.search-res { cursor:pointer; }
+.search-res:hover { background:var(--canvas); }
+.card { padding:0; }
+.production-card { padding:18px 20px; }
+.card.kpi-card { padding:18px 18px 16px; }
+.kpi-value { color:var(--ink); }
+.grid.cards { gap:12px; margin-bottom:20px; }
+.tablewrap { background:white; border:1px solid var(--border); border-radius:12px; overflow:auto; box-shadow:var(--shadow-sm); }
+table { border-collapse:collapse; width:100%; font-size:12px; }
+thead th { background:#f7f9fc; font-size:9px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; padding:12px 18px; font-weight:600; }
+tbody td { padding:14px 18px; border-bottom:1px solid var(--border); color:var(--ink); }
+tr:last-child td { border-bottom:0; }
+tr.click:hover { background:#f7f9fc; }
+.cell-sub { font-size:10px; line-height:1.5; }
+.toolbar { gap:8px; margin-bottom:18px; }
+.input,.select,.textarea { background:white; border:1px solid var(--border-strong); border-radius:8px; color:var(--ink); font-size:12px; }
+.input:focus,.select:focus,.textarea:focus { border-color:var(--navy-900); outline:2px solid #dbe6f2; outline-offset:1px; }
+textarea.input { height:auto; padding:10px 12px; }
+.label { font-size:11px; color:var(--muted); font-weight:600; }
+.section-title { color:var(--ink); font-size:13px; font-weight:700; letter-spacing:-.02em; }
+.btn.primary { background:var(--red); color:white; border-color:var(--red); }
+.btn.primary:hover { background:var(--red-hover); }
+.btn.ghost { background:transparent; color:var(--muted); }
+.btn.full,.full { width:100%; }
+.btn:disabled { cursor:not-allowed; }
+.pager { background:white; color:var(--muted); font-size:11px; }
+.error-banner { color:#b42318; background:#fff1f0; border-color:#ffd2cb; }
+.info-banner { background:var(--blue-bg); color:var(--blue); border-color:#d4e2fb; }
+.drawer { background:white; box-shadow:var(--shadow-lg); }
+.drawer-head { background:white; }
+.modal { background:white; }
+.bars { height:170px; gap:6px; }
+.bar { background:var(--navy-900); opacity:.72; }
+.bar.hot { background:var(--red); opacity:1; }
+.mobile-menu,.sidebar-close { display:none; }
+.live-map-wrap { border:0; border-radius:10px; overflow:hidden; margin:0; height:340px; isolation:isolate; }
+.live-map-empty { background:white; color:var(--muted); box-shadow:var(--shadow); }
+.dash-map { padding:0; overflow:hidden; }
+.dash-map .live-map-wrap { border-radius:0 0 12px 12px; }
+.dash-side .card { padding:0; }
+.dash-side .action-list { padding:0 10px 10px; }
+.action-item { color:var(--ink); }
+.action-item .action-copy { flex:1; min-width:0; }
+.action-copy strong { font-size:11px; display:block; }
+.action-copy span { color:var(--muted); font-size:10px; }
+.action-number { font-weight:700; font-size:16px; }
+.live-layout .live-map-wrap { height:540px; }
+.live-driver { display:flex; gap:10px; padding:14px; align-items:center; border-bottom:1px solid var(--border); }
+.live-driver-copy { min-width:0; flex:1; }
+.live-driver-copy strong { display:block; font-size:12px; }
+.live-driver-copy span { display:block; font-size:10px; color:var(--muted); margin-top:3px; }
+.app-list .application-row { border:0; border-bottom:1px solid var(--border); width:100%; background:white; text-align:left; padding:16px; display:flex; flex-direction:column; gap:7px; color:var(--ink); }
+.application-row.selected { background:var(--blue-bg); box-shadow:inset 3px 0 var(--red); }
+.application-row strong { font-size:12px; }
+.application-row .application-meta { font-size:10px; color:var(--muted); }
+.app-detail { padding:22px; min-width:0; }
+.app-detail-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+.integration-grid,.integrations-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.integ-card .integration-head { margin:14px 0; }
+.control-two { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:16px; }
+.support-layout { display:grid; grid-template-columns:300px minmax(0,1fr); gap:16px; }
+.support-ticket { display:flex; flex-direction:column; gap:8px; padding:16px; border:0; border-bottom:1px solid var(--border); background:white; width:100%; text-align:left; color:var(--ink); }
+.support-ticket.selected { background:var(--blue-bg); box-shadow:inset 3px 0 var(--red); }
+.support-ticket strong { font-size:12px; }
+.support-ticket .cell-sub { margin:0; }
+.sidebar-backdrop { display:none; }
+:focus-visible { outline:2px solid #1a5fb4; outline-offset:3px; }
+@media(max-width:1280px) { .integration-grid,.integrations-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:900px) { .sidebar { transform:translateX(-100%); width:256px; display:flex; } .sidebar.sidebar-open { transform:translateX(0); } .sidebar-backdrop { display:block; position:fixed; inset:0; background:#07182e88; border:0; z-index:29; } .sidebar-close,.mobile-menu { display:inline-flex; } .app-main { margin-left:0; } .main-content { padding:24px 20px 40px; } .topbar { padding:0 16px; } .who-email { display:none; } .control-two,.support-layout { grid-template-columns:1fr; } .app-list { max-height:420px; overflow:auto; } .live-layout .live-map-wrap { height:400px; } }
+@media(max-width:560px) { .main-content { padding:20px 14px 32px; } .global-search { width:42vw; } .topbar-right { gap:5px; } .topbar-right .avatar { display:none; } .hdr-actions { flex-wrap:wrap; } .page-hdr { align-items:flex-start; flex-wrap:wrap; } .grid.cards { grid-template-columns:repeat(2,minmax(0,1fr)); } .integration-grid,.integrations-grid { grid-template-columns:1fr; } .pager { flex-wrap:wrap; } .kpi-value { font-size:20px; } }

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, apiError } from './api';
 import { useAuth } from './auth';
 import LiveMap from './LiveMap';
+import { Icon } from './snar-ui';
 import {
   Bars, Btn, Card, Drawer, Empty, ErrorBanner, KV, Kpi, Loader, Modal, PageHead, Pagination,
   Pill, Route as RouteView, fmtDate, fmtDay, fmtMoney, useAsync, usePaged,
@@ -45,68 +46,51 @@ export function Dashboard() {
   const staleOpen = live.data?.trips?.filter((t: any) => t.created_at && Date.now() - Date.parse(t.created_at) > 2 * 60 * 60_000).length ?? d.trips?.stale_active ?? 0;
   return (
     <>
-      <PageHead title="Dashbord" sub={`Oppdatert ${fmtDate(d.as_of)}`} />
+      <PageHead title="Operasjonell oversikt" sub={`Oppdatert ${fmtDate(d.as_of)}`} />
       {twofa.data?.required && !twofa.data?.enabled && <div className="error-banner" role="alert">
         Administratorkontoen mangler totrinnsbekreftelse. <a href="#/settings" style={{ textDecoration: 'underline' }}>Aktiver 2FA i Innstillinger.</a>
       </div>}
 
-      <Card style={{ marginBottom: 18, border: '1px solid rgba(45,212,191,.28)', boxShadow: '0 0 28px rgba(45,212,191,.08)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ maxWidth: 720 }}>
-            <div className="dim" style={{ fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 6 }}>KJAPP · Beta Operations 2.0</div>
-            <div className="strong" style={{ fontSize: 20, marginBottom: 6 }}>Nytt operatør- og priskontrollsenter er aktivt</div>
-            <div className="dim" style={{ lineHeight: 1.55 }}>
-              Dynamisk prissetting, prisområder, rollback, operatørinngripen på aktive turer,
-              sjåførutstyr og 10 % serviceavgift er samlet i kontrollsenteret.
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <a className="btn primary" href="#/pricing">Åpne prissetting</a>
-            <a className="btn" href="#/trips">Operatørkontroll</a>
-            <a className="btn" href="#/drivers">Sjåførutstyr</a>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid cards">
+      <div className="kpi-grid-5">
         <Kpi label="Åpne turer" value={d.trips?.active ?? 0} accent
           foot={<span className="dim">{live.loading ? 'Kontrollerer GPS…' : live.err ? 'GPS-status utilgjengelig' : `${freshCount} sjåfører med fersk GPS`}{staleOpen ? ` · ${staleOpen} turer eldre enn 2t` : ''}</span>} />
         <Kpi label="Turer i dag" value={d.trips?.today ?? 0}
           foot={<span className={`delta ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs i går</span>} />
         <Kpi label="Brutto i dag (GMV)" value={fmtMoney(d.finance?.gmv_today)}
           foot={<span className="dim">{d.trips?.completed_today ?? 0} fullført</span>} />
-        <Kpi label="KJAPP-inntekt i dag" value={fmtMoney(d.finance?.kjapp_revenue_today)} accent />
+        <Kpi label="SNAR-inntekt i dag" value={fmtMoney(d.finance?.kjapp_revenue_today)} accent />
+        <Kpi label="Ferske GPS-posisjoner" value={live.loading || live.err ? "—" : freshCount} icon="map" foot="GPS mottatt de siste 2 minuttene"/>
       </div>
 
-      <div className="section-title">Siste 30 dager — brutto omsetning</div>
-      <Card>
-        {fin.loading ? <Loader /> : <Bars data={fin.data?.series || []} xkey="date" ykey="gmv" />}
-      </Card>
-
-      <div className="section-title">Krever oppmerksomhet</div>
-      <div className="grid cards">
-        <Shortcut ic="☗" n={d.drivers?.pending ?? 0} l="Sjåfører til godkjenning" c="amber" />
-        <Shortcut ic="◉" n={d.trips?.active ?? 0} l="Åpne turer" c="blue" />
-        <Shortcut ic="✆" n={d.support?.open ?? 0} l="Åpne supportsaker" c="red" />
-        <Shortcut ic="≣" n={d.finance?.pending_payouts ?? 0} l="Utbetalinger i kø" c="gold" />
+      <div className="kpi-grid-4">
+        <Kpi label="Aktive løyvehavere" value={d.fleets?.active ?? 0} icon="building" foot={`${d.fleets?.suspended ?? 0} suspendert`}/>
+        <Kpi label="Løyvesøknader" value={d.fleets?.pending_applications ?? 0} icon="file"/>
+        <Kpi label="Godkjente sjåfører" value={d.drivers?.approved ?? 0} icon="users"/>
+        <Kpi label="Avbrutt i dag" value={d.trips?.cancelled_today ?? 0} icon="route"/>
       </div>
-
-      <div className="section-title">Flåte & kunder</div>
-      <div className="grid cards">
-        <Kpi label="Aktive løyvehavere" value={d.fleets?.active ?? 0} foot={<span className="dim">{d.fleets?.suspended ?? 0} suspendert</span>} />
-        <Kpi label="Søknader (løyve)" value={d.fleets?.pending_applications ?? 0} />
-        <Kpi label="Godkjente sjåfører" value={d.drivers?.approved ?? 0} />
-        <Kpi label="Avbrutt i dag" value={d.trips?.cancelled_today ?? 0} />
+      <div className="dash-grid">
+        <div className="dash-main">
+          <section className="card dash-map"><div className="card-head"><div><h2 className="card-title">Live drift</h2><p className="card-sub">Kun ferske GPS-posisjoner fra sjåførene</p></div><a className="text-btn" href="#/live">Åpne live drift →</a></div>
+            {live.loading ? <Loader/> : live.err ? <ErrorBanner msg={live.err}/> : <LiveMap drivers={(live.data?.drivers || []).filter(hasFreshGps).map((x: any) => ({...x, lat:Number(x.lat), lng:Number(x.lng)}))}/>}
+          </section>
+          <Card><h2 className="card-title" style={{marginBottom:20}}>Brutto omsetning · siste 30 dager</h2>{fin.loading ? <Loader/> : fin.err ? <ErrorBanner msg={fin.err}/> : fin.data?.series?.length ? <Bars data={fin.data.series} xkey="date" ykey="gmv"/> : <Empty title="Ingen omsetningsdata"/>}</Card>
+        </div>
+        <div className="dash-side">
+          <section className="card"><div className="card-head"><h2 className="card-title">Krever handling</h2><a className="text-btn" href="#/actions">Se alle →</a></div><div className="action-list">
+            <DashboardAction icon="users" n={d.drivers?.pending ?? 0} title="Sjåfører til godkjenning" href="/drivers"/>
+            <DashboardAction icon="chat" n={d.support?.open ?? 0} title="Åpne supportsaker" href="/support"/>
+            <DashboardAction icon="wallet" n={d.finance?.pending_payouts ?? 0} title="Utbetalinger i kø" href="/payments"/>
+          </div></section>
+          <section className="card"><div className="card-head"><h2 className="card-title">Åpne turer</h2><a className="text-btn" href="#/trips">Se turer →</a></div><div className="action-list">
+            {live.loading ? <Loader/> : live.err ? <ErrorBanner msg={live.err}/> : (live.data?.trips || []).slice(0,5).map((t:any) => <a key={t.trip_id} className="action-item" href={'#/trips?q='+encodeURIComponent(t.trip_id)}><Icon name="route"/><div className="action-copy"><strong>{t.pickup_address || 'Ukjent hentested'}</strong><span>{t.dropoff_address || 'Ukjent mål'}</span></div><Pill status={t.status}/></a>)}
+            {!live.loading && !live.err && !live.data?.trips?.length && <Empty title="Ingen åpne turer"/>}
+          </div></section>
+        </div>
       </div>
     </>
   );
 }
-const Shortcut = ({ ic, n, l, c }: any) => (
-  <div className="card"><div className="shortcut">
-    <div className="ic" style={{ color: `var(--${c})` }}>{ic}</div>
-    <div><div className="n">{n}</div><div className="l">{l}</div></div>
-  </div></div>
-);
+const DashboardAction = ({ icon, n, title, href }: any) => <a className="action-item" href={'#'+href}><Icon name={icon}/><div className="action-copy"><strong>{title}</strong><span>Åpne for å behandle</span></div><span className="action-number">{n}</span><Icon name="arrow" size={14}/></a>;
 
 /* ----------------------------- Live ----------------------------- */
 export function Live() {
@@ -121,7 +105,7 @@ export function Live() {
       <ErrorBanner msg={err} />
       {loading && !data ? <Loader /> : (
         <>
-        <LiveMap drivers={freshDrivers.map((d: any) => ({ ...d, lat: Number(d.lat), lng: Number(d.lng) }))} />
+        <div className="live-layout" style={{marginBottom:20}}><section className="card live-side"><div className="card-head"><div><h2 className="card-title">Sjåfører med fersk GPS</h2><p className="card-sub">{freshDrivers.length} posisjoner · oppdateres hvert 5. sekund</p></div></div>{freshDrivers.map((d:any) => <a className="live-driver" key={d.id} href={'#/drivers?q='+encodeURIComponent(d.name || d.id)}><div className="avatar av-xs">{(d.name || '?').slice(0,2).toUpperCase()}</div><div className="live-driver-copy"><strong>{d.name || 'Sjåfør'}</strong><span>{d.car} · {d.plate || 'Ukjent registrering'}</span><span>{d.fleet_name || 'Ukjent løyvehaver'}</span></div><Icon name="arrow" size={14}/></a>)}{!freshDrivers.length && <Empty title="Ingen ferske posisjoner"/>}</section><section className="card"><LiveMap drivers={freshDrivers.map((d:any) => ({...d, lat:Number(d.lat), lng:Number(d.lng)}))}/></section></div>
         <div className="grid live-columns">
           <div>
             <div className="section-title" style={{ marginTop: 0 }}>Sjåfører med fersk GPS ({freshDrivers.length})</div>
@@ -506,7 +490,7 @@ export function Vehicles() {
       <div className="toolbar">
         <input className="input" placeholder="Søk skilt / modell / sjåfør…" value={qi} onChange={(e) => setQi(e.target.value)} />
         <select className="select" value={vt} onChange={(e) => setVt(e.target.value)}>
-          <option value="">Alle klasser</option><option value="ai-first">KJAPP</option>
+          <option value="">Alle klasser</option><option value="ai-first">SNAR</option>
           <option value="enkelt">Enkel</option><option value="trygg">Komfort XL</option><option value="premium">Premium</option>
         </select>
       </div>
@@ -652,7 +636,7 @@ function FinanceOverview() {
         <>
           <div className="grid cards">
             <Kpi label="Brutto omsetning" value={fmtMoney(t.gmv)} accent />
-            <Kpi label="KJAPP-inntekt" value={fmtMoney(t.kjapp_revenue)} accent />
+            <Kpi label="SNAR-inntekt" value={fmtMoney(t.kjapp_revenue)} accent />
             <Kpi label="Turer" value={t.trips ?? 0} />
             <Kpi label="Snittpris" value={fmtMoney(t.avg_price)} />
           </div>
@@ -660,7 +644,7 @@ function FinanceOverview() {
           <Card><Bars data={data?.series || []} xkey="date" ykey="gmv" /></Card>
           <div className="section-title">Per løyvehaver</div>
           <div className="tablewrap">
-            <table><thead><tr><th>Løyvehaver</th><th>Turer</th><th>Provisjon</th><th className="right">Omsetning</th><th className="right">KJAPP-provisjon</th></tr></thead>
+            <table><thead><tr><th>Løyvehaver</th><th>Turer</th><th>Provisjon</th><th className="right">Omsetning</th><th className="right">SNAR-provisjon</th></tr></thead>
               <tbody>
                 {(data?.fleets || []).map((f: any) => (
                   <tr key={f.id}><td className="strong">{f.name}</td><td className="mono">{f.trips}</td>
@@ -779,43 +763,35 @@ function RefundModal({ onClose, onDone }: any) {
 export function Support() {
   const [status, setStatus] = useState('open');
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [status]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  useEffect(() => { setPage(1); setSelectedId(null); }, [status]);
   const { rows, total, totalPages, loading, err, reload } = usePaged('/admin/support/tickets', { status, page, page_size: PAGE });
-  const setTicket = async (id: string, s: string) => { try { await api.updateTicket(id, { status: s }); reload(); } catch {} };
-  return (
-    <>
-      <PageHead title="Support" sub={`${total} saker`} />
-      <div className="toolbar">
-        <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="all">Alle</option><option value="open">Åpne</option>
-          <option value="resolved">Løste</option><option value="closed">Lukkede</option>
-        </select>
-      </div>
-      <ErrorBanner msg={err} />
-      <div className="tablewrap">
-        <table>
-          <thead><tr><th>Emne</th><th>Kategori</th><th>Prioritet</th><th>Status</th><th>Opprettet</th><th className="right">Endre</th></tr></thead>
-          <tbody>
-            {loading ? <tr><td colSpan={6}><Loader /></td></tr> : rows.length ? rows.map((t: any) => (
-              <tr key={t.id}>
-                <td className="strong">{t.subject}</td>
-                <td className="dim">{t.category}</td>
-                <td><Pill status="gray" label={t.priority} /></td>
-                <td><Pill status={t.status} /></td>
-                <td className="dim nowrap">{fmtDate(t.created_at)}</td>
-                <td className="right">
-                  <select className="select" style={{ height: 30, width: 'auto' }} value={t.status} onChange={(e) => setTicket(t.id, e.target.value)}>
-                    {['open', 'in_progress', 'waiting_for_user', 'resolved', 'closed'].map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </td>
-              </tr>
-            )) : <tr><td colSpan={6}><Empty title="Ingen supportsaker" /></td></tr>}
-          </tbody>
-        </table>
-        <Pagination page={page} totalPages={totalPages} total={total} onPage={setPage} />
-      </div>
-    </>
-  );
+  const ticket = rows.find((t:any) => t.id === selectedId);
+  const setTicket = async (id: string, next: string) => {
+    setBusy(true); setActionError('');
+    try { await api.updateTicket(id, { status: next }); reload(); }
+    catch (e) { setActionError(apiError(e)); }
+    finally { setBusy(false); }
+  };
+  return <>
+    <PageHead title="Support" sub={`${total} saker`} right={<Btn variant="sm" onClick={reload}>Oppdater</Btn>}/>
+    <div className="toolbar"><select className="select" aria-label="Filtrer supportsaker" value={status} onChange={e => setStatus(e.target.value)}><option value="all">Alle</option><option value="open">Åpne</option><option value="in_progress">Under arbeid</option><option value="waiting_for_user">Venter bruker</option><option value="resolved">Løste</option><option value="closed">Lukkede</option></select></div>
+    <ErrorBanner msg={err || actionError}/>
+    <div className="support-layout">
+      <section className="card"><div className="card-head"><h2 className="card-title">Innboks</h2><span className="card-sub">{total} saker</span></div>
+        {loading ? <Loader/> : rows.length ? rows.map((t:any) => <button className={`support-ticket ${selectedId === t.id ? 'selected' : ''}`} key={t.id} onClick={() => setSelectedId(t.id)}><strong>{t.subject || 'Uten emne'}</strong><span className="cell-sub">{t.category || '—'} · {fmtDate(t.created_at)}</span><div><Pill status={t.status}/> <Pill label={t.priority || 'Ukjent prioritet'}/></div></button>) : <Empty title="Ingen supportsaker"/>}
+        <Pagination page={page} totalPages={totalPages} total={total} onPage={(p:number) => {setPage(p);setSelectedId(null);}}/>
+      </section>
+      <Card>{ticket ? <>
+        <h2 className="card-title" style={{marginBottom:16}}>{ticket.subject}</h2>
+        <KV k="Saksnummer" v={<span className="mono">{ticket.id}</span>}/><KV k="Kategori" v={ticket.category}/><KV k="Prioritet" v={ticket.priority}/><KV k="Opprettet" v={fmtDate(ticket.created_at)}/>
+        <div className="section-title">Status</div><select className="select" aria-label="Endre saksstatus" value={ticket.status} disabled={busy} onChange={e => setTicket(ticket.id,e.target.value)}>{[['open','Åpen'],['in_progress','Under arbeid'],['waiting_for_user','Venter bruker'],['resolved','Løst'],['closed','Lukket']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>
+        {(ticket.description || ticket.message || ticket.body) && <><div className="section-title">Henvendelse</div><p style={{whiteSpace:'pre-wrap',lineHeight:1.7}}>{ticket.description || ticket.message || ticket.body}</p></>}
+      </> : <Empty title="Velg en supportsak" sub="Se sakens detaljer og oppdater status."/>}</Card>
+    </div>
+  </>;
 }
 
 /* ----------------------------- Audit ----------------------------- */
@@ -1028,7 +1004,7 @@ export function Settings() {
     ['extra_stop_fee','Ekstra stopp'], ['customer_cancellation_fee','Avbestillingsgebyr kunde'],
     ['late_driver_cancellation_fee','Registrert gebyr ved sen sjåføravbestilling'],
   ];
-  const vehicleLabels: any = { 'ai-first': 'KJAPP', enkelt: 'KJAPP Sparsom', trygg: 'KJAPP XL / Komfort', premium: 'KJAPP Premium' };
+  const vehicleLabels: any = { 'ai-first': 'SNAR', enkelt: 'SNAR Sparsom', trygg: 'SNAR XL / Komfort', premium: 'SNAR Premium' };
   const areas = Object.entries(pricing?.areas || {}) as [string, any][];
   const versions = history.data?.items || [];
   const checks = readiness.data?.checks || {};
@@ -1053,7 +1029,7 @@ export function Settings() {
         <TwoFactorCard />
         <Card>
           <div className="section-title" style={{ marginTop: 0 }}>Provisjon</div>
-          <div className="field"><label className="label">Standard KJAPP-serviceavgift (%)</label>
+          <div className="field"><label className="label">Standard SNAR-serviceavgift (%)</label>
             <input className="input" type="number" min="0" max="50" step="0.1" value={comm} disabled={!isSuper} onChange={(e) => setComm(e.target.value)} /></div>
           <div className="dim" style={{ fontSize: 12 }}>Provisjonen snapshots på hver ny tur. Endringer påvirker ikke historiske eller pågående turer.</div>
         </Card>
@@ -1169,7 +1145,7 @@ export function Settings() {
           <div className="field"><label className="label">Distanse (km)</label><input className="input" type="number" value={test.distance_km} onChange={e=>setTest({...test,distance_km:e.target.value})}/></div>
           <div className="field"><label className="label">Tid (min)</label><input className="input" type="number" value={test.duration_min} onChange={e=>setTest({...test,duration_min:e.target.value})}/></div>
           <div className="field"><label className="label">Kategori</label><select className="input" value={test.vehicle_type} onChange={e=>setTest({...test,vehicle_type:e.target.value})}>
-            <option value="ai-first">KJAPP</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+            <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
           </select></div>
           <Btn onClick={runTest}>Beregn</Btn>
         </div>
@@ -1180,7 +1156,7 @@ export function Settings() {
           <div className="field"><label className="label">Fra</label><input className="input" placeholder="Adresse / sted" value={routeTest.pickup_address} onChange={e=>setRouteTest({...routeTest,pickup_address:e.target.value})}/></div>
           <div className="field"><label className="label">Til</label><input className="input" placeholder="Adresse / sted" value={routeTest.dropoff_address} onChange={e=>setRouteTest({...routeTest,dropoff_address:e.target.value})}/></div>
           <div className="field"><label className="label">Kategori</label><select className="input" value={routeTest.vehicle_type} onChange={e=>setRouteTest({...routeTest,vehicle_type:e.target.value})}>
-            <option value="ai-first">KJAPP</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
+            <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
           </select></div>
           <Btn onClick={runRouteTest}>Test rute</Btn>
         </div>
@@ -1214,3 +1190,4 @@ export function Settings() {
     </>
   );
 }
+
