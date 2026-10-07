@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createFleetDraft, submitFleetApplication, uploadFleetDocument, type FleetDraft, type UploadedDocument } from './api';
 
-const FLEET_URL = 'https://fleet.kjappapp.no';
+const FLEET_URL = 'https://fleet.snarapp.no';
 const EMAILS = {
   support: 'support@kjappapp.no',
   fleet: 'fleet@kjappapp.no',
