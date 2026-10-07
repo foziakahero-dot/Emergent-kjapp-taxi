@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
 import { colors } from '@/src/theme';
+import { carsApi } from '@/src/lib/api';
 import { Icon } from './Icon';
 import { CarSvg, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
@@ -102,7 +103,38 @@ export function InteractiveMap({
   const zoomRef = useRef(15);
   const [ready, setReady] = useState(false);
   const [manual, setManual] = useState(false);
+  const [destinationCars, setDestinationCars] = useState<Car[]>([]);
   const smoothCar = useSmoothPosition(activeCar, 1600);
+
+  // Home historically sends cars=[] as soon as a destination is selected.
+  // Keep the customer experience truthful by reusing the same real /cars/nearby
+  // endpoint only in that pre-booking state. No demo/cache cars are introduced.
+  useEffect(() => {
+    if (!dropoff || activeCar || !user || cars.length > 0) {
+      setDestinationCars([]);
+      return;
+    }
+
+    let mounted = true;
+    const load = () => {
+      carsApi.nearby(user.lat, user.lng)
+        .then((result) => {
+          if (mounted) setDestinationCars(Array.isArray(result?.cars) ? result.cars : []);
+        })
+        .catch(() => {
+          if (mounted) setDestinationCars([]);
+        });
+    };
+
+    load();
+    const timer = setInterval(load, 8000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, user?.lat, user?.lng, cars.length]);
+
+  const visibleCars = cars.length > 0 ? cars : destinationCars;
 
   const focus = useMemo(() => {
     const pts: LL[] = [];
@@ -116,17 +148,17 @@ export function InteractiveMap({
       return pts;
     }
 
-    // Idle customer map: keep the customer's location as an invisible anchor,
-    // but make the visible focus the nearest real online vehicles.
+    // Idle customer map: keep customer location only as an invisible anchor,
+    // while the visible objects are the nearest real online vehicles.
     if (user) pts.push(user);
-    cars.slice(0, 6).forEach((car) => pts.push({ lat: car.lat, lng: car.lng }));
+    visibleCars.slice(0, 6).forEach((car) => pts.push({ lat: car.lat, lng: car.lng }));
     return pts;
   }, [
     user?.lat, user?.lng,
     pickup?.lat, pickup?.lng,
     dropoff?.lat, dropoff?.lng,
     activeCar?.lat, activeCar?.lng,
-    cars,
+    visibleCars,
   ]);
 
   const fit = useCallback((animated = true) => {
@@ -212,7 +244,7 @@ export function InteractiveMap({
         pickup={pickup}
         dropoff={dropoff}
         route={route}
-        cars={cars}
+        cars={visibleCars}
         activeCar={activeCar}
         user={null}
         style={style}
@@ -317,7 +349,7 @@ export function InteractiveMap({
           </MapboxGL.ShapeSource>
         ) : null}
 
-        {cars.slice(0, 80).map((car, index) => (
+        {visibleCars.slice(0, 80).map((car, index) => (
           <MapboxGL.MarkerView
             key={'nearby-' + index}
             coordinate={[car.lng, car.lat]}
