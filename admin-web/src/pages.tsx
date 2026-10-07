@@ -909,7 +909,7 @@ export function Settings() {
   const [compliance, setCompliance] = useState<any>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [test, setTest] = useState({ distance_km: '10', duration_min: '20', vehicle_type: 'ai-first' });
+  const [test, setTest] = useState({ distance_km: '10', duration_min: '20', waiting_minutes: '0', vehicle_type: 'ai-first' });
   const [routeTest, setRouteTest] = useState({ pickup_address: '', dropoff_address: '', vehicle_type: 'ai-first' });
   const [testResult, setTestResult] = useState<any>(null);
   const [routeResult, setRouteResult] = useState<any>(null);
@@ -945,9 +945,9 @@ export function Settings() {
       const a = Number(oldValue), b = Number(newValue);
       if (a > 0 && Number.isFinite(b) && (b > a * 2 || b < a * 0.5)) extreme.push(`${label}: ${a} → ${b}`);
     };
-    ['base_fare','per_km','per_minute','minimum_fare'].forEach((k) => checkRatio(k, prev?.[k], pricing?.[k]));
+    ['base_fare','per_km','per_minute','minimum_fare','waiting_per_minute'].forEach((k) => checkRatio(k, prev?.[k], pricing?.[k]));
     for (const type of ['enkelt','trygg','premium']) {
-      for (const k of ['base_fare','per_km','per_minute','minimum_fare']) {
+      for (const k of ['base_fare','per_km','per_minute','minimum_fare','waiting_per_minute']) {
         checkRatio(`${type}.${k}`, prev?.vehicle_rates?.[type]?.[k], pricing?.vehicle_rates?.[type]?.[k]);
       }
     }
@@ -976,6 +976,7 @@ export function Settings() {
     try {
       setTestResult(await api.pricingTest({
         distance_km: Number(test.distance_km), duration_min: Number(test.duration_min), vehicle_type: test.vehicle_type,
+        waiting_minutes: Number(test.waiting_minutes),
       }));
     } catch (e: any) { setMsg(e?.response?.data?.detail || 'Kunne ikke teste pris'); }
   };
@@ -1073,6 +1074,12 @@ export function Settings() {
           <div className="field"><label className="label">Gratis avbestilling etter aksept (min)</label>
             <input className="input" type="number" min="0" max="60" value={pricing?.free_cancel_minutes ?? 2}
               disabled={!isSuper} onChange={(e) => setPrice('free_cancel_minutes', Number(e.target.value))} /></div>
+          <div className="field"><label className="label">Gratis ventetid ved henting (min)</label>
+            <input className="input" type="number" min="0" max="60" step="0.5" value={pricing?.waiting_free_minutes ?? 2}
+              disabled={!isSuper} onChange={(e) => setPrice('waiting_free_minutes', Number(e.target.value))} /></div>
+          <div className="field"><label className="label">Maks betalbare venteminutter</label>
+            <input className="input" type="number" min="0" max="60" step="0.5" value={pricing?.waiting_max_minutes ?? 15}
+              disabled={!isSuper} onChange={(e) => setPrice('waiting_max_minutes', Number(e.target.value))} /></div>
           <div className="field"><label className="label">Maks søketid etter sjåfør (sek)</label>
             <input className="input" type="number" min="30" max="1800" value={pricing?.dispatch_timeout_seconds ?? 180}
               disabled={!isSuper} onChange={(e) => setPrice('dispatch_timeout_seconds', Number(e.target.value))} /></div>
@@ -1096,6 +1103,7 @@ export function Settings() {
 
       <div className="section-title">Pris per kjøretøyklasse</div>
       <Card>
+        <p className="dim">Ventetid gjelder ved hentestedet fra registrert ankomst til turstart, etter gratisperioden. Kunden må bekrefte sats og maksimal kortreservasjon før bestilling. Ubrukt reservasjon frigjøres; ventetid får ikke toppristillegg. Eldre appversjoner uten bekreftelsen får ikke dette tillegget.</p>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
           {['ai-first','enkelt','trygg','premium'].map((type) => {
             const rate = type === 'ai-first'
@@ -1103,11 +1111,16 @@ export function Settings() {
               : (pricing?.vehicle_rates?.[type] || {});
             return <div key={type} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 14 }}>
               <div className="strong">{vehicleLabels[type]}</div>
-              <div className="grid" style={{ gridTemplateColumns: 'repeat(4,1fr)', marginTop: 10 }}>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 10 }}>
                 {([['base_fare','Start'],['per_km','Km'],['per_minute','Min'],['minimum_fare','Min.pris']] as any[]).map(([k,l]) =>
                   <div className="field" key={k}><label className="label">{l}</label><input className="input" type="number" min="0" step="0.5"
                     disabled={!isSuper} value={rate?.[k] ?? 0}
                     onChange={(e) => type === 'ai-first' ? setPrice(k, Number(e.target.value)) : setVehicleRate(type,k,Number(e.target.value))}/></div>
+                )}
+                {([['waiting_per_minute','Ventetid / min',4],['waiting_free_minutes','Gratis venteminutter',2],['waiting_max_minutes','Maks betalbare minutter',15]] as const).map(([k,l,fallback]) =>
+                  <div className="field" key={k}><label className="label">{l}</label><input className="input" type="number" min="0" max={k === 'waiting_per_minute' ? 200 : 60} step="0.5"
+                    disabled={!isSuper} value={pricing?.vehicle_rates?.[type]?.[k] ?? pricing?.[k] ?? fallback}
+                    onChange={(e) => setVehicleRate(type,k,Number(e.target.value))}/></div>
                 )}
               </div>
             </div>;
@@ -1141,15 +1154,16 @@ export function Settings() {
 
       <div className="section-title">Test pris før publisering</div>
       <Card>
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr auto', alignItems: 'end' }}>
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr auto', alignItems: 'end' }}>
           <div className="field"><label className="label">Distanse (km)</label><input className="input" type="number" value={test.distance_km} onChange={e=>setTest({...test,distance_km:e.target.value})}/></div>
           <div className="field"><label className="label">Tid (min)</label><input className="input" type="number" value={test.duration_min} onChange={e=>setTest({...test,duration_min:e.target.value})}/></div>
+          <div className="field"><label className="label">Ventetid ved henting (min)</label><input className="input" type="number" min="0" max="1440" value={test.waiting_minutes} onChange={e=>setTest({...test,waiting_minutes:e.target.value})}/></div>
           <div className="field"><label className="label">Kategori</label><select className="input" value={test.vehicle_type} onChange={e=>setTest({...test,vehicle_type:e.target.value})}>
             <option value="ai-first">SNAR</option><option value="enkelt">Sparsom</option><option value="trygg">XL / Komfort</option><option value="premium">Premium</option>
           </select></div>
           <Btn onClick={runTest}>Beregn</Btn>
         </div>
-        {testResult && <div className="strong" style={{ marginTop: 12 }}>{testResult.price} kr · toppris ×{testResult.surge_multiplier} · versjon {testResult.pricing_version}</div>}
+        {testResult && <div className="strong" style={{ marginTop: 12 }}>{testResult.price} kr · tur {testResult.ride_price} kr + ventetid {testResult.waiting_fee_total} kr · toppris ×{testResult.surge_multiplier} · versjon {testResult.pricing_version}</div>}
 
         <div className="section-title">Test ekte norsk rute</div>
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr auto', alignItems: 'end' }}>
@@ -1190,4 +1204,5 @@ export function Settings() {
     </>
   );
 }
+
 

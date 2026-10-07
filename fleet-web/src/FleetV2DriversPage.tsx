@@ -72,12 +72,12 @@ export function DriversV2Page() {
         <div className="head"><span>Sjåfør</span><span>Status</span><span>Bil</span><span>Dokumenter</span><span>Turer i dag</span><span>Inntekt i dag</span><span /></div>
         {rows.map((driver) => {
           const vehicle = vehicles.find((item) => item.driver_id === driver.id);
-          const approved = driver.approved && driver.fleet_active !== false;
+          const verified = driver.documents_verified === true;
           return <Link to={`/sjaforer/${driver.id}`} className="row" key={driver.id}>
             <span className="person"><Avatar name={nameOf(driver)} online={driver.online} /><span><strong>{nameOf(driver)}</strong><small>{driver.email || driver.phone || 'Kontaktinfo mangler'}</small></span></span>
             <span><Pill tone={driver.online ? 'green' : 'neutral'}>{driver.online ? 'Online' : 'Offline'}</Pill></span>
             <span><strong>{vehicle?.car || driver.car || 'Ikke tildelt'}</strong><small>{vehicle?.plate || driver.plate || '—'}</small></span>
-            <span><Pill tone={approved ? 'green' : 'amber'}>{approved ? 'Gyldig' : 'Til kontroll'}</Pill></span>
+            <span><Pill tone={verified ? 'green' : 'amber'}>{verified ? 'Kontrollert' : driver.missing_document_types?.length ? 'Mangler dokumenter' : 'Til kontroll'}</Pill></span>
             <span className="mono">{driver.today_trips || 0}</span>
             <span className="mono">{money(driver.today_income || 0)}</span>
             <span className="arrow">›</span>

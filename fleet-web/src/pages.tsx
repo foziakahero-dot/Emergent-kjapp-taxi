@@ -13,6 +13,7 @@ const fmtMoney = (v: unknown) => `${new Intl.NumberFormat('nb-NO').format(Math.r
 const fmtDate = (v?: string) => v ? new Date(v).toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 const monthTitle = (date = new Date()) => date.toLocaleDateString('nb-NO', { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
 const nameOf = (d: FleetDriver) => d.fullName || d.full_name || d.email || 'Sjåfør';
+const driverDocLabels: Record<string,string> = {profile_photo:'Profilbilde',drivers_license:'Førerkort',taxi_license:'Kjøreseddel'};
 const statusDone = (s: string) => ['arrived', 'completed', 'rated', 'Fullført'].includes(s);
 
 const liveStatusLabel = (s?: string) => ({
@@ -87,7 +88,7 @@ export function LoginPage() {
       <ErrorBox message={err} />
       <button className="primary-button" disabled={busy}>{busy ? 'Logger inn…' : 'Logg inn'}</button>
       <Link to="/glemt-passord" className="text-link">Glemt passord?</Link>
-      <div className="approval-note">Tilgang aktiveres først etter at KJAPP har godkjent løyvehaversøknaden og dokumentasjonen.</div>
+      <div className="approval-note">Tilgang aktiveres først etter at SNAR har godkjent løyvehaversøknaden og dokumentasjonen.</div>
     </form>
   </div>;
 }
@@ -103,7 +104,7 @@ export function ForgotPasswordPage() {
   };
   return <div className="auth-simple"><Brand /><div className="auth-simple-card">
     <h1>Glemt passord</h1>
-    {sent ? <><p>Hvis e-posten finnes hos KJAPP, har vi sendt en lenke for å velge nytt passord.</p><Link className="primary-button link-button" to="/login">Tilbake til innlogging</Link></> :
+    {sent ? <><p>Hvis e-posten finnes hos SNAR, har vi sendt en lenke for å velge nytt passord.</p><Link className="primary-button link-button" to="/login">Tilbake til innlogging</Link></> :
       <form onSubmit={submit}><p>Skriv inn e-posten som er knyttet til den godkjente løyvehaverkontoen.</p><input type="email" placeholder="E-post" value={email} onChange={(e) => setEmail(e.target.value)} required /><button className="primary-button" disabled={busy}>{busy ? 'Sender…' : 'Send lenke'}</button><Link className="text-link" to="/login">Tilbake</Link></form>}
   </div></div>;
 }
@@ -125,7 +126,7 @@ export function ResetPasswordPage() {
   return <div className="auth-simple"><Brand /><div className="auth-simple-card">
     {state === 'checking' ? <Loading /> : null}
     {state === 'invalid' ? <><h1>Lenken virker ikke</h1><p>Lenken er ugyldig eller utløpt.</p><Link className="primary-button link-button" to="/glemt-passord">Be om ny lenke</Link></> : null}
-    {state === 'form' ? <form onSubmit={submit}><h1>Velg nytt passord</h1><p>Bruk det nye passordet neste gang du logger inn i KJAPP Partner.</p><input type="password" placeholder="Nytt passord" value={pw} onChange={(e) => setPw(e.target.value)} required /><input type="password" placeholder="Gjenta nytt passord" value={pw2} onChange={(e) => setPw2(e.target.value)} required /><ErrorBox message={err} /><button className="primary-button" disabled={busy}>{busy ? 'Lagrer…' : 'Lagre nytt passord'}</button></form> : null}
+    {state === 'form' ? <form onSubmit={submit}><h1>Velg nytt passord</h1><p>Bruk det nye passordet neste gang du logger inn i SNAR Partner.</p><input type="password" placeholder="Nytt passord" value={pw} onChange={(e) => setPw(e.target.value)} required /><input type="password" placeholder="Gjenta nytt passord" value={pw2} onChange={(e) => setPw2(e.target.value)} required /><ErrorBox message={err} /><button className="primary-button" disabled={busy}>{busy ? 'Lagrer…' : 'Lagre nytt passord'}</button></form> : null}
     {state === 'done' ? <><h1>Passordet er endret</h1><p>Du kan nå logge inn i partnerportalen.</p><Link className="primary-button link-button" to="/login">Logg inn</Link></> : null}
   </div></div>;
 }
@@ -212,7 +213,7 @@ export function OverviewPage() {
     </div>
     <div className="overview-grid"><LiveFleet drivers={liveDrivers} /><LiveTrips live={live} /></div>
     <div className="mobile-week"><span>Denne uken</span><strong>{fmtMoney(ov.week.net)}</strong><small>{ov.week.trips} turer · netto etter provisjon</small></div>
-    <div className="week-summary"><span>Denne uken</span><strong>{ov.week.trips} turer</strong><span>{fmtMoney(ov.week.gross)} brutto</span><span>{fmtMoney(ov.week.gross - ov.week.net)} KJAPP</span><b>{fmtMoney(ov.week.net)} netto</b></div>
+    <div className="week-summary"><span>Denne uken</span><strong>{ov.week.trips} turer</strong><span>{fmtMoney(ov.week.gross)} brutto</span><span>{fmtMoney(ov.week.gross - ov.week.net)} SNAR</span><b>{fmtMoney(ov.week.net)} netto</b></div>
     <ErrorBox message={err} />
   </div>;
 }
@@ -336,24 +337,40 @@ function InviteModal({ vehicles, onClose, onDone }: { vehicles: FleetVehicle[]; 
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [accessMode, setAccessMode] = useState<'assigned' | 'all'>('assigned');
+  const [created, setCreated] = useState<any>(null);
+  const eligible = vehicles.filter((v) => v.active !== false && (accessMode === 'all' || !(v.assigned_driver_id ?? v.driver_id)));
+  useEffect(() => { if (!eligible.some((v) => v.id === vehicleId)) setVehicleId(eligible[0]?.id || ''); }, [accessMode, vehicles, vehicleId]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!vehicleId) { setErr('Registrer en ledig bil under Kjøretøy før du inviterer sjåføren.'); return; }
     setErr(''); setBusy(true);
-    try { await api.createInvite({ vehicle_id: vehicleId, email: email || undefined, note }); onDone(); }
+    try { setCreated(await api.createInvite({ vehicle_id: vehicleId, email: email || undefined, note, vehicle_access_mode: accessMode })); }
     catch (e) { setErr(apiError(e)); }
     finally { setBusy(false); }
   };
   return <div className="modal-backdrop" onClick={onClose}><form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
     <div className="modal-head"><div><span className="eyebrow">NY SJÅFØR</span><h2>Opprett invitasjon</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div>
-    <p>Velg en registrert, ledig bil fra flåten. Bil, skilt og klasse følger kjøretøyregisteret og kan ikke skrives inn manuelt her.</p>
-    {vehicles.length ? <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required>
-      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.car || 'Bil'} · {v.plate || '—'} · {v.vehicle_type || 'KJAPP'}</option>)}
+    {created ? <>
+      <p role="status">{created.email_sent ? 'Invitasjonen er sendt på e-post.' : 'Invitasjonen er opprettet, men e-posten er ikke sendt. Del lenken direkte eller prøv å sende igjen.'}</p>
+      <input aria-label="Invitasjonslenke" readOnly value={created.invite_url || ''} />
+      <button type="button" className="primary-button" onClick={() => navigator.clipboard.writeText(created.invite_url).catch(() => setErr('Marker og kopier lenken manuelt.'))}>Kopier lenke</button>
+      {!created.email_sent && email ? <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { setCreated(await api.resendInvite(created.token)); } catch(e) { setErr(apiError(e)); } finally { setBusy(false); } }}>Send e-post på nytt</button> : null}
+      <ErrorBox message={err} /><button type="button" className="text-link" onClick={onDone}>Ferdig</button>
+    </> : <>
+    <p>Invitasjonen knyttes til din flåte. Sjåføren laster opp profilbilde, førerkort og kjøreseddel før SNAR kontrollerer dokumentene.</p>
+    <label>Biltilgang<select value={accessMode} onChange={(e) => setAccessMode(e.target.value as 'assigned' | 'all')}>
+      <option value="assigned">Bare tildelt bil</option><option value="all">Alle aktive biler i min flåte</option>
+    </select></label>
+    <p>{accessMode === 'all' ? 'Sjåføren får varig tilgang og velger ledig bil før hver vakt. Velg en bil for første oppsett.' : 'Velg en ledig bil. Tilgangen kan senere endres til flere biler.'}</p>
+    {eligible.length ? <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required>
+      {eligible.map((v) => <option key={v.id} value={v.id}>{v.car || 'Bil'} · {v.plate || '—'} · {v.vehicle_type || 'SNAR'}</option>)}
     </select> : <div className="empty-state padded">Ingen ledige biler. <a href="#/vehicles">Registrer eller frigjør en bil først.</a></div>}
     <input type="email" placeholder="Sjåførens e-post (valgfritt)" value={email} onChange={(e) => setEmail(e.target.value)} />
     <textarea placeholder="Kort notat (valgfritt)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
     <ErrorBox message={err} />
     <button className="primary-button" disabled={busy || !vehicleId}>{busy ? 'Oppretter…' : 'Opprett invitasjon'}</button>
+    </>}
   </form></div>;
 }
 
@@ -381,8 +398,6 @@ export function DriversPage() {
   const filtered = drivers.filter((d) =>
     `${nameOf(d)} ${d.car || ''} ${d.plate || ''}`.toLowerCase().includes(q.toLowerCase())
   );
-  const invitedVehicleIds = new Set(invites.filter((i) => !i.used).map((i) => i.vehicle_id).filter(Boolean));
-  const availableVehicles = vehicles.filter((v) => v.active !== false && !v.driver_id && !invitedVehicleIds.has(v.id));
 
   return <div className="page-content">
     <PageHead title="Sjåfører" sub="Administrer personer og biler i din flåte" action={<button className="primary-button compact-button" onClick={() => setModal(true)}>+ Legg til sjåfør</button>} />
@@ -408,17 +423,25 @@ export function DriversPage() {
       {invites.length ? <div className="invite-chips">{invites.slice(0, 8).map((i) => <span key={i.token}>{i.email || i.plate || 'Invitasjon'} · {i.used ? 'Godtatt' : i.email_sent ? 'Sendt' : 'Venter'}</span>)}</div> : null}
     </section>
     <ErrorBox message={err} />
-    {modal ? <InviteModal vehicles={availableVehicles} onClose={() => setModal(false)} onDone={() => { setModal(false); load(); }} /> : null}
+    {modal ? <InviteModal vehicles={vehicles.filter((v) => v.active !== false)} onClose={() => { setModal(false); load(); }} onDone={() => { setModal(false); load(); }} /> : null}
     {detailBusy ? <div className="modal-backdrop"><div className="modal-card"><Loading /></div></div> : null}
-    {selected ? <DriverDetailModal driver={selected} onClose={() => setSelected(null)} /> : null}
+    {selected ? <DriverDetailModal driver={selected} vehicles={vehicles} onClose={() => { setSelected(null); load(); }} /> : null}
   </div>;
 }
 
-function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onClose: () => void }) {
+function DriverDetailModal({ driver, vehicles, onClose }: { driver: FleetDriverDetail; vehicles: FleetVehicle[]; onClose: () => void }) {
   const docs = driver.documents || [];
   const [fleetActive, setFleetActive] = useState(driver.fleet_active !== false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [accessMode, setAccessMode] = useState<'assigned' | 'selected' | 'all'>(driver.vehicle_access_mode || 'assigned');
+  const [allowed, setAllowed] = useState<string[]>(driver.allowed_vehicle_ids || []);
+  const [saved, setSaved] = useState(false);
+  const saveAccess = async () => {
+    setBusy(true); setErr(''); setSaved(false);
+    try { await api.setVehicleAccess(driver.id, accessMode, allowed); setSaved(true); }
+    catch(e) { setErr(apiError(e)); } finally { setBusy(false); }
+  };
   const toggleFleetActive = async () => {
     const next = !fleetActive;
     if (!next && !window.confirm('Deaktivere denne sjåføren i din flåte? Sjåføren blir satt offline.')) return;
@@ -435,7 +458,7 @@ function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onC
       <div className="detail-grid">
         <InfoRow label="Status" value={<span className={driver.online ? 'status-green' : 'muted'}>{driver.online ? 'Pålogget' : 'Avlogget'}</span>} />
         <InfoRow label="Flåtestatus" value={<span className={fleetActive ? 'status-green' : 'status-red'}>{fleetActive ? 'Aktiv' : 'Deaktivert'}</span>} />
-        <InfoRow label="KJAPP-godkjenning" value={driver.approved ? 'Godkjent' : 'Venter'} />
+        <InfoRow label="SNAR-godkjenning" value={driver.approved ? 'Godkjent' : 'Venter'} />
         <InfoRow label="Selfie ID" value={<span className={identityClass(driver.identity_verification_status)}>{identityLabel(driver.identity_verification_status)}</span>} />
         <InfoRow label="Bil" value={driver.car || '—'} />
         <InfoRow label="Skilt" value={driver.plate || '—'} />
@@ -447,14 +470,29 @@ function DriverDetailModal({ driver, onClose }: { driver: FleetDriverDetail; onC
       {driver.active_trip ? <div className="detail-section"><span className="eyebrow green">AKTIV TUR</span><strong>{driver.active_trip.pickup_address || 'Hentested'} → {driver.active_trip.dropoff_address || 'Destinasjon'}</strong><small>{liveStatusLabel(driver.active_trip.status)}</small></div> : null}
       <div className="detail-section">
         <span className="eyebrow">FLÅTESTYRING</span>
-        <small>{fleetActive ? 'Sjåføren kan bruke flåten når øvrige KJAPP-krav er godkjent.' : 'Sjåføren er sperret av løyvehaver fra operativ bruk.'}</small>
+        <small>{fleetActive ? 'Sjåføren kan bruke flåten når øvrige SNAR-krav er godkjent.' : 'Sjåføren er sperret av løyvehaver fra operativ bruk.'}</small>
         <button className={fleetActive ? 'danger-outline-button' : 'primary-button'} disabled={busy || Boolean(driver.active_trip)} onClick={() => void toggleFleetActive()}>
           {busy ? 'Lagrer…' : fleetActive ? 'Deaktiver i flåten' : 'Aktiver i flåten'}
         </button>
         {driver.active_trip ? <small>Kan ikke deaktiveres mens sjåføren har aktiv tur.</small> : null}
         <ErrorBox message={err} />
       </div>
-      <div className="detail-section"><span className="eyebrow">DOKUMENTER</span>{docs.length ? docs.map((d) => <div className="detail-doc" key={d.id}><span>{d.doc_type || d.filename || 'Dokument'}</span><b className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</b></div>) : <small>Ingen dokumenter registrert.</small>}</div>
+      <div className="detail-section"><span className="eyebrow">BILTILGANG</span>
+        <p>Gi tilgang én gang. Sjåføren velger bil før vakten. En bil kan bare brukes av én online sjåfør om gangen.</p>
+        <select aria-label="Biltilgang" disabled={busy || driver.online || Boolean(driver.active_trip)} value={accessMode} onChange={(e) => { setAccessMode(e.target.value as typeof accessMode); setSaved(false); }}>
+          <option value="assigned">Bare tildelt bil</option><option value="selected">Valgte biler</option><option value="all">Alle aktive biler i min flåte</option>
+        </select>
+        {accessMode === 'selected' ? vehicles.filter((v) => v.active !== false).map((v) => <label key={v.id} style={{ display:'flex', gap:10, padding:6 }}>
+          <input type="checkbox" disabled={busy || driver.online || Boolean(driver.active_trip)} checked={allowed.includes(v.id)} onChange={(e) => { setAllowed((ids) => e.target.checked ? [...ids,v.id] : ids.filter((id) => id !== v.id)); setSaved(false); }}/>{v.car} · {v.plate}
+        </label>) : null}
+        <button className="primary-button" disabled={busy || driver.online || Boolean(driver.active_trip)} onClick={() => void saveAccess()}>{busy ? 'Lagrer…' : 'Lagre biltilgang'}</button>
+        {saved ? <p role="status">Biltilgangen er lagret.</p> : null}
+        {driver.online || driver.active_trip ? <small>Sjåføren må gå offline og avslutte aktiv tur før tilgangen endres.</small> : null}
+      </div>
+      <div className="detail-section"><span className="eyebrow">DOKUMENTER</span>
+        <p className={driver.documents_verified ? 'status-green' : 'status-amber'}>{driver.documents_verified ? 'Dokumentene er kontrollert og gyldige.' : 'Dokumenter mangler eller venter på kontroll.'}</p>
+        {driver.missing_document_types?.length ? <small>Mangler: {driver.missing_document_types.map((kind) => driverDocLabels[kind] || kind).join(', ')}</small> : null}
+        {docs.length ? docs.map((d) => <div className="detail-doc" key={d.id}><span>{d.doc_type || d.filename || 'Dokument'}</span><b className={complianceClass(d.compliance)}>{complianceLabel(d.compliance)}</b></div>) : <small>Ingen dokumenter registrert.</small>}</div>
     </div>
   </div>;
 }
@@ -476,7 +514,7 @@ function CreateVehicleModal({ onClose, onDone }: { onClose: () => void; onDone: 
   return <div className="modal-backdrop" onClick={onClose}>
     <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
       <div className="modal-head"><div><span className="eyebrow">NYTT KJØRETØY</span><h2>Legg til bil</h2></div><button type="button" className="icon-button" onClick={onClose}>×</button></div>
-      <p>Registrer bilen i din KJAPP-flåte. Sjåfør kan tildeles etterpå.</p>
+      <p>Registrer bilen i din SNAR-flåte. Sjåfør kan tildeles etterpå.</p>
       <input placeholder="Bilmodell, f.eks. Mercedes EQE" value={car} onChange={(e) => setCar(e.target.value)} required />
       <input placeholder="Skiltnummer" value={plate} onChange={(e) => setPlate(e.target.value)} required />
       <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
@@ -600,7 +638,7 @@ export function VehiclesPage() {
           <span className="mono">{v.plate || '—'}</span>
           <span className={v.active === false ? 'status-red' : 'status-green'}>{v.active === false ? 'Parkert' : 'Aktiv'}</span>
           <span>
-            <select className="vehicle-driver-select" value={v.driver_id || ''} disabled={busy === v.id || Boolean(v.online)} onChange={(e) => void assign(v.id, e.target.value)}>
+            <select className="vehicle-driver-select" value={v.assigned_driver_id !== undefined ? v.assigned_driver_id || '' : v.driver_id || ''} disabled={busy === v.id || Boolean(v.online)} onChange={(e) => void assign(v.id, e.target.value)}>
               <option value="">Ingen sjåfør</option>
               {drivers.filter((d) => d.fleet_active !== false).map((d) => <option key={d.id} value={d.id}>{nameOf(d)}{d.plate ? ' · ' + d.plate : ''}</option>)}
             </select>
@@ -654,7 +692,7 @@ export function DocumentsPage() {
     <div className="kpi-grid four compliance-kpis">
       <div className="kpi-card"><span>GODKJENT</span><strong>{summary.VALID || 0}</strong><small>gyldige dokumenter</small></div>
       <div className="kpi-card"><span>UTLØPER</span><strong>{summary.EXPIRING || 0}</strong><small>innen 30 dager</small></div>
-      <div className="kpi-card"><span>TIL VURDERING</span><strong>{summary.PENDING || 0}</strong><small>venter på KJAPP</small></div>
+      <div className="kpi-card"><span>TIL VURDERING</span><strong>{summary.PENDING || 0}</strong><small>venter på SNAR</small></div>
       <div className="kpi-card"><span>AVVIK</span><strong>{(summary.EXPIRED || 0) + (summary.REJECTED || 0)}</strong><small>utløpt eller avvist</small></div>
     </div>
     <div className="table-card no-tools">
@@ -780,7 +818,7 @@ function StripeOnboarding() {
   return <div className="payout-card" style={{ marginBottom: 20 }}>
     <div className="eyebrow">STRIPE · BANK OG VERIFISERING</div>
     <h2>{status?.ready ? 'Klar for automatiske oppgjør' : 'Fullfør Stripe-oppsettet'}</h2>
-    <p>{status?.ready ? 'Turbetalinger fordeles med avtalt KJAPP-serviceavgift. Stripe utbetaler til bankkonto etter bekreftet plan.' : 'KJAPP-godkjenningen gir tilgang til panelet. Firma, bankkonto og identitet må i tillegg bekreftes direkte hos Stripe.'}</p>
+    <p>{status?.ready ? 'Turbetalinger fordeles med avtalt SNAR-serviceavgift. Stripe utbetaler til bankkonto etter bekreftet plan.' : 'SNAR-godkjenningen gir tilgang til panelet. Firma, bankkonto og identitet må i tillegg bekreftes direkte hos Stripe.'}</p>
     {status?.currently_due?.length ? <p>Stripe trenger flere opplysninger. Åpne oppsettet for å se hva som mangler.</p> : null}
     {!status?.ready && <button className="primary-button" disabled={busy} onClick={start}>{busy ? 'Venter…' : status?.connected ? 'Fortsett hos Stripe' : 'Koble bankkonto med Stripe'}</button>}
     <button className="text-link" disabled={busy} onClick={refresh}>Oppdater Stripe-status</button>
@@ -794,10 +832,10 @@ export function FinancePage() {
   useEffect(() => { Promise.all([loadFleetWorkbook(now.getFullYear(), now.getMonth() + 1), api.payouts(), api.fleetMe()]).then(([b,p,m]) => { setBook(b); setPayouts(p.payouts || []); setPayoutMeta(p); setMe(m); }).catch((e) => setErr(apiError(e))); }, []);
   if (!book || !me) return err ? <ErrorBox message={err} /> : <Loading />;
   const rate = Math.round((me.commission_rate ?? (book.summary.gross ? book.summary.commission / book.summary.gross : .10)) * 100);
-  const download = async () => { setDownloading(true); try { const buf = await api.exportMonthly(now.getFullYear(), now.getMonth() + 1); const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `KJAPP-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}.xlsx`; a.click(); URL.revokeObjectURL(url); } catch (e) { setErr(apiError(e)); } finally { setDownloading(false); } };
-  return <div className="page-content"><PageHead title="Økonomi" sub="Enkelt oppgjør. Ingen regnskapssystem inni KJAPP." />
-    <StripeOnboarding /><div className="kpi-grid three"><div className="kpi-card"><span>BRUTTO DENNE MÅNEDEN</span><strong>{fmtMoney(book.summary.gross)}</strong><small>{book.summary.trips} turer</small></div><div className="kpi-card"><span>KJAPP PROVISJON</span><strong>{fmtMoney(book.summary.commission)}</strong><small>{rate}% avtalt</small></div><div className="kpi-card"><span>NETTO</span><strong>{fmtMoney(book.summary.net)}</strong><small>før øvrige kostnader</small></div></div>
-    <div className="finance-grid"><div className="payout-card"><div className="eyebrow">STRIPE-UTBETALINGER</div><small>{payoutMeta.connected ? (payoutMeta.payout_schedule === 'weekly_friday' ? 'Connected account · ukentlig fredag' : 'Connected account · Stripe-plan') : 'Stripe Connect er ikke aktivert'}</small>{payouts.slice(0,5).map((p,i) => <div className="payout-row" key={p.id || i}><span>{payoutLabel(p)}</span><b className="mono">{fmtMoney(payoutAmount(p))}</b><em className={['paid','completed','utbetalt'].includes(String(p.status).toLowerCase()) ? 'status-green' : 'muted'}>{p.status === 'paid' ? 'Utbetalt' : p.status || 'Registrert'}</em></div>)}{!payouts.length ? <div className="empty-state">{payoutMeta.temporarily_unavailable ? 'Stripe-utbetalinger er midlertidig utilgjengelige. Prøv igjen senere.' : payoutMeta.connected ? 'Ingen Stripe-utbetalinger registrert ennå.' : 'Koble løyvehaver til Stripe Connect for automatiske oppgjør.'}</div> : null}</div><div className="report-card"><div className="eyebrow">MÅNEDSRAPPORT</div><h2>{monthTitle(now)}</h2><p>Turer · sjåførfordeling<br/>brutto · provisjon · netto</p><button className="primary-button" onClick={download} disabled={downloading}>{downloading ? 'Laster…' : 'Last ned Excel'}</button><small>Eksporten genereres av KJAPP-backenden fra ekte turdata.</small></div></div><ErrorBox message={err} />
+  const download = async () => { setDownloading(true); try { const buf = await api.exportMonthly(now.getFullYear(), now.getMonth() + 1); const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `SNAR-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}.xlsx`; a.click(); URL.revokeObjectURL(url); } catch (e) { setErr(apiError(e)); } finally { setDownloading(false); } };
+  return <div className="page-content"><PageHead title="Økonomi" sub="Enkelt oppgjør. Ingen regnskapssystem inni SNAR." />
+    <StripeOnboarding /><div className="kpi-grid three"><div className="kpi-card"><span>BRUTTO DENNE MÅNEDEN</span><strong>{fmtMoney(book.summary.gross)}</strong><small>{book.summary.trips} turer</small></div><div className="kpi-card"><span>SNAR PROVISJON</span><strong>{fmtMoney(book.summary.commission)}</strong><small>{rate}% avtalt</small></div><div className="kpi-card"><span>NETTO</span><strong>{fmtMoney(book.summary.net)}</strong><small>før øvrige kostnader</small></div></div>
+    <div className="finance-grid"><div className="payout-card"><div className="eyebrow">STRIPE-UTBETALINGER</div><small>{payoutMeta.connected ? (payoutMeta.payout_schedule === 'weekly_friday' ? 'Connected account · ukentlig fredag' : 'Connected account · Stripe-plan') : 'Stripe Connect er ikke aktivert'}</small>{payouts.slice(0,5).map((p,i) => <div className="payout-row" key={p.id || i}><span>{payoutLabel(p)}</span><b className="mono">{fmtMoney(payoutAmount(p))}</b><em className={['paid','completed','utbetalt'].includes(String(p.status).toLowerCase()) ? 'status-green' : 'muted'}>{p.status === 'paid' ? 'Utbetalt' : p.status || 'Registrert'}</em></div>)}{!payouts.length ? <div className="empty-state">{payoutMeta.temporarily_unavailable ? 'Stripe-utbetalinger er midlertidig utilgjengelige. Prøv igjen senere.' : payoutMeta.connected ? 'Ingen Stripe-utbetalinger registrert ennå.' : 'Koble løyvehaver til Stripe Connect for automatiske oppgjør.'}</div> : null}</div><div className="report-card"><div className="eyebrow">MÅNEDSRAPPORT</div><h2>{monthTitle(now)}</h2><p>Turer · sjåførfordeling<br/>brutto · provisjon · netto</p><button className="primary-button" onClick={download} disabled={downloading}>{downloading ? 'Laster…' : 'Last ned Excel'}</button><small>Eksporten genereres av SNAR-backenden fra ekte turdata.</small></div></div><ErrorBox message={err} />
   </div>;
 }
 
@@ -807,8 +845,9 @@ export function BedriftPage() {
   useEffect(() => { api.fleetMe().then(setMe).catch((e) => setErr(apiError(e))); }, []);
   if (!me) return err ? <ErrorBox message={err} /> : <Loading />;
   const rate = Math.round((me.commission_rate ?? .10) * 100); const active = me.status ? me.status !== 'suspended' : me.active !== false;
-  return <div className="page-content"><PageHead title="Bedrift" sub="Virksomhetsinformasjon og KJAPP-avtale" /><div className="company-grid"><div className="company-card"><div className="eyebrow">VIRKSOMHET</div><InfoRow label="Firmanavn" value={me.name}/><InfoRow label="Organisasjonsnummer" value={me.org_number || '—'}/><InfoRow label="Kontaktperson" value={me.contact_name || user?.fullName || '—'}/><InfoRow label="E-post" value={me.contact_email || user?.email || '—'}/><InfoRow label="Telefon" value={me.contact_phone || '—'}/><InfoRow label="Bankkonto" value={maskBank(me.bank_account)}/></div><div className="company-side"><div className="agreement-card"><div className="eyebrow">KJAPP-AVTALE</div><span className="field-label">Provisjon</span><strong className="agreement-rate">{rate}%</strong><span className="field-label">Aktiv siden</span><b className="mono agreement-date">{fmtDate(me.created_at)}</b><span className="field-label">Status</span><b className={active ? 'status-green' : 'status-red'}>{active ? 'Aktiv' : 'Suspendert'}</b></div><div className="support-card"><div className="eyebrow">SUPPORT</div><p>Trenger du hjelp med konto, sjåfør eller oppgjør?</p><a href="https://kjappapp.no/hjelp">Kontakt KJAPP →</a></div></div></div><ErrorBox message={err} />
+  return <div className="page-content"><PageHead title="Bedrift" sub="Virksomhetsinformasjon og SNAR-avtale" /><div className="company-grid"><div className="company-card"><div className="eyebrow">VIRKSOMHET</div><InfoRow label="Firmanavn" value={me.name}/><InfoRow label="Organisasjonsnummer" value={me.org_number || '—'}/><InfoRow label="Kontaktperson" value={me.contact_name || user?.fullName || '—'}/><InfoRow label="E-post" value={me.contact_email || user?.email || '—'}/><InfoRow label="Telefon" value={me.contact_phone || '—'}/><InfoRow label="Bankkonto" value={maskBank(me.bank_account)}/></div><div className="company-side"><div className="agreement-card"><div className="eyebrow">SNAR-AVTALE</div><span className="field-label">Provisjon</span><strong className="agreement-rate">{rate}%</strong><span className="field-label">Aktiv siden</span><b className="mono agreement-date">{fmtDate(me.created_at)}</b><span className="field-label">Status</span><b className={active ? 'status-green' : 'status-red'}>{active ? 'Aktiv' : 'Suspendert'}</b></div><div className="support-card"><div className="eyebrow">SUPPORT</div><p>Trenger du hjelp med konto, sjåfør eller oppgjør?</p><a href="https://snarapp.no/help">Kontakt SNAR →</a></div></div></div><ErrorBox message={err} />
   </div>;
 }
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) { return <div className="info-row"><span>{label}</span><b>{value}</b></div>; }
+
 

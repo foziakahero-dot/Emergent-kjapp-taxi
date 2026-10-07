@@ -175,7 +175,9 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
       if (controller.signal.aborted) return;
       setStatus("success");
       setMessage(
-        "Takk! Interessen din er registrert. Vi kontakter deg når betaen åpner for din gruppe.",
+        data.confirmation_email_status === 'queued'
+          ? 'Registreringen er mottatt. En bekreftelse er lagt i e-postkøen. Du får informasjon når din testgruppe åpner.'
+          : 'Registreringen er mottatt. Vi kontakter deg når din testgruppe åpner.',
       );
     } catch (error) {
       if (controller.signal.aborted && controller.signal.reason !== "timeout")
@@ -376,3 +378,4 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
     </div>
   );
 }
+

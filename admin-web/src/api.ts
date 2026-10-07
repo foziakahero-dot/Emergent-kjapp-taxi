@@ -85,10 +85,10 @@ export const api = {
     http.get('/superadmin/fleet-applications', { params: status ? { status } : {} }).then((r) => r.data),
   fleetApplication: (id: string) =>
     http.get(`/superadmin/fleet-applications/${id}`).then((r) => r.data),
-  approveFleetApplication: (id: string, review_notes = '') =>
+  approveFleetApplication: (id: string, review_notes = '', commission_rate?: number) =>
     http.post(`/superadmin/fleet-applications/${id}/approve`, {
       review_notes,
-      commission_rate: 0.10,
+      ...(commission_rate != null ? { commission_rate } : {}),
     }).then((r) => r.data),
   rejectFleetApplication: (id: string, review_notes = '') =>
     http.post(`/superadmin/fleet-applications/${id}/reject`, { review_notes }).then((r) => r.data),
@@ -120,4 +120,5 @@ export const api = {
   updateAdminUser: (id: string, body: any) => http.patch(`/admin/control/admin-users/${id}`, body).then((r) => r.data),
 
 };
+
 

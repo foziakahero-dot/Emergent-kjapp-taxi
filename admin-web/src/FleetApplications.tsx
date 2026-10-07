@@ -3,7 +3,6 @@ import { api, apiError } from './api';
 import { useAuth } from './auth';
 import { Btn, Card, Empty, ErrorBanner, KV, Loader, PageHead, Pill, fmtDate } from './ui';
 
-const FIXED_COMMISSION = 0.10;
 
 const DOC_LABELS: Record<string, string> = {
   firmaattest: 'Firmaattest',
@@ -23,8 +22,16 @@ export default function FleetApplications() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
+  const [approvalResult, setApprovalResult] = useState<any>(null);
+  const [defaultCommission, setDefaultCommission] = useState<number | null>(null);
+  const [commission, setCommission] = useState<number | null>(null);
 
   const isSuperadmin = user?.role === 'superadmin';
+  useEffect(() => {
+    if (!isSuperadmin) return;
+    api.list('/admin/settings', {}).then((settings) => { const fee = Number(settings.default_commission) * 100; setDefaultCommission(fee); setCommission(fee); })
+      .catch(() => setErr('Kunne ikke hente standard serviceavgift. Oppdater før godkjenning.'));
+  }, [isSuperadmin]);
 
   const load = async () => {
     if (!isSuperadmin) return;
@@ -46,6 +53,8 @@ export default function FleetApplications() {
   }, [status, isSuperadmin]);
 
   const openApplication = async (id: string) => {
+    setApprovalResult(null);
+    setCommission(defaultCommission);
     setDetailLoading(true);
     setErr('');
     try {
@@ -60,6 +69,7 @@ export default function FleetApplications() {
   };
 
   const close = () => {
+    setApprovalResult(null);
     setSelected(null);
     setNotes('');
   };
@@ -69,8 +79,10 @@ export default function FleetApplications() {
     setBusy(true);
     setErr('');
     try {
-      await api.approveFleetApplication(selected.id, notes);
-      close();
+      if (commission == null || !Number.isFinite(commission) || commission < 0 || commission > 50) throw new Error('Oppgi serviceavgift mellom 0 og 50 %.');
+      const result = await api.approveFleetApplication(selected.id, notes, commission / 100);
+      setApprovalResult(result);
+      setSelected((value: any) => ({ ...value, status: 'approved', fleet_id: result.fleet_id, reviewed_at: new Date().toISOString() }));
       await load();
     } catch (e) {
       setErr(apiError(e));
@@ -141,13 +153,13 @@ export default function FleetApplications() {
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
           <div>
-            <div className="section-title" style={{ margin: 0 }}>Fast partnerprovisjon</div>
+            <div className="section-title" style={{ margin: 0 }}>Avtalt serviceavgift</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-              Nye godkjente løyvehavere opprettes med SNAR-serviceavgift på 10 %.
+              Standard hentes fra Prissetting. Du kan velge en egen avtalt sats ved godkjenning.
             </div>
           </div>
           <div className="mono" style={{ fontSize: 26, color: 'var(--gold)', fontWeight: 700 }}>
-            {Math.round(FIXED_COMMISSION * 100)}%
+            {defaultCommission == null ? '—' : `${defaultCommission}%`}
           </div>
         </div>
       </Card>
@@ -197,6 +209,13 @@ export default function FleetApplications() {
             </>
           ) : null}
 
+          {approvalResult ? <Card>
+            <div className="section-title">Flåten er opprettet</div>
+            <p>{approvalResult.confirmation_email_status === 'queued' ? 'Bekreftelsen er lagt i e-postkøen.' : 'E-post er ikke konfigurert. Bekreftelsen ligger i kø til tjenesten aktiveres.'}</p>
+            <p>Løyvehaveren logger inn på <a href="https://fleet.snarapp.no/login" target="_blank" rel="noreferrer">SNAR Fleet</a> med e-postadressen fra søknaden.</p>
+            {approvalResult.temp_password ? <><p>Midlertidig passord vises bare nå. Løyvehaveren bør velge et nytt passord via engangslenken i bekreftelsesmailen.</p><input className="input" aria-label="Midlertidig passord til ny løyvehaver" type="password" value={approvalResult.temp_password} readOnly autoComplete="off"/><Btn variant="ghost" onClick={() => void navigator.clipboard?.writeText(approvalResult.temp_password)}>Kopier midlertidig passord</Btn></> : <p>Bruk eksisterende passord, eller velg Glemt passord når e-post er aktivert.</p>}
+          </Card> : null}
+
           {selected.status === 'pending' ? (
             <>
               <div className="section-title">Superadmin beslutning</div>
@@ -204,9 +223,9 @@ export default function FleetApplications() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
                   <div>
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>SNAR-provisjon ved godkjenning</div>
-                    <div style={{ marginTop: 4, fontWeight: 700 }}>Fast onboarding-sats</div>
+                    <div style={{ marginTop: 4, fontWeight: 700 }}>Avtalt sats for denne løyvehaveren</div>
                   </div>
-                  <div className="mono" style={{ fontSize: 24, color: 'var(--gold)', fontWeight: 700 }}>10%</div>
+                  <label>Serviceavgift (%)<input className="input" aria-label="Serviceavgift ved godkjenning" type="number" min="0" max="50" step="0.1" value={commission ?? ''} onChange={(e) => setCommission(e.target.value === '' ? null : Number(e.target.value))}/></label>
                 </div>
 
                 <textarea
@@ -219,13 +238,13 @@ export default function FleetApplications() {
                 />
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <Btn disabled={busy} onClick={approve}>{busy ? 'Behandler…' : 'Godkjenn løyvehaver'}</Btn>
+                  <Btn disabled={busy || commission == null} onClick={approve}>{busy ? 'Behandler…' : 'Godkjenn løyvehaver'}</Btn>
                   <Btn variant="ghost" disabled={busy} onClick={reject}>Avslå</Btn>
                 </div>
               </Card>
 
               <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.5, color: 'var(--muted)' }}>
-                Ved godkjenning oppretter backend flåten og en fleet_owner-konto. Før dette har søkeren ingen tilgang til fleet.snarapp.no.
+                Godkjenning åpner søkerens egen flåte i SNAR Fleet. Søkeren fullfører Stripe-verifisering i portalen før utbetalinger kan starte.
               </div>
             </>
           ) : (
@@ -245,3 +264,4 @@ export default function FleetApplications() {
     </>
   );
 }
+

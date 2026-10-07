@@ -71,6 +71,8 @@ export type FleetOverview = {
 };
 
 export type FleetDriver = {
+  documents_verified?: boolean;
+  missing_document_types?: string[];
   id: string;
   fullName?: string;
   full_name?: string;
@@ -90,6 +92,8 @@ export type FleetDriver = {
   today_income?: number;
   today_trips?: number;
   identity_verification_status?: string;
+  vehicle_access_mode?: 'assigned' | 'selected' | 'all';
+  allowed_vehicle_ids?: string[];
 };
 
 export type FleetLiveDriver = {
@@ -134,6 +138,7 @@ export type FleetLive = {
 };
 
 export type FleetVehicle = {
+  assigned_driver_id?: string | null;
   id: string;
   car?: string;
   plate?: string;
@@ -176,6 +181,8 @@ export type FleetDocuments = {
 };
 
 export type FleetDriverDetail = FleetDriver & {
+  missing_document_types?: string[];
+  documents_verified?: boolean;
   trips_completed?: number;
   active_trip?: {
     trip_id?: string;
@@ -226,6 +233,9 @@ export type FleetPayout = {
 };
 
 export type DriverInvite = {
+  invite_url?: string;
+  email_status?: 'sent' | 'failed' | 'not_configured' | 'not_requested';
+  vehicle_access_mode?: 'assigned' | 'all';
   id?: string;
   token: string;
   vehicle_id?: string;
@@ -240,6 +250,7 @@ export type DriverInvite = {
 };
 
 export type PublicDriverInvite = {
+  vehicle_access_mode?: 'assigned' | 'all';
   vehicle_id?: string;
   car?: string;
   plate?: string;
@@ -290,7 +301,10 @@ export const api = {
   payouts: (): Promise<{ payouts: FleetPayout[]; source?: string; connected?: boolean; payout_schedule?: string; temporarily_unavailable?: boolean }> =>
     http.get('/fleet/payouts').then((r) => r.data),
   invites: (): Promise<{ invites: DriverInvite[] }> => http.get('/fleet/driver-invites').then((r) => r.data),
-  createInvite: (body: { vehicle_id: string; email?: string; note?: string }) =>
+  setVehicleAccess: (id: string, mode: 'assigned' | 'selected' | 'all', vehicle_ids: string[]) =>
+    http.put(`/fleet/drivers/${id}/vehicle-access`, { mode, vehicle_ids }).then((r) => r.data),
+  resendInvite: (token: string) => http.post(`/fleet/driver-invites/${token}/resend`).then((r) => r.data),
+  createInvite: (body: { vehicle_id: string; email?: string; note?: string; vehicle_access_mode?: 'assigned' | 'all' }) =>
     http.post('/fleet/driver-invites', body).then((r) => r.data),
   exportMonthly: (year: number, month: number) =>
     http.get('/fleet/export/monthly', { params: { year, month }, responseType: 'arraybuffer' }).then((r) => r.data as ArrayBuffer),
@@ -317,3 +331,4 @@ export const api = {
     return http.post('/upload/driver-doc', form).then((r) => r.data);
   },
 };
+

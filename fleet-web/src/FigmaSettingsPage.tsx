@@ -36,7 +36,7 @@ export function FigmaSettingsPage() {
     }
   };
 
-  const stripeReady = Boolean(stripe?.connected || stripe?.charges_enabled || stripe?.details_submitted || stripe?.payouts_enabled);
+  const stripeReady = Boolean(stripe?.ready);
 
   return <div className="figma-page settings-page">
     <div className="figma-page-head">
