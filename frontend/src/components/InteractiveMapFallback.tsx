@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect } from 'react-native-svg';
 import { colors } from '@/src/theme';
+import { carsApi } from '@/src/lib/api';
 import { Icon } from './Icon';
 import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
@@ -103,6 +104,7 @@ export function InteractiveMap({
   const [center, setCenter] = useState<LL>(user || OSLO);
   const [zoom, setZoom] = useState(15);
   const [manual, setManual] = useState(false);
+  const [destinationCars, setDestinationCars] = useState<Car[]>([]);
   const smoothCar = useSmoothPosition(activeCar);
 
   const centerRef = useRef(center);
@@ -112,6 +114,33 @@ export function InteractiveMap({
   const pinchStartZoom = useRef(zoom);
   centerRef.current = center;
   zoomRef.current = zoom;
+
+  useEffect(() => {
+    if (!dropoff || activeCar || !user || cars.length > 0) {
+      setDestinationCars([]);
+      return;
+    }
+
+    let mounted = true;
+    const load = () => {
+      carsApi.nearby(user.lat, user.lng)
+        .then((result) => {
+          if (mounted) setDestinationCars(Array.isArray(result?.cars) ? result.cars : []);
+        })
+        .catch(() => {
+          if (mounted) setDestinationCars([]);
+        });
+    };
+
+    load();
+    const timer = setInterval(load, 8000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, user?.lat, user?.lng, cars.length]);
+
+  const visibleCars = cars.length > 0 ? cars : destinationCars;
 
   const focus = useMemo(() => {
     const pts: LL[] = [];
@@ -124,12 +153,10 @@ export function InteractiveMap({
       return pts;
     }
 
-    // Keep customer position only as an invisible camera anchor. The visible
-    // objects on the idle map are the nearest real online cars.
     if (user) pts.push(user);
-    cars.slice(0, 6).forEach((car) => pts.push({ lat: car.lat, lng: car.lng }));
+    visibleCars.slice(0, 6).forEach((car) => pts.push({ lat: car.lat, lng: car.lng }));
     return pts;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, visibleCars]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -183,12 +210,8 @@ export function InteractiveMap({
           lng: unprojectX(start.x - g.dx, z),
         });
       },
-      onPanResponderRelease: () => {
-        pinchStartDistance.current = 0;
-      },
-      onPanResponderTerminate: () => {
-        pinchStartDistance.current = 0;
-      },
+      onPanResponderRelease: () => { pinchStartDistance.current = 0; },
+      onPanResponderTerminate: () => { pinchStartDistance.current = 0; },
       onPanResponderTerminationRequest: () => false,
     }),
   ).current;
@@ -217,32 +240,15 @@ export function InteractiveMap({
         const top = row * TILE - originY;
         const tileStyle = { position: 'absolute' as const, left, top, width: TILE, height: TILE };
 
-        baseTiles.push(
-          <Image
-            key={`base-${zoom}-${tx}-${row}`}
-            source={{ uri: baseTileUrl(zoom, tx, row) }}
-            style={tileStyle}
-            fadeDuration={0}
-          />,
-        );
-
+        baseTiles.push(<Image key={`base-${zoom}-${tx}-${row}`} source={{ uri: baseTileUrl(zoom, tx, row) }} style={tileStyle} fadeDuration={0} />);
         if (!MAPTILER_KEY) {
-          labelTiles.push(
-            <Image
-              key={`label-${zoom}-${tx}-${row}`}
-              source={{ uri: labelTileUrl(zoom, tx, row) }}
-              style={tileStyle}
-              fadeDuration={0}
-            />,
-          );
+          labelTiles.push(<Image key={`label-${zoom}-${tx}-${row}`} source={{ uri: labelTileUrl(zoom, tx, row) }} style={tileStyle} fadeDuration={0} />);
         }
       }
     }
   }
 
-  const routeLine = (
-    route && route.length > 1 ? route : []
-  )
+  const routeLine = (route && route.length > 1 ? route : [])
     .map(([lng, lat]) => `${sx(lng).toFixed(1)},${sy(lat).toFixed(1)}`)
     .join(' ');
 
@@ -257,18 +263,7 @@ export function InteractiveMap({
         <>
           {baseTiles}
           {labelTiles}
-
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 110,
-              backgroundColor: 'rgba(244,246,250,0.18)',
-              pointerEvents: 'none',
-            }}
-          />
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 110, backgroundColor: 'rgba(244,246,250,0.18)', pointerEvents: 'none' }} />
 
           <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
             {routeLine ? (
@@ -278,7 +273,7 @@ export function InteractiveMap({
               </>
             ) : null}
 
-            {cars.map((c, i) => (
+            {visibleCars.map((c, i) => (
               <G key={`car-${i}`} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${20 / 24}) translate(-12, -12)`}>
                 <CarShape {...CAR_IDLE} />
               </G>
@@ -309,9 +304,7 @@ export function InteractiveMap({
             ) : null}
           </Svg>
 
-          <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
-            {ATTRIB}
-          </Text>
+          <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>{ATTRIB}</Text>
 
           {interactive ? (
             <View style={{ position: 'absolute', right: 14, top: Platform.OS === 'web' ? 108 : 116, gap: 8 }} pointerEvents="box-none">
@@ -332,16 +325,7 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
       onPress={onPress}
       testID={testID}
       hitSlop={8}
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.line,
-      }}
+      style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line }}
     >
       <Icon name={name} size={20} color={colors.text} />
     </Pressable>
