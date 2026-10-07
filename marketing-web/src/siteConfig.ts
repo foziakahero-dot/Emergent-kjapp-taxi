@@ -12,11 +12,11 @@ function runtimePublicOrigin() {
     }
   }
 
-  return "https://kjappapp.no";
+  return "https://snarapp.no";
 }
 
 export const PUBLIC_SITE_URL = runtimePublicOrigin();
-export const FLEET_URL = configuredFleetUrl || "https://fleet.kjappapp.no";
+export const FLEET_URL = configuredFleetUrl || "https://fleet.snarapp.no";
 export const CONTACT_DOMAIN = configuredContactDomain || "kjappapp.no";
 
 export function contactEmail(localPart: string) {
