@@ -1,5 +1,5 @@
 import { driverPresence } from '@/src/lib/tripPresence';
-import { apiError } from '@/src/lib/format';
+import { apiError, kr } from '@/src/lib/format';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useReducedMotion } from '@/src/components/Motion';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
@@ -281,6 +281,9 @@ export default function BookingFlow() {
 
           <View style={[s.inRideSheet, { paddingBottom: insets.bottom + 32 }]}>
             <View style={s.handle} />
+            {trip.waiting_policy ? <Text style={{ color: colors.textSecondary, marginBottom: 10 }} testID="pickup-waiting-policy">
+              {trip.waiting_policy.free_minutes} min gratis ventetid fra sjåførens ankomst. Deretter {kr(trip.waiting_policy.per_minute)}/min, maks {kr(trip.waiting_policy.max_fee)}. Tillegget stopper når turen starter.
+            </Text> : null}
             {networkIssue || !driverGpsFresh ? (
               <View style={s.networkBanner}>
                 <View style={s.networkDot} />
@@ -477,4 +480,5 @@ const useStyles = makeStyles((c) => ({
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
+
 

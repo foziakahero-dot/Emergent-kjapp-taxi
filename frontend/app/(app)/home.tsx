@@ -44,6 +44,7 @@ export default function Home() {
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [estimate, setEstimate] = useState<any>(null);
+  const [waitingAccepted, setWaitingAccepted] = useState(false);
   const [selType, setSelType] = useState('ai-first');
   const bookingLock = useRef(false);
   const [booking, setBooking] = useState(false);
@@ -171,6 +172,8 @@ export default function Home() {
   const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
   const nearest = etaValues.length ? Math.min(...etaValues) : null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
+  const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
+  useEffect(() => setWaitingAccepted(false), [estimate, selType]);
   const payMethod = methods.find((m) => m.is_default) || methods[0];
   const quickPlaces = [...myPlaces, ...recentPlaces].filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
   const goldVehicles = VEHICLES.filter((v) => GOLD_VEHICLE_TYPES.includes(v.type as VehicleKind));
@@ -189,6 +192,10 @@ export default function Home() {
     }
     if (!estimate || priceFor(selType) == null) {
       setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
+      return;
+    }
+    if (waitingPolicy && !waitingAccepted) {
+      setError('Bekreft ventetid og kortreservasjon før bestilling.');
       return;
     }
     if (!payMethod) {
@@ -210,6 +217,11 @@ export default function Home() {
         vehicle_type: selType,
         stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
         special_needs: specialNeeds,
+        ...(waitingPolicy ? {
+          waiting_policy_token: waitingPolicy.token,
+          quoted_price: priceFor(selType),
+          quoted_pricing_version: estimate.pricing_version,
+        } : {}),
       });
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
@@ -220,7 +232,17 @@ export default function Home() {
           return;
         }
       } catch {}
-      if (e?.response?.status === 402) {
+      if (e?.response?.data?.detail?.code === 'quote_changed') {
+        setWaitingAccepted(false);
+        setEstimate(null);
+        setError('Prisen er endret. Kontroller det nye tilbudet og bekreft på nytt.');
+        const fresh = await tripsApi.estimate({
+          pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
+          dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+          stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
+        }).catch(() => null);
+        setEstimate(fresh);
+      } else if (e?.response?.status === 402) {
         setError('Legg til et betalingskort før du bestiller.');
         setTimeout(() => router.push('/payment-methods'), 700);
       } else if (e?.response?.status === 409) {
@@ -235,7 +257,7 @@ export default function Home() {
   };
 
   const routeGeom = estimate?.geometry?.coordinates;
-  const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);
+  const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking && (!waitingPolicy || waitingAccepted));
   const selectedCopy = vehicleCopy(selType);
   const selectedPrice = priceFor(selType);
   const recommendations = featured.filter(place => place.name && place.lat != null && place.lng != null && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)));
@@ -507,6 +529,16 @@ export default function Home() {
             </View>
           </View>
 
+          {waitingPolicy ? <Pressable
+            accessibilityRole="checkbox" accessibilityState={{ checked: waitingAccepted }}
+            onPress={() => setWaitingAccepted((value) => !value)} testID="waiting-policy-consent"
+            style={{ paddingVertical: 12, flexDirection: 'row', gap: 10 }}>
+            <Text style={s.fareValue}>{waitingAccepted ? '☑' : '☐'}</Text>
+            <Text style={[s.fareLabel, { flex: 1 }]}>
+              Jeg godtar {waitingPolicy.free_minutes} min gratis ventetid ved henting, deretter {kr(waitingPolicy.per_minute)}/min, maks {kr(waitingPolicy.max_fee)} i ventetidstillegg. Kortet reserveres for opptil {kr(Number(selectedPrice || 0) + waitingPolicy.max_fee)}. Bare turpris og faktisk ventetid trekkes; resten frigjøres.
+            </Text>
+          </Pressable> : null}
+
           <Pressable style={s.paymentRow} onPress={() => router.push('/payment-methods')} testID="booking-payment-row">
             <Icon name={payMethod?.type === 'vipps' ? 'wallet' : 'card'} size={19} color={colors.textSecondary} />
             <Text style={s.paymentText} numberOfLines={1}>
@@ -775,4 +807,5 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
+
 
