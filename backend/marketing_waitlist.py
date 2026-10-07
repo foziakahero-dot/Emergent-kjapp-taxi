@@ -77,7 +77,7 @@ async def _consume_global_rate_limit(db, now: datetime) -> None:
         raise HTTPException(status_code=429, detail="For mange forespørsler akkurat nå. Prøv igjen om litt.")
 
 
-def install_marketing_waitlist(api, db) -> None:
+def install_marketing_waitlist(api, db, confirmation=None) -> None:
     @api.post("/marketing/waitlist", status_code=201)
     async def create_marketing_waitlist_entry(body: MarketingWaitlistRequest):
         now = datetime.now(timezone.utc)
@@ -114,7 +114,7 @@ def install_marketing_waitlist(api, db) -> None:
             "email": email,
             "city": city,
             "role": body.role,
-            "source": "kjappapp.no",
+            "source": "snarapp.no",
             "status": "new",
             "consent_context": "beta_interest",
             "created_at": now,
@@ -142,4 +142,8 @@ def install_marketing_waitlist(api, db) -> None:
             )
 
         # Do not reveal whether this contact already existed.
-        return {"ok": True, "status": "registered"}
+        result = {"ok": True, "status": "registered"}
+        if confirmation:
+            result["confirmation_email_status"] = await confirmation(identity_key, email, name)
+        return result
+

@@ -48,6 +48,7 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
         self.raw = raw
         self.db = SimpleNamespace(**{n: Collection(raw[n]) for n in ('users', 'fleets', 'fleet_vehicles', 'driver_invites', 'uploaded_files')})
         async def rate(*args): pass
+        async def confirmation(*args): return 'not_configured'
         self.mail = Mock(return_value=False)
         self.ns = dict(asyncio=asyncio, os=os, secrets=secrets, html_escape=html,
                        datetime=datetime, timezone=timezone, timedelta=timedelta,
@@ -56,7 +57,7 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
                        Field=Field, EmailStr=EmailStr, Optional=Optional, List=List, Literal=Literal,
                        SpecialNeed=str, CURRENT_LEGAL_VERSION='2026-09',
                        Depends=lambda _: None, require_fleet_owner=None, require_admin=None,
-                       db=self.db, send_email=self.mail, _enforce_rate_limit=rate,
+                       db=self.db, send_email=self.mail, _enforce_rate_limit=rate, queue_confirmation=confirmation,
                        hash_password=lambda _: 'test-hash', create_access_token=lambda *a:'test-token',
                        set_auth_cookie=lambda *a: None)
         names = {'DriverInviteRequest','DriverSignupRequest','_invite_expired','email_driver_invite_html',
@@ -131,6 +132,22 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as caught: await self.ns['get_driver_invite'](invite['token'])
         self.assertEqual(caught.exception.status_code,410)
 
+    async def test_shared_invites_grant_own_fleet_without_exclusive_assignment(self):
+        for index in range(2):
+            email=f'shared{index}@example.com'
+            invite=await self.ns['fleet_create_driver_invite'](self.ns['DriverInviteRequest'](vehicle_id=str(self.vehicle_id),email=email,vehicle_access_mode='all'),self.request,self.current)
+            data=dict(token=invite['token'],fullName='Shared Driver',email=email,phone='+4799999999',password='test-password',accepted_terms=True)
+            for kind in ['drivers_license','taxi_license','profile_photo']:
+                path=f'test/{index}/{kind}'
+                self.raw.uploaded_files.insert_one({'storage_path':path,'invite_token':invite['token'],'doc_type':kind,'scope':'driver-docs','owner_user_id':None})
+                data[kind+'_path']=path
+            result=await self.ns['accept_driver_invite'](self.ns['DriverSignupRequest'](**data),self.request,Response())
+            driver=self.raw.users.find_one({'_id':ObjectId(result['user']['id'])})
+            self.assertEqual(driver['vehicle_access_mode'],'all')
+            self.assertEqual(driver['fleet_id'],str(self.fleet_id))
+            self.assertFalse(self.raw.fleet_vehicles.find_one().get('assigned_driver_id'))
+        self.assertEqual(self.raw.users.count_documents({'role':'driver'}),2)
+
     async def test_expired_invite_cannot_be_resent(self):
         invite=await self.create()
         self.raw.driver_invites.update_one({'token':invite['token']},{'$set':{'expires_at':'2020-01-01T00:00:00+00:00'}})
@@ -143,3 +160,4 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
