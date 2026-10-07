@@ -1,26 +1,42 @@
-name: SNAR Customer APK - authorized one-time build
+name: SNAR Customer APK - manual only
 
 on:
-  push:
-    branches:
-      - fix/customer-search-mapbox-stripe-20261004
-    paths:
-      - '.github/workflows/snar-customer-apk-once.yml'
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: "Exact approved Customer commit SHA"
+        required: true
+        default: "cb15b514f888e3d9ca09cf46524d567d56d2c8b7"
+        type: string
+      confirmation:
+        description: "Type BUILD_ONE_CUSTOMER_APK exactly"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: snar-customer-apk-authorized-once
+  group: snar-customer-apk-manual
   cancel-in-progress: false
 
-env:
-  SOURCE_SHA: cb15b514f888e3d9ca09cf46524d567d56d2c8b7
-
 jobs:
+  guard:
+    name: Confirm one Customer APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require explicit authorization
+        shell: bash
+        run: |
+          if [ "${{ inputs.confirmation }}" != "BUILD_ONE_CUSTOMER_APK" ]; then
+            echo "Build blocked: confirmation text is not exact."
+            exit 1
+          fi
+
   customer-apk:
-    name: Build authorized SNAR Customer EAS APK
+    name: Build one SNAR Customer EAS APK
+    needs: guard
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
@@ -31,11 +47,12 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_PUBLIC_BACKEND_URL: https://api.kjappapp.no
       EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ vars.MAPBOX_PUBLIC_TOKEN }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
     steps:
       - name: Checkout exact approved Customer source
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.SOURCE_SHA }}
+          ref: ${{ inputs.source_sha }}
           fetch-depth: 1
       - name: Verify exact source SHA
         shell: bash
