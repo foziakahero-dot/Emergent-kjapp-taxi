@@ -1,69 +1,153 @@
-name: KJAPP Customer Android APK
+name: SNAR Customer APK - manual gated build
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/customer-apk-hotfix.yml'
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Customer branch/ref to build"
+        required: true
+        default: "fix/customer-search-mapbox-stripe-20261004"
+        type: string
+      expected_sha:
+        description: "Exact Customer commit SHA that passed preflight"
+        required: true
+        default: "a7bd5261da2cf5d54d7a759e3c1da82028df5927"
+        type: string
+      confirmation:
+        description: "Type BUILD_ONE_CUSTOMER_APK exactly"
+        required: true
+        type: string
 
 permissions:
   contents: read
+  statuses: read
 
 concurrency:
-  group: kjapp-customer-apk-main
+  group: snar-customer-apk-manual
   cancel-in-progress: true
 
 env:
-  CI: '1'
-  EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
+  CI: "1"
+  EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
 
 jobs:
-  customer-apk:
-    name: Build KJAPP Customer APK
+  guard:
+    name: Cost-control guard
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    defaults:
-      run:
-        working-directory: frontend
-
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Reject accidental invocation
+        if: ${{ inputs.confirmation != 'BUILD_ONE_CUSTOMER_APK' }}
+        shell: bash
+        run: |
+          echo "Native build blocked. Confirmation text was not exact."
+          exit 1
 
-      - name: Setup Node 22
+      - name: Checkout exact Customer ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Verify exact source SHA
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          echo "sha=$ACTUAL_SHA" >> "$GITHUB_OUTPUT"
+          echo "Customer source SHA: $ACTUAL_SHA"
+          if [ "$ACTUAL_SHA" != "${{ inputs.expected_sha }}" ]; then
+            echo "Build blocked: ref resolved to $ACTUAL_SHA, expected ${{ inputs.expected_sha }}"
+            exit 1
+          fi
+
+      - name: Require green preflight status for the exact SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATE="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/status" --jq '[.statuses[] | select(.context == "snar/customer-preflight")][0].state // "missing"')"
+          echo "snar/customer-preflight status: $STATE"
+          if [ "$STATE" != "success" ]; then
+            echo "Build blocked: exact SHA has not passed Customer preflight."
+            exit 1
+          fi
+
+  build:
+    name: Build one SNAR Customer APK
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact validated Customer ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Re-verify SHA before native work
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ needs.guard.outputs.sha }}"
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
+          cache: gradle
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.1.12297006"
 
-      - name: Validate Expo config
-        run: npx expo config --type public
+      - name: Install Customer dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
 
       - name: Generate Android project
+        working-directory: frontend
         run: npx expo prebuild --platform android --clean
 
-      - name: Build release APK
+      - name: Build release APK locally on GitHub - no EAS build call
         working-directory: frontend/android
+        shell: bash
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          set -euo pipefail
+          printf '\norg.gradle.workers.max=2\norg.gradle.parallel=false\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
+          test -s app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk
+          sha256sum ../../SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk > ../../SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk.sha256
 
-      - name: Upload Customer APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KJAPP-Customer-Android-APK-hotfix
-          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          name: SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64
+          path: |
+            SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk
+            SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
