@@ -1,29 +1,74 @@
-name: Customer Android APK
+name: SNAR Customer Preflight - manual, no APK
 
 on:
-  push:
-    branches:
-      - audit/customer-prebuild-snar-20261003
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Customer branch/ref to validate"
+        required: true
+        default: "fix/customer-search-mapbox-stripe-20261004"
+        type: string
+      expected_sha:
+        description: "Exact Customer commit SHA expected"
+        required: true
+        default: "a7bd5261da2cf5d54d7a759e3c1da82028df5927"
+        type: string
+
+permissions:
+  contents: read
+  statuses: write
 
 concurrency:
-  group: customer-apk-${{ github.ref }}
+  group: snar-customer-preflight
   cancel-in-progress: true
 
 jobs:
-  build:
+  preflight:
+    name: Validate Customer source without building APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 25
     env:
       CI: "1"
       EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
-      CMAKE_BUILD_PARALLEL_LEVEL: "2"
     steps:
-      - name: Checkout
+      - name: Checkout exact Customer ref
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Verify exact source SHA
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          echo "sha=$ACTUAL_SHA" >> "$GITHUB_OUTPUT"
+          echo "Customer source SHA: $ACTUAL_SHA"
+          if [ "$ACTUAL_SHA" != "${{ inputs.expected_sha }}" ]; then
+            echo "Ref resolved to $ACTUAL_SHA but expected ${{ inputs.expected_sha }}"
+            exit 1
+          fi
+
+      - name: Mark preflight pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state=pending \
+            -f context='snar/customer-preflight' \
+            -f description='Customer preflight running'
+
+      - name: Verify live-car and vehicle artwork source is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f frontend/src/components/VehicleAsset.tsx
+          test -f frontend/src/components/CarMarker.tsx
+          grep -q 'cars/nearby' frontend/src/components/InteractiveMap.native.tsx
+          grep -q 'cars/nearby' frontend/src/components/InteractiveMapFallback.tsx
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -31,19 +76,6 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platform-tools"             "platforms;android-36"             "build-tools;36.0.0"             "cmake;3.22.1"             "ndk;27.1.12297006"
 
       - name: Install Customer dependencies
         working-directory: frontend
@@ -53,27 +85,34 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit
 
-      - name: Expo prebuild Android
+      - name: Validate Expo config
+        working-directory: frontend
+        run: npx expo config --type public
+
+      - name: Metro Android export
+        working-directory: frontend
+        run: npx expo export --platform android --output-dir /tmp/snar-customer-export
+
+      - name: Generate Android project only - no native build
         working-directory: frontend
         run: npx expo prebuild --platform android --clean
 
-      - name: Build release APK
-        working-directory: frontend/android
+      - name: Record preflight result on exact Customer SHA
+        if: always() && steps.source.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.source.outputs.sha }}
+          JOB_STATUS: ${{ job.status }}
         shell: bash
         run: |
-          printf '\norg.gradle.workers.max=2\norg.gradle.parallel=false\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
-          chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
-          test -s app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-arm64.apk
-          sha256sum ../../SNAR-Customer-arm64.apk > ../../SNAR-Customer-arm64.apk.sha256
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: SNAR-Customer-arm64
-          path: |
-            SNAR-Customer-arm64.apk
-            SNAR-Customer-arm64.apk.sha256
-          if-no-files-found: error
-          retention-days: 14
+          if [ "$JOB_STATUS" = "success" ]; then
+            STATE=success
+            DESC='Customer preflight passed - APK may be built manually'
+          else
+            STATE=failure
+            DESC='Customer preflight failed - do not build APK'
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state="$STATE" \
+            -f context='snar/customer-preflight' \
+            -f description="$DESC"
