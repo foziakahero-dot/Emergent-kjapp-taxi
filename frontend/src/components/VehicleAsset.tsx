@@ -1,32 +1,70 @@
 import React, { useId } from 'react';
-import Svg, { Defs, Ellipse, LinearGradient, Path, Stop, Circle } from 'react-native-svg';
+import Svg, { Defs, Ellipse, LinearGradient, Path, Stop, Circle, G } from 'react-native-svg';
 import { colors } from '@/src/theme';
 
 type VehicleKind = 'ai-first' | 'trygg' | 'premium';
 
-const VEHICLE_PATHS: Record<VehicleKind, {
+type VehicleSpec = {
   body: string;
   glass: string;
   wheels: [number, number];
   label: string;
-}> = {
+  bodyTop: string;
+  bodyMid: string;
+  bodyBottom: string;
+  glassTop: string;
+  glassBottom: string;
+  stroke: string;
+  accent: string;
+  headlight: string;
+  taillight: string;
+};
+
+const VEHICLES: Record<VehicleKind, VehicleSpec> = {
   'ai-first': {
-    body: 'M13 47C16 35 25 28 41 25L76 23C87 23 96 28 105 38L119 42C123 43 126 46 126 50V54C126 57 123 59 120 59H17C13 59 10 56 11 52L13 47Z',
-    glass: 'M41 28C46 21 53 18 61 18L78 18C85 18 92 23 99 33L102 37L34 38L41 28Z',
-    wheels: [35, 101],
-    label: 'SNAR standardbil',
+    body: 'M10 49C12 39 21 32 35 29L78 24C90 23 99 28 108 39L121 43C126 45 129 49 128 54C128 58 124 61 119 61H17C11 61 8 57 10 49Z',
+    glass: 'M39 31C45 23 53 19 63 19H78C87 19 95 24 102 35L105 39L31 40L39 31Z',
+    wheels: [33, 103],
+    label: 'SNAR',
+    bodyTop: '#FFFFFF',
+    bodyMid: '#E7ECF1',
+    bodyBottom: '#AAB4BE',
+    glassTop: '#BFD7E7',
+    glassBottom: '#15222E',
+    stroke: '#7A8792',
+    accent: '#3B82F6',
+    headlight: '#DDF8FF',
+    taillight: '#E34850',
   },
   trygg: {
-    body: 'M11 45C13 33 22 25 38 22L82 20C94 20 104 27 112 38L121 42C125 44 128 47 128 51V55C128 58 125 60 122 60H15C11 60 9 56 10 52L11 45Z',
-    glass: 'M35 25C41 18 48 15 57 15L84 15C93 15 101 21 108 33L110 37L29 38L35 25Z',
-    wheels: [36, 103],
+    body: 'M8 48C9 35 19 27 35 24L86 21C98 21 108 28 115 40L124 43C129 45 131 49 130 54C130 58 126 61 121 61H15C9 61 7 57 8 48Z',
+    glass: 'M34 27C40 19 49 15 60 15H87C97 15 105 21 111 34L113 39L27 40L34 27Z',
+    wheels: [35, 106],
     label: 'SNAR XL',
+    bodyTop: '#FFFFFF',
+    bodyMid: '#E8EDF2',
+    bodyBottom: '#9EAAB5',
+    glassTop: '#B9D4E7',
+    glassBottom: '#111D27',
+    stroke: '#75828E',
+    accent: '#4EA1FF',
+    headlight: '#E4FAFF',
+    taillight: '#E24B53',
   },
   premium: {
-    body: 'M8 48C11 37 21 30 40 27L79 20C90 18 99 22 109 34L122 40C126 42 129 46 129 50V54C129 58 126 60 122 60H12C8 60 6 56 7 52L8 48Z',
-    glass: 'M40 29C46 21 54 17 63 16L81 14C90 13 98 18 106 31L109 35L33 39L40 29Z',
-    wheels: [33, 105],
-    label: 'SNAR Premium',
+    body: 'M7 50C10 39 20 32 39 28L82 21C93 19 103 24 112 37L124 42C129 44 131 48 130 53C130 58 126 61 121 61H13C7 61 5 56 7 50Z',
+    glass: 'M40 30C46 22 55 17 65 16L83 15C93 14 101 20 108 33L111 37L33 40L40 30Z',
+    wheels: [33, 106],
+    label: 'Premium',
+    bodyTop: '#3B4047',
+    bodyMid: '#151A20',
+    bodyBottom: '#05080B',
+    glassTop: '#73808B',
+    glassBottom: '#080D12',
+    stroke: '#6D737A',
+    accent: '#D5A94E',
+    headlight: '#F2F7FF',
+    taillight: '#B82C35',
   },
 };
 
@@ -42,10 +80,10 @@ export function VehicleAsset({
   height?: number;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const v = VEHICLE_PATHS[kind];
-  const body = `vehicle-body-${uid}`;
-  const glass = `vehicle-glass-${uid}`;
-  const accent = colors.accent;
+  const spec = VEHICLES[kind];
+  const bodyId = `vehicle-body-${uid}`;
+  const glassId = `vehicle-glass-${uid}`;
+  const rimId = `vehicle-rim-${uid}`;
 
   return (
     <Svg
@@ -53,51 +91,66 @@ export function VehicleAsset({
       height={height}
       viewBox="0 0 138 74"
       accessibilityRole="image"
-      accessibilityLabel={v.label}
+      accessibilityLabel={spec.label}
     >
       <Defs>
-        <LinearGradient id={body} x1="18" y1="20" x2="108" y2="61">
-          <Stop offset="0" stopColor={selected ? '#52616C' : '#34414B'} />
-          <Stop offset="0.48" stopColor="#18232B" />
-          <Stop offset="1" stopColor="#071016" />
+        <LinearGradient id={bodyId} x1="20" y1="20" x2="110" y2="63">
+          <Stop offset="0" stopColor={spec.bodyTop} />
+          <Stop offset="0.48" stopColor={spec.bodyMid} />
+          <Stop offset="1" stopColor={spec.bodyBottom} />
         </LinearGradient>
-        <LinearGradient id={glass} x1="48" y1="16" x2="82" y2="40">
-          <Stop offset="0" stopColor="#D8F9FB" stopOpacity={selected ? 0.72 : 0.48} />
-          <Stop offset="0.5" stopColor="#45606C" stopOpacity="0.82" />
-          <Stop offset="1" stopColor="#12212A" stopOpacity="0.96" />
+        <LinearGradient id={glassId} x1="48" y1="15" x2="84" y2="41">
+          <Stop offset="0" stopColor={spec.glassTop} stopOpacity="0.92" />
+          <Stop offset="0.58" stopColor="#30404D" stopOpacity="0.92" />
+          <Stop offset="1" stopColor={spec.glassBottom} stopOpacity="0.98" />
+        </LinearGradient>
+        <LinearGradient id={rimId} x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#EFF3F6" />
+          <Stop offset="0.5" stopColor="#6F7A84" />
+          <Stop offset="1" stopColor="#20272D" />
         </LinearGradient>
       </Defs>
 
-      <Ellipse cx="69" cy="64" rx="52" ry="5" fill="#000" opacity="0.32" />
-      {selected ? <Ellipse cx="70" cy="60" rx="56" ry="10" fill={accent} opacity="0.08" /> : null}
+      <Ellipse cx="69" cy="64" rx={kind === 'trygg' ? 57 : 54} ry="5.6" fill="#000" opacity="0.28" />
+      {selected ? <Ellipse cx="70" cy="60" rx="59" ry="10" fill={colors.accent} opacity="0.10" /> : null}
 
       <Path
-        d={v.body}
-        fill={`url(#${body})`}
-        stroke={selected ? accent : '#657783'}
-        strokeOpacity={selected ? 0.95 : 0.46}
-        strokeWidth={selected ? 1.6 : 1.1}
+        d={spec.body}
+        fill={`url(#${bodyId})`}
+        stroke={selected ? colors.accent : spec.stroke}
+        strokeWidth={selected ? 1.7 : 1.05}
+        strokeOpacity={selected ? 0.96 : 0.72}
       />
-      <Path d={v.glass} fill={`url(#${glass})`} stroke="#BCEFF2" strokeOpacity="0.22" strokeWidth="0.8" />
-      <Path d="M18 47C43 44 84 42 121 44" stroke="#F8FAFC" strokeOpacity="0.10" strokeWidth="1" />
-      <Path d="M21 52H119" stroke={accent} strokeOpacity={selected ? 0.34 : 0.14} strokeWidth="0.9" />
-      <Path d="M116 41L124 44L121 48L113 46Z" fill="#DDFBFD" opacity="0.9" />
-      <Path d="M12 46L20 44L22 48L11 49Z" fill="#EF6B69" opacity="0.8" />
 
-      {v.wheels.map((x) => (
-        <React.Fragment key={x}>
-          <Circle cx={x} cy="58" r="8.4" fill="#05090C" stroke="#43515A" strokeWidth="1.2" />
-          <Circle cx={x} cy="58" r="4.7" fill="#1D2930" stroke={selected ? accent : '#6A7A83'} strokeWidth="1" />
-          <Circle cx={x} cy="58" r="1.4" fill="#B8C4CA" />
-        </React.Fragment>
-      ))}
+      <Path d={spec.glass} fill={`url(#${glassId})`} stroke="#DDE8F0" strokeOpacity="0.30" strokeWidth="0.85" />
+
+      <Path d="M22 45C48 41 90 40 121 44" stroke="#FFFFFF" strokeOpacity={kind === 'premium' ? 0.12 : 0.52} strokeWidth="1.25" strokeLinecap="round" />
+      <Path d="M20 52C46 51 94 50 120 51" stroke={spec.accent} strokeOpacity={selected ? 0.50 : 0.24} strokeWidth="0.9" strokeLinecap="round" />
+      <Path d="M59 22L58 39" stroke="#D8E2E8" strokeOpacity="0.22" strokeWidth="0.8" />
+      <Path d="M83 20L84 38" stroke="#D8E2E8" strokeOpacity="0.18" strokeWidth="0.8" />
 
       {kind === 'trygg' ? (
-        <Path d="M41 18H91" stroke={accent} strokeOpacity="0.42" strokeWidth="1.5" strokeLinecap="round" />
+        <>
+          <Path d="M38 16H95" stroke="#65727D" strokeWidth="1.7" strokeLinecap="round" />
+          <Path d="M43 13.7V17.2M91 13.7V17.2" stroke="#7C8993" strokeWidth="1.4" strokeLinecap="round" />
+        </>
       ) : null}
+
       {kind === 'premium' ? (
-        <Path d="M38 52H108" stroke={accent} strokeOpacity="0.48" strokeWidth="1.1" strokeLinecap="round" />
+        <Path d="M43 55H111" stroke={spec.accent} strokeOpacity="0.55" strokeWidth="1" strokeLinecap="round" />
       ) : null}
+
+      <Path d="M115 40L126 44L123 48L112 46Z" fill={spec.headlight} opacity="0.95" />
+      <Path d="M9 46L20 43L22 47L9 50Z" fill={spec.taillight} opacity="0.88" />
+
+      {spec.wheels.map((x) => (
+        <G key={x}>
+          <Circle cx={x} cy="58.5" r="8.8" fill="#05080B" stroke="#323A41" strokeWidth="1.2" />
+          <Circle cx={x} cy="58.5" r="5.4" fill={`url(#${rimId})`} stroke="#A6B0B7" strokeOpacity="0.45" strokeWidth="0.75" />
+          <Circle cx={x} cy="58.5" r="1.5" fill="#D8DEE3" />
+          <Path d={`M${x - 4} 58.5H${x + 4}M${x} 54.5V62.5`} stroke="#E9EEF2" strokeOpacity="0.55" strokeWidth="0.65" />
+        </G>
+      ))}
     </Svg>
   );
 }
