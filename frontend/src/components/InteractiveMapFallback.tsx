@@ -1,15 +1,7 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Image,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleProp,
-  Text,
-  View,
-  ViewStyle,
-} from 'react-native';
-import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
+import Svg, { Circle, G, Polyline, Rect } from 'react-native-svg';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
 import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
@@ -123,12 +115,21 @@ export function InteractiveMap({
 
   const focus = useMemo(() => {
     const pts: LL[] = [];
+    const hasTripGeometry = Boolean(pickup || dropoff || activeCar);
+
+    if (hasTripGeometry) {
+      if (pickup) pts.push(pickup);
+      if (dropoff) pts.push(dropoff);
+      if (activeCar) pts.push({ lat: activeCar.lat, lng: activeCar.lng });
+      return pts;
+    }
+
+    // Keep customer position only as an invisible camera anchor. The visible
+    // objects on the idle map are the nearest real online cars.
     if (user) pts.push(user);
-    if (pickup) pts.push(pickup);
-    if (dropoff) pts.push(dropoff);
-    if (activeCar) pts.push({ lat: activeCar.lat, lng: activeCar.lng });
+    cars.slice(0, 6).forEach((car) => pts.push({ lat: car.lat, lng: car.lng }));
     return pts;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -240,11 +241,7 @@ export function InteractiveMap({
   }
 
   const routeLine = (
-    route && route.length
-      ? route
-      : pickup && dropoff
-        ? [[pickup.lng, pickup.lat], [dropoff.lng, dropoff.lat]]
-        : []
+    route && route.length > 1 ? route : []
   )
     .map(([lng, lat]) => `${sx(lng).toFixed(1)},${sy(lat).toFixed(1)}`)
     .join(' ');
@@ -308,15 +305,6 @@ export function InteractiveMap({
               <G>
                 <Rect x={sx(dropoff.lng) - 7} y={sy(dropoff.lat) - 7} width={14} height={14} rx={3} fill={colors.bg} stroke={colors.accent} strokeWidth={2.5} />
                 <Rect x={sx(dropoff.lng) - 2.5} y={sy(dropoff.lat) - 2.5} width={5} height={5} fill={colors.text} />
-              </G>
-            ) : null}
-
-            {user ? (
-              <G>
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(64,145,255,0.16)" />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill="#4091FF" stroke="#FFFFFF" strokeWidth={2.5} />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={3} fill="#FFFFFF" />
-                <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill={colors.text} fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>
             ) : null}
           </Svg>
