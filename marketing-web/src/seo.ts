@@ -48,7 +48,7 @@ export function setPageSeo({
     "og:url": canonical,
     "og:type": "website",
     "og:image": image,
-    "og:image:alt": "SNAR taxi-app",
+    "og:image:alt": "SNAR reiseplattform",
     "og:site_name": "SNAR",
     "og:locale": "nb_NO",
   };

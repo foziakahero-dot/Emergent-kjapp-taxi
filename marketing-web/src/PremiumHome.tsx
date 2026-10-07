@@ -47,7 +47,7 @@ export default function PremiumHome() {
           </nav>
           <div className="snar-header-actions">
             <button type="button" className="snar-btn snar-btn-primary" onClick={openBeta}>
-              Få beta
+              Få tilgang
             </button>
           </div>
         </div>
@@ -56,16 +56,16 @@ export default function PremiumHome() {
       <main id="content">
         <section className="snar-hero snar-shell snar-hero-clean" aria-labelledby="hero-title">
           <div className="snar-hero-copy">
-            <Badge>OSLO · BETA</Badge>
-            <h1 id="hero-title">Taxi.<br />Bare enklere.</h1>
-            <p className="snar-lead">Bestill. Se prisen. Følg bilen.</p>
+            <Badge>SNAR · OSLO-BETA</Badge>
+            <h1 id="hero-title">Dit du skal.<br />Med SNAR.</h1>
+            <p className="snar-lead">Velg bilen. Se prisen. Reis på dine premisser.</p>
             <div className="snar-actions snar-hero-actions-simple">
               <button type="button" className="snar-btn snar-btn-primary" onClick={openBeta}>
-                Få SNAR beta <span aria-hidden="true">↗</span>
+                Bli med i Oslo-betaen <span aria-hidden="true">↗</span>
               </button>
               <Link className="snar-text-link" to="/loyvehaver">Kjør med SNAR →</Link>
             </div>
-            <p className="snar-hero-note">Norsk taxiopplevelse · tydelig prisestimat · live sporing</p>
+            <p className="snar-hero-note">Én app. Selvstendige løyvehavere. Oversikt hele veien.</p>
           </div>
           <ProductPreview />
         </section>
@@ -91,7 +91,7 @@ export default function PremiumHome() {
             <div className="snar-section-copy snar-section-copy-centered">
               <span className="snar-kicker">VELG BIL</span>
               <h2 id="vehicles-title">Riktig bil. Uten unødvendige valg.</h2>
-              <p>Tre tydelige kategorier. Pris og forventet hentetid vises før du bekrefter.</p>
+              <p>Fra en rask tur til ekstra plass og komfort. Se pris og forventet hentetid før du bekrefter i appen.</p>
             </div>
             <div className="snar-vehicle-grid snar-vehicle-grid-clean">
               {vehicles.map(([name, copy, image]) => (
@@ -109,7 +109,7 @@ export default function PremiumHome() {
 
         <section id="features" className="snar-section snar-shell snar-feature-duo" aria-labelledby="features-title">
           <div className="snar-feature-intro">
-            <span className="snar-kicker">SMART NÅR DU VIL. TRYGT HELE VEIEN.</span>
+            <span className="snar-kicker">DIN REISE. DIN OVERSIKT.</span>
             <h2 id="features-title">Mindre friksjon. Mer kontroll.</h2>
             <p>SNAR Assist gjør bestillingen enklere, mens tydelig sjåfør- og bilinformasjon gjør hentingen tryggere.</p>
           </div>
@@ -145,7 +145,7 @@ export default function PremiumHome() {
         <section id="download" className="snar-beta snar-shell snar-final-cta" aria-labelledby="beta-heading">
           <Badge>OSLO FØRST</Badge>
           <h2 id="beta-heading">Bli blant de første som prøver SNAR.</h2>
-          <p>Meld interesse, så kontakter vi deg når beta-tilgang åpner.</p>
+          <p>Registrer deg for neste testgruppe. Oppgi e-post for bekreftelse og informasjon når tilgang åpner.</p>
           <div className="snar-actions">
             <button className="snar-btn snar-btn-primary" type="button" onClick={openBeta}>Få tilgang til beta</button>
             <Link className="snar-text-link" to="/loyvehaver">Er du løyvehaver? →</Link>
@@ -158,3 +158,4 @@ export default function PremiumHome() {
     </div>
   );
 }
+

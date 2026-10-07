@@ -7,7 +7,7 @@ type DocKey = 'drivers_license' | 'taxi_license' | 'profile_photo';
 type Uploaded = { storage_path: string; original_filename?: string };
 type Step = 'invite' | 'contact' | 'password' | 'documents' | 'selfie' | 'vehicle';
 
-const PUBLIC_SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL || 'https://kjappapp.no').replace(/\/$/, '');
+const PUBLIC_SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL || 'https://snarapp.no').replace(/\/$/, '');
 
 const DOCS: Array<{ key: Exclude<DocKey, 'profile_photo'>; label: string; sub: string }> = [
   { key: 'drivers_license', label: 'Førerkort', sub: 'Forside og bakside' },
@@ -175,7 +175,7 @@ export default function DriverSignup() {
     </div>
   </div>;
 
-  const assigned = `${invite.car || 'SNAR-bil'}${invite.plate ? ` · ${invite.plate}` : ''}`;
+  const assigned = `${invite.car || 'Bil i din flåte'}${invite.plate ? ` · ${invite.plate}` : ''}`;
 
   return <div className="driver-signup-screen">
     <div className="driver-phone-shell">
@@ -187,12 +187,12 @@ export default function DriverSignup() {
         <p>Bekreft invitasjonen fra løyvehaveren for å aktivere sjåførkontoen.</p>
         <div className="driver-info-card">
           <span className="driver-card-label">INVITERT AV</span>
-          <strong>{invite.fleet_name || 'SNAR-flåte'}</strong>
+          <strong>{invite.fleet_name || 'Din løyvehaver'}</strong>
           {invite.fleet_org_number ? <small>Org.nr {invite.fleet_org_number}</small> : null}
         </div>
         <div className="driver-info-card">
           <span className="driver-card-label">TILDELT KJØRETØY</span>
-          <strong>{assigned}</strong>
+          <strong>{assigned}</strong>{invite.vehicle_access_mode === 'all' ? <p>Du får varig tilgang til alle aktive biler i denne flåten. Velg ledig bil ved hver vakt.</p> : null}
         </div>
         <NavyButton onClick={goContact}>Dette er meg — fortsett</NavyButton>
       </section> : null}
@@ -244,7 +244,7 @@ export default function DriverSignup() {
         <p>Kjøretøyet er tildelt av {invite.fleet_name || 'løyvehaveren'} og kan ikke endres i denne registreringen.</p>
         <div className="driver-vehicle-card">
           <span className="driver-vehicle-icon">››</span>
-          <div><strong>{invite.car || 'SNAR-bil'}</strong><span>{invite.plate || 'Registreringsnummer mangler'}</span></div>
+          <div><strong>{invite.car || 'Bil i din flåte'}</strong><span>{invite.plate || 'Registreringsnummer mangler'}</span></div>
           <span className="driver-check">✓</span>
         </div>
         {err ? <div className="driver-error">{err}</div> : null}
@@ -273,3 +273,4 @@ function SelfieUpload({ value, busy, onFile, onRemove }: {
     <input ref={ref} type="file" accept="image/*" capture="user" hidden onChange={(e)=>{const file=e.target.files?.[0]; if(file) onFile(file);}} />
   </div>;
 }
+

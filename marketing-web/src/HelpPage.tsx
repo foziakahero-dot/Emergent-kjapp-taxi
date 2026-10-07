@@ -126,10 +126,11 @@ export default function HelpPage() {
       </section>
 
       <footer className="help-footer help-shell">
-        <div><Wordmark /><p>Norsk taxi. Uten omveier.</p></div>
+        <div><Wordmark /><p>Appen som kobler deg med selvstendige løyvehavere.</p></div>
         <nav><Link to="/">Forside</Link><Link to="/loyvehaver">Løyvehaver</Link><a href={`mailto:${SUPPORT_EMAIL}`}>support@kjappapp.no</a></nav>
         <span>© 2026 SNAR · NexoraHub AS</span>
       </footer>
     </main>
   );
 }
+

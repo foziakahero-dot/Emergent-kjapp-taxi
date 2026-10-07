@@ -28,6 +28,8 @@ const statusTone: Record<string, string> = {
 
 const typeLabel = (doc: FleetDocument) => {
   const raw = String(doc.doc_type || '').toLowerCase();
+  if (raw === 'taxi_license') return 'Kjøreseddel';
+  if (raw === 'profile_photo') return 'Profilbilde';
   if (raw.includes('driver') || raw.includes('license') || raw.includes('førerkort')) return 'Førerkort';
   if (raw.includes('taxi') || raw.includes('kjøreseddel')) return 'Kjøreseddel';
   if (raw.includes('insurance') || raw.includes('forsikring')) return 'Forsikring';

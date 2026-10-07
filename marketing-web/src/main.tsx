@@ -77,9 +77,9 @@ function RouteMetadata() {
     }
 
     setPageSeo({
-      title: "SNAR – Taxi. Bare enklere.",
+      title: "SNAR – Dit du skal. Med SNAR.",
       description:
-        "SNAR er en norsk taxi-app med tydelige prisestimater, live sporing og en enklere bestillingsopplevelse.",
+        "SNAR kobler deg med selvstendige løyvehavere. Velg bilen, se prisen og følg turen i appen.",
       canonical: canonical("/"),
     });
   }, [pathname, hash]);

@@ -5,6 +5,7 @@ import { TripSharePage } from "./TripSharePage";
 import LegalPage from "./LegalPage";
 import { Card, Footer, Header } from "./SnarUI";
 import { contactEmail, FLEET_URL } from "./siteConfig";
+import { useServiceFee, serviceFeeLabel } from './platformConfig';
 
 const onboardingSteps = [
   ["01", "Send søknad", "Firma, kontaktinformasjon, løyver og kjøretøy."],
@@ -14,13 +15,15 @@ const onboardingSteps = [
 ];
 
 const partnerValues = [
-  ["12 %", "SERVICEAVGIFT", "En enkel og tydelig sats. Mer av turinntekten blir igjen i virksomheten."],
+  ["AVTALT", "SERVICEAVGIFT", "En tydelig avtale for bruken av SNAR-plattformen."],
   ["UKENTLIG", "OPPGJØR", "Digitale betalinger kan avregnes automatisk hver uke."],
   ["ÉN", "FLEET-OVERSIKT", "Sjåfører, turer, kjøretøy, økonomi og dokumentstatus samlet på ett sted."],
   ["NORSK", "PARTNERSTØTTE", "Direkte oppfølging når konto, dokumentasjon eller oppgjør må avklares."],
 ];
 
 function PartnerPage() {
+  const fee = useServiceFee();
+  const feeLabel = serviceFeeLabel(fee);
   return (
     <div className="snar-page">
       <Header />
@@ -30,14 +33,14 @@ function PartnerPage() {
             <span className="snar-kicker">FOR LØYVEHAVERE</span>
             <h1>Behold mer.<br />Jobb smartere.</h1>
             <p>
-              SNAR er bygget for løyvehavere som vil bruke mindre tid på administrasjon og beholde mer av verdien de skaper.
-              Du får booking, betaling og flåteverktøy i én løsning — med 12 % serviceavgift og ukentlig oppgjør.
+              Du driver virksomheten. SNAR kobler deg med kunder og samler bestillinger, betaling og flåteverktøy i én plattform.
+              {` ${feeLabel}. Utbetalinger går til din bankkonto gjennom Stripe når kontoen er bekreftet.`}
             </p>
             <div className="snar-actions">
               <Link className="snar-btn snar-btn-primary" to="/loyvehaver/soknad">Søk om å bli partner</Link>
               <a className="snar-btn snar-btn-secondary" href={FLEET_URL}>Åpne Fleet Panel</a>
             </div>
-            <p className="snar-caption">12 % serviceavgift · Ukentlig digitalt oppgjør · Full flåteoversikt</p>
+            <p className="snar-caption">{feeLabel} · Din egen flåte · Digitalt oppgjør</p>
           </div>
           <Card>
             <span className="snar-kicker">FLEET PANEL</span>
@@ -49,10 +52,10 @@ function PartnerPage() {
         <section className="snar-section snar-shell">
           <div className="snar-section-copy">
             <span className="snar-kicker">MER IGJEN PER TUR</span>
-            <h2>Hvorfor gi fra deg<br />mer enn nødvendig?</h2>
+            <h2>Din virksomhet.<br />Vår plattform.</h2>
             <p>
-              Moderne teknologi trenger ikke bety at plattformen tar en stor del av verdien rundt hver tur.
-              Med SNAR får du en tydelig 12 % serviceavgift og verktøyene du trenger for å drive effektivt.
+              Du beholder løyvene, bilene og sjåførene. SNAR gjør det enklere å motta bestillinger og følge drift og oppgjør.
+              Standard serviceavgift vises her; din avtalte sats vises i Fleet-portalen.
             </p>
           </div>
           <div className="snar-partner-value-grid">
@@ -102,7 +105,7 @@ function PartnerPage() {
         <section className="snar-section snar-shell">
           <span className="snar-kicker">KLAR FOR NESTE STEG?</span>
           <h2>Bli SNAR-partner.</h2>
-          <p>Bygg videre på virksomheten du allerede har — med lavere plattformfriksjon, tydelig økonomi og moderne verktøy rundt turene.</p>
+          <p>Send én søknad med virksomhet og dokumenter. Etter godkjenning får du din egen Fleet-portal og kan invitere sjåfører.</p>
           <div className="snar-actions">
             <Link className="snar-btn snar-btn-primary" to="/loyvehaver/soknad">Start søknaden</Link>
             <a className="snar-btn snar-btn-secondary" href={`mailto:${contactEmail("partner")}`}>Kontakt partnerteamet</a>
@@ -127,3 +130,4 @@ export default function App() {
     </Routes>
   );
 }
+

@@ -11,6 +11,7 @@ export type FleetDraft = {
   vehicle_count?: number;
   bank_account?: string;
   notes?: string;
+  accepted_terms: boolean;
 };
 
 export type UploadedDocument = {
@@ -32,20 +33,10 @@ async function parseError(res: Response) {
 }
 
 export async function createFleetDraft(data: FleetDraft): Promise<{ upload_token: string; status: string }> {
-  // The current production intake stores the free-text notes field but does not yet
-  // expose structured license/vehicle count fields. Preserve those values in notes
-  // so superadmin sees them immediately without creating a parallel backend model.
-  const operationalNotes = [
-    data.notes?.trim(),
-    data.license_count ? `Antall løyver: ${data.license_count}` : '',
-    data.vehicle_count ? `Antall biler: ${data.vehicle_count}` : '',
-  ].filter(Boolean).join('\n');
-
-  const payload = { ...data, notes: operationalNotes };
   const res = await fetch(`${API_BASE}/fleet-applications/draft`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -80,3 +71,4 @@ export async function getSharedTrip(token: string) {
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
+

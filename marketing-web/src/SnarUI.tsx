@@ -168,7 +168,7 @@ export function Footer() {
     <footer className="snar-footer snar-shell">
       <div>
         <Brand />
-        <p>Norsk taxi. Uten omveier.</p>
+        <p>Appen som kobler deg med selvstendige løyvehavere.</p>
       </div>
       <nav aria-label="Bunnmeny">
         <Link to="/#how">Slik fungerer det</Link>
@@ -192,3 +192,4 @@ export function Footer() {
     </footer>
   );
 }
+
