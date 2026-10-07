@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Pressable,
   StyleProp,
-  Text,
   View,
   ViewStyle,
 } from 'react-native';
@@ -33,37 +32,7 @@ const clamp = (n: number, min: number, max: number) =>
 const samePoint = (a?: LL | null, b?: LL | null) =>
   !!a && !!b && Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lng - b.lng) < 1e-7;
 
-function MarkerDot({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
-  if (kind === 'user') {
-    return (
-      <View style={{ alignItems: 'center' }}>
-        <View style={{
-          width: 44, height: 44, borderRadius: 22,
-          backgroundColor: 'rgba(64,145,255,0.16)',
-          alignItems: 'center', justifyContent: 'center',
-        }}>
-          <View style={{
-            width: 18, height: 18, borderRadius: 9,
-            backgroundColor: '#4091FF', borderWidth: 3, borderColor: '#FFFFFF',
-          }}>
-            <View style={{
-              width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFFFFF',
-              alignSelf: 'center', marginTop: 4,
-            }} />
-          </View>
-        </View>
-        <View style={{
-          marginTop: -4,
-          paddingHorizontal: 7, paddingVertical: 3,
-          borderRadius: 8,
-          backgroundColor: 'rgba(7,11,14,0.88)',
-        }}>
-          <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>Du er her</Text>
-        </View>
-      </View>
-    );
-  }
-
+function MarkerDot({ kind }: { kind: 'pickup' | 'dropoff' }) {
   if (kind === 'pickup') {
     return (
       <View style={{
@@ -95,15 +64,15 @@ function MarkerDot({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
 function CarMarker({ car, active = false }: { car: Car; active?: boolean }) {
   return (
     <View style={{
-      width: active ? 56 : 38,
-      height: active ? 56 : 38,
-      borderRadius: active ? 28 : 19,
+      width: active ? 56 : 42,
+      height: active ? 56 : 42,
+      borderRadius: active ? 28 : 21,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: active ? colors.accentGlow : 'rgba(7,11,14,0.10)',
+      backgroundColor: active ? colors.accentGlow : 'rgba(255,255,255,0.74)',
       transform: [{ rotate: String(car.heading || 0) + 'deg' }],
     }}>
-      <CarSvg size={active ? 38 : 27} {...(active ? CAR_ACTIVE : CAR_IDLE)} />
+      <CarSvg size={active ? 40 : 30} {...(active ? CAR_ACTIVE : CAR_IDLE)} />
     </View>
   );
 }
@@ -137,16 +106,27 @@ export function InteractiveMap({
 
   const focus = useMemo(() => {
     const pts: LL[] = [];
+    const hasTripGeometry = Boolean(pickup || dropoff || activeCar);
+
+    if (hasTripGeometry) {
+      if (pickup) pts.push(pickup);
+      else if (user) pts.push(user);
+      if (dropoff && !samePoint(pickup || user, dropoff)) pts.push(dropoff);
+      if (activeCar) pts.push({ lat: activeCar.lat, lng: activeCar.lng });
+      return pts;
+    }
+
+    // Idle customer map: keep the customer's location as an invisible anchor,
+    // but make the visible focus the nearest real online vehicles.
     if (user) pts.push(user);
-    if (pickup && !samePoint(user, pickup)) pts.push(pickup);
-    if (dropoff) pts.push(dropoff);
-    if (activeCar) pts.push({ lat: activeCar.lat, lng: activeCar.lng });
+    cars.slice(0, 6).forEach((car) => pts.push({ lat: car.lat, lng: car.lng }));
     return pts;
   }, [
     user?.lat, user?.lng,
     pickup?.lat, pickup?.lng,
     dropoff?.lat, dropoff?.lng,
     activeCar?.lat, activeCar?.lng,
+    cars,
   ]);
 
   const fit = useCallback((animated = true) => {
@@ -185,6 +165,24 @@ export function InteractiveMap({
     camera.fitBounds(ne, sw, [110, 70, 220, 70], animated ? 550 : 0);
   }, [focus, activeCar?.heading]);
 
+  const recenterOnUser = useCallback(() => {
+    const camera = cameraRef.current;
+    setManual(false);
+    if (!camera || !user) {
+      fit(true);
+      return;
+    }
+    camera.setCamera({
+      centerCoordinate: toCoord(user),
+      zoomLevel: 15.8,
+      pitch: 18,
+      heading: 0,
+      padding: { paddingTop: 90, paddingRight: 60, paddingBottom: 190, paddingLeft: 60 },
+      animationDuration: 500,
+      animationMode: 'easeTo',
+    });
+  }, [fit, user?.lat, user?.lng]);
+
   useEffect(() => {
     if (ready && !manual) fit(false);
   }, [ready, manual, fit]);
@@ -216,7 +214,7 @@ export function InteractiveMap({
         route={route}
         cars={cars}
         activeCar={activeCar}
-        user={user}
+        user={null}
         style={style}
         testID={testID}
         interactive={interactive}
@@ -351,12 +349,6 @@ export function InteractiveMap({
             <MarkerDot kind="dropoff" />
           </MapboxGL.MarkerView>
         ) : null}
-
-        {user ? (
-          <MapboxGL.MarkerView coordinate={toCoord(user)} allowOverlap allowOverlapWithPuck>
-            <MarkerDot kind="user" />
-          </MapboxGL.MarkerView>
-        ) : null}
       </MapboxGL.MapView>
 
       {interactive ? (
@@ -384,10 +376,7 @@ export function InteractiveMap({
           <Ctrl
             name="crosshair"
             testID="map-recenter"
-            onPress={() => {
-              setManual(false);
-              fit(true);
-            }}
+            onPress={recenterOnUser}
           />
         </View>
       ) : null}
