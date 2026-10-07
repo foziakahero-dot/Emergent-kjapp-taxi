@@ -184,6 +184,10 @@ export default function Receipt() {
         <View style={s.fareRow}><Text style={s.fareLabel}>Avstand</Text><Text style={s.fareValue}>{trip.distance_km} km</Text></View>
         <View style={s.fareRow}><Text style={s.fareLabel}>Varighet</Text><Text style={s.fareValue}>{trip.duration_min} min</Text></View>
         <View style={s.fareRow}><Text style={s.fareLabel}>Kjøretøy</Text><Text style={s.fareValue}>{v.name}</Text></View>
+        {trip.waiting_policy ? <>
+          <View style={s.fareRow}><Text style={s.fareLabel}>Avtalt turpris</Text><Text style={s.fareValue}>{kr(trip.quoted_ride_price)}</Text></View>
+          <View style={s.fareRow}><Text style={s.fareLabel}>Ventetid etter {trip.waiting_policy.free_minutes} min gratis</Text><Text style={s.fareValue}>{kr(trip.waiting_fee_total || 0)}</Text></View>
+        </> : null}
         {trip.receipt_id ? <View style={s.fareRow}><Text style={s.fareLabel}>Kvittering</Text><Text style={s.fareValue} numberOfLines={1}>{trip.receipt_id}</Text></View> : null}
         <View style={s.totalRow}>
           <Text style={s.totalLabel}>Totalt</Text>
@@ -291,5 +295,6 @@ const useStyles = makeStyles((c) => ({
   starHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   ratingLocked: { color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center' },
 }));
+
 
 
