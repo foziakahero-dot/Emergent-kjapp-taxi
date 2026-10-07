@@ -175,7 +175,7 @@ export function Footer() {
         <Link to="/#vehicles">Bilvalg</Link>
         <Link to="/loyvehaver">Løyvehaver</Link>
         <Link to="/help">Hjelp</Link>
-        <a href="https://fleet.kjappapp.no">Fleet Panel</a>
+        <a href="https://fleet.snarapp.no/login">Fleet Panel</a>
       </nav>
       <div className="snar-contacts">
         {contacts.map(([label, name]) => (
