@@ -32,7 +32,7 @@ export default function LiveMap({ drivers }: { drivers: DriverPosition[] }) {
         <FitDrivers drivers={drivers} />
         {drivers.map((driver) => (
           <CircleMarker key={driver.id} center={[driver.lat, driver.lng]} radius={9}
-            pathOptions={{ color: '#06222a', fillColor: '#72dce8', fillOpacity: 1, weight: 3 }}>
+            pathOptions={{ color: '#001f3f', fillColor: '#ff0000', fillOpacity: 1, weight: 3 }}>
             <Popup><strong>{driver.name || 'Sjåfør'}</strong><br />{driver.car || 'Ukjent bil'} {driver.plate || ''}</Popup>
           </CircleMarker>
         ))}
@@ -41,3 +41,4 @@ export default function LiveMap({ drivers }: { drivers: DriverPosition[] }) {
     </div>
   );
 }
+

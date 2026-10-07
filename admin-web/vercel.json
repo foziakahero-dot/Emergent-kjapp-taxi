@@ -7,13 +7,23 @@
   "redirects": [
     {
       "source": "/reset-password/:token",
-      "destination": "https://fleet.kjappapp.no/reset-password/:token",
+      "destination": "https://fleet.snarapp.no/reset-password/:token",
       "permanent": false
     },
     {
       "source": "/forgot-password",
-      "destination": "https://fleet.kjappapp.no/glemt-passord",
+      "destination": "https://fleet.snarapp.no/glemt-passord",
       "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/gateway?__snar_path=:path*"
+    },
+    {
+      "source": "/((?!api/|assets/).*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { http, apiError } from './api';
+import { Icon } from './snar-ui';
 
 export const fmtMoney = (v: any) =>
   (v === null || v === undefined ? '—' : new Intl.NumberFormat('no-NO').format(Math.round(v)) + ' kr');
@@ -42,39 +43,37 @@ const STATUS_MAP: Record<string, { c: string; t?: string }> = {
 };
 export const Pill = ({ status, label }: { status?: string; label?: string }) => {
   const m = STATUS_MAP[status || ''] || { c: 'gray' };
-  return <span className={`pill ${m.c}`}><span className="dot" />{label || m.t || status || '—'}</span>;
+  return <span className={`badge badge-${({green: 'success', amber: 'warning', red: 'danger', blue: 'info', gold: 'purple', gray: 'neutral'} as Record<string,string>)[m.c] || 'neutral'}`}><span className="bdot" />{label || m.t || status || '—'}</span>;
 };
 
 export const Card: React.FC<{ children: React.ReactNode; className?: string; style?: React.CSSProperties }> = ({ children, className = '', style }) => (
-  <div className={`card ${className}`} style={style}>{children}</div>
+  <div className={`card production-card ${className}`} style={style}>{children}</div>
 );
 
-export const Kpi = ({ label, value, foot, accent }: any) => (
-  <div className="card">
-    <div className="kpi-label">{label}</div>
-    <div className={`kpi-value ${accent ? 'kpi-accent' : ''}`}>{value}</div>
-    {foot ? <div className="kpi-foot">{foot}</div> : null}
+export const Kpi = ({ label, value, foot, accent, icon = 'trending' }: any) => (
+  <div className={`card kpi-card ${accent ? 'kpi-accent' : ''}`}>
+    <div className="kpi-top"><span className="kpi-label">{label}</span><div className="kpi-icon"><Icon name={icon} size={16}/></div></div>
+    <strong className="kpi-value">{value}</strong>{foot && <div className="kpi-note">{foot}</div>}
   </div>
 );
 
-export const Btn: React.FC<any> = ({ children, variant = '', className = '', ...p }) => (
-  <button className={`btn ${variant} ${className}`} {...p}>{children}</button>
-);
+export const Btn: React.FC<any> = ({ children, variant = '', className = '', type = 'button', ...p }) => {
+  const parts = variant.split(' ');
+  const tone = ['primary', 'ghost', 'danger', 'success'].find(v => parts.includes(v)) || 'secondary';
+  return <button type={type} className={`btn btn-${tone} btn-${parts.includes('sm') ? 'sm' : 'md'} ${parts.includes('full') ? 'full' : ''} ${className}`} {...p}>{children}</button>;
+};
 
 export const PageHead = ({ title, sub, right }: any) => (
-  <div className="page-head">
-    <div><div className="page-title">{title}</div>{sub && <div className="page-sub">{sub}</div>}</div>
-    {right}
-  </div>
+  <div className="page-hdr"><div><div className="eyebrow">SNAR CONTROL CENTER</div><h1 className="page-title">{title}</h1>{sub && <p className="page-sub">{sub}</p>}</div>{right && <div className="hdr-actions">{right}</div>}</div>
 );
 
 export function Drawer({ title, onClose, children }: any) {
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="drawer" onClick={(e) => e.stopPropagation()}>
+      <div className="drawer" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
           <div style={{ fontWeight: 700, fontSize: 16 }}>{title}</div>
-          <button className="x" onClick={onClose}>✕</button>
+          <button className="icon-btn" aria-label="Lukk" onClick={onClose}><Icon name="close"/></button>
         </div>
         <div className="drawer-body">{children}</div>
       </div>
@@ -85,7 +84,7 @@ export function Drawer({ title, onClose, children }: any) {
 export function Modal({ title, sub, onClose, children }: any) {
   return (
     <div className="modal-wrap" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>{sub && <div className="sub">{sub}</div>}{children}
       </div>
     </div>
@@ -189,3 +188,4 @@ export function usePaged(path: string, params: any) {
   useEffect(() => { reload(); }, [reload]);
   return { ...state, reload };
 }
+

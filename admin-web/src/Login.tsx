@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from './auth';
 import { apiError } from './api';
 import { Btn } from './ui';
+import { Icon, SnarMark } from './snar-ui';
 
 export default function Login() {
   const { login, verify2fa } = useAuth();
@@ -31,47 +32,32 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-wrap">
-      <div className="auth-card">
-        <div className="brand"><div className="brand-mark">K</div><div className="brand-name">KJAPP</div></div>
-        <div className="auth-sub">Kontrollsenter · kun for administratorer</div>
-
-        {err && <div className="error-banner">{err}</div>}
-
+    <div className="login-page">
+      <div className="login-brand"><SnarMark size={48}/><div className="login-brand-text"><strong>SNAR</strong><span>CONTROL CENTER</span></div></div>
+      <div className="login-card">
+        <div className="login-head">
+          {twofaToken && <div className="twofa-icon"><Icon name="shield" size={24}/></div>}
+          <h1 className="login-title">{twofaToken ? 'Tofaktorkontroll' : 'Logg inn'}</h1>
+          <p className="login-sub">{twofaToken ? 'Skriv inn koden fra autentiseringsappen din.' : 'SNAR administrasjonsportal · Kun autoriserte brukere'}</p>
+        </div>
+        {err && <div className="error-banner" role="alert">{err}</div>}
         {!twofaToken ? (
-          <form onSubmit={submit}>
-            <div className="field">
-              <label className="label">E-post</label>
-              <input className="input" type="email" autoFocus value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="admin@kjapp.no" />
-            </div>
-            <div className="field">
-              <label className="label">Passord</label>
-              <input className="input" type="password" value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-            </div>
-            <Btn variant="primary full" type="submit" disabled={loading || !email || !password}>
-              {loading ? 'Logger inn…' : 'Logg inn'}
-            </Btn>
+          <form className="login-form" onSubmit={submit}>
+            <label className="login-field"><span>E-postadresse</span><input type="email" autoComplete="username" autoFocus required value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@snarapp.no"/></label>
+            <label className="login-field"><span>Passord</span><input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)}/></label>
+            <a className="login-forgot" href="/forgot-password">Glemt passord?</a>
+            <Btn variant="primary full" type="submit" disabled={loading || !email || !password}>{loading ? 'Logger inn…' : 'Fortsett'}</Btn>
           </form>
         ) : (
-          <form onSubmit={submit2fa}>
-            <div className="auth-sub" style={{ marginTop: -8 }}>Skriv inn 6-sifret kode fra autentiseringsappen din.</div>
-            <div className="field">
-              <label className="label">Verifiseringskode</label>
-              <input className="input mono" inputMode="numeric" autoFocus value={code}
-                onChange={(e) => setCode(e.target.value)} placeholder="123456" maxLength={8}
-                style={{ letterSpacing: 4, textAlign: 'center', fontSize: 18 }} />
-            </div>
-            <Btn variant="primary full" type="submit" disabled={loading || code.length < 6}>
-              {loading ? 'Verifiserer…' : 'Bekreft'}
-            </Btn>
-            <Btn variant="ghost full" type="button" style={{ marginTop: 8 }} onClick={() => { setTwofaToken(''); setCode(''); }}>
-              Tilbake
-            </Btn>
+          <form className="login-form" onSubmit={submit2fa}>
+            <label className="login-field"><span>6-sifret kode</span><input className="code-input" inputMode="numeric" autoComplete="one-time-code" autoFocus required pattern="[0-9]{6}" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000"/></label>
+            <Btn variant="primary full" type="submit" disabled={loading || !/^[0-9]{6}$/.test(code)}>{loading ? 'Verifiserer…' : 'Logg inn'}</Btn>
+            <button className="login-forgot" type="button" onClick={() => { setTwofaToken(''); setCode(''); setErr(''); }}>← Tilbake til innlogging</button>
           </form>
         )}
+        <div className="login-security"><Icon name="lock" size={13}/><span>Sikker innlogging · Kun autoriserte administratorer</span></div>
       </div>
+      <p className="login-footer">© {new Date().getFullYear()} SNAR · Control Center</p>
     </div>
   );
 }

@@ -1,18 +1,18 @@
-const BACKEND_ORIGIN = 'https://github-app-builder-28.emergent.host';
+const BACKEND_ORIGIN = 'https://api.kjappapp.no';
 
 export default async function handler(req, res) {
   try {
-    const incomingUrl = new URL(req.url || '/', 'https://admin.kjappapp.no');
+    const incomingUrl = new URL(req.url || '/', 'https://admin.snarapp.no');
     const path = incomingUrl.pathname;
 
     // Keep the admin host as a narrow gateway: only auth + admin endpoints.
-    if (!(path.startsWith('/api/auth/') || path.startsWith('/api/admin/'))) {
+    const method = String(req.method || 'GET').toUpperCase();
+    const isDocumentRead = path.startsWith('/api/files/') && ['GET', 'HEAD'].includes(method);
+    if (!(isDocumentRead || path.startsWith('/api/auth/') || path.startsWith('/api/admin/') || path.startsWith('/api/superadmin/'))) {
       return res.status(404).json({ detail: 'Not found' });
     }
 
     const target = `${BACKEND_ORIGIN}${path}${incomingUrl.search}`;
-    const method = String(req.method || 'GET').toUpperCase();
-
     const headers = {
       accept: req.headers.accept || 'application/json',
     };
@@ -50,6 +50,7 @@ export default async function handler(req, res) {
     return res.status(upstream.status).send(responseBody);
   } catch (error) {
     console.error('[kjapp-admin-proxy]', error);
-    return res.status(502).json({ detail: 'KJAPP backend unavailable' });
+    return res.status(502).json({ detail: 'SNAR backend unavailable' });
   }
 }
+

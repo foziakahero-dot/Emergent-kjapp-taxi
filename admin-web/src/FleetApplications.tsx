@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, apiError } from './api';
 import { useAuth } from './auth';
-import { Btn, Card, Drawer, Empty, ErrorBanner, KV, Loader, PageHead, Pill, fmtDate } from './ui';
+import { Btn, Card, Empty, ErrorBanner, KV, Loader, PageHead, Pill, fmtDate } from './ui';
 
 const FIXED_COMMISSION = 0.10;
 
@@ -123,7 +123,7 @@ export default function FleetApplications() {
     <>
       <PageHead
         title="Løyvehaversøknader"
-        sub="Dokumentkontroll og godkjenning før tilgang til fleet.kjappapp.no"
+        sub="Dokumentkontroll og godkjenning før tilgang til fleet.snarapp.no"
         right={<Btn variant="sm" onClick={load}>Oppdater</Btn>}
       />
 
@@ -143,7 +143,7 @@ export default function FleetApplications() {
           <div>
             <div className="section-title" style={{ margin: 0 }}>Fast partnerprovisjon</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-              Nye godkjente løyvehavere opprettes med KJAPP-serviceavgift på 10 %.
+              Nye godkjente løyvehavere opprettes med SNAR-serviceavgift på 10 %.
             </div>
           </div>
           <div className="mono" style={{ fontSize: 26, color: 'var(--gold)', fontWeight: 700 }}>
@@ -152,45 +152,13 @@ export default function FleetApplications() {
         </div>
       </Card>
 
-      <div className="section-title">Søknader</div>
-      <div className="tablewrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Bedrift</th>
-              <th>Org.nr</th>
-              <th>Kontakt</th>
-              <th>Dokumenter</th>
-              <th>Status</th>
-              <th>Innsendt</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6}><Loader /></td></tr>
-            ) : apps.length ? apps.map((a: any) => (
-              <tr key={a.id} className="click" onClick={() => openApplication(a.id)}>
-                <td className="strong">{a.company_name || '—'}</td>
-                <td className="mono dim">{a.org_number || '—'}</td>
-                <td>
-                  <div>{a.contact_name || '—'}</div>
-                  <div className="cell-sub">{a.contact_email || ''}</div>
-                </td>
-                <td>{a.documents_count ?? Object.keys(a.documents || {}).length}/5</td>
-                <td><Pill status={a.status} /></td>
-                <td className="dim nowrap">{fmtDate(a.submitted_at || a.created_at)}</td>
-              </tr>
-            )) : (
-              <tr><td colSpan={6}><Empty title="Ingen søknader i denne statusen" /></td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {detailLoading && <div className="center"><Loader /></div>}
-
-      {selected && (
-        <Drawer title={selected.company_name || 'Løyvehaversøknad'} onClose={close}>
+      <div className="app-layout" style={{marginTop:20}}>
+        <section className="card app-list"><div className="card-head"><h2 className="card-title">Søknader ({apps.length})</h2></div>
+          {loading ? <Loader/> : apps.length ? apps.map((a:any) => <button key={a.id} className={`application-row ${selected?.id === a.id ? 'selected' : ''}`} onClick={() => openApplication(a.id)}><strong>{a.company_name || 'Ukjent bedrift'}</strong><span className="application-meta">{a.org_number || '—'} · {a.contact_name || '—'}</span><span className="application-meta">{fmtDate(a.submitted_at || a.created_at)} · {a.documents_count ?? Object.keys(a.documents || {}).length}/5 dokumenter</span><Pill status={a.status}/></button>) : <Empty title="Ingen søknader i denne statusen"/>}
+        </section>
+        <section className="card app-detail" aria-busy={detailLoading}>
+          {detailLoading ? <Loader/> : !selected ? <Empty title="Velg en søknad" sub="Kontroller dokumentene før godkjenning eller avslag."/> : <>
+          <div className="app-detail-head"><h2 className="card-title">{selected.company_name || 'Løyvehaversøknad'}</h2><Btn variant="ghost sm" onClick={close}>Lukk</Btn></div>
           <div style={{ marginBottom: 14 }}><Pill status={selected.status} /></div>
 
           <Card>
@@ -235,7 +203,7 @@ export default function FleetApplications() {
               <Card>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 14 }}>
                   <div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>KJAPP-provisjon ved godkjenning</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>SNAR-provisjon ved godkjenning</div>
                     <div style={{ marginTop: 4, fontWeight: 700 }}>Fast onboarding-sats</div>
                   </div>
                   <div className="mono" style={{ fontSize: 24, color: 'var(--gold)', fontWeight: 700 }}>10%</div>
@@ -257,7 +225,7 @@ export default function FleetApplications() {
               </Card>
 
               <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.5, color: 'var(--muted)' }}>
-                Ved godkjenning oppretter backend flåten og en fleet_owner-konto. Før dette har søkeren ingen tilgang til fleet.kjappapp.no.
+                Ved godkjenning oppretter backend flåten og en fleet_owner-konto. Før dette har søkeren ingen tilgang til fleet.snarapp.no.
               </div>
             </>
           ) : (
@@ -271,8 +239,9 @@ export default function FleetApplications() {
               </Card>
             </>
           )}
-        </Drawer>
-      )}
+          </>}
+        </section>
+      </div>
     </>
   );
 }
