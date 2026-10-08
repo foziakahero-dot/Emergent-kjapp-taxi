@@ -5406,6 +5406,9 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
     """Admin creates a fleet, links an existing (or new) user as fleet_owner."""
     owner_email = body.owner_email.strip().lower()
     owner = await db.users.find_one({"email": owner_email})
+    if owner and (owner.get("role") not in (None, "user", "customer", "fleet_owner")
+                  or owner.get("disabled") or owner.get("fleet_id")):
+        raise HTTPException(409, "Kontaktkontoen har allerede en annen rolle eller flåte. Avklar eierkonto før oppretting.")
     new_owner = False
     if not owner:
         new_owner = True
@@ -5447,30 +5450,15 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
             await db.fleets.update_one({"_id": fres.inserted_id}, {"$set": {"stripe_connect_status": "retry_required"}})
     fleet_doc["id"] = fleet_id; fleet_doc.pop("_id", None)
     fleet_doc["owner_email"] = owner_email
+    # Use the same durable, expiring password-setup email as application approval.
+    # Links are created only at delivery, so missing email configuration cannot
+    # leave the owner with an expired or incorrectly routed setup link.
+    confirmation_status = await queue_confirmation(
+        db, "fleet-approved", fleet_id, owner_email, body.name,
+    )
     onboarding_email_sent = False
-    if new_owner:
-        # Complete manual onboarding by sending the new fleet owner directly into the
-        # existing secure password-reset flow. The admin never needs to handle/share
-        # the randomly generated temporary password.
-        now = datetime.now(timezone.utc)
-        reset_token = secrets.token_urlsafe(32)
-        await db.password_reset_tokens.insert_one({
-            "token": reset_token,
-            "user_id": owner_id,
-            "email": owner_email,
-            "created_at": now,
-            "expires_at": now + timedelta(hours=24),
-            "used": False,
-        })
-        fu = (os.environ.get("FRONTEND_URL") or "").strip().rstrip("/")
-        frontend = fu if (fu and fu != "*" and fu.startswith("http")) else "https://admin.kjappapp.no"
-        reset_url = f"{frontend}/reset-password/{reset_token}"
-        onboarding_email_sent = bool(send_email(
-            owner_email,
-            "Velkommen som løyvehaver i SNAR",
-            email_password_reset_html(reset_url),
-        ))
     fleet_doc["onboarding_email_sent"] = onboarding_email_sent
+    fleet_doc["confirmation_email_status"] = confirmation_status
     await _audit(current, "fleet.create", "fleet", fleet_id, None, {
         "name": body.name,
         "owner_email": owner_email,
@@ -11370,7 +11358,7 @@ async def _queue_beta_confirmation(identity, email, name):
     return await queue_confirmation(db, "beta", identity, email, name)
 
 
-install_marketing_waitlist(api, db, confirmation=_queue_beta_confirmation)
+install_marketing_waitlist(api, db, confirmation=_queue_beta_confirmation, require_admin=require_admin, audit=_audit)
 
 # Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
 install_admin_control_center(
