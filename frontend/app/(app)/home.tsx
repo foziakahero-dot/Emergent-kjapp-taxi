@@ -273,7 +273,7 @@ export default function Home() {
         pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : dropoff && locationReady ? pickupPoint : null}
         dropoff={activeTrip ? { lat: activeTrip.dropoff_lat, lng: activeTrip.dropoff_lng } : dropoff}
         route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
-        cars={activeTrip || dropoff ? [] : cars}
+        cars={activeTrip ? [] : cars}
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
