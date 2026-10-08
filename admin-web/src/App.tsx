@@ -6,6 +6,7 @@ import { Loader } from './ui';
 import Login from './Login';
 import { Icon, SnarMark } from './snar-ui';
 import FleetApplications from './FleetApplications';
+import BetaWaitlist from './BetaWaitlist';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
@@ -23,6 +24,7 @@ const NAV = [
     { to: '/trips', label: 'Turer', ic: 'route', perm: 'operations' },
     { to: '/drivers', label: 'Sjåfører', ic: 'users', perm: 'operations' },
     { to: '/customers', label: 'Kunder', ic: 'user', perm: 'operations' },
+    { to: '/beta-waitlist', label: 'Beta-påmeldinger', ic: 'users', perm: 'operations' },
     { to: '/fleet-applications', label: 'Løyvesøknader', ic: 'file', superadminOnly: true },
     { to: '/fleets', label: 'Løyvehavere', ic: 'building', perm: 'operations' },
     { to: '/vehicles', label: 'Kjøretøy', ic: 'car', perm: 'operations' },
@@ -164,6 +166,7 @@ function Shell() {
             <Route path="/trips" element={gate('operations', <Trips />)} />
             <Route path="/drivers" element={gate('operations', <Drivers />)} />
             <Route path="/customers" element={gate('operations', <Customers />)} />
+            <Route path="/beta-waitlist" element={gate('operations', <BetaWaitlist />)} />
             <Route path="/fleet-applications" element={gate('operations', <FleetApplications />, true)} />
             <Route path="/fleets" element={gate('operations', <FleetManagement />)} />
             <Route path="/vehicles" element={gate('operations', <Vehicles />)} />

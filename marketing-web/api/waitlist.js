@@ -74,7 +74,9 @@ export default async function handler(req, res) {
       return send(res, response.status === 429 ? 429 : 502, { error: safeMessage });
     }
 
-    return send(res, 201, { ok: true, status: 'registered' });
+    const delivery = ['queued', 'not_configured', 'not_requested'].includes(data.confirmation_email_status)
+      ? data.confirmation_email_status : undefined;
+    return send(res, 201, { ok: true, status: 'registered', ...(delivery ? { confirmation_email_status: delivery } : {}) });
   } catch {
     return send(res, 502, { error: 'Påmeldingen kunne ikke lagres. Prøv igjen senere.' });
   } finally {
