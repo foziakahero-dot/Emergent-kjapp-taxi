@@ -145,7 +145,7 @@ export default function HelpPage() {
               <p>{answer}</p>
             </details>
           ))}
-          <Link to="/">Meld interesse for beta →</Link>
+          <Link to="/#download">Meld interesse for beta →</Link>
           <br />
           <Link to="/loyvehaver/soknad">Søk som løyvehaver →</Link>
         </div>
