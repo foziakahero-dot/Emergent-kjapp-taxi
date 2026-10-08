@@ -5,6 +5,17 @@ import './help.css';
 
 const SUPPORT_EMAIL = 'support@kjappapp.no';
 
+const faq = [
+  ['Hva er SNAR?', 'SNAR er en norsk mobilitetsplattform for enkel bestilling av persontransport. Du bestiller bil med sjåfør, følger sjåføren og betaler direkte i appen.'],
+  ['Hvordan bestiller jeg en reise?', 'Velg hentested og destinasjon i appen. Se tilgjengelige biler, prisestimat og forventet hentetid før du bekrefter bestillingen.'],
+  ['Ser jeg prisen før jeg bestiller?', 'Du ser et prisestimat før du bekrefter. Se prisinformasjonen i bestillingen for hva som gjelder for reisen din.'],
+  ['Hvem kjører med SNAR?', 'Profesjonelle sjåfører med gyldig kjøreseddel, knyttet til godkjente løyvehavere. Tilgang til plattformen åpnes etter kontroll og godkjenning.'],
+  ['Kan jeg følge sjåføren?', 'Når bestillingen er akseptert, ser du sjåføren, bilen og registreringsnummeret. Du kan følge sjåførens posisjon frem til hentestedet i sanntid.'],
+  ['Hvordan betaler jeg?', 'Du betaler digitalt i appen. Tilgjengelige betalingsmåter vises når du bestiller.'],
+  ['Kan jeg bruke SNAR nå?', 'SNAR starter med en avgrenset beta i Oslo. Meld interesse på forsiden. Vi kontakter deg når din testgruppe får tilgang.'],
+  ['Hvordan blir jeg sjåfør eller løyvehaver på SNAR?', 'Sjåfører kan melde interesse på forsiden og må ha gyldig kjøreseddel. Løyvehavere søker med virksomhet, drosjeløyver og nødvendig dokumentasjon. Tilgang krever godkjenning.'],
+];
+
 const topics = [
   { value: 'tur', label: 'Tur eller bestilling' },
   { value: 'betaling', label: 'Betaling eller kvittering' },
@@ -28,8 +39,8 @@ export default function HelpPage() {
 
   useEffect(() => {
     setPageSeo({
-      title: 'SNAR Hjelp & support',
-      description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.',
+      title: 'SNAR | Spørsmål, hjelp og support',
+      description: 'Svar på spørsmål om SNAR, bestilling, prisestimat, sjåfører, betaling og Oslo-beta. Få hjelp som kunde, sjåfør eller løyvehaver.',
       canonical: 'https://snarapp.no/help',
     });
   }, []);
@@ -61,6 +72,7 @@ export default function HelpPage() {
           <Link to="/">Forside</Link>
           <Link to="/loyvehaver">Løyvehaver</Link>
           <a href={`mailto:${SUPPORT_EMAIL}`}>E-post support</a>
+          <a href="#faq">Spørsmål om SNAR</a>
         </nav>
       </header>
 
@@ -120,13 +132,32 @@ export default function HelpPage() {
         </form>
       </section>
 
+      <section id="faq" className="help-content help-shell" aria-labelledby="faq-title">
+        <div className="help-form-head">
+          <span className="help-kicker">SPØRSMÅL OM SNAR</span>
+          <h2 id="faq-title">Dette lurer mange på.</h2>
+          <p>Om bestilling, reisen og hvordan du får tilgang.</p>
+        </div>
+        <div className="help-form">
+          {faq.map(([question, answer]) => (
+            <details key={question} className="help-form-head">
+              <summary><h3>{question}</h3></summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+          <Link to="/">Meld interesse for beta →</Link>
+          <br />
+          <Link to="/loyvehaver/soknad">Søk som løyvehaver →</Link>
+        </div>
+      </section>
+
       <section className="help-emergency help-shell">
         <div><span>SIKKERHET</span><h2>Akutt situasjon?</h2></div>
         <p>Ved fare for liv eller helse skal du kontakte nødetatene direkte. Supportkanalen er for SNAR-saker og erstatter ikke nødnummer.</p>
       </section>
 
       <footer className="help-footer help-shell">
-        <div><Wordmark /><p>Appen som kobler deg med selvstendige løyvehavere.</p></div>
+        <div><Wordmark /><p>SNAR er en norsk mobilitetsplattform for enkel bestilling av persontransport.</p></div>
         <nav><Link to="/">Forside</Link><Link to="/loyvehaver">Løyvehaver</Link><a href={`mailto:${SUPPORT_EMAIL}`}>support@kjappapp.no</a></nav>
         <span>© 2026 SNAR · NexoraHub AS</span>
       </footer>

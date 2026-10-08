@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /loyvehaver/soknad
 
-Sitemap: https://kjappapp.no/sitemap.xml
+Sitemap: https://snarapp.no/sitemap.xml

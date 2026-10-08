@@ -47,9 +47,9 @@ function RouteMetadata() {
 
     if (pathname === "/help") {
       setPageSeo({
-        title: "SNAR Hjelp & support",
+        title: "SNAR | Spørsmål, hjelp og support",
         description:
-          `Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på ${SUPPORT_EMAIL}.`,
+          "Svar på spørsmål om SNAR, bestilling, prisestimat, sjåfører, betaling og Oslo-beta. Få hjelp som kunde, sjåfør eller løyvehaver.",
         canonical: canonical("/help"),
       });
       return;
@@ -57,9 +57,9 @@ function RouteMetadata() {
 
     if (pathname === "/loyvehaver") {
       setPageSeo({
-        title: "SNAR for løyvehavere — Fleet Panel og norsk oppfølging",
+        title: "SNAR for løyvehavere | Bestillinger, drift og oppgjør",
         description:
-          "Bli SNAR-partner. Fleet Panel samler sjåfører, turer, dokumentasjon og oppgjør for norske løyvehavere.",
+          "SNAR er en bestillings- og formidlingsplattform for profesjonelle aktører. Søk om partnerskap og få oversikt over drift og oppgjør i SNAR Fleet.",
         canonical: canonical("/loyvehaver"),
       });
       return;
@@ -77,9 +77,9 @@ function RouteMetadata() {
     }
 
     setPageSeo({
-      title: "SNAR – Dit du skal. Med SNAR.",
+      title: "SNAR – Bestill bil med sjåfør | Oslo-beta",
       description:
-        "SNAR kobler deg med selvstendige løyvehavere. Velg bilen, se prisen og følg turen i appen.",
+        "Bestill bil med sjåfør i SNAR. Se prisestimat, følg sjåføren og betal i appen. Norsk mobilitetsplattform. Meld interesse for Oslo-betaen.",
       canonical: canonical("/"),
     });
   }, [pathname, hash]);

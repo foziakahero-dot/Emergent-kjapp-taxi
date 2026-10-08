@@ -126,7 +126,7 @@ export function Header({
               className="snar-btn snar-btn-primary snar-mobile-beta"
               onClick={onBeta}
             >
-              Få tilgang til beta
+              Meld interesse for beta
             </button>
           )}
         </nav>
@@ -137,7 +137,7 @@ export function Header({
               className="snar-btn snar-btn-primary"
               onClick={onBeta}
             >
-              Få tilgang til beta
+              Meld interesse for beta
             </button>
           ) : (
             <Link className="snar-btn snar-btn-primary" to="/loyvehaver/soknad">
@@ -168,12 +168,12 @@ export function Footer() {
     <footer className="snar-footer snar-shell">
       <div>
         <Brand />
-        <p>Appen som kobler deg med selvstendige løyvehavere.</p>
+        <p>SNAR er en norsk mobilitetsplattform for enkel bestilling av persontransport.</p>
       </div>
       <nav aria-label="Bunnmeny">
         <Link to="/#how">Slik fungerer det</Link>
         <Link to="/#vehicles">Bilvalg</Link>
-        <Link to="/loyvehaver">Løyvehaver</Link>
+        <Link to="/loyvehaver">Løyvehavere</Link>
         <Link to="/help">Hjelp</Link>
         <a href="https://fleet.snarapp.no/login">Fleet Panel</a>
       </nav>
