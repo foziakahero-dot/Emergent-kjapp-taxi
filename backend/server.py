@@ -69,6 +69,9 @@ CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").str
 APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"
 
 PRODUCTION_CORS_ORIGINS = [
+    "https://snarapp.no",           # SNAR marketing and partner applications
+    "https://admin.snarapp.no",     # SNAR control center
+    "https://fleet.snarapp.no",     # SNAR fleet portal
     "https://kjappapp.no",            # root (reserved for marketing site)
     "https://admin.kjappapp.no",      # admin/ops control center (CONFIRMED domain)
     "https://fleet.kjappapp.no",      # fleet web portal
