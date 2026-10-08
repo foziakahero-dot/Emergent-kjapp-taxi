@@ -257,7 +257,9 @@ export default function Home() {
   };
 
   const routeGeom = estimate?.geometry?.coordinates;
-  const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking && (!waitingPolicy || waitingAccepted));
+  // Payment and waiting consent are completed on the review screen.
+  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && !booking);
+  const canBook = canReview && Boolean(payMethod && (!waitingPolicy || waitingAccepted));
   const selectedCopy = vehicleCopy(selType);
   const selectedPrice = priceFor(selType);
   const recommendations = featured.filter(place => place.name && place.lat != null && place.lng != null && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)));
@@ -474,9 +476,9 @@ export default function Home() {
               </View>
 
               <Pressable
-                style={[s.reviewButton, !canBook && s.buttonDisabled]}
-                onPress={() => canBook && setReviewing(true)}
-                disabled={!canBook}
+                style={[s.reviewButton, !canReview && s.buttonDisabled]}
+                onPress={() => canReview && setReviewing(true)}
+                disabled={!canReview}
                 testID="booking-review"
               >
                 <FigmaGradient pointerEvents="none" colors={['#FF3B3B', '#FF0000']} style={{ position: 'absolute', inset: 0, borderRadius: 999 }} />
