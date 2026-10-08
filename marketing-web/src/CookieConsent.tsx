@@ -27,7 +27,7 @@ export default function CookieConsent() {
   return (
     <aside className="mk-cookie-banner" aria-label="Valg for informasjonskapsler">
       <div>
-        <strong>Personvern på kjappapp.no</strong>
+        <strong>Personvern på snarapp.no</strong>
         <p>Vi bruker kun nødvendige lokale innstillinger på denne siden nå. Valgfri analyse er ikke aktivert. Du kan lagre valget ditt nedenfor.</p>
       </div>
       <div className="mk-cookie-actions">
