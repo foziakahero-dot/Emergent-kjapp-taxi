@@ -156,7 +156,7 @@ export function ApplyPage() {
           <div className="apply2-eyebrow">SNAR PARTNER · STEG {step} AV 2</div>
           <h1>{step === 1 ? 'Søk om Fleet-tilgang.' : 'Last opp dokumentasjonen.'}</h1>
           <p>{step === 1
-            ? 'Fortell oss om virksomheten, løyvene og bilene. SNAR aktiverer ikke Fleet før dokumentasjonen er kontrollert og godkjent.'
+            ? 'Søk med virksomheten, drosjeløyvene og bilene dine. Tilgang til SNAR Fleet åpnes etter at dokumentasjonen er kontrollert og godkjent.'
             : 'Alle fem dokumenttyper må være klare før søknaden sendes videre til manuell kontroll.'}</p>
           <div className="apply2-trust-row">
             <span>{serviceFeeLabel(serviceFee)}</span>
@@ -236,7 +236,7 @@ export function ApplyPage() {
           <article>
             <span>03</span>
             <h3>SNAR kontrollerer</h3>
-            <p>Superadmin går gjennom dokumentasjon før Fleet aktiveres.</p>
+            <p>SNAR kontrollerer dokumentasjonen før Fleet-tilgang åpnes.</p>
           </article>
           <article className="apply2-info-highlight">
             <h3>Trenger du hjelp?</h3>
@@ -277,7 +277,7 @@ function Submitted({ email }: { email: string }) {
         <div className="apply2-success-ring">✓</div>
         <div className="apply2-eyebrow">SØKNAD MOTTATT</div>
         <h1>Venter på godkjenning.</h1>
-        <p>SNAR går gjennom virksomheten og dokumentasjonen manuelt. Det opprettes ingen Fleet-tilgang før superadmin har godkjent søknaden.</p>
+        <p>SNAR går gjennom virksomheten og dokumentasjonen. Du får tilgang til SNAR Fleet etter at søknaden er godkjent.</p>
         <div className="apply2-submitted-email">Svar sendes til <strong>{email}</strong></div>
         <div className="apply2-submitted-actions"><Link className="apply2-button apply2-primary" to="/">Til forsiden</Link><Link className="apply2-button apply2-secondary" to="/loyvehaver">Om SNAR Partner</Link><a className="apply2-button apply2-secondary" href={FLEET_URL}>Fleet Panel</a></div>
       </div>

@@ -31,9 +31,9 @@ function PartnerPage() {
         <section className="snar-section snar-shell snar-partner-hero">
           <div>
             <span className="snar-kicker">FOR LØYVEHAVERE</span>
-            <h1>Behold mer.<br />Jobb smartere.</h1>
+            <h1>Din virksomhet.<br />Bedre oversikt.</h1>
             <p>
-              Du driver virksomheten. SNAR kobler deg med kunder og samler bestillinger, betaling og flåteverktøy i én plattform.
+              SNAR er en bestillings- og formidlingsplattform for profesjonelle sjåfører og løyvehavere. Bestillinger, betaling, oppgjør og drift samlet på ett sted.
               {` ${feeLabel}. Utbetalinger går til din bankkonto gjennom Stripe når kontoen er bekreftet.`}
             </p>
             <div className="snar-actions">
@@ -45,13 +45,13 @@ function PartnerPage() {
           <Card>
             <span className="snar-kicker">FLEET PANEL</span>
             <h3>Sjåfører. Turer.<br />Dokumenter. Oppgjør.</h3>
-            <p>Alt du trenger for å følge driften — uten å gi fra deg kontrollen over virksomheten.</p>
+            <p>Følg sjåfører, biler, dokumentstatus og oppgjør i SNAR Fleet.</p>
           </Card>
         </section>
 
         <section className="snar-section snar-shell">
           <div className="snar-section-copy">
-            <span className="snar-kicker">MER IGJEN PER TUR</span>
+            <span className="snar-kicker">TYDELIGE VILKÅR</span>
             <h2>Din virksomhet.<br />Vår plattform.</h2>
             <p>
               Du beholder løyvene, bilene og sjåførene. SNAR gjør det enklere å motta bestillinger og følge drift og oppgjør.
@@ -75,7 +75,7 @@ function PartnerPage() {
               <span className="snar-kicker">DIN VIRKSOMHET</span>
               <h2>Teknologien skal jobbe for deg.</h2>
               <p>
-                Du beholder løyvene, bilene, sjåførene og virksomheten. SNAR leverer teknologien rundt booking, betaling,
+                Du beholder løyvene, bilene, sjåførene og virksomheten. SNAR samler bestilling, betaling,
                 dokumentasjon og drift — slik at du kan bruke mer tid på flåten og mindre tid på administrasjon.
               </p>
             </div>
@@ -85,10 +85,10 @@ function PartnerPage() {
         <section className="snar-section snar-shell">
           <div className="snar-section-copy">
             <span className="snar-kicker">SLIK BLIR DU PARTNER</span>
-            <h2>Én kontrollert vei inn.</h2>
+            <h2>Slik får du tilgang.</h2>
             <p>
-              Tilgang til Fleet åpnes først etter at firma og dokumentasjon er kontrollert.
-              Det gir en ryddig onboarding for både SNAR og løyvehaveren.
+              Tilgang åpnes etter at virksomheten og dokumentasjonen er godkjent.
+              Løyvehavere må ha gyldig drosjeløyve, og sjåfører må ha gyldig kjøreseddel.
             </p>
           </div>
           <div className="snar-partner-value-grid">

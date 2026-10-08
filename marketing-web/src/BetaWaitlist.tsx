@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-type BetaRole = "passenger" | "driver" | "fleet_owner";
+export type BetaRole = "passenger" | "driver" | "fleet_owner";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   returnFocusTo?: HTMLElement | null;
+  initialRole?: BetaRole;
 };
 
 type FormState = {
@@ -43,7 +44,7 @@ function validate(form: FormState) {
   return "";
 }
 
-export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
+export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole }: Props) {
   const [form, setForm] = useState<FormState>(initialForm);
   const [status, setStatus] = useState<
     "idle" | "submitting" | "success" | "error"
@@ -55,6 +56,10 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
   const submitting = useRef(false);
   const request = useRef<AbortController | null>(null);
   const successRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open && initialRole) setForm((current) => ({ ...current, role: initialRole }));
+  }, [open, initialRole]);
 
   useEffect(() => {
     if (status === "success") successRef.current?.focus();
@@ -176,8 +181,8 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
       setStatus("success");
       setMessage(
         data.confirmation_email_status === 'queued'
-          ? 'Registreringen er mottatt. En bekreftelse er lagt i e-postkøen. Du får informasjon når din testgruppe åpner.'
-          : 'Registreringen er mottatt. Vi kontakter deg når din testgruppe åpner.',
+          ? 'Interessen din er registrert. En bekreftelse sendes på e-post. Du får informasjon når din testgruppe åpner.'
+          : 'Interessen din er registrert. Vi kontakter deg når din testgruppe åpner.',
       );
     } catch (error) {
       if (controller.signal.aborted && controller.signal.reason !== "timeout")
@@ -224,10 +229,10 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
           ×
         </button>
         <span className="mk-beta-kicker">SNAR BETA</span>
-        <h2 id="beta-title">Få tilgang til beta</h2>
+        <h2 id="beta-title">Meld interesse for beta</h2>
         <p id="beta-description">
-          Meld interesse som passasjer, sjåfør eller løyvehaver. Vi bruker
-          opplysningene kun for å følge opp beta-tilgang.
+          Meld interesse som kunde, sjåfør eller løyvehaver. Vi bruker
+          opplysningene kun for å følge opp beta-tilgang. Sjåførtilgang krever godkjenning.
         </p>
 
         {status === "success" ? (
@@ -316,7 +321,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo }: Props) {
                   setForm({ ...form, role: event.target.value as BetaRole })
                 }
               >
-                <option value="passenger">Passasjer</option>
+                <option value="passenger">Kunde</option>
                 <option value="driver">Sjåfør</option>
                 <option value="fleet_owner">Løyvehaver / flåte</option>
               </select>

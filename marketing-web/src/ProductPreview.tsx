@@ -70,7 +70,7 @@ export default function ProductPreview() {
                 </div>
               ))}
             </div>
-            <p>Pris og hentetid vises før du bestiller.</p>
+            <p>Illustrasjon · priser og hentetider er eksempler.</p>
           </div>
         </div>
       </div>

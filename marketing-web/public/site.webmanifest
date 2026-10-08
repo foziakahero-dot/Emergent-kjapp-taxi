@@ -1,7 +1,7 @@
 {
   "name": "SNAR",
   "short_name": "SNAR",
-  "description": "SNAR – norsk taxi med smart bestilling.",
+  "description": "SNAR – bestill bil med sjåfør i appen.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F4F6FA",
