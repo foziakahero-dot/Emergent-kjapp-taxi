@@ -1,12 +1,10 @@
-name: KJAPP Customer Android APK
+name: SNAR Customer Android APK
 
-on:
-  push:
-    branches: ['main']
+# Manual builds only: web and backend pushes must not start mobile builds.
 
 jobs:
   build_customer_android:
-    name: Build KJAPP Customer Android APK
+    name: Build SNAR Customer Android APK
     type: build
     params:
       platform: android

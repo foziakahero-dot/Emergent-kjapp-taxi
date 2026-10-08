@@ -1,12 +1,10 @@
-name: KJAPP Driver Android APK
+name: SNAR Driver Android APK
 
-on:
-  push:
-    branches: ['main']
+# Manual builds only: web and backend pushes must not start mobile builds.
 
 jobs:
   build_driver_android_apk:
-    name: Build KJAPP Driver Android APK
+    name: Build SNAR Driver Android APK
     type: build
     params:
       platform: android

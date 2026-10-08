@@ -30,7 +30,7 @@ export default function HelpPage() {
     setPageSeo({
       title: 'SNAR Hjelp & support',
       description: 'Få hjelp med turer, betaling, konto, sjåfør- eller løyvehaverspørsmål. SNAR support svarer på support@kjappapp.no.',
-      canonical: 'https://kjappapp.no/help',
+      canonical: 'https://snarapp.no/help',
     });
   }, []);
 
@@ -47,7 +47,7 @@ export default function HelpPage() {
       'Beskrivelse:',
       message || '-',
       '',
-      'Sendt fra kjappapp.no/help',
+      'Sendt fra snarapp.no/help',
     ].join('\n');
 
     window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
