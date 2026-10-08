@@ -54,6 +54,10 @@ export const api = {
   twofaDisable: (password: string, code: string) => http.post('/auth/2fa/disable', { password, code }).then((r) => r.data),
 
   overview: () => http.get('/admin/overview').then((r) => r.data),
+  betaWaitlist: (params: { role?: string; status?: string; offset: number; limit: number }) =>
+    http.get('/admin/beta-waitlist', { params }).then((r) => r.data),
+  updateBetaInterest: (id: string, status: string) =>
+    http.patch(`/admin/beta-waitlist/${id}`, { status }).then((r) => r.data),
   live: () => http.get('/admin/live').then((r) => r.data),
   finance: (days = 30) => http.get('/admin/finance', { params: { days } }).then((r) => r.data),
 
