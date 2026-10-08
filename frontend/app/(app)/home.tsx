@@ -52,7 +52,13 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchCollapsed, setSearchCollapsed] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(true);
-  useEffect(() => { if (dropoff) setSearchCollapsed(true); }, [dropoff]);
+  const [rideSheetCollapsed, setRideSheetCollapsed] = useState(false);
+  useEffect(() => {
+    if (dropoff) {
+      setSearchCollapsed(true);
+      setRideSheetCollapsed(false);
+    }
+  }, [dropoff]);
   const [recommendationOpen, setRecommendationOpen] = useState(false);
   const [recommendationIndex, setRecommendationIndex] = useState(0);
   const [reviewing, setReviewing] = useState(false);
@@ -327,7 +333,7 @@ export default function Home() {
               s.locationFab,
               {
                 bottom: dropoff
-                  ? insets.bottom + 372
+                  ? insets.bottom + (rideSheetCollapsed ? 126 : 372)
                   : insets.bottom + (sheetCollapsed ? 94 : 300),
               },
             ]}
@@ -422,11 +428,36 @@ export default function Home() {
               </Collapse>
             </View>
           ) : (
-            <View style={[s.rideSheet, { paddingBottom: insets.bottom + 112 }]} testID="home-ride-sheet">
-              <Pressable testID="customer-app-app-home-365" style={s.sheetHandleButton} onPress={() => setSheetCollapsed((v) => !v)}>
+            <View style={[s.rideSheet, { paddingBottom: insets.bottom + (rideSheetCollapsed ? 18 : 112) }]} testID="home-ride-sheet">
+              <Pressable
+                testID={rideSheetCollapsed ? 'home-ride-sheet-expand' : 'home-ride-sheet-collapse'}
+                style={s.sheetHandleButton}
+                onPress={() => setRideSheetCollapsed((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={rideSheetCollapsed ? 'Utvid bilvalg' : 'Minimer bilvalg'}
+              >
                 <View style={s.handle} />
               </Pressable>
 
+              {rideSheetCollapsed ? (
+                <Pressable
+                  testID="home-ride-sheet-summary"
+                  onPress={() => setRideSheetCollapsed(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Vis bilvalg"
+                  style={{ minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 4 }}
+                >
+                  <View style={[s.vehicleIconBox, s.vehicleIconBoxActive]}>
+                    <VehicleGlyph selected kind={selType as VehicleKind} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.vehicleName}>{selectedCopy.name}</Text>
+                    <Text style={s.vehicleMeta}>{nearest != null ? nearest + ' min · ' : ''}{selectedPrice != null ? kr(selectedPrice) : 'Beregner pris…'}</Text>
+                  </View>
+                  <Icon name="chevron-up" size={20} color={colors.textMuted} />
+                </Pressable>
+              ) : (
+                <>
               <View style={s.rideHeader}>
                 <Text style={s.rideTitle}>Velg reise</Text>
                 <Pressable
@@ -485,6 +516,8 @@ export default function Home() {
                 <Text style={s.reviewButtonText}>Se over · {selectedCopy.name}</Text>
               </Pressable>
               {error ? <Text style={s.error} testID="home-error">{error}</Text> : null}
+                </>
+              )}
             </View>
           )}
         </>

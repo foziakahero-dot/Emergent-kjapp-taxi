@@ -1,0 +1,1068 @@
+{
+  "scope": "All 106 remote branches; root tree comparison, all 53 unique Customer trees, 23 unique Customer home files, and all 23 marketing trees. Backend and Driver source was read only where it affected Customer requirements.",
+  "date": "2026-10-08",
+  "selected_branch": "fix/customer-search-mapbox-stripe-20261004",
+  "baseline": "b776998f36dff7e3d2df5d02e0fdc854162d7dad",
+  "branches": [
+    {
+      "branch": "Admin-panel-",
+      "commit": "52e40845539bec4930aaf432519372fc0be85d48",
+      "frontend_tree": "43c346ceb44f8b92de7d10f652f765b82fa5fe87",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "Apk-iOS-",
+      "commit": "5e34f3aefa2a980ded6dcdc42258acd278bd6869",
+      "frontend_tree": "25894e5e32468dee40b89d7df4c583ec9e88d754",
+      "home_blob": null,
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": null
+    },
+    {
+      "branch": "Nyeste-mobil-klar-",
+      "commit": "b721f927144eda7af105387103962714ed4caee4",
+      "frontend_tree": "43c346ceb44f8b92de7d10f652f765b82fa5fe87",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "admin-control-center-20260918",
+      "commit": "ce36238b27e7c0f211854d9fc46c9def21e5b573",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "audit/admin-snar-p0-chatgpt-20261006",
+      "commit": "256fa956285165892bcd10bd65f81bafe1ac6b26",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "audit/admin-snar-p0-chatgpt-beta-20261006",
+      "commit": "e8260ec3cc1dfa57ec1ad46e6bd1d7198e1df754",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "audit/customer-prebuild-snar-20261003",
+      "commit": "cf0042246c43b13702587bb483ed9e52ba5f0f60",
+      "frontend_tree": "87d997767185a133c6602b9d07755f8aa7fa4882",
+      "home_blob": "d5f1006d6e3810819931eaec43615887369ef60f",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip ? [] : cars}"
+    },
+    {
+      "branch": "audit/driver-snar-p0-20261005",
+      "commit": "244c081a5788babe5fff84bef3f3e1d3a14f7b3a",
+      "frontend_tree": "7bd9e34469cb21d6bad6c37078e8f1dd1783b0a6",
+      "home_blob": "0b81f92f5a5cbcfed16c81d7d5df048577ad1366",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "backup/claude-driver-mixed-78d25d9-20261004",
+      "commit": "78d25d96546353c2a9590d0127f25ced59a63061",
+      "frontend_tree": "9d66c3107c0e82c6ef7ecea80e5ecf38417211ce",
+      "home_blob": "6c98fdab278b6609e4ab31d39a304acff2d36b6c",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "backup/customer-api-preprofile-20261004",
+      "commit": "d93cbb6c8282e82e52fbb5674087103928814daa",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "backup/customer-prebuild-before-render-reuse-20261004",
+      "commit": "f8341cd1853e35b9a94c4423626b78df87870efb",
+      "frontend_tree": "f985754c781570d16bc72d1afe8f6c6816326209",
+      "home_blob": "738106a37018d7a45d1aa01fc8c9c5414b4aa55e",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip ? [] : cars}"
+    },
+    {
+      "branch": "backup/customer-prebuild-snar-20261004",
+      "commit": "ebb76fc009ba8d7daed8b24e50ea5a9a70ed0cbe",
+      "frontend_tree": "05757c20292f7066803f6ed5bb1939f2b640e8b1",
+      "home_blob": "0b81f92f5a5cbcfed16c81d7d5df048577ad1366",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "backup/firebase-ops-before-snar-fleet-validation-20261005",
+      "commit": "199f362786e5362be84d1a3e1f9904ed82c0e9a4",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "backup/mapbox-standard-before-snar-fleet-promote-20261005",
+      "commit": "be832aee861409a4cab5e68f739d6ad6224928c4",
+      "frontend_tree": "6ca4e7dfd5bf10f61057099b7861b2fd07fe0c48",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "backup/release-beta-mobile-build-20261001-before-driver71",
+      "commit": "0d001cd4316043b5516cde57a03646f912f4b631",
+      "frontend_tree": "ba7b21867ac93096dcee2b7db0684e467d55f4de",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "backup/render-api-pre-native-hotfix-20261003",
+      "commit": "dc43d5696b1efeeed8fbf71392abe53a4b7a4807",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "beta/oslo-production-ready",
+      "commit": "376cd12575fcb5ea0a9211004325733600240581",
+      "frontend_tree": "ba7b21867ac93096dcee2b7db0684e467d55f4de",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "build/driver-apk-proxy-20260928",
+      "commit": "8dc6622dd1ca296cc60308f2aaea93e332042741",
+      "frontend_tree": "46a06826b33d374885c2a8a98261284e56368b6d",
+      "home_blob": "8379e2bd533c07bdd27dbe2cedf272f2bbecf0ef",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "build/internal-apk-20261004",
+      "commit": "f5ab5c92094f203df474cdc22651c40313ceeea9",
+      "frontend_tree": "08fdcab08251fed4e1d7d9c919483e38bdab41b5",
+      "home_blob": "6c98fdab278b6609e4ab31d39a304acff2d36b6c",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "chatgpt/kjapp-product-rebase",
+      "commit": "4b2abb67560e19d7a318f2f3698ebaefa0430ca6",
+      "frontend_tree": "eaa547fb39b2f41f5d34e74a22f9095f8df87815",
+      "home_blob": "3f467c5957ab3caea2edda3ef5eebb445f979824",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "codex/admin-gold-console-20260917",
+      "commit": "fc49e4ce3602a670279a285d40aa8c28c9a6daa2",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "codex/admin-production-qa",
+      "commit": "fb8fa0ced1a8c0cc02f9413ab83027041bd5a7b2",
+      "frontend_tree": "c0a73c7d8a05fbeffbe3cee21a003dbf014e6ab1",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "codex/kjapp-signature-mainline",
+      "commit": "7f6e3efad6ebb874fd5d889a3f9cff9264c0c57b",
+      "frontend_tree": "b89540705a783f9f46377157a949f1006763a22f",
+      "home_blob": "ada7e7efb4f669f83674de131c897d3e818e2d87",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "codex/mobile-apk-release-20260920",
+      "commit": "8f6de74f68fd87c25f843ce3feb3509ce3f99ee4",
+      "frontend_tree": "5a98e05c0ab089fc9c7f891ced444dae568aff65",
+      "home_blob": "9da3515c4bc56087669783844e9ae74a5d9270b0",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/emergent-pixel-perfect",
+      "commit": "a6d12a9e55931606cfd95b2cad8d1412dbf8be96",
+      "frontend_tree": "ea75b1af8103477317686ddcab4394aeb164d0ea",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/figma-make-pixel-match-20261002",
+      "commit": "85d2c19bdbc5aa74f1abfd306e51909e53a4505e",
+      "frontend_tree": "7bd9e34469cb21d6bad6c37078e8f1dd1783b0a6",
+      "home_blob": "0b81f92f5a5cbcfed16c81d7d5df048577ad1366",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/kjapp-ai-mobility-v2",
+      "commit": "10aea61dd339c5e18335d5711c8e073fd7811507",
+      "frontend_tree": "7d0580b1f9785c3d74bb48c414535ca035837809",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/kjapp-signature-2",
+      "commit": "61665e7b518c5bbe9e59a648eb7e39c23f6ad736",
+      "frontend_tree": "5bd7c5555d1395ca8f075706d8c3aa042aa1311d",
+      "home_blob": "ada7e7efb4f669f83674de131c897d3e818e2d87",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/snar-control-center-figma-v2-20261007",
+      "commit": "86de5f4e637f43d3fa99b14e717d4b85e0941ade",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/snar-fleet-theme-20261005",
+      "commit": "7d2d43a5694cddda55d920c9047c43f5e9b0a1bd",
+      "frontend_tree": "2baaa24d655f92aee53a7cdb0a46aa368b90633f",
+      "home_blob": "d2cbf34e87eceba9b33fbae6b21f325419456341",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/snar-kjappapp-web-20261004",
+      "commit": "43f39aec60fe79a92102018c6033276e6724a215",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/snar-landing-figma-20261004",
+      "commit": "8fee33eccbb05cc570ad713c5bf269151554277e",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "design/snar-landing-upgrade-20261004",
+      "commit": "a509ace81a3bc38e0bde61688a15423f7208925c",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "diagnose/driver-eas-exact-error",
+      "commit": "fdd10552dd60b3abe97bce8ec93d0a49648506bb",
+      "frontend_tree": "18668f779713dd92eb472a90ff901854b9d1fabf",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "diagnostic/customer-runtime-smoke",
+      "commit": "72204bee242e8ef7fa53091e2c29b001b8aa9434",
+      "frontend_tree": "6f9f5db67a2a7197f1ae8aca5684887cc1aa0f81",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "diagnostic/fresh-customer-driver-builds",
+      "commit": "3ce4098461b43e6927abb6d52ceb8e2e21060204",
+      "frontend_tree": "da4fa5033a21175db9c6883116d5d154c85a8dd4",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "driver-improvements-fix",
+      "commit": "2759aa04c0755d192e9eb9eb090c3e0ba306db98",
+      "frontend_tree": "594d4a4a4e744820416eca41e1f3321335199a19",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/door-to-car-20261002",
+      "commit": "376cd12575fcb5ea0a9211004325733600240581",
+      "frontend_tree": "ba7b21867ac93096dcee2b7db0684e467d55f4de",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/fleet-live-compliance",
+      "commit": "5768d0768106f5da4bf82db5b1cc2f1f5bf59548",
+      "frontend_tree": "72680d4b6cc62e7bf28a635de66711fce3afae30",
+      "home_blob": "334c67d47b3bad8cae608b54f90fd32a327da22a",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/fleet-live-ops-selfie",
+      "commit": "462e468b61987b00197587d270e66b0b1c20f4e4",
+      "frontend_tree": "063560ecc73f2103cf6d92a4f543275293efe233",
+      "home_blob": "49fa1baa5f8acb5370f7b1d6c50c2af54b39113a",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/mapbox-standard-mobile-20261001",
+      "commit": "be832aee861409a4cab5e68f739d6ad6224928c4",
+      "frontend_tree": "6ca4e7dfd5bf10f61057099b7861b2fd07fe0c48",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/native-auth-fleet-payments-20261002",
+      "commit": "ab23e2825a47d6adcfadf1cc080198c17b87b8e9",
+      "frontend_tree": "81b896de2d58c1a038c8fd31c3644dac76e09f7b",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/next-landing-beta-preview",
+      "commit": "6ee3c0430eb59b6b6542c075e12a6794a99ce577",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/receipt-ledger-selfie-recheck",
+      "commit": "1935d5344027a3413d9e1af39e5b4621019ddc05",
+      "frontend_tree": "957bd6fe228f0f3c6e7ea973478485f5e5815139",
+      "home_blob": "334c67d47b3bad8cae608b54f90fd32a327da22a",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/snar-customer-waiting-consent-20261007",
+      "commit": "13911f8c738581bf0c073700a51630db5fd8a9be",
+      "frontend_tree": "70b99b162e440221a43ad3ccc9c6bfb7e468324c",
+      "home_blob": "69250416e266b184f68eb96512ebd2f6a91c00e9",
+      "snar_review": true,
+      "waiting_consent": true,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking && (!waitingPolicy || waitingAccepted));",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/snar-fleet-figma-exact-20261006",
+      "commit": "c7a86a33cc0b90080f1b8eec52341411ffd4e05d",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/snar-fleet-v2-core-screens-20261006",
+      "commit": "26347cb5a17e415a39e58ce95f32166fe87a5f02",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feat/snar-onboarding-waiting-20261007",
+      "commit": "f6422a6af32472699fe93c41250d2b4cc5464f8d",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "feat/snar-platform-fleet-controls-20261007",
+      "commit": "fa7fbab6d6204c53a74e6f5cd3ee5772b0f57c90",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/byteplus-deepwiki-mcp-test",
+      "commit": "e82869e700af8605094bf60af1714a6e012a08ef",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/fleet-approval-12pct",
+      "commit": "7dbd0369895967f9ec992fb590e082df75859105",
+      "frontend_tree": "ea75b1af8103477317686ddcab4394aeb164d0ea",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/fleet-portal-v1",
+      "commit": "7801dde926e53d0d561fc68ba86ca38f3d1f4410",
+      "frontend_tree": "ea75b1af8103477317686ddcab4394aeb164d0ea",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/kjapp-marketing-web-v1",
+      "commit": "07d385fba17096f465658eb4ae48f5effb47fc17",
+      "frontend_tree": "ea75b1af8103477317686ddcab4394aeb164d0ea",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/kjapp-operations-os-20260929",
+      "commit": "ae6d8d1ed4079f27377d8794ed50739d26d725ea",
+      "frontend_tree": "fbaa278642a3d45f4aee5e30bf727448921f264a",
+      "home_blob": "ce6a41f98ee6e691c756410eee17c7f01e038e1a",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/landing-production-readiness",
+      "commit": "7fb8629692ffa838aed676924283efbfd6685d5a",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/p0-security-financial-integrity",
+      "commit": "7ca6f69bd5f8bd74e88378cc5cf0f09406bc1d29",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "feature/split-customer-driver",
+      "commit": "d86707e7de33a368df3e9579ba5351b40379fe2f",
+      "frontend_tree": "260699a1f0f0312bca70d18645d430697cd6fbcb",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/admin-2fa-current-20260929",
+      "commit": "f8f7c2220bb87d4009adf11c12f0419aada67865",
+      "frontend_tree": "f296d1fdc1114be1230e17a32258a6c5e9510e2a",
+      "home_blob": "ce6a41f98ee6e691c756410eee17c7f01e038e1a",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/admin-2fa-qr-dependency-20260930",
+      "commit": "490d5cfa44a5dd54cfbef412e3a9ee83f2f436ca",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "fix/admin-visible-beta-controls",
+      "commit": "30f5e2312515e15ae50e0e461cd638f861b8c2f3",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/beta-mobile-firebase-ops-20260926",
+      "commit": "3f84fe6dd635830c66e1e406d0344757656ec575",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "fix/customer-final-clean-20261004",
+      "commit": "66bb81e1cfc72cafc4ea01b12c9ad0140c729bf2",
+      "frontend_tree": "b452eec88e80ca8c262140c42cdad3ffe45f3c20",
+      "home_blob": "6c98fdab278b6609e4ab31d39a304acff2d36b6c",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/customer-gdpr-clean-20261004",
+      "commit": "b2e6396ebb79034a78d1b106ec630fed96b20797",
+      "frontend_tree": "783ce0fbe8f49aca17f749936b549c0a831e3266",
+      "home_blob": "6c98fdab278b6609e4ab31d39a304acff2d36b6c",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/customer-home-map-ux-20260929",
+      "commit": "60b32d3c630985822a9f01481f066b869c9400de",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "fix/customer-search-mapbox-stripe-20261004",
+      "commit": "b776998f36dff7e3d2df5d02e0fdc854162d7dad",
+      "frontend_tree": "06a3e17fe94368b17b8cf8935c6aa1f0bde9caba",
+      "home_blob": "db59b224d96291e97a0696d4d04b81a62d5ced53",
+      "snar_review": true,
+      "waiting_consent": true,
+      "review_gate": "const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && !booking);",
+      "nearby_map_binding": "cars={activeTrip ? [] : cars}"
+    },
+    {
+      "branch": "fix/driver-final-clean-20261004",
+      "commit": "b5a275d568d1c8be2dcdf8937640b346226a75f0",
+      "frontend_tree": "7bd9e34469cb21d6bad6c37078e8f1dd1783b0a6",
+      "home_blob": "0b81f92f5a5cbcfed16c81d7d5df048577ad1366",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/eas-manual-only-trigger",
+      "commit": "1f1ac87cac8f1831ca2296bd86ff57485dd18d9b",
+      "frontend_tree": "c03df04a49c2511a39a9186202e0557d5257b768",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/firebase-native-push-production",
+      "commit": "bcfddbb16c03fb5ff0ea06ee9001c879b85f12e0",
+      "frontend_tree": "2acad905704ccecdabe02dcec836deec2de3884f",
+      "home_blob": "dd74600c0bc05d7859398a9a88be56dae897b6db",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/fleet-export-openpyxl-20261005",
+      "commit": "5417683c91cf7ce93b05face2b565d05813f1e89",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "fix/fleet-invitation-delivery-20261005",
+      "commit": "9450cf8e89557db5fa459372f4306e9e881f350e",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "fix/fleet-onboarding-required-docs",
+      "commit": "22283bc70d37940c37b1bebe99f2ed80c2e3d26f",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/google-native-idtoken-20260929",
+      "commit": "d388932a9f04193efc7029e7525b0c73ff0f07e9",
+      "frontend_tree": "278d74b45158d4a03df6514418bddc85e20d93f4",
+      "home_blob": "ce6a41f98ee6e691c756410eee17c7f01e038e1a",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/landing-beta-badge-polish",
+      "commit": "d44db0b64433b4cab8d4095c89c84e3903b5e8c8",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/landing-copy-fleet-theme-20260926",
+      "commit": "04eecee82eed91f3a1b0ee2e9f670ae2e0936266",
+      "frontend_tree": "1e48e5a562866a1a6a72f42b24f23281aee291ba",
+      "home_blob": "8379e2bd533c07bdd27dbe2cedf272f2bbecf0ef",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/live-payment-return",
+      "commit": "527aedb363b1282c56fd7428a719dcbba5594e50",
+      "frontend_tree": "dee70b0911c953493d9146c6389a0fed1b7cecb9",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/mobile-build-trigger",
+      "commit": "14fd9638ed613c4d7badd1465d4b591e4d70af75",
+      "frontend_tree": "72e61566127199ae8819baa9fae87049c6b233a5",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/mobile-final-hardening",
+      "commit": "bf2d6c31ef905da207858720d48de55d9b803319",
+      "frontend_tree": "dee70b0911c953493d9146c6389a0fed1b7cecb9",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/mobile-map-account-ux",
+      "commit": "8581f0a69adbc7e5b371838511e2c4a740d82296",
+      "frontend_tree": "ea75b1af8103477317686ddcab4394aeb164d0ea",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/mobile-production-recovery",
+      "commit": "0b26e64fd8486bee2b5721a2f049df194fc1ff5d",
+      "frontend_tree": "8f18c5cced0df9f91f0be0a88720eaef25d2d69a",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/restore-kjappapp-landing",
+      "commit": "63049ca2fa6506442f1b6b2f02b08c9716edb733",
+      "frontend_tree": "dee70b0911c953493d9146c6389a0fed1b7cecb9",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/snar-api-cors-20261008",
+      "commit": "8b8866229dfc2a66250ac9c8f260a8628ee75dc6",
+      "frontend_tree": "00eb24a7c9e5c659e4b07cc29f404bdaf0c7863c",
+      "home_blob": "f7ced0d18d061d8fc240fc5857336911543d45fc",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={cars}"
+    },
+    {
+      "branch": "fix/snar-device-trip-release-20261006",
+      "commit": "85325cc25b00d401db026e6f4dbdb1bcc00e0c56",
+      "frontend_tree": "60f71ae2d4804d377eda1700dc61865707cf76be",
+      "home_blob": "097ecdb2045224aa21bc15ea7b4d851d00ef50ac",
+      "snar_review": true,
+      "waiting_consent": false,
+      "review_gate": "const canBook = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={activeTrip || dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/snar-fleet-v2-finance-hardening-20261006",
+      "commit": "1d8ad3b5cef4d87d5c480c3661ea74089ef06177",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "fix/snar-manual-expo-builds-20261008",
+      "commit": "4f89366c5070f9f126aa9f6da899559598d02b3f",
+      "frontend_tree": "7b49f2b8a314c81e9931789fca307f1c3f85e111",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "hardening/beta-p0-p1-p2-20260921",
+      "commit": "39bebe6438ffdcdf4d2015cc87c7f2032cd6f7af",
+      "frontend_tree": "d46cde03b2d2bfcda9a73fa56fb457bdfdd49238",
+      "home_blob": "5d78fadca3442721677fafff7cabaa5db8e639c6",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "hotfix/backend-native-auth-stripe-test-20261003",
+      "commit": "88fbb011ea91c9d0f6005d96ac09606ca70d94b5",
+      "frontend_tree": "ba7b21867ac93096dcee2b7db0684e467d55f4de",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "implement/dynamic-pricing-admin",
+      "commit": "06680d4701656965d2f0bb519f87277b454b3942",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "kjapp-gold-rebase",
+      "commit": "77511909ae0bcbf0a3742078ffadc3bab5df7fa8",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "kjapp-help-support",
+      "commit": "04365aa9b89ba3bf18384d3c10c904d1a3d2f953",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "kjapp-web-gold",
+      "commit": "6b850c4fabe050189e074ff3368789495df6f30e",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "kjapp-web-gold-v2",
+      "commit": "b8d42b8c64844eb25b4421950914e18cfcf381c1",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "landing-next-beta",
+      "commit": "f78de632cf784b35e68903e23335d2100666c1ae",
+      "frontend_tree": "597f758500594847bab21f6c22d97673ffc8e0cb",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "main",
+      "commit": "4b16ce81566fb823f0e3e6addd0831d0a6a0a25c",
+      "frontend_tree": "7b49f2b8a314c81e9931789fca307f1c3f85e111",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "p0-beta-hardening-20260917",
+      "commit": "ac9ad46308013f7684d34781e8fe65762ea8a8b7",
+      "frontend_tree": "13b05c061bf9936e5242f9b9a31a39d718a0e180",
+      "home_blob": "54e313c687f1b2fa347240bb8203d6f65a847547",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "p0-beta-hardening-20260918",
+      "commit": "a824ab5eb80a7402ac21f0d35b27112bc2e2f932",
+      "frontend_tree": "2a2c318e6a68fcfacd86dceaa3379ce06c5acf92",
+      "home_blob": "7f46fa64078323b2b6baccfb773bf480a7d5d354",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "p0/admin-2fa-hardening-20260928",
+      "commit": "8a605eb6bbb5b3095715e5792a140e8fefc98f48",
+      "frontend_tree": "906ef230d8f959583465f8093c4186822cfbad29",
+      "home_blob": "8379e2bd533c07bdd27dbe2cedf272f2bbecf0ef",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "p0/mobile-release-readiness-20260928",
+      "commit": "22e1d59da3e259927c2ac6f5c852522e9984c977",
+      "frontend_tree": "61e6b8732316d6d9a3d462bbc3b8948696a6debd",
+      "home_blob": "8379e2bd533c07bdd27dbe2cedf272f2bbecf0ef",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "plan/kjapp-web-fleet",
+      "commit": "7d0a268477977efeaabd7c16e1c9a15748ea02c8",
+      "frontend_tree": "ea75b1af8103477317686ddcab4394aeb164d0ea",
+      "home_blob": "cb901a37fd994e2f3f4dc55fe5ba41202871ba33",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/admin-snar-clean-20261006",
+      "commit": "a76df6b2a1b67359a5181181fe8ffcba3292261a",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/admin-snar-production-20261006",
+      "commit": "256fa956285165892bcd10bd65f81bafe1ac6b26",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/beta-mobile-build-20261001",
+      "commit": "0d001cd4316043b5516cde57a03646f912f4b631",
+      "frontend_tree": "ba7b21867ac93096dcee2b7db0684e467d55f4de",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/emergent-production",
+      "commit": "00298982c16569e50552959791934a203d28398d",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/snar-fleet-production-20261005",
+      "commit": "00298982c16569e50552959791934a203d28398d",
+      "frontend_tree": "17688b5ab6d6fb80e3762c4ee9666729ab4febb7",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/snar-fleet-production-main-20261005",
+      "commit": "c71cc85b030af81236d63bae147a862ca61b5333",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "release/snar-landing-production-main-20261005",
+      "commit": "ee3e31b3f22728f5b67beb1a8b9cb3aefe7729e8",
+      "frontend_tree": "b41ba5d2541929106524c6397d0b3ccfcd3aa79a",
+      "home_blob": "563ee0eb9a5d652bcdae9df38357ad10538841c3",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": null,
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    },
+    {
+      "branch": "snar/mobile-ui-review-20260930",
+      "commit": "42ef52612ba77b7fae827e75686fcd48aa6427ab",
+      "frontend_tree": "bc42cb7c582275956b5190c11d0b09c05ba8cc1b",
+      "home_blob": "375cbdc1246197706dfb5d6bc8223eae91066e31",
+      "snar_review": false,
+      "waiting_consent": false,
+      "review_gate": "const canBook = Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && payMethod && !booking);",
+      "nearby_map_binding": "cars={dropoff ? [] : cars}"
+    }
+  ]
+}

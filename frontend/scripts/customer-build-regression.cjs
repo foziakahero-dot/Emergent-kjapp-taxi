@@ -7,11 +7,11 @@ const React = require(root+'/node_modules/react');
 const renderer = require(root+'/node_modules/react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT=true;
 for(const extension of ['.ts','.tsx']) require.extensions[extension]=(mod,file)=>mod._compile(ts.transpileModule(require('node:fs').readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
-const estimates=[];let activeTrip=null;let stripeConfig={enabled:true,test_mode:true,publishable_key:'pk_test_unit'};let intentCalls=0;let paymentResult={};let settled=true;let urlListener;const urls=[];
+const estimates=[];const requests=[];let activeTrip=null;let paymentMethods=[{id:'test-method',is_default:true}];let availableCars=[{id:'online-driver',lat:59.911,lng:10.751,heading:90}];const waitingPolicy={token:'unit-quote',free_minutes:3,per_minute:5,max_fee:50};let stripeConfig={enabled:true,test_mode:true,publishable_key:'pk_test_unit'};let intentCalls=0;let paymentResult={};let settled=true;let urlListener;const urls=[];
 const api={
- tripsApi:{get:async()=>({trip_id:'unit-trip',status:'searching',pickup_lat:59.9,pickup_lng:10.7,dropoff_lat:59.95,dropoff_lng:10.8}),active:async()=>activeTrip,list:async()=>[],estimate:async data=>{estimates.push(data);return {options:[{vehicle_type:'ai-first',price:100}]};}},
- carsApi:{nearby:async()=>({cars:[]})},mePlacesApi:{list:async()=>({places:[]})},placesApi:{list:async()=>({places:[]}),reverse:async()=>({label:'GPS address'}),search:async()=>({results:[]})},
- paymentApi:{list:async()=>[{id:'test-method',is_default:true}],nativeConfig:async()=>stripeConfig,nativeIntent:async()=>{intentCalls++;return {payment_intent_id:'pi_unit',client_secret:'unit'}},nativeStatus:async()=>({payment_status:settled?'paid':'unpaid'})}
+ tripsApi:{request:async data=>{requests.push(data);return {trip_id:'requested-unit-trip'};},get:async()=>({trip_id:'unit-trip',status:'searching',pickup_lat:59.9,pickup_lng:10.7,dropoff_lat:59.95,dropoff_lng:10.8}),active:async()=>activeTrip,list:async()=>[],estimate:async data=>{estimates.push(data);return {options:[{vehicle_type:'ai-first',price:100,waiting_policy:waitingPolicy}],pricing_version:'unit-pricing'};}},
+ carsApi:{nearby:async()=>({cars:availableCars})},mePlacesApi:{list:async()=>({places:[]})},placesApi:{list:async()=>({places:[]}),reverse:async()=>({label:'GPS address'}),search:async()=>({results:[]})},
+ paymentApi:{list:async()=>paymentMethods,nativeConfig:async()=>stripeConfig,nativeIntent:async()=>{intentCalls++;return {payment_intent_id:'pi_unit',client_secret:'unit'}},nativeStatus:async()=>({payment_status:settled?'paid':'unpaid'})}
 };
 const stripe={StripeProvider:({children,...props})=>React.createElement('StripeProvider',props,children),handleURLCallback:async url=>urls.push(url),initStripe:async()=>{},initPaymentSheet:async options=>{assert.equal(options.returnURL,'kjapp://receipt/unit');return {}},presentPaymentSheet:async()=>paymentResult};
 const color=new Proxy({}, {get:()=> '#000000'});
@@ -21,6 +21,7 @@ Module._load=function(id,parent,isMain){
  if(id==='react'||id==='react/jsx-runtime')return old.call(this,root+'/node_modules/'+id,parent,isMain);
  if(id==='@stripe/stripe-react-native')return stripe;
  if(id==='./api'||id==='@/src/lib/api')return api;
+ if(id==='expo-image')return {Image:'ExpoImage'};
  if(id==='react-native')return {View:'View',Text:'Text',TextInput:'TextInput',Pressable:'Pressable',ScrollView:'ScrollView',ActivityIndicator:'ActivityIndicator',Modal:'Modal',Image:'Image',Alert:{alert(){}},Share:{share:async()=>{}},Easing:{linear:x=>x},Animated:{View:'AnimatedView',Value:class{stopAnimation(){} setValue(){} interpolate(){return 0}},loop:()=>({start(){},stop(){}}),timing:()=>({})},StyleSheet:{create:s=>s,absoluteFill:{}},AppState:{currentState:'active',addEventListener:()=>({remove(){}})},Linking:{getInitialURL:async()=> 'kjapp://payment/success',addEventListener:(_,cb)=>{urlListener=cb;return {remove(){urlListener=null}}}}};
  if(id==='expo-router')return {useLocalSearchParams:()=>({tripId:'unit-trip'}),useRouter:()=>testRouter,useFocusEffect:cb=>React.useEffect(cb,[cb])};
  if(id==='react-native-safe-area-context')return {useSafeAreaInsets:()=>({top:0,bottom:0})};
@@ -50,8 +51,50 @@ Module._load=function(id,parent,isMain){
  await renderer.act(async()=>app.root.findByType(SearchSheet).props.onSelect({name:'Chosen destination',lat:59.94,lng:10.80}));
  assert.equal(app.root.findAllByType(SearchSheet).length,0);find('home-search-expand');
  assert.equal(estimates.at(-1).pickup_lat,59.92);assert.equal(estimates.at(-1).dropoff_lat,59.94);
+ assert.deepEqual(app.root.findByType('Map').props.cars,availableCars,'Live drivers stay visible after selecting destination');
+ await renderer.act(async()=>find('home-ride-sheet-collapse').props.onPress());
+ find('home-ride-sheet-summary');
+ assert.equal(app.root.findAll(n=>n.props.testID==='booking-review').length,0);
+ await renderer.act(async()=>find('home-ride-sheet-summary').props.onPress());
+ find('home-ride-sheet-collapse');
+
+ assert.equal(find('booking-review').props.disabled,false,'Review opens before waiting consent');
+ assert.equal(requests.length,0,'Selecting/reviewing never books a ride');
+ await renderer.act(async()=>find('booking-review').props.onPress());
+ find('booking-review-screen');
+ assert.equal(find('booking-confirm').props.disabled,true,'Submit requires waiting consent');
+ await renderer.act(async()=>find('waiting-policy-consent').props.onPress());
+ assert.equal(find('booking-confirm').props.disabled,false);
+ await renderer.act(async()=>find('booking-confirm').props.onPress());
+ assert.equal(requests.length,1);assert.equal(requests[0].waiting_policy_token,waitingPolicy.token);
+ assert.equal(requests[0].quoted_price,100);assert.equal(requests[0].pickup_lat,59.92);
+ assert.equal(navigations.at(-1),'/booking/requested-unit-trip');
+ console.log('PASS: review before waiting consent, guarded final submit, quoted policy/pricing sent once, real nearby cars retained');
+
  await renderer.act(async()=>app.unmount());
  console.log('PASS: collapsed initial browse sheet, search expand, pickup/destination selection, automatic collapse, selected pickup used by quote');
+
+ paymentMethods=[];
+ await renderer.act(async()=>{app=renderer.create(React.createElement(Home));});
+ await renderer.act(async()=>find('home-where-to').props.onPress());
+ await renderer.act(async()=>app.root.findByType(SearchSheet).props.onSelect({name:'Destination',lat:59.94,lng:10.80}));
+ assert.equal(find('booking-review').props.disabled,false,'Missing card must not block access to payment setup');
+ await renderer.act(async()=>find('booking-review').props.onPress());
+ await renderer.act(async()=>find('waiting-policy-consent').props.onPress());
+ assert.equal(find('booking-confirm').props.disabled,true,'Consent without payment must not allow a request');
+ await renderer.act(async()=>find('booking-payment-row').props.onPress());
+ assert.equal(navigations.at(-1),'/payment-methods');assert.equal(requests.length,1);
+ await renderer.act(async()=>app.unmount());
+ paymentMethods=[{id:'test-method',is_default:true}];
+ console.log('PASS: review without card, payment setup reachable, final booking remains blocked');
+ require.extensions['.webp']=(mod,file)=>{mod.exports=file;};
+ const {VehicleAsset}=require(root+'/src/components/VehicleAsset.tsx');
+ for(const [kind,name] of [['ai-first','standard'],['trygg','xl'],['premium','premium']]){
+   let artwork;await renderer.act(async()=>{artwork=renderer.create(React.createElement(VehicleAsset,{kind}));});
+   assert.ok(artwork.root.findByType('ExpoImage').props.source.endsWith(name+'-3d.webp'));
+   await renderer.act(async()=>artwork.unmount());
+ }
+ console.log('PASS: all three original SNAR artwork files wired to correct vehicle categories');
  const BookingFlow=require(root+'/app/booking/[tripId].tsx').default;
  await renderer.act(async()=>{app=renderer.create(React.createElement(BookingFlow));});
  find('matching-overlay');

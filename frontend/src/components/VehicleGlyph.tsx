@@ -3,8 +3,8 @@ import { VehicleAsset, VehicleKind } from './VehicleAsset';
 
 /**
  * Vehicle selector artwork.
- * Keeps the existing Home API stable while using the richer SNAR vehicle assets.
- * The final Figma-rendered assets can replace VehicleAsset later without touching Home.
+ * Keeps the existing Home API stable while rendering the original approved
+ * SNAR car images bundled by VehicleAsset.
  */
 export function VehicleGlyph({
   selected,
