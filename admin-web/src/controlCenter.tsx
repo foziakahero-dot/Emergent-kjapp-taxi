@@ -212,11 +212,52 @@ export function ActionCenter() {
 }
 
 export function SystemIntegrations() {
+  const { user } = useAuth();
   const state = useAsync(() => api.controlIntegrations(), []);
+  const [selected, setSelected] = useState<any>(null);
+  const [saved, setSaved] = useState('');
+  const editable = ['stripe', 'sendgrid', 'fcm', 'maps_routing', 'google', 'ai'];
+  const integrations = [...(state.data?.integrations || []), { id: 'google', name: 'Google innlogging', detail: 'Klient-ID og klienthemmelighet for kundekontoer', status: 'configuration', configured: null }];
   return <>
-    <PageHead title="System & integrasjoner" sub="Produksjonsstatus for kritiske SNAR-tjenester" right={<Btn onClick={state.reload}>Oppdater</Btn>} /><ErrorBanner msg={state.err} />
-    {state.loading ? <Loader /> : <div className="integrations-grid">{(state.data?.integrations || []).map((i: any) => <Card key={i.id} className="integ-card"><Icon name="plug" size={24}/><div className="integration-head"><div><div className="strong">{i.name}</div><div className="cell-sub">{i.detail}</div></div><Pill status={i.status === 'operational' ? 'completed' : 'pending'} label={i.status === 'operational' ? 'Operativ' : i.status || 'Ukjent'} /></div><div className="integration-meta"><span className="dim">Konfigurert</span><span>{i.configured ? 'Ja' : 'Nei'}</span></div></Card>)}</div>}
+    <PageHead title="System & integrasjoner" sub="Status, innstillinger og API-nøkler for SNAR-tjenestene" right={<Btn onClick={state.reload}>Oppdater</Btn>} /><ErrorBanner msg={state.err} />
+    {saved && <div className="ok-banner" role="status">{saved}</div>}
+    <div className="cell-sub" style={{ marginBottom: 16 }}>Superadministrator kan endre nøkler. Hemmelige verdier lagres kryptert og vises aldri igjen. Konfigurert status bekrefter oppsett; levering og betaling må testes separat.</div>
+    {state.loading ? <Loader /> : <div className="integrations-grid">{integrations.map((i: any) => <Card key={i.id} className="integ-card"><Icon name="plug" size={24}/><div className="integration-head"><div><div className="strong">{i.name}</div><div className="cell-sub">{i.detail}</div></div><Pill status={i.status === 'operational' ? 'completed' : 'pending'} label={i.status === 'operational' ? 'Konfigurert' : i.id === 'google' ? 'Innstillinger' : 'Krever oppsett'} /></div><div className="integration-meta"><span className="dim">Konfigurert</span><span>{i.configured === null ? 'Se innstillinger' : i.configured ? 'Ja' : 'Nei'}</span></div>{user?.role === 'superadmin' && (editable.includes(i.id) || i.id === 'stripe_connect') && <Btn onClick={() => { setSaved(''); setSelected(i.id === 'stripe_connect' ? { id: 'stripe', name: 'Stripe' } : i); }}>Konfigurer {i.name}</Btn>}</Card>)}</div>}
+    {selected && <IntegrationConfigModal integration={selected} onClose={() => setSelected(null)} onDone={() => { setSelected(null); setSaved('Innstillingene er lagret og tas i bruk innen fem sekunder.'); state.reload(); }} />}
   </>;
+}
+
+function IntegrationConfigModal({ integration, onClose, onDone }: any) {
+  const state = useAsync(() => api.integrationSettings(), []);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [acknowledge, setAcknowledge] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const settings = state.data?.groups?.[integration.id];
+  const changes = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim()));
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      await api.saveIntegration(integration.id, { values: changes, revision: settings.revision, acknowledge_stripe_change: acknowledge });
+      setValues({}); onDone();
+    } catch (e) { setErr(apiError(e)); } finally { setBusy(false); }
+  };
+  return <Modal title={'Konfigurer ' + integration.name} sub="Tomme felt beholder eksisterende verdi. Lim inn ny verdi for å erstatte den." onClose={busy ? () => {} : onClose}>
+    <ErrorBanner msg={state.err || err} />
+    {state.loading ? <Loader /> : !settings ? <Empty title="Innstillingene er ikke tilgjengelige" /> : <>
+      {!state.data?.writable && <ErrorBanner msg="Sikker nøkkellagring må konfigureres på serveren før du kan lagre." />}
+      {integration.id === 'stripe' && <div className="cell-sub" style={{ marginBottom: 16 }}>Hemmelig nøkkel, publiserbar nøkkel og webhook-nøkkel må tilhøre samme Stripe-konto og modus. Ved kontobytte må eksisterende testkort registreres på nytt; gamle kunde- og løyvehaverkoblinger må flyttes før nye betalinger. Beta tillater bare testnøkler.</div>}
+      {integration.id === 'sendgrid' && <div className="cell-sub" style={{ marginBottom: 16 }}>Avsenderadressen må være verifisert i SendGrid. Ventende e-poster forsøkes sendt automatisk når en gyldig nøkkel er lagret.</div>}
+      {settings.fields.map((field: any) => <div className="field" key={field.key}>
+        <label className="label" htmlFor={'integration-' + field.key}>{field.label} · {field.configured ? 'Satt' : 'Mangler'}</label>
+        <input id={'integration-' + field.key} className="input" type={field.secret ? 'password' : 'text'} autoComplete="off" spellCheck={false} value={values[field.key] || ''} placeholder={field.secret ? (field.configured ? '•••••••• · lim inn for å erstatte' : 'Lim inn ny verdi') : field.value || 'Lim inn ny verdi'} onChange={e => setValues({ ...values, [field.key]: e.target.value })} disabled={busy} />
+      </div>)}
+      {settings.stripe_account_id && <div className="cell-sub">Verifisert Stripe-konto: {settings.stripe_account_id}</div>}
+      {settings.updated_at && <div className="cell-sub">Sist endret: {fmtDate(settings.updated_at)}</div>}
+      {integration.id === 'stripe' && <label className="permission-item"><input type="checkbox" checked={acknowledge} disabled={busy} onChange={e => setAcknowledge(e.target.checked)} /><span>Jeg bekrefter at nøklene tilhører samme konto og modus, og har vurdert eksisterende betalingskoblinger.</span></label>}
+      <div className="modal-actions"><Btn disabled={busy} onClick={onClose}>Avbryt</Btn><Btn variant="primary" onClick={save} disabled={busy || !state.data?.writable || !Object.keys(changes).length || (integration.id === 'stripe' && !acknowledge)}>{busy ? 'Lagrer…' : 'Lagre innstillinger'}</Btn></div>
+    </>}
+  </Modal>;
 }
 
 export function AdminRoles() {
