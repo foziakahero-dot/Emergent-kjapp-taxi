@@ -101,6 +101,8 @@ export const api = {
   // Admin Control Center
   controlActionCenter: () => http.get('/admin/control/action-center').then((r) => r.data),
   controlIntegrations: () => http.get('/admin/control/integrations').then((r) => r.data),
+  integrationSettings: () => http.get('/admin/control/integration-settings').then((r) => r.data),
+  saveIntegration: (id: string, body: any) => http.put(`/admin/control/integration-settings/${id}`, body).then((r) => r.data),
   controlFleets: () => http.get('/admin/fleets-full').then((r) => r.data),
   createFleet: (body: any) => http.post('/admin/fleets', body).then((r) => r.data),
   fleetDetail: (id: string) => http.get(`/admin/fleets/${id}`).then((r) => r.data),
