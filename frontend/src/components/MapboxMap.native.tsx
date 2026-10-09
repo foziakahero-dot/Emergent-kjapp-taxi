@@ -1,4 +1,4 @@
-import { mapFocusPoints, MapFocusMode } from '@/src/lib/mapFocus';
+import { mapContentInsets, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/src/lib/mapFocus';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -39,6 +39,7 @@ type Props = {
   testID?: string;
   interactive?: boolean;
   focusMode?: MapFocusMode;
+  contentInsets?: Partial<MapContentInsets>;
 };
 
 function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
@@ -77,26 +78,32 @@ export function MapboxInteractiveMap({
   testID,
   interactive = true,
   focusMode = 'route',
+  contentInsets,
 }: Props) {
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const smoothCar = useSmoothPosition(activeCar);
 
   const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode }),
     [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
+  const padding = mapContentInsets(size.width, size.height, contentInsets);
+  const paddingKey = `${padding.top},${padding.right},${padding.bottom},${padding.left}`;
+  const cameraPadding = { paddingTop: padding.top, paddingRight: padding.right, paddingBottom: padding.bottom, paddingLeft: padding.left };
 
   const fitFocus = useCallback((duration = 450) => {
     const camera = cameraRef.current;
-    if (!camera) return;
+    if (!camera || !size.width || !size.height) return;
     if (!focus.length) {
       camera.setCamera?.({
         centerCoordinate: [OSLO.lng, OSLO.lat],
         zoomLevel: activeCar ? 16.5 : 15.8,
+        padding: cameraPadding,
         pitch: activeCar ? 40 : 25,
         animationDuration: duration,
         animationMode: 'easeTo',
@@ -107,6 +114,7 @@ export function MapboxInteractiveMap({
       camera.setCamera?.({
         centerCoordinate: [focus[0].lng, focus[0].lat],
         zoomLevel: activeCar ? 16.5 : 15.8,
+        padding: cameraPadding,
         pitch: activeCar ? 40 : 25,
         animationDuration: duration,
         animationMode: 'easeTo',
@@ -117,8 +125,8 @@ export function MapboxInteractiveMap({
     const lats = focus.map((p) => p.lat);
     const ne: [number, number] = [Math.max(...lngs), Math.max(...lats)];
     const sw: [number, number] = [Math.min(...lngs), Math.min(...lats)];
-    camera.fitBounds?.(ne, sw, [90, 58, 170, 58], duration);
-  }, [focusKey]);
+    camera.fitBounds?.(ne, sw, [padding.top, padding.right, padding.bottom, padding.left], duration);
+  }, [focusKey, paddingKey, size.width, size.height, Boolean(activeCar)]);
 
   useEffect(() => {
     if (!mapReady || manual) return;
@@ -149,6 +157,7 @@ export function MapboxInteractiveMap({
         testID={testID}
         interactive={interactive}
         focusMode={focusMode}
+        contentInsets={contentInsets}
       />
       <View testID="map-error" style={{ position: 'absolute', left: 16, right: 16, top: 62, backgroundColor: colors.surface, padding: 10, borderRadius: 16 }}>
         <Text accessibilityRole="alert">{TOKEN ? 'Mapbox er midlertidig utilgjengelig. Viser reservekart.' : 'Viser reservekart. Mapbox mangler konfigurasjon.'}</Text>
@@ -171,7 +180,7 @@ export function MapboxInteractiveMap({
   };
 
   return (
-    <View testID={testID} style={[{ backgroundColor: colors.mapCanvas, overflow: 'hidden' }, style]}>
+    <View testID={testID} onLayout={e => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} style={[{ backgroundColor: colors.mapCanvas, overflow: 'hidden' }, style]}>
       <MapView
         ref={mapRef}
         style={{ flex: 1 }}
