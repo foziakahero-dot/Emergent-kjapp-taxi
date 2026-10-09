@@ -332,9 +332,9 @@ def install_admin_control_center(
                     "configured": True,
                 },
                 {
-                    "id": "ai", "name": "SNAR Assist / AI", "status": "operational" if os.getenv("EMERGENT_LLM_KEY") else "warning",
-                    "detail": "LLM-integrasjon konfigurert" if os.getenv("EMERGENT_LLM_KEY") else "EMERGENT_LLM_KEY mangler",
-                    "configured": bool(os.getenv("EMERGENT_LLM_KEY")),
+                    "id": "ai", "name": "SNAR Assist / AI", "status": "operational" if (os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")) else "warning",
+                    "detail": "LLM-integrasjon konfigurert" if (os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")) else "AI-nøkkel mangler",
+                    "configured": bool(os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")),
                 },
             ],
         }
@@ -777,3 +777,4 @@ def install_admin_control_center(
         await db.users.update_one({"_id": target["_id"]}, {"$set": sets})
         await audit(current, "admin_user.update", "admin_user", user_id, before, sets)
         return {"ok": True}
+
