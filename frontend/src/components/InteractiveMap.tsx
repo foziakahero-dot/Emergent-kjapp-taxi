@@ -1,4 +1,4 @@
-import { mapFocusPoints, MapFocusMode } from '@/src/lib/mapFocus';
+import { fitMapView, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/src/lib/mapFocus';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -57,27 +57,6 @@ function touchDistance(touches: any[]) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function fitView(points: LL[], w: number, h: number) {
-  if (!points.length) return { center: OSLO, zoom: 13 };
-  if (points.length === 1) return { center: points[0], zoom: 16 };
-
-  for (let z = MAX_Z; z >= MIN_Z; z--) {
-    const xs = points.map((p) => projectX(p.lng, z));
-    const ys = points.map((p) => projectY(p.lat, z));
-    const width = Math.max(...xs) - Math.min(...xs);
-    const height = Math.max(...ys) - Math.min(...ys);
-    if (width <= w * 0.76 && height <= h * 0.46) {
-      const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-      const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-      return {
-        center: { lat: unprojectY(cy, z), lng: unprojectX(cx, z) },
-        zoom: clampZoom(z),
-      };
-    }
-  }
-
-  return { center: points[0], zoom: 13 };
-}
 
 export function InteractiveMap({
   pickup,
@@ -90,6 +69,7 @@ export function InteractiveMap({
   testID,
   interactive = true,
   focusMode = 'route',
+  contentInsets,
 }: {
   pickup?: LL | null;
   dropoff?: LL | null;
@@ -101,6 +81,7 @@ export function InteractiveMap({
   testID?: string;
   interactive?: boolean;
   focusMode?: MapFocusMode;
+  contentInsets?: Partial<MapContentInsets>;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [center, setCenter] = useState<LL>(user || OSLO);
@@ -121,17 +102,19 @@ export function InteractiveMap({
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
+  const insetsKey = JSON.stringify(contentInsets);
+
   useEffect(() => {
     if (manual || !size.w || !size.h) return;
-    const fitted = fitView(focus, size.w, size.h);
+    const fitted = fitMapView(focus, size.w, size.h, contentInsets);
     setCenter(fitted.center);
     setZoom(fitted.zoom);
-  }, [focusKey, size.w, size.h, manual]);
+  }, [focusKey, size.w, size.h, manual, insetsKey]);
 
   const recenter = () => {
     setManual(false);
     if (size.w && size.h) {
-      const fitted = fitView(focus, size.w, size.h);
+      const fitted = fitMapView(focus, size.w, size.h, contentInsets);
       setCenter(fitted.center);
       setZoom(fitted.zoom);
     }
