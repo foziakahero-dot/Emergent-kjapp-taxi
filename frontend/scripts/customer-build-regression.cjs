@@ -54,9 +54,16 @@ Module._load=function(id,parent,isMain){
  assert.equal(app.root.findAllByType(SearchSheet).length,0);find('home-search-expand');
  assert.deepEqual(nearbyRequests.at(-1),[59.92,10.76,'ai-first',[]]);
  assert.equal(app.root.findByType('Map').props.focusMode,'nearby');
+ await renderer.act(async()=>{
+   find('home-search-panel').props.onLayout({nativeEvent:{layout:{height:152}}});
+   find('home-ride-sheet').props.onLayout({nativeEvent:{layout:{height:408}}});
+ });
+ assert.deepEqual(find('home-map').props.contentInsets,{top:196,right:48,bottom:440,left:48},'Map excludes the measured search and expanded ride cards');
  assert.equal(estimates.at(-1).pickup_lat,59.92);assert.equal(estimates.at(-1).dropoff_lat,59.94);
  assert.deepEqual(app.root.findByType('Map').props.cars,availableCars,'Live drivers stay visible after selecting destination');
  await renderer.act(async()=>find('home-ride-sheet-collapse').props.onPress());
+ await renderer.act(async()=>find('home-ride-sheet').props.onLayout({nativeEvent:{layout:{height:100}}}));
+ assert.equal(find('home-map').props.contentInsets.bottom,144,'Collapsing the ride sheet restores map space');
  find('home-ride-sheet-summary');
  assert.equal(app.root.findAll(n=>n.props.testID==='booking-review').length,0);
  await renderer.act(async()=>find('home-ride-sheet-summary').props.onPress());
@@ -104,8 +111,12 @@ Module._load=function(id,parent,isMain){
  find('matching-overlay');
  assert.deepEqual(find('booking-map').props.cars,availableCars,'Search-phase map shows real available cars');
  assert.equal(find('booking-map').props.focusMode,'nearby');
+ await renderer.act(async()=>find('booking-matching-card').props.onLayout({nativeEvent:{layout:{height:306}}}));
+ assert.equal(find('booking-map').props.contentInsets.bottom,498,'Car markers are framed above the complete matching card');
  assert.deepEqual(nearbyRequests.at(-1),[59.9,10.7,'ai-first',[]]);
  await renderer.act(async()=>find('active-trip-minimize').props.onPress());
+ await renderer.act(async()=>find('booking-minimized-card').props.onLayout({nativeEvent:{layout:{height:150}}}));
+ assert.equal(find('booking-map').props.contentInsets.bottom,206,'Minimizing refits the newly exposed map area');
  assert.equal(app.root.findAll(n=>n.props.testID==='matching-overlay').length,0);
  find('booking-map');
  await renderer.act(async()=>app.root.findByType('ActiveTripCard').props.onOpen());
