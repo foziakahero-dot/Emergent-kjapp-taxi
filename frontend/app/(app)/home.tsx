@@ -1,4 +1,6 @@
 import { recentDestinations } from '@/src/lib/recentPlaces';
+import { useAvailableCars } from '@/src/lib/useAvailableCars';
+import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { VehicleGlyph } from '@/src/components/VehicleGlyph';
@@ -7,14 +9,14 @@ import { Rise, Collapse } from '@/src/components/Motion';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
-import { carsApi, mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, kr, VEHICLES } from '@/src/lib/format';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
@@ -28,6 +30,7 @@ function vehicleCopy(type: string) {
 
 export default function Home() {
   const router = useRouter();
+  const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
   const insets = useSafeAreaInsets();
   const s = useStyles();
 
@@ -40,7 +43,6 @@ export default function Home() {
   const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
   const [locDenied, setLocDenied] = useState(false);
   const [locationReady, setLocationReady] = useState(false);
-  const [cars, setCars] = useState<any[]>([]);
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [estimate, setEstimate] = useState<any>(null);
@@ -71,6 +73,29 @@ export default function Home() {
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   const [quickPlacesIssue, setQuickPlacesIssue] = useState(false);
   const placesSequence = useRef(0);
+  const searchingTrip = activeTrip && ['searching', 'booking'].includes(activeTrip.status) && !activeTrip.driver_id;
+  const available = useAvailableCars({
+    enabled: Boolean(searchingTrip || (!activeTrip && (locationReady || selectedPickup))),
+    lat: searchingTrip ? activeTrip.pickup_lat : pickupPoint.lat,
+    lng: searchingTrip ? activeTrip.pickup_lng : pickupPoint.lng,
+    vehicleType: searchingTrip ? activeTrip.vehicle_type : selType,
+    specialNeeds: searchingTrip ? activeTrip.special_needs : specialNeeds,
+    continuous: Boolean(searchingTrip),
+  });
+  const cars = available.cars;
+
+  useEffect(() => {
+    if (!retryTripId) return;
+    let mounted = true;
+    void tripsApi.get(retryTripId).then(t => {
+      if (!mounted || t.status !== 'cancelled' || t.cancel_reason !== 'no_driver_available') return;
+      setSelectedPickup({ name: t.pickup_address, lat: t.pickup_lat, lng: t.pickup_lng });
+      setDropoff({ name: t.dropoff_address, lat: t.dropoff_lat, lng: t.dropoff_lng });
+      setSelType(t.vehicle_type || 'ai-first'); setSpecialNeeds(t.special_needs || []); setStops((t.stops || []).map((stop: any) => ({ ...stop, name: stop.address || stop.name })));
+      setWaitingAccepted(false); setReviewing(false);
+    }).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisemål. Velg hentested og reisemål på nytt.'); });
+    return () => { mounted = false; };
+  }, [retryTripId]);
 
   useEffect(() => {
     if (dropoff || searchOpen) return;
@@ -151,21 +176,9 @@ export default function Home() {
   }, [loadMethods, loadPlaces, refreshLocation]);
 
   useEffect(() => {
-    let mounted = true;
-    if (!locationReady) {
-      setCars([]);
-      return () => { mounted = false; };
-    }
-    const load = () => carsApi.nearby(loc.lat, loc.lng).then((r) => mounted && setCars(r.cars || [])).catch(() => { if (mounted) setCars([]); });
-    load();
-    const i = setInterval(load, 8000);
-    return () => { mounted = false; clearInterval(i); };
-  }, [locationReady, loc.lat, loc.lng]);
-
-  useEffect(() => {
     let current = true;
     setEstimate(null);
-    if (!dropoff || !locationReady) return;
+    if (!dropoff || (!locationReady && !selectedPickup)) return;
     tripsApi.estimate({
       pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
       dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
@@ -173,7 +186,7 @@ export default function Home() {
     }).then(result => { if (current) { setEstimate(result); setError(''); } })
       .catch(error => { if (current) setError(apiError(error)); });
     return () => { current = false; };
-  }, [dropoff, locationReady, pickupPoint.lat, pickupPoint.lng, stops]);
+  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops]);
 
   const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
   const nearest = etaValues.length ? Math.min(...etaValues) : null;
@@ -192,7 +205,7 @@ export default function Home() {
   const book = async () => {
     if (bookingLock.current || activeTrip || !activeTripChecked || activeTripOffline) return;
     if (!dropoff) return;
-    if (!locationReady) {
+    if (!locationReady && !selectedPickup) {
       setError('SNAR trenger en fersk posisjon før du kan bestille tur.');
       return;
     }
@@ -264,7 +277,7 @@ export default function Home() {
 
   const routeGeom = estimate?.geometry?.coordinates;
   // Payment and waiting consent are completed on the review screen.
-  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean(locationReady && dropoff && estimate && priceFor(selType) != null && !booking);
+  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && estimate && priceFor(selType) != null && !booking);
   const canBook = canReview && Boolean(payMethod && (!waitingPolicy || waitingAccepted));
   const selectedCopy = vehicleCopy(selType);
   const selectedPrice = priceFor(selType);
@@ -276,16 +289,18 @@ export default function Home() {
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={locationReady ? loc : null}
-        pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : dropoff && locationReady ? pickupPoint : null}
+        pickup={activeTrip ? { lat: activeTrip.pickup_lat, lng: activeTrip.pickup_lng } : (locationReady || selectedPickup) ? pickupPoint : null}
         dropoff={activeTrip ? { lat: activeTrip.dropoff_lat, lng: activeTrip.dropoff_lng } : dropoff}
         route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
-        cars={activeTrip ? [] : cars}
+        cars={activeTrip && !searchingTrip ? [] : cars}
+        focusMode={!activeTrip || searchingTrip ? 'nearby' : 'route'}
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
 
       {activeTrip ? <View style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 16 }}>
         <ActiveTripCard trip={activeTrip} offline={activeTripOffline} onOpen={() => router.push(activeTrip.status === 'arrived' ? `/receipt/${activeTrip.trip_id}` : `/booking/${activeTrip.trip_id}`)} />
+        {searchingTrip ? <AvailabilityStatus search={available} trip={activeTrip} /> : null}
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
       {!reviewing && !activeTrip ? (
         <>
@@ -326,6 +341,7 @@ export default function Home() {
                 </Pressable>
               </View>
             )}
+            {(locationReady || selectedPickup) ? <AvailabilityStatus search={available} /> : null}
           </View>
 
           <Pressable
@@ -497,7 +513,7 @@ export default function Home() {
                           {v.type === 'ai-first' ? <Text style={s.vehicleBadge}>Mest valgt</Text> : null}
                         </View>
                         <Text style={s.vehicleMeta}>
-                          {copy.tagline}{nearest != null ? ` · ${nearest} min` : ''}{v.type === 'trygg' ? ' · 7 pers.' : ' · 4 pers.'}
+                          {copy.tagline}{v.type === selType && nearest != null ? ` · ${nearest} min` : ''}{v.type === 'trygg' ? ' · 7 pers.' : ' · 4 pers.'}
                         </Text>
                       </View>
                       <Text style={s.vehiclePrice}>{price != null ? kr(price) : '…'}</Text>

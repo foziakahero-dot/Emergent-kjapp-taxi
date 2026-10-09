@@ -1,3 +1,4 @@
+import { mapFocusPoints, MapFocusMode } from '@/src/lib/mapFocus';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -88,6 +89,7 @@ export function InteractiveMap({
   style,
   testID,
   interactive = true,
+  focusMode = 'route',
 }: {
   pickup?: LL | null;
   dropoff?: LL | null;
@@ -98,6 +100,7 @@ export function InteractiveMap({
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  focusMode?: MapFocusMode;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [center, setCenter] = useState<LL>(user || OSLO);
@@ -113,14 +116,8 @@ export function InteractiveMap({
   centerRef.current = center;
   zoomRef.current = zoom;
 
-  const focus = useMemo(() => {
-    const pts: LL[] = [];
-    if (user) pts.push(user);
-    if (pickup) pts.push(pickup);
-    if (dropoff) pts.push(dropoff);
-    if (activeCar) pts.push({ lat: activeCar.lat, lng: activeCar.lng });
-    return pts;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode }),
+    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
