@@ -1,3 +1,4 @@
+import { mapFocusPoints, MapFocusMode } from '@/src/lib/mapFocus';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -37,6 +38,7 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  focusMode?: MapFocusMode;
 };
 
 function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
@@ -74,6 +76,7 @@ export function MapboxInteractiveMap({
   style,
   testID,
   interactive = true,
+  focusMode = 'route',
 }: Props) {
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
@@ -82,14 +85,8 @@ export function MapboxInteractiveMap({
   const [mapReady, setMapReady] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
 
-  const focus = useMemo(() => {
-    const points: LL[] = [];
-    if (user) points.push(user);
-    if (pickup && (!user || Math.abs(pickup.lat - user.lat) > 1e-7 || Math.abs(pickup.lng - user.lng) > 1e-7)) points.push(pickup);
-    if (dropoff) points.push(dropoff);
-    if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
-    return points;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode }),
+    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -151,6 +148,7 @@ export function MapboxInteractiveMap({
         style={{ flex: 1 }}
         testID={testID}
         interactive={interactive}
+        focusMode={focusMode}
       />
       <View testID="map-error" style={{ position: 'absolute', left: 16, right: 16, top: 62, backgroundColor: colors.surface, padding: 10, borderRadius: 16 }}>
         <Text accessibilityRole="alert">{TOKEN ? 'Mapbox er midlertidig utilgjengelig. Viser reservekart.' : 'Viser reservekart. Mapbox mangler konfigurasjon.'}</Text>
