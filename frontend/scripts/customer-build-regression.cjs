@@ -7,10 +7,11 @@ const React = require(root+'/node_modules/react');
 const renderer = require(root+'/node_modules/react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT=true;
 for(const extension of ['.ts','.tsx']) require.extensions[extension]=(mod,file)=>mod._compile(ts.transpileModule(require('node:fs').readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
-const estimates=[];const requests=[];let activeTrip=null;let paymentMethods=[{id:'test-method',is_default:true}];let availableCars=[{id:'online-driver',lat:59.911,lng:10.751,heading:90}];const waitingPolicy={token:'unit-quote',free_minutes:3,per_minute:5,max_fee:50};let stripeConfig={enabled:true,test_mode:true,publishable_key:'pk_test_unit'};let intentCalls=0;let paymentResult={};let settled=true;let urlListener;const urls=[];
+const estimates=[];const requests=[];const nearbyRequests=[];let activeTrip=null;let bookingTrip={trip_id:'unit-trip',status:'searching',pickup_lat:59.9,pickup_lng:10.7,dropoff_lat:59.95,dropoff_lng:10.8};let paymentMethods=[{id:'test-method',is_default:true}];let availableCars=[{id:'online-driver',lat:59.911,lng:10.751,heading:90}];const waitingPolicy={token:'unit-quote',free_minutes:3,per_minute:5,max_fee:50};let stripeConfig={enabled:true,test_mode:true,publishable_key:'pk_test_unit'};let intentCalls=0;let paymentResult={};let settled=true;let urlListener;const urls=[];
 const api={
- tripsApi:{request:async data=>{requests.push(data);return {trip_id:'requested-unit-trip'};},get:async()=>({trip_id:'unit-trip',status:'searching',pickup_lat:59.9,pickup_lng:10.7,dropoff_lat:59.95,dropoff_lng:10.8}),active:async()=>activeTrip,list:async()=>[],estimate:async data=>{estimates.push(data);return {options:[{vehicle_type:'ai-first',price:100,waiting_policy:waitingPolicy}],pricing_version:'unit-pricing'};}},
- carsApi:{nearby:async()=>({cars:availableCars})},mePlacesApi:{list:async()=>({places:[]})},placesApi:{list:async()=>({places:[]}),reverse:async()=>({label:'GPS address'}),search:async()=>({results:[]})},
+ tripDriverPhotoSource:async()=>null,
+ tripsApi:{request:async data=>{requests.push(data);return {trip_id:'requested-unit-trip'};},get:async()=>bookingTrip,active:async()=>activeTrip,list:async()=>[],estimate:async data=>{estimates.push(data);return {options:[{vehicle_type:'ai-first',price:100,waiting_policy:waitingPolicy}],pricing_version:'unit-pricing'};}},
+ carsApi:{nearby:async(...args)=>{nearbyRequests.push(args);return {cars:availableCars}}},mePlacesApi:{list:async()=>({places:[]})},placesApi:{list:async()=>({places:[]}),reverse:async()=>({label:'GPS address'}),search:async()=>({results:[]})},
  paymentApi:{list:async()=>paymentMethods,nativeConfig:async()=>stripeConfig,nativeIntent:async()=>{intentCalls++;return {payment_intent_id:'pi_unit',client_secret:'unit'}},nativeStatus:async()=>({payment_status:settled?'paid':'unpaid'})}
 };
 const stripe={StripeProvider:({children,...props})=>React.createElement('StripeProvider',props,children),handleURLCallback:async url=>urls.push(url),initStripe:async()=>{},initPaymentSheet:async options=>{assert.equal(options.returnURL,'kjapp://receipt/unit');return {}},presentPaymentSheet:async()=>paymentResult};
@@ -26,6 +27,7 @@ Module._load=function(id,parent,isMain){
  if(id==='expo-router')return {useLocalSearchParams:()=>({tripId:'unit-trip'}),useRouter:()=>testRouter,useFocusEffect:cb=>React.useEffect(cb,[cb])};
  if(id==='react-native-safe-area-context')return {useSafeAreaInsets:()=>({top:0,bottom:0})};
  if(id==='expo-location')return {requestForegroundPermissionsAsync:async()=>({status:'granted'}),getCurrentPositionAsync:async()=>({coords:{latitude:59.91,longitude:10.75}}),Accuracy:{High:1}};
+ if(id==='@/src/lib/useAvailableCars')return old.call(this,root+'/src/lib/useAvailableCars.ts',parent,isMain);
  if(id==='@/src/lib/tripPresence')return old.call(this,root+'/src/lib/tripPresence.ts',parent,isMain);
  if(id==='@/src/theme')return {colors:color,font:{},makeStyles:factory=>()=>factory(color)};
  if(id==='@/src/lib/format')return {apiError:()=> 'unit error',kr:v=>String(v),VEHICLES:[{type:'ai-first'}]};
@@ -50,6 +52,8 @@ Module._load=function(id,parent,isMain){
  await renderer.act(async()=>find('home-where-to').props.onPress());
  await renderer.act(async()=>app.root.findByType(SearchSheet).props.onSelect({name:'Chosen destination',lat:59.94,lng:10.80}));
  assert.equal(app.root.findAllByType(SearchSheet).length,0);find('home-search-expand');
+ assert.deepEqual(nearbyRequests.at(-1),[59.92,10.76,'ai-first',[]]);
+ assert.equal(app.root.findByType('Map').props.focusMode,'nearby');
  assert.equal(estimates.at(-1).pickup_lat,59.92);assert.equal(estimates.at(-1).dropoff_lat,59.94);
  assert.deepEqual(app.root.findByType('Map').props.cars,availableCars,'Live drivers stay visible after selecting destination');
  await renderer.act(async()=>find('home-ride-sheet-collapse').props.onPress());
@@ -98,6 +102,9 @@ Module._load=function(id,parent,isMain){
  const BookingFlow=require(root+'/app/booking/[tripId].tsx').default;
  await renderer.act(async()=>{app=renderer.create(React.createElement(BookingFlow));});
  find('matching-overlay');
+ assert.deepEqual(find('booking-map').props.cars,availableCars,'Search-phase map shows real available cars');
+ assert.equal(find('booking-map').props.focusMode,'nearby');
+ assert.deepEqual(nearbyRequests.at(-1),[59.9,10.7,'ai-first',[]]);
  await renderer.act(async()=>find('active-trip-minimize').props.onPress());
  assert.equal(app.root.findAll(n=>n.props.testID==='matching-overlay').length,0);
  find('booking-map');
@@ -108,6 +115,24 @@ Module._load=function(id,parent,isMain){
  assert.equal(navigations.at(-1),'/(app)/home');
  await renderer.act(async()=>app.unmount());
  console.log('PASS: active trip minimize/reopen, map stays rendered, home navigation retained');
+ bookingTrip={...bookingTrip,status:'driver_on_way',driver_id:'assigned-driver',driver_lat:59.91,driver_lng:10.76,driver_last_location_at:new Date().toISOString()};
+ const lookupsBeforeAssigned=nearbyRequests.length;
+ await renderer.act(async()=>{app=renderer.create(React.createElement(BookingFlow));});
+ assert.deepEqual(find('booking-map').props.cars,[]);
+ assert.equal(find('booking-map').props.focusMode,'route');
+ assert.equal(nearbyRequests.length,lookupsBeforeAssigned,'Assigned driver ends availability lookup');
+ await renderer.act(async()=>app.unmount());
+ bookingTrip={...bookingTrip,status:'cancelled',driver_id:null,cancel_reason:'no_driver_available',reservation_status:'released'};
+ const bookingsBeforeRetry=requests.length;
+ await renderer.act(async()=>{app=renderer.create(React.createElement(BookingFlow));});
+ const renderedText=JSON.stringify(app.toJSON());
+ assert.ok(renderedText.includes('etter tre forsøk'));
+ assert.ok(renderedText.includes('Kortreservasjonen er frigitt'));
+ await renderer.act(async()=>find('booking-home').props.onPress());
+ assert.deepEqual(navigations.at(-1),{pathname:'/(app)/home',params:{retryTripId:'unit-trip'}});
+ assert.equal(requests.length,bookingsBeforeRetry,'Retry opens fresh review, never books automatically');
+ await renderer.act(async()=>app.unmount());
+ console.log('PASS: assignment stops nearby search, no-driver prompt, released-hold copy, explicit retry route without booking');
  const {payNative}=require(root+'/src/lib/nativePayment.native.ts');
  stripeConfig.test_mode=false;await assert.rejects(payNative('unit'),/bare testbetaling/);assert.equal(intentCalls,0);
  stripeConfig.test_mode=true;stripeConfig.enabled=false;await assert.rejects(payNative('unit'),/Testbetaling/);assert.equal(intentCalls,0);
