@@ -1,7 +1,10 @@
 """Shared, idempotent Stripe account setup. No bank data or onboarding links in email."""
 import asyncio
+import logging
 from datetime import datetime, timezone
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 # Stripe Checkout setup-mode compatibility.
 # The deployed Stripe API rejects setup_intent_data[usage]. Checkout mode="setup"
@@ -47,7 +50,22 @@ async def ensure_fleet_account(db, stripe, fleet, owner_email=None):
             metadata={"kjapp_fleet_id": fleet_id, "kjapp_org_number": fleet.get("org_number") or ""},
             idempotency_key=f"kjapp-fleet-account-v1-{fleet_id}",
         )
-    except Exception:
+    except Exception as exc:
+        error = (getattr(exc, "json_body", None) or {}).get("error", {})
+        if not isinstance(error, dict):
+            error = {}
+        logger.warning(
+            "Stripe Connect account creation failed: fleet=%s type=%s request_id=%s",
+            fleet_id, type(exc).__name__, getattr(exc, "request_id", None),
+        )
+        message = str(error.get("message") or "").lower()
+        if "signed up for connect" in message or "connect is not enabled" in message:
+            raise HTTPException(
+                503,
+                "Stripe Connect er ikke aktivert på SNARs plattformkonto. "
+                "Aktiver Connect for riktig konto og testmodus i Stripe Dashboard. "
+                "Løyvehaverkontoen er allerede opprettet; ikke opprett den på nytt.",
+            ) from None
         raise HTTPException(502, "Stripe-konto kunne ikke opprettes. Prøv igjen senere.")
     await db.fleets.update_one({"_id": fleet["_id"]}, {"$set": {
         "stripe_account_id": account.id, "stripe_connect_status": "onboarding",
