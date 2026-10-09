@@ -20,6 +20,7 @@ from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
+from ride_search import RideSearch
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
 from onboarding_emails import queue_confirmation, confirmation_loop
@@ -867,6 +868,8 @@ class UserPlaceRequest(BaseModel):
 class NearbyCarsRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
+    vehicle_type: Optional[Literal["ai-first", "trygg", "premium"]] = None
+    special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
 
 
 class EstimateRequest(BaseModel):
@@ -1790,6 +1793,10 @@ async def cars_nearby(body: NearbyCarsRequest, request: Request):
             continue
         assigned_vehicle = await _assigned_fleet_vehicle(u, required=False)
         if not assigned_vehicle:
+            continue
+        if body.vehicle_type and (assigned_vehicle.get("vehicle_type") or "ai-first") != body.vehicle_type:
+            continue
+        if not _driver_supports_special_needs(u, body.special_needs):
             continue
         compliance = await _driver_shift_compliance(u, assigned_vehicle)
         if not compliance.get("operational"):
@@ -3915,7 +3922,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         return []
     test_customer = ride_testing.is_test_customer(customer_id)
     required = set(required_capabilities or [])
-    fresh = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
+    fresh = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
     busy = set()
     async for t in db.trips.find(_real_trip_filter({"status": {"$in": ACTIVE_TRIP_STATUSES}}), {"driver_id": 1}):
         if t.get("driver_id"):
@@ -3925,7 +3932,7 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         {"role": "driver", "approved": True,
          **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
             {"accepted_terms_at": {"$exists": True, "$ne": None}}),
-         "online": True, "disabled": {"$ne": True},
+         "online": True, "disabled": {"$ne": True}, "active_trip_id": {"$in": [None, ""]},
          **ride_testing.driver_supply_filter(test_customer),
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
         {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1},
@@ -3945,7 +3952,9 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         driver_vehicle_type = assigned_vehicle.get("vehicle_type") or "ai-first"
         if vehicle_type and driver_vehicle_type != vehicle_type:
             continue
-        out.append({"id": did, "km": haversine_km(lat, lng, d["last_lat"], d["last_lng"])})
+        distance = haversine_km(lat, lng, d["last_lat"], d["last_lng"])
+        if distance <= 10:
+            out.append({"id": did, "km": distance})
     out.sort(key=lambda x: x["km"])
     return out
 
@@ -3956,6 +3965,9 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     The offer expires after DISPATCH_OFFER_SECONDS and is then forwarded automatically. When every
     eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
     """
+    trip = await ride_search.ensure_started(trip)
+    if not trip or trip.get("driver_id") or trip.get("status") not in ("searching", "booking"):
+        return None
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(
         trip.get("pickup_lat"),
@@ -4003,58 +4015,18 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
 
 
 async def dispatch_loop():
-    """Forwards ride requests whose offer window expired without an answer."""
+    """Persisted three-round search, including newly available broadcast drivers."""
     while True:
         try:
-            now_iso = datetime.now(timezone.utc).isoformat()
-            async for t in db.trips.find(_real_trip_filter({
-                "status": {"$in": ["searching", "booking"]},
-                "driver_id": None,
-                "dispatch_mode": "sequential",
-                "offer_expires_at": {"$lt": now_iso},
-            })).limit(20):
-                pricing = t.get("pricing_snapshot") or await active_pricing()
-                timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
+            async for trip in db.trips.find(_real_trip_filter({
+                "status": {"$in": ["searching", "booking"]}, "driver_id": None,
+            })):
                 try:
-                    created = datetime.fromisoformat(str(t.get("created_at")).replace("Z", "+00:00"))
-                    expired = (datetime.now(timezone.utc) - created).total_seconds() >= timeout_seconds
-                except Exception:
-                    expired = False
-                if expired:
-                    res = await db.trips.update_one(
-                        _real_trip_filter({"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
-                        {"$set": {"status": "cancelled", "cancelled_at": now_iso,
-                                  "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
-                    )
-                    if res.modified_count:
-                        await send_push_to_user(t["user_id"], "Ingen ledig sjåfør",
-                                                "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
-                    continue
-                await offer_trip_to_next_driver(t)
-            # Hard stop for any still-unassigned request, including broadcast mode.
-            async for t in db.trips.find(_real_trip_filter({
-                "status": {"$in": ["searching", "booking"]},
-                "driver_id": None,
-            })).sort("created_at", 1).limit(50):
-                pricing = t.get("pricing_snapshot") or await active_pricing()
-                timeout_seconds = int(pricing.get("dispatch_timeout_seconds", 180) or 180)
-                try:
-                    created = datetime.fromisoformat(str(t.get("created_at")).replace("Z", "+00:00"))
-                    expired = (datetime.now(timezone.utc) - created).total_seconds() >= timeout_seconds
-                except Exception:
-                    expired = False
-                if not expired:
-                    continue
-                res = await db.trips.update_one(
-                    _real_trip_filter({"trip_id": t["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
-                    {"$set": {"status": "cancelled", "cancelled_at": now_iso,
-                              "cancelled_by": "system", "cancel_reason": "no_driver_available"}},
-                )
-                if res.modified_count:
-                    await send_push_to_user(t["user_id"], "Ingen ledig sjåfør",
-                                            "Vi fant dessverre ingen ledig sjåfør. Du kan prøve igjen.", "/app")
-        except Exception as e:
-            print(f"dispatch_loop error: {e}")
+                    await ride_search.tick(trip)
+                except Exception as exc:
+                    print(f"dispatch search error: {type(exc).__name__}")
+        except Exception as exc:
+            print(f"dispatch_loop error: {type(exc).__name__}")
         await asyncio.sleep(3)
 
 
@@ -11410,6 +11382,9 @@ ride_reservations = RideReservations(
     db, stripe, mark_paid=_mark_trip_paid_and_complete, receipts=send_trip_receipts,
     push=send_push_to_user, dispatch=offer_trip_to_next_driver, destination=_reservation_destination,
 )
+
+ride_search = RideSearch(db, real_filter=_real_trip_filter, offer=offer_trip_to_next_driver,
+                         release=ride_reservations.release, notify=send_push_to_user)
 
 
 handle_native_payment_webhook = install_mobile_commerce(
