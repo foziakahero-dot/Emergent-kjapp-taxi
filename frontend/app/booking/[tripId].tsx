@@ -1,4 +1,6 @@
 import { driverPresence } from '@/src/lib/tripPresence';
+import { useAvailableCars } from '@/src/lib/useAvailableCars';
+import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { apiError, kr } from '@/src/lib/format';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useReducedMotion } from '@/src/components/Motion';
@@ -48,6 +50,9 @@ export default function BookingFlow() {
   const nav = useRef(false);
   const matchingSpin = useRef(new Animated.Value(0)).current;
   const reducedMotion = useReducedMotion();
+  const searching = ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
+  const available = useAvailableCars({ enabled: searching, lat: trip?.pickup_lat, lng: trip?.pickup_lng,
+    vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [], continuous: true });
 
   useEffect(() => {
     if (reducedMotion || !['searching', 'booking'].includes(trip?.status)) {
@@ -212,6 +217,7 @@ export default function BookingFlow() {
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
+  const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
   const canCancel = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
   const etaValue = Number(trip.eta_min);
@@ -230,6 +236,8 @@ export default function BookingFlow() {
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
         route={route}
+        cars={searching ? available.cars : []}
+        focusMode={searching ? 'nearby' : 'route'}
         activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading } : null}
         testID="booking-map"
       />
@@ -239,7 +247,7 @@ export default function BookingFlow() {
         <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
       </View> : trip.status === 'searching' || trip.status === 'booking' ? (
-        <View style={s.matchingOverlay} testID="matching-overlay">
+        <View style={s.matchingOverlay} testID="matching-overlay" pointerEvents="box-none">
           <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
           <View style={s.matchingCard}>
             <View style={s.matchingMarkWrap}>
@@ -247,7 +255,8 @@ export default function BookingFlow() {
               <KjappMark size={40} />
             </View>
             <Text style={s.matchingTitle}>Finner din sjåfør…</Text>
-            <Text style={s.matchingSub}>Matcher med nærmeste ledige SNAR-bil</Text>
+            <AvailabilityStatus search={available} trip={trip} />
+            {networkIssue ? <Text testID="search-trip-offline" accessibilityRole="alert" style={s.matchingSub}>Mangler fersk turstatus. Søket fortsetter på serveren.</Text> : null}
             <Pressable onPress={cancel} disabled={cancelBusy} testID="searching-cancel" style={s.matchingCancel}>
               <Text style={s.matchingCancelText}>Avbryt søk</Text>
             </Pressable>
@@ -258,11 +267,12 @@ export default function BookingFlow() {
           <View style={[s.finalIcon, driverCancelled && s.finalIconDriver]}>
             <Icon name={driverCancelled ? 'car' : 'x'} size={22} color={driverCancelled ? colors.accent : colors.danger} />
           </View>
-          <Text style={s.finalTitle}>{meta.title}</Text>
-          <Text style={s.finalSub}>{meta.sub}</Text>
+          <Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat nå' : meta.title}</Text>
+          <Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sjåfør etter tre forsøk. Vil du prøve igjen om litt?' : meta.sub}</Text>
+          {noDriver ? <Text style={s.recoveryCopy}>{trip.reservation_status === 'released' ? 'Kortreservasjonen er frigitt. Banken kan bruke litt tid på å oppdatere saldoen.' : 'Kortreservasjonen frigis automatisk.'}</Text> : null}
           {driverCancelled ? <Text style={s.recoveryCopy}>Start en ny bestilling når du er klar.</Text> : null}
-          <Pressable onPress={() => router.replace('/(app)/home')} style={s.homeBtn} testID="booking-home">
-            <Text style={s.homeBtnText}>{driverCancelled ? 'Bestill ny tur' : 'Tilbake til hjem'}</Text>
+          <Pressable onPress={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')} style={s.homeBtn} testID="booking-home">
+            <Text style={s.homeBtnText}>{noDriver ? 'Prøv igjen' : driverCancelled ? 'Bestill ny tur' : 'Tilbake til hjem'}</Text>
           </Pressable>
         </View>
       ) : trip.status === 'in_trip' ? (
