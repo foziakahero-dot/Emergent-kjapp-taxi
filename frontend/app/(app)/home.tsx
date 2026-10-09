@@ -55,6 +55,10 @@ export default function Home() {
   const [searchCollapsed, setSearchCollapsed] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(true);
   const [rideSheetCollapsed, setRideSheetCollapsed] = useState(false);
+  const [searchHeight, setSearchHeight] = useState(140);
+  const [activeCardHeight, setActiveCardHeight] = useState(180);
+  const [browseHeight, setBrowseHeight] = useState(100);
+  const [rideHeight, setRideHeight] = useState(400);
   useEffect(() => {
     if (dropoff) {
       setSearchCollapsed(true);
@@ -294,17 +298,19 @@ export default function Home() {
         route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
         cars={activeTrip && !searchingTrip ? [] : cars}
         focusMode={!activeTrip || searchingTrip ? 'nearby' : 'route'}
+        contentInsets={{ top: insets.top + (activeTrip ? 16 + activeCardHeight : 12 + searchHeight) + 32,
+          right: 48, bottom: Math.max(insets.bottom + 112, activeTrip ? 0 : dropoff ? rideHeight : browseHeight) + 32, left: 48 }}
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
 
-      {activeTrip ? <View style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 16 }}>
+      {activeTrip ? <View testID="home-active-card" onLayout={e => setActiveCardHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 16 }}>
         <ActiveTripCard trip={activeTrip} offline={activeTripOffline} onOpen={() => router.push(activeTrip.status === 'arrived' ? `/receipt/${activeTrip.trip_id}` : `/booking/${activeTrip.trip_id}`)} />
         {searchingTrip ? <AvailabilityStatus search={available} trip={activeTrip} /> : null}
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
       {!reviewing && !activeTrip ? (
         <>
-          <View style={[s.searchBarWrap, { top: insets.top + 12 }]}>
+          <View testID="home-search-panel" onLayout={e => setSearchHeight(e.nativeEvent.layout.height)} style={[s.searchBarWrap, { top: insets.top + 12 }]}>
             {searchCollapsed ? (
               <Pressable
                 style={s.collapsedSearchButton}
@@ -385,7 +391,7 @@ export default function Home() {
           </Rise>}
 
           {!dropoff ? (
-            <View style={[s.browseSheet, { paddingBottom: insets.bottom + (sheetCollapsed ? 32 : 112) }]} testID="home-browse-sheet">
+            <View onLayout={e => setBrowseHeight(e.nativeEvent.layout.height)} style={[s.browseSheet, { paddingBottom: insets.bottom + (sheetCollapsed ? 32 : 112) }]} testID="home-browse-sheet">
               <Pressable testID={sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}
                 style={s.sheetHandleButton}
                 onPress={() => setSheetCollapsed((v) => !v)}
@@ -444,7 +450,7 @@ export default function Home() {
               </Collapse>
             </View>
           ) : (
-            <View style={[s.rideSheet, { paddingBottom: insets.bottom + (rideSheetCollapsed ? 18 : 112) }]} testID="home-ride-sheet">
+            <View onLayout={e => setRideHeight(e.nativeEvent.layout.height)} style={[s.rideSheet, { paddingBottom: insets.bottom + (rideSheetCollapsed ? 18 : 112) }]} testID="home-ride-sheet">
               <Pressable
                 testID={rideSheetCollapsed ? 'home-ride-sheet-expand' : 'home-ride-sheet-collapse'}
                 style={s.sheetHandleButton}
