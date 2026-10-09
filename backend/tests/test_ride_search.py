@@ -188,3 +188,23 @@ def test_broadcast_retry_requeries_and_offers_newly_online_driver():
         await tick(raw,engine,30)
         assert raw.trips.find_one()['offer_driver_id']=='new-online-driver' and pushed==['new-online-driver']
     asyncio.run(run())
+
+def test_initial_dispatch_and_retry_cannot_duplicate_driver_offer():
+    raw,db,engine,_,_,_=fixture(); pushed=[]
+    async def candidates(*args,**kwargs):
+        await asyncio.sleep(0)
+        return [{'id':'one-driver','km':1}]
+    async def commission(trip):return .1
+    async def push(*args,**kwargs):pushed.append(args[0])
+    from typing import Optional
+    env={'Optional':Optional,'db':db,'ride_search':engine,'_dispatch_candidates':candidates,
+         '_required_driver_capabilities':lambda needs:[],'_commission_for_trip':commission,
+         '_real_trip_filter':lambda q:{'$and':[{'demo':{'$ne':True}},q]},'send_push_to_user':push,
+         'datetime':datetime,'timezone':timezone,'timedelta':timedelta,'DISPATCH_OFFER_SECONDS':20}
+    offer=function('offer_trip_to_next_driver',env)
+    async def run():
+        trip=await engine.ensure_started(raw.trips.find_one(),START)
+        await asyncio.gather(offer(trip),offer(trip))
+        assert pushed==['one-driver']
+        assert raw.trips.find_one()['offer_seq']==1
+    asyncio.run(run())

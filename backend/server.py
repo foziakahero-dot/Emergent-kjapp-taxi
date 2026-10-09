@@ -3988,6 +3988,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
                 "trip_id": trip["trip_id"],
                 "driver_id": None,
                 "status": {"$in": ["searching", "booking"]},
+                "offer_seq": trip.get("offer_seq"),
             }),
             {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
         )
@@ -3999,7 +4000,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
 
     expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
     res = await db.trips.update_one(
-        _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}}),
+        _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}, "offer_seq": trip.get("offer_seq")}),
         {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
                   "offer_expires_at": expires.isoformat(), "offer_km": round(nxt["km"], 2)},
          "$addToSet": {"offer_history": nxt["id"]},
