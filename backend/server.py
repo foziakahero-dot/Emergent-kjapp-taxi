@@ -27,6 +27,7 @@ from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
+from integration_settings import IntegrationSettings, install_integration_settings
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
@@ -61,6 +62,7 @@ DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+AI_LLM_KEY = os.environ.get("SNAR_AI_KEY", "") or EMERGENT_LLM_KEY
 
 # ------------------ Environment / security hardening ------------------
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
@@ -1183,7 +1185,7 @@ def _fcm_app():
         FCM_APP = firebase_admin.initialize_app(cred, name="kjapp-push")
         print("FCM native push: initialised")
     except Exception as e:
-        print(f"FCM init failed: {e}")
+        print(f"FCM init failed: {type(e).__name__}")
         FCM_APP = None
     return FCM_APP
 
@@ -1346,6 +1348,8 @@ async def progress_trip(trip_id: str):
 # ------------------ Lifespan ------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Restore encrypted admin configuration before workers or onboarding start.
+    await integration_settings.refresh()
     await db.users.create_index("email", unique=True)
     await db.trips.create_index("user_id")
     await db.trips.create_index("trip_id", unique=True)
@@ -1625,13 +1629,15 @@ async def lifespan(app: FastAPI):
     dispatch_task = asyncio.create_task(dispatch_loop())
     reservation_task = asyncio.create_task(ride_reservations.reconcile_loop())
     confirmation_task = asyncio.create_task(confirmation_loop(db, send_email, prepare_email=_prepare_onboarding_email, invite_sender=_deliver_driver_invite))
+    integration_settings_task = asyncio.create_task(integration_settings.sync_loop())
 
     yield
 
     dispatch_task.cancel()
     reservation_task.cancel()
     confirmation_task.cancel()
-    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, return_exceptions=True)
+    integration_settings_task.cancel()
+    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, return_exceptions=True)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -3258,12 +3264,12 @@ async def _load_trip_or_403(trip_id: str, current: dict):
 
 async def _translate_via_llm(text: str, target_lang: str) -> Optional[str]:
     """Best-effort translation using Emergent LLM key (Claude Sonnet). Returns None on failure."""
-    if not EMERGENT_LLM_KEY or not text.strip():
+    if not AI_LLM_KEY or not text.strip():
         return None
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
+            api_key=AI_LLM_KEY,
             session_id=f"translate_{uuid.uuid4().hex[:8]}",
             system_message=(
                 "You are a professional translator. Translate the user's message to the requested language. "
@@ -3494,7 +3500,7 @@ async def ai_transcribe(body: TranscribeRequest, request: Request, current=Depen
     """
     if not body.audio_base64:
         raise HTTPException(400, "Mangler lyd")
-    if not EMERGENT_LLM_KEY:
+    if not AI_LLM_KEY:
         raise HTTPException(503, "AI-nøkkel mangler")
     try:
         raw = base64.b64decode(body.audio_base64)
@@ -3523,7 +3529,7 @@ async def ai_transcribe(body: TranscribeRequest, request: Request, current=Depen
         buf = _io.BytesIO(raw)
         buf.name = f"audio.{ext}"
 
-        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        stt = OpenAISpeechToText(api_key=AI_LLM_KEY)
         kwargs = {"file": buf, "model": "whisper-1", "response_format": "json"}
         if body.language:
             kwargs["language"] = body.language
@@ -3823,7 +3829,7 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
     })
 
     chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
+        api_key=AI_LLM_KEY,
         session_id=session_id,
         system_message=AI_SYSTEM,
     ).with_model("openai", "gpt-5.6-sol")
@@ -11360,6 +11366,29 @@ async def _queue_beta_confirmation(identity, email, name):
 
 install_marketing_waitlist(api, db, confirmation=_queue_beta_confirmation, require_admin=require_admin, audit=_audit)
 
+
+def _apply_integration_settings(values):
+    global STRIPE_WEBHOOK_SECRET, MAPTILER_API_KEY, FCM_APP, FCM_INIT_TRIED, AI_LLM_KEY
+    previous_fcm = os.environ.get("FCM_SERVICE_ACCOUNT_JSON", "")
+    os.environ.update(values)
+    if "STRIPE_SECRET_KEY" in values:
+        stripe.api_key = values["STRIPE_SECRET_KEY"]
+        STRIPE_WEBHOOK_SECRET = values["STRIPE_WEBHOOK_SECRET"]
+    if "MAPTILER_API_KEY" in values:
+        MAPTILER_API_KEY = values["MAPTILER_API_KEY"]
+    if "SNAR_AI_KEY" in values:
+        AI_LLM_KEY = values["SNAR_AI_KEY"] or EMERGENT_LLM_KEY
+    if "FCM_SERVICE_ACCOUNT_JSON" in values and previous_fcm != values["FCM_SERVICE_ACCOUNT_JSON"]:
+        if FCM_APP is not None:
+            import firebase_admin
+            firebase_admin.delete_app(FCM_APP)
+        FCM_APP = None
+        FCM_INIT_TRIED = False
+
+
+integration_settings = IntegrationSettings(db, _apply_integration_settings)
+install_integration_settings(api, integration_settings, require_superadmin, _audit)
+
 # Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
 install_admin_control_center(
     api,
@@ -11410,6 +11439,7 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+
 
 
 
