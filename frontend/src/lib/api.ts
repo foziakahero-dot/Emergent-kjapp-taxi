@@ -82,8 +82,8 @@ export const tripsApi = {
 };
 
 export const carsApi = {
-  nearby: (lat: number, lng: number) =>
-    api.post('/cars/nearby', { lat, lng }).then((r) => r.data),
+  nearby: (lat: number, lng: number, vehicle_type?: string, special_needs: string[] = []) =>
+    api.post('/cars/nearby', { lat, lng, vehicle_type, special_needs }).then((r) => r.data),
 };
 
 export const placesApi = {
