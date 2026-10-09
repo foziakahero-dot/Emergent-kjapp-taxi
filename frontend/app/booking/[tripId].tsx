@@ -36,6 +36,8 @@ export default function BookingFlow() {
   const s = useStyles();
   const router = useRouter();
   const [minimized, setMinimized] = useState(false);
+  const [matchingHeight, setMatchingHeight] = useState(300);
+  const [minimizedHeight, setMinimizedHeight] = useState(160);
   const [trip, setTrip] = useState<any>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -238,18 +240,20 @@ export default function BookingFlow() {
         route={route}
         cars={searching ? available.cars : []}
         focusMode={searching ? 'nearby' : 'route'}
+        contentInsets={searching ? { top: insets.top + 88, right: 48,
+          bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : 160 + matchingHeight + 32, left: 48 } : undefined}
         activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading } : null}
         testID="booking-map"
       />
 
       {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
-      {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
+      {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View testID="booking-minimized-card" onLayout={e => setMinimizedHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
         <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
       </View> : trip.status === 'searching' || trip.status === 'booking' ? (
         <View style={s.matchingOverlay} testID="matching-overlay" pointerEvents="box-none">
           <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
-          <View style={s.matchingCard}>
+          <View testID="booking-matching-card" onLayout={e => setMatchingHeight(e.nativeEvent.layout.height)} style={s.matchingCard}>
             <View style={s.matchingMarkWrap}>
               <Animated.View style={[s.matchingRing, { transform: [{ rotate: spinDeg }] }]} />
               <KjappMark size={40} />
