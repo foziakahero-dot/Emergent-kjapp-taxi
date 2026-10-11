@@ -16,7 +16,8 @@
           "path/query/form"
         ],
         "response": [
-          "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}"
+          "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}",
+          "{'enabled': False, 'client_id': '', 'message': 'Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.'}"
         ],
         "http_statuses": []
       }
@@ -91,7 +92,8 @@
           "Literal['customer', 'driver']"
         ],
         "response": [
-          "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}"
+          "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}",
+          "{'google_enabled': False, 'google_web_client_id': '', 'google_ios_client_id': ''}"
         ],
         "http_statuses": []
       }
@@ -220,7 +222,8 @@
           "await identity_session('apple', claims, body, response)"
         ],
         "http_statuses": [
-          "401"
+          "401",
+          "503"
         ]
       }
     ],
@@ -331,6 +334,7 @@
           "ForgotPasswordRequest"
         ],
         "response": [
+          "{'ok': True}",
           "{'ok': True}",
           "{'ok': True}",
           "{'ok': True}"
@@ -3005,7 +3009,8 @@
           "path/query/form"
         ],
         "response": [
-          "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}"
+          "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}",
+          "{'enabled': False, 'client_id': '', 'message': 'Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.'}"
         ],
         "http_statuses": []
       }
@@ -3080,7 +3085,8 @@
           "Literal['customer', 'driver']"
         ],
         "response": [
-          "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}"
+          "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}",
+          "{'google_enabled': False, 'google_web_client_id': '', 'google_ios_client_id': ''}"
         ],
         "http_statuses": []
       }
@@ -3202,7 +3208,8 @@
           "await identity_session('apple', claims, body, response)"
         ],
         "http_statuses": [
-          "401"
+          "401",
+          "503"
         ]
       }
     ],
@@ -3313,6 +3320,7 @@
           "ForgotPasswordRequest"
         ],
         "response": [
+          "{'ok': True}",
           "{'ok': True}",
           "{'ok': True}",
           "{'ok': True}"

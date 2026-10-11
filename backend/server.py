@@ -34,6 +34,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
+from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -62,12 +63,14 @@ MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
-AI_LLM_KEY = os.environ.get("SNAR_AI_KEY", "") or EMERGENT_LLM_KEY
 
 # ------------------ Environment / security hardening ------------------
 APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
 IS_PRODUCTION = APP_ENV == "production"
+DEFAULT_PUBLIC_WEB_ORIGIN = "" if APP_ENV == "qa" else "https://snarapp.no"
+validate_qa_configuration(os.environ)
+EMERGENT_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("EMERGENT_LLM_KEY", "")
+AI_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("SNAR_AI_KEY", "") or EMERGENT_LLM_KEY
 CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").strip()[:32] or "2026-09"
 APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"
 
@@ -149,6 +152,14 @@ def compute_cors_origins(app_env: str, frontend_url: str = "") -> list:
     """Production: strict whitelist only. Dev/staging: whitelist + localhost + preview origin."""
     if (app_env or "").strip().lower() == "production":
         return list(PRODUCTION_CORS_ORIGINS)
+    if (app_env or "").strip().lower() == "qa":
+        origins = ["capacitor://localhost", "ionic://localhost", "https://localhost"]
+        fu = (frontend_url or "").strip().rstrip("/")
+        if fu:
+            if not is_safe_qa_web_origin(fu):
+                raise RuntimeError("APP_ENV=qa requires FRONTEND_URL to be an isolated HTTPS origin.")
+            origins.append(fu)
+        return origins
     origins = list(PRODUCTION_CORS_ORIGINS) + [
         "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8001",
         # admin web local dev servers (Vite / Next / CRA)
@@ -1015,6 +1026,9 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
     """Send email via SendGrid if configured, else log to console."""
+    if APP_ENV == "qa":
+        print("[EMAIL/disabled-qa] external email delivery is disabled")
+        return False
     api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
     sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
     if not api_key:
@@ -1326,6 +1340,9 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
     """Deliver a notification to every channel the user has: real mobile app (FCM/APNs) + web push."""
+    if APP_ENV == "qa":
+        print("[PUSH/disabled-qa] external push delivery is disabled")
+        return
     await send_native_push(user_id, title, body, url, tag)
     if not PUSH_AVAILABLE:
         return
@@ -1724,14 +1741,28 @@ async def readiness():
     checks = {
         "database": db_ok,
         "production_mode": IS_PRODUCTION,
+        "qa_mode": APP_ENV == "qa",
+        "qa_database_isolated": (
+            APP_ENV != "qa"
+            or bool(re.search(r"(?:^|[_-])qa(?:$|[_-])", DB_NAME.strip().lower()))
+        ),
         "demo_data_disabled": not ENABLE_DEMO_DATA,
         "jwt_configured": bool((JWT_SECRET or "").strip()),
         "admin_identity_configured": bool((os.environ.get("ADMIN_EMAIL") or "").strip()),
         "stripe_key_configured": bool((stripe.api_key or "").strip()),
         "stripe_webhook_configured": bool((STRIPE_WEBHOOK_SECRET or "").strip()),
+        "stripe_test_mode_configured": (
+            APP_ENV != "qa"
+            or (
+                stripe.api_key.startswith(("sk_test_", "rk_test_"))
+                and os.environ.get("STRIPE_PUBLISHABLE_KEY", "").startswith("pk_test_")
+            )
+        ),
         "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
         "public_web_origin_configured": (
-            os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://snarapp.no").rstrip("/") in ("https://snarapp.no", "https://kjappapp.no")
+            is_safe_qa_web_origin(os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", ""))
+            if APP_ENV == "qa"
+            else os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", DEFAULT_PUBLIC_WEB_ORIGIN).rstrip("/") in ("https://snarapp.no", "https://kjappapp.no")
         ),
         "expo_push_sender": True,
         "identity_recheck_policy_days": [KJAPP_IDENTITY_RECHECK_MIN_DAYS, KJAPP_IDENTITY_RECHECK_MAX_DAYS],
@@ -1746,20 +1777,36 @@ async def readiness():
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
         "booking_enabled": runtime_features.get("booking_enabled", True),
     }
-    required_keys = (
-        "database",
-        "production_mode",
-        "demo_data_disabled",
-        "jwt_configured",
-        "admin_identity_configured",
-        "stripe_key_configured",
-        "stripe_webhook_configured",
-        "email_configured",
-        "public_web_origin_configured",
-        "apple_native_auth_configured",
-        "service_area_enforced",
-        "booking_enabled",
-    )
+    if APP_ENV == "qa":
+        required_keys = (
+            "database",
+            "qa_mode",
+            "qa_database_isolated",
+            "demo_data_disabled",
+            "jwt_configured",
+            "admin_identity_configured",
+            "stripe_key_configured",
+            "stripe_webhook_configured",
+            "stripe_test_mode_configured",
+            "public_web_origin_configured",
+            "service_area_enforced",
+            "booking_enabled",
+        )
+    else:
+        required_keys = (
+            "database",
+            "production_mode",
+            "demo_data_disabled",
+            "jwt_configured",
+            "admin_identity_configured",
+            "stripe_key_configured",
+            "stripe_webhook_configured",
+            "email_configured",
+            "public_web_origin_configured",
+            "apple_native_auth_configured",
+            "service_area_enforced",
+            "booking_enabled",
+        )
     blockers = [key for key in required_keys if not checks[key]]
     if checks["auto_charge_enabled"]:
         blockers.append("auto_charge_must_remain_off_until_stripe_e2e")
@@ -2450,6 +2497,8 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         return {"ok": True}
     user = await db.users.find_one({"email": email})
     if user:
+        if APP_ENV == "qa":
+            return {"ok": True}
         token = secrets.token_urlsafe(32)
         await db.password_reset_tokens.insert_one({
             "token_hash": _password_reset_token_hash(token),
@@ -5165,6 +5214,8 @@ class GoogleSessionRequest(BaseModel):
 @api.post("/auth/google/session")
 async def google_session(body: GoogleSessionRequest, request: Request, response: Response):
     """Exchange Emergent session_id for our JWT token, linking to existing user by email or creating one."""
+    if APP_ENV == "qa":
+        raise HTTPException(status_code=503, detail="Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
     await _enforce_rate_limit(request, "auth-google-session", 60, 900)
     async with httpx.AsyncClient(timeout=10.0) as client:
         r = await client.get(
@@ -5247,6 +5298,12 @@ class GoogleCodeRequest(BaseModel):
 @api.get("/auth/google/config")
 async def google_oauth_config():
     """Public config — only the client ID (never the secret) so the app can start the OAuth flow."""
+    if APP_ENV == "qa":
+        return {
+            "enabled": False,
+            "client_id": "",
+            "message": "Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.",
+        }
     enabled = google_oauth_configured()
     return {
         "enabled": enabled,
@@ -5280,6 +5337,8 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
 async def google_oauth_code(body: GoogleCodeRequest, request: Request, response: Response):
     """Exchange a Google authorization code (PKCE) for a KJAPP session.
     Identity is taken ONLY from the cryptographically verified id_token — never from the client."""
+    if APP_ENV == "qa":
+        raise HTTPException(status_code=503, detail="Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
     await _enforce_rate_limit(request, "auth-google-code", 60, 900)
     if not google_oauth_configured():
         raise HTTPException(status_code=503, detail="Google-innlogging er ikke konfigurert ennå")
@@ -7785,6 +7844,8 @@ async def _get_apple_keys():
 
 @api.post("/auth/apple")
 async def apple_signin(body: AppleSignInRequest, request: Request, response: Response):
+    if APP_ENV == "qa":
+        raise HTTPException(status_code=503, detail="Apple-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
     await _enforce_rate_limit(request, "auth-apple", 60, 900)
     """Verify Apple identity_token and log user in.
 
@@ -7872,6 +7933,14 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
 @api.get("/auth/apple/config")
 async def apple_config():
     """Expose non-secret Apple auth readiness for web/native clients."""
+    if APP_ENV == "qa":
+        return {
+            "client_id": "",
+            "bundle_id": "",
+            "enabled": False,
+            "bundle_env_matches": False,
+            "message": "Apple-innlogging krever QA-spesifikk OAuth-konfigurasjon.",
+        }
     client_id = os.environ.get("APPLE_CLIENT_ID", "").strip()
     configured_bundle_id = os.environ.get("APPLE_BUNDLE_ID", "").strip()
     return {
@@ -8377,7 +8446,9 @@ class TripCheckoutRequest(BaseModel):
 
 
 def _trusted_checkout_origin(requested: str) -> str:
-    default_origin = os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no").rstrip("/")
+    default_origin = os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", DEFAULT_PUBLIC_WEB_ORIGIN).rstrip("/")
+    if APP_ENV == "qa" and not is_safe_qa_web_origin(default_origin):
+        raise HTTPException(status_code=503, detail="QA checkout web origin is not configured.")
     configured = {
         x.strip().rstrip("/")
         for x in os.environ.get("KJAPP_CHECKOUT_ALLOWED_ORIGINS", default_origin).split(",")
@@ -8593,6 +8664,8 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Invalid signature")
     except Exception:
         raise HTTPException(400, "Webhook error")
+    if reject_live_qa_stripe_event(APP_ENV, event):
+        raise HTTPException(400, "Live-mode Stripe events are disabled in QA.")
     if await ride_reservations.webhook(event):
         return {"status": "ok"}
     if await handle_native_payment_webhook(event):
@@ -11257,7 +11330,7 @@ async def admin_beta_readiness(current=Depends(require_admin)):
         "service_area_radius_km": OSLO_BETA_RADIUS_KM,
         "auto_charge_enabled": AUTO_CHARGE_ENABLED,
         "booking_enabled": bool(({**DEFAULT_PLATFORM_SETTINGS["features"], **((settings.get("features") or {}))}).get("booking_enabled", True)),
-        "public_web_origin": os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", "https://kjappapp.no"),
+        "public_web_origin": os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", DEFAULT_PUBLIC_WEB_ORIGIN),
         "admin_2fa_enabled": bool(current.get("totp_enabled")),
         "pricing_version": int(pricing.get("version", 1)),
         "pricing_rollback_available": await db.pricing_versions.count_documents({}) > 0,
@@ -11451,8 +11524,3 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
-
-
-
-
-

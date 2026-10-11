@@ -15,6 +15,7 @@ import httpx
 from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException, Request
 from pymongo.errors import DuplicateKeyError
+from qa_safety import validate_qa_stripe_configuration
 
 
 GROUPS = {
@@ -66,6 +67,8 @@ class IntegrationSettings:
                 group = doc.get("_id")
                 if group in GROUPS and self.revisions.get(group) != doc["revision"]:
                     values = self.decode(doc)
+                    if group == "stripe" and os.getenv("APP_ENV", "").strip().lower() == "qa":
+                        validate_qa_stripe_configuration(values)
                     self.apply(values)
                     self.revisions[group] = doc["revision"]
 

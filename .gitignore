@@ -28,3 +28,4 @@ frontend/android/app/google-services.json
 frontend/ios/App/App/GoogleService-Info.plist
 backend/secrets/
 keystore.properties
+/artifacts/phase5-qa/

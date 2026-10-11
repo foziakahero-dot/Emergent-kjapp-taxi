@@ -12,6 +12,18 @@
       },
       "environment": "preview"
     },
+    "qa": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no"
+      },
+      "android": {
+        "buildType": "apk",
+        "image": "latest",
+        "resourceClass": "medium"
+      },
+      "environment": "preview"
+    },
     "production": {
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
