@@ -1,0 +1,1003 @@
+[
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 105,
+    "api": "placesApi",
+    "method": "reverse",
+    "args": "lat, lng"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 153,
+    "api": "placesApi",
+    "method": "search",
+    "args": "destinationQuery"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 177,
+    "api": "placesApi",
+    "method": "search",
+    "args": "q"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 196,
+    "api": "tripsApi",
+    "method": "estimate",
+    "args": "{\n        pickup_lat: pickup.lat,\n        pickup_lng: pickup.lng,\n        dropoff_lat: place.lat,\n        dropoff_lng: place.lng,\n      }"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 230,
+    "api": "tripsApi",
+    "method": "request",
+    "args": "{\n        pickup_address: pickup.name,\n        pickup_lat: pickup.lat,\n        pickup_lng: pickup.lng,\n        dropoff_address: dropoff.name,\n        dropoff_lat: dropoff.lat,\n        dropoff_lng: dropoff.lng,\n        vehicle_type: vehicle,\n      }"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 279,
+    "api": "aiApi",
+    "method": "chat",
+    "args": "text, sessionId"
+  },
+  {
+    "file": "frontend/app/(app)/assist.tsx",
+    "line": 305,
+    "api": "aiApi",
+    "method": "transcribe",
+    "args": "b64, mime, 'no'"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 70,
+    "api": "paymentApi",
+    "method": "list",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 76,
+    "api": "mePlacesApi",
+    "method": "list",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 76,
+    "api": "tripsApi",
+    "method": "list",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 94,
+    "api": "tripsApi",
+    "method": "active",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 124,
+    "api": "placesApi",
+    "method": "reverse",
+    "args": "p.lat, p.lng"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 136,
+    "api": "placesApi",
+    "method": "list",
+    "args": "true"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 148,
+    "api": "carsApi",
+    "method": "nearby",
+    "args": "loc.lat, loc.lng"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 157,
+    "api": "tripsApi",
+    "method": "estimate",
+    "args": "{\n      pickup_lat: loc.lat, pickup_lng: loc.lng,\n      dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,\n      stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\n    }"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 199,
+    "api": "tripsApi",
+    "method": "request",
+    "args": "{\n        pickup_address: pickupLabel,\n        pickup_lat: loc.lat,\n        pickup_lng: loc.lng,\n        dropoff_address: dropoff.name,\n        dropoff_lat: dropoff.lat,\n        dropoff_lng: dropoff.lng,\n        vehicle_type: selType,\n        stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\n        special_needs: specialNeeds,\n      }"
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 215,
+    "api": "tripsApi",
+    "method": "active",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/home.tsx",
+    "line": 540,
+    "api": "placesApi",
+    "method": "search",
+    "args": "q.trim()"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 37,
+    "api": "authApi",
+    "method": "nativeConfig",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 40,
+    "api": "authApi",
+    "method": "linkGoogle",
+    "args": "identity"
+  },
+  {
+    "file": "frontend/app/(app)/profile.tsx",
+    "line": 62,
+    "api": "gdprApi",
+    "method": "delete",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/(app)/wallet.tsx",
+    "line": 18,
+    "api": "paymentApi",
+    "method": "list",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 77,
+    "api": "tripsApi",
+    "method": "get",
+    "args": "tripId!"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 123,
+    "api": "tripsApi",
+    "method": "cancelPreview",
+    "args": "tripId!"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 133,
+    "api": "tripsApi",
+    "method": "cancel",
+    "args": "tripId!"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 139,
+    "api": "tripsApi",
+    "method": "get",
+    "args": "tripId!"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 158,
+    "api": "safetyApi",
+    "method": "log",
+    "args": "tripId!, { kind: 'emergency' }"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 168,
+    "api": "safetyApi",
+    "method": "log",
+    "args": "tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' }"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 183,
+    "api": "safetyApi",
+    "method": "shareLink",
+    "args": "tripId!"
+  },
+  {
+    "file": "frontend/app/booking/[tripId].tsx",
+    "line": 185,
+    "api": "safetyApi",
+    "method": "log",
+    "args": "tripId!, { kind: 'share' }"
+  },
+  {
+    "file": "frontend/app/forgot-password.tsx",
+    "line": 27,
+    "api": "authApi",
+    "method": "forgotPassword",
+    "args": "value"
+  },
+  {
+    "file": "frontend/app/payment/success.tsx",
+    "line": 34,
+    "api": "paymentApi",
+    "method": "checkoutStatus",
+    "args": "session_id"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 34,
+    "api": "paymentApi",
+    "method": "cardSetupStatus",
+    "args": "sessionId"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 63,
+    "api": "paymentApi",
+    "method": "remove",
+    "args": "id"
+  },
+  {
+    "file": "frontend/app/payment-methods.tsx",
+    "line": 76,
+    "api": "paymentApi",
+    "method": "cardSetup",
+    "args": "CHECKOUT_ORIGIN"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 32,
+    "api": "tripsApi",
+    "method": "get",
+    "args": "tripId"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 57,
+    "api": "tripsApi",
+    "method": "complete",
+    "args": "tripId"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 76,
+    "api": "tripsApi",
+    "method": "rate",
+    "args": "tripId, { rating: stars, feedback: '' }"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 86,
+    "api": "paymentApi",
+    "method": "checkoutStatus",
+    "args": "sessionId"
+  },
+  {
+    "file": "frontend/app/receipt/[tripId].tsx",
+    "line": 114,
+    "api": "paymentApi",
+    "method": "checkout",
+    "args": "tripId, CHECKOUT_ORIGIN"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 27,
+    "api": "authApi",
+    "method": "checkResetToken",
+    "args": "value"
+  },
+  {
+    "file": "frontend/app/reset-password/[token].tsx",
+    "line": 37,
+    "api": "authApi",
+    "method": "resetPassword",
+    "args": "String(token), password"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 55,
+    "api": "placesApi",
+    "method": "search",
+    "args": "query.trim()"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 70,
+    "api": "mePlacesApi",
+    "method": "update",
+    "args": "editingId, value"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 71,
+    "api": "mePlacesApi",
+    "method": "add",
+    "args": "value"
+  },
+  {
+    "file": "frontend/app/saved-places.tsx",
+    "line": 85,
+    "api": "mePlacesApi",
+    "method": "remove",
+    "args": "id"
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 47,
+    "api": "gdprApi",
+    "method": "export",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 63,
+    "api": "gdprApi",
+    "method": "delete",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 74,
+    "api": "settingsApi",
+    "method": "get",
+    "args": ""
+  },
+  {
+    "file": "frontend/app/settings.tsx",
+    "line": 85,
+    "api": "settingsApi",
+    "method": "update",
+    "args": "{ [key]: next[key] }"
+  },
+  {
+    "file": "frontend/src/components/ChatSheet.tsx",
+    "line": 39,
+    "api": "messagesApi",
+    "method": "list",
+    "args": "tripId"
+  },
+  {
+    "file": "frontend/src/components/ChatSheet.tsx",
+    "line": 57,
+    "api": "messagesApi",
+    "method": "send",
+    "args": "tripId, t"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 23,
+    "api": "customerProfileApi",
+    "method": "photoSource",
+    "args": "user.customer_photo_version"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 41,
+    "api": "customerProfileApi",
+    "method": "uploadPhoto",
+    "args": "form, value => { if (mounted.current) setProgress(value); }"
+  },
+  {
+    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "line": 49,
+    "api": "customerProfileApi",
+    "method": "deletePhoto",
+    "args": ""
+  },
+  {
+    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "line": 26,
+    "api": "gdprApi",
+    "method": "export",
+    "args": ""
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 39,
+    "api": "aiApi",
+    "method": "chat",
+    "args": "value, sessionId"
+  },
+  {
+    "file": "frontend/src/components/CustomerSupport.tsx",
+    "line": 54,
+    "api": "api",
+    "method": "post",
+    "args": "'/support/public', { topic: 'annet', name: user?.fullName, contact: user?.email || user?.phone, message: text.slice(0, 4000) }"
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 49,
+    "api": "authApi",
+    "method": "me",
+    "args": ""
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 74,
+    "api": "authApi",
+    "method": "login",
+    "args": "{ email, password, client: 'customer' }"
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 86,
+    "api": "authApi",
+    "method": "register",
+    "args": "data"
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 97,
+    "api": "authApi",
+    "method": "acceptLegal",
+    "args": "'2026-09'"
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 106,
+    "api": "authApi",
+    "method": "nativeConfig",
+    "args": ""
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 108,
+    "api": "authApi",
+    "method": "nativeSignIn",
+    "args": "provider, identity"
+  },
+  {
+    "file": "frontend/src/context/AuthContext.tsx",
+    "line": 130,
+    "api": "authApi",
+    "method": "logout",
+    "args": "token"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 27,
+    "api": "api",
+    "method": "get",
+    "args": "'/auth/google/config'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 28,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/google/code', { code, code_verifier, redirect_uri }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 30,
+    "api": "api",
+    "method": "get",
+    "args": "'/auth/native/config', { params: { client: 'customer' } }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 31,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/google/link', { identity_token, client: 'customer' }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 32,
+    "api": "api",
+    "method": "post",
+    "args": "`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 34,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/register', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 35,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/login', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 36,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/forgot-password', { email, client: 'customer' }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 37,
+    "api": "api",
+    "method": "get",
+    "args": "`/auth/reset-password/${token}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 38,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/reset-password', { token, new_password }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 39,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/accept-legal', { accepted_terms: true, legal_version }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 40,
+    "api": "api",
+    "method": "get",
+    "args": "'/auth/me'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 41,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 42,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/google/session', { session_id }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 43,
+    "api": "api",
+    "method": "post",
+    "args": "'/auth/apple', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 48,
+    "api": "api",
+    "method": "post",
+    "args": "'/trips/estimate', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 49,
+    "api": "api",
+    "method": "post",
+    "args": "'/trips/request', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 50,
+    "api": "api",
+    "method": "get",
+    "args": "'/trips/active'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 51,
+    "api": "api",
+    "method": "get",
+    "args": "`/trips/${id}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 52,
+    "api": "api",
+    "method": "post",
+    "args": "`/trips/${id}/complete`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 53,
+    "api": "api",
+    "method": "get",
+    "args": "`/trips/${id}/cancel-preview`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 54,
+    "api": "api",
+    "method": "post",
+    "args": "`/trips/${id}/cancel`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 55,
+    "api": "api",
+    "method": "patch",
+    "args": "`/trips/${id}/destination`, data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 56,
+    "api": "api",
+    "method": "post",
+    "args": "`/trips/${id}/rate`, data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 57,
+    "api": "api",
+    "method": "get",
+    "args": "'/trips'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 61,
+    "api": "api",
+    "method": "post",
+    "args": "'/cars/nearby', { lat, lng }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 66,
+    "api": "api",
+    "method": "get",
+    "args": "'/places', { params: { featured_only: featuredOnly } }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 68,
+    "api": "api",
+    "method": "get",
+    "args": "'/places/search', { params: { q } }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 69,
+    "api": "api",
+    "method": "get",
+    "args": "'/places/reverse', { params: { lat, lng } }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 74,
+    "api": "api",
+    "method": "get",
+    "args": "'/payments/native/config'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 75,
+    "api": "api",
+    "method": "post",
+    "args": "'/payments/native/intent', { trip_id }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 76,
+    "api": "api",
+    "method": "get",
+    "args": "`/payments/native/intent/${id}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 77,
+    "api": "api",
+    "method": "get",
+    "args": "'/payment-methods'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 78,
+    "api": "api",
+    "method": "delete",
+    "args": "`/payment-methods/${id}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 79,
+    "api": "api",
+    "method": "post",
+    "args": "'/payments/card/setup', { origin_url }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 80,
+    "api": "api",
+    "method": "get",
+    "args": "`/payments/card/setup/${session_id}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 81,
+    "api": "api",
+    "method": "post",
+    "args": "'/payments/checkout', { trip_id, origin_url }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 83,
+    "api": "api",
+    "method": "get",
+    "args": "`/payments/status/${session_id}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 84,
+    "api": "api",
+    "method": "get",
+    "args": "'/payments/vipps/config'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 88,
+    "api": "api",
+    "method": "post",
+    "args": "'/ai/chat', { message, session_id }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 90,
+    "api": "api",
+    "method": "post",
+    "args": "'/ai/transcribe', { audio_base64, mime_type, language }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 95,
+    "api": "api",
+    "method": "get",
+    "args": "`/trips/${tripId}/messages`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 96,
+    "api": "api",
+    "method": "post",
+    "args": "`/trips/${tripId}/messages`, { text }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 100,
+    "api": "api",
+    "method": "post",
+    "args": "`/trips/${tripId}/safety`, data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 102,
+    "api": "api",
+    "method": "post",
+    "args": "`/trips/${tripId}/share-link`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 106,
+    "api": "api",
+    "method": "get",
+    "args": "'/gdpr/export'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 107,
+    "api": "api",
+    "method": "delete",
+    "args": "'/gdpr/delete'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 111,
+    "api": "api",
+    "method": "get",
+    "args": "'/me/places'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 112,
+    "api": "api",
+    "method": "post",
+    "args": "'/me/places', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 113,
+    "api": "api",
+    "method": "put",
+    "args": "`/me/places/${id}`, data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 114,
+    "api": "api",
+    "method": "delete",
+    "args": "`/me/places/${id}`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 118,
+    "api": "api",
+    "method": "get",
+    "args": "'/settings'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 119,
+    "api": "api",
+    "method": "patch",
+    "args": "'/settings', data"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 123,
+    "api": "api",
+    "method": "get",
+    "args": "'/summary/today'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 127,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/pending'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 128,
+    "api": "api",
+    "method": "post",
+    "args": "'/driver/accept', { trip_id }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 129,
+    "api": "api",
+    "method": "post",
+    "args": "'/driver/decline', { trip_id }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 130,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/current'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 131,
+    "api": "api",
+    "method": "post",
+    "args": "`/driver/trip/${id}/at-pickup`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 132,
+    "api": "api",
+    "method": "post",
+    "args": "`/driver/trip/${id}/start`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 133,
+    "api": "api",
+    "method": "post",
+    "args": "`/driver/trip/${id}/arrive`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 134,
+    "api": "api",
+    "method": "post",
+    "args": "`/driver/trip/${id}/no-show`"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 135,
+    "api": "api",
+    "method": "post",
+    "args": "'/driver/online', { online }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 136,
+    "api": "api",
+    "method": "post",
+    "args": "'/driver/location', { lat, lng, heading, speed }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 138,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/summary/today'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 139,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/history'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 140,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/history/weekly'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 141,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/ratings'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 142,
+    "api": "api",
+    "method": "get",
+    "args": "'/driver/payouts'"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 148,
+    "api": "api",
+    "method": "post",
+    "args": "'/me/profile-photo', form, {\n    headers: { 'Content-Type': 'multipart/form-data' },\n    onUploadProgress: event => { if (event.total) progress(Math.min(99, Math.round(event.loaded / event.total * 100))); },\n  }"
+  },
+  {
+    "file": "frontend/src/lib/api.ts",
+    "line": 152,
+    "api": "api",
+    "method": "delete",
+    "args": "'/me/profile-photo'"
+  },
+  {
+    "file": "frontend/src/lib/nativePayment.native.ts",
+    "line": 7,
+    "api": "paymentApi",
+    "method": "nativeConfig",
+    "args": ""
+  },
+  {
+    "file": "frontend/src/lib/nativePayment.native.ts",
+    "line": 13,
+    "api": "paymentApi",
+    "method": "nativeIntent",
+    "args": "tripId"
+  },
+  {
+    "file": "frontend/src/lib/nativePayment.native.ts",
+    "line": 28,
+    "api": "paymentApi",
+    "method": "nativeStatus",
+    "args": "intent.payment_intent_id"
+  },
+  {
+    "file": "frontend/src/lib/nativeRuntime.ts",
+    "line": 47,
+    "api": "api",
+    "method": "post",
+    "args": "'/push/native-subscribe', {\n      platform: Platform.OS,\n      provider: 'expo',\n      token,\n    }"
+  },
+  {
+    "file": "frontend/src/lib/nativeRuntime.ts",
+    "line": 65,
+    "api": "api",
+    "method": "post",
+    "args": "'/push/native-unsubscribe', {\n      platform: Platform.OS,\n      provider: 'expo',\n      token,\n    }, sessionToken ? { headers: { Authorization: `Bearer ${sessionToken}` } } : undefined"
+  },
+  {
+    "file": "frontend/src/lib/socialSignIn.web.ts",
+    "line": 8,
+    "api": "authApi",
+    "method": "googleWebConfig",
+    "args": ""
+  },
+  {
+    "file": "frontend/src/lib/socialSignIn.web.ts",
+    "line": 18,
+    "api": "authApi",
+    "method": "googleWebCode",
+    "args": "result.params.code, request.codeVerifier, redirectUri"
+  }
+]
