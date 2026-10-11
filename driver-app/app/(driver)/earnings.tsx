@@ -11,6 +11,7 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
 import { driverApi } from '@/src/lib/api';
+import { monthToDateTrips } from '@/src/lib/earnings';
 import { kr } from '@/src/lib/format';
 
 type Period = 'today' | 'week' | 'month';
@@ -25,7 +26,7 @@ export default function DriverEarnings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const [period] = useState<Period>('week');
+  const [period, setPeriod] = useState<Period>('week');
   const [focused, setFocused] = useState(false);
 
   const summaryQ = useQuery({ queryKey: ['driver-summary'], queryFn: driverApi.summary, refetchInterval: focused ? 5000 : false });
@@ -73,8 +74,7 @@ export default function DriverEarnings() {
       const t = days.reduce((sum: number, d: any) => sum + Number(d.trips || 0), 0);
       return { gross, bonus: 0, fee: Math.max(0, gross - net), trips: t, minutes: null, net };
     }
-    const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();
-    const mt = trips.filter((t: any) => (t.created_at || '') >= monthAgo && t.payment_status === 'paid' && t.driver_earnings != null);
+    const mt = monthToDateTrips(trips).filter((t: any) => t.payment_status === 'paid' && t.driver_earnings != null);
     const gross = mt.reduce((sum: number, t: any) => sum + Number(t.price || 0), 0);
     const net = mt.reduce((sum: number, t: any) => sum + Number(t.driver_earnings || 0), 0);
     return { gross, bonus: 0, fee: Math.max(0, gross - net), trips: mt.length, minutes: null, net };
@@ -95,6 +95,14 @@ export default function DriverEarnings() {
       <View style={{ flex: 1, backgroundColor: colors.driverBg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
         <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 16, textAlign: 'center' }}>Kunne ikke hente inntektsdata</Text>
         <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>Prøv igjen når forbindelsen er tilbake.</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void refreshEarnings()}
+          testID="earnings-retry"
+          style={{ marginTop: 20, minHeight: 52, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent }}
+        >
+          <Text style={{ color: colors.accentOn, fontFamily: font.semibold, fontSize: 14 }}>Prøv igjen</Text>
+        </Pressable>
       </View>
     );
   }
@@ -103,7 +111,22 @@ export default function DriverEarnings() {
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refreshEarnings()} tintColor={colors.accent} />} style={{ flex: 1, backgroundColor: colors.driverBg }} contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
       <Text style={s.title}>Inntjening</Text>
 
-      <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.hero}>
+      <View style={s.segs} accessibilityRole="tablist">
+        {PERIODS.map((item) => (
+          <Pressable
+            key={item.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: period === item.key }}
+            onPress={() => setPeriod(item.key)}
+            style={[s.seg, period === item.key && s.segOn]}
+            testID={`earnings-period-${item.key}`}
+          >
+            <Text style={[s.segText, period === item.key && s.segTextOn]}>{item.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <FigmaGradient angle={135} colors={[colors.accent, colors.accentDim]} style={s.hero}>
         <Text style={s.heroLabel}>NETTO {PERIODS.find((p) => p.key === period)!.label.toUpperCase()}</Text>
         <Text style={s.heroValue} testID="earnings-net">{kr(period_data.net)}</Text>
         <View style={s.heroRow}>
@@ -220,9 +243,9 @@ const useStyles = makeStyles((c) => ({
   title: { color: c.text, fontFamily: font.semibold, fontSize: 24, marginBottom: 22, letterSpacing: -0.5 },
   segs: { flexDirection: 'row', backgroundColor: c.cardSubtle, borderRadius: 999, padding: 4, marginBottom: 18 },
   seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
-  segOn: { backgroundColor: c.online },
+  segOn: { backgroundColor: c.surface },
   segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
-  segTextOn: { color: c.accentOn },
+  segTextOn: { color: c.text },
   hero: { borderRadius: 24, padding: 24 },
   heroLabel: { color: 'rgba(255,255,255,0.78)', fontSize: 10, letterSpacing: 1.7, fontFamily: font.mono },
   heroValue: { color: c.accentOn, fontFamily: font.semibold, fontSize: 36, lineHeight: 40, marginTop: 8 },

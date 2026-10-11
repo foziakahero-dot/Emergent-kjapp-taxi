@@ -35,7 +35,7 @@ export default function DriverForgotPassword() {
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={['#FFFFFF','#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <LinearGradient colors={['#F7F5F1','#F1EEE8']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[s.wrap,{paddingTop:insets.top+26,paddingBottom:insets.bottom+24}]}>
         <Pressable onPress={() => router.back()} style={s.backLink}><Text style={s.backLinkText}>‹  Tilbake</Text></Pressable>
         <View style={s.content}>
@@ -53,7 +53,7 @@ export default function DriverForgotPassword() {
             <View style={s.field}><TextInput value={email} onChangeText={setEmail} placeholder="deg@epost.no" placeholderTextColor={colors.textMuted} autoCapitalize="none" autoComplete="email" keyboardType="email-address" style={s.input} testID="driver-forgot-email" /></View>
             {error ? <Text style={s.error}>{error}</Text> : null}
             <Pressable onPress={submit} disabled={busy} style={{marginTop:18}} testID="driver-forgot-submit">
-              <LinearGradient colors={busy ? [colors.lineStrong,colors.lineStrong] : ['#012A54','#001F3F']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}><Text style={s.primaryText}>{busy?'Sender…':'Send lenke'}</Text></LinearGradient>
+              <LinearGradient colors={busy ? [colors.lineStrong,colors.lineStrong] : [colors.accent,colors.accentDim]} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}><Text style={s.primaryText}>{busy?'Sender…':'Send lenke'}</Text></LinearGradient>
             </Pressable>
           </>}
         </View>
@@ -81,5 +81,4 @@ const useStyles = makeStyles((c) => ({
   secondaryButton: { minHeight:50, paddingHorizontal:22, borderRadius:25, alignItems:'center', justifyContent:'center', backgroundColor:c.surface, borderWidth:1, borderColor:c.lineStrong },
   secondaryText: { color:c.text, fontFamily:font.semibold, fontSize:13 },
 }));
-
 

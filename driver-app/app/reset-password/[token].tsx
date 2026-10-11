@@ -45,7 +45,7 @@ export default function DriverResetPassword() {
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={['#FFFFFF','#F2F5FA']} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <LinearGradient colors={['#F7F5F1','#F1EEE8']} style={StyleSheet.absoluteFill} pointerEvents="none" />
       <View style={[s.wrap,{paddingTop:insets.top+26,paddingBottom:insets.bottom+24}]}>
         <Pressable onPress={() => router.replace('/driver-login')} style={s.backLink}><Text style={s.backLinkText}>‹  Til innlogging</Text></Pressable>
         <View style={s.content}>
@@ -59,7 +59,7 @@ export default function DriverResetPassword() {
             <Text style={s.fieldLabel}>NYTT PASSORD</Text><View style={s.field}><TextInput value={password} onChangeText={setPassword} secureTextEntry placeholder="Minst 8 tegn" placeholderTextColor={colors.textMuted} autoComplete="new-password" style={s.input}/></View>
             <Text style={[s.fieldLabel,{marginTop:16}]}>GJENTA PASSORD</Text><View style={s.field}><TextInput value={again} onChangeText={setAgain} secureTextEntry placeholder="Gjenta passord" placeholderTextColor={colors.textMuted} autoComplete="new-password" style={s.input}/></View>
             {error ? <Text style={s.error}>{error}</Text> : null}
-            <Pressable onPress={submit} disabled={busy} style={{marginTop:18}}><LinearGradient colors={busy?[colors.lineStrong,colors.lineStrong]:['#012A54','#001F3F']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}><Text style={s.primaryText}>{busy?'Lagrer…':'Lagre nytt passord'}</Text></LinearGradient></Pressable>
+            <Pressable onPress={submit} disabled={busy} style={{marginTop:18}}><LinearGradient colors={busy?[colors.lineStrong,colors.lineStrong]:[colors.accent,colors.accentDim]} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}><Text style={s.primaryText}>{busy?'Lagrer…':'Lagre nytt passord'}</Text></LinearGradient></Pressable>
           </> : null}
           {state==='done' ? <>
             <View style={s.doneCircle}><Icon name="check" size={24} color={colors.accentOn}/></View><Text style={s.title}>Passordet er endret</Text><Text style={s.sub}>Du kan nå logge inn i SNAR Driver.</Text>
@@ -82,5 +82,4 @@ const useStyles = makeStyles((c) => ({
   secondaryButton:{minHeight:50,paddingHorizontal:22,borderRadius:25,alignItems:'center',justifyContent:'center',backgroundColor:c.surface,borderWidth:1,borderColor:c.lineStrong}, secondaryText:{color:c.text,fontFamily:font.semibold,fontSize:13},
   doneCircle:{width:58,height:58,borderRadius:29,backgroundColor:c.online,alignItems:'center',justifyContent:'center'},
 }));
-
 

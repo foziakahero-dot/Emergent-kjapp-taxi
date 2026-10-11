@@ -1,71 +1,72 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Inter_300Light } from '@expo-google-fonts/inter/300Light';
-import { Inter_800ExtraBold } from '@expo-google-fonts/inter/800ExtraBold';
+import { Geist_300Light } from '@expo-google-fonts/geist/300Light';
+import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
 import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
-import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
-import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
-import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
-import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { Geist_400Regular } from '@expo-google-fonts/geist/400Regular';
+import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
+import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
+import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 
-/** KJAPP Driver — shared light/navy/red system with green for real online status. */
+/** SNAR V10 Driver — Geist typography and warm-neutral surfaces with truthful status colors. */
 export const colors = {
-  bg: '#F4F6FA',
+  bg: '#F7F5F1',
   surface: '#FFFFFF',
   card: '#FFFFFF',
-  cardSubtle: '#EEF1F5',
+  cardSubtle: '#F1EEE8',
   elevated: '#FFFFFF',
-  line: 'rgba(0,31,63,0.10)',
-  lineStrong: 'rgba(0,31,63,0.18)',
-  text: '#001F3F',
-  textSecondary: '#4A5A6E',
-  textMuted: '#8B97A7',
-  accent: '#FF0000',
-  accentHover: '#FF3B3B',
-  accentDim: '#CC0000',
-  accentSoft: '#FFE6E6',
-  accentGlow: 'rgba(255,0,0,0.25)',
+  surfaceInverse: '#0B1A2C',
+  onInverse: '#F4F6F9',
+  line: 'rgba(11,26,44,0.08)',
+  lineStrong: 'rgba(11,26,44,0.14)',
+  text: '#0B1A2C',
+  textSecondary: '#4B5A6C',
+  textMuted: '#8A95A3',
+  accent: '#E00000',
+  accentHover: '#C80000',
+  accentDim: '#A80000',
+  accentSoft: 'rgba(224,0,0,0.08)',
+  accentGlow: 'rgba(224,0,0,0.18)',
   accentOn: '#FFFFFF',
-  success: '#4CAF50',
-  warning: '#FF9800',
-  danger: '#F44336',
-  dangerSoft: '#FFF0F0',
-  info: '#245FAD',
-  online: '#12B981',
-  onlineSoft: '#E5F7ED',
-  onlineGlow: 'rgba(18,185,129,0.24)',
-  route: '#FF0000',
-  mapCanvas: '#E9EEF3',
-  mapWater: '#D8E8F0',
+  success: '#0D7A58',
+  warning: '#A35A00',
+  danger: '#D0001A',
+  dangerSoft: 'rgba(208,0,26,0.08)',
+  info: '#1A5FB4',
+  online: '#0D7A58',
+  onlineSoft: 'rgba(13,122,88,0.1)',
+  onlineGlow: 'rgba(13,122,88,0.18)',
+  route: '#0B1A2C',
+  mapCanvas: '#EFECE6',
   mapRoad: '#FFFFFF',
-  mapRoadMajor: '#F8FAFC',
-  mapBuilding: '#E2E8EE',
-  driverBg: '#F4F6FA',
+  mapRoadMajor: '#FBFAF7',
+  mapBuilding: '#E4E0D8',
+  driverBg: '#F7F5F1',
   driverCard: '#FFFFFF',
 };
 
 export type ThemeColors = typeof colors;
 
 export const font = {
-  display: 'Inter_600SemiBold',
-  body: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-  bold: 'Inter_700Bold',
-  light: 'Inter_300Light',
-  extraBold: 'Inter_800ExtraBold',
+  display: 'Geist_600SemiBold',
+  body: 'Geist_400Regular',
+  medium: 'Geist_500Medium',
+  semibold: 'Geist_600SemiBold',
+  bold: 'Geist_700Bold',
+  light: 'Geist_300Light',
+  extraBold: 'Geist_800ExtraBold',
   mono: 'JetBrainsMono',
   monoMedium: 'JetBrainsMono_500Medium',
 };
 
 export const FONT_ASSETS = {
-  Inter_300Light,
-  Inter_800ExtraBold,
+  Geist_300Light,
+  Geist_800ExtraBold,
   JetBrainsMono_500Medium,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+  Geist_700Bold,
   JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
 };
 
@@ -102,4 +103,3 @@ export function makeStyles<T extends StyleSheet.NamedStyles<T>>(
     return useMemo(() => StyleSheet.create(factory(colors)), []);
   };
 }
-

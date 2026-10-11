@@ -90,13 +90,13 @@ export default function DriverProfile() {
     { label: 'Profilbilde', path: u.profile_photo_path },
   ];
   return <View style={{ flex: 1 }}>
-    <FigmaGradient angle={180} colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
-    <ScrollView contentContainerStyle={{ paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112, paddingHorizontal: 28 }}>
+    <FigmaGradient angle={180} colors={['#F7F5F1', '#F1EEE8']} style={StyleSheet.absoluteFill} />
+    <ScrollView contentContainerStyle={{ paddingTop: insets.top + 40, paddingBottom: insets.bottom + 112, paddingHorizontal: 20 }}>
       <Text style={s.title}>Min profil</Text>
       <View style={s.account}>
         <Pressable onPress={() => router.push('/driver-profile-photo')} testID="driver-profile-photo-open" accessibilityRole="button" accessibilityLabel="Endre profilbilde" style={s.avatarWrap}>
-          <FigmaGradient angle={135} colors={['#012A54', '#001F3F']} style={s.avatar}>
-            {profilePhoto.data ? <Image source={profilePhoto.data} style={{ width: 64, height: 64 }} /> : <Text style={s.avatarText}>{initials}</Text>}
+          <FigmaGradient angle={135} colors={[colors.surfaceInverse, colors.surfaceInverse]} style={s.avatar}>
+              {profilePhoto.data ? <Image source={profilePhoto.data} style={{ width: 72, height: 72 }} /> : <Text style={s.avatarText}>{initials}</Text>}
           </FigmaGradient>
           {verified && <View style={s.verifiedBadge}><Icon name="check" size={14} color="#FFFFFF" /></View>}
         </Pressable>
@@ -112,7 +112,7 @@ export default function DriverProfile() {
       <Outline label="Endre passord" onPress={() => router.push('/forgot-password')} />
       <Section>Du kjører for</Section>
       <View style={s.row} testID="driver-fleet-card">
-        <FigmaGradient angle={135} colors={['#012A54', '#001F3F']} style={s.fleetIcon}><Icon name="shield" size={20} color="#FFFFFF" /></FigmaGradient>
+        <FigmaGradient angle={135} colors={[colors.surfaceInverse, colors.surfaceInverse]} style={s.fleetIcon}><Icon name="shield" size={20} color="#FFFFFF" /></FigmaGradient>
         <View style={{ flex: 1 }}><Text style={s.label}>{u.fleet_name || 'Ikke tilknyttet'}</Text><Text style={s.sub}>Org.nr {u.fleet_org_number || '—'}</Text></View>
         {!!u.fleet_id && <Badge label="Tilknyttet" />}
       </View>
@@ -190,8 +190,8 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
 const s = StyleSheet.create({
   title: { fontFamily: font.semibold, fontSize: 24, letterSpacing: -0.48, color: colors.text },
   account: { marginTop: 24, flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: 24, padding: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
-  avatarWrap: { width: 64, height: 64 }, avatar: { width: 64, height: 64, borderRadius: 32, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: font.semibold, fontSize: 24, color: '#FFFFFF', letterSpacing: -0.48 },
+  avatarWrap: { width: 72, height: 72 }, avatar: { width: 72, height: 72, borderRadius: 36, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: font.semibold, fontSize: 26, color: '#FFFFFF', letterSpacing: -0.5 },
   verifiedBadge: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.success, borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   name: { fontFamily: font.semibold, fontSize: 18, letterSpacing: -0.36, color: colors.text },
   label: { fontFamily: font.semibold, fontSize: 14, color: colors.text }, sub: { fontSize: 12, color: colors.textSecondary },

@@ -38,7 +38,7 @@ export default function DriverTrips() {
   const [filter, setFilter] = useState<Filter>('all');
   const [detail, setDetail] = useState<any>(null);
 
-  const { data: hist, isLoading, isError } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
+  const { data: hist, isLoading, isError, refetch } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
   const all = hist?.trips || hist?.history || (Array.isArray(hist) ? hist : []);
 
   const trips = useMemo(() => {
@@ -70,7 +70,12 @@ export default function DriverTrips() {
         {isLoading ? (
           <View style={{ paddingTop: 60 }}><Loader /></View>
         ) : isError ? (
-          <Text style={s.empty}>Kunne ikke hente turhistorikken. Prøv igjen når forbindelsen er tilbake.</Text>
+          <View style={s.errorState}>
+            <Text style={s.empty}>Kunne ikke hente turhistorikken. Prøv igjen når forbindelsen er tilbake.</Text>
+            <Pressable accessibilityRole="button" onPress={() => void refetch()} testID="driver-trips-retry" style={s.retry}>
+              <Text style={s.retryText}>Prøv igjen</Text>
+            </Pressable>
+          </View>
         ) : trips.length ? (
           trips.map((t: any, i: number) => {
             const st = STATUS[t.status] || { label: t.status, color: colors.textMuted };
@@ -170,6 +175,9 @@ const useStyles = makeStyles((c) => ({
   rowPrice: { color: c.text, fontFamily: font.mono, fontSize: 15 },
   rowStatus: { fontSize: 11, marginTop: 2 },
   empty: { color: c.textMuted, fontSize: 14, marginTop: 40, textAlign: 'center' },
+  errorState: { alignItems: 'center', paddingHorizontal: 20 },
+  retry: { minHeight: 48, marginTop: 16, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
+  retryText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
   sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)' },
   detailSheet: { backgroundColor: c.elevated, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: c.line, paddingHorizontal: 22, paddingTop: 10 },
   handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },

@@ -8,7 +8,6 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
-import { BrandBadge } from '@/src/components/BrandBadge';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 import { FigmaGradient as LinearGradient } from '@/src/components/FigmaGradient';
@@ -59,14 +58,12 @@ export default function DriverLogin() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.driverBg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={s.bgGradient} pointerEvents="none" />
-      <ScrollView contentContainerStyle={[s.wrap, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+      <LinearGradient colors={['#F7F5F1', '#F1EEE8']} style={s.bgGradient} pointerEvents="none" />
+      <ScrollView contentContainerStyle={[s.wrap, { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
         <Rise style={s.identity}>
-          <BrandBadge size={48} />
-          <View>
-            <Text style={s.eyebrow}>SNAR SJÅFØR</Text>
-            <Text style={s.title}>Logg inn</Text>
-          </View>
+          <Text style={s.eyebrow}>SNAR DRIVER</Text>
+          <Text style={s.title}>Logg inn for å kjøre</Text>
+          <Text style={s.subtitle}>Bruk e-post eller telefonnummeret som er registrert hos løyvehaveren din.</Text>
         </Rise>
 
         <Rise delay={60} style={s.form}>
@@ -78,7 +75,7 @@ export default function DriverLogin() {
         {error ? <Text style={s.error} testID="driver-login-error">{error}</Text> : null}
 
         <Pressable onPress={submit} disabled={loading} testID="driver-login-submit" style={({ pressed }) => ({ marginTop: 32, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
-          <LinearGradient colors={loading ? [colors.lineStrong, colors.lineStrong] : ['#012A54', '#001F3F']} style={s.primaryButton}>
+          <LinearGradient colors={loading ? [colors.lineStrong, colors.lineStrong] : [colors.accent, colors.accentDim]} style={s.primaryButton}>
             <Text style={s.primaryButtonText}>{loading ? 'Logger inn…' : 'Logg inn'}</Text>
           </LinearGradient>
         </Pressable>
@@ -99,13 +96,14 @@ export default function DriverLogin() {
 
 const useStyles = makeStyles((c) => ({
     bgGradient: { ...StyleSheet.absoluteFill },
-    wrap: { paddingHorizontal: 28, flexGrow: 1, backgroundColor: 'transparent' },
-    identity: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 36 },
-    eyebrow: { color: c.text, fontFamily: font.mono, fontSize: 10, letterSpacing: 2.8 },
-    title: { fontFamily: font.semibold, fontSize: 24, color: c.text, marginTop: 2, letterSpacing: -0.5 },
+    wrap: { paddingHorizontal: 24, flexGrow: 1, backgroundColor: 'transparent' },
+    identity: { alignItems: 'flex-start', marginBottom: 28 },
+    eyebrow: { color: c.textSecondary, fontFamily: font.mono, fontSize: 11, letterSpacing: 1.1 },
+    title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, color: c.text, marginTop: 6, letterSpacing: -0.7 },
+    subtitle: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 8 },
     form: { gap: 16 },
     fieldAction: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-    primaryButton: { minHeight: 52, borderRadius: 27, alignItems: 'center', justifyContent: 'center', shadowColor: c.text, shadowOpacity: 0.25, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+    primaryButton: { minHeight: 58, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
     primaryButtonText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
     forgot: { minHeight: 20, alignSelf: 'center', justifyContent: 'center', marginTop: 20 },
     forgotText: { color: c.text, fontFamily: font.medium, fontSize: 14, lineHeight: 20 },

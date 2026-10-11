@@ -543,19 +543,16 @@ export default function DriverHome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
-      {(online || current || firstOffer) ? (
-        <Map
-          style={StyleSheet.absoluteFill}
-          user={!current ? loc : null}
-          pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
-          dropoff={current ? mapDropoff : (firstOffer ? { lat: firstOffer.dropoff_lat, lng: firstOffer.dropoff_lng } : null)}
-          route={current ? mapRoute : firstOffer?.geometry?.coordinates}
-          activeCar={current && loc ? loc : null}
-          testID="driver-map"
-        />
-      ) : (
-        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
-      )}
+      <Map
+        style={StyleSheet.absoluteFill}
+        user={!current ? loc : null}
+        pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
+        dropoff={current ? mapDropoff : (firstOffer ? { lat: firstOffer.dropoff_lat, lng: firstOffer.dropoff_lng } : null)}
+        route={current ? mapRoute : firstOffer?.geometry?.coordinates}
+        activeCar={current && loc ? loc : null}
+        testID="driver-map"
+      />
+      {!online && !current && !firstOffer ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.offlineMapWash]} /> : null}
 
       <View style={[s.driverHeaderWrap, { top: insets.top + 12 }]}>
         <View style={s.driverHeader}>
@@ -563,9 +560,12 @@ export default function DriverHome() {
             <BrandBadge size={34} />
             <View>
               <Text style={s.headerName} numberOfLines={1}>{user?.fullName || 'SNAR-sjåfør'}</Text>
-              <Text style={[s.headerStatus, { color: online ? colors.online : colors.textMuted }]}>
-                {online ? '● ONLINE' : 'OFFLINE'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                {online ? <View style={s.onlineDot} /> : null}
+                <Text style={[s.headerStatus, { color: online ? colors.online : colors.textMuted }]}>
+                  {online ? 'ONLINE' : 'OFFLINE'}
+                </Text>
+              </View>
             </View>
           </View>
           <Pressable
@@ -688,7 +688,7 @@ export default function DriverHome() {
                 <Text style={[s.offerCountdownNum, offerExpired && { color: colors.textMuted }]}>
                   {offerRemaining != null ? offerRemaining : '—'}
                 </Text>
-                <Text style={s.offerCountdownUnit}>SEK</Text>
+                <Text style={s.offerCountdownUnit}>s</Text>
               </View>
             </View>
             <View style={s.offerPriceRow}>
@@ -716,7 +716,7 @@ export default function DriverHome() {
           </View>
         </>
       ) : completedTrip ? (
-        <LinearGradient colors={['#FFFFFF', '#F2F5FA']} style={[StyleSheet.absoluteFill, s.completeWrap]}>
+        <LinearGradient colors={['#F7F5F1', '#F1EEE8']} style={[StyleSheet.absoluteFill, s.completeWrap]}>
           <View style={[s.completeContent, { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 26 }]}>
             <Text style={s.completeEyebrow}>TUR FULLFØRT</Text>
             <Text style={s.completeAmount}>
@@ -799,10 +799,12 @@ export default function DriverHome() {
 
 const useStyles = makeStyles((c) => ({
     driverHeaderWrap: { position: 'absolute', left: 16, right: 16, zIndex: 50 },
+    offlineMapWash: { backgroundColor: 'rgba(247,245,241,0.42)' },
     driverHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
     driverIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
     headerName: { color: c.text, fontFamily: font.semibold, fontSize: 14, maxWidth: 180 },
     headerStatus: { fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4, marginTop: 2 },
+    onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.online },
     switchTrack: { width: 56, height: 32, borderRadius: 16, backgroundColor: c.lineStrong, padding: 2 },
     switchTrackOn: { backgroundColor: c.online },
     switchKnob: { width: 28, height: 28, borderRadius: 14, backgroundColor: c.surface },
@@ -853,7 +855,7 @@ const useStyles = makeStyles((c) => ({
     offerButtons: { flexDirection: 'row', gap: 10, marginTop: 16 },
     declineButton: { flex: 1, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface },
     declineButtonText: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 14 },
-    acceptButton: { flex: 2, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 28, backgroundColor: c.online },
+    acceptButton: { flex: 2, minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: c.accent },
     acceptButtonDisabled: { opacity: 0.45 },
     acceptButtonText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
     waitingSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
@@ -891,6 +893,3 @@ const useStyles = makeStyles((c) => ({
     reasonRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: c.line },
     reasonText: { color: c.text, fontFamily: font.medium, fontSize: 14 }
 }));
-
-
-

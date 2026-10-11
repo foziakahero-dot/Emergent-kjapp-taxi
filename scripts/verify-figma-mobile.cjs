@@ -75,6 +75,20 @@ function advance(ms) {
 }
 const act = renderer.act;
 (async () => {
+  const { monthToDateTrips } = load('driver-app', 'src/lib/earnings.ts');
+  const monthStart = new Date(2026, 1, 1).toISOString();
+  const previousMonth = new Date(new Date(monthStart).getTime() - 1).toISOString();
+  const februaryTrips = [
+    { trip_id: 'previous-month', created_at: previousMonth, payment_status: 'paid', driver_earnings: 150 },
+    { trip_id: 'paid-this-month', created_at: monthStart, payment_status: 'paid', driver_earnings: 175 },
+    { trip_id: 'unpaid-this-month', created_at: new Date(2026, 1, 10, 12).toISOString(), payment_status: 'pending', driver_earnings: null },
+    { trip_id: 'missing-earnings', created_at: new Date(2026, 1, 11, 12).toISOString(), payment_status: 'paid', driver_earnings: null },
+  ];
+  assert.deepEqual(
+    monthToDateTrips(februaryTrips, new Date(2026, 1, 12, 12)).map(trip => trip.trip_id),
+    ['paid-this-month', 'unpaid-this-month', 'missing-earnings'],
+    'Driver month-to-date history excludes trips before the current calendar month',
+  );
   for (const app of ['frontend', 'driver-app']) {
     const { font, FONT_ASSETS } = load(app, 'src/theme.ts');
     const { resolveFont, Text } = load(app, 'src/components/Typography.tsx');
@@ -503,5 +517,5 @@ const act = renderer.act;
   assert.equal(recent.length, 1); assert.equal(recent[0].name, 'Actual destination'); assert.equal(recent[0].icon, 'clock');
   assert.equal(timers.size, 0);
   assert.equal(nativeListeners, 0);
-  console.log('PASS: Customer search race/offline/retry, actual trip-history recents, session race protection, immediate logout/old-token cleanup, cancellation reconciliation, duplicate guards, safety/network errors, immediate emergency dialer, GPS freshness, minimize/reopen/completion; fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, duplicate guards, privacy export, permission-gated server-confirmed Driver alerts, unmount cancellation, error recovery and address edit identity.');
+  console.log('PASS: Customer search race/offline/retry, actual trip-history recents, session race protection, immediate logout/old-token cleanup, cancellation reconciliation, duplicate guards, safety/network errors, immediate emergency dialer, GPS freshness, minimize/reopen/completion; fonts, nested inheritance, CSS gradient angles, reduced motion/toggles, single delayed trip action, support server replies/ticket IDs, privacy export, permission-gated server-confirmed Driver alerts, month-to-date paid-trip earnings, unmount cancellation, error recovery and address edit identity.');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { console.error = originalError; });
