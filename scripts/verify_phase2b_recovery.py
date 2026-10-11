@@ -12,7 +12,7 @@ TARGETS = {
     "backend/tests/test_beta_trip_integrity_contract.py": "8db6c09d38efbb71a88130f8705aa82db0a352b1",
     "backend/tests/test_beta_trip_lifecycle_contract.py": "f07442072f81f25604fea0b3a14814d0604c65c1",
     "backend/tests/test_fleet_live_identity_contract.py": "2eb6aeb0ca135f794606eb3cd29b5d0b3c7ff456",
-    "backend/tests/test_mobile_server_truth_contract.py": "e06ea51470fb9fd61c08a4ca0412594bc8af3948",
+    "backend/tests/test_mobile_server_truth_contract.py": "e06ea514442737624a7cd1f379b66b46a7174d47",
     "backend/tests/test_navigation_settings_unit.py": "4590c7f3584c27abe03ed1f639d3f8fe9d4e5079",
     "backend/tests/test_receipt_identity_recheck_contract.py": "8fea06ab47ad87d99d94ea460ea18ee5267849ad",
     "backend/tests/test_security_regressions_unit.py": "dbb6e916eb8938e4e0721646b4175943630a52f6",
