@@ -15,18 +15,19 @@ let backgroundPermissionRequestedThisSession = false;
 let backgroundLocationMode: 'idle' | 'active' | null = null;
 
 try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => {
-      const requestsEnabled = (await storage.getItem('driver_notif_requests')) !== 'false';
-      const soundEnabled = (await storage.getItem('driver_req_sound')) !== 'false';
-      return {
-        shouldPlaySound: requestsEnabled && soundEnabled,
-        shouldSetBadge: false,
-        shouldShowBanner: requestsEnabled,
-        shouldShowList: requestsEnabled,
-      };
-    },
-  });
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => {
+    const requestsEnabled = (await storage.getItem('driver_notif_requests')) !== 'false';
+    const soundEnabled = (await storage.getItem('driver_req_sound')) !== 'false';
+    return {
+      shouldPlaySound: requestsEnabled && soundEnabled,
+      shouldSetBadge: false,
+      shouldShowBanner: requestsEnabled,
+      shouldShowList: requestsEnabled,
+    };
+  },
+});
 } catch {
   // A notification module error must not crash Driver startup.
 }
