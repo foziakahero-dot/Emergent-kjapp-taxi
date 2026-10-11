@@ -63,6 +63,10 @@ export default function Login() {
     }
   };
 
+  const openLegal = (url: string) => {
+    void Linking.openURL(url).catch(() => setError('Kunne ikke åpne dokumentet. Prøv igjen.'));
+  };
+
   const googleSignIn = async () => {
     setError('');
     setGLoading(true);
@@ -134,7 +138,7 @@ export default function Login() {
           <Text style={s.footerText}>Ny hos SNAR? <Text style={s.footerLink}>Opprett konto</Text></Text>
         </Pressable>
         <Text style={s.legalNote}>
-          Ved å fortsette godtar du SNARs <Text style={s.legalLink} onPress={() => void Linking.openURL('https://kjappapp.no/vilkar')}>vilkår</Text> og <Text style={s.legalLink} onPress={() => void Linking.openURL('https://kjappapp.no/personvern')}>personvernerklæring</Text>.
+          Ved å fortsette godtar du SNARs <Text style={s.legalLink} onPress={() => openLegal('https://kjappapp.no/vilkar')}>vilkår</Text> og <Text style={s.legalLink} onPress={() => openLegal('https://kjappapp.no/personvern')}>personvernerklæring</Text>.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
