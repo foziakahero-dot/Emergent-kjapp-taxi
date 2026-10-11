@@ -8,8 +8,9 @@ RECEIPT = (ROOT / "frontend" / "app" / "receipt" / "[tripId].tsx").read_text(enc
 
 
 def test_customer_reopens_canonical_active_trip_on_start():
-    assert "tripsApi.active().then((t) => {" in CUSTOMER_HOME
-    assert "if (active && t?.trip_id) router.replace(`/booking/${t.trip_id}`);" in CUSTOMER_HOME
+    assert "const t = await tripsApi.active();" in CUSTOMER_HOME
+    assert "setActiveTrip(t?.trip_id ? t : null);" in CUSTOMER_HOME
+    assert "onOpen={() => router.push(activeTrip.status === 'arrived'" in CUSTOMER_HOME
 
 
 def test_uncertain_customer_booking_reconciles_with_server():
@@ -33,3 +34,6 @@ def test_booking_screen_uses_server_state_for_receipt_transition():
 def test_receipt_never_rates_before_paid():
     assert "trip?.payment_status !== 'paid'" in RECEIPT
     assert "if (!tripId || trip?.payment_status !== 'paid') return;" in RECEIPT
+    assert "if (t.passenger_rating)" in RECEIPT
+    assert "setRating(t.passenger_rating)" in RECEIPT
+    assert "trip?.status !== 'arrived'" in RECEIPT

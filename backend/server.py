@@ -279,7 +279,14 @@ ALLOWED_UPLOAD_MIME = {
 }
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB per file
 
-client = AsyncIOMotorClient(MONGO_URL)
+client = AsyncIOMotorClient(
+    MONGO_URL,
+    serverSelectionTimeoutMS=10000,
+    connectTimeoutMS=10000,
+    socketTimeoutMS=20000,
+    maxPoolSize=50,
+    waitQueueTimeoutMS=10000,
+)
 db = client[DB_NAME]
 
 # Stripe setup
@@ -457,6 +464,13 @@ def _gen_backup_codes(n: int = 8):
 
 def _twofa_required_role(role: str) -> bool:
     return role in ("admin", "superadmin")
+
+
+def _enforce_admin_2fa(current: dict) -> dict:
+    """Fail closed for every admin control surface until mandatory TOTP is enabled."""
+    if _twofa_required_role(current.get("role", "user")) and not current.get("totp_enabled"):
+        raise HTTPException(status_code=403, detail="2FA må aktiveres før administratortilgang")
+    return current
 
 
 USER_RESPONSE_FIELDS = frozenset({
@@ -1356,6 +1370,9 @@ async def lifespan(app: FastAPI):
     await db.users.create_index("email", unique=True)
     await db.trips.create_index("user_id")
     await db.trips.create_index("trip_id", unique=True)
+    await db.trips.create_index([("status", 1), ("driver_id", 1), ("dispatch_mode", 1), ("offer_expires_at", 1)])
+    await db.trips.create_index([("driver_id", 1), ("status", 1), ("created_at", -1)])
+    await db.trips.create_index([("user_id", 1), ("status", 1), ("created_at", -1)])
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
@@ -1681,12 +1698,12 @@ async def health():
         db_ok = True
     except Exception:
         db_ok = False
-    return {
+    return JSONResponse(status_code=200 if db_ok else 503, content={
         "app": "KJAPP",
         "status": "ok" if db_ok else "degraded",
         "db": db_ok,
         "time": datetime.now(timezone.utc).isoformat(),
-    }
+    })
 
 
 @api.get("/ready")
@@ -1746,14 +1763,14 @@ async def readiness():
     blockers = [key for key in required_keys if not checks[key]]
     if checks["auto_charge_enabled"]:
         blockers.append("auto_charge_must_remain_off_until_stripe_e2e")
-    return {
+    return JSONResponse(status_code=200 if not blockers else 503, content={
         "app": "KJAPP",
         "ready": not blockers,
         "status": "ready" if not blockers else "not_ready",
         "checks": checks,
         "blockers": blockers,
         "time": datetime.now(timezone.utc).isoformat(),
-    }
+    })
 
 
 # ---- Available cars nearby (real driver fleet from DB) ----
@@ -2330,6 +2347,8 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
 
 @api.post("/auth/2fa/disable")
 async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_user)):
+    if _twofa_required_role(current.get("role", "user")):
+        raise HTTPException(status_code=403, detail="2FA er obligatorisk for administratorer")
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
@@ -2477,23 +2496,16 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     if len(body.new_password) < 8:
         raise HTTPException(status_code=400, detail="Passord må ha minst 8 tegn")
     token_hash = _password_reset_token_hash(body.token)
-    rec = await db.password_reset_tokens.find_one({
+    rec = await db.password_reset_tokens.find_one_and_update({
         "$or": [{"token_hash": token_hash}, {"token": body.token}],
         "used": False,
         "expires_at": {"$gte": datetime.now(timezone.utc)},
-    })
+    }, {"$set": {"used": True, "used_at": datetime.now(timezone.utc)}, "$unset": {"token": ""}})
     if not rec:
         raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
     await db.users.update_one(
         {"_id": ObjectId(rec["user_id"])},
         {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
-    )
-    await db.password_reset_tokens.update_one(
-        {"_id": rec["_id"]},
-        {
-            "$set": {"used": True, "used_at": datetime.now(timezone.utc)},
-            "$unset": {"token": ""},
-        },
     )
     # Unlock the account: clear brute-force counters so the user can log in immediately
     await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
@@ -3257,6 +3269,7 @@ class TripMessageRequest(BaseModel):
 
 
 async def _load_trip_or_403(trip_id: str, current: dict):
+    _enforce_admin_2fa(current)
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if not trip:
         raise HTTPException(status_code=404, detail="Turen finnes ikke")
@@ -3911,6 +3924,17 @@ ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
 DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
 
 
+def _recent_driver_reservation(locked_at, now=None) -> bool:
+    """A fresh reservation can be in flight before the matching trip is claimed."""
+    try:
+        since = datetime.fromisoformat(str(locked_at).replace("Z", "+00:00"))
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        return (now or datetime.now(timezone.utc)) - since < timedelta(minutes=2)
+    except (TypeError, ValueError):
+        return False
+
+
 async def _dispatch_candidates(lat: float, lng: float, required_capabilities=None, vehicle_type: Optional[str] = None, customer_id: Optional[str] = None) -> list:
     """Real, available drivers sorted by actual distance to pickup.
 
@@ -4253,7 +4277,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     )
     if lock.modified_count == 0:
         # Self-heal a lock left behind by an already-finished/cancelled ride.
-        locked_driver = await db.users.find_one({"_id": driver_oid}, {"active_trip_id": 1})
+        locked_driver = await db.users.find_one({"_id": driver_oid}, {"active_trip_id": 1, "active_trip_locked_at": 1})
         locked_trip_id = (locked_driver or {}).get("active_trip_id")
         locked_trip = None
         if locked_trip_id:
@@ -4265,12 +4289,16 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
                 }),
                 {"_id": 1},
             )
-        if locked_trip:
+        # An unclaimed trip may simply be between reservation and claim.
+        # Never clear that fresh reservation, even if no active trip is visible yet.
+        if locked_trip or _recent_driver_reservation((locked_driver or {}).get("active_trip_locked_at")):
             raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
-        await db.users.update_one(
-            {"_id": driver_oid},
+        cleared = await db.users.update_one(
+            {"_id": driver_oid, "active_trip_id": locked_trip_id},
             {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
         )
+        if cleared.modified_count != 1:
+            raise HTTPException(status_code=409, detail="En tur behandles allerede")
         lock = await db.users.update_one(
             {
                 "_id": driver_oid,
@@ -4290,6 +4318,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}
     if trip_pre.get("dispatch_mode") == "sequential":
         claim["offer_driver_id"] = trip_pre.get("offer_driver_id")
+        claim["offer_seq"] = trip_pre.get("offer_seq")
+        claim["offer_expires_at"] = {"$gt": datetime.now(timezone.utc).isoformat()}
     result = await db.trips.update_one(
         _real_trip_filter(claim),
         {"$set": updates, "$unset": {"offer_driver_id": "", "offer_expires_at": ""}},
@@ -4329,8 +4359,9 @@ async def driver_current(current=Depends(require_driver)):
         )
     else:
         # No active trip means any reservation lock is stale and must not block new work.
+        lock_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
         await db.users.update_one(
-            {"_id": ObjectId(driver_id)},
+            {"_id": ObjectId(driver_id), "active_trip_locked_at": {"$lt": lock_cutoff}},
             {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
         )
         # Just-finished trip: keep the summary visible for 15 minutes. "completed"/"rated" appear
@@ -5342,6 +5373,7 @@ ADMIN_PERMISSION_PREFIXES = (
 def require_admin(request: Request, current=Depends(get_current_user)):
     if current.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for admin")
+    _enforce_admin_2fa(current)
     if current.get("role") == "admin":
         permissions = current.get("permissions", None)
         if permissions is not None:
@@ -5354,12 +5386,14 @@ def require_admin(request: Request, current=Depends(get_current_user)):
 def require_superadmin(current=Depends(get_current_user)):
     if current.get("role") != "superadmin":
         raise HTTPException(status_code=403, detail="Kun for superadmin")
+    _enforce_admin_2fa(current)
     return current
 
 
 async def require_fleet_owner(current=Depends(get_current_user)):
     if current.get("role") not in ("fleet_owner", "admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Kun for flåteiere")
+    _enforce_admin_2fa(current)
     if current.get("role") == "fleet_owner":
         await _require_active_fleet(current.get("fleet_id"))
     return current
@@ -9422,6 +9456,7 @@ async def upload_public(request: Request, file: UploadFile = File(...), applicat
 
 @api.get("/files/{path:path}")
 async def download_file(path: str, current=Depends(get_current_user)):
+    _enforce_admin_2fa(current)
     rec = await db.uploaded_files.find_one({"storage_path": path, "is_deleted": {"$ne": True}})
     if not rec:
         raise HTTPException(status_code=404, detail="Fil ikke funnet")

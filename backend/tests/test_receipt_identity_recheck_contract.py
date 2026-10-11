@@ -82,7 +82,7 @@ def test_driver_login_supports_privacy_safe_installation_signal():
 
 
 def test_paid_receipt_preserves_booked_zero_and_promo_commission():
-    """Exercise the real snapshot function with an in-memory paid trip."""
+    """Exercise commission resolution and immutable snapshots with paid in-memory trips."""
     import asyncio
     import datetime
     import re
@@ -91,10 +91,12 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
 
     source = _source()
     tree = ast.parse(source)
-    function = next(
-        node for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "ensure_receipt_snapshot"
-    )
+    functions = {
+        node.name: node for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef)
+    }
+    commission_function = functions["_commission_for_trip"]
+    snapshot_function = functions["ensure_receipt_snapshot"]
     namespace = {
         "Optional": typing.Optional,
         "ObjectId": str,
@@ -109,7 +111,14 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
         return 0.10
 
     namespace["_platform_commission"] = platform_commission
-    exec(compile(ast.Module(body=[function], type_ignores=[]), str(SERVER), "exec"), namespace)
+    exec(
+        compile(
+            ast.Module(body=[commission_function, snapshot_function], type_ignores=[]),
+            str(SERVER),
+            "exec",
+        ),
+        namespace,
+    )
 
     class Collection:
         def __init__(self, document=None):
@@ -127,7 +136,7 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
     class Database:
         pass
 
-    async def check(booked_rate, expected_fee):
+    async def check(booked_rate, expected_rate):
         db = Database()
         db.trips = Collection({
             "_id": "trip-1", "trip_id": "trip-1", "status": "completed",
@@ -141,11 +150,16 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
         namespace["db"] = db
 
         first = await namespace["ensure_receipt_snapshot"]("trip-1")
+        db.fleets.document["commission_rate"] = 0.35
         second = await namespace["ensure_receipt_snapshot"]("trip-1")
+        expected_fee = int(round(200 * expected_rate))
+        assert first["commission_rate"] == expected_rate
         assert first["platform_fee"] == expected_fee
         assert first["fleet_net"] == 200 - expected_fee
         assert second["receipt_number"] == first["receipt_number"]
+        assert second["commission_rate"] == expected_rate
+        assert second["platform_fee"] == expected_fee
         assert db.trips.document["receipt_id"] == first["receipt_number"]
 
-    for booked_rate, expected_fee in ((0, 0), (0.05, 10), (None, 30)):
-        asyncio.run(check(booked_rate, expected_fee))
+    for booked_rate, expected_rate in ((0, 0), (0.05, 0.05), (None, 0.10)):
+        asyncio.run(check(booked_rate, expected_rate))

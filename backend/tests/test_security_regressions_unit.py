@@ -295,14 +295,31 @@ def test_parallel_dispatch_notifies_only_one_driver(monkeypatch):
 
         async def update_one(self, query, update):
             async with self.lock:
-                expected = query["$and"][1]["offer_seq"]
-                if not isinstance(expected, dict) or not expected.get("$exists") is False or self.offer_seq is not None:
+                expected = query["$and"][1].get("offer_seq")
+                if expected != self.offer_seq:
                     return SimpleNamespace(modified_count=0)
                 self.offer_seq = update["$inc"]["offer_seq"]
                 return SimpleNamespace(modified_count=1)
 
-    async def candidates(*_args):
+    async def candidates(*_args, **_kwargs):
         return [{"id": "driver-1", "km": 1.2}]
+
+    ensure_started_reads = 0
+    both_started = asyncio.Event()
+
+    async def ensure_started(trip, now=None):
+        nonlocal ensure_started_reads
+        snapshot = {
+            **trip,
+            "status": "searching",
+            "search_started_at": "2026-09-29T03:00:00+00:00",
+            "offer_seq": None,
+        }
+        ensure_started_reads += 1
+        if ensure_started_reads == 2:
+            both_started.set()
+        await both_started.wait()
+        return snapshot
 
     async def commission(*_args):
         return 0.1
@@ -317,6 +334,7 @@ def test_parallel_dispatch_notifies_only_one_driver(monkeypatch):
     monkeypatch.setattr(server, "_dispatch_candidates", candidates)
     monkeypatch.setattr(server, "_commission_for_trip", commission)
     monkeypatch.setattr(server, "send_push_to_user", push)
+    monkeypatch.setattr(server.ride_search, "ensure_started", ensure_started)
     trip = {"trip_id": "real-trip-1", "pickup_lat": 59.9, "pickup_lng": 10.7,
             "pickup_address": "Oslo S", "dropoff_address": "Majorstuen", "price": 200}
 
@@ -328,6 +346,266 @@ def test_parallel_dispatch_notifies_only_one_driver(monkeypatch):
 
     assert asyncio.run(race()).count("driver-1") == 1
     assert notifications == ["driver-1"]
+
+
+async def _race_driver_accepts(monkeypatch, trip_ids, driver_ids):
+    import asyncio
+    from types import SimpleNamespace
+    from bson import ObjectId
+
+    fleet_id = str(ObjectId())
+    user_docs = {
+        driver_id: {
+            "_id": ObjectId(driver_id),
+            "role": "driver",
+            "approved": True,
+            "online": True,
+            "fleet_id": fleet_id,
+        }
+        for driver_id in set(driver_ids)
+    }
+    trip_docs = {
+        trip_id: {
+            "_id": ObjectId(),
+            "trip_id": trip_id,
+            "user_id": "507f1f77bcf86cd799439011",
+            "status": "searching",
+            "driver_id": None,
+            "dispatch_mode": "broadcast",
+            "pickup_lat": 59.9,
+            "pickup_lng": 10.7,
+            "pickup_address": "Oslo S",
+            "dropoff_address": "Majorstuen",
+            "price": 200,
+            "vehicle_type": "ai-first",
+            "special_needs": [],
+        }
+        for trip_id in set(trip_ids)
+    }
+
+    def extra(query):
+        return query["$and"][-1] if "$and" in query else query
+
+    class Trips:
+        def __init__(self):
+            self.lock = asyncio.Lock()
+            self.pre_reads = 0
+            self.ready = asyncio.Event()
+
+        async def find_one(self, query, *_args, **_kwargs):
+            filters = extra(query)
+            trip_id = filters.get("trip_id")
+            trip = trip_docs.get(trip_id)
+            if (
+                trip
+                and filters.get("driver_id", "missing") is None
+                and filters.get("status") == {"$in": ["searching", "booking"]}
+            ):
+                self.pre_reads += 1
+                if self.pre_reads == len(trip_ids):
+                    self.ready.set()
+                await self.ready.wait()
+                return dict(trip_docs[trip_id])
+            if not trip:
+                return None
+            if filters.get("driver_id", trip.get("driver_id")) != trip.get("driver_id"):
+                return None
+            statuses = filters.get("status")
+            if isinstance(statuses, dict) and trip.get("status") not in statuses.get("$in", []):
+                return None
+            return dict(trip)
+
+        async def update_one(self, query, update, **_kwargs):
+            filters = extra(query)
+            trip = trip_docs.get(filters.get("trip_id"))
+            if not trip:
+                return SimpleNamespace(modified_count=0)
+            if trip.get("driver_id") is not None or trip.get("status") not in ("searching", "booking"):
+                return SimpleNamespace(modified_count=0)
+            async with self.lock:
+                if trip.get("driver_id") is not None or trip.get("status") not in ("searching", "booking"):
+                    return SimpleNamespace(modified_count=0)
+                trip.update(update.get("$set", {}))
+                for key in update.get("$unset", {}):
+                    trip.pop(key, None)
+                return SimpleNamespace(modified_count=1)
+
+    class Users:
+        def __init__(self):
+            self.lock = asyncio.Lock()
+
+        async def find_one(self, query, *_args, **_kwargs):
+            user = user_docs.get(str(query.get("_id")))
+            return dict(user) if user else None
+
+        async def update_one(self, query, update, **_kwargs):
+            user = user_docs.get(str(query.get("_id")))
+            if not user:
+                return SimpleNamespace(modified_count=0)
+            async with self.lock:
+                if "$or" in query:
+                    if user.get("active_trip_id") is not None:
+                        return SimpleNamespace(modified_count=0)
+                elif "active_trip_id" in query and user.get("active_trip_id") != query["active_trip_id"]:
+                    return SimpleNamespace(modified_count=0)
+                user.update(update.get("$set", {}))
+                for key in update.get("$unset", {}):
+                    user.pop(key, None)
+                return SimpleNamespace(modified_count=1)
+
+    class Fleets:
+        async def find_one(self, *_args, **_kwargs):
+            return {"_id": ObjectId(fleet_id), "name": "Test Fleet", "commission_rate": 0.1}
+
+    trips = Trips()
+    users = Users()
+    monkeypatch.setattr(server, "db", SimpleNamespace(trips=trips, users=users, fleets=Fleets()))
+
+    async def assigned_vehicle(*_args, **_kwargs):
+        return {"_id": ObjectId(), "car": "Test car", "plate": "AB12345", "vehicle_type": "ai-first"}
+
+    async def compliance(*_args, **_kwargs):
+        return {"operational": True, "message": ""}
+
+    async def internal_context(*_args, **_kwargs):
+        return {}, None
+
+    async def route(*_args, **_kwargs):
+        return {"duration_min": 1}
+
+    async def push(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(server, "_assigned_fleet_vehicle", assigned_vehicle)
+    monkeypatch.setattr(server, "_driver_shift_compliance", compliance)
+    monkeypatch.setattr(server, "_internal_driver_context", internal_context)
+    monkeypatch.setattr(server.ride_testing, "trip_allowed", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(server, "_driver_supports_special_needs", lambda *_args: True)
+    monkeypatch.setattr(server, "_fresh_driver_location", lambda *_args: True)
+    monkeypatch.setattr(server, "osrm_route", route)
+    monkeypatch.setattr(server, "send_push_to_user", push)
+
+    calls = [
+        server.driver_accept(
+            server.AcceptTripRequest(trip_id=trip_id),
+            {
+                "id": driver_id,
+                "role": "driver",
+                "online": True,
+                "fleet_id": fleet_id,
+                "fullName": "Test Driver",
+                "last_lat": 59.9,
+                "last_lng": 10.7,
+                "last_location_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        for trip_id, driver_id in zip(trip_ids, driver_ids)
+    ]
+    return await asyncio.gather(*calls, return_exceptions=True), trip_docs, user_docs
+
+
+def test_driver_accept_race_two_drivers_claim_one_trip(monkeypatch):
+    import asyncio
+    from bson import ObjectId
+    from fastapi import HTTPException
+
+    driver_ids = [str(ObjectId()), str(ObjectId())]
+    outcomes, trips, users = asyncio.run(
+        _race_driver_accepts(monkeypatch, ["shared-trip", "shared-trip"], driver_ids)
+    )
+    assert sum(isinstance(value, dict) for value in outcomes) == 1
+    rejected = next(value for value in outcomes if isinstance(value, HTTPException))
+    assert rejected.status_code == 409
+    assert trips["shared-trip"]["driver_id"] in driver_ids
+    assert sum(user.get("active_trip_id") == "shared-trip" for user in users.values()) == 1
+
+
+def test_driver_accept_race_one_driver_cannot_claim_two_trips(monkeypatch):
+    import asyncio
+    from bson import ObjectId
+    from fastapi import HTTPException
+
+    driver_id = str(ObjectId())
+    outcomes, trips, users = asyncio.run(
+        _race_driver_accepts(monkeypatch, ["trip-a", "trip-b"], [driver_id, driver_id])
+    )
+    assert sum(isinstance(value, dict) for value in outcomes) == 1
+    rejected = next(value for value in outcomes if isinstance(value, HTTPException))
+    assert rejected.status_code == 409
+    assert sum(trip["driver_id"] == driver_id for trip in trips.values()) == 1
+    assert users[driver_id]["active_trip_id"] in ("trip-a", "trip-b")
+
+
+def test_parallel_password_reset_claims_token_once_and_revokes_sessions(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+
+    class ResetTokens:
+        def __init__(self):
+            self.used = False
+            self.lock = asyncio.Lock()
+
+        async def find_one_and_update(self, _query, update):
+            async with self.lock:
+                if self.used:
+                    return None
+                self.used = update["$set"]["used"]
+                return {"user_id": "507f1f77bcf86cd799439011", "email": "user@example.no"}
+
+    class Users:
+        def __init__(self):
+            self.writes = []
+
+        async def update_one(self, query, update):
+            self.writes.append((query, update))
+            return SimpleNamespace(modified_count=1)
+
+    class LoginAttempts:
+        def __init__(self):
+            self.deletes = []
+
+        async def delete_many(self, query):
+            self.deletes.append(query)
+            return SimpleNamespace(deleted_count=1)
+
+    tokens = ResetTokens()
+    users = Users()
+    attempts = LoginAttempts()
+    monkeypatch.setattr(server, "db", SimpleNamespace(
+        password_reset_tokens=tokens,
+        users=users,
+        login_attempts=attempts,
+    ))
+
+    async def no_rate_limit(*_args):
+        return None
+
+    monkeypatch.setattr(server, "_enforce_rate_limit", no_rate_limit)
+    monkeypatch.setattr(server, "hash_password", lambda password: f"hashed:{password}")
+    request = Request({"type": "http", "method": "POST", "path": "/auth/reset-password", "headers": []})
+    body = server.ResetPasswordRequest(
+        token="one-use-reset-token-with-enough-entropy",
+        new_password="new-password-123",
+    )
+
+    async def race():
+        return await asyncio.gather(
+            server.reset_password(body, request),
+            server.reset_password(body, request),
+            return_exceptions=True,
+        )
+
+    outcomes = asyncio.run(race())
+    assert outcomes.count({"ok": True}) == 1
+    rejected = next(value for value in outcomes if isinstance(value, HTTPException))
+    assert rejected.status_code == 400
+    assert len(users.writes) == 1
+    saved_query, saved_update = users.writes[0]
+    assert saved_query == {"_id": server.ObjectId("507f1f77bcf86cd799439011")}
+    assert saved_update["$set"]["password_hash"] == "hashed:new-password-123"
+    assert "tokens_valid_after" in saved_update["$set"]
+    assert len(attempts.deletes) == 1
 
 
 @pytest.mark.parametrize("role", ["admin", "superadmin"])

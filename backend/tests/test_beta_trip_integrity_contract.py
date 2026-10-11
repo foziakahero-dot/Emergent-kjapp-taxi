@@ -1,8 +1,13 @@
 from pathlib import Path
 import ast
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVER_PATH = ROOT / "backend" / "server.py"
+sys.path.insert(0, str(SERVER_PATH.parent))
+from bson import ObjectId
+from fleet_vehicle_access import access_query as vehicle_access_query
+
 CONTROL_PATH = ROOT / "backend" / "admin_control_center.py"
 CUSTOMER_BOOKING_PATH = ROOT / "frontend" / "app" / "booking" / "[tripId].tsx"
 CUSTOMER_RECEIPT_PATH = ROOT / "frontend" / "app" / "receipt" / "[tripId].tsx"
@@ -120,7 +125,8 @@ def test_driver_app_does_not_mask_money_failures_or_recompute_trip_earnings():
     assert ".catch(() => normalizePayouts())" not in DRIVER_API
     assert "t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'" in DRIVER_TRIPS
     assert "t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'" in DRIVER_EARNINGS
-    assert "KJAPP viser ikke 0 kr som fallback" in DRIVER_EARNINGS
+    assert "t.payment_status === 'paid'" in DRIVER_EARNINGS
+    assert "'Venter betaling'" in DRIVER_EARNINGS
 
 
 def test_customer_and_driver_roles_are_server_separated():
@@ -244,7 +250,7 @@ def test_driver_bundle_contains_no_google_or_self_registration_auth_path():
         assert forbidden not in driver_auth
     assert "register:" not in driver_api
     assert "googleSession:" not in driver_api
-    assert "E-post eller telefonnummer" in driver_login
+    assert 'label="E-post eller telefon"' in driver_login
 
 
 def test_customer_and_driver_apps_fail_closed_on_wrong_restored_role():
@@ -258,19 +264,52 @@ def test_customer_and_driver_apps_fail_closed_on_wrong_restored_role():
 def test_driver_can_select_only_explicit_fleet_assignments():
     resolver = SOURCE = SERVER
     block = SOURCE[SOURCE.index("async def _assigned_fleet_vehicle"):SOURCE.index("def _parse_iso_utc")]
-    assert '"assigned_driver_id": driver_id' in block
-    assert '"assigned_driver_id": {"$in": [None, ""]}' not in block
+    assert "vehicle_access_query(driver)" in block
     assert "Clear stale compatibility mirrors" in block
 
     listing = _block(SERVER, "driver_assigned_vehicles")
-    assert '"assigned_driver_id": driver_id' in listing
+    assert "vehicle_access_query(current)" in listing
     assert '"selected": vid == selected_id' in listing
 
     select = _block(SERVER, "driver_select_vehicle")
     assert 'current.get("online") is True' in select
     assert "ACTIVE_TRIP_STATUSES" in select
-    assert '"assigned_driver_id": current["id"]' in select
-    assert '"active": {"$ne": False}' in select
+    assert "vehicle_access_query(current)" in select
+
+
+def test_canonical_vehicle_access_is_fleet_scoped_and_mode_specific():
+    fleet_id = "fleet-own"
+    assigned = vehicle_access_query({
+        "id": "driver-1",
+        "fleet_id": fleet_id,
+        "vehicle_access_mode": "assigned",
+    })
+    assert assigned == {
+        "fleet_id": fleet_id,
+        "active": {"$ne": False},
+        "assigned_driver_id": "driver-1",
+    }
+
+    selected_ids = [ObjectId(), ObjectId()]
+    selected = vehicle_access_query({
+        "id": "driver-1",
+        "fleet_id": fleet_id,
+        "vehicle_access_mode": "selected",
+        "allowed_vehicle_ids": [str(selected_ids[0]), "not-an-object-id", str(selected_ids[1])],
+    })
+    assert selected["fleet_id"] == fleet_id
+    assert selected["active"] == {"$ne": False}
+    assert selected["_id"]["$in"] == selected_ids
+    assert "assigned_driver_id" not in selected
+
+    fleet_wide = vehicle_access_query({
+        "id": "driver-1",
+        "fleet_id": fleet_id,
+        "vehicle_access_mode": "all",
+    })
+    assert fleet_wide == {"fleet_id": fleet_id, "active": {"$ne": False}}
+    driver_guard = _block(SERVER, "require_driver")
+    assert '_require_active_fleet(current.get("fleet_id"))' in driver_guard
 
 
 def test_fleet_can_assign_multiple_vehicles_without_forcing_selected_car():
@@ -296,7 +335,8 @@ def test_driver_app_exposes_vehicle_selector_and_profile_photo_without_redesign(
     photo = (ROOT / "driver-app" / "app" / "driver-profile-photo.tsx").read_text(encoding="utf-8")
     api = (ROOT / "driver-app" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
 
-    assert 'label="Mine biler"' in profile
+    assert 'testID="driver-active-vehicle-card"' in profile
+    assert 'testID={`driver-profile-vehicle-${v.id}`}' in profile
     assert "authenticatedFileSource" in profile
     assert "Kun biler tildelt av løyvehaveren" in vehicles
     assert "selectVehicle" in vehicles
@@ -355,7 +395,7 @@ def test_customer_booking_shows_real_driver_photo_with_initials_fallback():
     assert "tripDriverPhotoSource" in customer_api
     assert "/driver-photo" in customer_api
     assert 'testID="customer-driver-photo"' in booking
-    assert "trip.driver?.photo || 'SJ'" in booking
+    assert "(trip.driver?.name || 'S').slice(0, 1).toUpperCase()" in booking
 
 
 def test_fleet_ui_distinguishes_selected_from_extra_assigned_cars():
