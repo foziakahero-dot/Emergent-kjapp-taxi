@@ -14,18 +14,22 @@ export const DRIVER_NATIVE_PUSH_REGISTERED_KEY = 'kjapp_driver_native_push_regis
 let backgroundPermissionRequestedThisSession = false;
 let backgroundLocationMode: 'idle' | 'active' | null = null;
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => {
-    const requestsEnabled = (await storage.getItem('driver_notif_requests')) !== 'false';
-    const soundEnabled = (await storage.getItem('driver_req_sound')) !== 'false';
-    return {
-      shouldPlaySound: requestsEnabled && soundEnabled,
-      shouldSetBadge: false,
-      shouldShowBanner: requestsEnabled,
-      shouldShowList: requestsEnabled,
-    };
-  },
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => {
+      const requestsEnabled = (await storage.getItem('driver_notif_requests')) !== 'false';
+      const soundEnabled = (await storage.getItem('driver_req_sound')) !== 'false';
+      return {
+        shouldPlaySound: requestsEnabled && soundEnabled,
+        shouldSetBadge: false,
+        shouldShowBanner: requestsEnabled,
+        shouldShowList: requestsEnabled,
+      };
+    },
+  });
+} catch {
+  // A notification module error must not crash Driver startup.
+}
 
 async function driverNotificationPrefs() {
   const [requests, sound, vibrate] = await Promise.all([
