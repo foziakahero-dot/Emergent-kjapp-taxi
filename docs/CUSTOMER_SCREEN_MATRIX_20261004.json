@@ -146,19 +146,19 @@
         "source": "setLoading(false);"
       },
       {
-        "line": 68,
+        "line": 72,
         "source": "setGLoading(true);"
       },
       {
-        "line": 75,
+        "line": 79,
         "source": "setGLoading(false);"
       },
       {
-        "line": 81,
+        "line": 85,
         "source": "setAppleLoading(true);"
       },
       {
-        "line": 88,
+        "line": 92,
         "source": "setAppleLoading(false);"
       }
     ],
@@ -194,15 +194,15 @@
       },
       {
         "line": 67,
+        "source": "void Linking.openURL(url).catch(() => setError('Kunne ikke \u00e5pne dokumentet. Pr\u00f8v igjen.'));"
+      },
+      {
+        "line": 71,
         "source": "setError('');"
       },
       {
-        "line": 72,
+        "line": 76,
         "source": "} catch (e) {"
-      },
-      {
-        "line": 73,
-        "source": "setError(apiError(e));"
       }
     ],
     "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",

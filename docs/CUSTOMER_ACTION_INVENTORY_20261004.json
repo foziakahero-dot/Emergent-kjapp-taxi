@@ -1362,7 +1362,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 105,
+    "line": 109,
     "component": "Pressable",
     "testID": "\"login-back\"",
     "label": "\"Tilbake\"",
@@ -1379,7 +1379,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 115,
+    "line": 119,
     "component": "DesignField",
     "testID": "\"login-email\"",
     "label": "\"E-post\"",
@@ -1396,7 +1396,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 116,
+    "line": 120,
     "component": "DesignField",
     "testID": "\"login-password\"",
     "label": "\"Passord\"",
@@ -1413,7 +1413,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 117,
+    "line": 121,
     "component": "Pressable",
     "testID": "\"login-toggle-password\"",
     "label": "{show ? 'Skjul passord' : 'Vis passord'}",
@@ -1430,7 +1430,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 121,
+    "line": 125,
     "component": "Button",
     "testID": "\"login-submit\"",
     "label": "\"Logg inn\"",
@@ -1447,7 +1447,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 122,
+    "line": 126,
     "component": "Pressable",
     "testID": "\"login-forgot-password\"",
     "label": "text child/dynamic",
@@ -1464,7 +1464,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 127,
+    "line": 131,
     "component": "AppleSignInButton",
     "testID": "MISSING (wrapper/input)",
     "label": "text child/dynamic",
@@ -1481,7 +1481,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 128,
+    "line": 132,
     "component": "Pressable",
     "testID": "\"login-google\"",
     "label": "\"Fortsett med Google\"",
@@ -1498,7 +1498,7 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 133,
+    "line": 137,
     "component": "Pressable",
     "testID": "\"login-to-register\"",
     "label": "text child/dynamic",
@@ -1515,14 +1515,14 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 137,
+    "line": 141,
     "component": "Text",
-    "testID": "\"customer-app-login-137-89\"",
+    "testID": "\"customer-app-login-141-89\"",
     "label": "vilkår",
     "handlers": {
-      "onPress": "{() => void Linking.openURL('https://kjappapp.no/vilkar')}"
+      "onPress": "{() => openLegal('https://kjappapp.no/vilkar')}"
     },
-    "destination": "'https://kjappapp.no/vilkar'",
+    "destination": "handler/local state",
     "authenticated": false,
     "disabled": "not declared",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
@@ -1532,14 +1532,14 @@
   },
   {
     "file": "frontend\\app\\login.tsx",
-    "line": 137,
+    "line": 141,
     "component": "Text",
-    "testID": "\"customer-app-login-137-90\"",
+    "testID": "\"customer-app-login-141-90\"",
     "label": "personvernerklæring",
     "handlers": {
-      "onPress": "{() => void Linking.openURL('https://kjappapp.no/personvern')}"
+      "onPress": "{() => openLegal('https://kjappapp.no/personvern')}"
     },
-    "destination": "'https://kjappapp.no/personvern'",
+    "destination": "handler/local state",
     "authenticated": false,
     "disabled": "not declared",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
