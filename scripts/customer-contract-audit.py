@@ -37,7 +37,12 @@ for caller in calls:
     match = re.match(r"['\"`]([^'\"`]+)['\"`]", caller['args'])
     if not match: continue
     p = match.group(1); method = caller['method'].upper()
-    contract.append(dict(method=method, client_path=p, wrapper='api.'+caller['method'], backend=[r for r in routes if r['method']==method and r['path']==p],mobile_callers=[caller],status='PARTIAL: source mapped; native runtime unverified',timeout_ms=30000,retry='explicit user action',request_arguments=caller['args'],role_scope='Customer direct caller'))
+    paths=[p.replace('${provider}',provider) for provider in ('google','apple')] if '${provider}' in p else [p]
+    for client_path in paths:
+        pattern='^'+re.escape(client_path)+'$'
+        pattern=re.sub(r'\\\$\\\{[^}]+\\\}',r'\\{[^}]+\\}',pattern)
+        matches=[r for r in routes if r['method']==method and re.fullmatch(pattern,r['path'])]
+        contract.append(dict(method=method, client_path=client_path, wrapper='api.'+caller['method'], backend=matches,mobile_callers=[caller],status='PARTIAL: source mapped; native runtime unverified',timeout_ms=30000,retry='explicit user action',request_arguments=caller['args'],role_scope='Customer direct caller'))
 # Protected image GETs use authenticated Image sources, not axios.
 for p,wrapper in [('/me/profile-photo','customerProfileApi.photoSource'),('/trips/{trip_id}/driver-photo','tripDriverPhotoSource')]:
     contract.append(dict(method='GET',client_path=p,wrapper=wrapper,backend=[r for r in routes if r['method']=='GET' and r['path']==p],mobile_callers='Image source; bearer header; no public customer id',status='PARTIAL: source mapped; native image load unverified',timeout_ms='native Image transport',retry='user reload/replace',request_arguments='version query or trip_id',role_scope='Customer'))

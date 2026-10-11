@@ -283,18 +283,35 @@ export default function BookingFlow() {
         <>
           <View style={[s.tripBanner, { top: insets.top + 16 }]} testID="inride-banner">
             <View style={s.tripBannerRow}>
+              <View style={s.tripDestinationIcon}><Icon name="map-pin" size={18} color={colors.onInverse} /></View>
               <View style={{ flex: 1 }}>
-                <Text style={s.tripEyebrow}>UNDERVEIS</Text>
-                <Text style={s.tripDriverLine} numberOfLines={1}>
-                  {trip.driver?.name || 'Din sjåfør'} · {trip.driver?.car || 'Bil'} · {trip.driver?.plate || ''}
-                </Text>
+                <Text style={s.tripEyebrow}>DESTINASJON</Text>
+                <Text style={s.tripDriverLine} numberOfLines={1}>{trip.dropoff_address || 'Mål for turen'}</Text>
               </View>
-              <Text style={s.tripEta}>{etaMinutes ? `${etaMinutes} min` : 'På vei'}</Text>
+              <View style={s.tripEtaWrap}>
+                <Text style={s.tripEta}>{etaMinutes ?? '—'}</Text>
+                <Text style={s.tripEtaUnit}>{etaMinutes ? 'min' : 'ETA'}</Text>
+              </View>
             </View>
           </View>
 
           <View style={[s.inRideSheet, { paddingBottom: insets.bottom + 32 }]}>
             <View style={s.handle} />
+            <View style={s.driverCard}>
+              <View style={s.driverAvatar}>
+                {driverPhotoSource ? (
+                  <Image source={driverPhotoSource} style={s.driverAvatarImage} resizeMode="cover" onError={() => setDriverPhotoSource(null)} />
+                ) : <Text style={s.driverAvatarText}>{(trip.driver?.name || 'S').slice(0, 1).toUpperCase()}</Text>}
+              </View>
+              <View style={s.driverInfo}>
+                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
+                <Text style={s.driverCar} numberOfLines={1}>{trip.driver?.car || 'Bil'}</Text>
+              </View>
+              <View style={s.plateBox}>
+                <Text style={s.plateLabel}>SKILT</Text>
+                <Text style={s.plateText}>{trip.driver?.plate || '—'}</Text>
+              </View>
+            </View>
             {trip.waiting_policy ? <Text style={{ color: colors.textSecondary, marginBottom: 10 }} testID="pickup-waiting-policy">
               {trip.waiting_policy.free_minutes} min gratis ventetid fra sjåførens ankomst. Deretter {kr(trip.waiting_policy.per_minute)}/min, maks {kr(trip.waiting_policy.max_fee)}. Tillegget stopper når turen starter.
             </Text> : null}
@@ -315,7 +332,7 @@ export default function BookingFlow() {
               </Pressable>
               <Pressable style={s.sosAction} onPress={() => setSafetyOpen(true)} testID="ontrip-safety">
                 <Icon name="shield" size={20} color={colors.accentOn} />
-                <Text style={s.sosText}>SOS</Text>
+                <Text style={s.sosText}>Sikkerhet</Text>
               </Pressable>
             </View>
           </View>
@@ -460,9 +477,12 @@ const useStyles = makeStyles((c) => ({
 
   tripBanner: { position: 'absolute', left: 16, right: 16, zIndex: 20, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 13, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
   tripBannerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tripDestinationIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceInverse },
   tripEyebrow: { color: c.accent, fontFamily: font.mono, fontSize: 9, letterSpacing: 1.4 },
   tripDriverLine: { color: c.text, fontFamily: font.semibold, fontSize: 13, marginTop: 3 },
-  tripEta: { color: c.text, fontFamily: font.semibold, fontSize: 18 },
+  tripEtaWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  tripEta: { color: c.text, fontFamily: font.semibold, fontSize: 20 },
+  tripEtaUnit: { color: c.textMuted, fontSize: 12 },
   inRideSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingTop: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12, shadowRadius: 25, shadowOffset: { width: 0, height: -10 }, elevation: 9 },
   inRideActions: { flexDirection: 'row', gap: 10 },
   rideAction: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
@@ -494,5 +514,4 @@ const useStyles = makeStyles((c) => ({
   safetyActionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
   safetyActionSub: { color: c.textMuted, fontSize: 11, marginTop: 3 },
 }));
-
 

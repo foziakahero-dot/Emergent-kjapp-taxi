@@ -108,7 +108,7 @@ export default function History() {
 
 const useStyles = makeStyles((c) => ({
   header: { paddingHorizontal: 28, paddingBottom: 18 },
-  title: { fontFamily: font.semibold, fontSize: 24, color: c.text, letterSpacing: -0.5 },
+  title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, color: c.text, letterSpacing: -0.8 },
   center: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
   retry: { minHeight: 44, borderRadius: 12, backgroundColor: c.accent, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4 },

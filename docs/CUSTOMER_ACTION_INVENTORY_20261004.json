@@ -1,6 +1,6 @@
 [
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 350,
     "component": "Pressable",
     "testID": "\"assist-back\"",
@@ -17,7 +17,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 363,
     "component": "Pressable",
     "testID": "\"customer-app-app-assist-363\"",
@@ -34,7 +34,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 406,
     "component": "Pressable",
     "testID": "\"customer-app-app-assist-406\"",
@@ -51,7 +51,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 415,
     "component": "Pressable",
     "testID": "{`assist-place-${i}`}",
@@ -68,7 +68,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 432,
     "component": "Pressable",
     "testID": "{`assist-vehicle-${o.vehicle_type}`}",
@@ -85,7 +85,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 464,
     "component": "Pressable",
     "testID": "\"assist-confirm\"",
@@ -102,7 +102,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 481,
     "component": "Pressable",
     "testID": "\"assist-mic\"",
@@ -119,7 +119,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 493,
     "component": "TextInput",
     "testID": "\"assist-input\"",
@@ -137,7 +137,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/assist.tsx",
+    "file": "frontend\\app\\(app)\\assist.tsx",
     "line": 504,
     "component": "Pressable",
     "testID": "\"assist-send\"",
@@ -154,8 +154,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/history.tsx",
-    "line": 47,
+    "file": "frontend\\app\\(app)\\history.tsx",
+    "line": 53,
     "component": "Pressable",
     "testID": "\"history-retry\"",
     "label": "text child/dynamic",
@@ -171,15 +171,32 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/history.tsx",
-    "line": 68,
+    "file": "frontend\\app\\(app)\\history.tsx",
+    "line": 75,
     "component": "Pressable",
-    "testID": "{`trip-${item.trip_id}`}",
+    "testID": "{`trip-${tripId || 'unknown'}`}",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => router.push(receiptState ? `/receipt/${item.trip_id}` : `/booking/${item.trip_id}`)}"
+      "onPress": "{() => tripId && router.push(receiptState ? `/receipt/${tripId}` : `/booking/${tripId}`)}"
     },
-    "destination": "receiptState ? `/receipt/${item.trip_id}` : `/booking/${item.trip_id}`",
+    "destination": "receiptState ? `/receipt/${tripId}` : `/booking/${tripId}`",
+    "authenticated": true,
+    "disabled": "{!tripId}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 317,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-317-11\"",
+    "label": "\"Åpne profilen\"",
+    "handlers": {
+      "onPress": "{() => router.push('/(app)/profile')}"
+    },
+    "destination": "'/(app",
     "authenticated": true,
     "disabled": "not declared",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
@@ -188,13 +205,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 261,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 333,
     "component": "Pressable",
-    "testID": "\"home-where-to\"",
-    "label": "\"Søk etter destinasjon\"",
+    "testID": "\"home-voice\"",
+    "label": "\"Bestill med stemmen\"",
     "handlers": {
-      "onPress": "{() => setSearchOpen(true)}"
+      "onPress": "{openVoice}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -205,8 +222,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 275,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 349,
     "component": "Pressable",
     "testID": "\"home-recenter\"",
     "label": "\"Sentrer kartet på min posisjon\"",
@@ -222,8 +239,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 297,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 371,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-287\"",
     "label": "\"Lukk anbefaling\"",
@@ -239,8 +256,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 306,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 380,
     "component": "Pressable",
     "testID": "\"recommendation-select\"",
     "label": "text child/dynamic",
@@ -256,8 +273,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 309,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 383,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-299\"",
     "label": "text child/dynamic",
@@ -273,8 +290,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 317,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 391,
     "component": "Pressable",
     "testID": "{sheetCollapsed ? 'home-sheet-expand' : 'home-sheet-collapse'}",
     "label": "{sheetCollapsed ? 'Utvid nylige steder' : 'Minimer nylige steder'}",
@@ -290,13 +307,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 326,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 400,
     "component": "Pressable",
-    "testID": "\"customer-app-app-home-316\"",
-    "label": "text child/dynamic",
+    "testID": "\"home-where-to\"",
+    "label": "\"Søk etter destinasjon\"",
     "handlers": {
-      "onPress": "{() => setSheetCollapsed((v) => !v)}"
+      "onPress": "{() => setSearchOpen(true)}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -307,25 +324,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 332,
-    "component": "Pressable",
-    "testID": "\"home-places-retry\"",
-    "label": "text child/dynamic",
-    "handlers": {
-      "onPress": "{() => void loadPlaces()}"
-    },
-    "destination": "handler/local state",
-    "authenticated": true,
-    "disabled": "not declared",
-    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
-    "success": "SOURCE ONLY; see screen matrix",
-    "error": "SOURCE ONLY; see screen matrix",
-    "verification": "SOURCE INVENTORY; device behavior unverified"
-  },
-  {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 334,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 413,
     "component": "Pressable",
     "testID": "{`quick-${p.label || i}`}",
     "label": "text child/dynamic",
@@ -341,8 +341,42 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 354,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 430,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-home-316\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setSheetCollapsed((v) => !v)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 436,
+    "component": "Pressable",
+    "testID": "\"home-places-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void loadPlaces()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 438,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-343\"",
     "label": "text child/dynamic",
@@ -358,8 +392,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 362,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 446,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-351\"",
     "label": "text child/dynamic",
@@ -375,8 +409,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 365,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 449,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-354\"",
     "label": "text child/dynamic",
@@ -392,13 +426,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 376,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 460,
     "component": "Pressable",
-    "testID": "\"customer-app-app-home-365\"",
-    "label": "text child/dynamic",
+    "testID": "{rideSheetCollapsed ? 'home-ride-sheet-expand' : 'home-ride-sheet-collapse'}",
+    "label": "{rideSheetCollapsed ? 'Utvid bilvalg' : 'Minimer bilvalg'}",
     "handlers": {
-      "onPress": "{() => setSheetCollapsed((v) => !v)}"
+      "onPress": "{() => setRideSheetCollapsed((v) => !v)}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -409,13 +443,30 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 382,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 470,
+    "component": "Pressable",
+    "testID": "\"home-ride-sheet-summary\"",
+    "label": "\"Vis bilvalg\"",
+    "handlers": {
+      "onPress": "{() => setRideSheetCollapsed(false)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 491,
     "component": "Pressable",
     "testID": "\"booking-change-dest\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => {\n                    setReviewing(false);\n                    setDropoff(null);\n                    setEstimate(null);\n                  }}"
+      "onPress": "{() => {\r\n                    setReviewing(false);\r\n                    setDropoff(null);\r\n                    setEstimate(null);\r\n                  }}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -426,8 +477,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 399,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 508,
     "component": "Pressable",
     "testID": "{`vehicle-${v.type}`}",
     "label": "text child/dynamic",
@@ -443,25 +494,25 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 428,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 537,
     "component": "Pressable",
     "testID": "\"booking-review\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => canBook && setReviewing(true)}"
+      "onPress": "{() => canReview && setReviewing(true)}"
     },
     "destination": "handler/local state",
     "authenticated": true,
-    "disabled": "{!canBook}",
+    "disabled": "{!canReview}",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
     "success": "SOURCE ONLY; see screen matrix",
     "error": "SOURCE ONLY; see screen matrix",
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 445,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 556,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-434\"",
     "label": "\"Tilbake til bilvalg\"",
@@ -477,8 +528,25 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 484,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 595,
+    "component": "Pressable",
+    "testID": "\"waiting-policy-consent\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => setWaitingAccepted((value) => !value)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 605,
     "component": "Pressable",
     "testID": "\"booking-payment-row\"",
     "label": "text child/dynamic",
@@ -494,8 +562,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 493,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 614,
     "component": "Pressable",
     "testID": "\"booking-confirm\"",
     "label": "text child/dynamic",
@@ -511,8 +579,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 558,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 686,
     "component": "TextInput",
     "testID": "\"search-input\"",
     "label": "text child/dynamic",
@@ -528,8 +596,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 570,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 698,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-557\"",
     "label": "\"Tøm søk\"",
@@ -545,8 +613,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 574,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 702,
     "component": "Pressable",
     "testID": "\"customer-app-app-home-561\"",
     "label": "\"Bestill med stemmen\"",
@@ -562,8 +630,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 580,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 708,
     "component": "Pressable",
     "testID": "\"search-close\"",
     "label": "text child/dynamic",
@@ -579,8 +647,42 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 586,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 714,
+    "component": "Pressable",
+    "testID": "\"search-pickup\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPickup}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 715,
+    "component": "Pressable",
+    "testID": "\"search-destination\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onDestination}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 718,
     "component": "Pressable",
     "testID": "{`search-result-${i}`}",
     "label": "text child/dynamic",
@@ -596,8 +698,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/home.tsx",
-    "line": 601,
+    "file": "frontend\\app\\(app)\\home.tsx",
+    "line": 733,
     "component": "Pressable",
     "testID": "\"search-retry\"",
     "label": "text child/dynamic",
@@ -613,8 +715,42 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/profile.tsx",
-    "line": 90,
+    "file": "frontend\\app\\(app)\\messages.tsx",
+    "line": 55,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-messages-55-42\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void activeTripQuery.refetch()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\messages.tsx",
+    "line": 66,
+    "component": "Pressable",
+    "testID": "\"customer-app-app-messages-66-43\"",
+    "label": "\"Åpne meldinger med sjåføren\"",
+    "handlers": {
+      "onPress": "{() => setChatOpen(true)}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\(app)\\profile.tsx",
+    "line": 88,
     "component": "Pressable",
     "testID": "\"profile-link-google\"",
     "label": "text child/dynamic",
@@ -630,8 +766,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/profile.tsx",
-    "line": 92,
+    "file": "frontend\\app\\(app)\\profile.tsx",
+    "line": 94,
     "component": "Pressable",
     "testID": "{r.testID}",
     "label": "text child/dynamic",
@@ -647,8 +783,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/profile.tsx",
-    "line": 101,
+    "file": "frontend\\app\\(app)\\profile.tsx",
+    "line": 105,
     "component": "Pressable",
     "testID": "\"profile-logout\"",
     "label": "text child/dynamic",
@@ -664,8 +800,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/profile.tsx",
-    "line": 113,
+    "file": "frontend\\app\\(app)\\profile.tsx",
+    "line": 117,
     "component": "TextInput",
     "testID": "\"profile-delete-confirm-input\"",
     "label": "text child/dynamic",
@@ -681,8 +817,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/profile.tsx",
-    "line": 123,
+    "file": "frontend\\app\\(app)\\profile.tsx",
+    "line": 127,
     "component": "Button",
     "testID": "\"profile-delete-confirm\"",
     "label": "\"Slett konto permanent\"",
@@ -698,13 +834,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/profile.tsx",
-    "line": 132,
+    "file": "frontend\\app\\(app)\\profile.tsx",
+    "line": 136,
     "component": "Pressable",
     "testID": "\"profile-delete-cancel\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => {\n                setDeleteOpen(false);\n                setConfirmText('');\n                setDeleteError('');\n              }}"
+      "onPress": "{() => {\r\n                setDeleteOpen(false);\r\n                setConfirmText('');\r\n                setDeleteError('');\r\n              }}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -715,7 +851,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/wallet.tsx",
+    "file": "frontend\\app\\(app)\\wallet.tsx",
     "line": 36,
     "component": "Pressable",
     "testID": "\"customer-app-app-wallet-36\"",
@@ -732,7 +868,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/(app)/wallet.tsx",
+    "file": "frontend\\app\\(app)\\wallet.tsx",
     "line": 47,
     "component": "Pressable",
     "testID": "\"wallet-add-payment\"",
@@ -749,25 +885,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/_layout.tsx",
-    "line": 24,
-    "component": "Pressable",
-    "testID": "\"session-retry\"",
-    "label": "text child/dynamic",
-    "handlers": {
-      "onPress": "{() => void refresh()}"
-    },
-    "destination": "handler/local state",
-    "authenticated": true,
-    "disabled": "not declared",
-    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
-    "success": "SOURCE ONLY; see screen matrix",
-    "error": "SOURCE ONLY; see screen matrix",
-    "verification": "SOURCE INVENTORY; device behavior unverified"
-  },
-  {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 198,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 206,
     "component": "Pressable",
     "testID": "\"booking-retry-load\"",
     "label": "text child/dynamic",
@@ -783,8 +902,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 235,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 249,
     "component": "Pressable",
     "testID": "\"active-trip-minimize\"",
     "label": "\"Minimer tur\"",
@@ -800,8 +919,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 238,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 252,
     "component": "Pressable",
     "testID": "\"active-trip-home\"",
     "label": "text child/dynamic",
@@ -817,8 +936,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 249,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 264,
     "component": "Pressable",
     "testID": "\"searching-cancel\"",
     "label": "text child/dynamic",
@@ -834,15 +953,15 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 262,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 278,
     "component": "Pressable",
     "testID": "\"booking-home\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => router.replace('/(app)/home')}"
+      "onPress": "{() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}"
     },
-    "destination": "'/(app",
+    "destination": "noDriver ? { pathname: '/(app",
     "authenticated": true,
     "disabled": "not declared",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
@@ -851,8 +970,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 289,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 325,
     "component": "Pressable",
     "testID": "\"ontrip-share\"",
     "label": "text child/dynamic",
@@ -868,8 +987,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 293,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 329,
     "component": "Pressable",
     "testID": "\"ontrip-chat\"",
     "label": "text child/dynamic",
@@ -885,8 +1004,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 297,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 333,
     "component": "Pressable",
     "testID": "\"ontrip-safety\"",
     "label": "text child/dynamic",
@@ -902,8 +1021,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 347,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 383,
     "component": "Pressable",
     "testID": "\"action-call-driver\"",
     "label": "text child/dynamic",
@@ -919,8 +1038,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 351,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 387,
     "component": "Pressable",
     "testID": "\"action-message\"",
     "label": "text child/dynamic",
@@ -936,8 +1055,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 356,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 392,
     "component": "Pressable",
     "testID": "\"assigned-trip-cancel\"",
     "label": "text child/dynamic",
@@ -953,8 +1072,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 362,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 398,
     "component": "Pressable",
     "testID": "\"customer-app-booking-tripId-337\"",
     "label": "text child/dynamic",
@@ -970,8 +1089,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 369,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 405,
     "component": "Pressable",
     "testID": "\"customer-app-booking-tripId-344\"",
     "label": "\"Lukk sikkerhetsmeny\"",
@@ -987,8 +1106,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 375,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 411,
     "component": "Pressable",
     "testID": "\"safety-call-112\"",
     "label": "text child/dynamic",
@@ -1004,8 +1123,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 379,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 415,
     "component": "Pressable",
     "testID": "\"safety-share-trip\"",
     "label": "text child/dynamic",
@@ -1021,8 +1140,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/booking/[tripId].tsx",
-    "line": 383,
+    "file": "frontend\\app\\booking\\[tripId].tsx",
+    "line": 419,
     "component": "Pressable",
     "testID": "\"safety-report\"",
     "label": "text child/dynamic",
@@ -1038,7 +1157,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/forgot-password.tsx",
+    "file": "frontend\\app\\forgot-password.tsx",
     "line": 40,
     "component": "Pressable",
     "testID": "\"customer-app-forgot-password-40\"",
@@ -1055,7 +1174,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/forgot-password.tsx",
+    "file": "frontend\\app\\forgot-password.tsx",
     "line": 50,
     "component": "Pressable",
     "testID": "\"customer-app-forgot-password-50\"",
@@ -1072,7 +1191,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/forgot-password.tsx",
+    "file": "frontend\\app\\forgot-password.tsx",
     "line": 62,
     "component": "TextInput",
     "testID": "\"forgot-email\"",
@@ -1089,7 +1208,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/forgot-password.tsx",
+    "file": "frontend\\app\\forgot-password.tsx",
     "line": 76,
     "component": "Pressable",
     "testID": "\"forgot-submit\"",
@@ -1106,13 +1225,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/index.tsx",
-    "line": 45,
+    "file": "frontend\\app\\index.tsx",
+    "line": 47,
     "component": "Button",
     "testID": "\"customer-role-logout\"",
     "label": "\"Logg ut\"",
     "handlers": {
-      "onPress": "{async () => {\n            await logout();\n            router.replace('/login');\n          }}"
+      "onPress": "{async () => {\r\n            await logout();\r\n            router.replace('/login');\r\n          }}"
     },
     "destination": "'/login'",
     "authenticated": false,
@@ -1123,11 +1242,11 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/index.tsx",
-    "line": 61,
-    "component": "SplashAction",
+    "file": "frontend\\app\\index.tsx",
+    "line": 70,
+    "component": "Pressable",
     "testID": "\"onboarding-next\"",
-    "label": "\"Kom i gang\"",
+    "label": "text child/dynamic",
     "handlers": {
       "onPress": "{() => router.push('/permissions')}"
     },
@@ -1140,7 +1259,24 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/legal-consent.tsx",
+    "file": "frontend\\app\\index.tsx",
+    "line": 73,
+    "component": "Pressable",
+    "testID": "\"onboarding-login\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => router.push('/login')}"
+    },
+    "destination": "'/login'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\legal-consent.tsx",
     "line": 53,
     "component": "Pressable",
     "testID": "\"customer-app-legal-consent-53\"",
@@ -1157,7 +1293,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/legal-consent.tsx",
+    "file": "frontend\\app\\legal-consent.tsx",
     "line": 58,
     "component": "Pressable",
     "testID": "\"customer-app-legal-consent-58\"",
@@ -1174,7 +1310,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/legal-consent.tsx",
+    "file": "frontend\\app\\legal-consent.tsx",
     "line": 65,
     "component": "Pressable",
     "testID": "\"legal-consent-checkbox\"",
@@ -1191,7 +1327,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/legal-consent.tsx",
+    "file": "frontend\\app\\legal-consent.tsx",
     "line": 82,
     "component": "Button",
     "testID": "\"legal-consent-submit\"",
@@ -1208,7 +1344,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/legal-consent.tsx",
+    "file": "frontend\\app\\legal-consent.tsx",
     "line": 83,
     "component": "Pressable",
     "testID": "\"legal-consent-logout\"",
@@ -1225,42 +1361,25 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 113,
-    "component": "AppleSignInButton",
-    "testID": "MISSING (wrapper/input)",
-    "label": "text child/dynamic",
-    "handlers": {
-      "onPress": "{appleSignIn}"
-    },
-    "destination": "handler/local state",
-    "authenticated": false,
-    "disabled": "{appleLoading}",
-    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
-    "success": "SOURCE ONLY; see screen matrix",
-    "error": "SOURCE ONLY; see screen matrix",
-    "verification": "SOURCE INVENTORY; device behavior unverified"
-  },
-  {
-    "file": "frontend/app/login.tsx",
-    "line": 114,
+    "file": "frontend\\app\\login.tsx",
+    "line": 105,
     "component": "Pressable",
-    "testID": "\"login-google\"",
-    "label": "\"Fortsett med Google\"",
+    "testID": "\"login-back\"",
+    "label": "\"Tilbake\"",
     "handlers": {
-      "onPress": "{googleSignIn}"
+      "onPress": "{() => router.back()}"
     },
     "destination": "handler/local state",
     "authenticated": false,
-    "disabled": "{gLoading}",
+    "disabled": "not declared",
     "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
     "success": "SOURCE ONLY; see screen matrix",
     "error": "SOURCE ONLY; see screen matrix",
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 138,
+    "file": "frontend\\app\\login.tsx",
+    "line": 115,
     "component": "DesignField",
     "testID": "\"login-email\"",
     "label": "\"E-post\"",
@@ -1276,8 +1395,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 139,
+    "file": "frontend\\app\\login.tsx",
+    "line": 116,
     "component": "DesignField",
     "testID": "\"login-password\"",
     "label": "\"Passord\"",
@@ -1293,8 +1412,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 140,
+    "file": "frontend\\app\\login.tsx",
+    "line": 117,
     "component": "Pressable",
     "testID": "\"login-toggle-password\"",
     "label": "{show ? 'Skjul passord' : 'Vis passord'}",
@@ -1310,8 +1429,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 144,
+    "file": "frontend\\app\\login.tsx",
+    "line": 121,
     "component": "Button",
     "testID": "\"login-submit\"",
     "label": "\"Logg inn\"",
@@ -1327,8 +1446,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 145,
+    "file": "frontend\\app\\login.tsx",
+    "line": 122,
     "component": "Pressable",
     "testID": "\"login-forgot-password\"",
     "label": "text child/dynamic",
@@ -1344,8 +1463,42 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/login.tsx",
-    "line": 148,
+    "file": "frontend\\app\\login.tsx",
+    "line": 127,
+    "component": "AppleSignInButton",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{appleSignIn}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{appleLoading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\login.tsx",
+    "line": 128,
+    "component": "Pressable",
+    "testID": "\"login-google\"",
+    "label": "\"Fortsett med Google\"",
+    "handlers": {
+      "onPress": "{googleSignIn}"
+    },
+    "destination": "handler/local state",
+    "authenticated": false,
+    "disabled": "{gLoading}",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\login.tsx",
+    "line": 133,
     "component": "Pressable",
     "testID": "\"login-to-register\"",
     "label": "text child/dynamic",
@@ -1361,7 +1514,41 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/payment/cancel.tsx",
+    "file": "frontend\\app\\login.tsx",
+    "line": 137,
+    "component": "Text",
+    "testID": "\"customer-app-login-137-89\"",
+    "label": "vilkår",
+    "handlers": {
+      "onPress": "{() => void Linking.openURL('https://kjappapp.no/vilkar')}"
+    },
+    "destination": "'https://kjappapp.no/vilkar'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\login.tsx",
+    "line": 137,
+    "component": "Text",
+    "testID": "\"customer-app-login-137-90\"",
+    "label": "personvernerklæring",
+    "handlers": {
+      "onPress": "{() => void Linking.openURL('https://kjappapp.no/personvern')}"
+    },
+    "destination": "'https://kjappapp.no/personvern'",
+    "authenticated": false,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\payment\\cancel.tsx",
     "line": 24,
     "component": "Pressable",
     "testID": "\"payment-cancel-back\"",
@@ -1378,7 +1565,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/payment/success.tsx",
+    "file": "frontend\\app\\payment\\success.tsx",
     "line": 73,
     "component": "Pressable",
     "testID": "\"payment-success-back\"",
@@ -1395,7 +1582,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/payment-methods.tsx",
+    "file": "frontend\\app\\payment-methods.tsx",
     "line": 96,
     "component": "Pressable",
     "testID": "\"pm-back\"",
@@ -1412,7 +1599,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/payment-methods.tsx",
+    "file": "frontend\\app\\payment-methods.tsx",
     "line": 110,
     "component": "Pressable",
     "testID": "\"pm-retry\"",
@@ -1429,7 +1616,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/payment-methods.tsx",
+    "file": "frontend\\app\\payment-methods.tsx",
     "line": 137,
     "component": "Pressable",
     "testID": "{`pm-remove-${m.id}`}",
@@ -1446,7 +1633,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/payment-methods.tsx",
+    "file": "frontend\\app\\payment-methods.tsx",
     "line": 152,
     "component": "Pressable",
     "testID": "\"pm-stripe\"",
@@ -1463,7 +1650,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/permissions.tsx",
+    "file": "frontend\\app\\permissions.tsx",
     "line": 47,
     "component": "PermissionRow",
     "testID": "MISSING (wrapper/input)",
@@ -1480,7 +1667,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/permissions.tsx",
+    "file": "frontend\\app\\permissions.tsx",
     "line": 48,
     "component": "PermissionRow",
     "testID": "MISSING (wrapper/input)",
@@ -1497,7 +1684,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/permissions.tsx",
+    "file": "frontend\\app\\permissions.tsx",
     "line": 53,
     "component": "Pressable",
     "testID": "\"permissions-continue\"",
@@ -1514,7 +1701,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/permissions.tsx",
+    "file": "frontend\\app\\permissions.tsx",
     "line": 71,
     "component": "DesignToggle",
     "testID": "MISSING (wrapper/input)",
@@ -1531,7 +1718,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/profile-setup.tsx",
+    "file": "frontend\\app\\profile-setup.tsx",
     "line": 41,
     "component": "Pressable",
     "testID": "{`setup-payment-${id}`}",
@@ -1548,7 +1735,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/profile-setup.tsx",
+    "file": "frontend\\app\\profile-setup.tsx",
     "line": 48,
     "component": "Pressable",
     "testID": "{`setup-place-${label}`}",
@@ -1565,7 +1752,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/profile-setup.tsx",
+    "file": "frontend\\app\\profile-setup.tsx",
     "line": 55,
     "component": "Button",
     "testID": "\"setup-finish\"",
@@ -1582,7 +1769,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/profile-setup.tsx",
+    "file": "frontend\\app\\profile-setup.tsx",
     "line": 56,
     "component": "Pressable",
     "testID": "\"setup-skip\"",
@@ -1599,7 +1786,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/receipt/[tripId].tsx",
+    "file": "frontend\\app\\receipt\\[tripId].tsx",
     "line": 142,
     "component": "Pressable",
     "testID": "\"receipt-retry\"",
@@ -1616,8 +1803,25 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/receipt/[tripId].tsx",
-    "line": 201,
+    "file": "frontend\\app\\receipt\\[tripId].tsx",
+    "line": 168,
+    "component": "Pressable",
+    "testID": "\"receipt-back\"",
+    "label": "\"Tilbake til hjem\"",
+    "handlers": {
+      "onPress": "{() => router.replace('/(app)/home')}"
+    },
+    "destination": "'/(app",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\app\\receipt\\[tripId].tsx",
+    "line": 211,
     "component": "Button",
     "testID": "\"receipt-pay\"",
     "label": "{`Betal ${kr(trip.price)} med kort`}",
@@ -1633,8 +1837,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/receipt/[tripId].tsx",
-    "line": 202,
+    "file": "frontend\\app\\receipt\\[tripId].tsx",
+    "line": 212,
     "component": "Pressable",
     "testID": "\"receipt-check-payment\"",
     "label": "text child/dynamic",
@@ -1650,8 +1854,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/receipt/[tripId].tsx",
-    "line": 225,
+    "file": "frontend\\app\\receipt\\[tripId].tsx",
+    "line": 235,
     "component": "Pressable",
     "testID": "{`rate-star-${n}`}",
     "label": "{`${n} stjerner`}",
@@ -1667,11 +1871,11 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/receipt/[tripId].tsx",
-    "line": 236,
+    "file": "frontend\\app\\receipt\\[tripId].tsx",
+    "line": 246,
     "component": "Button",
     "testID": "\"receipt-done\"",
-    "label": "\"Ferdig\"",
+    "label": "{isPaid ? 'Ferdig' : 'Til hjem'}",
     "handlers": {
       "onPress": "{() => router.replace('/(app)/home')}"
     },
@@ -1684,8 +1888,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 59,
+    "file": "frontend\\app\\register.tsx",
+    "line": 60,
     "component": "Pressable",
     "testID": "\"register-back\"",
     "label": "\"Tilbake\"",
@@ -1701,11 +1905,11 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 68,
-    "component": "Field",
+    "file": "frontend\\app\\register.tsx",
+    "line": 69,
+    "component": "DesignField",
     "testID": "\"register-name\"",
-    "label": "\"FULLT NAVN\"",
+    "label": "\"Fullt navn\"",
     "handlers": {
       "onChangeText": "{setFullName}"
     },
@@ -1718,11 +1922,11 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 69,
-    "component": "Field",
+    "file": "frontend\\app\\register.tsx",
+    "line": 70,
+    "component": "DesignField",
     "testID": "\"register-email\"",
-    "label": "\"E-POST\"",
+    "label": "\"E-post\"",
     "handlers": {
       "onChangeText": "{setEmail}"
     },
@@ -1735,11 +1939,11 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 70,
-    "component": "Field",
+    "file": "frontend\\app\\register.tsx",
+    "line": 71,
+    "component": "DesignField",
     "testID": "\"register-phone\"",
-    "label": "\"TELEFON\"",
+    "label": "\"Telefon\"",
     "handlers": {
       "onChangeText": "{setPhone}"
     },
@@ -1752,11 +1956,11 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 74,
-    "component": "TextInput",
+    "file": "frontend\\app\\register.tsx",
+    "line": 72,
+    "component": "DesignField",
     "testID": "\"register-password\"",
-    "label": "text child/dynamic",
+    "label": "\"Passord\"",
     "handlers": {
       "onChangeText": "{setPassword}"
     },
@@ -1769,8 +1973,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 84,
+    "file": "frontend\\app\\register.tsx",
+    "line": 73,
     "component": "Pressable",
     "testID": "\"register-toggle-password\"",
     "label": "{show ? 'Skjul passord' : 'Vis passord'}",
@@ -1786,8 +1990,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 91,
+    "file": "frontend\\app\\register.tsx",
+    "line": 78,
     "component": "Pressable",
     "testID": "\"register-legal-consent\"",
     "label": "text child/dynamic",
@@ -1803,8 +2007,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 94,
+    "file": "frontend\\app\\register.tsx",
+    "line": 81,
     "component": "Text",
     "testID": "\"register-terms-link\"",
     "label": "vilkår",
@@ -1820,8 +2024,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 94,
+    "file": "frontend\\app\\register.tsx",
+    "line": 81,
     "component": "Text",
     "testID": "\"register-privacy-link\"",
     "label": "personvernerklæring",
@@ -1837,8 +2041,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 100,
+    "file": "frontend\\app\\register.tsx",
+    "line": 87,
     "component": "Pressable",
     "testID": "\"register-submit\"",
     "label": "text child/dynamic",
@@ -1854,8 +2058,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/register.tsx",
-    "line": 106,
+    "file": "frontend\\app\\register.tsx",
+    "line": 93,
     "component": "Pressable",
     "testID": "\"register-to-login\"",
     "label": "text child/dynamic",
@@ -1871,7 +2075,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/reset-password/[token].tsx",
+    "file": "frontend\\app\\reset-password\\[token].tsx",
     "line": 50,
     "component": "Pressable",
     "testID": "\"customer-app-reset-password-token-50\"",
@@ -1888,7 +2092,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/reset-password/[token].tsx",
+    "file": "frontend\\app\\reset-password\\[token].tsx",
     "line": 59,
     "component": "Pressable",
     "testID": "\"customer-app-reset-password-token-59\"",
@@ -1905,7 +2109,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/reset-password/[token].tsx",
+    "file": "frontend\\app\\reset-password\\[token].tsx",
     "line": 66,
     "component": "TextInput",
     "testID": "MISSING (wrapper/input)",
@@ -1922,7 +2126,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/reset-password/[token].tsx",
+    "file": "frontend\\app\\reset-password\\[token].tsx",
     "line": 68,
     "component": "TextInput",
     "testID": "MISSING (wrapper/input)",
@@ -1939,7 +2143,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/reset-password/[token].tsx",
+    "file": "frontend\\app\\reset-password\\[token].tsx",
     "line": 70,
     "component": "Pressable",
     "testID": "\"customer-app-reset-password-token-70\"",
@@ -1956,7 +2160,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/reset-password/[token].tsx",
+    "file": "frontend\\app\\reset-password\\[token].tsx",
     "line": 80,
     "component": "Pressable",
     "testID": "\"customer-app-reset-password-token-80\"",
@@ -1973,7 +2177,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 94,
     "component": "Pressable",
     "testID": "\"places-back\"",
@@ -1990,7 +2194,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 102,
     "component": "Pressable",
     "testID": "\"places-retry\"",
@@ -2007,7 +2211,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 113,
     "component": "Pressable",
     "testID": "{`place-edit-${p.id}`}",
@@ -2024,7 +2228,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 114,
     "component": "Pressable",
     "testID": "{`place-remove-${p.id}`}",
@@ -2041,7 +2245,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 130,
     "component": "TextInput",
     "testID": "\"places-search-input\"",
@@ -2058,7 +2262,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 141,
     "component": "Pressable",
     "testID": "{`places-result-${i}`}",
@@ -2075,7 +2279,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 153,
     "component": "Pressable",
     "testID": "{`places-label-${l.label}`}",
@@ -2092,7 +2296,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 161,
     "component": "Pressable",
     "testID": "\"places-choose-back\"",
@@ -2109,7 +2313,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/saved-places.tsx",
+    "file": "frontend\\app\\saved-places.tsx",
     "line": 167,
     "component": "Pressable",
     "testID": "\"places-add\"",
@@ -2126,8 +2330,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 93,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 127,
     "component": "Pressable",
     "testID": "\"settings-back\"",
     "label": "\"Tilbake\"",
@@ -2143,8 +2347,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 100,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 134,
     "component": "Button",
     "testID": "\"settings-retry\"",
     "label": "\"Prøv igjen\"",
@@ -2160,8 +2364,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 113,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 147,
     "component": "Switch",
     "testID": "{`setting-${t.key}`}",
     "label": "text child/dynamic",
@@ -2177,8 +2381,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 127,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 161,
     "component": "Pressable",
     "testID": "\"customer-app-settings-110\"",
     "label": "text child/dynamic",
@@ -2194,8 +2398,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 130,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 164,
     "component": "Pressable",
     "testID": "\"customer-app-settings-113\"",
     "label": "text child/dynamic",
@@ -2211,8 +2415,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 133,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 167,
     "component": "Pressable",
     "testID": "\"customer-app-settings-116\"",
     "label": "text child/dynamic",
@@ -2228,8 +2432,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 140,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 174,
     "component": "Pressable",
     "testID": "\"gdpr-export\"",
     "label": "text child/dynamic",
@@ -2245,8 +2449,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 151,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 185,
     "component": "Pressable",
     "testID": "\"gdpr-delete-open\"",
     "label": "text child/dynamic",
@@ -2262,8 +2466,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 163,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 197,
     "component": "TextInput",
     "testID": "\"gdpr-delete-confirm-input\"",
     "label": "text child/dynamic",
@@ -2279,8 +2483,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 173,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 207,
     "component": "Button",
     "testID": "\"gdpr-delete-confirm\"",
     "label": "\"Slett konto permanent\"",
@@ -2296,8 +2500,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/app/settings.tsx",
-    "line": 182,
+    "file": "frontend\\app\\settings.tsx",
+    "line": 216,
     "component": "Pressable",
     "testID": "\"gdpr-delete-cancel\"",
     "label": "text child/dynamic",
@@ -2313,7 +2517,24 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/ActiveTripCard.tsx",
+    "file": "frontend\\app\\_layout.tsx",
+    "line": 26,
+    "component": "Pressable",
+    "testID": "\"session-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void refresh()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\ActiveTripCard.tsx",
     "line": 12,
     "component": "Pressable",
     "testID": "\"active-trip-reopen\"",
@@ -2330,7 +2551,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/AppleSignInButton.ios.tsx",
+    "file": "frontend\\src\\components\\AppleSignInButton.ios.tsx",
     "line": 33,
     "component": "AppleAuthentication.AppleAuthenticationButton",
     "testID": "MISSING (wrapper/input)",
@@ -2347,7 +2568,41 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/ChatSheet.tsx",
+    "file": "frontend\\src\\components\\AppleSignInButton.native.tsx",
+    "line": 16,
+    "component": "AppleAuthentication.AppleAuthenticationButton",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => void onPress()}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\AvailabilityStatus.tsx",
+    "line": 20,
+    "component": "Pressable",
+    "testID": "\"availability-retry\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{search.retry}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\ChatSheet.tsx",
     "line": 81,
     "component": "Pressable",
     "testID": "\"chat-close\"",
@@ -2364,7 +2619,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/ChatSheet.tsx",
+    "file": "frontend\\src\\components\\ChatSheet.tsx",
     "line": 111,
     "component": "TextInput",
     "testID": "\"chat-input\"",
@@ -2382,7 +2637,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/ChatSheet.tsx",
+    "file": "frontend\\src\\components\\ChatSheet.tsx",
     "line": 121,
     "component": "Pressable",
     "testID": "\"chat-send\"",
@@ -2399,7 +2654,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "file": "frontend\\src\\components\\CustomerPhoto.tsx",
     "line": 55,
     "component": "Pressable",
     "testID": "\"profile-photo-edit\"",
@@ -2416,7 +2671,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "file": "frontend\\src\\components\\CustomerPhoto.tsx",
     "line": 64,
     "component": "Pressable",
     "testID": "\"profile-photo-camera\"",
@@ -2433,7 +2688,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "file": "frontend\\src\\components\\CustomerPhoto.tsx",
     "line": 65,
     "component": "Pressable",
     "testID": "\"profile-photo-gallery\"",
@@ -2450,7 +2705,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "file": "frontend\\src\\components\\CustomerPhoto.tsx",
     "line": 66,
     "component": "Pressable",
     "testID": "\"profile-photo-delete\"",
@@ -2467,7 +2722,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerPhoto.tsx",
+    "file": "frontend\\src\\components\\CustomerPhoto.tsx",
     "line": 67,
     "component": "Pressable",
     "testID": "\"profile-photo-cancel\"",
@@ -2484,7 +2739,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 36,
     "component": "Pressable",
     "testID": "\"customer-src-components-CustomerProfileDetails-36\"",
@@ -2501,7 +2756,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 39,
     "component": "Row",
     "testID": "MISSING (wrapper/input)",
@@ -2518,7 +2773,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 44,
     "component": "Button",
     "testID": "\"customer-src-components-CustomerProfileDetails-44\"",
@@ -2535,7 +2790,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 55,
     "component": "Row",
     "testID": "\"privacy-export\"",
@@ -2552,7 +2807,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 56,
     "component": "Row",
     "testID": "MISSING (wrapper/input)",
@@ -2569,7 +2824,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 59,
     "component": "Text",
     "testID": "\"customer-src-components-CustomerProfileDetails-59\"",
@@ -2586,7 +2841,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 61,
     "component": "Row",
     "testID": "MISSING (wrapper/input)",
@@ -2603,7 +2858,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 68,
     "component": "Pressable",
     "testID": "\"customer-src-components-CustomerProfileDetails-68\"",
@@ -2620,7 +2875,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 74,
     "component": "DesignToggle",
     "testID": "MISSING (wrapper/input)",
@@ -2637,7 +2892,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerProfileDetails.tsx",
+    "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
     "line": 76,
     "component": "Pressable",
     "testID": "{testID}",
@@ -2654,7 +2909,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 67,
     "component": "Pressable",
     "testID": "\"customer-src-components-CustomerSupport-67\"",
@@ -2671,7 +2926,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 72,
     "component": "Pressable",
     "testID": "\"customer-src-components-CustomerSupport-72\"",
@@ -2688,7 +2943,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 83,
     "component": "TextInput",
     "testID": "MISSING (wrapper/input)",
@@ -2705,7 +2960,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 84,
     "component": "Pressable",
     "testID": "\"customer-src-components-CustomerSupport-84\"",
@@ -2722,7 +2977,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 90,
     "component": "TextInput",
     "testID": "\"support-message-input\"",
@@ -2740,7 +2995,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 91,
     "component": "Pressable",
     "testID": "\"support-send\"",
@@ -2757,7 +3012,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/CustomerSupport.tsx",
+    "file": "frontend\\src\\components\\CustomerSupport.tsx",
     "line": 95,
     "component": "Pressable",
     "testID": "\"support-escalate\"",
@@ -2774,7 +3029,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/DesignToggle.tsx",
+    "file": "frontend\\src\\components\\DesignToggle.tsx",
     "line": 16,
     "component": "Pressable",
     "testID": "{testID}",
@@ -2791,13 +3046,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/FloatingTabBar.tsx",
-    "line": 55,
+    "file": "frontend\\src\\components\\FloatingTabBar.tsx",
+    "line": 53,
     "component": "Pressable",
     "testID": "{`tab-${route.name}`}",
     "label": "{options.tabBarAccessibilityLabel || label}",
     "handlers": {
-      "onPress": "{() => {\n            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });\n            if (!selected && !event.defaultPrevented) navigation.navigate(route.name, route.params);\n          }}"
+      "onPress": "{() => {\r\n            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });\r\n            if (!selected && !event.defaultPrevented) navigation.navigate(route.name, route.params);\r\n          }}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -2808,13 +3063,47 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/InteractiveMap.tsx",
-    "line": 318,
+    "file": "frontend\\src\\components\\GlobalCustomerShell.tsx",
+    "line": 43,
+    "component": "Pressable",
+    "testID": "\"customer-journey-island\"",
+    "label": "{`${labels[trip.status] || 'Aktiv tur'}. ${subtitle}`}",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\GlobalCustomerShell.tsx",
+    "line": 128,
+    "component": "JourneyIsland",
+    "testID": "MISSING (wrapper/input)",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => {\r\n        void queryClient.invalidateQueries({ queryKey: ['customer-active-trip', user?.id] });\r\n        router.push(`/booking/${islandTrip.trip_id}`);\r\n      }}"
+    },
+    "destination": "`/booking/${islandTrip.trip_id}`",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMap.native.tsx",
+    "line": 388,
     "component": "Ctrl",
     "testID": "\"map-zoom-in\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }}"
+      "onPress": "{() => {\r\n              setManual(true);\r\n              const next = clamp(zoomRef.current + 1, MIN_ZOOM, MAX_ZOOM);\r\n              zoomRef.current = next;\r\n              cameraRef.current?.zoomTo(next, 220);\r\n            }}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -2825,13 +3114,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/InteractiveMap.tsx",
-    "line": 319,
+    "file": "frontend\\src\\components\\InteractiveMap.native.tsx",
+    "line": 398,
     "component": "Ctrl",
     "testID": "\"map-zoom-out\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }}"
+      "onPress": "{() => {\r\n              setManual(true);\r\n              const next = clamp(zoomRef.current - 1, MIN_ZOOM, MAX_ZOOM);\r\n              zoomRef.current = next;\r\n              cameraRef.current?.zoomTo(next, 220);\r\n            }}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -2842,13 +3131,13 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/InteractiveMap.tsx",
-    "line": 320,
+    "file": "frontend\\src\\components\\InteractiveMap.native.tsx",
+    "line": 408,
     "component": "Ctrl",
     "testID": "\"map-recenter\"",
     "label": "text child/dynamic",
     "handlers": {
-      "onPress": "{recenter}"
+      "onPress": "{recenterOnUser}"
     },
     "destination": "handler/local state",
     "authenticated": true,
@@ -2859,8 +3148,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/InteractiveMap.tsx",
-    "line": 330,
+    "file": "frontend\\src\\components\\InteractiveMap.native.tsx",
+    "line": 420,
     "component": "Pressable",
     "testID": "{testID}",
     "label": "text child/dynamic",
@@ -2876,8 +3165,144 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/MapboxMap.native.tsx",
-    "line": 157,
+    "file": "frontend\\src\\components\\InteractiveMap.tsx",
+    "line": 298,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-in\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMap.tsx",
+    "line": 299,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-out\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMap.tsx",
+    "line": 300,
+    "component": "Ctrl",
+    "testID": "\"map-recenter\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{recenter}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMap.tsx",
+    "line": 310,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMapFallback.tsx",
+    "line": 311,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-in\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMapFallback.tsx",
+    "line": 312,
+    "component": "Ctrl",
+    "testID": "\"map-zoom-out\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMapFallback.tsx",
+    "line": 313,
+    "component": "Ctrl",
+    "testID": "\"map-recenter\"",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{recenter}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\InteractiveMapFallback.tsx",
+    "line": 323,
+    "component": "Pressable",
+    "testID": "{testID}",
+    "label": "text child/dynamic",
+    "handlers": {
+      "onPress": "{onPress}"
+    },
+    "destination": "handler/local state",
+    "authenticated": true,
+    "disabled": "not declared",
+    "backendCalls": "See CUSTOMER_API_CALLERS_20261004.json for this file and handler",
+    "success": "SOURCE ONLY; see screen matrix",
+    "error": "SOURCE ONLY; see screen matrix",
+    "verification": "SOURCE INVENTORY; device behavior unverified"
+  },
+  {
+    "file": "frontend\\src\\components\\MapboxMap.native.tsx",
+    "line": 164,
     "component": "Pressable",
     "testID": "\"map-retry\"",
     "label": "text child/dynamic",
@@ -2893,8 +3318,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/MapboxMap.native.tsx",
-    "line": 282,
+    "file": "frontend\\src\\components\\MapboxMap.native.tsx",
+    "line": 289,
     "component": "Ctrl",
     "testID": "\"map-zoom-in\"",
     "label": "text child/dynamic",
@@ -2910,8 +3335,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/MapboxMap.native.tsx",
-    "line": 283,
+    "file": "frontend\\src\\components\\MapboxMap.native.tsx",
+    "line": 290,
     "component": "Ctrl",
     "testID": "\"map-zoom-out\"",
     "label": "text child/dynamic",
@@ -2927,8 +3352,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/MapboxMap.native.tsx",
-    "line": 284,
+    "file": "frontend\\src\\components\\MapboxMap.native.tsx",
+    "line": 291,
     "component": "Ctrl",
     "testID": "\"map-recenter\"",
     "label": "text child/dynamic",
@@ -2944,8 +3369,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/MapboxMap.native.tsx",
-    "line": 292,
+    "file": "frontend\\src\\components\\MapboxMap.native.tsx",
+    "line": 299,
     "component": "Pressable",
     "testID": "{testID}",
     "label": "text child/dynamic",
@@ -2961,8 +3386,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/RasterMap.tsx",
-    "line": 318,
+    "file": "frontend\\src\\components\\RasterMap.tsx",
+    "line": 298,
     "component": "Ctrl",
     "testID": "\"map-zoom-in\"",
     "label": "text child/dynamic",
@@ -2978,8 +3403,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/RasterMap.tsx",
-    "line": 319,
+    "file": "frontend\\src\\components\\RasterMap.tsx",
+    "line": 299,
     "component": "Ctrl",
     "testID": "\"map-zoom-out\"",
     "label": "text child/dynamic",
@@ -2995,8 +3420,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/RasterMap.tsx",
-    "line": 320,
+    "file": "frontend\\src\\components\\RasterMap.tsx",
+    "line": 300,
     "component": "Ctrl",
     "testID": "\"map-recenter\"",
     "label": "text child/dynamic",
@@ -3012,8 +3437,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/RasterMap.tsx",
-    "line": 330,
+    "file": "frontend\\src\\components\\RasterMap.tsx",
+    "line": 310,
     "component": "Pressable",
     "testID": "{testID}",
     "label": "text child/dynamic",
@@ -3029,7 +3454,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/SplashArt.tsx",
+    "file": "frontend\\src\\components\\SplashArt.tsx",
     "line": 62,
     "component": "Pressable",
     "testID": "{testID}",
@@ -3046,7 +3471,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/TileMap.tsx",
+    "file": "frontend\\src\\components\\TileMap.tsx",
     "line": 256,
     "component": "Ctrl",
     "testID": "\"map-zoom-in\"",
@@ -3063,7 +3488,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/TileMap.tsx",
+    "file": "frontend\\src\\components\\TileMap.tsx",
     "line": 257,
     "component": "Ctrl",
     "testID": "\"map-zoom-out\"",
@@ -3080,7 +3505,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/TileMap.tsx",
+    "file": "frontend\\src\\components\\TileMap.tsx",
     "line": 258,
     "component": "Ctrl",
     "testID": "\"map-recenter\"",
@@ -3097,7 +3522,7 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/TileMap.tsx",
+    "file": "frontend\\src\\components\\TileMap.tsx",
     "line": 268,
     "component": "Pressable",
     "testID": "{testID}",
@@ -3114,8 +3539,8 @@
     "verification": "SOURCE INVENTORY; device behavior unverified"
   },
   {
-    "file": "frontend/src/components/ui.tsx",
-    "line": 29,
+    "file": "frontend\\src\\components\\ui.tsx",
+    "line": 28,
     "component": "Pressable",
     "testID": "{testID}",
     "label": "text child/dynamic",

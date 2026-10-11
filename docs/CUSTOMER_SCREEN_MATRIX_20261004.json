@@ -1,0 +1,4343 @@
+[
+  {
+    "SCREEN": "Splash",
+    "COMPONENT": "frontend/app/index.tsx",
+    "USER ACTION": "Enter app / recover session",
+    "ROUTE": "/",
+    "API CALL": "authApi.me",
+    "BACKEND ENDPOINT": [
+      "GET /api/auth/me"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';"
+      },
+      {
+        "line": 32,
+        "source": "<ActivityIndicator color={colors.accent} style={{ marginTop: 28 }} />"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Splash.tsx",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Cold launch/font/icon screenshot acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Permissions",
+    "COMPONENT": "frontend/app/permissions.tsx",
+    "USER ACTION": "Grant location/notifications",
+    "ROUTE": "/permissions",
+    "API CALL": "api.post",
+    "BACKEND ENDPOINT": [],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 21,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 25,
+        "source": "setBusy(true);"
+      },
+      {
+        "line": 34,
+        "source": "setBusy(false);"
+      },
+      {
+        "line": 53,
+        "source": "<Pressable onPress={continueFlow} disabled={busy} testID=\"permissions-continue\" style={{ marginTop: 'auto' }}>"
+      },
+      {
+        "line": 54,
+        "source": "<LinearGradient colors={busy ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B', '#FF0000']} style={s.primary}>"
+      },
+      {
+        "line": 55,
+        "source": "{busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Tillat og fortsett</Text>}"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 22,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 26,
+        "source": "setError('');"
+      },
+      {
+        "line": 31,
+        "source": "} catch {"
+      },
+      {
+        "line": 32,
+        "source": "setError('Kunne ikke \u00e5pne alle systemtillatelsene. Du kan endre dem senere i Innstillinger.');"
+      },
+      {
+        "line": 51,
+        "source": "{error ? <Text style={s.error}>{error}</Text> : null}"
+      },
+      {
+        "line": 88,
+        "source": "error: { color: c.danger, fontSize: 12, textAlign: 'center', marginTop: 12 },"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Permissions",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Grant/reject on physical iOS and Android",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Login",
+    "COMPONENT": "frontend/app/login.tsx",
+    "USER ACTION": "Password login / 2FA",
+    "ROUTE": "/login",
+    "API CALL": "authApi.login",
+    "BACKEND ENDPOINT": [
+      "POST /api/auth/login"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 7,
+        "source": "import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 27,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 28,
+        "source": "const [gLoading, setGLoading] = useState(false);"
+      },
+      {
+        "line": 29,
+        "source": "const [appleLoading, setAppleLoading] = useState(false);"
+      },
+      {
+        "line": 51,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 62,
+        "source": "setLoading(false);"
+      },
+      {
+        "line": 68,
+        "source": "setGLoading(true);"
+      },
+      {
+        "line": 75,
+        "source": "setGLoading(false);"
+      },
+      {
+        "line": 81,
+        "source": "setAppleLoading(true);"
+      },
+      {
+        "line": 88,
+        "source": "setAppleLoading(false);"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 14,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 30,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 35,
+        "source": "setError("
+      },
+      {
+        "line": 50,
+        "source": "setError('');"
+      },
+      {
+        "line": 55,
+        "source": "setError('Kontoen krever tofaktor \u2014 logg inn via web-portalen.');"
+      },
+      {
+        "line": 59,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 60,
+        "source": "setError(apiError(e));"
+      },
+      {
+        "line": 67,
+        "source": "setError('');"
+      },
+      {
+        "line": 72,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 73,
+        "source": "setError(apiError(e));"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Login.tsx",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Authenticated runtime + rejected credentials/2FA",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Google login",
+    "COMPONENT": "frontend/src/lib/socialSignIn.native.ts",
+    "USER ACTION": "Open Google chooser / cancel",
+    "ROUTE": "/login",
+    "API CALL": "authApi.nativeConfig authApi.nativeSignIn",
+    "BACKEND ENDPOINT": [
+      "GET /api/auth/native/config",
+      "POST /api/auth/apple/native",
+      "POST /api/auth/google/native"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 8,
+        "source": "if (!webClientId) throw new Error('Google-innlogging er ikke konfigurert p\u00e5 SNAR-serveren enn\u00e5.');"
+      },
+      {
+        "line": 10,
+        "source": "throw new Error('Google-innlogging for iPhone mangler iOS-klientkonfigurasjon p\u00e5 SNAR-serveren.');"
+      },
+      {
+        "line": 29,
+        "source": "throw new Error('Google returnerte ikke et gyldig innloggingstoken.');"
+      },
+      {
+        "line": 36,
+        "source": "throw new Error('Apple-innlogging er bare tilgjengelig p\u00e5 st\u00f8ttede Apple-enheter.');"
+      },
+      {
+        "line": 45,
+        "source": "if (!result.identityToken) throw new Error('Apple returnerte ikke et gyldig innloggingstoken.');"
+      },
+      {
+        "line": 47,
+        "source": "} catch (error: any) {"
+      },
+      {
+        "line": 48,
+        "source": "if (error?.code === 'ERR_REQUEST_CANCELED') return null;"
+      },
+      {
+        "line": 49,
+        "source": "throw error;"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Login.tsx",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: provision OAuth clients/package signing; physical login",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Apple login",
+    "COMPONENT": "frontend/src/components/AppleSignInButton.ios.tsx",
+    "USER ACTION": "Sign in / cancel / private relay",
+    "ROUTE": "/login",
+    "API CALL": "authApi.nativeSignIn",
+    "BACKEND ENDPOINT": [
+      "POST /api/auth/apple/native",
+      "POST /api/auth/google/native"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 2,
+        "source": "import { ActivityIndicator, View } from 'react-native';"
+      },
+      {
+        "line": 7,
+        "source": "loading,"
+      },
+      {
+        "line": 10,
+        "source": "loading?: boolean;"
+      },
+      {
+        "line": 13,
+        "source": "if (loading) {"
+      },
+      {
+        "line": 26,
+        "source": "<ActivityIndicator color={colors.surface} />"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Login.tsx",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Physical iOS capability/private relay/existing account",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Register",
+    "COMPONENT": "frontend/app/register.tsx",
+    "USER ACTION": "Register + terms",
+    "ROUTE": "/register",
+    "API CALL": "authApi.register",
+    "BACKEND ENDPOINT": [
+      "POST /api/auth/register"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 25,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 38,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 52,
+        "source": "setLoading(false);"
+      },
+      {
+        "line": 87,
+        "source": "<Pressable onPress={submit} disabled={!acceptedTerms || loading} testID=\"register-submit\" style={{ marginTop: 18 }}>"
+      },
+      {
+        "line": 88,
+        "source": "<LinearGradient colors={!acceptedTerms || loading ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B', '#FF0000']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.primaryButton}>"
+      },
+      {
+        "line": 89,
+        "source": "<Text style={s.primaryButtonText}>{loading ? 'Oppretter\u2026' : 'Opprett konto'}</Text>"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 12,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 26,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 29,
+        "source": "setError('');"
+      },
+      {
+        "line": 31,
+        "source": "setError('Fyll inn navn, e-post og passord (minst 8 tegn).');"
+      },
+      {
+        "line": 35,
+        "source": "setError('Du m\u00e5 godta vilk\u00e5r og personvern f\u00f8r kontoen opprettes.');"
+      },
+      {
+        "line": 49,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 50,
+        "source": "setError(apiError(e));"
+      },
+      {
+        "line": 85,
+        "source": "{error ? <Text style={s.error} testID=\"register-error\">{error}</Text> : null}"
+      },
+      {
+        "line": 115,
+        "source": "error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 9 },"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Login.tsx",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Unique email/password/consent runtime acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Forgot password",
+    "COMPONENT": "frontend/app/forgot-password.tsx",
+    "USER ACTION": "Request reset link",
+    "ROUTE": "/forgot-password",
+    "API CALL": "authApi.forgotPassword",
+    "BACKEND ENDPOINT": [
+      "POST /api/auth/forgot-password"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 18,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 25,
+        "source": "setBusy(true); setError('');"
+      },
+      {
+        "line": 32,
+        "source": "setBusy(false);"
+      },
+      {
+        "line": 76,
+        "source": "<Pressable onPress={submit} disabled={busy} testID=\"forgot-submit\">"
+      },
+      {
+        "line": 77,
+        "source": "<LinearGradient colors={busy ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B', '#FF0000']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}>"
+      },
+      {
+        "line": 78,
+        "source": "{busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Send lenke</Text>}"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 7,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 20,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 24,
+        "source": "if (!value) return setError('Skriv inn e-postadressen din.');"
+      },
+      {
+        "line": 25,
+        "source": "setBusy(true); setError('');"
+      },
+      {
+        "line": 29,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 30,
+        "source": "setError(apiError(e));"
+      },
+      {
+        "line": 75,
+        "source": "{error ? <Text style={s.error}>{error}</Text> : null}"
+      },
+      {
+        "line": 101,
+        "source": "error: { color: c.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Not supplied as separate Make screen",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: email sender and actual delivery",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Reset password",
+    "COMPONENT": "frontend/app/reset-password/[token].tsx",
+    "USER ACTION": "Validate token / submit new password",
+    "ROUTE": "/reset-password/[token]",
+    "API CALL": "authApi.checkResetToken authApi.resetPassword",
+    "BACKEND ENDPOINT": [
+      "GET /api/auth/reset-password/{token}",
+      "POST /api/auth/reset-password"
+    ],
+    "AUTH REQUIREMENT": "public onboarding/OS or provider login",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 9,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 22,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 35,
+        "source": "setBusy(true);"
+      },
+      {
+        "line": 42,
+        "source": "setBusy(false);"
+      },
+      {
+        "line": 54,
+        "source": "{state === 'checking' ? <Loader /> : null}"
+      },
+      {
+        "line": 70,
+        "source": "<Pressable testID=\"customer-app-reset-password-token-70\" onPress={submit} disabled={busy} style={{marginTop:18}}>"
+      },
+      {
+        "line": 71,
+        "source": "<LinearGradient colors={busy ? [colors.lineStrong, colors.lineStrong] : ['#FF3B3B','#FF0000']} start={{x:0,y:0}} end={{x:1,y:0}} style={s.primaryButton}>"
+      },
+      {
+        "line": 72,
+        "source": "{busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Lagre nytt passord</Text>}"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 7,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 23,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 28,
+        "source": "authApi.checkResetToken(value).then(() => setState('form')).catch(() => setState('invalid'));"
+      },
+      {
+        "line": 32,
+        "source": "setError('');"
+      },
+      {
+        "line": 33,
+        "source": "if (password.length < 8) return setError('Passord m\u00e5 ha minst 8 tegn.');"
+      },
+      {
+        "line": 34,
+        "source": "if (password !== again) return setError('Passordene er ikke like.');"
+      },
+      {
+        "line": 39,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 40,
+        "source": "setError(apiError(e));"
+      },
+      {
+        "line": 69,
+        "source": "{error ? <Text style={s.error}>{error}</Text> : null}"
+      },
+      {
+        "line": 99,
+        "source": "error: { color: c.danger, fontSize: 12, lineHeight: 18, marginTop: 12 },"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Not supplied as separate Make screen",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Real email deep link, expired token, session invalidation",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Legal consent",
+    "COMPONENT": "frontend/app/legal-consent.tsx",
+    "USER ACTION": "Read terms / accept",
+    "ROUTE": "/legal-consent",
+    "API CALL": "authApi.acceptLegal",
+    "BACKEND ENDPOINT": [
+      "POST /api/auth/accept-legal"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 26,
+        "source": "setBusy(true);"
+      },
+      {
+        "line": 34,
+        "source": "setBusy(false);"
+      },
+      {
+        "line": 82,
+        "source": "<Button label=\"Godta og fortsett\" onPress={submit} loading={busy} disabled={!accepted} testID=\"legal-consent-submit\" />"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 10,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 19,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 23,
+        "source": "setError('Du m\u00e5 godta vilk\u00e5r og personvern for \u00e5 fortsette.');"
+      },
+      {
+        "line": 27,
+        "source": "setError('');"
+      },
+      {
+        "line": 31,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 32,
+        "source": "setError(apiError(e));"
+      },
+      {
+        "line": 78,
+        "source": "{error ? <Text style={s.error}>{error}</Text> : null}"
+      },
+      {
+        "line": 105,
+        "source": "error: { color: c.danger, fontSize: 13, lineHeight: 18, marginTop: 10 },"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Login/setup consent",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Native links + server persistence",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Home/map",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "GPS, recenter, pan, nearby cars",
+    "ROUTE": "/(app)/home",
+    "API CALL": "carsApi.nearby placesApi.reverse tripsApi.active",
+    "BACKEND ENDPOINT": [
+      "GET /api/places/reverse",
+      "GET /api/trips/active",
+      "POST /api/cars/nearby"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Browse/LiveMap",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: Mapbox token + native map acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Destination search",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Search and select destination",
+    "ROUTE": "/(app)/home",
+    "API CALL": "placesApi.search",
+    "BACKEND ENDPOINT": [
+      "GET /api/places/search"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Browse",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Stale-response, offline/retry/zero-results and unmount tests PASS; physical search acceptance pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Recent/favorite locations",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Select real recent or saved destination",
+    "ROUTE": "/(app)/home",
+    "API CALL": "tripsApi.list mePlacesApi.list",
+    "BACKEND ENDPOINT": [
+      "GET /api/me/places",
+      "GET /api/trips"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Browse",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Recents derive only from valid finished customer trips; local filter/dedup tests PASS; real history/device acceptance pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Saved locations",
+    "COMPONENT": "frontend/app/saved-places.tsx",
+    "USER ACTION": "Create/edit/remove address",
+    "ROUTE": "/saved-places",
+    "API CALL": "mePlacesApi.list mePlacesApi.add mePlacesApi.update mePlacesApi.remove",
+    "BACKEND ENDPOINT": [
+      "DELETE /api/me/places/{place_id}",
+      "GET /api/me/places",
+      "POST /api/me/places",
+      "PUT /api/me/places/{place_id}"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 10,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 26,
+        "source": "const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['me-places'], queryFn: mePlacesApi.list });"
+      },
+      {
+        "line": 44,
+        "source": "if (initialized.current || isLoading || isError || !data || !['Hjem', 'Jobb'].includes(initialLabel || '')) return;"
+      },
+      {
+        "line": 48,
+        "source": "}, [isLoading, isError, initialLabel, data]);"
+      },
+      {
+        "line": 102,
+        "source": "{isError ? <View style={{ gap: 12 }}><Text style={{ color: colors.danger }} accessibilityRole=\"alert\">Kunne ikke hente adressene dine.</Text><Pressable onPress={() => void refetch()} accessibilityRole=\"button\" testID=\"pl"
+      },
+      {
+        "line": 103,
+        "source": "<View style={{ paddingTop: 60 }}><Loader /></View>"
+      },
+      {
+        "line": 139,
+        "source": "{searching ? <ActivityIndicator color={colors.accent} /> : null}"
+      },
+      {
+        "line": 160,
+        "source": "{saving ? <ActivityIndicator color={colors.accent} style={{ marginTop: 12 }} /> : null}"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 121,
+        "source": "<Text style={s.empty}>Lagre stedene du reiser til ofte for bestilling med ett trykk.</Text>"
+      },
+      {
+        "line": 188,
+        "source": "empty: { color: c.textMuted, fontSize: 14, marginVertical: 16, lineHeight: 20 },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 12,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 26,
+        "source": "const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['me-places'], queryFn: mePlacesApi.list });"
+      },
+      {
+        "line": 37,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 44,
+        "source": "if (initialized.current || isLoading || isError || !data || !['Hjem', 'Jobb'].includes(initialLabel || '')) return;"
+      },
+      {
+        "line": 48,
+        "source": "}, [isLoading, isError, initialLabel, data]);"
+      },
+      {
+        "line": 58,
+        "source": ".catch(() => { if (searchRevision.current === revision) setResults([]); })"
+      },
+      {
+        "line": 66,
+        "source": "saveLock.current = true; setError('');"
+      },
+      {
+        "line": 79,
+        "source": "} catch (e) { setError(apiError(e)); }"
+      },
+      {
+        "line": 87,
+        "source": "} catch (e) { setError(apiError(e)); }"
+      },
+      {
+        "line": 101,
+        "source": "{error ? <Text style={{ color: colors.danger, fontSize: 12, marginBottom: 12 }} accessibilityRole=\"alert\">{error}</Text> : null}"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Profile addresses",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "CRUD and cross-customer runtime acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Ride categories",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Select SNAR / SNAR XL / Premium",
+    "ROUTE": "/(app)/home",
+    "API CALL": "tripsApi.estimate",
+    "BACKEND ENDPOINT": [
+      "POST /api/trips/estimate"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Browse; latest tier SVGs",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Latest source has Standard/Comfort/Premium/Van/accessible; primary mapping retained. Realistic category renders not supplied/complete",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Price estimate",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Estimate route and fare",
+    "ROUTE": "/(app)/home",
+    "API CALL": "tripsApi.estimate",
+    "BACKEND ENDPOINT": [
+      "POST /api/trips/estimate"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Browse/Confirm",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Road geometry/time/fare/service-area live acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Booking review",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Review fare/stops/payment",
+    "ROUTE": "/(app)/home",
+    "API CALL": "tripsApi.estimate paymentApi.list",
+    "BACKEND ENDPOINT": [
+      "GET /api/payment-methods",
+      "POST /api/trips/estimate"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Confirm",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Native keyboard/sheet/layout + exact server fare",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Booking submit",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Submit once / recover lost response",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "tripsApi.request tripsApi.active",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/active",
+      "POST /api/trips/request"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Confirm",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Real rider/driver runtime; duplicate/lost response",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Driver matching",
+    "COMPONENT": "frontend/app/booking/[tripId].tsx",
+    "USER ACTION": "Wait / cancel / minimize",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "tripsApi.get tripsApi.cancelPreview tripsApi.cancel",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/{trip_id}",
+      "GET /api/trips/{trip_id}/cancel-preview",
+      "POST /api/trips/{trip_id}/cancel"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 44,
+        "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
+      },
+      {
+        "line": 47,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
+      },
+      {
+        "line": 126,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 164,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
+      },
+      {
+        "line": 169,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 174,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      },
+      {
+        "line": 179,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 189,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 22,
+        "source": "payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sj\u00e5f\u00f8r bestilles f\u00f8r banken har godkjent turbel\u00f8pet' },"
+      },
+      {
+        "line": 29,
+        "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 152,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 192,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 205,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
+      },
+      {
+        "line": 274,
+        "source": "<Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat n\u00e5' : meta.title}</Text>"
+      },
+      {
+        "line": 275,
+        "source": "<Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sj\u00e5f\u00f8r etter tre fors\u00f8k. Vil du pr\u00f8ve igjen om litt?' : meta.sub}</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 4,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 10,
+        "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 48,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 95,
+        "source": "} catch {"
+      },
+      {
+        "line": 120,
+        "source": "}).catch(() => {"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 133,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "} catch (error) {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Matching",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Failed/lost-response cancellation reconciliation and duplicate guards PASS locally; real driver/device acceptance pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Driver approaching",
+    "COMPONENT": "frontend/app/booking/[tripId].tsx",
+    "USER ACTION": "View driver/car/plate/ETA",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "tripsApi.get tripDriverPhotoSource",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/{trip_id}",
+      "GET /api/trips/{trip_id}/driver-photo"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 44,
+        "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
+      },
+      {
+        "line": 47,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
+      },
+      {
+        "line": 126,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 164,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
+      },
+      {
+        "line": 169,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 174,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      },
+      {
+        "line": 179,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 189,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 22,
+        "source": "payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sj\u00e5f\u00f8r bestilles f\u00f8r banken har godkjent turbel\u00f8pet' },"
+      },
+      {
+        "line": 29,
+        "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 152,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 192,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 205,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
+      },
+      {
+        "line": 274,
+        "source": "<Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat n\u00e5' : meta.title}</Text>"
+      },
+      {
+        "line": 275,
+        "source": "<Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sj\u00e5f\u00f8r etter tre fors\u00f8k. Vil du pr\u00f8ve igjen om litt?' : meta.sub}</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 4,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 10,
+        "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 48,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 95,
+        "source": "} catch {"
+      },
+      {
+        "line": 120,
+        "source": "}).catch(() => {"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 133,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "} catch (error) {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Arriving/DriverCard",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Invalid/missing/stale/future GPS hides ETA; photo failure uses actual-name initial; real movement/photo acceptance pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Driver arrived",
+    "COMPONENT": "frontend/app/booking/[tripId].tsx",
+    "USER ACTION": "Confirm actual assigned driver",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "tripsApi.get",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/{trip_id}"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 44,
+        "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
+      },
+      {
+        "line": 47,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
+      },
+      {
+        "line": 126,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 164,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
+      },
+      {
+        "line": 169,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 174,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      },
+      {
+        "line": 179,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 189,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 22,
+        "source": "payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sj\u00e5f\u00f8r bestilles f\u00f8r banken har godkjent turbel\u00f8pet' },"
+      },
+      {
+        "line": 29,
+        "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 152,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 192,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 205,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
+      },
+      {
+        "line": 274,
+        "source": "<Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat n\u00e5' : meta.title}</Text>"
+      },
+      {
+        "line": 275,
+        "source": "<Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sj\u00e5f\u00f8r etter tre fors\u00f8k. Vil du pr\u00f8ve igjen om litt?' : meta.sub}</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 4,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 10,
+        "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 48,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 95,
+        "source": "} catch {"
+      },
+      {
+        "line": 120,
+        "source": "}).catch(() => {"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 133,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "} catch (error) {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Arriving",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Real at_pickup status and push",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Active/in-ride",
+    "COMPONENT": "frontend/app/booking/[tripId].tsx",
+    "USER ACTION": "View route / update destination",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "tripsApi.get tripsApi.changeDestination",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/{trip_id}",
+      "PATCH /api/trips/{trip_id}/destination"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 44,
+        "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
+      },
+      {
+        "line": 47,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
+      },
+      {
+        "line": 126,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 164,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
+      },
+      {
+        "line": 169,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 174,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      },
+      {
+        "line": 179,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 189,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 22,
+        "source": "payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sj\u00e5f\u00f8r bestilles f\u00f8r banken har godkjent turbel\u00f8pet' },"
+      },
+      {
+        "line": 29,
+        "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 152,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 192,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 205,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
+      },
+      {
+        "line": 274,
+        "source": "<Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat n\u00e5' : meta.title}</Text>"
+      },
+      {
+        "line": 275,
+        "source": "<Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sj\u00e5f\u00f8r etter tre fors\u00f8k. Vil du pr\u00f8ve igjen om litt?' : meta.sub}</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 4,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 10,
+        "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 48,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 95,
+        "source": "} catch {"
+      },
+      {
+        "line": 120,
+        "source": "}).catch(() => {"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 133,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "} catch (error) {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "InRide",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Driver-controlled start/end/route progress device E2E",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Customer-driver chat",
+    "COMPONENT": "frontend/src/components/ChatSheet.tsx",
+    "USER ACTION": "Read/send actual messages",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "messagesApi.list messagesApi.send",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/{trip_id}/messages",
+      "POST /api/trips/{trip_id}/messages"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';"
+      },
+      {
+        "line": 29,
+        "source": "const [loading, setLoading] = useState(true);"
+      },
+      {
+        "line": 35,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 42,
+        "source": "finally { if (mounted) setLoading(false); }"
+      },
+      {
+        "line": 87,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 88,
+        "source": "<View style={s.center}><ActivityIndicator color={colors.accent} /></View>"
+      },
+      {
+        "line": 122,
+        "source": "{sending ? <ActivityIndicator color={colors.accentOn} /> : <Icon name=\"navigation\" size={18} color={colors.accentOn} />}"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 62,
+        "source": "setError('Meldingen ble ikke sendt. Pr\u00f8v igjen.');"
+      },
+      {
+        "line": 96,
+        "source": "ListEmptyComponent={<Text style={s.empty}>Ingen meldinger enn\u00e5. Si hei!</Text>}"
+      },
+      {
+        "line": 140,
+        "source": "empty: { color: c.textMuted, fontSize: 14, textAlign: 'center', marginTop: 40 },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 25,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 36,
+        "source": "setError('');"
+      },
+      {
+        "line": 40,
+        "source": "if (mounted) { setMessages(r.messages || []); setError(''); }"
+      },
+      {
+        "line": 41,
+        "source": "} catch { if (mounted) setError('Kan ikke hente meldinger. Vi pr\u00f8ver igjen automatisk.'); }"
+      },
+      {
+        "line": 53,
+        "source": "setError('');"
+      },
+      {
+        "line": 60,
+        "source": "} catch {"
+      },
+      {
+        "line": 62,
+        "source": "setError('Meldingen ble ikke sendt. Pr\u00f8v igjen.');"
+      },
+      {
+        "line": 76,
+        "source": "{error ? <Text accessibilityRole=\"alert\" testID=\"chat-error\" style={{ padding: 12, color: colors.danger }}>{error}</Text> : null}"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Arriving/InRide chat action",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Two-party runtime/retry/keyboard acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Safety/SOS/share trip",
+    "COMPONENT": "frontend/app/booking/[tripId].tsx",
+    "USER ACTION": "Emergency call / report / share link",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "safetyApi.log safetyApi.shareLink",
+    "BACKEND ENDPOINT": [
+      "POST /api/trips/{trip_id}/safety",
+      "POST /api/trips/{trip_id}/share-link"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 44,
+        "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
+      },
+      {
+        "line": 47,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
+      },
+      {
+        "line": 126,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 164,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
+      },
+      {
+        "line": 169,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 174,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      },
+      {
+        "line": 179,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 189,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 22,
+        "source": "payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sj\u00e5f\u00f8r bestilles f\u00f8r banken har godkjent turbel\u00f8pet' },"
+      },
+      {
+        "line": 29,
+        "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 152,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 192,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 205,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
+      },
+      {
+        "line": 274,
+        "source": "<Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat n\u00e5' : meta.title}</Text>"
+      },
+      {
+        "line": 275,
+        "source": "<Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sj\u00e5f\u00f8r etter tre fors\u00f8k. Vil du pr\u00f8ve igjen om litt?' : meta.sub}</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 4,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 10,
+        "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 48,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 95,
+        "source": "} catch {"
+      },
+      {
+        "line": 120,
+        "source": "}).catch(() => {"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 133,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "} catch (error) {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "InRide/Profile safety",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Visible failures/duplicate guards and immediate dialer before backend logging PASS locally; actual OS share/dialer and trip-link permissions pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Active trip minimize",
+    "COMPONENT": "frontend/app/booking/[tripId].tsx",
+    "USER ACTION": "Minimize to persistent card",
+    "ROUTE": "/booking/[tripId]",
+    "API CALL": "tripsApi.get",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/{trip_id}"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 18,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 44,
+        "source": "const [safetyBusy, setSafetyBusy] = useState(false);"
+      },
+      {
+        "line": 47,
+        "source": "const [cancelBusy, setCancelBusy] = useState(false);"
+      },
+      {
+        "line": 126,
+        "source": "const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 164,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true); setSafetyOpen(false);"
+      },
+      {
+        "line": 169,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 174,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      },
+      {
+        "line": 179,
+        "source": "finally { safetyLock.current = false; setSafetyBusy(false); }"
+      },
+      {
+        "line": 189,
+        "source": "safetyLock.current = true; setActionError(''); setSafetyBusy(true);"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 22,
+        "source": "payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sj\u00e5f\u00f8r bestilles f\u00f8r banken har godkjent turbel\u00f8pet' },"
+      },
+      {
+        "line": 29,
+        "source": "cancelled: { title: 'Turen ble avbrutt', sub: 'Ingen aktiv tur p\u00e5g\u00e5r' },"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 152,
+        "source": "setActionError(`Avbestillingen er ikke bekreftet. ${apiError(error)}`);"
+      },
+      {
+        "line": 192,
+        "source": "if (typeof shared?.url !== 'string' || !/^https:\\/\\//.test(shared.url)) throw new Error('Ingen gyldig turlenke mottatt.');"
+      },
+      {
+        "line": 205,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt. SNAR gj\u00f8r ingen endringer i turen mens denne skjermen ikke har ferske data.</Text>"
+      },
+      {
+        "line": 274,
+        "source": "<Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat n\u00e5' : meta.title}</Text>"
+      },
+      {
+        "line": 275,
+        "source": "<Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sj\u00e5f\u00f8r etter tre fors\u00f8k. Vil du pr\u00f8ve igjen om litt?' : meta.sub}</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 4,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 10,
+        "source": "import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 48,
+        "source": "const [actionError, setActionError] = useState('');"
+      },
+      {
+        "line": 95,
+        "source": "} catch {"
+      },
+      {
+        "line": 120,
+        "source": "}).catch(() => {"
+      },
+      {
+        "line": 129,
+        "source": "cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');"
+      },
+      {
+        "line": 133,
+        "source": "if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilk\u00e5r.');"
+      },
+      {
+        "line": 135,
+        "source": "Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises f\u00f8r du bekrefter.` : 'Ingen avbestillingsgebyr gjelder n\u00e5.', ["
+      },
+      {
+        "line": 142,
+        "source": "if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');"
+      },
+      {
+        "line": 144,
+        "source": "} catch (error) {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "InRide/Arriving; added required minimized view",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Component minimize/reopen/completion verified; device layout/tab sequence pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Active trip reopen",
+    "COMPONENT": "frontend/app/(app)/home.tsx",
+    "USER ACTION": "Recover on focus/foreground and reopen",
+    "ROUTE": "/(app)/home -> /booking/[tripId]",
+    "API CALL": "tripsApi.active",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips/active"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 621,
+        "source": "{booking ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmButtonText}>Bekreft tur</Text>}"
+      },
+      {
+        "line": 659,
+        "source": "const [loading, setLoading] = useState(false);"
+      },
+      {
+        "line": 666,
+        "source": "if (q.trim().length < 2) { setLoading(false); return; }"
+      },
+      {
+        "line": 667,
+        "source": "setLoading(true);"
+      },
+      {
+        "line": 672,
+        "source": ".finally(() => { if (current) setLoading(false); });"
+      },
+      {
+        "line": 696,
+        "source": "{loading ? ("
+      },
+      {
+        "line": 697,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 734,
+        "source": "{!searchError && !items.length && q.trim().length >= 2 && !loading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 196,
+        "source": "const nearest = etaValues.length ? Math.min(...etaValues) : null;"
+      },
+      {
+        "line": 436,
+        "source": "{quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID=\"home-places-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable t"
+      },
+      {
+        "line": 439,
+        "source": "<Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />"
+      },
+      {
+        "line": 440,
+        "source": "<Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>"
+      },
+      {
+        "line": 735,
+        "source": "<View style={s.emptySearch}>"
+      },
+      {
+        "line": 736,
+        "source": "<View style={s.emptySearchIcon}><Icon name=\"search\" size={24} color={colors.textMuted} /></View>"
+      },
+      {
+        "line": 737,
+        "source": "<Text style={s.emptyTitle}>Fant ingen steder</Text>"
+      },
+      {
+        "line": 738,
+        "source": "<Text style={s.emptySub}>Pr\u00f8v et annet s\u00f8k</Text>"
+      },
+      {
+        "line": 867,
+        "source": "emptySearch: { alignItems: 'center', paddingTop: 64 },"
+      },
+      {
+        "line": 868,
+        "source": "emptySearchIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 20,
+        "source": "import { apiError, kr, VEHICLES } from '@/src/lib/format';"
+      },
+      {
+        "line": 55,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 100,
+        "source": "}).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisem\u00e5l. Velg hentested og reisem\u00e5l p\u00e5 nytt.'); });"
+      },
+      {
+        "line": 111,
+        "source": "paymentApi.list().then((r) => setMethods(Array.isArray(r) ? r : (r?.payment_methods || []))).catch(() => {});"
+      },
+      {
+        "line": 140,
+        "source": "} catch { if (active) setActiveTripOffline(true); }"
+      },
+      {
+        "line": 165,
+        "source": "placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});"
+      },
+      {
+        "line": 167,
+        "source": "} catch {"
+      },
+      {
+        "line": 177,
+        "source": "placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});"
+      },
+      {
+        "line": 190,
+        "source": "}).then(result => { if (current) { setEstimate(result); setError(''); } })"
+      },
+      {
+        "line": 191,
+        "source": ".catch(error => { if (current) setError(apiError(error)); });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Browse/active trip recovery",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Cold restart/background/tab recovery with real active trip",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Payment methods",
+    "COMPONENT": "frontend/app/payment-methods.tsx",
+    "USER ACTION": "List/add/remove card",
+    "ROUTE": "/payment-methods",
+    "API CALL": "paymentApi.list paymentApi.cardSetup paymentApi.cardSetupStatus paymentApi.remove paymentApi.nativeConfig",
+    "BACKEND ENDPOINT": [
+      "DELETE /api/payment-methods/{pm_id}",
+      "GET /api/payment-methods",
+      "GET /api/payments/card/setup/{session_id}",
+      "GET /api/payments/native/config",
+      "POST /api/payments/card/setup"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';"
+      },
+      {
+        "line": 10,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 23,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 27,
+        "source": "const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });"
+      },
+      {
+        "line": 53,
+        "source": "setBusy(true);"
+      },
+      {
+        "line": 54,
+        "source": "verifySetup(session_id).finally(() => setBusy(false));"
+      },
+      {
+        "line": 71,
+        "source": "if (busy) return;"
+      },
+      {
+        "line": 72,
+        "source": "setBusy(true);"
+      },
+      {
+        "line": 89,
+        "source": "setBusy(false);"
+      },
+      {
+        "line": 103,
+        "source": "{isLoading ? ("
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 56,
+        "source": "setNotice('Kortverifiseringen ble avbrutt. Ingen kortdata ble lagret.');"
+      },
+      {
+        "line": 144,
+        "source": "{!methods.length ? ("
+      },
+      {
+        "line": 145,
+        "source": "<View style={s.emptyCard}>"
+      },
+      {
+        "line": 147,
+        "source": "<Text style={s.emptyTitle}>Ingen verifisert betalingsm\u00e5te</Text>"
+      },
+      {
+        "line": 148,
+        "source": "<Text style={s.empty}>Legg til et kort via Stripe f\u00f8r du bestiller din f\u00f8rste tur. N\u00e5r automatisk betaling aktiveres for betaen, kan avtalt turbel\u00f8p belastes etter fullf\u00f8rt tur.</Text>"
+      },
+      {
+        "line": 194,
+        "source": "emptyCard: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 20, marginBottom: 12 },"
+      },
+      {
+        "line": 195,
+        "source": "emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15, marginTop: 10 },"
+      },
+      {
+        "line": 196,
+        "source": "empty: { color: c.textMuted, fontSize: 13, marginTop: 5, lineHeight: 19, textAlign: 'center' },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 12,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 25,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 27,
+        "source": "const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });"
+      },
+      {
+        "line": 39,
+        "source": "setError('');"
+      },
+      {
+        "line": 41,
+        "source": "setError('Kortet ble ikke verifisert av Stripe. Pr\u00f8v et annet kort.');"
+      },
+      {
+        "line": 45,
+        "source": "} catch {}"
+      },
+      {
+        "line": 48,
+        "source": "setError('Stripe-bekreftelsen er ikke klar enn\u00e5. \u00c5pne betalingsm\u00e5ter igjen om noen sekunder.');"
+      },
+      {
+        "line": 61,
+        "source": "setError('');"
+      },
+      {
+        "line": 65,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 66,
+        "source": "setError(apiError(e));"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Wallet/Profile payment",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: Stripe test keys; setup callback device acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Google Pay",
+    "COMPONENT": "frontend/src/lib/nativePayment.native.ts",
+    "USER ACTION": "Confirm Google Pay test payment",
+    "ROUTE": "/receipt/[tripId]",
+    "API CALL": "paymentApi.nativeConfig paymentApi.nativeIntent paymentApi.nativeStatus",
+    "BACKEND ENDPOINT": [
+      "GET /api/payments/native/config",
+      "GET /api/payments/native/intent/{intent_id}",
+      "POST /api/payments/native/intent"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 5,
+        "source": "// never open a second payment flow automatically, even after a network error."
+      },
+      {
+        "line": 8,
+        "source": "if (!config.enabled) throw new Error('Testbetaling er midlertidig utilgjengelig. Pr\u00f8v igjen senere.');"
+      },
+      {
+        "line": 9,
+        "source": "if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');"
+      },
+      {
+        "line": 14,
+        "source": "if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');"
+      },
+      {
+        "line": 22,
+        "source": "if (initialized.error) throw new Error(initialized.error.message);"
+      },
+      {
+        "line": 24,
+        "source": "if (result.error) {"
+      },
+      {
+        "line": 25,
+        "source": "if (result.error.code === 'Canceled') return false;"
+      },
+      {
+        "line": 26,
+        "source": "throw new Error(result.error.message);"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Wallet",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: keys + enable test Google Pay; Android physical payment",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Apple Pay",
+    "COMPONENT": "frontend/src/lib/nativePayment.native.ts",
+    "USER ACTION": "Confirm Apple Pay test payment",
+    "ROUTE": "/receipt/[tripId]",
+    "API CALL": "paymentApi.nativeConfig paymentApi.nativeIntent paymentApi.nativeStatus",
+    "BACKEND ENDPOINT": [
+      "GET /api/payments/native/config",
+      "GET /api/payments/native/intent/{intent_id}",
+      "POST /api/payments/native/intent"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 5,
+        "source": "// never open a second payment flow automatically, even after a network error."
+      },
+      {
+        "line": 8,
+        "source": "if (!config.enabled) throw new Error('Testbetaling er midlertidig utilgjengelig. Pr\u00f8v igjen senere.');"
+      },
+      {
+        "line": 9,
+        "source": "if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');"
+      },
+      {
+        "line": 14,
+        "source": "if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');"
+      },
+      {
+        "line": 22,
+        "source": "if (initialized.error) throw new Error(initialized.error.message);"
+      },
+      {
+        "line": 24,
+        "source": "if (result.error) {"
+      },
+      {
+        "line": 25,
+        "source": "if (result.error.code === 'Canceled') return false;"
+      },
+      {
+        "line": 26,
+        "source": "throw new Error(result.error.message);"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Wallet",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: Merchant ID/certificate/entitlement; iOS physical payment",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Stripe card",
+    "COMPONENT": "frontend/src/lib/nativePayment.native.ts",
+    "USER ACTION": "Present PaymentSheet test card",
+    "ROUTE": "/receipt/[tripId]",
+    "API CALL": "paymentApi.nativeConfig paymentApi.nativeIntent paymentApi.nativeStatus",
+    "BACKEND ENDPOINT": [
+      "GET /api/payments/native/config",
+      "GET /api/payments/native/intent/{intent_id}",
+      "POST /api/payments/native/intent"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 5,
+        "source": "// never open a second payment flow automatically, even after a network error."
+      },
+      {
+        "line": 8,
+        "source": "if (!config.enabled) throw new Error('Testbetaling er midlertidig utilgjengelig. Pr\u00f8v igjen senere.');"
+      },
+      {
+        "line": 9,
+        "source": "if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');"
+      },
+      {
+        "line": 14,
+        "source": "if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');"
+      },
+      {
+        "line": 22,
+        "source": "if (initialized.error) throw new Error(initialized.error.message);"
+      },
+      {
+        "line": 24,
+        "source": "if (result.error) {"
+      },
+      {
+        "line": 25,
+        "source": "if (result.error.code === 'Canceled') return false;"
+      },
+      {
+        "line": 26,
+        "source": "throw new Error(result.error.message);"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Wallet/Receipt",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "P0: keys; webhook success/duplicate/status reconciliation",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Receipt",
+    "COMPONENT": "frontend/app/receipt/[tripId].tsx",
+    "USER ACTION": "Read server receipt / pay / email",
+    "ROUTE": "/receipt/[tripId]",
+    "API CALL": "tripsApi.get paymentApi.checkout paymentApi.checkoutStatus",
+    "BACKEND ENDPOINT": [
+      "GET /api/payments/status/{session_id}",
+      "GET /api/trips/{trip_id}",
+      "POST /api/payments/checkout"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 9,
+        "source": "import { Button, Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 138,
+        "source": "<View style={s.loading} testID=\"receipt-load-error\">"
+      },
+      {
+        "line": 148,
+        "source": "return <View style={s.loading}><Loader label=\"Henter kvittering\u2026\" /></View>;"
+      },
+      {
+        "line": 172,
+        "source": "<View style={[s.statusCheck, !isPaid && s.pendingCircle]}>"
+      },
+      {
+        "line": 211,
+        "source": "{!automaticPayment ? <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID=\"receipt-pay\" style={{ marginTop: 16 }} /> : null}"
+      },
+      {
+        "line": 254,
+        "source": "loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },"
+      },
+      {
+        "line": 264,
+        "source": "pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 111,
+        "source": "if (!nativeResult) setPaymentError('Betalingen er ikke bekreftet. Du kan \u00e5pne betalingen igjen eller sjekke status.');"
+      },
+      {
+        "line": 125,
+        "source": "setPaymentError('Betalingen er ikke bekreftet enn\u00e5. Hvis du betalte, vent noen sekunder og pr\u00f8v \u00abSjekk betaling\u00bb.');"
+      },
+      {
+        "line": 141,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt og pr\u00f8v igjen. Ingen betaling startes p\u00e5 nytt automatisk.</Text>"
+      },
+      {
+        "line": 242,
+        "source": "<Text style={s.ratingLocked}>Vurdering \u00e5pnes n\u00e5r betalingen er bekreftet.</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 12,
+        "source": "import { apiError, kr, vehicleMeta } from '@/src/lib/format';"
+      },
+      {
+        "line": 26,
+        "source": "const [paymentError, setPaymentError] = useState('');"
+      },
+      {
+        "line": 27,
+        "source": "const [loadError, setLoadError] = useState(false);"
+      },
+      {
+        "line": 34,
+        "source": "setLoadError(false);"
+      },
+      {
+        "line": 40,
+        "source": "} catch {"
+      },
+      {
+        "line": 41,
+        "source": "setLoadError(true);"
+      },
+      {
+        "line": 59,
+        "source": "} catch {}"
+      },
+      {
+        "line": 78,
+        "source": "} catch {"
+      },
+      {
+        "line": 94,
+        "source": "} catch {}"
+      },
+      {
+        "line": 105,
+        "source": "setPaymentError('');"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Receipt",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Real settled trip/receipt; email sender missing",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Rating",
+    "COMPONENT": "frontend/app/receipt/[tripId].tsx",
+    "USER ACTION": "Submit score/comment",
+    "ROUTE": "/receipt/[tripId]",
+    "API CALL": "tripsApi.rate",
+    "BACKEND ENDPOINT": [
+      "POST /api/trips/{trip_id}/rate"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 9,
+        "source": "import { Button, Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 138,
+        "source": "<View style={s.loading} testID=\"receipt-load-error\">"
+      },
+      {
+        "line": 148,
+        "source": "return <View style={s.loading}><Loader label=\"Henter kvittering\u2026\" /></View>;"
+      },
+      {
+        "line": 172,
+        "source": "<View style={[s.statusCheck, !isPaid && s.pendingCircle]}>"
+      },
+      {
+        "line": 211,
+        "source": "{!automaticPayment ? <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID=\"receipt-pay\" style={{ marginTop: 16 }} /> : null}"
+      },
+      {
+        "line": 254,
+        "source": "loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },"
+      },
+      {
+        "line": 264,
+        "source": "pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 111,
+        "source": "if (!nativeResult) setPaymentError('Betalingen er ikke bekreftet. Du kan \u00e5pne betalingen igjen eller sjekke status.');"
+      },
+      {
+        "line": 125,
+        "source": "setPaymentError('Betalingen er ikke bekreftet enn\u00e5. Hvis du betalte, vent noen sekunder og pr\u00f8v \u00abSjekk betaling\u00bb.');"
+      },
+      {
+        "line": 141,
+        "source": "<Text style={s.loadErrorSub}>Sjekk nettet ditt og pr\u00f8v igjen. Ingen betaling startes p\u00e5 nytt automatisk.</Text>"
+      },
+      {
+        "line": 242,
+        "source": "<Text style={s.ratingLocked}>Vurdering \u00e5pnes n\u00e5r betalingen er bekreftet.</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 12,
+        "source": "import { apiError, kr, vehicleMeta } from '@/src/lib/format';"
+      },
+      {
+        "line": 26,
+        "source": "const [paymentError, setPaymentError] = useState('');"
+      },
+      {
+        "line": 27,
+        "source": "const [loadError, setLoadError] = useState(false);"
+      },
+      {
+        "line": 34,
+        "source": "setLoadError(false);"
+      },
+      {
+        "line": 40,
+        "source": "} catch {"
+      },
+      {
+        "line": 41,
+        "source": "setLoadError(true);"
+      },
+      {
+        "line": 59,
+        "source": "} catch {}"
+      },
+      {
+        "line": 78,
+        "source": "} catch {"
+      },
+      {
+        "line": 94,
+        "source": "} catch {}"
+      },
+      {
+        "line": 105,
+        "source": "setPaymentError('');"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Receipt",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Duplicate/backend persistence/clean home acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Activity/history",
+    "COMPONENT": "frontend/app/(app)/history.tsx",
+    "USER ACTION": "List/filter and open real trip",
+    "ROUTE": "/(app)/history",
+    "API CALL": "tripsApi.list",
+    "BACKEND ENDPOINT": [
+      "GET /api/trips"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 10,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 29,
+        "source": "const { data, isLoading, isError, refetch, isRefetching } = useQuery({"
+      },
+      {
+        "line": 47,
+        "source": "{isLoading ? ("
+      },
+      {
+        "line": 48,
+        "source": "<View style={s.center}><Loader label=\"Henter turer\u2026\" /></View>"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 52,
+        "source": "<Text style={s.emptyText}>Kunne ikke hente turhistorikken.</Text>"
+      },
+      {
+        "line": 63,
+        "source": "ListEmptyComponent={"
+      },
+      {
+        "line": 66,
+        "source": "<Text style={s.emptyText}>Ingen turer enn\u00e5.</Text>"
+      },
+      {
+        "line": 113,
+        "source": "emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center' },"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 29,
+        "source": "const { data, isLoading, isError, refetch, isRefetching } = useQuery({"
+      },
+      {
+        "line": 49,
+        "source": ") : isError ? ("
+      },
+      {
+        "line": 50,
+        "source": "<View style={s.center} testID=\"history-load-error\">"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Activity",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Completed/live/cancelled route runtime acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Profile",
+    "COMPONENT": "frontend/app/(app)/profile.tsx",
+    "USER ACTION": "Open details / Google link / logout",
+    "ROUTE": "/(app)/profile",
+    "API CALL": "authApi.linkGoogle authApi.logout",
+    "BACKEND ENDPOINT": [
+      "POST /api/auth/google/link",
+      "POST /api/auth/logout"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 32,
+        "source": "const [googleBusy, setGoogleBusy] = useState(false);"
+      },
+      {
+        "line": 35,
+        "source": "googleLock.current = true; setGoogleBusy(true); setGoogleError('');"
+      },
+      {
+        "line": 42,
+        "source": "finally { googleLock.current = false; setGoogleBusy(false); }"
+      },
+      {
+        "line": 88,
+        "source": "{Platform.OS !== 'web' ? <Pressable testID=\"profile-link-google\" accessibilityRole=\"button\" disabled={googleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? "
+      },
+      {
+        "line": 131,
+        "source": "loading={deleting}"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 13,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 28,
+        "source": "const [deleteError, setDeleteError] = useState('');"
+      },
+      {
+        "line": 31,
+        "source": "const [googleError, setGoogleError] = useState('');"
+      },
+      {
+        "line": 35,
+        "source": "googleLock.current = true; setGoogleBusy(true); setGoogleError('');"
+      },
+      {
+        "line": 39,
+        "source": "if (typeof identity !== 'string') throw new Error('Kontokobling m\u00e5 gj\u00f8res i mobilappen.');"
+      },
+      {
+        "line": 41,
+        "source": "} catch (error) { setGoogleError(apiError(error)); }"
+      },
+      {
+        "line": 61,
+        "source": "setDeleteError('');"
+      },
+      {
+        "line": 66,
+        "source": "} catch {"
+      },
+      {
+        "line": 67,
+        "source": "setDeleteError('Kunne ikke slette kontoen akkurat n\u00e5. Pr\u00f8v igjen.');"
+      },
+      {
+        "line": 89,
+        "source": "{googleError ? <Text testID=\"profile-link-google-error\" accessibilityRole=\"alert\" style={{ color: colors.danger }}>{googleError}</Text> : null}"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Profile",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Identity error branding updated; live link/device layout pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Customer profile picture",
+    "COMPONENT": "frontend/src/components/CustomerPhoto.tsx",
+    "USER ACTION": "Camera/gallery/crop/upload/replace/delete",
+    "ROUTE": "/(app)/profile",
+    "API CALL": "customerProfileApi.uploadPhoto customerProfileApi.photoSource customerProfileApi.deletePhoto",
+    "BACKEND ENDPOINT": [
+      "DELETE /api/me/profile-photo",
+      "GET /api/me/profile-photo"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 2,
+        "source": "import { ActivityIndicator, Image, Modal, Platform, Pressable, View } from 'react-native';"
+      },
+      {
+        "line": 15,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 37,
+        "source": "setBusy(true); setProgress(0);"
+      },
+      {
+        "line": 44,
+        "source": "finally { lock.current = false; if (mounted.current) setBusy(false); }"
+      },
+      {
+        "line": 48,
+        "source": "lock.current = true; setChoosing(false); setBusy(true); setError('');"
+      },
+      {
+        "line": 51,
+        "source": "finally { lock.current = false; if (mounted.current) setBusy(false); }"
+      },
+      {
+        "line": 55,
+        "source": "<Pressable accessibilityRole=\"button\" accessibilityLabel=\"Endre profilbilde\" testID=\"profile-photo-edit\" disabled={busy} onPress={() => setChoosing(true)}>"
+      },
+      {
+        "line": 58,
+        "source": "{busy ? <><ActivityIndicator color={colors.accent} /><Text>{progress}%</Text></> : <Text style={{ fontSize: 10, color: colors.textSecondary }}>Endre bilde</Text>}"
+      }
+    ],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 6,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 17,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 29,
+        "source": "lock.current = true; setChoosing(false); setError('');"
+      },
+      {
+        "line": 31,
+        "source": "if (camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) throw new Error('Tillat kamera i innstillingene for \u00e5 ta et bilde.');"
+      },
+      {
+        "line": 36,
+        "source": "if ((asset.fileSize || 0) > 5 * 1024 * 1024) throw new Error('Bildet kan v\u00e6re maks 5 MB.');"
+      },
+      {
+        "line": 43,
+        "source": "} catch (e) { if (mounted.current) setError(apiError(e)); }"
+      },
+      {
+        "line": 48,
+        "source": "lock.current = true; setChoosing(false); setBusy(true); setError('');"
+      },
+      {
+        "line": 50,
+        "source": "catch (e) { if (mounted.current) setError(apiError(e)); }"
+      },
+      {
+        "line": 56,
+        "source": "{source ? <Image source={source} style={avatarStyle} onError={() => setSource(null)} /> : <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={[avatarStyle, { alignItems: 'center', justifyContent: 'center' }]}><Text sty"
+      },
+      {
+        "line": 59,
+        "source": "{error ? <Text testID=\"profile-photo-error\" accessibilityRole=\"alert\" style={{ fontSize: 11, color: colors.danger }}>{error}</Text> : null}"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Profile avatar",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Protected backend tests PASS; camera and authenticated native Image/device reload pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Privacy/GDPR export/delete",
+    "COMPONENT": "frontend/src/components/CustomerProfileDetails.tsx",
+    "USER ACTION": "Export actual JSON / confirmed erasure",
+    "ROUTE": "/(app)/profile -> /settings",
+    "API CALL": "gdprApi.export gdprApi.delete",
+    "BACKEND ENDPOINT": [
+      "DELETE /api/gdpr/delete",
+      "GET /api/gdpr/export"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [
+      {
+        "line": 59,
+        "source": "<Text testID=\"customer-src-components-CustomerProfileDetails-59\" style={[s.note, { marginTop: 4, textAlign: 'center', fontSize: 10 }]} onPress={() => void Linking.openURL('https://kjappapp.no/personvern')}>Les personvern"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 10,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 17,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 24,
+        "source": "setExporting(true); setError('');"
+      },
+      {
+        "line": 29,
+        "source": "catch (e) { if (active.current) setError(apiError(e)); }"
+      },
+      {
+        "line": 58,
+        "source": "{error ? <Text style={s.error} accessibilityRole=\"alert\">{error}</Text> : null}"
+      },
+      {
+        "line": 84,
+        "source": "note: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 }, error: { fontSize: 12, color: colors.danger },"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Profile privacy",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Photo included and auth-scoped in tests; OS export sharing/erasure acceptance pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Settings",
+    "COMPONENT": "frontend/app/settings.tsx",
+    "USER ACTION": "Read/update server settings / export/delete",
+    "ROUTE": "/settings",
+    "API CALL": "settingsApi.get settingsApi.update gdprApi.export gdprApi.delete",
+    "BACKEND ENDPOINT": [
+      "DELETE /api/gdpr/delete",
+      "GET /api/gdpr/export",
+      "GET /api/settings",
+      "PATCH /api/settings"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 11,
+        "source": "import { Button, Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 136,
+        "source": "<View style={{ paddingTop: 60 }}>{!settingsError ? <Loader /> : null}</View>"
+      },
+      {
+        "line": 180,
+        "source": "{exporting ? <Loader /> : <Icon name=\"chevron-right\" size={18} color={colors.textMuted} />}"
+      },
+      {
+        "line": 211,
+        "source": "loading={deleting}"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 81,
+        "source": "setExportInfo('Datafilen ble opprettet, men delingen kunne ikke \u00e5pnes. Pr\u00f8v igjen.');"
+      },
+      {
+        "line": 120,
+        "source": "catch { setSettings(previous); setSettingsError('Endringen ble ikke lagret. Pr\u00f8v igjen n\u00e5r forbindelsen er tilbake.'); }"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 26,
+        "source": "const [settingsError, setSettingsError] = useState('');"
+      },
+      {
+        "line": 30,
+        "source": "const [deleteError, setDeleteError] = useState('');"
+      },
+      {
+        "line": 79,
+        "source": "} catch (sharingError) {"
+      },
+      {
+        "line": 80,
+        "source": "console.warn('GDPR file sharing failed:', sharingError);"
+      },
+      {
+        "line": 83,
+        "source": "} catch (error) {"
+      },
+      {
+        "line": 84,
+        "source": "console.warn('GDPR export failed:', error);"
+      },
+      {
+        "line": 94,
+        "source": "deleteLock.current = true; setDeleteError('');"
+      },
+      {
+        "line": 100,
+        "source": "} catch {"
+      },
+      {
+        "line": 101,
+        "source": "setDeleteError('Kunne ikke slette kontoen. Pr\u00f8v igjen n\u00e5r forbindelsen er tilbake.');"
+      },
+      {
+        "line": 107,
+        "source": "setSettingsError('');"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Profile safety/privacy/language",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Network error/retry and update rollback implemented; persistence device acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Support",
+    "COMPONENT": "frontend/src/components/CustomerSupport.tsx",
+    "USER ACTION": "AI question / human escalation",
+    "ROUTE": "/(app)/profile",
+    "API CALL": "aiApi.chat api.post",
+    "BACKEND ENDPOINT": [
+      "POST /api/ai/chat"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 2,
+        "source": "import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';"
+      },
+      {
+        "line": 28,
+        "source": "const [busy, setBusy] = useState(false);"
+      },
+      {
+        "line": 36,
+        "source": "requestLock.current = true; setBusy(true); setError(''); setInput('');"
+      },
+      {
+        "line": 45,
+        "source": "finally { requestLock.current = false; if (active.current) setBusy(false); }"
+      },
+      {
+        "line": 52,
+        "source": "requestLock.current = true; setBusy(true); setError('');"
+      },
+      {
+        "line": 61,
+        "source": "finally { requestLock.current = false; if (active.current) setBusy(false); }"
+      },
+      {
+        "line": 69,
+        "source": "<View><Text style={s.title}>Kundest\u00f8tte</Text><Text style={s.status}>\u25cf SNAR AI{busy ? ' \u00b7 SVARER N\u00c5' : ''}</Text></View>"
+      },
+      {
+        "line": 72,
+        "source": "<View style={s.chips}>{FAQ.map(question => <Pressable testID=\"customer-src-components-CustomerSupport-72\" key={question} onPress={() => void send(question)} disabled={busy} style={({ pressed }) => [s.chip, pressed && { t"
+      },
+      {
+        "line": 77,
+        "source": "{busy && <ActivityIndicator style={{ alignSelf: 'flex-start', marginLeft: 14 }} color={colors.accent} />}"
+      },
+      {
+        "line": 91,
+        "source": "<Pressable onPress={() => void send()} disabled={busy || !input.trim()} accessibilityRole=\"button\" accessibilityLabel=\"Send til AI-assistent\" style={({ pressed }) => [{ opacity: busy || !input.trim() ? 0.55 : 1 }, presse"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 41,
+        "source": "if (typeof result.reply !== 'string' || !result.reply.trim()) throw new Error('Ingen svar mottatt. Pr\u00f8v igjen.');"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 10,
+        "source": "import { apiError } from '@/src/lib/format';"
+      },
+      {
+        "line": 29,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 36,
+        "source": "requestLock.current = true; setBusy(true); setError(''); setInput('');"
+      },
+      {
+        "line": 41,
+        "source": "if (typeof result.reply !== 'string' || !result.reply.trim()) throw new Error('Ingen svar mottatt. Pr\u00f8v igjen.');"
+      },
+      {
+        "line": 44,
+        "source": "} catch (e) { if (active.current) setError(apiError(e)); }"
+      },
+      {
+        "line": 50,
+        "source": "if (text.length < 10) { setError('Skriv minst 10 tegn om hva du trenger hjelp med.'); return; }"
+      },
+      {
+        "line": 51,
+        "source": "if (!user?.email && !user?.phone) { setError('Legg til kontaktinformasjon f\u00f8r du sender en henvendelse.'); return; }"
+      },
+      {
+        "line": 52,
+        "source": "requestLock.current = true; setBusy(true); setError('');"
+      },
+      {
+        "line": 56,
+        "source": "if (!result.data?.ok || !result.data?.ticket_id) throw new Error('Henvendelsen kunne ikke bekreftes.');"
+      },
+      {
+        "line": 60,
+        "source": "} catch (e) { if (active.current) setError(apiError(e)); }"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Support",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Replies/ticket IDs use server; reward redemption unavailable, explicitly reported by UI",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Notifications/push",
+    "COMPONENT": "frontend/src/lib/nativeRuntime.ts",
+    "USER ACTION": "Register OS push token and react to events",
+    "ROUTE": "all authenticated Customer routes",
+    "API CALL": "api.post",
+    "BACKEND ENDPOINT": [],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 53,
+        "source": "} catch {"
+      },
+      {
+        "line": 71,
+        "source": "} catch {"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Permissions",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Physical FCM/APNs permission/token/delivery/background acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Offline/network errors",
+    "COMPONENT": "frontend/src/context/AuthContext.tsx",
+    "USER ACTION": "Retry cold session / reconcile trip/payment",
+    "ROUTE": "all Customer routes",
+    "API CALL": "authApi.me tripsApi.active paymentApi.nativeStatus",
+    "BACKEND ENDPOINT": [
+      "GET /api/auth/me",
+      "GET /api/payments/native/intent/{intent_id}",
+      "GET /api/trips/active"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 22,
+        "source": "user: User | undefined; // undefined = loading, null = signed out"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 75,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 79,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 87,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');"
+      },
+      {
+        "line": 90,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');"
+      },
+      {
+        "line": 110,
+        "source": "if (!res.token || res.user?.role !== 'user') throw new Error('Innloggingen kunne ikke bekreftes.');"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 21,
+        "source": "sessionError: string;"
+      },
+      {
+        "line": 36,
+        "source": "const [sessionError, setSessionError] = useState('');"
+      },
+      {
+        "line": 41,
+        "source": "setSessionError('');"
+      },
+      {
+        "line": 58,
+        "source": "} catch (error: any) {"
+      },
+      {
+        "line": 60,
+        "source": "if (error?.response?.status === 401) {"
+      },
+      {
+        "line": 65,
+        "source": "setSessionError('Kan ikke kontakte SNAR. Sjekk forbindelsen og pr\u00f8v igjen.');"
+      },
+      {
+        "line": 75,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 77,
+        "source": "if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i SNAR kundeappen.');"
+      },
+      {
+        "line": 79,
+        "source": "if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');"
+      },
+      {
+        "line": 80,
+        "source": "setSessionError(''); setUser(res.user);"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "No dedicated Make screen",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Offline cold retry and stale refresh/401 after new login PASS locally; logout remote cleanup preserves old token; physical outage sequence pending",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Profile setup",
+    "COMPONENT": "frontend/app/profile-setup.tsx",
+    "USER ACTION": "Open payment/address setup and finish",
+    "ROUTE": "/profile-setup",
+    "API CALL": "paymentApi.list mePlacesApi.list",
+    "BACKEND ENDPOINT": [
+      "GET /api/me/places",
+      "GET /api/payment-methods"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "ProfileSetup",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Real onboarding resume/required data runtime acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Wallet",
+    "COMPONENT": "frontend/app/(app)/wallet.tsx",
+    "USER ACTION": "Inspect balance/receipts and add card",
+    "ROUTE": "/(app)/wallet",
+    "API CALL": "paymentApi.list",
+    "BACKEND ENDPOINT": [
+      "GET /api/payment-methods"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [],
+    "EMPTY STATE": [],
+    "ERROR STATE": [
+      {
+        "line": 21,
+        "source": "}).catch(() => {});"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Wallet",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Configure Stripe; compare device Wallet screenshot",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Assist",
+    "COMPONENT": "frontend/app/(app)/assist.tsx",
+    "USER ACTION": "Send text/voice destination request",
+    "ROUTE": "/(app)/assist",
+    "API CALL": "aiApi.chat aiApi.transcribe",
+    "BACKEND ENDPOINT": [
+      "POST /api/ai/chat",
+      "POST /api/ai/transcribe"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 3,
+        "source": "import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';"
+      },
+      {
+        "line": 465,
+        "source": "{sending ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmBtnText}>Bekreft SNAR</Text>}"
+      },
+      {
+        "line": 471,
+        "source": "<View style={s.loadingRow}>"
+      },
+      {
+        "line": 472,
+        "source": "<ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 473,
+        "source": "<Text style={s.loadingText}>Henter data\u2026</Text>"
+      },
+      {
+        "line": 490,
+        "source": "? <ActivityIndicator color={colors.accent} />"
+      },
+      {
+        "line": 586,
+        "source": "loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: 12 },"
+      },
+      {
+        "line": 587,
+        "source": "loadingText: { color: c.textMuted, fontSize: 12 },"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 180,
+        "source": "if (!places.length) add({ role: 'assistant', content: 'Ingen sikre treff. Pr\u00f8v et mer presist gatenavn eller sted.' });"
+      },
+      {
+        "line": 365,
+        "source": "onPress={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }}"
+      },
+      {
+        "line": 423,
+        "source": "{step === 'category' && visibleOptions.length ? ("
+      },
+      {
+        "line": 463,
+        "source": "<Text style={s.confirmHint}>Ingen tur opprettes f\u00f8r du trykker bekreft.</Text>"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 19,
+        "source": "import { apiError, kr } from '@/src/lib/format';"
+      },
+      {
+        "line": 75,
+        "source": "const [error, setError] = useState('');"
+      },
+      {
+        "line": 91,
+        "source": "setError('');"
+      },
+      {
+        "line": 107,
+        "source": "} catch {}"
+      },
+      {
+        "line": 115,
+        "source": "setError('');"
+      },
+      {
+        "line": 124,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 125,
+        "source": "add({ role: 'assistant', content: apiError(e) });"
+      },
+      {
+        "line": 134,
+        "source": "setError('');"
+      },
+      {
+        "line": 161,
+        "source": "} catch (e) {"
+      },
+      {
+        "line": 162,
+        "source": "add({ role: 'assistant', content: apiError(e) });"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "Support AI",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Actual model/transcription permissions/runtime acceptance",
+    "ACTION INVENTORY IDS": []
+  },
+  {
+    "SCREEN": "Payment callbacks",
+    "COMPONENT": "frontend/app/payment/success.tsx",
+    "USER ACTION": "Reconcile Checkout result",
+    "ROUTE": "/payment/success and /payment/cancel",
+    "API CALL": "paymentApi.checkoutStatus paymentApi.cardSetupStatus",
+    "BACKEND ENDPOINT": [
+      "GET /api/payments/card/setup/{session_id}",
+      "GET /api/payments/status/{session_id}"
+    ],
+    "AUTH REQUIREMENT": "customer bearer session; backend role/ownership gates where applicable",
+    "LOADING STATE": [
+      {
+        "line": 9,
+        "source": "import { Loader } from '@/src/components/ui';"
+      },
+      {
+        "line": 65,
+        "source": "<Loader label={message} />"
+      }
+    ],
+    "EMPTY STATE": [
+      {
+        "line": 43,
+        "source": "setMessage('Betalingen ble ikke fullf\u00f8rt.');"
+      },
+      {
+        "line": 52,
+        "source": "setMessage('Betalingen er ikke bekreftet enn\u00e5. G\u00e5 tilbake til kvitteringen og sjekk p\u00e5 nytt \u2014 turen forblir \u00e5pen til serveren bekrefter betalingen.');"
+      }
+    ],
+    "ERROR STATE": [
+      {
+        "line": 47,
+        "source": "} catch {}"
+      }
+    ],
+    "OFFLINE/NETWORK STATE": "Source evidence in ERROR STATE; physical network interruption unverified",
+    "SUCCESS STATE": "Server result/navigation in source; authenticated device sequence unverified",
+    "FIGMA PARITY": {
+      "status": "PARTIAL",
+      "reference": "No dedicated Make screen",
+      "source": "latest attached Revolutionary AI Taxi App Design (3).zip; src/apps/CustomerApp.tsx / src/screens",
+      "limitation": "No native screenshot/device comparison; additional real backend states are requirements beyond prototype"
+    },
+    "STATUS": "PARTIAL",
+    "FIX REQUIRED": "Native external-browser return/deep-link/cancel acceptance",
+    "ACTION INVENTORY IDS": []
+  }
+]

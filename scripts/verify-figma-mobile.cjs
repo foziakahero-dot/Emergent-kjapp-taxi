@@ -41,6 +41,9 @@ function load(app, file) {
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
     if (stubs.has(name)) return stubs.get(name);
+    if (app === 'frontend' && name === './api' && absolute.endsWith(path.join('frontend', 'src', 'lib', 'useAvailableCars.ts'))) {
+      return { carsApi: { nearby: async () => ({ cars: [] }) } };
+    }
     if (name === 'react') return React;
     if (name.startsWith('./')) { const target = path.relative(path.join(root, app), path.resolve(path.dirname(absolute), name)); return load(app, fs.existsSync(path.join(root, app, target + '.tsx')) ? target + '.tsx' : target + '.ts'); }
     if (name === 'react/jsx-runtime') return customerRequire(name);
@@ -75,7 +78,7 @@ const act = renderer.act;
   for (const app of ['frontend', 'driver-app']) {
     const { font, FONT_ASSETS } = load(app, 'src/theme.ts');
     const { resolveFont, Text } = load(app, 'src/components/Typography.tsx');
-    for (const [weight, family] of [[300, 'Inter_300Light'], [400, font.body], [500, font.medium], [600, font.semibold], [700, font.bold], [800, font.extraBold]]) {
+    for (const [weight, family] of [[300, font.light], [400, font.body], [500, font.medium], [600, font.semibold], [700, font.bold], [800, font.extraBold]]) {
       assert.equal(resolveFont({ fontWeight: String(weight) }).fontFamily, family);
       assert.ok(FONT_ASSETS[family], `${app} must load ${family}`);
     }
@@ -99,6 +102,65 @@ const act = renderer.act;
       assert.ok(Math.abs(dx * -Math.cos(angle * Math.PI / 180) - dy * Math.sin(angle * Math.PI / 180)) < 1e-9, 'CSS gradient angle must survive non-square layouts');
     }
   }
+  stubs.set('expo-blur', { BlurTargetView: 'BlurTargetView', BlurView: 'BlurView' });
+  const { FloatingTabBar, TabBarVisibilityProvider, useHideTabBar } = load('frontend', 'src/components/FloatingTabBar.tsx');
+  const tabRoutes = ['home', 'history', 'assist', 'messages', 'profile', 'wallet'].map(name => ({ name, key: `route-${name}` }));
+  const tabCalls = [];
+  const tabProps = {
+    state: { index: 0, routes: tabRoutes },
+    descriptors: Object.fromEntries(tabRoutes.map(route => [route.key, { options: { title: route.name } }])),
+    navigation: {
+      emit: event => { tabCalls.push(event); return { defaultPrevented: false }; },
+      navigate: (...args) => tabCalls.push(args),
+    },
+  };
+  let tabBar;
+  await act(async () => { tabBar = renderer.create(React.createElement(FloatingTabBar, tabProps)); });
+  assert.equal(tabBar.root.findAllByProps({ accessibilityRole: 'tab' }).length, 5, 'Customer dock must expose the five approved routes');
+  assert.equal(tabBar.root.findAllByProps({ testID: 'tab-wallet' }).length, 0, 'Wallet remains reachable through its supported route, not a dock item');
+  const assistantTab = tabBar.root.findByProps({ testID: 'tab-assist' });
+  assert.equal(assistantTab.findByType('View').props.style.width, 52, 'SNAR AI uses the approved inverse 52px dock tile');
+  assert.equal(assistantTab.findAllByType('NativeText').length, 0, 'SNAR AI tile is icon-only like the approved dock');
+  await act(async () => tabBar.root.findByProps({ testID: 'tab-messages' }).props.onPress());
+  assert.ok(tabCalls.some(call => Array.isArray(call) && call[0] === 'messages'), 'Messages dock item navigates to its supported route');
+  await act(async () => tabBar.unmount());
+  function HideCustomerTabBar() { useHideTabBar(true); return null; }
+  let hiddenTabBar;
+  await act(async () => {
+    hiddenTabBar = renderer.create(React.createElement(TabBarVisibilityProvider, null,
+      React.createElement(React.Fragment, null, React.createElement(HideCustomerTabBar), React.createElement(FloatingTabBar, tabProps))));
+  });
+  assert.equal(hiddenTabBar.root.findAllByProps({ accessibilityRole: 'tab' }).length, 0, 'A screen requesting a hidden dock must not leave the dock visible');
+  await act(async () => hiddenTabBar.unmount());
+  native.Modal = 'Modal';
+  const profileRoutes = [];
+  stubs.set('@/src/components/CustomerPhoto', { CustomerPhoto: 'CustomerPhoto' });
+  stubs.set('@/src/components/FigmaGradient', { FigmaGradient: 'Gradient' });
+  stubs.set('@/src/components/CustomerSupport', { CustomerSupport: 'CustomerSupport' });
+  stubs.set('@/src/components/CustomerProfileDetails', { CustomerProfileDetails: 'CustomerProfileDetails' });
+  stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: { id: 'customer-1', fullName: 'Test Customer', email: 'test@example.test' }, logout: async () => {}, refresh: async () => {} }) });
+  stubs.set('expo-router', { useRouter: () => ({ push: route => profileRoutes.push(route), replace: () => {}, back: () => {} }) });
+  stubs.set('@/src/lib/socialSignIn', { googleIdentity: async () => null });
+  stubs.set('@/src/lib/api', { authApi: { nativeConfig: async () => ({}), linkGoogle: async () => {} }, gdprApi: { delete: async () => {} } });
+  const CustomerProfile = load('frontend', 'app/(app)/profile.tsx').default;
+  let customerProfile;
+  await act(async () => { customerProfile = renderer.create(React.createElement(CustomerProfile)); });
+  await act(async () => customerProfile.root.findByProps({ testID: 'profile-settings' }).props.onPress());
+  assert.deepEqual(profileRoutes, ['/settings'], 'Customer Profile must expose the existing account settings route');
+  await act(async () => customerProfile.unmount());
+  const onboardingRoutes = [];
+  stubs.set('@/src/components/SplashArt', { SplashBackground: 'SplashBackground', SplashBrand: 'SplashBrand' });
+  stubs.set('@/src/components/KjappMark', { KjappMark: 'KjappMark' });
+  stubs.set('@/src/components/Icon', { Icon: 'Icon' });
+  stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: null, logout: async () => {} }) });
+  stubs.set('expo-router', { useRouter: () => ({ push: route => onboardingRoutes.push(route), replace: () => {}, back: () => {} }) });
+  const CustomerIndex = load('frontend', 'app/index.tsx').default;
+  let onboarding;
+  await act(async () => { onboarding = renderer.create(React.createElement(CustomerIndex)); });
+  await act(async () => onboarding.root.findByProps({ testID: 'onboarding-next' }).props.onPress());
+  await act(async () => onboarding.root.findByProps({ testID: 'onboarding-login' }).props.onPress());
+  assert.deepEqual(onboardingRoutes, ['/permissions', '/login'], 'Customer onboarding preserves permission requests and existing login');
+  await act(async () => onboarding.unmount());
   const motion = load('driver-app', 'src/components/Motion.tsx');
   function Preference() { return React.createElement('Preference', { reduced: motion.useReducedMotion() }); }
   let preferences;
@@ -271,10 +333,14 @@ const act = renderer.act;
   const dialogs = [], callsToDialer = [];
   native.Share = { share: async () => ({}) }; native.Alert = { alert: (...args) => dialogs.push(args) };
   native.Linking = { openURL: async url => { callsToDialer.push(url); } };
-  let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
+  let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, dropoff_address: 'Fixture destination', driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
   const navigations = [];
   const bookingRouter = { replace: url => navigations.push(url) };
-  stubs.set('expo-router', { useLocalSearchParams: () => ({ tripId: 'unit-trip' }), useRouter: () => bookingRouter });
+  stubs.set('expo-router', {
+    useLocalSearchParams: () => ({ tripId: 'unit-trip' }),
+    useRouter: () => bookingRouter,
+    useFocusEffect: effect => React.useEffect(effect, [effect]),
+  });
   let cancelRequests = 0, previews = 0, cancellationMode = 'reject', shareRequests = 0, safetyMode = 'reject';
   stubs.set('@/src/lib/api', {
     tripsApi: { get: async () => serverTrip, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
@@ -284,6 +350,7 @@ const act = renderer.act;
     tripDriverPhotoSource: async () => ({ uri: 'fixture' }),
   });
   stubs.set('@/src/components/Map', { Map: 'Map' });
+  stubs.set('@/src/components/AvailabilityStatus', { AvailabilityStatus: 'AvailabilityStatus' });
   stubs.set('@/src/components/ChatSheet', { ChatSheet: 'ChatSheet' });
   const Booking = load('frontend', 'app/booking/[tripId].tsx').default;
   let booking;
@@ -314,6 +381,8 @@ const act = renderer.act;
   // Sharing/report errors stay visible; double taps issue one request.
   serverTrip = { ...serverTrip, status: 'in_trip' };
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Fixture destination'), 'Active trip banner must use the server destination');
+  assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0, 'Active trip destination banner must replace pickup-arrival status');
   await act(async () => { const share = booking.root.findByProps({ testID: 'ontrip-share' }).props.onPress; share(); share(); });
   assert.equal(shareRequests, 1);
   assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'booking-action-error').length, 1);
@@ -398,7 +467,9 @@ const act = renderer.act;
   // Actual destination search ignores stale responses and distinguishes outages from zero matches.
   const searchRequests = [];
   stubs.set('expo-location', {});
+  stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: null }) });
   stubs.set('@/src/components/FloatingTabBar', { useHideTabBar() {} });
+  stubs.set('@/src/components/VehicleGlyph', { VehicleGlyph: 'VehicleGlyph' });
   stubs.set('@/src/lib/api', { placesApi: { search: query => new Promise((resolve, reject) => searchRequests.push({ query, resolve, reject })) } });
   const { SearchSheet } = load('frontend', 'app/(app)/home.tsx');
   let search;

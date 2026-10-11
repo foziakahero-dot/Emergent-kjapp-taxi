@@ -2,25 +2,32 @@ import React, { createContext, forwardRef, useContext } from 'react';
 import { StyleSheet, Text as NativeText, TextInput as NativeTextInput, type TextProps, type TextInputProps, type TextStyle } from 'react-native';
 import { colors, font } from '@/src/theme';
 
-const weights: Record<string, string> = {
+const geistWeights: Record<string, string> = {
+  '300': 'Geist_300Light', '400': 'Geist_400Regular', '500': 'Geist_500Medium',
+  '600': 'Geist_600SemiBold', '700': 'Geist_700Bold', '800': 'Geist_800ExtraBold',
+  normal: 'Geist_400Regular', bold: 'Geist_700Bold',
+};
+const interWeights: Record<string, string> = {
   '300': 'Inter_300Light', '400': 'Inter_400Regular', '500': 'Inter_500Medium',
   '600': 'Inter_600SemiBold', '700': 'Inter_700Bold', '800': 'Inter_800ExtraBold',
   normal: 'Inter_400Regular', bold: 'Inter_700Bold',
 };
 const TypographyContext = createContext<{ family: string; color: TextStyle['color']; size: number }>({ family: font.body, color: colors.text, size: 14 });
-const lineHeights: Record<number, number> = { 9: 13.5, 10: 15, 11: 16.5, 12: 16, 14: 20, 15: 22.5, 16: 24, 18: 28, 20: 28, 24: 32, 30: 36, 36: 40, 60: 60 };
+const lineHeights: Record<number, number> = { 9: 13, 10: 14, 11: 14, 12: 16, 14: 20, 15: 22, 16: 23, 18: 26, 20: 26, 24: 32, 26: 32, 30: 36, 32: 38, 36: 40, 40: 44, 60: 60 };
 
 /** Use the actual font files, rather than Android/iOS synthetic font weights. */
 export function resolveFont(style: TextStyle, inherited = font.body): TextStyle {
   let family = style.fontFamily || inherited;
-  if (style.fontWeight && (family.startsWith('Inter_') || family === 'Inter')) {
-    family = weights[String(style.fontWeight)] || family;
+  if (style.fontWeight && (family.startsWith('Geist_') || family === 'Geist')) {
+    family = geistWeights[String(style.fontWeight)] || family;
+  } else if (style.fontWeight && (family.startsWith('Inter_') || family === 'Inter')) {
+    family = interWeights[String(style.fontWeight)] || family;
   } else if (style.fontWeight && family.startsWith('JetBrainsMono')) {
     family = ['normal', '300', '400'].includes(String(style.fontWeight)) ? font.mono : font.monoMedium;
   }
   return {
     fontFamily: family,
-    ...(family.startsWith('Inter_') || family.startsWith('JetBrainsMono') ? { fontWeight: 'normal' as const } : {}),
+    ...(family.startsWith('Geist_') || family.startsWith('Inter_') || family.startsWith('JetBrainsMono') ? { fontWeight: 'normal' as const } : {}),
     includeFontPadding: false,
   };
 }

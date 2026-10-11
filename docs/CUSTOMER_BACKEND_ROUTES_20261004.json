@@ -1,0 +1,4167 @@
+[
+  {
+    "method": "GET",
+    "path": "/admin/control/action-center",
+    "function": "action_center",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'as_of': _now(), 'summary': {'pending_applications': pending_apps, 'pending_drivers': pending_drivers, 'failed_payments': failed_payments, 'failed_payouts': failed_payouts, 'expired_documents': expired_documents, 'expiring_documents': expiring_documents, 'stripe_pending': stripe_pending, 'open_support': open_support}, 'items': items}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/integrations",
+    "function": "integration_status",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'as_of': _now(), 'integrations': [{'id': 'backend', 'name': 'SNAR API / MongoDB', 'status': 'operational', 'detail': 'FastAPI og database svarer.', 'configured': True}, {'id': 'stripe', 'name': 'Stripe', 'status': 'operational' if stripe_key else 'warning', 'detail': ('Live-modus' if key.startswith('sk_live_') else 'Test-modus') if stripe_key else 'STRIPE_SECRET_KEY mangler', 'configured': stripe_key}, {'id': 'stripe_connect', 'name': 'Stripe Co"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/stripe-fleets",
+    "function": "stripe_fleets",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'fleets': rows}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/control/fleets/{fleet_id}/stripe-connect",
+    "function": "create_stripe_connect",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True, 'account_id': account_id, 'onboarding_url': link.url}"
+    ],
+    "http_statuses": [
+      "502",
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/fleets/{fleet_id}/stripe-status",
+    "function": "get_stripe_status",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'connected': True, **snap, 'payout_schedule': payout_schedule}",
+      "{'connected': False, 'ready': False, 'status': 'not_connected'}"
+    ],
+    "http_statuses": [
+      "502",
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/payouts",
+    "function": "stripe_payouts",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'configured': True, 'payouts': rows[:200]}",
+      "{'configured': False, 'payouts': rows}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/fleets/{fleet_id}/vehicles",
+    "function": "admin_fleet_vehicles",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'vehicles': rows}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/control/fleets/{fleet_id}/driver-invites",
+    "function": "invite_driver_for_fleet",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "FleetDriverInvite"
+    ],
+    "response": [
+      "{'ok': True, 'email_sent': bool(sent), 'invite_url': invite_url, 'vehicle_id': str(vehicle['_id']), 'expires_at': doc['expires_at']}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/control/fleets/{fleet_id}/vehicle",
+    "function": "update_fleet_vehicle",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "FleetVehicleUpdate"
+    ],
+    "response": [
+      "{'ok': True, **after}"
+    ],
+    "http_statuses": [
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/communication-fleets",
+    "function": "communication_fleets",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'fleets': fleets}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/communications",
+    "function": "communication_history",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'broadcasts': items}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/control/communications",
+    "function": "send_broadcast",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "BroadcastRequest"
+    ],
+    "response": [
+      "{'ok': True, **{k: v for k, v in doc.items() if k != '_id'}}"
+    ],
+    "http_statuses": [
+      "400"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/admin-users",
+    "function": "list_admin_users",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'users': users, 'available_permissions': list(ADMIN_PERMISSIONS)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/control/admin-users",
+    "function": "create_admin_user",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "AdminUserCreate"
+    ],
+    "response": [
+      "{'ok': True, 'id': uid, 'email': email, 'temp_password': temp_password, 'permissions': perms}"
+    ],
+    "http_statuses": [
+      "400",
+      "409"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/control/admin-users/{user_id}",
+    "function": "update_admin_user",
+    "file": "backend\\admin_control_center.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "AdminUserUpdate"
+    ],
+    "response": [
+      "{'ok': True}",
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/config/runtime",
+    "function": "public_runtime_config",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "Literal['customer', 'driver']"
+    ],
+    "response": [
+      "{'version': current['version'], 'app': app, 'shared': current['runtime_config']['shared'], 'config': current['runtime_config'][app], 'features': current['features'], 'updated_at': current['updated_at']}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/operations/runtime-config",
+    "function": "admin_runtime_config",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "await state()"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/operations/runtime-config",
+    "function": "admin_patch_runtime_config",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "RuntimePatchRequest"
+    ],
+    "response": [
+      "{'ok': True, **saved}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/operations/runtime-config/history",
+    "function": "admin_runtime_history",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'versions': rows}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/operations/runtime-config/rollback",
+    "function": "admin_runtime_rollback",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "RuntimeRollbackRequest"
+    ],
+    "response": [
+      "{'ok': True, 'rolled_back_from': body.version, **saved}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/operations/releases",
+    "function": "admin_releases",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'releases': rows, 'automation': {'remote_config': True, 'ota': 'not_configured', 'native': 'eas_build', 'approval_required': True}}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/operations/releases",
+    "function": "admin_create_release",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "ReleaseCreateRequest"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/operations/releases/{release_id}/transition",
+    "function": "admin_transition_release",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "ReleaseTransitionRequest"
+    ],
+    "response": [
+      "{'ok': True, 'id': release_id, **updates}"
+    ],
+    "http_statuses": [
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/operations/ai/plan",
+    "function": "admin_ai_plan",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "AIPlanRequest"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/operations/ai/plans",
+    "function": "admin_ai_plans",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'plans': rows, 'ai_configured': bool((os.getenv('OPENAI_API_KEY') or '').strip())}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/operations/ai/plans/{plan_id}/approve",
+    "function": "admin_ai_approve",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "AIApproveRequest"
+    ],
+    "response": [
+      "{'ok': True, 'id': plan_id, 'status': 'approved'}"
+    ],
+    "http_statuses": [
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/operations/ai/plans/{plan_id}/apply",
+    "function": "admin_ai_apply",
+    "file": "backend\\admin_operations_os.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "AIApplyRequest"
+    ],
+    "response": [
+      "{'ok': True, 'id': plan_id, 'status': 'applied', 'version': saved['version']}"
+    ],
+    "http_statuses": [
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/me/profile-photo",
+    "function": "upload_photo",
+    "file": "backend\\customer_profile.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'customer_photo_version': version}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/me/profile-photo",
+    "function": "read_photo",
+    "file": "backend\\customer_profile.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "Response(content=doc['data'], media_type='image/jpeg', headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/me/profile-photo",
+    "function": "remove_photo",
+    "file": "backend\\customer_profile.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'deleted': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/control/integration-settings",
+    "function": "summary",
+    "file": "backend\\integration_settings.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "await settings.summary()"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PUT",
+    "path": "/admin/control/integration-settings/{group}",
+    "function": "save",
+    "file": "backend\\integration_settings.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "result"
+    ],
+    "http_statuses": [
+      "400"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/marketing/waitlist",
+    "function": "create_marketing_waitlist_entry",
+    "file": "backend\\marketing_waitlist.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "MarketingWaitlistRequest"
+    ],
+    "response": [
+      "result",
+      "{'ok': True, 'status': 'registered'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/beta-waitlist",
+    "function": "list_beta_interest",
+    "file": "backend\\marketing_waitlist.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[Literal['passenger', 'driver', 'fleet_owner']]",
+      "Optional[Literal['new', 'contacted', 'archived']]"
+    ],
+    "response": [
+      "{'items': entries, 'total': total, 'limit': limit, 'offset': offset, 'email_configured': bool(os.environ.get('SENDGRID_API_KEY', '').strip())}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/beta-waitlist/{identity}",
+    "function": "update_beta_interest",
+    "file": "backend\\marketing_waitlist.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "InterestStatusRequest"
+    ],
+    "response": [
+      "{'ok': True, 'status': body.status}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/auth/native/config",
+    "function": "identity_config",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "Literal['customer', 'driver']"
+    ],
+    "response": [
+      "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/google/native",
+    "function": "google_native",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "NativeIdentity"
+    ],
+    "response": [
+      "await identity_session('google', claims, body, response)"
+    ],
+    "http_statuses": [
+      "401",
+      "503"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/auth/google/link",
+    "function": "link_google",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "NativeIdentity"
+    ],
+    "response": [
+      "{'linked': True}"
+    ],
+    "http_statuses": [
+      "401",
+      "403",
+      "409",
+      "503"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/auth/apple/native",
+    "function": "apple_native",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "NativeIdentity"
+    ],
+    "response": [
+      "await identity_session('apple', claims, body, response)"
+    ],
+    "http_statuses": [
+      "401"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/stripe/onboarding",
+    "function": "fleet_onboarding",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'onboarding_url': link.url}"
+    ],
+    "http_statuses": [
+      "502"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/stripe/status",
+    "function": "fleet_status",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'connected': True, **snap, 'payout_schedule': fleet.get('stripe_payout_schedule', 'stripe_default')}",
+      "{'connected': False, 'ready': False, 'currently_due': [], 'status': 'not_connected'}"
+    ],
+    "http_statuses": [
+      "502",
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/payments/native/config",
+    "function": "native_config",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "payment_config()"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/payments/native/setup-intent",
+    "function": "native_setup_intent",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'client_secret': setup.client_secret, 'setup_intent_id': setup.id}"
+    ],
+    "http_statuses": [
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/payments/native/setup-intent/{setup_intent_id}",
+    "function": "native_setup_status",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ready': True, 'verified': True, 'card': doc}",
+      "{'ready': False, 'status': setup.get('status')}",
+      "{'ready': True, 'verified': True, 'card': existing}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/payments/native/intent",
+    "function": "native_intent",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "NativePayment"
+    ],
+    "response": [
+      "{'client_secret': pi.client_secret, 'payment_intent_id': pi.id}",
+      "{'client_secret': pi.client_secret, 'payment_intent_id': pi.id}"
+    ],
+    "http_statuses": [
+      "400",
+      "409",
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/payments/native/intent/{intent_id}",
+    "function": "native_status",
+    "file": "backend\\mobile_commerce.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'payment_status': 'paid' if paid else pi.get('status')}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/service-area",
+    "function": "service_area",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'launch_city': 'Oslo', 'enforced': OSLO_BETA_ENFORCE, 'center': {'lat': OSLO_BETA_CENTER_LAT, 'lng': OSLO_BETA_CENTER_LNG}, 'radius_km': OSLO_BETA_RADIUS_KM, 'pickup_only': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/",
+    "function": "root",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'app': 'KJAPP', 'status': 'ok'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/health",
+    "function": "health",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "JSONResponse(status_code=200 if db_ok else 503, content={'app': 'KJAPP', 'status': 'ok' if db_ok else 'degraded', 'db': db_ok, 'time': datetime.now(timezone.utc).isoformat()})"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/ready",
+    "function": "readiness",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "JSONResponse(status_code=200 if not blockers else 503, content={'app': 'KJAPP', 'ready': not blockers, 'status': 'ready' if not blockers else 'not_ready', 'checks': checks, 'blockers': blockers, 'time': datetime.now(timezone.utc).isoformat()})"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/cars/nearby",
+    "function": "cars_nearby",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "NearbyCarsRequest"
+    ],
+    "response": [
+      "{'cars': cars, 'count': len(cars), 'live': True, 'gps_fresh_seconds': GPS_FRESH_SECONDS, 'server_time': datetime.now(timezone.utc).isoformat()}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/places",
+    "function": "list_places",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'places': places}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/places/reverse",
+    "function": "reverse_geocode_endpoint",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "await reverse_geocode(lat, lng)"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/places/search",
+    "function": "search_places",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'results': results}",
+      "{'results': []}",
+      "{'results': results}",
+      "{'results': results}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/estimate",
+    "function": "trip_estimate",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "EstimateRequest"
+    ],
+    "response": [
+      "{'distance_km': est, 'duration_min': duration, 'options': options, 'geometry': geometry, 'stops': [s.model_dump() for s in body.stops], 'commission_rate': commission_rate, 'pricing_version': int(effective_pricing.get('version', 1)), 'pricing_area': pricing_area}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/client-errors",
+    "function": "ingest_client_error",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "ClientErrorEvent"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/support/public",
+    "function": "create_public_support_ticket",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "PublicSupportRequest"
+    ],
+    "response": [
+      "{'ok': True, 'ticket_id': str(result.inserted_id)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/register",
+    "function": "register",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "RegisterRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': user_public(created_user or {'_id': result.inserted_id, 'email': email, 'fullName': body.fullName, 'phone': body.phone or '', 'role': 'user', 'accepted_terms_at': now_iso})}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/login",
+    "function": "login",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "LoginRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': user_public(user)}",
+      "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/logout",
+    "function": "logout",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/auth/2fa/status",
+    "function": "twofa_status",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'enabled': bool(current.get('totp_enabled')), 'required': _twofa_required_role(current.get('role', 'user'))}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/2fa/setup",
+    "function": "twofa_setup",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'secret': secret, 'otpauth_url': otpauth, 'qr': qr_data_uri}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/2fa/enable",
+    "function": "twofa_enable",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "TwoFAEnableRequest"
+    ],
+    "response": [
+      "{'enabled': True, 'backup_codes': backup}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/2fa/disable",
+    "function": "twofa_disable",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "TwoFADisableRequest"
+    ],
+    "response": [
+      "{'enabled': False}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/2fa/verify-login",
+    "function": "twofa_verify_login",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "TwoFAVerifyLoginRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': user_public(user)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/forgot-password",
+    "function": "forgot_password",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "ForgotPasswordRequest"
+    ],
+    "response": [
+      "{'ok': True}",
+      "{'ok': True}",
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/auth/reset-password/{token}",
+    "function": "check_reset_token",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'valid': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/reset-password",
+    "function": "reset_password",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "ResetPasswordRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/auth/legal-config",
+    "function": "legal_config",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'legal_version': CURRENT_LEGAL_VERSION, 'terms_url': 'https://kjappapp.no/vilkar', 'privacy_url': 'https://kjappapp.no/personvern'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/accept-legal",
+    "function": "accept_legal",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "AcceptLegalRequest"
+    ],
+    "response": [
+      "user_public(updated)"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/auth/me",
+    "function": "me",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "public"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/request",
+    "function": "request_trip",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "TripRequest"
+    ],
+    "response": [
+      "trip"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/authorization/confirm",
+    "function": "confirm_trip_authorization",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "await ride_reservations.confirm(trip_id, current['id'])"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/authorization/retry",
+    "function": "retry_trip_authorization",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "trip"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/payment/retry",
+    "function": "retry_reserved_payment",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "await ride_reservations.capture(trip)",
+      "{'ok': True, 'paid': True}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/trips/active",
+    "function": "active_trip",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "trip",
+      "None"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/trips/{trip_id}",
+    "function": "get_trip",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "trip"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/trips/{trip_id}/destination",
+    "function": "change_trip_destination",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "TripDestinationUpdate"
+    ],
+    "response": [
+      "{'ok': True, 'price': updated_price, 'previous_price': trip.get('price'), 'distance_km': distance_km, 'duration_min': duration_min, 'pricing_version': quote['pricing_version'], 'stops': [s.model_dump() for s in body.stops]}"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/trips/{trip_id}/driver-photo",
+    "function": "customer_driver_photo",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "FastResponse(content=data, media_type=rec.get('content_type') or ct, headers={'Cache-Control': 'private, max-age=60'})"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/complete",
+    "function": "complete_trip",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "trip"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/rate",
+    "function": "rate_trip",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "RateTripRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/driver/vehicles",
+    "function": "driver_assigned_vehicles",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'vehicles': vehicles, 'selected_vehicle_id': selected_id or None}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/vehicles/{vehicle_id}/select",
+    "function": "driver_select_vehicle",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{**canonical, 'selected': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/profile-photo",
+    "function": "driver_update_profile_photo",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'profile_photo_path': stored['path'], 'updated_at': now_iso}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/trip/{trip_id}/rate-passenger",
+    "function": "driver_rate_passenger",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "DriverRatePassengerRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/trips/{trip_id}/cancel-preview",
+    "function": "cancel_trip_preview",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'cancellation_fee': fee, 'currency': 'NOK', 'free_cancel_minutes': free_minutes}",
+      "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/cancel",
+    "function": "cancel_trip",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+      "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/trips",
+    "function": "list_trips",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "trips"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/messages",
+    "function": "send_trip_message",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "TripMessageRequest"
+    ],
+    "response": [
+      "msg"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/safety",
+    "function": "trip_safety_event",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "SafetyEventRequest"
+    ],
+    "response": [
+      "{'ok': True, 'event_id': event['id'], 'emergency_number': '112'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/trips/{trip_id}/share-link",
+    "function": "create_trip_share_link",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'token': token, 'url': f'https://kjappapp.no/tur/{token}', 'expires_at': expires_at.isoformat()}"
+    ],
+    "http_statuses": [
+      "403"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/trips/share/{token}",
+    "function": "public_trip_share",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trip_id': trip.get('trip_id'), 'status': trip.get('status'), 'pickup_address': trip.get('pickup_address'), 'dropoff_address': trip.get('dropoff_address'), 'vehicle_type': trip.get('vehicle_type'), 'driver': {'name': driver.get('name'), 'car': driver.get('car'), 'plate': driver.get('plate'), 'rating': driver.get('rating')} if driver else None, 'driver_location': {'lat': trip.get('driver_lat'), 'lng': trip.get('driver_lng'), 'updated_at': trip.ge"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/ai/translate",
+    "function": "ai_translate",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "TranslateRequest"
+    ],
+    "response": [
+      "{'translation': translation, 'cached': False, 'target_lang': lang}",
+      "{'translation': cached['translation'], 'cached': True, 'target_lang': lang}"
+    ],
+    "http_statuses": [
+      "400",
+      "503"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/ai/transcribe",
+    "function": "ai_transcribe",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "TranscribeRequest"
+    ],
+    "response": [
+      "{'text': (text or '').strip()}"
+    ],
+    "http_statuses": [
+      "400",
+      "429",
+      "502",
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/trips/{trip_id}/messages",
+    "function": "list_trip_messages",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'messages': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/payment-methods",
+    "function": "list_payment_methods",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "methods"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/payment-methods",
+    "function": "add_payment_method",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "PaymentMethodRequest"
+    ],
+    "response": [],
+    "http_statuses": []
+  },
+  {
+    "method": "DELETE",
+    "path": "/payment-methods/{pm_id}",
+    "function": "delete_payment_method",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'deleted': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/me/places",
+    "function": "list_my_places",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'places': places}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/me/places",
+    "function": "add_my_place",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "UserPlaceRequest"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PUT",
+    "path": "/me/places/{place_id}",
+    "function": "update_my_place",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "UserPlaceRequest"
+    ],
+    "response": [
+      "update"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/me/places/{place_id}",
+    "function": "delete_my_place",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'deleted': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/payments/card/setup",
+    "function": "stripe_card_setup",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "CardSetupRequest"
+    ],
+    "response": [
+      "{'checkout_url': session.url, 'session_id': session.id}"
+    ],
+    "http_statuses": [
+      "500"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/payments/card/setup/{session_id}",
+    "function": "stripe_card_setup_status",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ready': True, 'card': existing, 'verified': verified}",
+      "{'ready': False, 'status': s.status}",
+      "{'ready': False, 'reason': 'no payment method attached'}",
+      "{'ready': True, 'card': doc, 'verified': verified}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/payments/vipps/config",
+    "function": "vipps_config",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'enabled': enabled, 'provider': 'Vipps'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/settings",
+    "function": "get_settings",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "settings"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/settings",
+    "function": "update_settings",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "SettingsUpdate"
+    ],
+    "response": [
+      "settings"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/ai/chat",
+    "function": "ai_chat",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "ChatRequest"
+    ],
+    "response": [
+      "{'reply': reply, 'session_id': session_id}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/ai/history",
+    "function": "ai_history",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "Optional[str]"
+    ],
+    "response": [
+      "{'session_id': sid, 'messages': msgs}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/summary/today",
+    "function": "summary_today",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trips': trips, 'spent': total, 'satisfaction': 98}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/pending",
+    "function": "driver_pending",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trips': trips, 'commission': commission, 'driver_gps': {'lat': d_lat, 'lng': d_lng, 'at': current.get('last_location_at')} if d_lat is not None else None}",
+      "{'trips': [], 'offline': True, 'commission': await _platform_commission(), 'driver_gps': None}",
+      "{'trips': [], 'offline': False, 'gps_stale': True, 'commission': await _platform_commission(), 'driver_gps': None}",
+      "{'trips': [], 'offline': forced_offline, 'compliance_blocked': True, 'compliance': compliance, 'message': compliance['message'], 'commission': await _platform_commission(), 'driver_gps': None}",
+      "{'trips': [], 'busy': True, 'active_trip_id': current['active_trip_id'], 'commission': await _platform_commission(), 'driver_gps': {'lat': current.get('last_lat'), 'lng': current.get('last_lng'), 'at': current.get('last_location_at')}}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/accept",
+    "function": "driver_accept",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "AcceptTripRequest"
+    ],
+    "response": [
+      "t"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/current",
+    "function": "driver_current",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "t",
+      "None",
+      "None",
+      "None"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/trip/{trip_id}/at-pickup",
+    "function": "driver_at_pickup",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}",
+      "{'ok': True, 'already_applied': True}",
+      "{'ok': True, 'already_applied': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/trip/{trip_id}/start",
+    "function": "driver_start",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}",
+      "{'ok': True, 'already_applied': True}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/driver/trip/{trip_id}/no-show",
+    "function": "driver_no_show",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True, 'cancellation_fee': int((t or {}).get('cancellation_fee') or 0), 'currency': 'NOK'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/trip/{trip_id}/arrive",
+    "function": "driver_arrive",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True, 'bonuses': [], 'payment': payment, 'ended_early': ended_early, 'location_verified': location_verified, 'warning': warning if ended_early else None}",
+      "{'ok': True, 'already_applied': True, 'bonuses': [], 'ended_early': trip.get('ended_early', False), 'warning': trip.get('early_end_warning')}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/demand",
+    "function": "driver_demand",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "Optional[float]",
+      "Optional[float]"
+    ],
+    "response": [
+      "{'generated_at': now.isoformat(), 'window_minutes': 90, 'cells': [{'lat': s['lat'], 'lng': s['lng'], 'weight': s['weight']} for s in scored], 'zones': zones, 'total_recent': total_recent, 'total_typical': total_typical, 'drivers_online': drivers_online}",
+      "(round(la, 2), round(ln, 2))",
+      "c",
+      "{'generated_at': now.isoformat(), 'window_minutes': 90, 'cells': [], 'zones': [], 'total_recent': 0, 'total_typical': 0, 'drivers_online': drivers_online}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/summary/today",
+    "function": "driver_summary",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'income': total + bonus, 'trip_income': total, 'gross_trip_income': gross_total, 'bonus': bonus, 'trips': trips, 'online': bool(u.get('online')), 'last_location_at': u.get('last_location_at'), 'online_minutes': online_minutes, 'acceptance_rate': acceptance_rate}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/decline",
+    "function": "driver_decline",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "DeclineTripRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/location",
+    "function": "driver_location",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "DriverLocationRequest"
+    ],
+    "response": [
+      "{'ok': True, 'recorded_at': recorded.isoformat(), 'received_at': now_iso}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/online",
+    "function": "driver_online",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "DriverOnlineRequest"
+    ],
+    "response": [
+      "{'online': body.online}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/push/vapid-public-key",
+    "function": "get_vapid_public_key",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'public_key': v['public_key'] if v else None}",
+      "{'public_key': None}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/push/subscribe",
+    "function": "push_subscribe",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "PushSubscribeRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/push/test",
+    "function": "push_test",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/push/native-config",
+    "function": "push_native_config",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'enabled': True, 'provider': 'expo', 'legacy_fcm_enabled': _fcm_app() is not None, 'message': None}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/push/native-subscribe",
+    "function": "push_native_subscribe",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "NativePushSubscribeRequest"
+    ],
+    "response": [
+      "{'ok': True, 'provider': body.provider}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/push/native-unsubscribe",
+    "function": "push_native_unsubscribe",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "NativePushSubscribeRequest"
+    ],
+    "response": [
+      "{'ok': True, 'removed': result.deleted_count}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/google/session",
+    "function": "google_session",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "GoogleSessionRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': user_public(session_user)}",
+      "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/auth/google/config",
+    "function": "google_oauth_config",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/google/code",
+    "function": "google_oauth_code",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "GoogleCodeRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': user_public(session_user)}",
+      "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/fleets",
+    "function": "admin_create_fleet",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "FleetCreateRequest"
+    ],
+    "response": [
+      "fleet_doc"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/fleets",
+    "function": "admin_list_fleets",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'fleets': fleets}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/fleets/attach-driver",
+    "function": "admin_attach_driver",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "AttachDriverRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/me",
+    "function": "fleet_me",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "f"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/overview",
+    "function": "fleet_overview",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'drivers_total': len(drivers_ids), 'drivers_online': online_count, 'today': {'gross': today_gross, 'trips': today_trips, 'net': today_net}, 'week': {'gross': week_gross, 'trips': week_trips, 'net': week_net}, 'commission_pct': int(commission * 100)}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/drivers",
+    "function": "fleet_drivers",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'drivers': drivers}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/live",
+    "function": "fleet_live",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'drivers': drivers, 'trips': trips, 'as_of': datetime.now(timezone.utc).isoformat()}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/trips",
+    "function": "fleet_trip_history",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trips': [{'trip_id': t.get('trip_id'), 'created_at': t.get('created_at'), 'status': t.get('status'), 'payment_status': t.get('payment_status'), 'price': t.get('price'), 'pickup_address': t.get('pickup_address'), 'dropoff_address': t.get('dropoff_address'), 'driver_id': t.get('driver_id'), 'driver_name': drivers.get(t.get('driver_id')) or (t.get('driver') or {}).get('name'), 'vehicle_id': t.get('vehicle_id'), 'vehicle_type': t.get('vehicle_type'"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/fleet/drivers/{driver_id}/vehicle-access",
+    "function": "fleet_driver_vehicle_access",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "FleetDriverVehicleAccessRequest"
+    ],
+    "response": [
+      "{'ok': True, **fields}"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/vehicles",
+    "function": "fleet_vehicles",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'vehicles': vehicles}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/vehicles",
+    "function": "fleet_create_vehicle",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "FleetVehicleCreateRequest"
+    ],
+    "response": [
+      "await _fleet_vehicle_public(doc, fid)"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/fleet/vehicles/{vehicle_id}",
+    "function": "fleet_update_vehicle",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "FleetVehicleUpdateRequest"
+    ],
+    "response": [
+      "await _fleet_vehicle_public(after, fid)"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/vehicles/{vehicle_id}/assign-driver",
+    "function": "fleet_assign_vehicle_driver",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "FleetVehicleAssignmentRequest"
+    ],
+    "response": [
+      "await _fleet_vehicle_public(after, fid)"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/drivers/{driver_id}/set-active",
+    "function": "fleet_set_driver_active",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "FleetDriverActiveRequest"
+    ],
+    "response": [
+      "{'ok': True, 'active': body.active}"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/vehicles/{vehicle_id}/documents",
+    "function": "fleet_upload_vehicle_document",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "Optional[str]"
+    ],
+    "response": [
+      "{'id': doc['id'], 'filename': doc['original_filename'], 'content_type': doc['content_type'], 'size': doc['size'], 'scope': doc['scope'], 'doc_type': doc_type, 'created_at': now, 'storage_path': doc['storage_path'], 'owner_type': 'vehicle', 'owner_id': vehicle_id, 'owner_name': vehicle.get('plate') or vehicle.get('car'), 'review_status': 'pending', 'expiry': doc['review_expiry'], 'compliance': _fleet_document_compliance('pending', doc['review_expi"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/documents",
+    "function": "fleet_documents",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'documents': docs, 'summary': summary}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/drivers/{driver_id}",
+    "function": "fleet_driver_detail",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "public"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/payouts",
+    "function": "fleet_payouts",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'payouts': [], 'source': 'none', 'connected': False, 'payout_schedule': schedule}",
+      "{'payouts': payouts, 'source': 'stripe', 'connected': True, 'payout_schedule': schedule}",
+      "{'payouts': [], 'source': 'stripe', 'connected': True, 'payout_schedule': schedule, 'temporarily_unavailable': True}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/export/monthly",
+    "function": "fleet_export_monthly",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "FastResponse(content=buf.read(), media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={'Content-Disposition': f'attachment; filename=\"{fname}\"'})"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/driver/bonus",
+    "function": "driver_bonus",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'campaigns': out, 'earned_today': await _bonus_earned_today(current['id'])}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/bonus-campaigns",
+    "function": "admin_list_bonus_campaigns",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'campaigns': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/bonus-campaigns",
+    "function": "admin_create_bonus_campaign",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "BonusCampaignIn"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/bonus-campaigns/{campaign_id}",
+    "function": "admin_update_bonus_campaign",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "dict"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "DELETE",
+    "path": "/admin/bonus-campaigns/{campaign_id}",
+    "function": "admin_delete_bonus_campaign",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/bonus-payouts",
+    "function": "admin_bonus_payouts",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'payouts': out, 'total_kr': total}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/overview",
+    "function": "admin_overview",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'fleets': {'active': active_fleets, 'suspended': suspended_fleets, 'pending_applications': pending_applications}, 'drivers': {'approved': approved_drivers, 'pending': pending_drivers, 'online': drivers_online}, 'trips': {'active': active_trips, 'stale_active': stale_active_trips, 'today': trips_today, 'yesterday': trips_yday, 'completed_today': completed_today, 'cancelled_today': cancelled_today}, 'finance': {'gmv_today': gmv_today, 'kjapp_reven",
+      "await col.count_documents(q)"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/client-errors",
+    "function": "admin_client_errors",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[Literal['customer', 'driver']]"
+    ],
+    "response": [
+      "{'items': items, 'total': total, 'page': page, 'page_size': page_size, 'total_pages': (total + page_size - 1) // page_size if page_size else 1}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/beta-health",
+    "function": "admin_beta_health",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'days': days, 'trips': {'requested': total, 'completed': completed, 'arrived_unclosed': arrived_unclosed, 'cancelled': cancelled, 'completion_rate_pct': pct(completed, total)}, 'dispatch': {'assigned': assigned, 'success_rate_pct': pct(assigned, total), 'accept_samples': len(accept_seconds), 'median_accept_seconds': percentile(accept_seconds, 50), 'p95_accept_seconds': percentile(accept_seconds, 95)}, 'gps': {'online_drivers': online_total, 'fre",
+      "round(values[idx], 1)",
+      "None"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/fleets/{fleet_id}/suspend",
+    "function": "admin_suspend_fleet",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "FleetSuspendRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/fleets/{fleet_id}/reactivate",
+    "function": "admin_reactivate_fleet",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/fleets/{fleet_id}/commission",
+    "function": "admin_update_commission",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "CommissionUpdateRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/audit-log",
+    "function": "admin_audit_log",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(events, total, page, page_size, 'events')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/fleets-full",
+    "function": "admin_fleets_full",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "{'fleets': fleets}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/users",
+    "function": "admin_users",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(out, total, page, page_size, 'users')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/users/{user_id}/set-status",
+    "function": "admin_set_user_status",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "AdminUserStatusRequest"
+    ],
+    "response": [
+      "{'ok': True, 'disabled': body.disabled}"
+    ],
+    "http_statuses": [
+      "400",
+      "403",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/drivers",
+    "function": "admin_drivers",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'drivers': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/trips",
+    "function": "admin_trips",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trips': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/drivers/{user_id}/approve",
+    "function": "admin_approve_driver",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "ApproveDriverRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/driver-invites",
+    "function": "create_driver_invite",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "DriverInviteRequest"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/driver-invites",
+    "function": "list_driver_invites",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'invites': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver-invites/{token}",
+    "function": "get_driver_invite",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'token': inv['token'], 'email': inv.get('email'), 'expires_at': inv.get('expires_at'), 'vehicle_id': str(vehicle['_id']), 'car': str(vehicle.get('car') or ''), 'plate': str(vehicle.get('plate') or '').upper(), 'vehicle_type': vehicle.get('vehicle_type') or 'ai-first', 'capabilities': inv.get('capabilities') or [], 'fleet_name': fleet.get('name'), 'fleet_org_number': fleet.get('org_number'), 'note': inv.get('note', ''), 'vehicle_access_mode': inv"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver-invites/accept",
+    "function": "accept_driver_invite",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "DriverSignupRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': {'id': uid, 'email': email, 'fullName': body.fullName, 'phone': body.phone, 'role': 'driver', 'approved': False}, 'pending_approval': True, 'confirmation_email_status': confirmation_status}"
+    ],
+    "http_statuses": [
+      "400"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/upload/driver-doc",
+    "function": "upload_driver_doc",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/auth/apple",
+    "function": "apple_signin",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "AppleSignInRequest"
+    ],
+    "response": [
+      "{'token': token, 'user': user_public(session_user)}",
+      "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/auth/apple/config",
+    "function": "apple_config",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'client_id': client_id, 'bundle_id': APPLE_NATIVE_BUNDLE_ID, 'enabled': True, 'bundle_env_matches': configured_bundle_id in ('', APPLE_NATIVE_BUNDLE_ID), 'message': None}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/payments/checkout",
+    "function": "create_trip_checkout",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "TripCheckoutRequest"
+    ],
+    "response": [
+      "{'checkout_url': session.url, 'session_id': session.id}",
+      "{'checkout_url': existing_session.url, 'session_id': existing_session.id, 'reused': True}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/payments/status/{session_id}",
+    "function": "get_payment_status",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_customer)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'session_id': record['session_id'], 'status': record.get('status'), 'payment_status': record.get('payment_status'), 'trip_id': record.get('trip_id')}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/stripe/webhook",
+    "function": "stripe_webhook",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'status': 'ok'}",
+      "{'status': 'ok'}",
+      "{'status': 'ok'}",
+      "{'status': 'ignored'}",
+      "{'status': 'ignored'}"
+    ],
+    "http_statuses": [
+      "400"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/gdpr/export",
+    "function": "gdpr_export",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'exported_at': datetime.now(timezone.utc).isoformat(), 'user': user, 'trips': trips, 'ai_messages': messages, 'payments': [{k: v for k, v in p.items() if k not in ('client_secret', 'stripe_client_secret')} for p in payments], 'customer_photo': await export_customer_photo(db, uid)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "DELETE",
+    "path": "/gdpr/delete",
+    "function": "gdpr_delete",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'deleted': True, 'anonymized_trip_owner': anon_id}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/pricing/surge",
+    "function": "pricing_surge",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "current_surge_info()"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/trip/{trip_id}/cancel",
+    "function": "driver_cancel",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}",
+      "{'ok': True, 'already_applied': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/history",
+    "function": "driver_history",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trips': trips}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/history/weekly",
+    "function": "driver_history_weekly",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'days': days}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/ratings",
+    "function": "driver_ratings",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'average': avg, 'count': count, 'breakdown': breakdown, 'recent': recent}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/payouts",
+    "function": "driver_payouts",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_driver)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'earned_gross_7d': pending, 'earned_net_7d': net, 'paid_trips_7d': trips_count, 'pending_gross': pending, 'pending_trips': trips_count, 'pending_net': net + bonus_total, 'pending_trip_net': net, 'pending_bonus': bonus_total, 'bonuses': bonuses, 'commission_pct': int(round(commission * 100)), 'next_payout_date': next_payout, 'settlement_recipient': 'fleet', 'stripe_connect_ready': connect_ready, 'payout_schedule': payout_schedule, 'history': hist"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/messages/unread-count",
+    "function": "unread_message_count",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'unread': min(n, 99)}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/messages/mark-seen/{trip_id}",
+    "function": "mark_messages_seen",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/driver/identity-verification",
+    "function": "driver_identity_verification_status",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(_require_driver_identity_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'id': (latest or {}).get('id') or str((latest or {}).get('_id')) if latest else None, 'status': current_status, 'verification_record_status': (latest or {}).get('status'), 'submitted_at': (latest or {}).get('created_at'), 'reviewed_at': (latest or {}).get('reviewed_at'), 'review_reason': (latest or {}).get('review_reason'), 'recheck_reason': current.get('identity_recheck_reason') or current.get('identity_recheck_pending_reason'), 'recheck_trigge"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/driver/identity-verification/selfie",
+    "function": "driver_identity_verification_selfie",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(_require_driver_identity_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'id': verification_id, 'status': 'pending_review', 'submitted_at': now}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/identity-verifications",
+    "function": "admin_identity_verifications",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(rows, total, page, page_size, 'verifications')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/identity-verifications/{verification_id}/review",
+    "function": "admin_review_identity_verification",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "DriverIdentityReviewRequest"
+    ],
+    "response": [
+      "{'ok': True, 'status': body.status, 'reviewed_at': now, 'next_identity_check_at': next_check_at}"
+    ],
+    "http_statuses": [
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/drivers/{driver_id}/identity-recheck",
+    "function": "admin_request_driver_identity_recheck",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "DriverIdentityRecheckRequest"
+    ],
+    "response": [
+      "{'ok': True, 'deferred': deferred, 'reason': reason}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/identity-verifications/retention",
+    "function": "admin_identity_retention",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'retention_days': KJAPP_IDENTITY_SELFIE_RETENTION_DAYS, 'cutoff': cutoff.isoformat(), 'eligible_for_purge': eligible, 'retained_terminal': retained, 'pending_review_excluded': pending}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/identity-verifications/purge-expired",
+    "function": "admin_purge_identity_selfies",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "IdentityRetentionPurgeRequest"
+    ],
+    "response": [
+      "{'dry_run': False, 'retention_days': KJAPP_IDENTITY_SELFIE_RETENTION_DAYS, 'purged': purged, 'failed': failed}",
+      "{'dry_run': True, 'retention_days': KJAPP_IDENTITY_SELFIE_RETENTION_DAYS, 'eligible': len(candidates), 'verification_ids': [v.get('id') or str(v['_id']) for v in candidates]}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/upload",
+    "function": "upload_auth",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/upload/public",
+    "function": "upload_public",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/files/{path:path}",
+    "function": "download_file",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(get_current_user)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "FastResponse(content=data, media_type=rec.get('content_type') or ct)"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/fleet-applications/draft",
+    "function": "create_fleet_application_draft",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "FleetApplicationDraftRequest"
+    ],
+    "response": [
+      "{'upload_token': upload_token, 'status': 'draft'}"
+    ],
+    "http_statuses": [
+      "400"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet-applications/submit",
+    "function": "submit_fleet_application",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "FleetApplicationSubmitRequest"
+    ],
+    "response": [
+      "{'ok': True, 'status': 'pending', 'confirmation_email_status': confirmation_status}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/superadmin/fleet-applications",
+    "function": "superadmin_list_applications",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "Optional[str]"
+    ],
+    "response": [
+      "{'applications': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/superadmin/fleet-applications/{app_id}",
+    "function": "superadmin_get_application",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "a"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/superadmin/fleet-applications/{app_id}/approve",
+    "function": "superadmin_approve_application",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "FleetApplicationDecisionRequest"
+    ],
+    "response": [
+      "{'ok': True, 'fleet_id': fleet_id, 'fleet_owner_user_id': owner_id, 'temp_password': temp_pw, 'stripe_onboarding_status': stripe_onboarding_status, 'confirmation_email_status': confirmation_status}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/superadmin/fleet-applications/{app_id}/reject",
+    "function": "superadmin_reject_application",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "FleetApplicationDecisionRequest"
+    ],
+    "response": [
+      "{'ok': True, 'confirmation_email_status': confirmation_status}"
+    ],
+    "http_statuses": [
+      "409"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/driver-invites",
+    "function": "fleet_create_driver_invite",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "DriverInviteRequest"
+    ],
+    "response": [
+      "await _deliver_driver_invite(doc)"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/fleet/driver-invites/{token}/resend",
+    "function": "fleet_resend_driver_invite",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "await _deliver_driver_invite(invite)"
+    ],
+    "http_statuses": [
+      "400",
+      "403",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/fleet/driver-invites",
+    "function": "fleet_list_driver_invites",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_fleet_owner)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'invites': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/pending-drivers",
+    "function": "admin_list_pending_drivers",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'drivers': out}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/live",
+    "function": "admin_live",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'drivers': drivers, 'stale_drivers': stale_drivers, 'trips': trips, 'as_of': datetime.now(timezone.utc).isoformat()}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/drivers-full",
+    "function": "admin_drivers_full",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(out, total, page, page_size, 'drivers')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/drivers/{user_id}/set-status",
+    "function": "admin_set_driver_status",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "ApproveDriverRequest"
+    ],
+    "response": [
+      "await admin_approve_driver(user_id, body, current)"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/drivers/{user_id}/capabilities",
+    "function": "admin_set_driver_capabilities",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "DriverCapabilitiesRequest"
+    ],
+    "response": [
+      "{'ok': True, 'capabilities': capabilities}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/vehicles",
+    "function": "admin_vehicles",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(out, total, page, page_size, 'vehicles')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/trips-full",
+    "function": "admin_trips_full",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(out, total, page, page_size, 'trips')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/receipts",
+    "function": "admin_receipts",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(rows, total, page, page_size, 'receipts')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/receipts/{receipt_or_trip}",
+    "function": "admin_receipt_detail",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "receipt"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/receipts/backfill",
+    "function": "admin_receipts_backfill",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'ok': True, 'scanned': scanned, 'created': created}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/trips/{trip_id}/timeline",
+    "function": "admin_trip_timeline",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'trip_id': trip_id, 'status': t.get('status'), 'events': events}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/trips/{trip_id}/intervene",
+    "function": "admin_trip_intervene",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "TripInterventionRequest"
+    ],
+    "response": [
+      "{'ok': True, 'action': body.action, 'status': 'cancelled', 'requires_manual_settlement': updates.get('requires_manual_settlement', False)}",
+      "{'ok': True, 'action': body.action, 'status': 'searching'}",
+      "{'ok': True, 'action': body.action, 'price': new_price, 'previous_price': previous_price}"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/finance",
+    "function": "admin_finance",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'days': days, 'totals': {'gmv': total_gmv, 'trips': total_trips, 'kjapp_revenue': platform_revenue, 'avg_price': round(total_gmv / total_trips) if total_trips else 0}, 'series': series, 'fleets': fleets_out[:50], 'as_of': datetime.now(timezone.utc).isoformat()}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/finance/export",
+    "function": "admin_finance_export",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "RawResponse(content='\\ufeff' + buf.getvalue(), media_type='text/csv; charset=utf-8', headers={'Content-Disposition': f'attachment; filename=\"kjapp_finans_{days}d.csv\"'})"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/documents",
+    "function": "admin_documents",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "{**_paged(out, total, page, page_size, 'documents'), 'scopes': sorted(all_scopes), 'summary': summary}",
+      "'VALID'",
+      "'REJECTED'",
+      "'PENDING'",
+      "'EXPIRED'",
+      "'EXPIRING'"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/documents/{file_id}/review",
+    "function": "admin_document_review",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "DocumentReviewRequest"
+    ],
+    "response": [
+      "{'ok': True, 'review_status': body.status, 'expiry': parsed_expiry, 'driver_compliance': compliance, 'forced_offline': forced_offline}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/refunds",
+    "function": "admin_refunds",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(out, total, page, page_size, 'refunds')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/refunds",
+    "function": "admin_create_refund",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "RefundRequest"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": [
+      "400",
+      "404",
+      "409",
+      "502"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/transactions",
+    "function": "admin_transactions",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(page_rows, total, page, page_size, 'transactions')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/support/tickets",
+    "function": "admin_tickets",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "Optional[str]",
+      "Optional[str]"
+    ],
+    "response": [
+      "_paged(out, total, page, page_size, 'tickets')"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/support/tickets",
+    "function": "admin_create_ticket",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "TicketCreateRequest"
+    ],
+    "response": [
+      "doc"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/support/tickets/{ticket_id}",
+    "function": "admin_update_ticket",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "TicketUpdateRequest"
+    ],
+    "response": [
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/analytics",
+    "function": "admin_analytics",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'days': days, 'metrics': {'acceptance_rate': round(accepted / offered * 100) if offered else 100, 'cancellation_rate': round(cancelled / total * 100) if total else 0, 'avg_price': round(price_sum / priced) if priced else 0, 'avg_distance_km': round(dist_sum / priced, 1) if priced else 0, 'avg_duration_min': round(dur_sum / priced) if priced else 0, 'total_trips': total, 'completed': completed, 'cancelled': cancelled}, 'series': series, 'hours': "
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/settings",
+    "function": "admin_get_settings",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "merged",
+      "{**DEFAULT_PLATFORM_SETTINGS, 'updated_at': None}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/marketing/platform-config",
+    "function": "marketing_platform_config",
+    "file": "backend\\server.py",
+    "auth": [
+      "public / inspect delegated dependencies"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'service_fee_percent': round(await _platform_commission() * 100, 2), 'fleet_application_review': 'manual', 'brand': 'SNAR'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "PATCH",
+    "path": "/admin/settings",
+    "function": "admin_update_settings",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "PlatformSettingsUpdate"
+    ],
+    "response": [
+      "{'ok': True}",
+      "{'ok': True}"
+    ],
+    "http_statuses": [
+      "400"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/admin/pricing/test",
+    "function": "admin_pricing_test",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "PricingTestRequest"
+    ],
+    "response": [
+      "{**quote, **charge, 'ride_price': quote['price'], 'price': quote['price'] + charge['waiting_fee_total'], 'waiting_policy': policy, 'distance_km': body.distance_km, 'duration_min': body.duration_min, 'vehicle_type': body.vehicle_type, 'pricing_area': area}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/pricing/test-route",
+    "function": "admin_pricing_test_route",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "PricingRouteTestRequest"
+    ],
+    "response": [
+      "{**quote, 'pricing_area': area, 'pickup': p, 'dropoff': d, 'distance_km': route['distance_km'], 'duration_min': route['duration_min'], 'vehicle_type': body.vehicle_type}"
+    ],
+    "http_statuses": [
+      "400",
+      "503"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/pricing/history",
+    "function": "admin_pricing_history",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'items': items}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "POST",
+    "path": "/admin/pricing/rollback",
+    "function": "admin_pricing_rollback",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_superadmin)"
+    ],
+    "request_model": [
+      "PricingRollbackRequest"
+    ],
+    "response": [
+      "{'ok': True, 'pricing_version': restored['version'], 'restored_from': body.version}"
+    ],
+    "http_statuses": [
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/beta-readiness",
+    "function": "admin_beta_readiness",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'generated_at': datetime.now(timezone.utc).isoformat(), 'checks': checks, 'blockers': blockers, 'ready': not blockers, 'note': 'Manuelle gates er eksplisitte operat\u00f8rbekreftelser; systemet hevder ikke juridisk godkjenning p\u00e5 egen h\u00e5nd.'}"
+    ],
+    "http_statuses": []
+  },
+  {
+    "method": "GET",
+    "path": "/admin/fleets/{fleet_id}",
+    "function": "admin_fleet_detail",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'fleet': f, 'drivers': drivers, 'commission_history': commission_history, 'audit': audit, 'payouts': payouts}"
+    ],
+    "http_statuses": [
+      "400",
+      "404"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/admin/search",
+    "function": "admin_search",
+    "file": "backend\\server.py",
+    "auth": [
+      "Depends(require_admin)"
+    ],
+    "request_model": [
+      "path/query/form"
+    ],
+    "response": [
+      "{'query': q, 'trips': trips, 'drivers': drivers[:10], 'customers': customers[:10], 'fleets': fleets}",
+      "{'query': q, 'trips': [], 'drivers': [], 'customers': [], 'fleets': []}"
+    ],
+    "http_statuses": []
+  }
+]

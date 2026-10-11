@@ -1,0 +1,6111 @@
+[
+  {
+    "method": "GET",
+    "client_path": "/auth/google/config",
+    "wrapper": "authApi.googleWebConfig",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/google/config",
+        "function": "google_oauth_config",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\socialSignIn.web.ts",
+        "line": 8,
+        "api": "authApi",
+        "method": "googleWebConfig",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/code",
+    "wrapper": "authApi.googleWebCode",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/code",
+        "function": "google_oauth_code",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "GoogleCodeRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(session_user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\socialSignIn.web.ts",
+        "line": 18,
+        "api": "authApi",
+        "method": "googleWebCode",
+        "args": "result.params.code, request.codeVerifier, redirectUri"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/native/config",
+    "wrapper": "authApi.nativeConfig",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/native/config",
+        "function": "identity_config",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "Literal['customer', 'driver']"
+        ],
+        "response": [
+          "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\profile.tsx",
+        "line": 37,
+        "api": "authApi",
+        "method": "nativeConfig",
+        "args": ""
+      },
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 106,
+        "api": "authApi",
+        "method": "nativeConfig",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/link",
+    "wrapper": "authApi.linkGoogle",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/link",
+        "function": "link_google",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "NativeIdentity"
+        ],
+        "response": [
+          "{'linked': True}"
+        ],
+        "http_statuses": [
+          "401",
+          "403",
+          "409",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\profile.tsx",
+        "line": 40,
+        "api": "authApi",
+        "method": "linkGoogle",
+        "args": "identity"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/native",
+    "wrapper": "authApi.nativeSignIn",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/native",
+        "function": "google_native",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "NativeIdentity"
+        ],
+        "response": [
+          "await identity_session('google', claims, body, response)"
+        ],
+        "http_statuses": [
+          "401",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 108,
+        "api": "authApi",
+        "method": "nativeSignIn",
+        "args": "provider, identity"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/apple/native",
+    "wrapper": "authApi.nativeSignIn",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/apple/native",
+        "function": "apple_native",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "NativeIdentity"
+        ],
+        "response": [
+          "await identity_session('apple', claims, body, response)"
+        ],
+        "http_statuses": [
+          "401"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 108,
+        "api": "authApi",
+        "method": "nativeSignIn",
+        "args": "provider, identity"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/register",
+    "wrapper": "authApi.register",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/register",
+        "function": "register",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "RegisterRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(created_user or {'_id': result.inserted_id, 'email': email, 'fullName': body.fullName, 'phone': body.phone or '', 'role': 'user', 'accepted_terms_at': now_iso})}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 86,
+        "api": "authApi",
+        "method": "register",
+        "args": "data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/login",
+    "wrapper": "authApi.login",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/login",
+        "function": "login",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "LoginRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 74,
+        "api": "authApi",
+        "method": "login",
+        "args": "{ email, password, client: 'customer' }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/forgot-password",
+    "wrapper": "authApi.forgotPassword",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/forgot-password",
+        "function": "forgot_password",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "ForgotPasswordRequest"
+        ],
+        "response": [
+          "{'ok': True}",
+          "{'ok': True}",
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\forgot-password.tsx",
+        "line": 27,
+        "api": "authApi",
+        "method": "forgotPassword",
+        "args": "value"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/reset-password/${token}",
+    "wrapper": "authApi.checkResetToken",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/reset-password/{token}",
+        "function": "check_reset_token",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'valid': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\reset-password\\[token].tsx",
+        "line": 27,
+        "api": "authApi",
+        "method": "checkResetToken",
+        "args": "value"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/reset-password",
+    "wrapper": "authApi.resetPassword",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/reset-password",
+        "function": "reset_password",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "ResetPasswordRequest"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\reset-password\\[token].tsx",
+        "line": 37,
+        "api": "authApi",
+        "method": "resetPassword",
+        "args": "String(token), password"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/accept-legal",
+    "wrapper": "authApi.acceptLegal",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/accept-legal",
+        "function": "accept_legal",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "AcceptLegalRequest"
+        ],
+        "response": [
+          "user_public(updated)"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 97,
+        "api": "authApi",
+        "method": "acceptLegal",
+        "args": "'2026-09'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/me",
+    "wrapper": "authApi.me",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/me",
+        "function": "me",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "public"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 49,
+        "api": "authApi",
+        "method": "me",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/logout",
+    "wrapper": "authApi.logout",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/logout",
+        "function": "logout",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\context\\AuthContext.tsx",
+        "line": 130,
+        "api": "authApi",
+        "method": "logout",
+        "args": "token"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/session",
+    "wrapper": "authApi.googleSession",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/session",
+        "function": "google_session",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "GoogleSessionRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(session_user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/apple",
+    "wrapper": "authApi.appleSignIn",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/apple",
+        "function": "apple_signin",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "AppleSignInRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(session_user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${detail.trip_id}/cancel",
+    "wrapper": "authApi.inspect source",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/cancel",
+        "function": "cancel_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${detail.trip_id}/cancel",
+    "wrapper": "authApi.inspect source",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/cancel",
+        "function": "cancel_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${detail.trip_id}/authorization/confirm",
+    "wrapper": "authApi.inspect source",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/authorization/confirm",
+        "function": "confirm_trip_authorization",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "await ride_reservations.confirm(trip_id, current['id'])"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${detail.trip_id}",
+    "wrapper": "authApi.inspect source",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}",
+        "function": "get_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/estimate",
+    "wrapper": "tripsApi.estimate",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/estimate",
+        "function": "trip_estimate",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "EstimateRequest"
+        ],
+        "response": [
+          "{'distance_km': est, 'duration_min': duration, 'options': options, 'geometry': geometry, 'stops': [s.model_dump() for s in body.stops], 'commission_rate': commission_rate, 'pricing_version': int(effective_pricing.get('version', 1)), 'pricing_area': pricing_area}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 196,
+        "api": "tripsApi",
+        "method": "estimate",
+        "args": "{\r\n        pickup_lat: pickup.lat,\r\n        pickup_lng: pickup.lng,\r\n        dropoff_lat: place.lat,\r\n        dropoff_lng: place.lng,\r\n      }"
+      },
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 185,
+        "api": "tripsApi",
+        "method": "estimate",
+        "args": "{\r\n      pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,\r\n      dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,\r\n      stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\r\n    }"
+      },
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 262,
+        "api": "tripsApi",
+        "method": "estimate",
+        "args": "{\r\n          pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,\r\n          dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,\r\n          stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\r\n        }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/request",
+    "wrapper": "tripsApi.request",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/request",
+        "function": "request_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "TripRequest"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 230,
+        "api": "tripsApi",
+        "method": "request",
+        "args": "{\r\n        pickup_address: pickup.name,\r\n        pickup_lat: pickup.lat,\r\n        pickup_lng: pickup.lng,\r\n        dropoff_address: dropoff.name,\r\n        dropoff_lat: dropoff.lat,\r\n        dropoff_lng: dropoff.lng,\r\n        vehicle_type: vehicle,\r\n      }"
+      },
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 233,
+        "api": "tripsApi",
+        "method": "request",
+        "args": "{\r\n        pickup_address: selectedPickup?.name || pickupLabel,\r\n        pickup_lat: pickupPoint.lat,\r\n        pickup_lng: pickupPoint.lng,\r\n        dropoff_address: dropoff.name,\r\n        dropoff_lat: dropoff.lat,\r\n        dropoff_lng: dropoff.lng,\r\n        vehicle_type: selType,\r\n        stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),\r\n        special_needs: specialNeeds,\r\n        ...(waitingPolicy ? {\r\n          waiting_policy_token: waitingPolicy.token,\r\n          quoted_price: priceFor(selType),\r\n          quoted_pricing_version: estimate.pricing_version,\r\n        } : {}),\r\n      }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/authorization/retry",
+    "wrapper": "tripsApi.authorize",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/authorization/retry",
+        "function": "retry_trip_authorization",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/payment/retry",
+    "wrapper": "tripsApi.retryPayment",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/payment/retry",
+        "function": "retry_reserved_payment",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "await ride_reservations.capture(trip)",
+          "{'ok': True, 'paid': True}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/active",
+    "wrapper": "tripsApi.active",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/active",
+        "function": "active_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip",
+          "None"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 134,
+        "api": "tripsApi",
+        "method": "active",
+        "args": ""
+      },
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 252,
+        "api": "tripsApi",
+        "method": "active",
+        "args": ""
+      },
+      {
+        "file": "frontend\\app\\(app)\\messages.tsx",
+        "line": 29,
+        "api": "tripsApi",
+        "method": "active",
+        "args": ""
+      },
+      {
+        "file": "frontend\\src\\components\\GlobalCustomerShell.tsx",
+        "line": 90,
+        "api": "tripsApi",
+        "method": "active",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${id}",
+    "wrapper": "tripsApi.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}",
+        "function": "get_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 94,
+        "api": "tripsApi",
+        "method": "get",
+        "args": "retryTripId"
+      },
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 85,
+        "api": "tripsApi",
+        "method": "get",
+        "args": "tripId!"
+      },
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 147,
+        "api": "tripsApi",
+        "method": "get",
+        "args": "tripId!"
+      },
+      {
+        "file": "frontend\\app\\receipt\\[tripId].tsx",
+        "line": 32,
+        "api": "tripsApi",
+        "method": "get",
+        "args": "tripId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/complete",
+    "wrapper": "tripsApi.complete",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/complete",
+        "function": "complete_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\receipt\\[tripId].tsx",
+        "line": 57,
+        "api": "tripsApi",
+        "method": "complete",
+        "args": "tripId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${id}/cancel-preview",
+    "wrapper": "tripsApi.cancelPreview",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}/cancel-preview",
+        "function": "cancel_trip_preview",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'cancellation_fee': fee, 'currency': 'NOK', 'free_cancel_minutes': free_minutes}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 131,
+        "api": "tripsApi",
+        "method": "cancelPreview",
+        "args": "tripId!"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/cancel",
+    "wrapper": "tripsApi.cancel",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/cancel",
+        "function": "cancel_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 141,
+        "api": "tripsApi",
+        "method": "cancel",
+        "args": "tripId!"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "PATCH",
+    "client_path": "/trips/${id}/destination",
+    "wrapper": "tripsApi.changeDestination",
+    "backend": [
+      {
+        "method": "PATCH",
+        "path": "/trips/{trip_id}/destination",
+        "function": "change_trip_destination",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "TripDestinationUpdate"
+        ],
+        "response": [
+          "{'ok': True, 'price': updated_price, 'previous_price': trip.get('price'), 'distance_km': distance_km, 'duration_min': duration_min, 'pricing_version': quote['pricing_version'], 'stops': [s.model_dump() for s in body.stops]}"
+        ],
+        "http_statuses": [
+          "400",
+          "404",
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/rate",
+    "wrapper": "tripsApi.rate",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/rate",
+        "function": "rate_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "RateTripRequest"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": [
+          "400",
+          "404",
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\receipt\\[tripId].tsx",
+        "line": 76,
+        "api": "tripsApi",
+        "method": "rate",
+        "args": "tripId, { rating: stars, feedback: '' }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips",
+    "wrapper": "tripsApi.list",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips",
+        "function": "list_trips",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trips"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 116,
+        "api": "tripsApi",
+        "method": "list",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/cars/nearby",
+    "wrapper": "carsApi.nearby",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/cars/nearby",
+        "function": "cars_nearby",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "NearbyCarsRequest"
+        ],
+        "response": [
+          "{'cars': cars, 'count': len(cars), 'live': True, 'gps_fresh_seconds': GPS_FRESH_SECONDS, 'server_time': datetime.now(timezone.utc).isoformat()}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\components\\InteractiveMap.native.tsx",
+        "line": 119,
+        "api": "carsApi",
+        "method": "nearby",
+        "args": "user.lat, user.lng"
+      },
+      {
+        "file": "frontend\\src\\components\\InteractiveMapFallback.tsx",
+        "line": 125,
+        "api": "carsApi",
+        "method": "nearby",
+        "args": "user.lat, user.lng"
+      },
+      {
+        "file": "frontend\\src\\lib\\useAvailableCars.ts",
+        "line": 16,
+        "api": "carsApi",
+        "method": "nearby",
+        "args": "lat, lng, vehicleType, needsKey ? needsKey.split(',') : []"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/places",
+    "wrapper": "placesApi.list",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/places",
+        "function": "list_places",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'places': places}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 176,
+        "api": "placesApi",
+        "method": "list",
+        "args": "true"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/places/search",
+    "wrapper": "placesApi.search",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/places/search",
+        "function": "search_places",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'results': results}",
+          "{'results': []}",
+          "{'results': results}",
+          "{'results': results}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 153,
+        "api": "placesApi",
+        "method": "search",
+        "args": "destinationQuery"
+      },
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 177,
+        "api": "placesApi",
+        "method": "search",
+        "args": "q"
+      },
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 668,
+        "api": "placesApi",
+        "method": "search",
+        "args": "q.trim()"
+      },
+      {
+        "file": "frontend\\app\\saved-places.tsx",
+        "line": 55,
+        "api": "placesApi",
+        "method": "search",
+        "args": "query.trim()"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/places/reverse",
+    "wrapper": "placesApi.reverse",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/places/reverse",
+        "function": "reverse_geocode_endpoint",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "await reverse_geocode(lat, lng)"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 105,
+        "api": "placesApi",
+        "method": "reverse",
+        "args": "lat, lng"
+      },
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 164,
+        "api": "placesApi",
+        "method": "reverse",
+        "args": "p.lat, p.lng"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/native/config",
+    "wrapper": "paymentApi.nativeConfig",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/native/config",
+        "function": "native_config",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "payment_config()"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\components\\NativePaymentProvider.native.tsx",
+        "line": 17,
+        "api": "paymentApi",
+        "method": "nativeConfig",
+        "args": ""
+      },
+      {
+        "file": "frontend\\src\\lib\\nativePayment.native.ts",
+        "line": 7,
+        "api": "paymentApi",
+        "method": "nativeConfig",
+        "args": ""
+      },
+      {
+        "file": "frontend\\src\\lib\\nativeReservation.native.ts",
+        "line": 5,
+        "api": "paymentApi",
+        "method": "nativeConfig",
+        "args": ""
+      },
+      {
+        "file": "frontend\\src\\lib\\nativeReservation.ts",
+        "line": 16,
+        "api": "paymentApi",
+        "method": "nativeConfig",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/payments/native/intent",
+    "wrapper": "paymentApi.nativeIntent",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/payments/native/intent",
+        "function": "native_intent",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "NativePayment"
+        ],
+        "response": [
+          "{'client_secret': pi.client_secret, 'payment_intent_id': pi.id}",
+          "{'client_secret': pi.client_secret, 'payment_intent_id': pi.id}"
+        ],
+        "http_statuses": [
+          "400",
+          "409",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\nativePayment.native.ts",
+        "line": 13,
+        "api": "paymentApi",
+        "method": "nativeIntent",
+        "args": "tripId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/native/intent/${id}",
+    "wrapper": "paymentApi.nativeStatus",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/native/intent/{intent_id}",
+        "function": "native_status",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'payment_status': 'paid' if paid else pi.get('status')}"
+        ],
+        "http_statuses": [
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\nativePayment.native.ts",
+        "line": 29,
+        "api": "paymentApi",
+        "method": "nativeStatus",
+        "args": "intent.payment_intent_id"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payment-methods",
+    "wrapper": "paymentApi.list",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payment-methods",
+        "function": "list_payment_methods",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "methods"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 110,
+        "api": "paymentApi",
+        "method": "list",
+        "args": ""
+      },
+      {
+        "file": "frontend\\app\\(app)\\wallet.tsx",
+        "line": 18,
+        "api": "paymentApi",
+        "method": "list",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/payment-methods/${id}",
+    "wrapper": "paymentApi.remove",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/payment-methods/{pm_id}",
+        "function": "delete_payment_method",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\payment-methods.tsx",
+        "line": 63,
+        "api": "paymentApi",
+        "method": "remove",
+        "args": "id"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/payments/card/setup",
+    "wrapper": "paymentApi.cardSetup",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/payments/card/setup",
+        "function": "stripe_card_setup",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "CardSetupRequest"
+        ],
+        "response": [
+          "{'checkout_url': session.url, 'session_id': session.id}"
+        ],
+        "http_statuses": [
+          "500"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\payment-methods.tsx",
+        "line": 76,
+        "api": "paymentApi",
+        "method": "cardSetup",
+        "args": "CHECKOUT_ORIGIN"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/card/setup/${session_id}",
+    "wrapper": "paymentApi.cardSetupStatus",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/card/setup/{session_id}",
+        "function": "stripe_card_setup_status",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ready': True, 'card': existing, 'verified': verified}",
+          "{'ready': False, 'status': s.status}",
+          "{'ready': False, 'reason': 'no payment method attached'}",
+          "{'ready': True, 'card': doc, 'verified': verified}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\payment-methods.tsx",
+        "line": 34,
+        "api": "paymentApi",
+        "method": "cardSetupStatus",
+        "args": "sessionId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/payments/checkout",
+    "wrapper": "paymentApi.checkout",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/payments/checkout",
+        "function": "create_trip_checkout",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "TripCheckoutRequest"
+        ],
+        "response": [
+          "{'checkout_url': session.url, 'session_id': session.id}",
+          "{'checkout_url': existing_session.url, 'session_id': existing_session.id, 'reused': True}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\receipt\\[tripId].tsx",
+        "line": 114,
+        "api": "paymentApi",
+        "method": "checkout",
+        "args": "tripId, CHECKOUT_ORIGIN"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/status/${session_id}",
+    "wrapper": "paymentApi.checkoutStatus",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/status/{session_id}",
+        "function": "get_payment_status",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'session_id': record['session_id'], 'status': record.get('status'), 'payment_status': record.get('payment_status'), 'trip_id': record.get('trip_id')}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\payment\\success.tsx",
+        "line": 34,
+        "api": "paymentApi",
+        "method": "checkoutStatus",
+        "args": "session_id"
+      },
+      {
+        "file": "frontend\\app\\receipt\\[tripId].tsx",
+        "line": 86,
+        "api": "paymentApi",
+        "method": "checkoutStatus",
+        "args": "sessionId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/vipps/config",
+    "wrapper": "paymentApi.vippsConfig",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/vipps/config",
+        "function": "vipps_config",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'enabled': enabled, 'provider': 'Vipps'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/ai/chat",
+    "wrapper": "aiApi.chat",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/ai/chat",
+        "function": "ai_chat",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "ChatRequest"
+        ],
+        "response": [
+          "{'reply': reply, 'session_id': session_id}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 279,
+        "api": "aiApi",
+        "method": "chat",
+        "args": "text, sessionId"
+      },
+      {
+        "file": "frontend\\src\\components\\CustomerSupport.tsx",
+        "line": 39,
+        "api": "aiApi",
+        "method": "chat",
+        "args": "value, sessionId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/ai/transcribe",
+    "wrapper": "aiApi.transcribe",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/ai/transcribe",
+        "function": "ai_transcribe",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "TranscribeRequest"
+        ],
+        "response": [
+          "{'text': (text or '').strip()}"
+        ],
+        "http_statuses": [
+          "400",
+          "429",
+          "502",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\assist.tsx",
+        "line": 305,
+        "api": "aiApi",
+        "method": "transcribe",
+        "args": "b64, mime, 'no'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${tripId}/messages",
+    "wrapper": "messagesApi.list",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}/messages",
+        "function": "list_trip_messages",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'messages': out}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\components\\ChatSheet.tsx",
+        "line": 39,
+        "api": "messagesApi",
+        "method": "list",
+        "args": "tripId"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${tripId}/messages",
+    "wrapper": "messagesApi.send",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/messages",
+        "function": "send_trip_message",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "TripMessageRequest"
+        ],
+        "response": [
+          "msg"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\components\\ChatSheet.tsx",
+        "line": 57,
+        "api": "messagesApi",
+        "method": "send",
+        "args": "tripId, t"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${tripId}/safety",
+    "wrapper": "safetyApi.log",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/safety",
+        "function": "trip_safety_event",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "SafetyEventRequest"
+        ],
+        "response": [
+          "{'ok': True, 'event_id': event['id'], 'emergency_number': '112'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 166,
+        "api": "safetyApi",
+        "method": "log",
+        "args": "tripId!, { kind: 'emergency' }"
+      },
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 176,
+        "api": "safetyApi",
+        "method": "log",
+        "args": "tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' }"
+      },
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 193,
+        "api": "safetyApi",
+        "method": "log",
+        "args": "tripId!, { kind: 'share' }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${tripId}/share-link",
+    "wrapper": "safetyApi.shareLink",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/share-link",
+        "function": "create_trip_share_link",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'token': token, 'url': f'https://kjappapp.no/tur/{token}', 'expires_at': expires_at.isoformat()}"
+        ],
+        "http_statuses": [
+          "403"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\booking\\[tripId].tsx",
+        "line": 191,
+        "api": "safetyApi",
+        "method": "shareLink",
+        "args": "tripId!"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/gdpr/export",
+    "wrapper": "gdprApi.export",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/gdpr/export",
+        "function": "gdpr_export",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'exported_at': datetime.now(timezone.utc).isoformat(), 'user': user, 'trips': trips, 'ai_messages': messages, 'payments': [{k: v for k, v in p.items() if k not in ('client_secret', 'stripe_client_secret')} for p in payments], 'customer_photo': await export_customer_photo(db, uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\settings.tsx",
+        "line": 49,
+        "api": "gdprApi",
+        "method": "export",
+        "args": ""
+      },
+      {
+        "file": "frontend\\src\\components\\CustomerProfileDetails.tsx",
+        "line": 26,
+        "api": "gdprApi",
+        "method": "export",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/gdpr/delete",
+    "wrapper": "gdprApi.delete",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/gdpr/delete",
+        "function": "gdpr_delete",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True, 'anonymized_trip_owner': anon_id}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\profile.tsx",
+        "line": 63,
+        "api": "gdprApi",
+        "method": "delete",
+        "args": ""
+      },
+      {
+        "file": "frontend\\app\\settings.tsx",
+        "line": 97,
+        "api": "gdprApi",
+        "method": "delete",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/me/places",
+    "wrapper": "mePlacesApi.list",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/me/places",
+        "function": "list_my_places",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'places': places}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\(app)\\home.tsx",
+        "line": 116,
+        "api": "mePlacesApi",
+        "method": "list",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/me/places",
+    "wrapper": "mePlacesApi.add",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/me/places",
+        "function": "add_my_place",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "UserPlaceRequest"
+        ],
+        "response": [
+          "doc"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\saved-places.tsx",
+        "line": 71,
+        "api": "mePlacesApi",
+        "method": "add",
+        "args": "value"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "PUT",
+    "client_path": "/me/places/${id}",
+    "wrapper": "mePlacesApi.update",
+    "backend": [
+      {
+        "method": "PUT",
+        "path": "/me/places/{place_id}",
+        "function": "update_my_place",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "UserPlaceRequest"
+        ],
+        "response": [
+          "update"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\saved-places.tsx",
+        "line": 70,
+        "api": "mePlacesApi",
+        "method": "update",
+        "args": "editingId, value"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/me/places/${id}",
+    "wrapper": "mePlacesApi.remove",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/me/places/{place_id}",
+        "function": "delete_my_place",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\saved-places.tsx",
+        "line": 85,
+        "api": "mePlacesApi",
+        "method": "remove",
+        "args": "id"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/settings",
+    "wrapper": "settingsApi.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/settings",
+        "function": "get_settings",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "settings"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\settings.tsx",
+        "line": 108,
+        "api": "settingsApi",
+        "method": "get",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "PATCH",
+    "client_path": "/settings",
+    "wrapper": "settingsApi.update",
+    "backend": [
+      {
+        "method": "PATCH",
+        "path": "/settings",
+        "function": "update_settings",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "SettingsUpdate"
+        ],
+        "response": [
+          "settings"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\app\\settings.tsx",
+        "line": 119,
+        "api": "settingsApi",
+        "method": "update",
+        "args": "{ [key]: next[key] }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/summary/today",
+    "wrapper": "summaryApi.today",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/summary/today",
+        "function": "summary_today",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'trips': trips, 'spent': total, 'satisfaction': 98}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/pending",
+    "wrapper": "driverApi.pending",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/pending",
+        "function": "driver_pending",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'trips': trips, 'commission': commission, 'driver_gps': {'lat': d_lat, 'lng': d_lng, 'at': current.get('last_location_at')} if d_lat is not None else None}",
+          "{'trips': [], 'offline': True, 'commission': await _platform_commission(), 'driver_gps': None}",
+          "{'trips': [], 'offline': False, 'gps_stale': True, 'commission': await _platform_commission(), 'driver_gps': None}",
+          "{'trips': [], 'offline': forced_offline, 'compliance_blocked': True, 'compliance': compliance, 'message': compliance['message'], 'commission': await _platform_commission(), 'driver_gps': None}",
+          "{'trips': [], 'busy': True, 'active_trip_id': current['active_trip_id'], 'commission': await _platform_commission(), 'driver_gps': {'lat': current.get('last_lat'), 'lng': current.get('last_lng'), 'at': current.get('last_location_at')}}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/accept",
+    "wrapper": "driverApi.accept",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/accept",
+        "function": "driver_accept",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "AcceptTripRequest"
+        ],
+        "response": [
+          "t"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/decline",
+    "wrapper": "driverApi.decline",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/decline",
+        "function": "driver_decline",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "DeclineTripRequest"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/current",
+    "wrapper": "driverApi.current",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/current",
+        "function": "driver_current",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "t",
+          "None",
+          "None",
+          "None"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/at-pickup",
+    "wrapper": "driverApi.atPickup",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/at-pickup",
+        "function": "driver_at_pickup",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True}",
+          "{'ok': True, 'already_applied': True}",
+          "{'ok': True, 'already_applied': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/start",
+    "wrapper": "driverApi.start",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/start",
+        "function": "driver_start",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True}",
+          "{'ok': True, 'already_applied': True}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/arrive",
+    "wrapper": "driverApi.arrive",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/arrive",
+        "function": "driver_arrive",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'bonuses': [], 'payment': payment, 'ended_early': ended_early, 'location_verified': location_verified, 'warning': warning if ended_early else None}",
+          "{'ok': True, 'already_applied': True, 'bonuses': [], 'ended_early': trip.get('ended_early', False), 'warning': trip.get('early_end_warning')}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/no-show",
+    "wrapper": "driverApi.noShow",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/no-show",
+        "function": "driver_no_show",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': int((t or {}).get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/online",
+    "wrapper": "driverApi.online",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/online",
+        "function": "driver_online",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "DriverOnlineRequest"
+        ],
+        "response": [
+          "{'online': body.online}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/location",
+    "wrapper": "driverApi.location",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/location",
+        "function": "driver_location",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "DriverLocationRequest"
+        ],
+        "response": [
+          "{'ok': True, 'recorded_at': recorded.isoformat(), 'received_at': now_iso}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/summary/today",
+    "wrapper": "driverApi.summary",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/summary/today",
+        "function": "driver_summary",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'income': total + bonus, 'trip_income': total, 'gross_trip_income': gross_total, 'bonus': bonus, 'trips': trips, 'online': bool(u.get('online')), 'last_location_at': u.get('last_location_at'), 'online_minutes': online_minutes, 'acceptance_rate': acceptance_rate}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/history",
+    "wrapper": "driverApi.history",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/history",
+        "function": "driver_history",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'trips': trips}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/history/weekly",
+    "wrapper": "driverApi.weekly",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/history/weekly",
+        "function": "driver_history_weekly",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'days': days}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/ratings",
+    "wrapper": "driverApi.ratings",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/ratings",
+        "function": "driver_ratings",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'average': avg, 'count': count, 'breakdown': breakdown, 'recent': recent}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/payouts",
+    "wrapper": "driverApi.payouts",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/payouts",
+        "function": "driver_payouts",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'earned_gross_7d': pending, 'earned_net_7d': net, 'paid_trips_7d': trips_count, 'pending_gross': pending, 'pending_trips': trips_count, 'pending_net': net + bonus_total, 'pending_trip_net': net, 'pending_bonus': bonus_total, 'bonuses': bonuses, 'commission_pct': int(round(commission * 100)), 'next_payout_date': next_payout, 'settlement_recipient': 'fleet', 'stripe_connect_ready': connect_ready, 'payout_schedule': payout_schedule, 'history': hist"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "unused legacy shared definitions"
+  },
+  {
+    "method": "POST",
+    "client_path": "/me/profile-photo",
+    "wrapper": "customerProfileApi.progress",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/me/profile-photo",
+        "function": "upload_photo",
+        "file": "backend\\customer_profile.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'customer_photo_version': version}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/me/profile-photo",
+    "wrapper": "customerProfileApi.deletePhoto",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/me/profile-photo",
+        "function": "remove_photo",
+        "file": "backend\\customer_profile.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\components\\CustomerPhoto.tsx",
+        "line": 49,
+        "api": "customerProfileApi",
+        "method": "deletePhoto",
+        "args": ""
+      }
+    ],
+    "status": "PARTIAL: source mapped; authenticated runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "No blanket mutation retries; trip/payment reconciliation in callers",
+    "request_arguments": "See wrapper in frontend/src/lib/api.ts",
+    "role_scope": "Customer caller or exported definition"
+  },
+  {
+    "method": "POST",
+    "client_path": "/support/public",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/support/public",
+        "function": "create_public_support_ticket",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "PublicSupportRequest"
+        ],
+        "response": [
+          "{'ok': True, 'ticket_id': str(result.inserted_id)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\components\\CustomerSupport.tsx",
+        "line": 54,
+        "api": "api",
+        "method": "post",
+        "args": "'/support/public', { topic: 'annet', name: user?.fullName, contact: user?.email || user?.phone, message: text.slice(0, 4000) }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/support/public', { topic: 'annet', name: user?.fullName, contact: user?.email || user?.phone, message: text.slice(0, 4000) }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/google/config",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/google/config",
+        "function": "google_oauth_config",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'enabled': enabled, 'client_id': os.environ.get('GOOGLE_CLIENT_ID', '').strip() if enabled else '', 'message': None if enabled else 'Google-innlogging er ikke konfigurert enn\u00e5'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 27,
+        "api": "api",
+        "method": "get",
+        "args": "'/auth/google/config'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/google/config'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/code",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/code",
+        "function": "google_oauth_code",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "GoogleCodeRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(session_user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 28,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/google/code', { code, code_verifier, redirect_uri }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/google/code', { code, code_verifier, redirect_uri }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/native/config",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/native/config",
+        "function": "identity_config",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "Literal['customer', 'driver']"
+        ],
+        "response": [
+          "{'google_enabled': bool(google_id), 'google_web_client_id': google_id, 'google_ios_client_id': os.getenv('GOOGLE_DRIVER_IOS_CLIENT_ID' if client == 'driver' else 'GOOGLE_IOS_CLIENT_ID', '').strip()}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 30,
+        "api": "api",
+        "method": "get",
+        "args": "'/auth/native/config', { params: { client: 'customer' } }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/native/config', { params: { client: 'customer' } }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/link",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/link",
+        "function": "link_google",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "NativeIdentity"
+        ],
+        "response": [
+          "{'linked': True}"
+        ],
+        "http_statuses": [
+          "401",
+          "403",
+          "409",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 31,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/google/link', { identity_token, client: 'customer' }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/google/link', { identity_token, client: 'customer' }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/native",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/native",
+        "function": "google_native",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "NativeIdentity"
+        ],
+        "response": [
+          "await identity_session('google', claims, body, response)"
+        ],
+        "http_statuses": [
+          "401",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 32,
+        "api": "api",
+        "method": "post",
+        "args": "`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/apple/native",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/apple/native",
+        "function": "apple_native",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "NativeIdentity"
+        ],
+        "response": [
+          "await identity_session('apple', claims, body, response)"
+        ],
+        "http_statuses": [
+          "401"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 32,
+        "api": "api",
+        "method": "post",
+        "args": "`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/register",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/register",
+        "function": "register",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "RegisterRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(created_user or {'_id': result.inserted_id, 'email': email, 'fullName': body.fullName, 'phone': body.phone or '', 'role': 'user', 'accepted_terms_at': now_iso})}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 34,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/register', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/register', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/login",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/login",
+        "function": "login",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "LoginRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 35,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/login', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/login', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/forgot-password",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/forgot-password",
+        "function": "forgot_password",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "ForgotPasswordRequest"
+        ],
+        "response": [
+          "{'ok': True}",
+          "{'ok': True}",
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 36,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/forgot-password', { email, client: 'customer' }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/forgot-password', { email, client: 'customer' }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/reset-password/${token}",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/reset-password/{token}",
+        "function": "check_reset_token",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'valid': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 37,
+        "api": "api",
+        "method": "get",
+        "args": "`/auth/reset-password/${token}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/auth/reset-password/${token}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/reset-password",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/reset-password",
+        "function": "reset_password",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "ResetPasswordRequest"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 38,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/reset-password', { token, new_password }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/reset-password', { token, new_password }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/accept-legal",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/accept-legal",
+        "function": "accept_legal",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "AcceptLegalRequest"
+        ],
+        "response": [
+          "user_public(updated)"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 39,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/accept-legal', { accepted_terms: true, legal_version }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/accept-legal', { accepted_terms: true, legal_version }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/auth/me",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/auth/me",
+        "function": "me",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "public"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 40,
+        "api": "api",
+        "method": "get",
+        "args": "'/auth/me'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/me'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/logout",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/logout",
+        "function": "logout",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 41,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/google/session",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/google/session",
+        "function": "google_session",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "GoogleSessionRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(session_user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 42,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/google/session', { session_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/google/session', { session_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/auth/apple",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/auth/apple",
+        "function": "apple_signin",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "AppleSignInRequest"
+        ],
+        "response": [
+          "{'token': token, 'user': user_public(session_user)}",
+          "{'twofa_required': True, 'twofa_token': create_twofa_token(uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 43,
+        "api": "api",
+        "method": "post",
+        "args": "'/auth/apple', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/auth/apple', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${detail.trip_id}/cancel",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/cancel",
+        "function": "cancel_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 55,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${detail.trip_id}/cancel`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${detail.trip_id}/cancel`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${detail.trip_id}/cancel",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/cancel",
+        "function": "cancel_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 57,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${detail.trip_id}/cancel`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${detail.trip_id}/cancel`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${detail.trip_id}/authorization/confirm",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/authorization/confirm",
+        "function": "confirm_trip_authorization",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "await ride_reservations.confirm(trip_id, current['id'])"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 60,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${detail.trip_id}/authorization/confirm`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${detail.trip_id}/authorization/confirm`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${detail.trip_id}",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}",
+        "function": "get_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 62,
+        "api": "api",
+        "method": "get",
+        "args": "`/trips/${detail.trip_id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${detail.trip_id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/estimate",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/estimate",
+        "function": "trip_estimate",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "EstimateRequest"
+        ],
+        "response": [
+          "{'distance_km': est, 'duration_min': duration, 'options': options, 'geometry': geometry, 'stops': [s.model_dump() for s in body.stops], 'commission_rate': commission_rate, 'pricing_version': int(effective_pricing.get('version', 1)), 'pricing_area': pricing_area}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 70,
+        "api": "api",
+        "method": "post",
+        "args": "'/trips/estimate', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/trips/estimate', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/request",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/request",
+        "function": "request_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "TripRequest"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 71,
+        "api": "api",
+        "method": "post",
+        "args": "'/trips/request', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/trips/request', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/authorization/retry",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/authorization/retry",
+        "function": "retry_trip_authorization",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 72,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${id}/authorization/retry`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/authorization/retry`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/payment/retry",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/payment/retry",
+        "function": "retry_reserved_payment",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "await ride_reservations.capture(trip)",
+          "{'ok': True, 'paid': True}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 73,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${id}/payment/retry`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/payment/retry`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/active",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/active",
+        "function": "active_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip",
+          "None"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 74,
+        "api": "api",
+        "method": "get",
+        "args": "'/trips/active'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/trips/active'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${id}",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}",
+        "function": "get_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 75,
+        "api": "api",
+        "method": "get",
+        "args": "`/trips/${id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/complete",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/complete",
+        "function": "complete_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trip"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 76,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${id}/complete`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/complete`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${id}/cancel-preview",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}/cancel-preview",
+        "function": "cancel_trip_preview",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'cancellation_fee': fee, 'currency': 'NOK', 'free_cancel_minutes': free_minutes}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 77,
+        "api": "api",
+        "method": "get",
+        "args": "`/trips/${id}/cancel-preview`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/cancel-preview`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/cancel",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/cancel",
+        "function": "cancel_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': fee, 'currency': 'NOK'}",
+          "{'ok': True, 'already_applied': True, 'cancellation_fee': int(trip.get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 78,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${id}/cancel`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/cancel`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "PATCH",
+    "client_path": "/trips/${id}/destination",
+    "wrapper": "api.patch",
+    "backend": [
+      {
+        "method": "PATCH",
+        "path": "/trips/{trip_id}/destination",
+        "function": "change_trip_destination",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "TripDestinationUpdate"
+        ],
+        "response": [
+          "{'ok': True, 'price': updated_price, 'previous_price': trip.get('price'), 'distance_km': distance_km, 'duration_min': duration_min, 'pricing_version': quote['pricing_version'], 'stops': [s.model_dump() for s in body.stops]}"
+        ],
+        "http_statuses": [
+          "400",
+          "404",
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 79,
+        "api": "api",
+        "method": "patch",
+        "args": "`/trips/${id}/destination`, data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/destination`, data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${id}/rate",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/rate",
+        "function": "rate_trip",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "RateTripRequest"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": [
+          "400",
+          "404",
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 80,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${id}/rate`, data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${id}/rate`, data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips",
+        "function": "list_trips",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "trips"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 81,
+        "api": "api",
+        "method": "get",
+        "args": "'/trips'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/trips'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/cars/nearby",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/cars/nearby",
+        "function": "cars_nearby",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "NearbyCarsRequest"
+        ],
+        "response": [
+          "{'cars': cars, 'count': len(cars), 'live': True, 'gps_fresh_seconds': GPS_FRESH_SECONDS, 'server_time': datetime.now(timezone.utc).isoformat()}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 85,
+        "api": "api",
+        "method": "post",
+        "args": "'/cars/nearby', { lat, lng, vehicle_type, special_needs }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/cars/nearby', { lat, lng, vehicle_type, special_needs }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/places",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/places",
+        "function": "list_places",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'places': places}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 90,
+        "api": "api",
+        "method": "get",
+        "args": "'/places', { params: { featured_only: featuredOnly } }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/places', { params: { featured_only: featuredOnly } }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/places/search",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/places/search",
+        "function": "search_places",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'results': results}",
+          "{'results': []}",
+          "{'results': results}",
+          "{'results': results}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 92,
+        "api": "api",
+        "method": "get",
+        "args": "'/places/search', { params: { q } }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/places/search', { params: { q } }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/places/reverse",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/places/reverse",
+        "function": "reverse_geocode_endpoint",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "await reverse_geocode(lat, lng)"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 93,
+        "api": "api",
+        "method": "get",
+        "args": "'/places/reverse', { params: { lat, lng } }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/places/reverse', { params: { lat, lng } }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/native/config",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/native/config",
+        "function": "native_config",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "payment_config()"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 98,
+        "api": "api",
+        "method": "get",
+        "args": "'/payments/native/config'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/payments/native/config'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/payments/native/intent",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/payments/native/intent",
+        "function": "native_intent",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "NativePayment"
+        ],
+        "response": [
+          "{'client_secret': pi.client_secret, 'payment_intent_id': pi.id}",
+          "{'client_secret': pi.client_secret, 'payment_intent_id': pi.id}"
+        ],
+        "http_statuses": [
+          "400",
+          "409",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 99,
+        "api": "api",
+        "method": "post",
+        "args": "'/payments/native/intent', { trip_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/payments/native/intent', { trip_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/native/intent/${id}",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/native/intent/{intent_id}",
+        "function": "native_status",
+        "file": "backend\\mobile_commerce.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'payment_status': 'paid' if paid else pi.get('status')}"
+        ],
+        "http_statuses": [
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 100,
+        "api": "api",
+        "method": "get",
+        "args": "`/payments/native/intent/${id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/payments/native/intent/${id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payment-methods",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payment-methods",
+        "function": "list_payment_methods",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "methods"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 101,
+        "api": "api",
+        "method": "get",
+        "args": "'/payment-methods'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/payment-methods'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/payment-methods/${id}",
+    "wrapper": "api.delete",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/payment-methods/{pm_id}",
+        "function": "delete_payment_method",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 102,
+        "api": "api",
+        "method": "delete",
+        "args": "`/payment-methods/${id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/payment-methods/${id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/payments/card/setup",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/payments/card/setup",
+        "function": "stripe_card_setup",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "CardSetupRequest"
+        ],
+        "response": [
+          "{'checkout_url': session.url, 'session_id': session.id}"
+        ],
+        "http_statuses": [
+          "500"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 103,
+        "api": "api",
+        "method": "post",
+        "args": "'/payments/card/setup', { origin_url }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/payments/card/setup', { origin_url }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/card/setup/${session_id}",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/card/setup/{session_id}",
+        "function": "stripe_card_setup_status",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ready': True, 'card': existing, 'verified': verified}",
+          "{'ready': False, 'status': s.status}",
+          "{'ready': False, 'reason': 'no payment method attached'}",
+          "{'ready': True, 'card': doc, 'verified': verified}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 104,
+        "api": "api",
+        "method": "get",
+        "args": "`/payments/card/setup/${session_id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/payments/card/setup/${session_id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/payments/checkout",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/payments/checkout",
+        "function": "create_trip_checkout",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "TripCheckoutRequest"
+        ],
+        "response": [
+          "{'checkout_url': session.url, 'session_id': session.id}",
+          "{'checkout_url': existing_session.url, 'session_id': existing_session.id, 'reused': True}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 105,
+        "api": "api",
+        "method": "post",
+        "args": "'/payments/checkout', { trip_id, origin_url }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/payments/checkout', { trip_id, origin_url }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/status/${session_id}",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/status/{session_id}",
+        "function": "get_payment_status",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'session_id': record['session_id'], 'status': record.get('status'), 'payment_status': record.get('payment_status'), 'trip_id': record.get('trip_id')}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 107,
+        "api": "api",
+        "method": "get",
+        "args": "`/payments/status/${session_id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/payments/status/${session_id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/payments/vipps/config",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/payments/vipps/config",
+        "function": "vipps_config",
+        "file": "backend\\server.py",
+        "auth": [
+          "public / inspect delegated dependencies"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'enabled': enabled, 'provider': 'Vipps'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 108,
+        "api": "api",
+        "method": "get",
+        "args": "'/payments/vipps/config'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/payments/vipps/config'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/ai/chat",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/ai/chat",
+        "function": "ai_chat",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "ChatRequest"
+        ],
+        "response": [
+          "{'reply': reply, 'session_id': session_id}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 112,
+        "api": "api",
+        "method": "post",
+        "args": "'/ai/chat', { message, session_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/ai/chat', { message, session_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/ai/transcribe",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/ai/transcribe",
+        "function": "ai_transcribe",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "TranscribeRequest"
+        ],
+        "response": [
+          "{'text': (text or '').strip()}"
+        ],
+        "http_statuses": [
+          "400",
+          "429",
+          "502",
+          "503"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 114,
+        "api": "api",
+        "method": "post",
+        "args": "'/ai/transcribe', { audio_base64, mime_type, language }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/ai/transcribe', { audio_base64, mime_type, language }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/${tripId}/messages",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}/messages",
+        "function": "list_trip_messages",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'messages': out}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 119,
+        "api": "api",
+        "method": "get",
+        "args": "`/trips/${tripId}/messages`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${tripId}/messages`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${tripId}/messages",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/messages",
+        "function": "send_trip_message",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "TripMessageRequest"
+        ],
+        "response": [
+          "msg"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 120,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${tripId}/messages`, { text }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${tripId}/messages`, { text }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${tripId}/safety",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/safety",
+        "function": "trip_safety_event",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "SafetyEventRequest"
+        ],
+        "response": [
+          "{'ok': True, 'event_id': event['id'], 'emergency_number': '112'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 124,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${tripId}/safety`, data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${tripId}/safety`, data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/trips/${tripId}/share-link",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/trips/{trip_id}/share-link",
+        "function": "create_trip_share_link",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'token': token, 'url': f'https://kjappapp.no/tur/{token}', 'expires_at': expires_at.isoformat()}"
+        ],
+        "http_statuses": [
+          "403"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 126,
+        "api": "api",
+        "method": "post",
+        "args": "`/trips/${tripId}/share-link`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/trips/${tripId}/share-link`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/gdpr/export",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/gdpr/export",
+        "function": "gdpr_export",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'exported_at': datetime.now(timezone.utc).isoformat(), 'user': user, 'trips': trips, 'ai_messages': messages, 'payments': [{k: v for k, v in p.items() if k not in ('client_secret', 'stripe_client_secret')} for p in payments], 'customer_photo': await export_customer_photo(db, uid)}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 130,
+        "api": "api",
+        "method": "get",
+        "args": "'/gdpr/export'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/gdpr/export'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/gdpr/delete",
+    "wrapper": "api.delete",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/gdpr/delete",
+        "function": "gdpr_delete",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True, 'anonymized_trip_owner': anon_id}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 131,
+        "api": "api",
+        "method": "delete",
+        "args": "'/gdpr/delete'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/gdpr/delete'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/me/places",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/me/places",
+        "function": "list_my_places",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'places': places}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 135,
+        "api": "api",
+        "method": "get",
+        "args": "'/me/places'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/me/places'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/me/places",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/me/places",
+        "function": "add_my_place",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "UserPlaceRequest"
+        ],
+        "response": [
+          "doc"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 136,
+        "api": "api",
+        "method": "post",
+        "args": "'/me/places', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/me/places', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "PUT",
+    "client_path": "/me/places/${id}",
+    "wrapper": "api.put",
+    "backend": [
+      {
+        "method": "PUT",
+        "path": "/me/places/{place_id}",
+        "function": "update_my_place",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "UserPlaceRequest"
+        ],
+        "response": [
+          "update"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 137,
+        "api": "api",
+        "method": "put",
+        "args": "`/me/places/${id}`, data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/me/places/${id}`, data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/me/places/${id}",
+    "wrapper": "api.delete",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/me/places/{place_id}",
+        "function": "delete_my_place",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True}"
+        ],
+        "http_statuses": [
+          "400",
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 138,
+        "api": "api",
+        "method": "delete",
+        "args": "`/me/places/${id}`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/me/places/${id}`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/settings",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/settings",
+        "function": "get_settings",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "settings"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 142,
+        "api": "api",
+        "method": "get",
+        "args": "'/settings'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/settings'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "PATCH",
+    "client_path": "/settings",
+    "wrapper": "api.patch",
+    "backend": [
+      {
+        "method": "PATCH",
+        "path": "/settings",
+        "function": "update_settings",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "SettingsUpdate"
+        ],
+        "response": [
+          "settings"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 143,
+        "api": "api",
+        "method": "patch",
+        "args": "'/settings', data"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/settings', data",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/summary/today",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/summary/today",
+        "function": "summary_today",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'trips': trips, 'spent': total, 'satisfaction': 98}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 147,
+        "api": "api",
+        "method": "get",
+        "args": "'/summary/today'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/summary/today'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/pending",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/pending",
+        "function": "driver_pending",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'trips': trips, 'commission': commission, 'driver_gps': {'lat': d_lat, 'lng': d_lng, 'at': current.get('last_location_at')} if d_lat is not None else None}",
+          "{'trips': [], 'offline': True, 'commission': await _platform_commission(), 'driver_gps': None}",
+          "{'trips': [], 'offline': False, 'gps_stale': True, 'commission': await _platform_commission(), 'driver_gps': None}",
+          "{'trips': [], 'offline': forced_offline, 'compliance_blocked': True, 'compliance': compliance, 'message': compliance['message'], 'commission': await _platform_commission(), 'driver_gps': None}",
+          "{'trips': [], 'busy': True, 'active_trip_id': current['active_trip_id'], 'commission': await _platform_commission(), 'driver_gps': {'lat': current.get('last_lat'), 'lng': current.get('last_lng'), 'at': current.get('last_location_at')}}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 151,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/pending'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/pending'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/accept",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/accept",
+        "function": "driver_accept",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "AcceptTripRequest"
+        ],
+        "response": [
+          "t"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 152,
+        "api": "api",
+        "method": "post",
+        "args": "'/driver/accept', { trip_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/accept', { trip_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/decline",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/decline",
+        "function": "driver_decline",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "DeclineTripRequest"
+        ],
+        "response": [
+          "{'ok': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 153,
+        "api": "api",
+        "method": "post",
+        "args": "'/driver/decline', { trip_id }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/decline', { trip_id }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/current",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/current",
+        "function": "driver_current",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "t",
+          "None",
+          "None",
+          "None"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 154,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/current'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/current'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/at-pickup",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/at-pickup",
+        "function": "driver_at_pickup",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True}",
+          "{'ok': True, 'already_applied': True}",
+          "{'ok': True, 'already_applied': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 155,
+        "api": "api",
+        "method": "post",
+        "args": "`/driver/trip/${id}/at-pickup`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/driver/trip/${id}/at-pickup`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/start",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/start",
+        "function": "driver_start",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True}",
+          "{'ok': True, 'already_applied': True}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 156,
+        "api": "api",
+        "method": "post",
+        "args": "`/driver/trip/${id}/start`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/driver/trip/${id}/start`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/arrive",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/arrive",
+        "function": "driver_arrive",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'bonuses': [], 'payment': payment, 'ended_early': ended_early, 'location_verified': location_verified, 'warning': warning if ended_early else None}",
+          "{'ok': True, 'already_applied': True, 'bonuses': [], 'ended_early': trip.get('ended_early', False), 'warning': trip.get('early_end_warning')}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 157,
+        "api": "api",
+        "method": "post",
+        "args": "`/driver/trip/${id}/arrive`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/driver/trip/${id}/arrive`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/trip/${id}/no-show",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/trip/{trip_id}/no-show",
+        "function": "driver_no_show",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'ok': True, 'cancellation_fee': int((t or {}).get('cancellation_fee') or 0), 'currency': 'NOK'}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 158,
+        "api": "api",
+        "method": "post",
+        "args": "`/driver/trip/${id}/no-show`"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "`/driver/trip/${id}/no-show`",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/online",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/online",
+        "function": "driver_online",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "DriverOnlineRequest"
+        ],
+        "response": [
+          "{'online': body.online}"
+        ],
+        "http_statuses": [
+          "409"
+        ]
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 159,
+        "api": "api",
+        "method": "post",
+        "args": "'/driver/online', { online }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/online', { online }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/driver/location",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/driver/location",
+        "function": "driver_location",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "DriverLocationRequest"
+        ],
+        "response": [
+          "{'ok': True, 'recorded_at': recorded.isoformat(), 'received_at': now_iso}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 160,
+        "api": "api",
+        "method": "post",
+        "args": "'/driver/location', { lat, lng, heading, speed }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/location', { lat, lng, heading, speed }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/summary/today",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/summary/today",
+        "function": "driver_summary",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'income': total + bonus, 'trip_income': total, 'gross_trip_income': gross_total, 'bonus': bonus, 'trips': trips, 'online': bool(u.get('online')), 'last_location_at': u.get('last_location_at'), 'online_minutes': online_minutes, 'acceptance_rate': acceptance_rate}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 162,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/summary/today'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/summary/today'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/history",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/history",
+        "function": "driver_history",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'trips': trips}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 163,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/history'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/history'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/history/weekly",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/history/weekly",
+        "function": "driver_history_weekly",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'days': days}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 164,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/history/weekly'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/history/weekly'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/ratings",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/ratings",
+        "function": "driver_ratings",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'average': avg, 'count': count, 'breakdown': breakdown, 'recent': recent}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 165,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/ratings'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/ratings'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/driver/payouts",
+    "wrapper": "api.get",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/driver/payouts",
+        "function": "driver_payouts",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_driver)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'earned_gross_7d': pending, 'earned_net_7d': net, 'paid_trips_7d': trips_count, 'pending_gross': pending, 'pending_trips': trips_count, 'pending_net': net + bonus_total, 'pending_trip_net': net, 'pending_bonus': bonus_total, 'bonuses': bonuses, 'commission_pct': int(round(commission * 100)), 'next_payout_date': next_payout, 'settlement_recipient': 'fleet', 'stripe_connect_ready': connect_ready, 'payout_schedule': payout_schedule, 'history': hist"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 166,
+        "api": "api",
+        "method": "get",
+        "args": "'/driver/payouts'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/driver/payouts'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/me/profile-photo",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/me/profile-photo",
+        "function": "upload_photo",
+        "file": "backend\\customer_profile.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'customer_photo_version': version}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 172,
+        "api": "api",
+        "method": "post",
+        "args": "'/me/profile-photo', form, {\r\n    headers: { 'Content-Type': 'multipart/form-data' },\r\n    onUploadProgress: event => { if (event.total) progress(Math.min(99, Math.round(event.loaded / event.total * 100))); },\r\n  }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/me/profile-photo', form, {\r\n    headers: { 'Content-Type': 'multipart/form-data' },\r\n    onUploadProgress: event => { if (event.total) progress(Math.min(99, Math.round(event.loaded / event.total * 100))); },\r\n  }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "DELETE",
+    "client_path": "/me/profile-photo",
+    "wrapper": "api.delete",
+    "backend": [
+      {
+        "method": "DELETE",
+        "path": "/me/profile-photo",
+        "function": "remove_photo",
+        "file": "backend\\customer_profile.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "{'deleted': True}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\api.ts",
+        "line": 176,
+        "api": "api",
+        "method": "delete",
+        "args": "'/me/profile-photo'"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/me/profile-photo'",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/push/native-subscribe",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/push/native-subscribe",
+        "function": "push_native_subscribe",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "NativePushSubscribeRequest"
+        ],
+        "response": [
+          "{'ok': True, 'provider': body.provider}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\nativeRuntime.ts",
+        "line": 47,
+        "api": "api",
+        "method": "post",
+        "args": "'/push/native-subscribe', {\r\n      platform: Platform.OS,\r\n      provider: 'expo',\r\n      token,\r\n    }"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/push/native-subscribe', {\r\n      platform: Platform.OS,\r\n      provider: 'expo',\r\n      token,\r\n    }",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "POST",
+    "client_path": "/push/native-unsubscribe",
+    "wrapper": "api.post",
+    "backend": [
+      {
+        "method": "POST",
+        "path": "/push/native-unsubscribe",
+        "function": "push_native_unsubscribe",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(get_current_user)"
+        ],
+        "request_model": [
+          "NativePushSubscribeRequest"
+        ],
+        "response": [
+          "{'ok': True, 'removed': result.deleted_count}"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": [
+      {
+        "file": "frontend\\src\\lib\\nativeRuntime.ts",
+        "line": 65,
+        "api": "api",
+        "method": "post",
+        "args": "'/push/native-unsubscribe', {\r\n      platform: Platform.OS,\r\n      provider: 'expo',\r\n      token,\r\n    }, sessionToken ? { headers: { Authorization: `Bearer ${sessionToken}` } } : undefined"
+      }
+    ],
+    "status": "PARTIAL: source mapped; native runtime unverified",
+    "timeout_ms": 30000,
+    "retry": "explicit user action",
+    "request_arguments": "'/push/native-unsubscribe', {\r\n      platform: Platform.OS,\r\n      provider: 'expo',\r\n      token,\r\n    }, sessionToken ? { headers: { Authorization: `Bearer ${sessionToken}` } } : undefined",
+    "role_scope": "Customer direct caller"
+  },
+  {
+    "method": "GET",
+    "client_path": "/me/profile-photo",
+    "wrapper": "customerProfileApi.photoSource",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/me/profile-photo",
+        "function": "read_photo",
+        "file": "backend\\customer_profile.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "Response(content=doc['data'], media_type='image/jpeg', headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})"
+        ],
+        "http_statuses": [
+          "404"
+        ]
+      }
+    ],
+    "mobile_callers": "Image source; bearer header; no public customer id",
+    "status": "PARTIAL: source mapped; native image load unverified",
+    "timeout_ms": "native Image transport",
+    "retry": "user reload/replace",
+    "request_arguments": "version query or trip_id",
+    "role_scope": "Customer"
+  },
+  {
+    "method": "GET",
+    "client_path": "/trips/{trip_id}/driver-photo",
+    "wrapper": "tripDriverPhotoSource",
+    "backend": [
+      {
+        "method": "GET",
+        "path": "/trips/{trip_id}/driver-photo",
+        "function": "customer_driver_photo",
+        "file": "backend\\server.py",
+        "auth": [
+          "Depends(require_customer)"
+        ],
+        "request_model": [
+          "path/query/form"
+        ],
+        "response": [
+          "FastResponse(content=data, media_type=rec.get('content_type') or ct, headers={'Cache-Control': 'private, max-age=60'})"
+        ],
+        "http_statuses": []
+      }
+    ],
+    "mobile_callers": "Image source; bearer header; no public customer id",
+    "status": "PARTIAL: source mapped; native image load unverified",
+    "timeout_ms": "native Image transport",
+    "retry": "user reload/replace",
+    "request_arguments": "version query or trip_id",
+    "role_scope": "Customer"
+  }
+]

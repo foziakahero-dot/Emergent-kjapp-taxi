@@ -18,6 +18,7 @@ import { Map } from '@/src/components/Map';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
 import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, kr, VEHICLES } from '@/src/lib/format';
+import { useAuth } from '@/src/context/AuthContext';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 const GOLD_VEHICLE_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
@@ -30,6 +31,7 @@ function vehicleCopy(type: string) {
 
 export default function Home() {
   const router = useRouter();
+  const { user } = useAuth();
   const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -52,16 +54,14 @@ export default function Home() {
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchCollapsed, setSearchCollapsed] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(true);
   const [rideSheetCollapsed, setRideSheetCollapsed] = useState(false);
-  const [searchHeight, setSearchHeight] = useState(140);
+  const [headerHeight, setHeaderHeight] = useState(56);
   const [activeCardHeight, setActiveCardHeight] = useState(180);
   const [browseHeight, setBrowseHeight] = useState(100);
   const [rideHeight, setRideHeight] = useState(400);
   useEffect(() => {
     if (dropoff) {
-      setSearchCollapsed(true);
       setRideSheetCollapsed(false);
     }
   }, [dropoff]);
@@ -287,6 +287,8 @@ export default function Home() {
   const selectedPrice = priceFor(selType);
   const recommendations = featured.filter(place => place.name && place.lat != null && place.lng != null && Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)));
   const recommendation = recommendations[recommendationIndex % Math.max(1, recommendations.length)];
+  const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
+  const initials = (user?.fullName || 'SNAR').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -298,7 +300,7 @@ export default function Home() {
         route={activeTrip ? activeTrip.geometry?.coordinates : routeGeom}
         cars={activeTrip && !searchingTrip ? [] : cars}
         focusMode={!activeTrip || searchingTrip ? 'nearby' : 'route'}
-        contentInsets={{ top: insets.top + (activeTrip ? 16 + activeCardHeight : 12 + searchHeight) + 32,
+        contentInsets={{ top: insets.top + (activeTrip ? 16 + activeCardHeight : 12 + headerHeight) + 32,
           right: 48, bottom: Math.max(insets.bottom + 112, activeTrip ? 0 : dropoff ? rideHeight : browseHeight) + 32, left: 48 }}
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
@@ -310,53 +312,47 @@ export default function Home() {
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
       {!reviewing && !activeTrip ? (
         <>
-          <View testID="home-search-panel" onLayout={e => setSearchHeight(e.nativeEvent.layout.height)} style={[s.searchBarWrap, { top: insets.top + 12 }]}>
-            {searchCollapsed ? (
+          <View testID="home-header" onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)} style={[s.homeHeader, { top: insets.top + 12 }]}>
+            <View style={s.homeHeaderRow}>
               <Pressable
-                style={s.collapsedSearchButton}
-                onPress={() => setSearchCollapsed(false)}
-                testID="home-search-expand"
                 accessibilityRole="button"
-                accessibilityLabel="Utvid søkefeltet"
+                accessibilityLabel="Åpne profilen"
+                onPress={() => router.push('/(app)/profile')}
+                style={s.headerAvatar}
               >
-                <Icon name="search" size={19} color={colors.accent} />
-                <Text style={s.collapsedSearchText}>Søk</Text>
+                <Text style={s.headerInitials}>{initials}</Text>
               </Pressable>
-            ) : (
-              <View style={s.expandedSearchRow}>
-                <Pressable
-                  style={s.floatingSearch}
-                  onPress={() => setSearchOpen(true)}
-                  testID="home-where-to"
-                  accessibilityRole="button"
-                  accessibilityLabel="Søk etter destinasjon"
-                >
-                  <Icon name="search" size={20} color={colors.textMuted} />
-                  <Text style={[s.floatingSearchText, dropoff && { color: colors.text }]} numberOfLines={1}>
-                    {dropoff?.name || 'Hvor skal du?'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={s.searchMinimizeButton}
-                  onPress={() => setSearchCollapsed(true)}
-                  testID="home-search-collapse"
-                  accessibilityRole="button"
-                  accessibilityLabel="Minimer søkefeltet"
-                >
-                  <Icon name="minus" size={19} color={colors.textSecondary} />
-                </Pressable>
+              <View style={s.headerLocation}>
+                <Text style={s.headerTitle} numberOfLines={1}>{user?.fullName ? `Hei, ${firstName}` : 'Velkommen til SNAR'}</Text>
+                <Text style={s.headerSub} numberOfLines={1}>{locationReady || selectedPickup ? (selectedPickup?.name || pickupLabel) : 'Hentested ikke tilgjengelig'}</Text>
               </View>
-            )}
+            </View>
             {(locationReady || selectedPickup) ? <AvailabilityStatus search={available} /> : null}
           </View>
 
           <Pressable
             style={[
+              s.voiceFab,
+              {
+                bottom: dropoff
+                  ? insets.bottom + (rideSheetCollapsed ? 232 : 480)
+                  : insets.bottom + (sheetCollapsed ? 236 : 332),
+              },
+            ]}
+            onPress={openVoice}
+            testID="home-voice"
+            accessibilityRole="button"
+            accessibilityLabel="Bestill med stemmen"
+          >
+            <Icon name="mic" size={20} color={colors.accent} />
+          </Pressable>
+          <Pressable
+            style={[
               s.locationFab,
               {
                 bottom: dropoff
-                  ? insets.bottom + (rideSheetCollapsed ? 126 : 372)
-                  : insets.bottom + (sheetCollapsed ? 94 : 300),
+                  ? insets.bottom + (rideSheetCollapsed ? 180 : 428)
+                  : insets.bottom + (sheetCollapsed ? 184 : 280),
               },
             ]}
             onPress={() => void refreshLocation()}
@@ -367,7 +363,7 @@ export default function Home() {
             <Icon name="crosshair" size={21} color={colors.accent} />
           </Pressable>
 
-          {recommendationOpen && recommendation && !dropoff && !searchOpen && <Rise style={{ position: 'absolute', left: 16, right: 16, bottom: insets.bottom + (sheetCollapsed ? 112 : 316), zIndex: 30 }}>
+          {recommendationOpen && recommendation && !dropoff && !searchOpen && <Rise style={{ position: 'absolute', left: 16, right: 16, bottom: insets.bottom + (sheetCollapsed ? 202 : 332), zIndex: 30 }}>
             <View style={{ overflow: 'hidden', borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.98)', borderWidth: 1, borderColor: colors.line, boxShadow: '0 16px 40px rgba(11,14,20,0.18)' }} testID="home-recommendation">
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14 }}>
                 <FigmaGradient angle={135} colors={['#FF3B3B', '#FF0000']} style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}><Icon name="sparkles" size={16} color="#FFFFFF" /></FigmaGradient>
@@ -401,6 +397,36 @@ export default function Home() {
                 <View style={s.handle} />
               </Pressable>
 
+              <Pressable
+                style={s.destinationButton}
+                onPress={() => setSearchOpen(true)}
+                testID="home-where-to"
+                accessibilityRole="button"
+                accessibilityLabel="Søk etter destinasjon"
+              >
+                <Icon name="search" size={20} color={colors.textSecondary} />
+                <Text style={s.destinationText} numberOfLines={1}>Hvor skal du?</Text>
+                <View style={s.nowChip}><Icon name="clock" size={15} color={colors.textSecondary} /><Text style={s.nowText}>Nå</Text></View>
+              </Pressable>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickPlaceRow}>
+                {quickPlaces.slice(0, 4).map((p: any, i: number) => (
+                  <Pressable
+                    key={p.id || p.slug || `${p.name}-${i}`}
+                    style={s.quickPlaceChip}
+                    testID={`quick-${p.label || i}`}
+                    onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
+                  >
+                    <Icon
+                      name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'clock') as IconName}
+                      size={17}
+                      color={colors.textSecondary}
+                    />
+                    <Text style={s.quickPlaceText} numberOfLines={1}>{p.label || p.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
               <Pressable testID="customer-app-app-home-316" style={s.sheetTitleRow} onPress={() => setSheetCollapsed((v) => !v)}>
                 <Text style={s.sheetEyebrow}>NYLIG OG FAVORITTER</Text>
                 <Icon name={sheetCollapsed ? 'chevron-up' : 'chevron-down'} size={17} color={colors.textMuted} />
@@ -409,26 +435,6 @@ export default function Home() {
               <Collapse open={!sheetCollapsed}>
                 {quickPlacesIssue ? <View style={{ paddingHorizontal: 16 }}><Text testID="home-places-error" accessibilityRole="alert" style={{ color: colors.danger }}>Kunne ikke oppdatere nylige steder og favoritter.</Text><Pressable testID="home-places-retry" onPress={() => void loadPlaces()}><Text style={{ color: colors.accent }}>Prøv igjen</Text></Pressable></View> : !quickPlaces.length ? <Text testID="home-places-empty" style={{ padding: 16, color: colors.textSecondary }}>Ingen nylige reisemål eller favoritter ennå.</Text> : null}
                 <View style={s.placeList}>
-                  {quickPlaces.slice(0, 4).map((p: any, i: number) => (
-                    <Pressable
-                      key={p.id || p.slug || `${p.name}-${i}`}
-                      style={s.placeRow}
-                      testID={`quick-${p.label || i}`}
-                      onPress={() => setDropoff({ name: p.name, lat: p.lat, lng: p.lng })}
-                    >
-                      <View style={s.placeIcon}>
-                        <Icon
-                          name={(p.icon === 'home' ? 'home' : p.icon === 'briefcase' ? 'briefcase' : 'clock') as IconName}
-                          size={18}
-                          color={colors.textSecondary}
-                        />
-                      </View>
-                      <View style={s.placeTextWrap}>
-                        <Text style={s.placeTitle} numberOfLines={1}>{p.label || p.name}</Text>
-                        <Text style={s.placeSub} numberOfLines={1}>{p.description || p.name}</Text>
-                      </View>
-                    </Pressable>
-                  ))}
                   <Pressable testID="customer-app-app-home-343" style={s.managePlaces} onPress={() => router.push('/saved-places')}>
                     <Icon name={myPlaces.length ? 'settings' : 'plus'} size={17} color={colors.accent} />
                     <Text style={s.managePlacesText}>{myPlaces.length ? 'Rediger faste steder' : 'Legg til fast sted'}</Text>
@@ -636,7 +642,6 @@ export default function Home() {
             }
             setSearchTarget('dropoff');
             setSearchOpen(false);
-            setSearchCollapsed(true);
           }}
           featured={featured}
           insets={insets}
@@ -739,29 +744,31 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, targ
 }
 
 const useStyles = makeStyles((c) => ({
-  searchBarWrap: { position: 'absolute', left: 16, right: 16, zIndex: 20 },
-  expandedSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  floatingSearch: {
-    flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.96)',
-    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10,
-    shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
+  homeHeader: { position: 'absolute', left: 16, right: 16, zIndex: 20, gap: 8 },
+  homeHeaderRow: {
+    minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6,
+    borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: 'rgba(255,255,255,0.9)',
+    shadowColor: '#0B1A2C', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 4,
   },
-  floatingSearchText: { flex: 1, color: c.textMuted, fontFamily: font.medium, fontSize: 15 },
-  searchMinimizeButton: {
-    width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line,
-    shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 }, elevation: 5,
+  headerAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surfaceInverse },
+  headerInitials: { color: c.onInverse, fontFamily: font.semibold, fontSize: 12 },
+  headerLocation: { flex: 1, minWidth: 0 },
+  headerTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, lineHeight: 18 },
+  headerSub: { color: c.textMuted, fontFamily: font.medium, fontSize: 9, lineHeight: 13, letterSpacing: 1.1 },
+  destinationButton: {
+    minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16,
+    borderRadius: 16, borderWidth: 1, borderColor: c.line, backgroundColor: c.cardSubtle,
   },
-  collapsedSearchButton: {
-    alignSelf: 'flex-start', minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 14, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.96)',
-    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10,
-    shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5,
-  },
-  collapsedSearchText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
+  destinationText: { flex: 1, color: c.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 22 },
+  nowChip: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 17, backgroundColor: c.surface },
+  nowText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 12 },
   locationFab: {
+    position: 'absolute', right: 16, zIndex: 21, width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.96)',
+    borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12,
+    shadowRadius: 9, shadowOffset: { width: 0, height: 4 }, elevation: 5,
+  },
+  voiceFab: {
     position: 'absolute', right: 16, zIndex: 21, width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.96)',
     borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.12,
@@ -784,11 +791,9 @@ const useStyles = makeStyles((c) => ({
   sheetTitleRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sheetEyebrow: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.6 },
   placeList: { paddingBottom: 2 },
-  placeRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  placeIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
-  placeTextWrap: { flex: 1, minHeight: 82, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: c.line },
-  placeTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  placeSub: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 2 },
+  quickPlaceRow: { gap: 8, paddingVertical: 2, paddingBottom: 8 },
+  quickPlaceChip: { minHeight: 42, maxWidth: 160, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, borderRadius: 999, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
+  quickPlaceText: { flexShrink: 1, color: c.textSecondary, fontFamily: font.medium, fontSize: 12 },
   managePlaces: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 4 },
   managePlacesText: { color: c.accent, fontFamily: font.medium, fontSize: 13 },
   locationWarning: { marginTop: 8, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: c.warning, backgroundColor: c.warning + '10' },
@@ -864,5 +869,3 @@ const useStyles = makeStyles((c) => ({
   emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14, marginTop: 12 },
   emptySub: { color: c.textSecondary, fontSize: 12, marginTop: 4 },
 }));
-
-

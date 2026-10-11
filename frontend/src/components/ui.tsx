@@ -1,7 +1,6 @@
 import { Text } from '@/src/components/Typography';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
-import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { colors, font, makeStyles, radius } from '@/src/theme';
 
 export function Button({
@@ -37,11 +36,10 @@ export function Button({
         variant === 'ghost' && s.btnGhost,
         isDanger && s.btnDanger,
         (disabled || loading) && { opacity: 0.55 },
-        pressed && { transform: [{ scale: 0.95 }] },
+        pressed && { transform: [{ scale: 0.97 }] },
         style,
       ]}
     >
-      {isPrimary && <FigmaGradient pointerEvents="none" colors={['#FF3B3B', '#FF0000']} style={{ position: 'absolute', inset: 0, borderRadius: 999 }} />}
       {loading ? (
         <ActivityIndicator color={isPrimary ? colors.accentOn : colors.accent} />
       ) : (
@@ -109,8 +107,8 @@ export function Loader({ label }: { label?: string }) {
 
 const useStyles = makeStyles((c) => ({
   btn: {
-    height: 52,
-    borderRadius: radius.pill,
+    minHeight: 56,
+    borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -118,10 +116,10 @@ const useStyles = makeStyles((c) => ({
   btnPrimary: {
     backgroundColor: c.accent,
     shadowColor: c.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   btnGhost: {
     backgroundColor: c.cardSubtle,
@@ -137,7 +135,7 @@ const useStyles = makeStyles((c) => ({
   btnText: { fontSize: 14, lineHeight: 20, letterSpacing: -0.28, fontWeight: '600', color: c.accentOn },
   card: {
     backgroundColor: c.card,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: c.line,
     padding: 18,
@@ -145,4 +143,3 @@ const useStyles = makeStyles((c) => ({
 }));
 
 export { font };
-

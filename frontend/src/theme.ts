@@ -7,58 +7,73 @@ import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { Geist_300Light } from '@expo-google-fonts/geist/300Light';
+import { Geist_400Regular } from '@expo-google-fonts/geist/400Regular';
+import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
+import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
+import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
+import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
 
-/** SNAR mobile — light surfaces, navy ink, red actions and green operational status. */
+/** SNAR V10 Customer — warm neutral surfaces, Geist typography and restrained red actions. */
 export const colors = {
-  bg: '#F4F6FA',
+  bg: '#F7F5F1',
   surface: '#FFFFFF',
   card: '#FFFFFF',
-  cardSubtle: '#EEF1F5',
+  cardSubtle: '#F1EEE8',
   elevated: '#FFFFFF',
-  line: 'rgba(0,31,63,0.10)',
-  lineStrong: 'rgba(0,31,63,0.18)',
-  text: '#001F3F',
-  textSecondary: '#4A5A6E',
-  textMuted: '#8B97A7',
-  accent: '#FF0000',
-  accentHover: '#FF3B3B',
-  accentDim: '#CC0000',
-  accentSoft: '#FFE6E6',
-  accentGlow: 'rgba(255,0,0,0.25)',
+  surfaceInverse: '#0B1A2C',
+  onInverse: '#F7F5F1',
+  surfaceRaised: '#FFFFFF',
+  line: 'rgba(11,26,44,0.09)',
+  lineStrong: 'rgba(11,26,44,0.16)',
+  text: '#0B1A2C',
+  textSecondary: '#4B5A6C',
+  textMuted: '#8A95A3',
+  accent: '#E00000',
+  accentHover: '#C80000',
+  accentDim: '#A80000',
+  accentSoft: 'rgba(224,0,0,0.08)',
+  accentGlow: 'rgba(224,0,0,0.18)',
   accentOn: '#FFFFFF',
-  success: '#4CAF50',
-  warning: '#FF9800',
-  danger: '#F44336',
-  dangerSoft: '#FFF0F0',
-  info: '#245FAD',
-  online: '#12B981',
-  onlineSoft: '#E5F7ED',
-  onlineGlow: 'rgba(18,185,129,0.24)',
-  route: '#FF0000',
-  mapCanvas: '#E9EEF3',
-  mapWater: '#D8E8F0',
+  success: '#0D7A58',
+  warning: '#A35A00',
+  danger: '#D0001A',
+  dangerSoft: 'rgba(208,0,26,0.08)',
+  info: '#1A5FB4',
+  online: '#0D7A58',
+  onlineSoft: '#E6F6F0',
+  onlineGlow: 'rgba(13,122,88,0.18)',
+  route: '#E00000',
+  mapCanvas: '#F1EEE8',
+  mapWater: '#DCE8EB',
   mapRoad: '#FFFFFF',
-  mapRoadMajor: '#F8FAFC',
-  mapBuilding: '#E2E8EE',
-  driverBg: '#F4F6FA',
+  mapRoadMajor: '#FAF8F4',
+  mapBuilding: '#E9E5DD',
+  driverBg: '#08131F',
   driverCard: '#FFFFFF',
 };
 
 export type ThemeColors = typeof colors;
 
 export const font = {
-  display: 'Inter_600SemiBold',
-  body: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-  bold: 'Inter_700Bold',
-  light: 'Inter_300Light',
-  extraBold: 'Inter_800ExtraBold',
+  display: 'Geist_600SemiBold',
+  body: 'Geist_400Regular',
+  medium: 'Geist_500Medium',
+  semibold: 'Geist_600SemiBold',
+  bold: 'Geist_700Bold',
+  light: 'Geist_300Light',
+  extraBold: 'Geist_800ExtraBold',
   mono: 'JetBrainsMono',
   monoMedium: 'JetBrainsMono_500Medium',
 };
 
 export const FONT_ASSETS = {
+  Geist_300Light,
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+  Geist_700Bold,
+  Geist_800ExtraBold,
   Inter_300Light,
   Inter_800ExtraBold,
   JetBrainsMono_500Medium,
@@ -69,7 +84,7 @@ export const FONT_ASSETS = {
   JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
 };
 
-export const radius = { sm: 8, md: 12, lg: 18, xl: 24, pill: 999 };
+export const radius = { sm: 8, md: 12, lg: 18, xl: 24, sheet: 30, button: 16, pill: 999 };
 export const spacing = {
   xxs: 4,
   xs: 8,
@@ -84,10 +99,10 @@ export const spacing = {
 };
 
 export const motion = {
-  instant: 100,
-  fast: 160,
-  base: 300,
-  sheet: 300,
+  instant: 150,
+  fast: 150,
+  base: 210,
+  sheet: 280,
   slow: 700,
 };
 
@@ -102,4 +117,3 @@ export function makeStyles<T extends StyleSheet.NamedStyles<T>>(
     return useMemo(() => StyleSheet.create(factory(colors)), []);
   };
 }
-

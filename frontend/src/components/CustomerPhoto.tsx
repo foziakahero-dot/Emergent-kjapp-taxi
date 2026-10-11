@@ -8,7 +8,7 @@ import { colors } from '@/src/theme';
 import { Text } from './Typography';
 import { FigmaGradient } from './FigmaGradient';
 
-export function CustomerPhoto({ initials }: { initials: string }) {
+export function CustomerPhoto({ initials, size = 56 }: { initials: string; size?: number }) {
   const { user, refresh } = useAuth();
   const [source, setSource] = useState<any>(null);
   const [choosing, setChoosing] = useState(false);
@@ -50,8 +50,8 @@ export function CustomerPhoto({ initials }: { initials: string }) {
     catch (e) { if (mounted.current) setError(apiError(e)); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   };
-  const avatarStyle = { width: 56, height: 56, borderRadius: 28 };
-  return <View style={{ alignItems: 'center', maxWidth: 90, gap: 4 }}>
+  const avatarStyle = { width: size, height: size, borderRadius: size / 2 };
+  return <View style={{ alignItems: 'center', maxWidth: size + 8, gap: 4 }}>
     <Pressable accessibilityRole="button" accessibilityLabel="Endre profilbilde" testID="profile-photo-edit" disabled={busy} onPress={() => setChoosing(true)}>
       {source ? <Image source={source} style={avatarStyle} onError={() => setSource(null)} /> : <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={[avatarStyle, { alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: '#FFFFFF', fontSize: 20 }}>{initials}</Text></FigmaGradient>}
     </Pressable>

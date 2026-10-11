@@ -25,13 +25,13 @@ export default function CustomerTabsLayout() {
       tabBar={props => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen name="home" options={{ title: 'Reise' }} />
+      <Tabs.Screen name="home" options={{ title: 'Hjem' }} />
       <Tabs.Screen name="history" options={{ title: 'Aktivitet' }} />
-      <Tabs.Screen name="wallet" options={{ title: 'Lommebok' }} />
+      <Tabs.Screen name="assist" options={{ title: 'SNAR AI' }} />
+      <Tabs.Screen name="messages" options={{ title: 'Meldinger' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil' }} />
-      <Tabs.Screen name="assist" options={{ href: null }} />
+      <Tabs.Screen name="wallet" options={{ href: null }} />
     </Tabs>
     </TabBarVisibilityProvider>
   );
 }
-

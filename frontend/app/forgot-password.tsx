@@ -88,23 +88,22 @@ export default function ForgotPassword() {
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.bg },
-  wrap: { flex: 1, paddingHorizontal: 28 },
+  wrap: { flex: 1, paddingHorizontal: 24 },
   backLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center' },
   backLinkText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 14 },
   content: { flex: 1, justifyContent: 'center', paddingBottom: 80 },
-  title: { color: c.text, fontFamily: font.semibold, fontSize: 26, letterSpacing: -0.6, marginTop: 22 },
+  title: { color: c.text, fontFamily: font.semibold, fontSize: 26, lineHeight: 32, letterSpacing: -0.65, marginTop: 22 },
   sub: { color: c.textSecondary, fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 26 },
   fieldGroup: { marginBottom: 16 },
   fieldLabel: { color: c.textMuted, fontFamily: font.mono, fontSize: 10, letterSpacing: 1.9, marginBottom: 8 },
-  field: { height: 52, borderRadius: 16, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.surface, paddingHorizontal: 16, justifyContent: 'center' },
+  field: { height: 56, borderRadius: 16, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.cardSubtle, paddingHorizontal: 16, justifyContent: 'center' },
   input: { color: c.text, fontFamily: font.body, fontSize: 15, height: '100%' },
   error: { color: c.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
-  primaryButton: { minHeight: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.3, shadowRadius: 15, shadowOffset: {width:0,height:8}, elevation: 6 },
+  primaryButton: { minHeight: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: c.accent, shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: {width:0,height:4}, elevation: 3 },
   primaryText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
   sentState: { alignItems: 'center' },
   mailCircle: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
   secondaryButton: { minHeight: 50, marginTop: 8, paddingHorizontal: 22, borderRadius: 25, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.lineStrong },
   secondaryText: { color: c.text, fontFamily: font.semibold, fontSize: 13 },
 }));
-
 

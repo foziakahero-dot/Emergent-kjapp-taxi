@@ -44,13 +44,14 @@ export default function Profile() {
   const initials = (user?.fullName || user?.email || 'K')
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
-  const rows: { icon: IconName; label: string; sub: string; onPress: () => void; testID: string }[] = [
-    { icon: 'home', label: 'Favorittadresser', sub: 'Hjem, Jobb og faste steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
-    { icon: 'shield', label: 'Sikkerhetssenter', sub: 'Nødkontakter, deling, verifisering', onPress: () => setView('safety'), testID: 'profile-safety' },
-    { icon: 'card', label: 'Betaling og kvitteringer', sub: 'Apple Pay, Google Pay, kort', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
-    { icon: 'shield', label: 'Personvern', sub: 'Samtykker, data, GDPR', onPress: () => setView('privacy'), testID: 'profile-privacy' },
-    { icon: 'sparkles', label: 'Kundestøtte', sub: 'AI-assistent, kontakt oss, kode/reward', onPress: () => setView('help'), testID: 'profile-help' },
-    { icon: 'globe', label: 'Språk og tilgjengelighet', sub: 'Norsk · Stor tekst · Høykontrast', onPress: () => setView('language'), testID: 'profile-language' },
+  const rows: { section: 'Steder' | 'Konto'; icon: IconName; label: string; sub: string; onPress: () => void; testID: string }[] = [
+    { section: 'Steder', icon: 'home', label: 'Favorittadresser', sub: 'Hjem, Jobb og faste steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
+    { section: 'Konto', icon: 'shield', label: 'Sikkerhetssenter', sub: 'Nødkontakter, deling, verifisering', onPress: () => setView('safety'), testID: 'profile-safety' },
+    { section: 'Konto', icon: 'card', label: 'Betaling og kvitteringer', sub: 'Apple Pay, Google Pay, kort', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
+    { section: 'Konto', icon: 'shield', label: 'Personvern', sub: 'Samtykker, data, GDPR', onPress: () => setView('privacy'), testID: 'profile-privacy' },
+    { section: 'Konto', icon: 'sparkles', label: 'Kundestøtte', sub: 'AI-assistent, kontakt oss, kode/reward', onPress: () => setView('help'), testID: 'profile-help' },
+    { section: 'Konto', icon: 'globe', label: 'Språk og tilgjengelighet', sub: 'Norsk · Stor tekst · Høykontrast', onPress: () => setView('language'), testID: 'profile-language' },
+    { section: 'Konto', icon: 'settings', label: 'Innstillinger', sub: 'Turvarsler, personvern og appversjon', onPress: () => router.push('/settings'), testID: 'profile-settings' },
   ];
 
   const deleteAccount = async () => {
@@ -74,29 +75,32 @@ export default function Profile() {
       <FigmaGradient angle={180} colors={['#FFFFFF', '#F2F5FA']} style={StyleSheet.absoluteFill} />
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 28, paddingTop: insets.top + 56, paddingBottom: insets.bottom + 112 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 112 }}
       >
-        <Text style={s.title}>Profil</Text>
-
-        <View style={s.card} testID="profile-card">
-          <CustomerPhoto initials={initials} />
+        <View style={s.profileHeader} testID="profile-card">
+          <CustomerPhoto initials={initials} size={72} />
           <View style={{ flex: 1 }}>
             <Text style={s.name}>{user?.fullName || 'SNAR-bruker'}</Text>
-            <Text style={s.email} numberOfLines={1}>{user?.phone || user?.email}</Text>
+            <Text style={s.email} numberOfLines={2}>{[user?.phone, user?.email].filter(Boolean).join(' · ')}</Text>
           </View>
         </View>
 
-        <View style={s.menu}>
-          {Platform.OS !== 'web' ? <Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.menuRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable> : null}
+        {Platform.OS !== 'web' ? <Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable> : null}
           {googleError ? <Text testID="profile-link-google-error" accessibilityRole="alert" style={{ color: colors.danger }}>{googleError}</Text> : null}
-          {rows.map((r) => (
-            <Pressable key={r.label} style={s.menuRow} onPress={r.onPress} testID={r.testID}>
-              <View style={s.menuIcon}><Icon name={r.icon} size={20} color={colors.accent} /></View>
-              <View style={{ flex: 1 }}><Text style={s.menuLabel}>{r.label}</Text><Text style={{ fontSize: 12, color: colors.textSecondary }}>{r.sub}</Text></View>
-              <Icon name="chevron-right" size={16} color={colors.textMuted} />
-            </Pressable>
-          ))}
-        </View>
+        {(['Steder', 'Konto'] as const).map((section) => (
+          <View key={section} style={s.section}>
+            <Text style={s.sectionTitle}>{section}</Text>
+            <View style={s.menu}>
+              {rows.filter((row) => row.section === section).map((r) => (
+                <Pressable key={r.label} style={s.menuRow} onPress={r.onPress} testID={r.testID}>
+                  <View style={s.menuIcon}><Icon name={r.icon} size={20} color={colors.text} /></View>
+                  <View style={{ flex: 1 }}><Text style={s.menuLabel}>{r.label}</Text><Text style={{ fontSize: 12, color: colors.textSecondary }}>{r.sub}</Text></View>
+                  <Icon name="chevron-right" size={16} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ))}
 
         <Pressable style={s.logout} onPress={logout} testID="profile-logout">
           <Text style={s.logoutText}>Logg ut</Text>
@@ -148,15 +152,17 @@ export default function Profile() {
 }
 
 const useStyles = makeStyles((c) => ({
-  title: { fontFamily: font.semibold, fontSize: 24, color: c.text, marginBottom: 24, letterSpacing: -0.48 },
-  card: { flexDirection: 'row', gap: 16, backgroundColor: c.card, borderRadius: 24, borderWidth: 1, borderColor: c.line, padding: 20, alignItems: 'center' },
+  profileHeader: { flexDirection: 'row', gap: 16, marginVertical: 16, alignItems: 'center' },
+  section: { marginTop: 20 },
+  sectionTitle: { color: c.textSecondary, fontFamily: font.semibold, fontSize: 14, lineHeight: 20, marginBottom: 8 },
   avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 20, letterSpacing: -0.4 },
   name: { color: c.text, fontFamily: font.semibold, fontSize: 18, letterSpacing: -0.36 },
   email: { color: c.textSecondary, fontSize: 12 },
-  menu: { marginTop: 12, gap: 12 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.line },
-  menuIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  menu: { gap: 1, paddingVertical: 4, borderRadius: 18, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line, overflow: 'hidden' },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: c.surface },
+  menuIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
+  googleRow: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   menuLabel: { color: c.text, fontFamily: font.semibold, fontSize: 14, flex: 1 },
   logout: { alignItems: 'center', justifyContent: 'center', marginTop: 20, paddingVertical: 14, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.accentSoft },
   logoutText: { color: c.accent, fontSize: 14, fontWeight: '600' },
