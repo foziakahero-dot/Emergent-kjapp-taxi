@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-04 Europe/Oslo",
+  "date": "2026-10-11 Europe/Oslo",
   "customerBuildAuthorized": false,
   "checks": {
     "typescript": "PASS",
@@ -40,7 +40,9 @@
     "GitHub Actions blocked by account payment failure/spending limit; source validation recovery via Render tracked separately",
     "Public privacy/terms contain beta placeholders; approved legal content required before commercial public release"
   ],
-  "nativeTestBuildAuthorized": false,
-  "nativeTestBuildProfiles": [],
-  "nativeTestBuildAuthorization": "Historical source-branch build approval is revoked for the recovered Phase 2B integration baseline. A new native build requires separate explicit approval."
+  "nativeTestBuildAuthorized": true,
+  "nativeTestBuildProfiles": [
+    "apk"
+  ],
+  "nativeTestBuildAuthorization": "Explicitly authorized Phase 4 internal Android APK only for quarantined static visual QA. Production API URL remains embedded. No backend-connected or provider-connected functional testing; no account login, booking, GPS update, payment, push, document upload, profile/settings mutation, or other runtime API/provider action."
 }
