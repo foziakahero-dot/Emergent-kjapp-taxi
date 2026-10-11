@@ -1,4 +1,4 @@
-"""KJAPP Admin Control Center extensions.
+"""SNAR Admin Control Center extensions.
 
 Focused admin-only capabilities:
 - Stripe Connect onboarding/status/payout visibility for fleets
@@ -22,6 +22,7 @@ from typing import Any, Literal, Optional
 from bson import ObjectId
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
+from stripe_fleet import ensure_fleet_account
 
 
 ADMIN_PERMISSIONS = ("operations", "finance", "support", "communications", "system")
@@ -64,8 +65,8 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     try:
         driver = await db.users.find_one({"_id": ObjectId(str(driver_id)), "role": "driver"})
     except Exception:
-        return None
-    fleet_id = (driver or {}).get("fleet_id")
+        driver = None
+    fleet_id = trip.get("fleet_id") or (driver or {}).get("fleet_id")
     if not fleet_id:
         return None
     try:
@@ -92,7 +93,7 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     )
     if not snap["ready"]:
         return None
-    rate = float((fleet or {}).get("commission_rate", 0.10) or 0.10)
+    rate = float(trip.get("commission_rate", (fleet or {}).get("commission_rate", 0.10)))
     rate = max(0.0, min(rate, 0.50))
     return {
         "fleet_id": str(fleet_id),
@@ -133,16 +134,18 @@ def install_admin_control_center(
 
     class FleetDriverInvite(BaseModel):
         email: str
-        car: str
-        plate: str
-        vehicle_type: str = "ai-first"
+        vehicle_id: Optional[str] = None
+        car: Optional[str] = None
+        plate: Optional[str] = None
+        vehicle_type: Optional[str] = "ai-first"
         note: Optional[str] = ""
 
     class FleetVehicleUpdate(BaseModel):
         driver_user_id: str
-        car: str
-        plate: str
-        vehicle_type: str = "ai-first"
+        vehicle_id: Optional[str] = None
+        car: Optional[str] = None
+        plate: Optional[str] = None
+        vehicle_type: Optional[str] = "ai-first"
 
     def clean_permissions(values: list[str]) -> list[str]:
         unknown = sorted(set(values) - set(ADMIN_PERMISSIONS))
@@ -165,43 +168,86 @@ def install_admin_control_center(
         except Exception:
             return None
 
+    async def resolve_fleet_vehicle(
+        fleet_id: str,
+        *,
+        vehicle_id: Optional[str] = None,
+        car: Optional[str] = None,
+        plate: Optional[str] = None,
+        vehicle_type: Optional[str] = None,
+        create_legacy: bool = False,
+    ) -> dict:
+        """Resolve canonical fleet_vehicles while supporting the older Admin payload.
+
+        The beta backend migrated to vehicle_id, while the deployed Admin form still
+        posts car/plate/type. During the rolling migration we resolve that legacy
+        payload into the canonical fleet_vehicles registry rather than returning 422.
+        """
+        vehicle = None
+        if vehicle_id:
+            try:
+                vehicle = await db.fleet_vehicles.find_one({"_id": _oid(vehicle_id), "fleet_id": fleet_id})
+            except HTTPException:
+                vehicle = None
+        normalized_plate = str(plate or "").strip().upper()
+        if not vehicle and normalized_plate:
+            vehicle = await db.fleet_vehicles.find_one({"fleet_id": fleet_id, "plate": normalized_plate})
+        if vehicle:
+            return vehicle
+        if not create_legacy:
+            raise HTTPException(404, "Bilen finnes ikke hos denne løyvehaveren")
+        normalized_car = str(car or "").strip()
+        if not normalized_car or not normalized_plate:
+            raise HTTPException(422, "Velg en registrert bil eller oppgi bilmodell og registreringsnummer")
+        now = _now()
+        result = await db.fleet_vehicles.update_one(
+            {"fleet_id": fleet_id, "plate": normalized_plate},
+            {"$setOnInsert": {
+                "fleet_id": fleet_id,
+                "car": normalized_car,
+                "plate": normalized_plate,
+                "vehicle_type": str(vehicle_type or "ai-first"),
+                "active": True,
+                "created_at": now,
+            }, "$set": {"updated_at": now}},
+            upsert=True,
+        )
+        if result.upserted_id:
+            vehicle = await db.fleet_vehicles.find_one({"_id": result.upserted_id})
+        else:
+            vehicle = await db.fleet_vehicles.find_one({"fleet_id": fleet_id, "plate": normalized_plate})
+        if not vehicle:
+            raise HTTPException(500, "Kjøretøyet kunne ikke registreres")
+        return vehicle
+
     # ---------------- Action Center ----------------
     @api.get("/admin/control/action-center")
     async def action_center(current=Depends(require_admin)):
-        pending_apps = await db.fleet_applications.count_documents({
-            "status": {"$in": ["submitted", "under_review", "documents_required"]}
-        })
-        pending_drivers = await db.users.count_documents({
-            "role": "driver",
-            "$or": [{"approved": False}, {"approved": {"$exists": False}}],
-        })
-        open_support = await db.support_tickets.count_documents({
-            "status": {"$in": ["open", "in_progress", "waiting_for_user"]}
-        })
-        failed_payments = await db.payment_transactions.count_documents({
-            "$or": [{"payment_status": "failed"}, {"status": "failed"}]
-        })
-        failed_payouts = await db.fleet_payouts.count_documents({"status": "failed"})
         today = datetime.now(timezone.utc).date().isoformat()
         expiry_limit = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
-        expired_documents = await db.uploaded_files.count_documents({
-            "is_deleted": {"$ne": True},
-            "review_status": "valid",
-            "review_expiry": {"$ne": None, "$lt": today},
-        })
-        expiring_documents = await db.uploaded_files.count_documents({
-            "is_deleted": {"$ne": True},
-            "review_status": "valid",
-            "review_expiry": {"$gte": today, "$lte": expiry_limit},
-        })
-        stripe_pending = await db.fleets.count_documents({
-            "active": {"$ne": False},
-            "$or": [
+        (
+            pending_apps,
+            pending_drivers,
+            open_support,
+            failed_payments,
+            failed_payouts,
+            expired_documents,
+            expiring_documents,
+            stripe_pending,
+        ) = await asyncio.gather(
+            db.fleet_applications.count_documents({"status": {"$in": ["submitted", "under_review", "documents_required"]}}),
+            db.users.count_documents({"role": "driver", "$or": [{"approved": False}, {"approved": {"$exists": False}}]}),
+            db.support_tickets.count_documents({"status": {"$in": ["open", "in_progress", "waiting_for_user"]}}),
+            db.payment_transactions.count_documents({"$or": [{"payment_status": "failed"}, {"status": "failed"}]}),
+            db.fleet_payouts.count_documents({"status": "failed"}),
+            db.uploaded_files.count_documents({"is_deleted": {"$ne": True}, "review_status": "valid", "review_expiry": {"$ne": None, "$lt": today}}),
+            db.uploaded_files.count_documents({"is_deleted": {"$ne": True}, "review_status": "valid", "review_expiry": {"$gte": today, "$lte": expiry_limit}}),
+            db.fleets.count_documents({"active": {"$ne": False}, "$or": [
                 {"stripe_account_id": {"$exists": False}},
                 {"stripe_account_id": None},
                 {"stripe_payouts_enabled": {"$ne": True}},
-            ],
-        })
+            ]}),
+        )
 
         items = []
         if pending_apps:
@@ -249,15 +295,17 @@ def install_admin_control_center(
     # ---------------- Integration health ----------------
     @api.get("/admin/control/integrations")
     async def integration_status(current=Depends(require_admin)):
-        total_fleets = await db.fleets.count_documents({"active": {"$ne": False}})
-        connect_ready = await db.fleets.count_documents({"stripe_payouts_enabled": True})
+        total_fleets, connect_ready = await asyncio.gather(
+            db.fleets.count_documents({"active": {"$ne": False}}),
+            db.fleets.count_documents({"stripe_payouts_enabled": True}),
+        )
         stripe_key = bool(getattr(stripe, "api_key", None))
         key = str(getattr(stripe, "api_key", "") or "")
         return {
             "as_of": _now(),
             "integrations": [
                 {
-                    "id": "backend", "name": "KJAPP API / MongoDB", "status": "operational",
+                    "id": "backend", "name": "SNAR API / MongoDB", "status": "operational",
                     "detail": "FastAPI og database svarer.", "configured": True,
                 },
                 {
@@ -279,16 +327,14 @@ def install_admin_control_center(
                     "detail": "E-post til sjåfører, løyvehavere og brukere", "configured": bool(os.getenv("SENDGRID_API_KEY")),
                 },
                 {
-                    "id": "maps_routing", "name": "Kart & routing",
-                    "status": "operational",
+                    "id": "maps_routing", "name": "Kart & routing", "status": "operational",
                     "detail": ("OSRM routing aktiv · MapTiler konfigurert" if os.getenv("MAPTILER_API_KEY") else "OSRM routing aktiv · kart bruker nøkkelfri/fallback der MapTiler ikke er satt"),
                     "configured": True,
                 },
                 {
-                    "id": "ai", "name": "KJAPP Assist / AI",
-                    "status": "operational" if os.getenv("EMERGENT_LLM_KEY") else "warning",
-                    "detail": "Emergent LLM-integrasjon konfigurert" if os.getenv("EMERGENT_LLM_KEY") else "EMERGENT_LLM_KEY mangler",
-                    "configured": bool(os.getenv("EMERGENT_LLM_KEY")),
+                    "id": "ai", "name": "SNAR Assist / AI", "status": "operational" if (os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")) else "warning",
+                    "detail": "LLM-integrasjon konfigurert" if (os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")) else "AI-nøkkel mangler",
+                    "configured": bool(os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")),
                 },
             ],
         }
@@ -296,9 +342,22 @@ def install_admin_control_center(
     # ---------------- Stripe Connect ----------------
     @api.get("/admin/control/stripe-fleets")
     async def stripe_fleets(current=Depends(require_admin)):
+        fleet_docs = await db.fleets.find({}).sort("created_at", -1).limit(300).to_list(length=300)
+        owner_ids = []
+        for fleet in fleet_docs:
+            owner_id = fleet.get("owner_user_id")
+            if owner_id:
+                try:
+                    owner_ids.append(ObjectId(str(owner_id)))
+                except Exception:
+                    pass
+        owners = {}
+        if owner_ids:
+            async for owner in db.users.find({"_id": {"$in": list(set(owner_ids))}}, {"email": 1}):
+                owners[str(owner["_id"])] = owner
         rows = []
-        async for fleet in db.fleets.find({}).sort("created_at", -1).limit(300):
-            owner = await owner_for(fleet)
+        for fleet in fleet_docs:
+            owner = owners.get(str(fleet.get("owner_user_id")))
             rows.append({
                 "id": str(fleet["_id"]),
                 "name": fleet.get("name"),
@@ -321,41 +380,8 @@ def install_admin_control_center(
         fleet = await fleet_or_404(fleet_id)
         owner = await owner_for(fleet)
         owner_email = (owner or {}).get("email") or fleet.get("contact_email")
-        account_id = fleet.get("stripe_account_id")
-        created = False
-        if not account_id:
-            try:
-                account = await asyncio.to_thread(
-                    stripe.Account.create,
-                    type="express",
-                    country="NO",
-                    email=owner_email,
-                    capabilities={"transfers": {"requested": True}},
-                    metadata={"kjapp_fleet_id": fleet_id, "kjapp_org_number": fleet.get("org_number") or ""},
-                )
-            except Exception as exc:
-                raise HTTPException(502, f"Stripe Connect kunne ikke opprettes: {type(exc).__name__}")
-            account_id = account.id
-            created = True
-            await db.fleets.update_one({"_id": _oid(fleet_id)}, {"$set": {
-                "stripe_account_id": account_id,
-                "stripe_connect_status": "onboarding",
-                "stripe_payout_schedule": "stripe_default",
-                "stripe_connected_at": _now(),
-            }})
-            try:
-                await asyncio.to_thread(
-                    stripe.Account.modify,
-                    account_id,
-                    settings={"payouts": {"schedule": {"interval": "weekly", "weekly_anchor": "friday"}}},
-                )
-                await db.fleets.update_one(
-                    {"_id": _oid(fleet_id)},
-                    {"$set": {"stripe_payout_schedule": "weekly_friday", "stripe_payout_schedule_updated_at": _now()}},
-                )
-            except Exception:
-                # Connected account remains usable; display Stripe's default schedule until confirmed.
-                pass
+        created = not fleet.get("stripe_account_id")
+        account_id = await ensure_fleet_account(db, stripe, fleet, owner_email)
         public_admin = os.getenv("ADMIN_PUBLIC_URL", "https://admin.kjappapp.no").rstrip("/")
         try:
             link = await asyncio.to_thread(
@@ -413,17 +439,11 @@ def install_admin_control_center(
         async for fleet in db.fleets.find({"stripe_account_id": {"$exists": True, "$ne": None}}).limit(100):
             fid = str(fleet["_id"])
             try:
-                plist = await asyncio.to_thread(
-                    stripe.Payout.list,
-                    limit=10,
-                    stripe_account=fleet["stripe_account_id"],
-                )
+                plist = await asyncio.to_thread(stripe.Payout.list, limit=10, stripe_account=fleet["stripe_account_id"])
                 for p in list(plist.data):
                     arrival = p.get("arrival_date")
                     rows.append({
-                        "id": p.get("id"),
-                        "fleet_id": fid,
-                        "fleet_name": fleet.get("name"),
+                        "id": p.get("id"), "fleet_id": fid, "fleet_name": fleet.get("name"),
                         "amount": (p.get("amount") or 0) / 100,
                         "currency": str(p.get("currency") or "nok").upper(),
                         "status": p.get("status"),
@@ -436,16 +456,71 @@ def install_admin_control_center(
         return {"configured": True, "payouts": rows[:200]}
 
     # ---------------- Fleet onboarding actions ----------------
+    @api.get("/admin/control/fleets/{fleet_id}/vehicles")
+    async def admin_fleet_vehicles(fleet_id: str, current=Depends(require_admin)):
+        await fleet_or_404(fleet_id)
+        rows = []
+        driver_ids = []
+        vehicles = await db.fleet_vehicles.find({"fleet_id": fleet_id}).sort("created_at", -1).limit(500).to_list(length=500)
+        for vehicle in vehicles:
+            driver_id = vehicle.get("assigned_driver_id")
+            if driver_id:
+                try:
+                    driver_ids.append(ObjectId(str(driver_id)))
+                except Exception:
+                    pass
+        drivers = {}
+        if driver_ids:
+            async for driver in db.users.find({"_id": {"$in": list(set(driver_ids))}}, {"fullName": 1, "email": 1, "online": 1}):
+                drivers[str(driver["_id"])] = driver
+        for vehicle in vehicles:
+            driver = drivers.get(str(vehicle.get("assigned_driver_id")))
+            rows.append({
+                "id": str(vehicle["_id"]),
+                "car": vehicle.get("car"),
+                "plate": vehicle.get("plate"),
+                "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+                "active": vehicle.get("active") is not False,
+                "assigned_driver_id": vehicle.get("assigned_driver_id"),
+                "assigned_driver_name": (driver or {}).get("fullName") or (driver or {}).get("email"),
+                "driver_online": bool((driver or {}).get("online")),
+            })
+        return {"vehicles": rows}
+
     @api.post("/admin/control/fleets/{fleet_id}/driver-invites")
     async def invite_driver_for_fleet(fleet_id: str, body: FleetDriverInvite, current=Depends(require_admin)):
         fleet = await fleet_or_404(fleet_id)
+        vehicle = await resolve_fleet_vehicle(
+            fleet_id,
+            vehicle_id=body.vehicle_id,
+            car=body.car,
+            plate=body.plate,
+            vehicle_type=body.vehicle_type,
+            create_legacy=True,
+        )
+        if vehicle.get("active") is False:
+            raise HTTPException(409, "Bilen er parkert")
+        if vehicle.get("assigned_driver_id"):
+            raise HTTPException(409, "Bilen er allerede tildelt en sjåfør")
+        if await db.driver_invites.find_one({
+            "fleet_id": fleet_id,
+            "vehicle_id": str(vehicle["_id"]),
+            "used": False,
+            "expires_at": {"$gt": _now()},
+        }):
+            raise HTTPException(409, "Det finnes allerede en aktiv invitasjon for denne bilen")
+
         token = secrets.token_urlsafe(24)
         email = body.email.strip().lower()
+        canonical_car = str(vehicle.get("car") or "").strip()
+        canonical_plate = str(vehicle.get("plate") or "").strip().upper()
+        canonical_type = vehicle.get("vehicle_type") or "ai-first"
         doc = {
             "token": token,
-            "car": body.car.strip(),
-            "plate": body.plate.strip().upper(),
-            "vehicle_type": body.vehicle_type,
+            "vehicle_id": str(vehicle["_id"]),
+            "car": canonical_car,
+            "plate": canonical_plate,
+            "vehicle_type": canonical_type,
             "note": body.note or "",
             "email": email,
             "created_by": current["id"],
@@ -456,24 +531,31 @@ def install_admin_control_center(
             "email_sent": False,
         }
         await db.driver_invites.insert_one(doc)
-        base = os.getenv("KJAPP_PUBLIC_URL", "https://kjappapp.no").rstrip("/")
+        base = os.getenv("SNAR_PUBLIC_URL", os.getenv("KJAPP_PUBLIC_URL", "https://snarapp.no")).rstrip("/")
         invite_url = f"{base}/driver-signup/{token}"
-        safe_name = html.escape(str(fleet.get("name") or "KJAPP-flåten"))
-        safe_car = html.escape(body.car)
-        safe_plate = html.escape(body.plate.upper())
+        safe_name = html.escape(str(fleet.get("name") or "SNAR-flåten"))
+        safe_car = html.escape(canonical_car)
+        safe_plate = html.escape(canonical_plate)
         mail = (
             "<div style='font-family:Arial,sans-serif;background:#071015;color:#e9edf1;padding:28px'>"
-            "<h2 style='color:#72dce8'>KJAPP sjåførinvitasjon</h2>"
+            "<h2 style='color:#72dce8'>SNAR sjåførinvitasjon</h2>"
             f"<p>Du er invitert til <b>{safe_name}</b>.</p>"
             f"<p>Kjøretøy: <b>{safe_car} · {safe_plate}</b></p>"
             f"<p><a href='{html.escape(invite_url)}' style='color:#72dce8'>Fullfør registreringen</a></p>"
             "<p>Lenken utløper om 14 dager. Kontoen må godkjennes før du kan motta turer.</p></div>"
         )
-        sent = await asyncio.to_thread(send_email, email, "Invitasjon: Bli sjåfør for KJAPP", mail)
+        sent = await asyncio.to_thread(send_email, email, "Invitasjon: Bli sjåfør for SNAR", mail)
         if sent:
             await db.driver_invites.update_one({"token": token}, {"$set": {"email_sent": True}})
-        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None, {"email": email, "plate": body.plate.upper()})
-        return {"ok": True, "email_sent": bool(sent), "expires_at": doc["expires_at"]}
+        await audit(current, "fleet.driver_invite", "fleet", fleet_id, None,
+                    {"email": email, "vehicle_id": str(vehicle["_id"]), "plate": canonical_plate, "email_sent": bool(sent)})
+        return {
+            "ok": True,
+            "email_sent": bool(sent),
+            "invite_url": invite_url,
+            "vehicle_id": str(vehicle["_id"]),
+            "expires_at": doc["expires_at"],
+        }
 
     @api.post("/admin/control/fleets/{fleet_id}/vehicle")
     async def update_fleet_vehicle(fleet_id: str, body: FleetVehicleUpdate, current=Depends(require_admin)):
@@ -481,11 +563,58 @@ def install_admin_control_center(
         driver = await db.users.find_one({"_id": _oid(body.driver_user_id), "role": "driver", "fleet_id": fleet_id})
         if not driver:
             raise HTTPException(404, "Sjåføren tilhører ikke denne løyvehaveren")
-        before = {"car": driver.get("car"), "plate": driver.get("plate"), "vehicle_type": driver.get("vehicle_type")}
-        after = {"car": body.car.strip(), "plate": body.plate.strip().upper(), "vehicle_type": body.vehicle_type}
-        await db.users.update_one({"_id": driver["_id"]}, {"$set": after})
-        await audit(current, "fleet.vehicle_update", "fleet", fleet_id, before, after)
-        return {"ok": True}
+        if driver.get("online"):
+            raise HTTPException(409, "Sjåføren må gå offline før bilbytte")
+        vehicle = await resolve_fleet_vehicle(
+            fleet_id,
+            vehicle_id=body.vehicle_id,
+            car=body.car,
+            plate=body.plate,
+            vehicle_type=body.vehicle_type,
+            create_legacy=True,
+        )
+        if vehicle.get("active") is False:
+            raise HTTPException(409, "Bilen er parkert")
+        previous_driver_id = vehicle.get("assigned_driver_id")
+        if previous_driver_id and previous_driver_id != body.driver_user_id:
+            previous_driver = await db.users.find_one({"_id": _oid(previous_driver_id), "role": "driver", "fleet_id": fleet_id})
+            if previous_driver and previous_driver.get("online"):
+                raise HTTPException(409, "Nåværende sjåfør må gå offline før bilen kan omfordeles")
+        else:
+            previous_driver = None
+
+        before = {
+            "driver_vehicle_id": driver.get("vehicle_id"),
+            "target_vehicle_id": str(vehicle["_id"]),
+            "target_previous_driver_id": previous_driver_id,
+        }
+        now = _now()
+        await db.fleet_vehicles.update_many(
+            {"fleet_id": fleet_id, "assigned_driver_id": body.driver_user_id, "_id": {"$ne": vehicle["_id"]}},
+            {"$unset": {"assigned_driver_id": "", "assigned_driver_name": ""}, "$set": {"updated_at": now}},
+        )
+        await db.fleet_vehicles.update_one(
+            {"_id": vehicle["_id"], "fleet_id": fleet_id},
+            {"$set": {
+                "assigned_driver_id": body.driver_user_id,
+                "assigned_driver_name": driver.get("fullName") or driver.get("full_name"),
+                "updated_at": now,
+            }},
+        )
+        after = {
+            "vehicle_id": str(vehicle["_id"]),
+            "car": vehicle.get("car"),
+            "plate": vehicle.get("plate"),
+            "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
+        }
+        await db.users.update_one({"_id": driver["_id"], "fleet_id": fleet_id}, {"$set": after})
+        if previous_driver:
+            await db.users.update_one(
+                {"_id": previous_driver["_id"], "fleet_id": fleet_id},
+                {"$unset": {"vehicle_id": "", "car": "", "plate": "", "vehicle_type": ""}, "$set": {"online": False}},
+            )
+        await audit(current, "fleet.vehicle_assign", "fleet", fleet_id, before, {**after, "driver_user_id": body.driver_user_id})
+        return {"ok": True, **after}
 
     # ---------------- Communications ----------------
     async def recipient_users(audience: str, fleet_id: Optional[str]):
@@ -558,8 +687,10 @@ def install_admin_control_center(
                         body.title.strip(),
                         f"<div style='font-family:Arial,sans-serif'><h2>{safe_title}</h2><p>{safe_body}</p></div>",
                     )
-                    if ok: email_sent += 1
-                    else: email_failed += 1
+                    if ok:
+                        email_sent += 1
+                    else:
+                        email_failed += 1
 
         await asyncio.gather(*(deliver(u) for u in users))
         doc = {
@@ -646,3 +777,4 @@ def install_admin_control_center(
         await db.users.update_one({"_id": target["_id"]}, {"$set": sets})
         await audit(current, "admin_user.update", "admin_user", user_id, before, sets)
         return {"ok": True}
+

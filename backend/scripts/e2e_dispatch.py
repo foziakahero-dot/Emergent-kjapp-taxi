@@ -1,8 +1,20 @@
-"""Nearest-driver-first dispatch check with two REAL driver accounts.
+"""Portable KJAPP dispatch lifecycle E2E for an ISOLATED backend/database.
 
-Driver A sits closer to the pickup than driver B. The trip must be offered to A first,
-forwarded to B when A does not answer (or declines), and B must then be able to accept it.
+This script creates real API records and therefore MUST NOT be pointed at the shared
+Oslo beta/production database. No credentials are stored in Git.
+
+Required:
+  KJAPP_E2E_CUSTOMER_EMAIL
+  KJAPP_E2E_CUSTOMER_PASSWORD
+  KJAPP_E2E_DRIVER_A_EMAIL
+  KJAPP_E2E_DRIVER_A_PASSWORD
+  KJAPP_E2E_DRIVER_B_EMAIL
+  KJAPP_E2E_DRIVER_B_PASSWORD
+
+Optional:
+  KJAPP_E2E_API=https://github-app-builder-28.emergent.host
 """
+import datetime as dt
 import json
 import os
 import sys
@@ -10,125 +22,331 @@ import time
 import urllib.error
 import urllib.request
 
-import asyncio
-from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
+API = (
+    os.environ.get("KJAPP_E2E_API")
+    or os.environ.get("EXPO_PUBLIC_BACKEND_URL")
+    or "https://github-app-builder-28.emergent.host"
+).rstrip("/")
+UA = {"User-Agent": "KJAPP-beta-e2e/1.0", "Content-Type": "application/json"}
+FAILS = []
 
-load_dotenv("/app/backend/.env")
-API = open("/app/frontend/.env").read().split("REACT_APP_BACKEND_URL=")[1].split()[0]
-UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
-fails = []
+# This script creates and advances a ride. It must never run accidentally against
+# the shared Oslo beta/production database. Use release_smoke.py for live systems.
+ALLOW_MUTATION = (os.environ.get("KJAPP_E2E_ALLOW_MUTATION") or "").strip().lower() in {"1", "true", "yes", "on"}
+ISOLATED = (os.environ.get("KJAPP_E2E_ISOLATED") or "").strip().lower() in {"1", "true", "yes", "on"}
+LIVE_HOSTS = {
+    "https://github-app-builder-28.emergent.host",
+    "https://api.kjappapp.no",
+}
+
+if API in LIVE_HOSTS:
+    print(
+        "REFUSED: lifecycle E2E can never mutate the shared KJAPP beta/production backend. "
+        "Use release_smoke.py for live checks."
+    )
+    sys.exit(3)
+if not (ALLOW_MUTATION and ISOLATED):
+    print(
+        "REFUSED: lifecycle E2E requires an isolated backend/database plus "
+        "KJAPP_E2E_ISOLATED=true and KJAPP_E2E_ALLOW_MUTATION=true."
+    )
+    sys.exit(3)
+
+
+def required(name: str) -> str:
+    value = (os.environ.get(name) or "").strip()
+    if not value:
+        print(f"Missing required environment variable: {name}")
+        sys.exit(2)
+    return value
 
 
 def call(path, data=None, token=None, method=None):
-    h = dict(UA)
+    headers = dict(UA)
     if token:
-        h["Authorization"] = "Bearer " + token
+        headers["Authorization"] = "Bearer " + token
     req = urllib.request.Request(
-        API + path, data=json.dumps(data).encode() if data is not None else None, headers=h, method=method
+        API + path,
+        data=json.dumps(data).encode() if data is not None else None,
+        headers=headers,
+        method=method,
     )
     try:
-        with urllib.request.urlopen(req) as r:
-            return r.status, json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()[:200].decode("utf-8", "ignore")
+        with urllib.request.urlopen(req, timeout=20) as response:
+            raw = response.read() or b"{}"
+            try:
+                body = json.loads(raw)
+            except Exception:
+                body = raw.decode("utf-8", "ignore")
+            return response.status, body
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        try:
+            body = json.loads(raw or b"{}")
+        except Exception:
+            body = raw[:500].decode("utf-8", "ignore")
+        return exc.code, body
+    except Exception as exc:
+        return 0, {"detail": f"{type(exc).__name__}: {exc}"}
 
 
 def check(name, ok, detail=""):
     print(("PASS  " if ok else "FAIL  ") + name, detail)
     if not ok:
-        fails.append(name)
+        FAILS.append(name)
 
 
-def login(email, pw):
-    st, d = call("/api/auth/login", {"email": email, "password": pw})
-    assert st == 200, (email, st, d)
-    return d["token"]
+def login(email, password):
+    status, body = call("/api/auth/login", {"email": email, "password": password})
+    if status != 200 or not isinstance(body, dict) or not body.get("token"):
+        raise RuntimeError(f"Login failed for {email}: {status} {body}")
+    return body["token"]
 
 
-DRIVER_B_EMAIL = "sjafor2@kjapp.no"
-DRIVER_B_PW = "sjafor2234"
+def now_iso():
+    return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-async def ensure_driver_b():
-    c = AsyncIOMotorClient(os.environ["MONGO_URL"])
-    db = c[os.environ["DB_NAME"]]
-    u = await db.users.find_one({"email": DRIVER_B_EMAIL})
-    if u:
-        await db.users.update_one({"_id": u["_id"]}, {"$set": {"role": "driver", "approved": True}})
-        return
-    st, d = call("/api/auth/register", {
-        "fullName": "Kari Sjåfør", "email": DRIVER_B_EMAIL, "password": DRIVER_B_PW, "phone": "+4790000002",
-    })
-    assert st in (200, 201), (st, d)
-    await db.users.update_one(
-        {"email": DRIVER_B_EMAIL},
-        {"$set": {"role": "driver", "approved": True, "car": "Volvo XC60", "plate": "KA98765", "fullName": "Kari Sjåfør"}},
+def num(value, default=0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def wait_for_offer(token, trip_id, seconds=8):
+    end = time.time() + seconds
+    last = None
+    while time.time() < end:
+        status, last = call("/api/driver/pending", None, token)
+        if status == 200 and isinstance(last, dict):
+            match = next((t for t in (last.get("trips") or []) if t.get("trip_id") == trip_id), None)
+            if match:
+                return match
+        time.sleep(1)
+    return None
+
+
+CUSTOMER_EMAIL = required("KJAPP_E2E_CUSTOMER_EMAIL")
+CUSTOMER_PASSWORD = required("KJAPP_E2E_CUSTOMER_PASSWORD")
+DRIVER_A_EMAIL = required("KJAPP_E2E_DRIVER_A_EMAIL")
+DRIVER_A_PASSWORD = required("KJAPP_E2E_DRIVER_A_PASSWORD")
+DRIVER_B_EMAIL = required("KJAPP_E2E_DRIVER_B_EMAIL")
+DRIVER_B_PASSWORD = required("KJAPP_E2E_DRIVER_B_PASSWORD")
+
+customer = login(CUSTOMER_EMAIL, CUSTOMER_PASSWORD)
+driver_a = login(DRIVER_A_EMAIL, DRIVER_A_PASSWORD)
+driver_b = login(DRIVER_B_EMAIL, DRIVER_B_PASSWORD)
+
+# Youngstorget -> Solli plass. Driver A starts nearest and must receive the first offer.
+PICKUP = (59.9139, 10.7497)
+DROPOFF = (59.9138, 10.7213)
+
+try:
+    # Live drivers must be real invite-only accounts attached to a fleet-owned vehicle.
+    status, me_a = call("/api/auth/me", None, driver_a)
+    check(
+        "driver A is tied to a fleet",
+        status == 200 and isinstance(me_a, dict) and bool(me_a.get("fleet_id")),
+        str(me_a)[:160],
+    )
+    status, me_b = call("/api/auth/me", None, driver_b)
+    check(
+        "driver B is tied to a fleet",
+        status == 200 and isinstance(me_b, dict) and bool(me_b.get("fleet_id")),
+        str(me_b)[:160],
     )
 
+    # Baselines let us prove unpaid rides never fabricate earnings.
+    status, summary_before = call("/api/driver/summary/today", None, driver_b)
+    check("driver earnings baseline is readable", status == 200 and isinstance(summary_before, dict), str(summary_before)[:120])
+    status, payouts_before = call("/api/driver/payouts", None, driver_b)
+    check("driver payout baseline is readable", status == 200 and isinstance(payouts_before, dict), str(payouts_before)[:120])
 
-asyncio.run(ensure_driver_b())
+    status, body = call("/api/driver/online", {"online": True}, driver_a)
+    check("driver A can go online only with active fleet vehicle", status == 200, str(body)[:120])
+    call("/api/driver/location", {
+        "lat": 59.9160, "lng": 10.7500, "heading": 10, "speed": 0, "recorded_at": now_iso(),
+    }, driver_a)
 
-cust = login("ola@kjapp.no", "test1234")
-drv_a = login("sjafor@kjapp.no", "sjafor1234")
-drv_b = login(DRIVER_B_EMAIL, DRIVER_B_PW)
+    status, body = call("/api/driver/online", {"online": True}, driver_b)
+    check("driver B can go online only with active fleet vehicle", status == 200, str(body)[:120])
+    call("/api/driver/location", {
+        "lat": 59.9400, "lng": 10.7800, "heading": 10, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
 
-# Pickup: Youngstorget. A is 300 m away, B is ~3 km away.
-PICKUP = (59.9139, 10.7497)
-call("/api/driver/online", {"online": True}, drv_a)
-call("/api/driver/location", {"lat": 59.9160, "lng": 10.7500, "heading": 10}, drv_a)
-call("/api/driver/online", {"online": True}, drv_b)
-call("/api/driver/location", {"lat": 59.9400, "lng": 10.7800, "heading": 10}, drv_b)
+    status, trip = call("/api/trips/request", {
+        "pickup_address": "Youngstorget 1, Oslo",
+        "pickup_lat": PICKUP[0],
+        "pickup_lng": PICKUP[1],
+        "dropoff_address": "Solli plass, Oslo",
+        "dropoff_lat": DROPOFF[0],
+        "dropoff_lng": DROPOFF[1],
+        "vehicle_type": "ai-first",
+    }, customer)
+    check("customer created a real trip", status == 200 and isinstance(trip, dict) and trip.get("trip_id"), str(trip)[:120])
+    if status != 200 or not isinstance(trip, dict) or not trip.get("trip_id"):
+        sys.exit(1)
+    trip_id = trip["trip_id"]
 
-st, trip = call("/api/trips/request", {
-    "pickup_address": "Youngstorget 1, Oslo", "pickup_lat": PICKUP[0], "pickup_lng": PICKUP[1],
-    "dropoff_address": "Solli plass, Oslo", "dropoff_lat": 59.9138, "dropoff_lng": 10.7213,
-    "vehicle_type": "enkelt",
-}, cust)
-check("customer created a real trip", st == 200, f"{trip.get('trip_id','')[:8]} {trip.get('price')} kr")
-tid = trip["trip_id"]
+    dup_status, duplicate = call("/api/trips/request", {
+        "pickup_address": "Youngstorget 1, Oslo",
+        "pickup_lat": PICKUP[0],
+        "pickup_lng": PICKUP[1],
+        "dropoff_address": "Aker Brygge, Oslo",
+        "dropoff_lat": 59.9108,
+        "dropoff_lng": 10.7290,
+        "vehicle_type": "ai-first",
+    }, customer)
+    check("duplicate active customer booking is rejected", dup_status == 409, str(duplicate)[:120])
 
-st, pa = call("/api/driver/pending", None, drv_a)
-st, pb = call("/api/driver/pending", None, drv_b)
-ids_a = [t["trip_id"] for t in pa["trips"]]
-ids_b = [t["trip_id"] for t in pb["trips"]]
-check("nearest driver got the offer", tid in ids_a, f"A sees {len(ids_a)}")
-check("far driver does NOT see it yet", tid not in ids_b, f"B sees {len(ids_b)}")
-offer = next((t for t in pa["trips"] if t["trip_id"] == tid), {})
-check("offer has a real countdown", bool(offer.get("offer_expires_at")), str(offer.get("offer_expires_at"))[11:19])
+    offer_a = wait_for_offer(driver_a, trip_id)
+    check("nearest driver got the first offer", bool(offer_a), str(offer_a)[:120])
+    if offer_a:
+        check("offer has server expiry", bool(offer_a.get("offer_expires_at")), offer_a.get("offer_expires_at"))
+        check("offer exposes real pickup route", bool(offer_a.get("pickup_route")), str(offer_a.get("pickup_route"))[:120])
 
-st, res = call("/api/driver/accept", {"trip_id": tid}, drv_b)
-check("far driver cannot snipe the offer", st == 409, str(res)[:80])
+    status, pending_b = call("/api/driver/pending", None, driver_b)
+    ids_b = [t.get("trip_id") for t in (pending_b.get("trips") or [])] if isinstance(pending_b, dict) else []
+    check("far driver cannot see sequential offer yet", trip_id not in ids_b, f"B sees {ids_b}")
 
-print("... waiting for the 20 s offer window to expire")
-time.sleep(26)
-st, pb2 = call("/api/driver/pending", None, drv_b)
-st, pa2 = call("/api/driver/pending", None, drv_a)
-check("unanswered offer forwarded to next driver", tid in [t["trip_id"] for t in pb2["trips"]], f"B sees {len(pb2['trips'])}")
+    status, body = call("/api/driver/accept", {"trip_id": trip_id}, driver_b)
+    check("far driver cannot snipe another driver's offer", status == 409, str(body)[:120])
 
-st, res = call("/api/driver/accept", {"trip_id": tid}, drv_b)
-check("second driver can accept the forwarded trip", st == 200, str(res)[:60])
-st, cur = call("/api/driver/current", None, drv_b)
-check("trip is assigned to the accepting driver", (cur or {}).get("trip_id") == tid, (cur or {}).get("status"))
-st, cur_a = call("/api/driver/current", None, drv_a)
-check(
-    "other driver has no ACTIVE trip",
-    not cur_a or cur_a.get("status") in ("arrived", "completed", "rated"),
-    (cur_a or {}).get("status", "none"),
-)
+    status, body = call("/api/driver/decline", {"trip_id": trip_id}, driver_a)
+    check("first driver can decline owned offer", status == 200, str(body)[:120])
 
-for ep in ["at-pickup", "start", "arrive"]:
-    st, _ = call(f"/api/driver/trip/{tid}/{ep}", {}, drv_b)
-    check(f"state machine: {ep}", st == 200)
+    offer_b = wait_for_offer(driver_b, trip_id)
+    check("declined offer forwards to next eligible driver", bool(offer_b), str(offer_b)[:120])
 
-st, s = call("/api/driver/summary/today", None, drv_b)
-check("earnings landed on the driver who drove", s["trips"] >= 1, f"{s['trips']} turer {s['income']} kr")
+    status, body = call("/api/driver/accept", {"trip_id": trip_id}, driver_b)
+    check("second driver can accept forwarded offer", status == 200, str(body)[:120])
+    if status == 200 and isinstance(body, dict):
+        check("accepted trip snapshots fleet", bool(body.get("fleet_id")), str(body.get("fleet_id")))
+        driver_snap = body.get("driver") or {}
+        check("accepted trip snapshots assigned vehicle", bool(body.get("vehicle_id") and driver_snap.get("plate") and driver_snap.get("car")), str(driver_snap)[:160])
+        check("accepted vehicle class matches requested ride", driver_snap.get("vehicle_type") == "ai-first", str(driver_snap)[:160])
 
-st, cfg = call("/api/push/native-config")
-check("native push config endpoint is key-optional", st == 200 and "enabled" in cfg, json.dumps(cfg)[:90])
+    status, body = call("/api/driver/accept", {"trip_id": trip_id}, driver_a)
+    check("losing driver cannot accept after assignment", status == 409, str(body)[:120])
 
-call("/api/driver/online", {"online": False}, drv_b)
-call("/api/driver/online", {"online": False}, drv_a)
+    status, current = call("/api/driver/current", None, driver_b)
+    check("trip belongs to accepting driver", status == 200 and isinstance(current, dict) and current.get("trip_id") == trip_id, str(current)[:120])
 
-print("\nresult:", "ALL PASSED" if not fails else f"{len(fails)} FAILED -> {fails}")
-sys.exit(1 if fails else 0)
+    # Server now requires real fresh GPS close to pickup before at-pickup.
+    call("/api/driver/location", {
+        "lat": PICKUP[0], "lng": PICKUP[1], "heading": 250, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
+    status, body = call(f"/api/driver/trip/{trip_id}/at-pickup", {}, driver_b)
+    check("at-pickup requires real pickup GPS", status == 200, str(body)[:120])
+
+    # A stale at-pickup state must not let the driver start after driving away.
+    call("/api/driver/location", {
+        "lat": 59.9400, "lng": 10.7800, "heading": 20, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
+    status, body = call(f"/api/driver/trip/{trip_id}/start", {}, driver_b)
+    check("trip cannot start far away from pickup", status == 409, str(body)[:120])
+
+    call("/api/driver/location", {
+        "lat": PICKUP[0], "lng": PICKUP[1], "heading": 250, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
+    status, body = call(f"/api/driver/trip/{trip_id}/start", {}, driver_b)
+    check("trip starts only with fresh GPS at pickup", status == 200, str(body)[:120])
+
+    # Server now requires real fresh GPS close to destination before arrive.
+    call("/api/driver/location", {
+        "lat": DROPOFF[0], "lng": DROPOFF[1], "heading": 260, "speed": 0, "recorded_at": now_iso(),
+    }, driver_b)
+    status, arrive_body = call(f"/api/driver/trip/{trip_id}/arrive", {}, driver_b)
+    check("arrive requires real destination GPS", status == 200, str(arrive_body)[:160])
+
+    # Payment is the source of truth. No script-side success shortcut is allowed.
+    status, after_arrive = call(f"/api/trips/{trip_id}", None, customer)
+    check("customer can read arrived ride", status == 200 and isinstance(after_arrive, dict), str(after_arrive)[:160])
+    payment_status = after_arrive.get("payment_status") if isinstance(after_arrive, dict) else None
+
+    if payment_status != "paid":
+        status, body = call(f"/api/trips/{trip_id}/complete", {}, customer)
+        check("unpaid arrived ride cannot be completed", status == 409, str(body)[:120])
+
+        status, body = call(f"/api/trips/{trip_id}/rate", {"rating": 5, "feedback": "must not apply before payment"}, customer)
+        check("unpaid ride cannot be rated", status == 409, str(body)[:120])
+
+        status, summary_unpaid = call("/api/driver/summary/today", None, driver_b)
+        unchanged_trips = (
+            status == 200
+            and isinstance(summary_before, dict)
+            and isinstance(summary_unpaid, dict)
+            and num(summary_unpaid.get("trips")) == num(summary_before.get("trips"))
+            and num(summary_unpaid.get("trip_income")) == num(summary_before.get("trip_income"))
+        )
+        check("unpaid ride creates no driver earnings", unchanged_trips, str(summary_unpaid)[:160])
+
+        status, payouts_unpaid = call("/api/driver/payouts", None, driver_b)
+        unchanged_payout = (
+            status == 200
+            and isinstance(payouts_before, dict)
+            and isinstance(payouts_unpaid, dict)
+            and num(payouts_unpaid.get("pending_net")) == num(payouts_before.get("pending_net"))
+        )
+        check("unpaid ride creates no payout balance", unchanged_payout, str(payouts_unpaid)[:160])
+
+        check(
+            "full live E2E payment completed",
+            False,
+            "Ride is physically arrived but payment is not paid. Configure real beta auto-charge or run a supervised real Stripe payment; E2E never fakes payment success.",
+        )
+    else:
+        # Payment-success transition should already have moved arrived -> completed and created receipt.
+        status, paid_trip = call(f"/api/trips/{trip_id}", None, customer)
+        check(
+            "paid ride is completed by server",
+            status == 200 and isinstance(paid_trip, dict) and paid_trip.get("status") in ("completed", "rated"),
+            str(paid_trip)[:180],
+        )
+        check("paid ride has immutable receipt id", bool((paid_trip or {}).get("receipt_id")), str((paid_trip or {}).get("receipt_id")))
+
+        status, body = call(f"/api/trips/{trip_id}/complete", {}, customer)
+        check("paid completion endpoint is idempotent", status == 200, str(body)[:120])
+
+        status, body = call(f"/api/trips/{trip_id}/rate", {"rating": 5, "feedback": "Oslo beta E2E"}, customer)
+        check("passenger rates paid finished ride", status == 200, str(body)[:120])
+
+        status, body = call(f"/api/trips/{trip_id}/rate", {"rating": 4, "feedback": "duplicate"}, customer)
+        check("duplicate passenger rating is rejected", status == 400, str(body)[:120])
+
+        status, body = call(f"/api/driver/trip/{trip_id}/rate-passenger", {"rating": 5, "feedback": "Oslo beta E2E"}, driver_b)
+        check("assigned driver can rate passenger after paid ride", status == 200, str(body)[:120])
+
+        status, summary = call("/api/driver/summary/today", None, driver_b)
+        earnings_advanced = (
+            status == 200
+            and isinstance(summary_before, dict)
+            and isinstance(summary, dict)
+            and num(summary.get("trips")) >= num(summary_before.get("trips")) + 1
+            and num(summary.get("trip_income")) > num(summary_before.get("trip_income"))
+        )
+        check("paid earnings reached assigned driver", earnings_advanced, str(summary)[:160])
+
+        status, payouts = call("/api/driver/payouts", None, driver_b)
+        payout_advanced = (
+            status == 200
+            and isinstance(payouts_before, dict)
+            and isinstance(payouts, dict)
+            and num(payouts.get("pending_net")) > num(payouts_before.get("pending_net"))
+        )
+        check("paid ride reached payout balance", payout_advanced, str(payouts)[:160])
+
+    status, push = call("/api/push/native-config")
+    check("native push config is exposed", status == 200 and isinstance(push, dict) and push.get("provider") == "expo", str(push)[:120])
+
+    status, area = call("/api/service-area")
+    check("Oslo service area is exposed", status == 200 and isinstance(area, dict) and area.get("launch_city") == "Oslo", str(area)[:120])
+
+finally:
+    call("/api/driver/online", {"online": False}, driver_b)
+    call("/api/driver/online", {"online": False}, driver_a)
+
+print("\nTarget:", API)
+print("Result:", "ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED -> {FAILS}")
+sys.exit(1 if FAILS else 0)

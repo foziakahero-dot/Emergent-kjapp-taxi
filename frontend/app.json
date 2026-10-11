@@ -1,33 +1,30 @@
 {
   "expo": {
-    "name": "KJAPP",
+    "name": "SNAR",
     "slug": "kjapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kjapp",
-    "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070B0E"
-    },
+    "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "no.kjapp.app",
+      "supportsTablet": false,
+      "bundleIdentifier": "no.nexorahub.kjapp.customer",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Vis biler i nærheten og hent deg der du er",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Del posisjon under turen for trygg henting",
-        "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi."
-      }
+        "NSMicrophoneUsageDescription": "Bruk stemmen for å snakke med SNAR Assist og bestille taxi.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "MGLMapboxMetricsEnabledSettingShownInApp": true,
+        "NSCameraUsageDescription": "Ta et profilbilde eller skann betalingskort i SNAR."
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "no.kjapp.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
-        "backgroundColor": "#070B0E"
+        "backgroundColor": "#FF0000"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
@@ -41,6 +38,18 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.31.1"
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": true
+        }
+      ],
       "expo-router",
       "expo-font",
       [
@@ -53,17 +62,34 @@
         "expo-notifications",
         {
           "defaultChannel": "kjapp_trips",
-          "color": "#00E5F5"
+          "color": "#FF0000"
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "Bruk stemmen for å snakke med KJAPP Assist og bestille taxi.",
+          "microphonePermission": "Bruk stemmen for å snakke med SNAR Assist og bestille taxi.",
           "recordAudioAndroid": true
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication",
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 104,
+          "backgroundColor": "#F4F6FA"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Velg et profilbilde i SNAR.",
+          "cameraPermission": "Ta et profilbilde i SNAR."
+        }
+      ]
     ],
     "extra": {
       "appRole": "customer",

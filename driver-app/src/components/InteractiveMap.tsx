@@ -1,14 +1,6 @@
+import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Image,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleProp,
-  Text,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors } from '@/src/theme';
 import { Icon } from './Icon';
@@ -27,11 +19,11 @@ const ATTRIB = MAPTILER_KEY ? '© MapTiler · OpenStreetMap' : '© Esri · OpenS
 
 const baseTileUrl = (z: number, x: number, y: number) =>
   MAPTILER_KEY
-    ? `https://api.maptiler.com/maps/dataviz-dark/${z}/${x}/${y}@2x.png?key=${MAPTILER_KEY}`
-    : `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`;
+    ? `https://api.maptiler.com/maps/streets-v4/${z}/${x}/${y}@2x.png?key=${MAPTILER_KEY}`
+    : `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`;
 
 const labelTileUrl = (z: number, x: number, y: number) =>
-  `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/${z}/${y}/${x}`;
+  `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/${z}/${y}/${x}`;
 
 function projectX(lng: number, z: number) {
   return ((lng + 180) / 360) * TILE * Math.pow(2, z);
@@ -268,7 +260,7 @@ export function InteractiveMap({
               left: 0,
               right: 0,
               height: 110,
-              backgroundColor: 'rgba(6,9,10,0.20)',
+              backgroundColor: 'rgba(244,246,250,0.18)',
               pointerEvents: 'none',
             }}
           />
@@ -313,15 +305,15 @@ export function InteractiveMap({
 
             {user ? (
               <G>
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(64,145,255,0.16)" />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill="#4091FF" stroke="#FFFFFF" strokeWidth={2.5} />
+                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(255,0,0,0.16)" />
+                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={3} fill="#FFFFFF" />
-                <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill="#FFFFFF" fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
+                <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill={colors.text} fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>
             ) : null}
           </Svg>
 
-          <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: 'rgba(244,244,240,0.45)', pointerEvents: 'none' }}>
+          <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
             {ATTRIB}
           </Text>
 
@@ -350,7 +342,7 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
         borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(12,18,22,0.94)',
+        backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.line,
       }}
@@ -362,3 +354,4 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 
 export const Map = InteractiveMap;
 export default InteractiveMap;
+

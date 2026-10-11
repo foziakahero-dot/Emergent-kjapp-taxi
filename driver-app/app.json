@@ -1,24 +1,30 @@
 {
   "expo": {
-    "name": "KJAPP Driver",
+    "name": "SNAR Driver",
     "slug": "kjapp-driver",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kjapp-driver",
-    "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#070B0E"
-    },
+    "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "no.kjapp.driver",
+      "supportsTablet": false,
+      "bundleIdentifier": "no.nexorahub.kjapp.driver",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din for å finne og gjennomføre turer.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "KJAPP Driver bruker posisjonen din under aktive skift og turer."
+        "LSApplicationQueriesSchemes": [
+          "waze",
+          "comgooglemaps",
+          "maps"
+        ],
+        "NSLocationWhenInUseUsageDescription": "SNAR Driver bruker posisjonen din for å finne og gjennomføre turer.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SNAR Driver bruker posisjonen din under aktive skift og turer.",
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "SNAR Driver bruker kameraet for å ta en selfie til identitetskontroll.",
+        "MGLMapboxMetricsEnabledSettingShownInApp": true
       }
     },
     "android": {
@@ -26,7 +32,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/android-icon-monochrome.png",
-        "backgroundColor": "#070B0E"
+        "backgroundColor": "#001F3F"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
@@ -42,12 +48,19 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.31.1"
+        }
+      ],
+      "./plugins/withNavigationQueries",
       "expo-router",
       "expo-font",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "KJAPP Driver bruker posisjonen din for å finne turer i nærheten.",
+          "locationWhenInUsePermission": "SNAR Driver bruker posisjonen din for å finne turer i nærheten.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
@@ -57,11 +70,26 @@
         "expo-notifications",
         {
           "defaultChannel": "kjapp_trips",
-          "color": "#00E5F5",
+          "color": "#FF0000",
           "enableBackgroundRemoteNotifications": true
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SNAR Driver bruker kameraet for å ta en selfie til identitetskontroll.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 104,
+          "backgroundColor": "#F4F6FA"
+        }
+      ]
     ],
     "extra": {
       "appRole": "driver",

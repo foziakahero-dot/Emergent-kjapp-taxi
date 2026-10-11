@@ -1,50 +1,11 @@
-name: KJAPP Expo iOS (manual smoke build)
+name: KJAPP Expo iOS (manual disabled placeholder)
 
 on:
   workflow_dispatch:
 
 jobs:
-  ios-smoke:
-    runs-on: macos-14
-    timeout-minutes: 45
-    env:
-      CI: '1'
-      EXPO_PUBLIC_BACKEND_URL: https://github-app-builder-28.emergent.host
-
+  ios-smoke-disabled:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install app dependencies
-        working-directory: frontend
-        run: npm install
-
-      - name: Validate Expo project
-        working-directory: frontend
-        run: npx expo config --type public
-
-      - name: Generate native iOS project from Expo
-        working-directory: frontend
-        run: npx expo prebuild --platform ios --clean
-
-      - name: Install CocoaPods
-        working-directory: frontend/ios
-        run: pod install
-
-      - name: Compile unsigned simulator build
-        working-directory: frontend/ios
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -workspace KJAPP.xcworkspace \
-            -scheme KJAPP \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -derivedDataPath "$RUNNER_TEMP/KJAPPDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+      - name: Native compile disabled pending certification
+        run: echo "Native iOS compile is disabled on the recovered Phase 2B baseline. Use the separately approved native build gate after Phase 2C certification."

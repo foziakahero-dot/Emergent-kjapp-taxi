@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-04 Europe/Oslo",
+  "customerBuildAuthorized": false,
+  "checks": {
+    "typescript": "PASS",
+    "expoDoctor": "PASS",
+    "androidPrebuild": "PASS",
+    "iosPrebuild": "PASS",
+    "componentTests": "PASS",
+    "backendFocusedTests": "PASS",
+    "apiContract": "FAIL",
+    "figmaParity": "PARTIAL",
+    "customerE2E": "PARTIAL",
+    "mapboxNativeRuntime": "UNVERIFIED",
+    "googleNativeLogin": "BLOCKED",
+    "appleNativeLogin": "UNVERIFIED",
+    "stripeTestPayment": "UNVERIFIED",
+    "googlePay": "UNVERIFIED",
+    "applePay": "BLOCKED",
+    "pushOnDevice": "UNVERIFIED",
+    "androidNativeCompile": "UNVERIFIED",
+    "iosNativeCompile": "UNVERIFIED",
+    "legacyRegressionSuite": "FAIL",
+    "githubCI": "BLOCKED",
+    "staticBetaPolicy": "PASS",
+    "renderSourceValidation": "PASS",
+    "stripeTestConfiguration": "PASS",
+    "googlePayConfiguration": "PASS"
+  },
+  "p0": [
+    "Google OAuth configuration missing in live API",
+    "Mapbox public runtime token/native map unverified",
+    "Reset/receipt email sender missing",
+    "Physical Customer state-machine/payment/device acceptance not completed"
+  ],
+  "p1": [
+    "Figma pixel parity and realistic category renders not complete",
+    "Expanded legacy suite remains non-green: 3 unchanged Driver failures; baseline 10 failures, 82 passed; current 89 passed",
+    "Apple Merchant capability, native payment callbacks and FCM/APNs not physically verified",
+    "GitHub Actions blocked by account payment failure/spending limit; source validation recovery via Render tracked separately",
+    "Public privacy/terms contain beta placeholders; approved legal content required before commercial public release"
+  ],
+  "nativeTestBuildAuthorized": true,
+  "nativeTestBuildProfiles": [
+    "apk",
+    "testflight-beta"
+  ],
+  "nativeTestBuildAuthorization": "User explicitly authorized native Android APK and Customer TestFlight builds on 2026-10-04. Device acceptance remains pending; no public release approval is implied."
+}

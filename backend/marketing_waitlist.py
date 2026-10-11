@@ -1,9 +1,10 @@
 import hashlib
+import os
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Literal, Optional
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
@@ -77,7 +78,7 @@ async def _consume_global_rate_limit(db, now: datetime) -> None:
         raise HTTPException(status_code=429, detail="For mange forespørsler akkurat nå. Prøv igjen om litt.")
 
 
-def install_marketing_waitlist(api, db) -> None:
+def install_marketing_waitlist(api, db, confirmation=None, require_admin=None, audit=None) -> None:
     @api.post("/marketing/waitlist", status_code=201)
     async def create_marketing_waitlist_entry(body: MarketingWaitlistRequest):
         now = datetime.now(timezone.utc)
@@ -114,7 +115,7 @@ def install_marketing_waitlist(api, db) -> None:
             "email": email,
             "city": city,
             "role": body.role,
-            "source": "kjappapp.no",
+            "source": "snarapp.no",
             "status": "new",
             "consent_context": "beta_interest",
             "created_at": now,
@@ -142,4 +143,57 @@ def install_marketing_waitlist(api, db) -> None:
             )
 
         # Do not reveal whether this contact already existed.
-        return {"ok": True, "status": "registered"}
+        result = {"ok": True, "status": "registered"}
+        if confirmation:
+            result["confirmation_email_status"] = await confirmation(identity_key, email, name)
+        return result
+
+    if require_admin is None:
+        return
+
+    @api.get("/admin/beta-waitlist")
+    async def list_beta_interest(
+        role: Optional[Literal["passenger", "driver", "fleet_owner"]] = None,
+        status: Optional[Literal["new", "contacted", "archived"]] = None,
+        limit: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+        current=Depends(require_admin),
+    ):
+        query = {}
+        if role:
+            query["role"] = role
+        if status:
+            query["status"] = status
+        total = await db.beta_waitlist.count_documents(query)
+        entries = []
+        async for record in db.beta_waitlist.find(query, {"_id": 0}).sort("created_at", -1).skip(offset).limit(limit):
+            record["id"] = record["identity_key"]
+            entries.append(record)
+        deliveries = {}
+        ids = [f"beta:{record['id']}" for record in entries]
+        async for job in db.onboarding_email_outbox.find({"_id": {"$in": ids}}, {"status": 1}):
+            deliveries[str(job["_id"]).removeprefix("beta:")] = job.get("status", "pending")
+        for record in entries:
+            record["confirmation_email_status"] = deliveries.get(record["id"], "not_requested")
+        return {"items": entries, "total": total, "limit": limit, "offset": offset,
+                "email_configured": bool(os.environ.get("SENDGRID_API_KEY", "").strip())}
+
+    class InterestStatusRequest(BaseModel):
+        status: Literal["new", "contacted", "archived"]
+
+    @api.patch("/admin/beta-waitlist/{identity}")
+    async def update_beta_interest(identity: str, body: InterestStatusRequest, current=Depends(require_admin)):
+        if not re.fullmatch(r"[a-f0-9]{64}", identity):
+            raise HTTPException(404, "Påmelding ikke funnet")
+        previous = await db.beta_waitlist.find_one({"identity_key": identity}, {"status": 1})
+        if not previous:
+            raise HTTPException(404, "Påmelding ikke funnet")
+        await db.beta_waitlist.update_one({"identity_key": identity}, {"$set": {
+            "status": body.status, "reviewed_at": datetime.now(timezone.utc), "reviewed_by": current["id"],
+        }})
+        if audit:
+            await audit(current, "beta_interest.status", "beta_interest", identity,
+                        {"status": previous.get("status")}, {"status": body.status})
+        return {"ok": True, "status": body.status}
+
+

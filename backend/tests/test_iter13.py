@@ -341,7 +341,8 @@ class TestDriverSignupDocs:
         email = f"TEST_drv_{uuid.uuid4().hex[:6]}@kjapp.no"
         r = requests.post(f"{API}/driver-invites/accept",
                           json={"token": tok, "fullName": "TEST", "email": email,
-                                "phone": "+4790000099", "password": "test1234"},
+                                "phone": "+4790000099", "password": "test1234",
+                                "accepted_terms": True, "legal_version": "test"},
                           timeout=15)
         assert r.status_code == 400
         assert "førerkort" in r.json().get("detail", "").lower()
@@ -359,6 +360,7 @@ class TestDriverSignupDocs:
         r2 = requests.post(f"{API}/driver-invites/accept",
                            json={"token": tok, "fullName": "TEST Driver", "email": email,
                                  "phone": "+4790000098", "password": "test1234",
+                                 "accepted_terms": True, "legal_version": "test",
                                  "drivers_license_path": paths["drivers_license"],
                                  "taxi_license_path": paths["taxi_license"],
                                  "profile_photo_path": paths["profile_photo"]},

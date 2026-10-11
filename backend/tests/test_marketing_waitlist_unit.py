@@ -116,7 +116,7 @@ def test_valid_signup_is_idempotent_and_does_not_reveal_duplicate():
     stored = next(iter(db.beta_waitlist.docs.values()))
     assert stored["phone"] == "+4791234567"
     assert stored["email"] == "ola@example.no"
-    assert stored["source"] == "kjappapp.no"
+    assert stored["source"] == "snarapp.no"
     assert stored["submission_count"] == 2
 
 
@@ -150,3 +150,4 @@ def test_global_rate_limit_is_enforced(monkeypatch):
     assert first.status_code == 201
     assert second.status_code == 429
     assert len(db.beta_waitlist.docs) == 1
+

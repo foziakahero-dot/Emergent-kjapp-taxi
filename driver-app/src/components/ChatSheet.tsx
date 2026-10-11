@@ -1,15 +1,6 @@
+import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -129,7 +120,7 @@ export function ChatSheet({
 }
 
 const useStyles = makeStyles((c) => ({
-  backdrop: { flex: 1, backgroundColor: 'rgba(4,8,10,0.6)', justifyContent: 'flex-end' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: c.line, height: '78%' },
   header: { paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: c.line, paddingBottom: 12 },
   handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 12 },
@@ -149,3 +140,4 @@ const useStyles = makeStyles((c) => ({
   input: { flex: 1, maxHeight: 110, minHeight: 48, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line, borderRadius: 16, paddingHorizontal: 14, paddingTop: 12, color: c.text, fontSize: 15 },
   sendBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
 }));
+

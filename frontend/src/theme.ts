@@ -1,66 +1,71 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Geist_400Regular } from '@expo-google-fonts/geist/400Regular';
-import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
-import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
-import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
+import { Inter_300Light } from '@expo-google-fonts/inter/300Light';
+import { Inter_800ExtraBold } from '@expo-google-fonts/inter/800ExtraBold';
+import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
+import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 
-/**
- * KJAPP 2.0 — premium Nordic mobility.
- * Mobility first. AI stays visually quiet until it is useful.
- * Customer surfaces use cyan/ice; semantic aliases prevent hard-coded accent drift.
- */
+/** SNAR mobile — light surfaces, navy ink, red actions and green operational status. */
 export const colors = {
-  bg: '#050A0F',
-  surface: '#091119',
-  card: '#0D1721',
-  cardSubtle: 'rgba(248,250,252,0.045)',
-  elevated: '#12202B',
-  line: 'rgba(145,163,184,0.18)',
-  lineStrong: 'rgba(145,163,184,0.32)',
-  text: '#F8FAFC',
-  textSecondary: '#C7D2DE',
-  textMuted: '#91A3B8',
-  accent: '#00E5F5',
-  accentHover: '#52F0FA',
-  accentDim: '#00A7B3',
-  accentSoft: 'rgba(0,229,245,0.12)',
-  accentGlow: 'rgba(0,229,245,0.24)',
-  accentOn: '#031014',
-  success: '#39E58C',
-  warning: '#F4C95D',
-  danger: '#FF5C6C',
-  dangerSoft: 'rgba(255,92,108,0.14)',
-  info: '#5BA7FF',
-  online: '#39E58C',
-  onlineSoft: 'rgba(57,229,140,0.14)',
-  onlineGlow: 'rgba(57,229,140,0.30)',
-  route: '#00E5F5',
-  mapCanvas: '#050A0F',
-  mapWater: '#07131B',
-  mapRoad: '#16222D',
-  mapRoadMajor: '#223342',
-  mapBuilding: '#101A23',
-  driverBg: '#050A0F',
-  driverCard: '#0A131B',
+  bg: '#F4F6FA',
+  surface: '#FFFFFF',
+  card: '#FFFFFF',
+  cardSubtle: '#EEF1F5',
+  elevated: '#FFFFFF',
+  line: 'rgba(0,31,63,0.10)',
+  lineStrong: 'rgba(0,31,63,0.18)',
+  text: '#001F3F',
+  textSecondary: '#4A5A6E',
+  textMuted: '#8B97A7',
+  accent: '#FF0000',
+  accentHover: '#FF3B3B',
+  accentDim: '#CC0000',
+  accentSoft: '#FFE6E6',
+  accentGlow: 'rgba(255,0,0,0.25)',
+  accentOn: '#FFFFFF',
+  success: '#4CAF50',
+  warning: '#FF9800',
+  danger: '#F44336',
+  dangerSoft: '#FFF0F0',
+  info: '#245FAD',
+  online: '#12B981',
+  onlineSoft: '#E5F7ED',
+  onlineGlow: 'rgba(18,185,129,0.24)',
+  route: '#FF0000',
+  mapCanvas: '#E9EEF3',
+  mapWater: '#D8E8F0',
+  mapRoad: '#FFFFFF',
+  mapRoadMajor: '#F8FAFC',
+  mapBuilding: '#E2E8EE',
+  driverBg: '#F4F6FA',
+  driverCard: '#FFFFFF',
 };
 
 export type ThemeColors = typeof colors;
 
 export const font = {
-  display: 'Geist_600SemiBold',
-  body: 'Geist_400Regular',
-  medium: 'Geist_500Medium',
-  semibold: 'Geist_600SemiBold',
-  bold: 'Geist_700Bold',
+  display: 'Inter_600SemiBold',
+  body: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+  light: 'Inter_300Light',
+  extraBold: 'Inter_800ExtraBold',
   mono: 'JetBrainsMono',
+  monoMedium: 'JetBrainsMono_500Medium',
 };
 
 export const FONT_ASSETS = {
-  Geist_400Regular,
-  Geist_500Medium,
-  Geist_600SemiBold,
-  Geist_700Bold,
+  Inter_300Light,
+  Inter_800ExtraBold,
+  JetBrainsMono_500Medium,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
   JetBrainsMono: require('@/assets/fonts/JetBrainsMono-Regular.ttf'),
 };
 
@@ -81,9 +86,9 @@ export const spacing = {
 export const motion = {
   instant: 100,
   fast: 160,
-  base: 240,
-  sheet: 280,
-  slow: 400,
+  base: 300,
+  sheet: 300,
+  slow: 700,
 };
 
 export function useTheme() {
@@ -97,3 +102,4 @@ export function makeStyles<T extends StyleSheet.NamedStyles<T>>(
     return useMemo(() => StyleSheet.create(factory(colors)), []);
   };
 }
+

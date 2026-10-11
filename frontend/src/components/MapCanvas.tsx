@@ -20,7 +20,7 @@ type Car = { lat: number; lng: number; heading?: number };
 /**
  * Stylised Nordic dark "map" canvas rendered with SVG so it works identically on
  * web preview, Expo Go and native builds. Plots pickup / dropoff / route / nearby
- * cars / user beacon using the KJAPP brass + granite palette.
+ * cars / user beacon using the SNAR brass + granite palette.
  */
 export function MapCanvas({
   pickup,
