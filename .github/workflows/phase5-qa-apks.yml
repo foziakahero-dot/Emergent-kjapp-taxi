@@ -1,0 +1,112 @@
+name: SNAR Phase 5 QA APKs
+
+on:
+  push:
+    branches:
+      - qa/snar-v10-phase5-staging-e2e
+    paths:
+      - '.github/workflows/phase5-qa-apks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snar-phase5-qa-apks
+  cancel-in-progress: true
+
+env:
+  CI: '1'
+  EAS_BUILD_PROFILE: qa
+  EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
+
+jobs:
+  customer:
+    name: Build SNAR Customer QA APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: QA URL guard
+        run: node scripts/phase5-qa-build-guard.cjs
+      - name: TypeScript
+        working-directory: frontend
+        run: npx tsc --noEmit
+      - name: Generate Android project
+        working-directory: frontend
+        run: npx expo prebuild --platform android --clean
+      - name: Build QA APK
+        working-directory: frontend/android
+        run: |
+          printf '\norg.gradle.workers.max=2\norg.gradle.parallel=false\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
+          test -s app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-QA.apk
+          sha256sum ../../SNAR-Customer-QA.apk > ../../SNAR-Customer-QA.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SNAR-Customer-QA
+          path: |
+            SNAR-Customer-QA.apk
+            SNAR-Customer-QA.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  driver:
+    name: Build SNAR Driver QA APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: driver-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Install dependencies
+        working-directory: driver-app
+        run: npm ci --no-audit --no-fund
+      - name: QA URL guard
+        run: node scripts/phase5-qa-build-guard.cjs
+      - name: TypeScript
+        working-directory: driver-app
+        run: npx tsc --noEmit
+      - name: Generate Android project
+        working-directory: driver-app
+        run: npx expo prebuild --platform android --clean
+      - name: Build QA APK
+        working-directory: driver-app/android
+        run: |
+          printf '\norg.gradle.workers.max=2\norg.gradle.parallel=false\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
+          test -s app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Driver-QA.apk
+          sha256sum ../../SNAR-Driver-QA.apk > ../../SNAR-Driver-QA.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SNAR-Driver-QA
+          path: |
+            SNAR-Driver-QA.apk
+            SNAR-Driver-QA.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
