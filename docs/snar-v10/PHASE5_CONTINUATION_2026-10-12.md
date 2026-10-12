@@ -1,6 +1,6 @@
 # SNAR Phase 5 continuation — 2026-10-12
 
-Decision: **NO-GO for controlled beta.** The isolated database is provisioned and seeded. MONGO_URL is now saved, but the backend cannot start because MongoDB rejects its login (AtlasError 8000). The QA CNAME now resolves correctly and Render shows Verified / Certificate Issued. Mongo authentication and isolated Stripe readiness still block builds and live QA.
+Decision: **NO-GO for controlled beta.** The QA backend is live with healthy MongoDB connectivity and canonical HTTPS. Thirty-four synthetic API smoke checks passed; full ride/payment/device certification remains blocked by isolated Stripe setup and build prerequisites. The QA CNAME now resolves correctly and Render shows Verified / Certificate Issued. Stripe readiness still blocks QA APK builds and full ride/payment E2E.
 
 ## Source and new changes
 
@@ -22,11 +22,14 @@ Decision: **NO-GO for controlled beta.** The isolated database is provisioned an
 | Render host | https://snar-api-qa.onrender.com |
 | Render workspace / region | `tea-dassqnrbc2fs73a770i0` / Frankfurt |
 | Runtime | Python 3.12.7; dependency build PASS |
-| Latest observed deploy | `dep-db6j3kvf3r2c73chk4r0`, commit `2cc0b18bc66864de84ead67303834e3b6af207b7`, `update_failed` |
-| Runtime blocker | MONGO_URL is saved; MongoDB rejects authentication with AtlasError 8000 (`bad auth : authentication failed`) |
+| Latest observed deploy | `dep-db6jckl9fdbs73asog6g`, commit `d32752ae4c6c30372f77735b11ce30e039c8c40a`, live at 19:36:36 UTC |
+| Runtime | Application startup complete; MongoDB auth/index setup succeeded; no current startup blocker |
+| Canonical health | Direct HTTPS `/api/health`: HTTP 200, status ok, db true |
+| Canonical readiness | `/api/ready`: HTTP 503; three Stripe configuration blockers |
+| Live API smoke | 34 PASS / 0 FAIL; 3 Customers, 3 Drivers; auth/profile/vehicle/RBAC/logout scope |
 | Canonical API | https://api-qa.snarapp.no |
 | Domain verification | Verified after Uniweb CNAME was added and Render Verify was clicked |
-| TLS | Render shows Certificate Issued; healthy API response is still unavailable |
+| TLS | Render Certificate Issued; direct canonical HTTPS health request passed with standard TLS verification and redirects disabled |
 | Required DNS record | CNAME host `api-qa`, target `snar-api-qa.onrender.com` |
 | DNS evidence | User reported Uniweb created the record; Google DNS CNAME answer confirms the exact target, TTL 3600 |
 | Atlas project | `SNAR Phase 5 QA`, `6acc26dd5baf02c7edfe0f92` |
@@ -36,8 +39,8 @@ Decision: **NO-GO for controlled beta.** The isolated database is provisioned an
 | QA network | Render Frankfurt CIDRs only; no world-open rule was added |
 | Safe settings added | `KJAPP_SERVICE_AREA_ENFORCE=true`, `ADMIN_EMAIL=qa.admin@example.com` |
 | Existing safety settings | APP_ENV=qa, DB_NAME=snar_qa, demo disabled, automatic charging disabled, isolated web origins, QA JWT, Python pin |
-| Mongo configuration | MONGO_URL present at runtime; credential rejected. No stored secret value was read. |
-| Stripe environment | STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY and STRIPE_WEBHOOK_SECRET were absent at the last environment-name inspection; current readiness remains unavailable |
+| Mongo configuration | MONGO_URL authenticates successfully; canonical health db=true. No stored secret value was read. |
+| Stripe environment | Live readiness reports stripe_key_configured=false, stripe_webhook_configured=false and stripe_test_mode_configured=false |
 | Stripe account | `Kjappapp sandbox`, `acct_1TG3m12eKdaX7ani`, livemode=false |
 | Stripe isolation | BLOCKED: enabled sandbox webhooks still target production API and legacy Base44 services. No QA payment events were generated. |
 | GitHub runner | Run `38189296640` reports recent account payments failed or spending limit needs increasing. No billing setting was changed. |
@@ -108,10 +111,10 @@ Customer/Driver package identities and native provider registration remain the p
 
 ## Remaining actions
 
-1. Authorized human correction of the QA Mongo login in the saved MONGO_URL. Use the database user snar_qa_render, the verified QA cluster and authSource=admin. Keep DB_NAME=snar_qa and APP_ENV=qa; percent-encode any password special characters.
+1. Mongo login, QA startup and canonical HTTPS health are complete. Keep the verified QA runtime and database isolation settings.
 2. DNS and Render certificate setup are complete. Require a healthy direct HTTPS response from the canonical QA host before allowing builds.
 3. Configure isolated Stripe sandbox credentials and a QA webhook on the existing route `/api/stripe/webhook`. Resolve sandbox events still routed to non-QA endpoints before generating test payments. Do not change live mode.
-4. Deploy QA successfully; require both health and readiness to pass. Keep automatic charging off.
+4. QA deployment and health now pass; require readiness to pass after isolated Stripe setup. Keep automatic charging off.
 5. Resolve GitHub Actions account payment/spending restriction or use the already authorized local/EAS QA build path after infrastructure passes.
 6. Build and inspect both QA artifacts, then run real synthetic E2E/device QA, receipts, earnings, concurrency, recovery and screenshot comparison.
 
@@ -160,3 +163,19 @@ Next required step is direct saving of the complete QA Mongo connection string a
 - Stripe sandbox webhook inventory remains unchanged: production API and Base44 destinations enabled, no isolated QA webhook. No payment event was generated. Latest observed GitHub Actions run for 2cc0b18 is `38251352319`, startup_failure, no APK build.
 - No application code, pool sizing, timeout, permissions or network-isolation changes were made. No reseeding or synthetic API login/ride test was performed while startup is failing. Existing local regression results remain carry-forward only.
 - Production untouched; Phase 5 remains NO-GO. Next dependent step is direct correction of the QA Mongo credential, followed by a fresh QA deploy and health/readiness verification.
+
+## Mongo resolved and live API smoke — 2026-10-12, Europe/Oslo
+
+- After the user reported completing the credential correction, triggered one QA-only deploy: `dep-db6jckl9fdbs73asog6g`, source `d32752ae4c6c30372f77735b11ce30e039c8c40a`, started 19:34:42 UTC.
+- Dependency build PASS at 19:35:43 UTC; application startup complete at 19:36:28 UTC; Render deploy live at 19:36:36 UTC.
+- Canonical HTTPS health at 19:37:12 UTC: HTTP 200, status ok, db=true. No redirect was followed; standard TLS checks stayed enabled.
+- Canonical readiness at 19:37:13 UTC: HTTP 503, ready=false. Blockers are exactly `stripe_key_configured`, `stripe_webhook_configured`, `stripe_test_mode_configured`.
+- Live readiness confirms database=true, qa_mode=true, qa_database_isolated=true, production_mode=false, demo_data_disabled=true, jwt_configured=true, admin_identity_configured=true, public_web_origin_configured=true, service_area_enforced=true, booking_enabled=true and auto_charge_enabled=false. Optional provider flags are not physical/provider certification.
+- Live synthetic API checks: **34 PASS, 0 FAIL**. Health and QA isolation (2); six account login/profile/vehicle-or-role-boundary/logout/revoked-token checks (30); wrong app-client role login rejections (2).
+- All 3 Customers and 3 Drivers authenticated with their synthetic credentials; auth/me matched each expected synthetic email/role. Each Driver sees exactly 1 assigned selected vehicle with car and plate data. Customers are denied the driver-vehicle route (403). Logged-out JWTs and cross-client role logins are rejected (401).
+- Passwords and JWTs stayed private and were not printed or committed. Only the canonical QA origin received synthetic API requests. These tests wrote QA login/risk metadata, revocations and failed-login bookkeeping; no ride, Stripe object/payment event, notification or email was generated.
+- These results certify API auth/profile/assignment boundaries only. Physical QA01–QA28 and visual carry-forward counts are unchanged; no full ride, native app, payment/SCA/receipt/earnings/device/concurrency certification is claimed.
+- QA backend preflight remains closed/nonzero; no APK build was initiated. Latest observed GitHub run for d32752a: `38297181795`, startup_failure, no APK artifact.
+- Stripe inventory is still only `Kjappapp sandbox` (`acct_1TG3m12eKdaX7ani`, livemode=false), whose enabled webhooks target the production API and Base44. No shared-sandbox test event was generated.
+- Installed official Stripe CLI 1.53.1 to inspect documented sandbox provisioning. Its help distinguishes existing-account dashboard management from an unauthenticated temporary/claimable sandbox. No anonymous sandbox or unowned test credential was created or placed in the QA backend.
+- No app source or production configuration changed. Historical failures above are retained as earlier evidence and are superseded for current Mongo/runtime status by this section. Phase 5 remains NO-GO until isolated Stripe readiness, QA artifacts and remaining E2E/device work pass.
