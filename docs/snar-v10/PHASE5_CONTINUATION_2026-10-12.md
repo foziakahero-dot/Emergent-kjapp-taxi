@@ -1,6 +1,6 @@
 # SNAR Phase 5 continuation — 2026-10-12
 
-Decision: **NO-GO for controlled beta.** The isolated database is provisioned and seeded; the backend cannot start without its QA Mongo credential. Canonical DNS/TLS and isolated Stripe configuration still block builds and live QA.
+Decision: **NO-GO for controlled beta.** The isolated database is provisioned and seeded; the backend cannot start without its QA Mongo credential. The QA CNAME now resolves correctly and Render shows Verified / Certificate Issued. Missing Mongo configuration and isolated Stripe readiness still block builds and live QA.
 
 ## Source and new changes
 
@@ -22,13 +22,13 @@ Decision: **NO-GO for controlled beta.** The isolated database is provisioned an
 | Render host | https://snar-api-qa.onrender.com |
 | Render workspace / region | `tea-dassqnrbc2fs73a770i0` / Frankfurt |
 | Runtime | Python 3.12.7; dependency build PASS |
-| Latest observed deploy | `dep-db630aijnfac73c7oj4g`, commit `7e801753c8b31ea6ff35e68e57e45323521b4966`, `update_failed` |
+| Latest observed deploy | `dep-db6d1g59fdbs73fnacpg`, commit `7045e397ba02e6b550f6c389c4533e7905610d89`, `update_failed` |
 | Runtime blocker | `KeyError: 'MONGO_URL'` |
 | Canonical API | https://api-qa.snarapp.no |
-| Domain verification | Render retry returned Verification Error / Waiting for DNS |
-| TLS | Waiting for Verification; NOT certified |
+| Domain verification | Verified after Uniweb CNAME was added and Render Verify was clicked |
+| TLS | Render shows Certificate Issued; healthy API response is still unavailable |
 | Required DNS record | CNAME host `api-qa`, target `snar-api-qa.onrender.com` |
-| DNS access | No connected authoritative DNS editor was available; provider not independently confirmed |
+| DNS evidence | User reported Uniweb created the record; Google DNS CNAME answer confirms the exact target, TTL 3600 |
 | Atlas project | `SNAR Phase 5 QA`, `6acc26dd5baf02c7edfe0f92` |
 | Cluster | `snar-qa`, `6acc27266b2b9c24df70b88c`, AWS EU_CENTRAL_1, IDLE |
 | Database | `snar_qa` |
@@ -43,7 +43,7 @@ Decision: **NO-GO for controlled beta.** The isolated database is provisioned an
 
 The automatic security review rejected the earlier Mongo/JWT credential transfer into Render. This continuation did not repeat that transfer or route the credential through the browser. The QA Mongo URI must be entered through an authorized human secret-entry path. Do not paste it in chat or commit it.
 
-The non-secret Render environment update automatically initiated a QA-only deploy. The deployment result and missing-MONGO_URL failure above were inspected; no extra manual deployment was issued.
+The initial non-secret Render environment update automatically initiated a QA-only deploy. A later QA-only deployment of 7045e39 also built successfully but failed on missing MONGO_URL, as recorded in the afternoon evidence below.
 
 ## Synthetic QA database seed
 
@@ -108,7 +108,7 @@ Customer/Driver package identities and native provider registration remain the p
 ## Remaining actions
 
 1. Authorized human entry of the QA-only MONGO_URL on the existing Render QA service. Keep DB_NAME=snar_qa and APP_ENV=qa.
-2. Add/verify only the api-qa CNAME with the authoritative DNS provider; then verify valid TLS.
+2. DNS and Render certificate setup are complete. Require a healthy direct HTTPS response from the canonical QA host before allowing builds.
 3. Configure isolated Stripe sandbox credentials and a QA webhook on the existing route `/api/stripe/webhook`. Resolve sandbox events still routed to non-QA endpoints before generating test payments. Do not change live mode.
 4. Deploy QA successfully; require both health and readiness to pass. Keep automatic charging off.
 5. Resolve GitHub Actions account payment/spending restriction or use the already authorized local/EAS QA build path after infrastructure passes.
@@ -136,4 +136,13 @@ Production database and backend untouched. No Stripe live transaction, real payo
 - No application source changes or new regression run were needed for this resume; earlier certified test results above remain carry-forward evidence.
 - Production remains untouched.
 
-Next required step is direct saving of the complete QA Mongo connection string as MONGO_URL on the existing QA Render service. Setting the Atlas password alone does not configure the backend environment. DNS/TLS and isolated Stripe readiness remain prerequisites before QA APK builds and E2E payment tests.
+Next required step is direct saving of the complete QA Mongo connection string as MONGO_URL on the existing QA Render service. Setting the Atlas password alone does not configure the backend environment. The canonical HTTPS health/readiness gates and isolated Stripe setup must pass before QA APK builds and E2E payment tests.
+
+## DNS completion after Uniweb confirmation — 2026-10-12
+
+- User supplied Aida's 14:36 confirmation that the new QA CNAME was added.
+- Independent Google DNS query returns status 0: `api-qa.snarapp.no.` CNAME `snar-api-qa.onrender.com.`, TTL 3600. The A query also resolves the CNAME chain.
+- Clicked Verify on the existing QA domain in Render. The domain reached Verified; certificate status progressed to Certificate Issued, confirmed on the service's Custom Domains page.
+- Canonical `/api/health` and `/api/ready` checks still do not return a healthy API response. The deployment remains update_failed because the saved QA environment has no MONGO_URL.
+- Only saved environment variable names were checked; no stored credential values were read. A new unsaved MONGO_URL row is prepared with the QA cluster's non-secret URI template and `<db_password>` placeholder. It must not be saved until the authorized human replaces the placeholder with the correct credential.
+- No new deployment was started after DNS verification. Stripe isolation, runner restriction and physical QA blockers are unchanged. Production resources were not changed.
