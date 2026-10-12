@@ -1,6 +1,6 @@
 # SNAR Phase 5 continuation — 2026-10-12
 
-Decision: **NO-GO for controlled beta.** The isolated database is provisioned and seeded; the backend cannot start without its QA Mongo credential. The QA CNAME now resolves correctly and Render shows Verified / Certificate Issued. Missing Mongo configuration and isolated Stripe readiness still block builds and live QA.
+Decision: **NO-GO for controlled beta.** The isolated database is provisioned and seeded. MONGO_URL is now saved, but the backend cannot start because MongoDB rejects its login (AtlasError 8000). The QA CNAME now resolves correctly and Render shows Verified / Certificate Issued. Mongo authentication and isolated Stripe readiness still block builds and live QA.
 
 ## Source and new changes
 
@@ -22,8 +22,8 @@ Decision: **NO-GO for controlled beta.** The isolated database is provisioned an
 | Render host | https://snar-api-qa.onrender.com |
 | Render workspace / region | `tea-dassqnrbc2fs73a770i0` / Frankfurt |
 | Runtime | Python 3.12.7; dependency build PASS |
-| Latest observed deploy | `dep-db6d1g59fdbs73fnacpg`, commit `7045e397ba02e6b550f6c389c4533e7905610d89`, `update_failed` |
-| Runtime blocker | `KeyError: 'MONGO_URL'` |
+| Latest observed deploy | `dep-db6j3kvf3r2c73chk4r0`, commit `2cc0b18bc66864de84ead67303834e3b6af207b7`, `update_failed` |
+| Runtime blocker | MONGO_URL is saved; MongoDB rejects authentication with AtlasError 8000 (`bad auth : authentication failed`) |
 | Canonical API | https://api-qa.snarapp.no |
 | Domain verification | Verified after Uniweb CNAME was added and Render Verify was clicked |
 | TLS | Render shows Certificate Issued; healthy API response is still unavailable |
@@ -36,7 +36,8 @@ Decision: **NO-GO for controlled beta.** The isolated database is provisioned an
 | QA network | Render Frankfurt CIDRs only; no world-open rule was added |
 | Safe settings added | `KJAPP_SERVICE_AREA_ENFORCE=true`, `ADMIN_EMAIL=qa.admin@example.com` |
 | Existing safety settings | APP_ENV=qa, DB_NAME=snar_qa, demo disabled, automatic charging disabled, isolated web origins, QA JWT, Python pin |
-| Missing Render keys | MONGO_URL, STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET |
+| Mongo configuration | MONGO_URL present at runtime; credential rejected. No stored secret value was read. |
+| Stripe environment | STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY and STRIPE_WEBHOOK_SECRET were absent at the last environment-name inspection; current readiness remains unavailable |
 | Stripe account | `Kjappapp sandbox`, `acct_1TG3m12eKdaX7ani`, livemode=false |
 | Stripe isolation | BLOCKED: enabled sandbox webhooks still target production API and legacy Base44 services. No QA payment events were generated. |
 | GitHub runner | Run `38189296640` reports recent account payments failed or spending limit needs increasing. No billing setting was changed. |
@@ -107,7 +108,7 @@ Customer/Driver package identities and native provider registration remain the p
 
 ## Remaining actions
 
-1. Authorized human entry of the QA-only MONGO_URL on the existing Render QA service. Keep DB_NAME=snar_qa and APP_ENV=qa.
+1. Authorized human correction of the QA Mongo login in the saved MONGO_URL. Use the database user snar_qa_render, the verified QA cluster and authSource=admin. Keep DB_NAME=snar_qa and APP_ENV=qa; percent-encode any password special characters.
 2. DNS and Render certificate setup are complete. Require a healthy direct HTTPS response from the canonical QA host before allowing builds.
 3. Configure isolated Stripe sandbox credentials and a QA webhook on the existing route `/api/stripe/webhook`. Resolve sandbox events still routed to non-QA endpoints before generating test payments. Do not change live mode.
 4. Deploy QA successfully; require both health and readiness to pass. Keep automatic charging off.
@@ -146,3 +147,16 @@ Next required step is direct saving of the complete QA Mongo connection string a
 - Canonical `/api/health` and `/api/ready` checks still do not return a healthy API response. The deployment remains update_failed because the saved QA environment has no MONGO_URL.
 - Only saved environment variable names were checked; no stored credential values were read. A new unsaved MONGO_URL row is prepared with the QA cluster's non-secret URI template and `<db_password>` placeholder. It must not be saved until the authorized human replaces the placeholder with the correct credential.
 - No new deployment was started after DNS verification. Stripe isolation, runner restriction and physical QA blockers are unchanged. Production resources were not changed.
+
+## Evening credential verification — 2026-10-12, Europe/Oslo
+
+- After the user reported saving MONGO_URL, triggered one QA-only deploy: `dep-db6j3kvf3r2c73chk4r0`, source `2cc0b18bc66864de84ead67303834e3b6af207b7`, started 19:15:31 UTC.
+- Build succeeded at 19:17:07 UTC. Startup reached MongoDB authentication and failed at 19:17:51 UTC with `pymongo.errors.OperationFailure: bad auth : authentication failed`, AtlasError code 8000. Deploy finished update_failed at 19:17:55 UTC.
+- The former missing-environment-variable error is resolved: MONGO_URL exists at runtime. A successful database ping, application startup or health/readiness result cannot yet be claimed.
+- QA Atlas inventory rechecked: snar-qa is IDLE/unpaused; snar_qa_render exists with readWrite only on snar_qa and cluster scope snar-qa. Network access still contains only the two approved Render Frankfurt CIDRs.
+- Intended cluster hostname re-confirmed from Atlas: snar-qa.acaaxp9.mongodb.net. The saved URI and password were not read, so their exact username, password and authSource contents are not independently verified. Do not infer a password mismatch as the only possible cause.
+- Official MongoDB troubleshooting calls for checking the database username/password, target cluster, authSource and URI percent-encoding. Recommended non-secret template: `mongodb+srv://snar_qa_render:<db_password>@snar-qa.acaaxp9.mongodb.net/?authSource=admin&appName=snar-qa`. Only the authorized human should insert the password directly in Render.
+- Canonical CNAME remains correct (TTL 3600). `/api/health` and `/api/ready` requests timed out; neither is certified healthy.
+- Stripe sandbox webhook inventory remains unchanged: production API and Base44 destinations enabled, no isolated QA webhook. No payment event was generated. Latest observed GitHub Actions run for 2cc0b18 is `38251352319`, startup_failure, no APK build.
+- No application code, pool sizing, timeout, permissions or network-isolation changes were made. No reseeding or synthetic API login/ride test was performed while startup is failing. Existing local regression results remain carry-forward only.
+- Production untouched; Phase 5 remains NO-GO. Next dependent step is direct correction of the QA Mongo credential, followed by a fresh QA deploy and health/readiness verification.
