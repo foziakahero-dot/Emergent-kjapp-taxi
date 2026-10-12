@@ -7,6 +7,18 @@ const { APPROVED_QA_BACKEND, assertQaBackend } = require('./phase5-qa-build-guar
 
 const repositoryRoot = path.resolve(__dirname, '..');
 
+test('command-line guard rejects unsafe targets and requires the QA profile', () => {
+  for (const [profile, url, expectedStatus] of [
+    ['qa', APPROVED_QA_BACKEND, 0], ['qa', 'https://api.kjappapp.no', 1],
+    ['apk', APPROVED_QA_BACKEND, 1], ['', APPROVED_QA_BACKEND, 1],
+  ]) {
+    const result = spawnSync(process.execPath, [path.join(__dirname, 'phase5-qa-build-guard.cjs')], {
+      encoding: 'utf8', env: { ...process.env, EAS_BUILD_PROFILE: profile, EXPO_PUBLIC_BACKEND_URL: url },
+    });
+    assert.equal(result.status, expectedStatus, result.stderr);
+  }
+});
+
 test('QA profile accepts only the approved HTTPS backend target', () => {
   assert.doesNotThrow(() => assertQaBackend('qa', APPROVED_QA_BACKEND));
 });
@@ -73,3 +85,4 @@ test('QA app configs do not embed shared Firebase service files', () => {
     assert.match(config.name, /QA BACKEND/);
   }
 });
+

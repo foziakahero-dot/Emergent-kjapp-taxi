@@ -1,5 +1,14 @@
 # Phase 5 Staging Architecture Audit
 
+## Updated continuation — 2026-10-12
+
+The current evidence is [PHASE5_CONTINUATION_2026-10-12.md](PHASE5_CONTINUATION_2026-10-12.md). The separate Render service and Atlas QA cluster now exist. Six synthetic users, three vehicles and one Fleet are seeded and verified in snar_qa. Render startup is blocked by missing MONGO_URL; canonical DNS/TLS and Stripe isolation are incomplete. No QA APK or physical/device E2E result exists. Code gates passed: 323 backend tests plus 7 subtests, both TypeScript checks, Customer design verification, 4 Driver tests, 12 QA guard tests, and 0 unmapped API calls. Final decision remains NO-GO for controlled beta.
+
+## Historical pre-provisioning evidence
+
+The original report below is retained for provenance; its resource-availability statements are superseded by the dated update above. Its physical QA statuses and visual carry-forward counts remain unchanged.
+
+
 **Status: BLOCKED before external provisioning.** Repository-side QA safeguards and build profiles are prepared on `qa/snar-v10-phase5-staging-e2e`; no QA service, database, DNS record, EAS build, or provider transaction was created.
 
 **Baseline:** Phase 4 `7382f1a1fd25757003b01151a328834b89e33373`
@@ -76,3 +85,4 @@ No secret values were displayed, copied, or committed. No existing production va
 6. Independently verify any shared Mapbox token's read-only scopes/terms before map/network visual QA.
 
 Until those prerequisites exist, staging deployment, QA data seeding, QA APK generation and QA01–QA28 device/provider execution remain blocked.
+

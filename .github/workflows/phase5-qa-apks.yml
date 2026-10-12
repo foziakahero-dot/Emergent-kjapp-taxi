@@ -6,6 +6,7 @@ on:
       - qa/snar-v10-phase5-staging-e2e
     paths:
       - '.github/workflows/phase5-qa-apks.yml'
+      - 'scripts/phase5-qa-*.cjs'
   workflow_dispatch:
 
 permissions:
@@ -19,9 +20,26 @@ env:
   CI: '1'
   EAS_BUILD_PROFILE: qa
   EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
+  EXPO_PUBLIC_SOURCE_SHA: ${{ github.sha }}
 
 jobs:
+  preflight:
+    name: Verify isolated QA backend before builds
+    if: github.ref == 'refs/heads/qa/snar-v10-phase5-staging-e2e'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test QA guards
+        run: node --test scripts/phase5-qa-build-guard.test.cjs scripts/phase5-qa-backend-preflight.test.cjs
+      - name: Verify QA DNS, TLS, health and readiness
+        run: node scripts/phase5-qa-backend-preflight.cjs
+
   customer:
+    needs: preflight
     name: Build SNAR Customer QA APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -42,6 +60,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: QA URL guard
         run: node scripts/phase5-qa-build-guard.cjs
+      - name: Recheck QA backend before this build
+        run: node scripts/phase5-qa-backend-preflight.cjs
       - name: TypeScript
         working-directory: frontend
         run: npx tsc --noEmit
@@ -55,18 +75,23 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
           test -s app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-QA.apk
-          sha256sum ../../SNAR-Customer-QA.apk > ../../SNAR-Customer-QA.apk.sha256
+          mkdir -p "$GITHUB_WORKSPACE/qa-artifacts/frontend"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/qa-artifacts/frontend/SNAR-Customer-QA.apk"
+          cd "$GITHUB_WORKSPACE/qa-artifacts/frontend"
+          sha256sum SNAR-Customer-QA.apk > SNAR-Customer-QA.apk.sha256
+          node -e 'require("node:fs").writeFileSync("build-evidence.json", JSON.stringify({sourceSha:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,profile:process.env.EAS_BUILD_PROFILE,api:process.env.EXPO_PUBLIC_BACKEND_URL},null,2)+"\n")'
       - uses: actions/upload-artifact@v4
         with:
           name: SNAR-Customer-QA
           path: |
-            SNAR-Customer-QA.apk
-            SNAR-Customer-QA.apk.sha256
+            qa-artifacts/frontend/SNAR-Customer-QA.apk
+            qa-artifacts/frontend/SNAR-Customer-QA.apk.sha256
+            qa-artifacts/frontend/build-evidence.json
           if-no-files-found: error
           retention-days: 7
 
   driver:
+    needs: preflight
     name: Build SNAR Driver QA APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -87,6 +112,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: QA URL guard
         run: node scripts/phase5-qa-build-guard.cjs
+      - name: Recheck QA backend before this build
+        run: node scripts/phase5-qa-backend-preflight.cjs
       - name: TypeScript
         working-directory: driver-app
         run: npx tsc --noEmit
@@ -100,13 +127,17 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
           test -s app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Driver-QA.apk
-          sha256sum ../../SNAR-Driver-QA.apk > ../../SNAR-Driver-QA.apk.sha256
+          mkdir -p "$GITHUB_WORKSPACE/qa-artifacts/driver-app"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/qa-artifacts/driver-app/SNAR-Driver-QA.apk"
+          cd "$GITHUB_WORKSPACE/qa-artifacts/driver-app"
+          sha256sum SNAR-Driver-QA.apk > SNAR-Driver-QA.apk.sha256
+          node -e 'require("node:fs").writeFileSync("build-evidence.json", JSON.stringify({sourceSha:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,profile:process.env.EAS_BUILD_PROFILE,api:process.env.EXPO_PUBLIC_BACKEND_URL},null,2)+"\n")'
       - uses: actions/upload-artifact@v4
         with:
           name: SNAR-Driver-QA
           path: |
-            SNAR-Driver-QA.apk
-            SNAR-Driver-QA.apk.sha256
+            qa-artifacts/driver-app/SNAR-Driver-QA.apk
+            qa-artifacts/driver-app/SNAR-Driver-QA.apk.sha256
+            qa-artifacts/driver-app/build-evidence.json
           if-no-files-found: error
           retention-days: 7

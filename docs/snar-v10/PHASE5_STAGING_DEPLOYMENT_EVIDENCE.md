@@ -1,5 +1,14 @@
 # Phase 5 Staging Deployment Evidence
 
+## Updated continuation — 2026-10-12
+
+The current evidence is [PHASE5_CONTINUATION_2026-10-12.md](PHASE5_CONTINUATION_2026-10-12.md). The separate Render service and Atlas QA cluster now exist. Six synthetic users, three vehicles and one Fleet are seeded and verified in snar_qa. Render startup is blocked by missing MONGO_URL; canonical DNS/TLS and Stripe isolation are incomplete. No QA APK or physical/device E2E result exists. Code gates passed: 323 backend tests plus 7 subtests, both TypeScript checks, Customer design verification, 4 Driver tests, 12 QA guard tests, and 0 unmapped API calls. Final decision remains NO-GO for controlled beta.
+
+## Historical pre-provisioning evidence
+
+The original report below is retained for provenance; its resource-availability statements are superseded by the dated update above. Its physical QA statuses and visual carry-forward counts remain unchanged.
+
+
 **Status: BLOCKED — no QA backend service or QA database was available to deploy to.**
 
 | Evidence item | Result |
@@ -18,3 +27,4 @@
 The API router exposes `/api/health` and `/api/ready`; the existing release smoke client calls `/api/ready`. The repo has a Render-oriented requirements file, but no Render blueprint or service ID that authorizes a safe new deployment. No alternate provider hostname was available.
 
 To proceed, provision a distinct QA backend service and `snar_qa` Mongo database using the service's secure variable store, then create only the `api-qa.snarapp.no` DNS record. Keep `APP_ENV=qa`, `ENABLE_DEMO_DATA=false`, and `KJAPP_AUTO_CHARGE_ENABLED=false`. The startup guard refuses obvious production Mongo/Stripe settings; the readiness route is intended to remain 503 until QA-only payment and web-origin configuration is complete.
+

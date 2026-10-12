@@ -1,5 +1,14 @@
 # Phase 5 Physical / Device QA Matrix
 
+## Updated continuation — 2026-10-12
+
+The current evidence is [PHASE5_CONTINUATION_2026-10-12.md](PHASE5_CONTINUATION_2026-10-12.md). The separate Render service and Atlas QA cluster now exist. Six synthetic users, three vehicles and one Fleet are seeded and verified in snar_qa. Render startup is blocked by missing MONGO_URL; canonical DNS/TLS and Stripe isolation are incomplete. No QA APK or physical/device E2E result exists. Code gates passed: 323 backend tests plus 7 subtests, both TypeScript checks, Customer design verification, 4 Driver tests, 12 QA guard tests, and 0 unmapped API calls. Final decision remains NO-GO for controlled beta.
+
+## Historical pre-provisioning evidence
+
+The original report below is retained for provenance; its resource-availability statements are superseded by the dated update above. Its physical QA statuses and visual carry-forward counts remain unchanged.
+
+
 **Status: NOT EXECUTABLE — QA backend and QA APKs are unavailable.** No QA app was installed or network-enabled. Phase 4 remains static/offline only and is not evidence for Phase 5 backend testing.
 
 Status meanings: PASS/FAIL require executed evidence; BLOCKED means a required isolated service/provider/build is unavailable; NOT RUN means the check could be performed but was not attempted. All 28 Phase 5 checks are **BLOCKED** because there is no resolved QA endpoint, separate test database or QA build.
@@ -38,3 +47,4 @@ Status meanings: PASS/FAIL require executed evidence; BLOCKED means a required i
 **Totals: PASS 0 / FAIL 0 / BLOCKED 28 / NOT RUN 0.** This is not a claim of failed product behavior; the environment prerequisites were not met. Static code gates and QA-config unit tests are recorded separately.
 
 No production API, database, push, email, OAuth, payment or payout action was performed.
+

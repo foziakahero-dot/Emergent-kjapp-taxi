@@ -1,5 +1,14 @@
 # Phase 5 Safe Staging / Functional E2E Certification
 
+## Updated continuation — 2026-10-12
+
+The current evidence is [PHASE5_CONTINUATION_2026-10-12.md](PHASE5_CONTINUATION_2026-10-12.md). The separate Render service and Atlas QA cluster now exist. Six synthetic users, three vehicles and one Fleet are seeded and verified in snar_qa. Render startup is blocked by missing MONGO_URL; canonical DNS/TLS and Stripe isolation are incomplete. No QA APK or physical/device E2E result exists. Code gates passed: 323 backend tests plus 7 subtests, both TypeScript checks, Customer design verification, 4 Driver tests, 12 QA guard tests, and 0 unmapped API calls. Final decision remains NO-GO for controlled beta.
+
+## Historical pre-provisioning evidence
+
+The original report below is retained for provenance; its resource-availability statements are superseded by the dated update above. Its physical QA statuses and visual carry-forward counts remain unchanged.
+
+
 **Decision: NO-GO for controlled beta.** Phase 5 repository safeguards and QA build profiles are prepared, but an isolated backend, database, QA DNS, Stripe test configuration and QA APKs were not available. No functional/device E2E flow was attempted.
 
 ## Environment and safety
@@ -59,3 +68,4 @@ After the Phase 5 code changes:
 5. Build/install staging-targeted QA APKs, verify manifests/runtime target, then execute physical QA and synthetic E2E flows.
 
 The task cannot receive a `GO FOR CONTROLLED BETA` recommendation without the core ride, test payment, dispatch, receipt and earnings outcomes passing in that isolated environment.
+
