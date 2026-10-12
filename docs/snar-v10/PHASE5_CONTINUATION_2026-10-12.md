@@ -1,5 +1,12 @@
 # SNAR Phase 5 continuation — 2026-10-12
 
+## Current resume — 2026-10-12 22:45 Europe/Oslo
+
+**3 of 4 tasks completed.** Build safeguards and DNS/TLS remain complete. QA Mongo and the new SNAR Phase5 QA Stripe sandbox now pass live readiness, with no blockers and automatic charging disabled. Existing canonical backend build preflight passes. PaymentIntent and Checkout fixtures reached the QA webhook with HTTP 200; unsigned input was rejected with 400. APKs and full ride/device E2E remain blocked by GitHub Actions billing and unavailable alternate builder credentials/SDK. No production resources changed.
+
+Continue from [PHASE5_RESUME_CHECKPOINT_2026-10-12.md](PHASE5_RESUME_CHECKPOINT_2026-10-12.md). Do not restart or repeat completed tests. The prior evidence below is historical and is superseded for current infrastructure/Stripe status; physical and visual totals remain unchanged. **NO-GO for controlled beta** pending actual QA APKs and full certification.
+
+
 Decision: **NO-GO for controlled beta.** The QA backend is live with healthy MongoDB connectivity and canonical HTTPS. Thirty-four synthetic API smoke checks passed; full ride/payment/device certification remains blocked by isolated Stripe setup and build prerequisites. The QA CNAME now resolves correctly and Render shows Verified / Certificate Issued. Stripe readiness still blocks QA APK builds and full ride/payment E2E.
 
 ## Source and new changes
