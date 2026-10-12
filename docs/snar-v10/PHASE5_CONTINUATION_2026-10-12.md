@@ -119,3 +119,21 @@ FCM/push, email, Google/Apple OAuth, AI and identity provider actions remain blo
 ## Production protection
 
 Production database and backend untouched. No Stripe live transaction, real payout, production push/SMS/email, production DNS update, production deployment, main merge, OTA, store publication or TestFlight submission occurred. No production rollout was started.
+
+## Afternoon resume — 2026-10-12, Europe/Oslo
+
+- User reported that the QA password had been added.
+- A QA-only deploy was triggered on `snar-api-qa` for `7045e397ba02e6b550f6c389c4533e7905610d89`.
+- Deploy ID: `dep-db6d1g59fdbs73fnacpg`.
+- Dependency build: PASS. Runtime: `update_failed`, with `KeyError: 'MONGO_URL'` at 12:22:56 UTC.
+- A fresh authenticated Render environment page was inspected: MONGO_URL is absent from the saved variable names. No stored secret values were exposed.
+- Authoritative DNS lookup confirms `ns01.no.brand.one.com` and `ns02.no.brand.one.com`; these are Uniweb's documented nameservers. Norid registrar is GROUP.ONE NORWAY AS.
+- QA CNAME lookup returned DNS status 3 (NXDOMAIN), with no answer.
+- Render still shows Waiting for DNS / Waiting for Verification.
+- The user was given the exact new DNS record: CNAME name `api-qa`, target `snar-api-qa.onrender.com`, default TTL. It must be added only inside the snarapp.no zone.
+- Stripe sandbox webhook inventory is unchanged: production API and legacy Base44 destinations are still enabled; no QA payment or webhook delivery was generated.
+- Latest observed GitHub run for 7045e39: `38190571430`, startup_failure. No new APK artifact was produced.
+- No application source changes or new regression run were needed for this resume; earlier certified test results above remain carry-forward evidence.
+- Production remains untouched.
+
+Next required step is direct saving of the complete QA Mongo connection string as MONGO_URL on the existing QA Render service. Setting the Atlas password alone does not configure the backend environment. DNS/TLS and isolated Stripe readiness remain prerequisites before QA APK builds and E2E payment tests.
