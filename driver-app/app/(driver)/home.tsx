@@ -1,4 +1,4 @@
-import { SlideConfirm } from '@/src/components/SlideConfirm';
+import { DriverCockpitView } from '@/src/components/DriverCockpitView';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -65,6 +65,8 @@ export default function DriverHome() {
   const [summary, setSummary] = useState<any>(null);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [busy, setBusy] = useState(false);
+  const [summaryActionBusy, setSummaryActionBusy] = useState(false);
+  const summaryActionLock = useRef(false);
   const [error, setError] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const [declineReasonsOpen, setDeclineReasonsOpen] = useState(false);
@@ -72,6 +74,7 @@ export default function DriverHome() {
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
+  const offerActionLock = useRef(false);
   const seenPendingTripIds = useRef<Set<string> | null>(null);
   const completedSummaryVisible = !current && !(pending[0] && online);
   useHideTabBar(Boolean((current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
@@ -298,6 +301,8 @@ export default function DriverHome() {
   };
 
   const accept = async (tripId: string) => {
+    if (offerActionLock.current || busy) return;
+    offerActionLock.current = true;
     setBusy(true);
     setError('');
     try {
@@ -317,12 +322,17 @@ export default function DriverHome() {
       setError(apiError(e));
       await poll().catch(() => {});
     } finally {
+      offerActionLock.current = false;
       setBusy(false);
     }
   };
 
   const decline = async (tripId: string) => {
-    try { await driverApi.decline(tripId); setPending((p) => p.filter((t) => t.trip_id !== tripId)); } catch {}
+    if (offerActionLock.current || busy) return;
+    offerActionLock.current = true; setBusy(true);
+    try { await driverApi.decline(tripId); setPending((p) => p.filter((t) => t.trip_id !== tripId)); }
+    catch (e) { setError(apiError(e)); }
+    finally { offerActionLock.current = false; setBusy(false); }
   };
 
   const cancelCurrentTrip = () => {
@@ -529,17 +539,21 @@ export default function DriverHome() {
   }, [firstOffer?.trip_id, firstOffer?.offer_expires_at, poll]);
 
   const mapPickup = current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null;
-  const mapDropoff = current && current.status === 'in_trip'
-    ? { lat: current.dropoff_lat, lng: current.dropoff_lng }
-    : (current ? { lat: current.pickup_lat, lng: current.pickup_lng } : null);
-  const mapRoute = current?.geometry?.coordinates;
+  const mapDropoff = current?.status === 'in_trip' ? { lat: current.dropoff_lat, lng: current.dropoff_lng } : null;
+  const mapRoute = current?.status === 'driver_on_way'
+    ? current.pickup_route?.geometry?.coordinates || null
+    : current?.status === 'in_trip' ? current.geometry?.coordinates || null : null;
 
-  const gpsLabel = !online ? 'GPS pauset' : loc ? 'GPS aktiv' : 'Finner GPS…';
-  const operationalLabel = current
-    ? 'Aktiv tur'
-    : pending.length > 0
-      ? `${pending.length} ${pending.length === 1 ? 'forespørsel' : 'forespørsler'}`
-      : online ? 'Klar for tur' : 'Ikke på skift';
+  const finishSummary = async (continueOnline: boolean) => {
+    if (!completedTrip || summaryActionLock.current) return;
+    summaryActionLock.current = true; setSummaryActionBusy(true);
+    try {
+      if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
+      setCompletedTrip(null);
+      if (online !== continueOnline) await toggleOnline();
+    } catch { setError('Kunne ikke lagre tursammendraget. Prøv igjen.'); }
+    finally { summaryActionLock.current = false; setSummaryActionBusy(false); }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
@@ -554,221 +568,25 @@ export default function DriverHome() {
       />
       {!online && !current && !firstOffer ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.offlineMapWash]} /> : null}
 
-      <View style={[s.driverHeaderWrap, { top: insets.top + 12 }]}>
-        <View style={s.driverHeader}>
-          <View style={s.driverIdentity}>
-            <BrandBadge size={34} />
-            <View>
-              <Text style={s.headerName} numberOfLines={1}>{user?.fullName || 'SNAR-sjåfør'}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                {online ? <View style={s.onlineDot} /> : null}
-                <Text style={[s.headerStatus, { color: online ? colors.online : colors.textMuted }]}>
-                  {online ? 'ONLINE' : 'OFFLINE'}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <Pressable
-            style={[s.switchTrack, online && s.switchTrackOn]}
-            onPress={toggleOnline}
-            disabled={busy || Boolean(current)}
-            testID="driver-online-toggle"
-            accessibilityRole="switch"
-            accessibilityState={{ checked: online, disabled: busy || Boolean(current) }}
-          >
-            <View style={[s.switchKnob, online && s.switchKnobOn]} />
-          </Pressable>
-        </View>
-      </View>
-
-      {error ? <View style={[s.errorBanner, { top: insets.top + 76 }]}><Text style={s.errorText}>{error}</Text></View> : null}
-
-      {current?.status === 'driver_on_way' ? (
-        <>
-          <View style={[s.navInstruction, { top: insets.top + 82 }]} testID="driver-topickup-instruction">
-            <View style={s.navIcon}><Icon name="navigation" size={20} color={colors.accentOn} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.navTitle}>Kjør til hentested</Text>
-              <Text style={s.navSub} numberOfLines={1}>{current.pickup_address}</Text>
-            </View>
-            <Pressable style={s.navOpen} onPress={openNavigation} testID="driver-navigation">
-              <Text style={s.navOpenText}>ÅPNE</Text>
-            </Pressable>
-          </View>
-
-          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-topickup-sheet">
-            <View style={s.handle} />
-            <Text style={s.stateEyebrow}>HENTING</Text>
-            <Text style={s.stateTitle}>{current.customer?.name || 'Kunde'}</Text>
-            <Text style={s.stateAddress}>{current.pickup_address}</Text>
-            {tripExtras(current) ? <Text style={s.stateMeta}>{tripExtras(current)}</Text> : null}
-            {current.passenger_note ? <Text style={s.stateMeta}>Notat: {current.passenger_note}</Text> : null}
-
-            <View style={s.contactGrid}>
-              <Pressable style={s.contactAction} onPress={() => current.customer?.phone && Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))} disabled={!current.customer?.phone} testID="driver-call-customer">
-                <Icon name="phone" size={19} color={colors.accent} />
-                <Text style={s.contactActionText}>Ring</Text>
-              </Pressable>
-              <Pressable style={s.contactAction} onPress={() => setChatOpen(true)} testID="driver-chat">
-                <Icon name="message" size={19} color={colors.accent} />
-                <Text style={s.contactActionText}>Melding</Text>
-              </Pressable>
-            </View>
-
-            <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Skyv når du er fremme" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
-          <Pressable style={s.noShowLink} onPress={cancelCurrentTrip} disabled={busy} testID="driver-cancel-trip">
-            <Text style={s.noShowLinkText}>Avbryt tur</Text>
-          </Pressable>
-          </View>
-        </>
-      ) : current?.status === 'at_pickup' ? (
-        <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-pickup-confirm">
-          <View style={s.handle} />
-          <Text style={s.stateEyebrow}>BEKREFT PASSASJER</Text>
-          <Text style={s.stateTitle}>{current.customer?.name || 'Kunde'}</Text>
-          <View style={s.destinationCard}>
-            <Text style={s.destinationLabel}>DESTINASJON</Text>
-            <Text style={s.destinationValue}>{current.dropoff_address}</Text>
-          </View>
-          {tripExtras(current) ? <Text style={s.stateMeta}>{tripExtras(current)}</Text> : null}
-          <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Start tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
-          <Pressable style={s.noShowLink} onPress={cancelCurrentTrip} disabled={busy} testID="driver-cancel-trip">
-            <Text style={s.noShowLinkText}>Avbryt tur</Text>
-          </Pressable>
-          <Pressable style={s.noShowLink} onPress={noShow} disabled={busy} testID="driver-no-show">
-            <Text style={s.noShowLinkText}>Kunden kom ikke?</Text>
-          </Pressable>
-        </View>
-      ) : current?.status === 'in_trip' ? (
-        <>
-          <View style={[s.navInstruction, { top: insets.top + 82 }]} testID="driver-intrip-instruction">
-            <View style={s.navIcon}><Icon name="navigation" size={20} color={colors.accentOn} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.navTitle}>Til destinasjon</Text>
-              <Text style={s.navSub} numberOfLines={1}>{current.dropoff_address}</Text>
-            </View>
-            <Pressable style={s.navOpen} onPress={openNavigation} testID="driver-navigation">
-              <Text style={s.navOpenText}>ÅPNE</Text>
-            </Pressable>
-          </View>
-
-          <View style={[s.stateSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-intrip-sheet">
-            <View style={s.handle} />
-            <View style={s.inTripControls}>
-              <Pressable style={s.tripTool} onPress={() => setChatOpen(true)} testID="driver-chat">
-                <Icon name="message" size={20} color={colors.accent} />
-                <Text style={s.tripToolText}>Melding</Text>
-              </Pressable>
-              <Pressable style={s.tripTool} onPress={openNavigation}>
-                <Icon name="navigation" size={20} color={colors.accent} />
-                <Text style={s.tripToolText}>Navigasjon</Text>
-              </Pressable>
-              <Pressable style={s.sosTool} onPress={emergency} testID="driver-safety-112">
-                <Icon name="shield" size={20} color={colors.accentOn} />
-                <Text style={s.sosToolText}>SOS</Text>
-              </Pressable>
-            </View>
-            <SlideConfirm key={`${current.trip_id}-${current.status}`} label="Avslutt tur" onConfirm={advance} onError={error => setError(apiError(error))} disabled={busy} testID="driver-advance" />
-          <Pressable style={s.noShowLink} onPress={cancelCurrentTrip} disabled={busy} testID="driver-cancel-trip">
-            <Text style={s.noShowLinkText}>Avbryt tur</Text>
-          </Pressable>
-          </View>
-        </>
-      ) : firstOffer && online ? (
-        <>
-          <View style={s.mapDim} pointerEvents="none" />
-          <View style={[s.offerSheet, { paddingBottom: insets.bottom + 32 }]} testID={`driver-offer-${firstOffer.trip_id}`}>
-            <View style={s.handle} />
-            <View style={s.offerHead}>
-              <View>
-                <Text style={s.offerEyebrow}>NY TUR</Text>
-                <Text style={s.offerCustomer}>{firstOffer.customer?.name || 'Kunde'}</Text>
-              </View>
-              <View style={s.offerCountdownCircle}>
-                <Text style={[s.offerCountdownNum, offerExpired && { color: colors.textMuted }]}>
-                  {offerRemaining != null ? offerRemaining : '—'}
-                </Text>
-                <Text style={s.offerCountdownUnit}>s</Text>
-              </View>
-            </View>
-            <View style={s.offerPriceRow}>
-              <Text style={s.offerPrice}>{kr(firstOffer.price)}</Text>
-              <Text style={s.offerRouteMeta}>
-                {offerDistance != null ? `${Number(offerDistance).toFixed(1)} km til henting` : 'Beregner avstand'}
-                {offerDuration != null ? ` · ${Math.max(1, Math.round(Number(offerDuration)))} min` : ''}
-              </Text>
-            </View>
-            <View style={s.routeBox}>
-              <View style={s.routePointRow}><View style={[s.routeDot, { backgroundColor: colors.online }]} /><Text style={s.routePointText} numberOfLines={1}>{firstOffer.pickup_address}</Text></View>
-              <View style={s.routeLine} />
-              <View style={s.routePointRow}><View style={[s.routeDot, { backgroundColor: colors.accent }]} /><Text style={s.routePointText} numberOfLines={1}>{firstOffer.dropoff_address}</Text></View>
-            </View>
-            {tripExtras(firstOffer) ? <Text style={s.stateMeta}>{tripExtras(firstOffer)}</Text> : null}
-            {firstOffer.passenger_note ? <Text style={s.stateMeta}>Notat: {firstOffer.passenger_note}</Text> : null}
-            <View style={s.offerButtons}>
-              <Pressable style={s.declineButton} onPress={() => setDeclineReasonsOpen(true)} testID={`driver-decline-${firstOffer.trip_id}`}>
-                <Text style={s.declineButtonText}>Avslå</Text>
-              </Pressable>
-              <Pressable style={[s.acceptButton, offerExpired && s.acceptButtonDisabled]} onPress={() => accept(firstOffer.trip_id)} disabled={busy || offerExpired} testID={`driver-accept-${firstOffer.trip_id}`}>
-                {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.acceptButtonText}>{offerExpired ? 'Utløpt' : 'Godta tur'}</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </>
-      ) : completedTrip ? (
-        <LinearGradient colors={['#F7F5F1', '#F1EEE8']} style={[StyleSheet.absoluteFill, s.completeWrap]}>
-          <View style={[s.completeContent, { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 26 }]}>
-            <Text style={s.completeEyebrow}>TUR FULLFØRT</Text>
-            <Text style={s.completeAmount}>
-              {completedTrip.payment_status === 'paid' ? `+${kr(completedTrip.driver_earnings)}` : 'Betaling avventer'}
-            </Text>
-            <View style={s.completeCard}>
-              <View style={s.completeRow}><Text style={s.completeLabel}>Distanse</Text><Text style={s.completeValue}>{completedTrip.distance_km ?? '—'} km</Text></View>
-              <View style={s.completeRow}><Text style={s.completeLabel}>Tid</Text><Text style={s.completeValue}>{completedTrip.duration_min ?? '—'} min</Text></View>
-              <View style={s.completeRow}><Text style={s.completeLabel}>Status</Text><Text style={s.completeValue}>{completedTrip.payment_status === 'paid' ? 'Betalt' : 'Avventer'}</Text></View>
-            </View>
-            <View style={s.completeButtons}>
-              <Pressable style={s.pauseButton} onPress={async () => {
-                if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
-                setCompletedTrip(null);
-                if (online) await toggleOnline();
-              }}>
-                <Text style={s.pauseButtonText}>Ta pause</Text>
-              </Pressable>
-              <Pressable style={s.continueButton} onPress={async () => {
-                if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
-                setCompletedTrip(null);
-                if (!online) await toggleOnline();
-              }}>
-                <Text style={s.continueButtonText}>Fortsett online</Text>
-              </Pressable>
-            </View>
-          </View>
-        </LinearGradient>
-      ) : online ? (
-        <View style={[s.waitingSheet, { paddingBottom: insets.bottom + 32 }]} testID="driver-waiting">
-          <View style={s.handle} />
-          <View style={s.waitingInner}>
-            <View style={s.waitingIcon}><Icon name="navigation" size={20} color={colors.online} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.waitingTitle}>Klar for neste tur</Text>
-              <Text style={s.waitingSub}>{loc ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text>
-            </View>
-          </View>
-        </View>
-      ) : (
-        <View style={[s.offlineContent, { paddingTop: insets.top + 112, paddingBottom: insets.bottom + 26 }]}>
-          <Text style={s.offlineEyebrow}>INNTJENING I DAG</Text>
-          <Text style={s.offlineAmount}>{kr(summary?.trip_income ?? 0)}</Text>
-          <View style={s.summaryCards}>
-            <View style={s.summaryCard}><Text style={s.summaryValue}>{String(summary?.trips ?? 0)}</Text><Text style={s.summaryLabel}>Turer</Text></View>
-            <View style={s.summaryCard}><Text style={s.summaryValue}>{hoursLabel(summary?.online_minutes)}</Text><Text style={s.summaryLabel}>Online</Text></View>
-          </View>
-          <Pressable style={s.goOnlineButton} onPress={toggleOnline} disabled={busy} testID="driver-go-online">
-            {busy ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.goOnlineButtonText}>Gå online</Text>}
-          </Pressable>
-        </View>
-      )}
+      <DriverCockpitView
+        user={user} online={online} busy={busy || summaryActionBusy} error={error}
+        summary={summary} current={current} completed={completedTrip} offer={firstOffer}
+        offerRemaining={offerRemaining} offerExpired={offerExpired} offerDistance={offerDistance} offerDuration={offerDuration}
+        gpsReady={Boolean(loc) && !gpsBlocked.current} minimized={tripMinimized}
+        extras={tripExtras(current || firstOffer)}
+        onOnline={() => void toggleOnline()}
+        onAccept={() => firstOffer && void accept(firstOffer.trip_id)}
+        onDecline={() => firstOffer && void decline(firstOffer.trip_id)}
+        onAdvance={advance} onCancel={cancelCurrentTrip} onNoShow={noShow}
+        onCall={() => current?.customer?.phone && void Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))}
+        onChat={() => setChatOpen(true)} onNavigate={() => void openNavigation()} onEmergency={emergency}
+        onMinimize={value => {
+          setTripMinimized(value);
+          if (current?.trip_id) void (value ? storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id) : storage.removeItem(MINIMIZED_TRIP_KEY)).catch(() => setError('Kunne ikke lagre visningsvalget.'));
+        }}
+        onContinue={() => void finishSummary(true)} onPause={() => void finishSummary(false)}
+        onError={error => setError(apiError(error))}
+      />
 
       {declineReasonsOpen && firstOffer ? (
         <View style={s.declineOverlay}>

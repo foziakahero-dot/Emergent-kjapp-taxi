@@ -40,13 +40,13 @@ export function V10Badge({ children, tone = 'neutral' }: { children: React.React
     <Text style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: palette[0] }}>{children}</Text>
   </View>;
 }
-export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID }: {
-  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string;
+export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height }: {
+  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number;
 }) {
   const color = kind === 'primary' || kind === 'ink' ? colors.accentOn : kind === 'ghost' ? colors.textSecondary : colors.text;
   const backgroundColor = { primary: colors.accent, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
-    style={({ pressed }) => ({ minHeight: small ? 44 : kind === 'ghost' ? 48 : 56, borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, transform: [{ scale: pressed ? .97 : 1 }] })}>
+    style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, transform: [{ scale: pressed ? .97 : 1 }] })}>
     {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={small ? 18 : 22} /> : null}
     <Text style={{ color, fontFamily: font.semibold, fontSize: small ? 14 : 16, lineHeight: small ? 20 : 22, letterSpacing: -.16 }}>{label}</Text>
   </Pressable>;
