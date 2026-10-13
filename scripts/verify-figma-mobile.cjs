@@ -295,7 +295,7 @@ const act = renderer.act;
     useQuery: ({ queryKey }) => ({ data: queryKey[0] === 'driver-notification-settings' ? settingsData : undefined }),
     useQueryClient: () => ({ setQueryData: (key, data) => { confirmedSettings.push({ key, data }); settingsData = data; } }),
   });
-  const DriverProfile = load('driver-app', 'app/(driver)/profile.tsx').default;
+  const DriverProfile = load('driver-app', 'app/driver-account.tsx').default;
   let profile;
   await act(async () => { profile = renderer.create(React.createElement(DriverProfile)); });
   await act(async () => { const press = profile.root.findByProps({ testID: 'profile-push-toggle' }).findByType('Pressable').props.onPress; press(); press(); });

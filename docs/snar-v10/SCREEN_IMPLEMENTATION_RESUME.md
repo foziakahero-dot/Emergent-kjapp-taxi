@@ -42,10 +42,20 @@ The authoritative screen lists and layout are `src/CustomerApp.tsx`, `src/Driver
 - `git diff --check` — PASS.
 - Original prototype and actual Customer onboarding/startup components were rendered in Chromium at 370×824 through React Native Web with auth/router/safe-area fixtures. This checks web layout only. It is not an Android/iOS screenshot or a complete pixel match. Actual local image captures were reviewed; no 67-screen native comparison exists.
 
+## Second checkpoint — Driver login and compact profile
+
+- Driver login now uses the source's warm surface, 110px safe top anchor, 24px horizontal padding, 32/38 headline, 60px input rows, flat 58px primary action and footer anchoring. It retains real password auth and role/approval/2FA/legal/identity gates. Blank and duplicate submissions are guarded. Prototype SMS/BankID remain unavailable.
+- Driver profile now uses the source's 72px avatar with 0.34× radius, header, grouped document/vehicle/fleet/activity rows and navigation/settings rows. Real rating counts are not falsely labelled as total trips; a required identity recheck does not show verified.
+- The existing full account functionality is preserved in `driver-account.tsx`, reached from Driver settings. This includes notifications, vehicle selection, identity, profile photo, earnings links, password and logout. The existing notification tests now exercise that route.
+- Shared rows match the original prototype's computed clickable-row padding, 56px minimum height, 2px subtitle margin and inset dividers; static rows retain their source padding.
+- New fleet/documents/profile account queries include user identity in their cache keys. Navigation exposes its confirmed checked state for radio accessibility.
+- Both existing behavioral scripts pass; the checkpoint script additionally tests all Driver login gates, blank/offline/duplicate submissions, compact profile routing and truthful status/counts. Driver TypeScript passes. Six actual Driver screens (login/profile/documents/fleet/navigation/messages) were web-rendered without JS errors; profile navigation and server-confirmed Waze selection were checked in Chromium.
+- Saved visual evidence is in `evidence/2026-10-13/`. The comparison currently covers the original light variant. The prototype's default dark Driver theme, native captures and full parity remain outstanding.
+
 ## Continue next
 
-1. Complete Driver login layout while retaining the actual password-based auth and account/legal/identity gates. SMS and BankID in the prototype do not have supported login contracts here.
-2. Convert the Driver profile to the compact source layout while preserving existing profile, notifications, vehicle and account functionality in reachable routes; compare before removing anything.
+1. Continue Driver vehicle, activity/trip-detail and earnings/detail screens from the original archive. Preserve paid-only financial values and offline/error states.
+2. Continue Customer profile, messages, activity, payment methods and account views; preserve account linking, privacy, support, booking and trip recovery.
 3. Continue Customer and Driver screens in original source order. Record each route/state as implemented, partially implemented, blocked by a specific contract, or not reviewed. Do not count a placeholder, an empty state, a route name or a component count as a completed design screen.
 4. Render the new map/permission, messages, documents, fleet and navigation screens with loading/error/real-data states. Run meaningful interaction tests and compare typography, insets, shapes, colors and motion.
 5. Finish native visual checks and the existing QA build/device gates before requesting a combined Customer + Driver build. Keep existing QA-only build profiles and deployment safeguards. No new APK, OTA, store release, production deployment or main merge has occurred in this implementation task.

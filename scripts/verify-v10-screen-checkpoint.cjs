@@ -14,10 +14,11 @@ const { act } = renderer;
 const originalError = console.error;
 console.error = (...args) => { if (!String(args[0]).includes('react-test-renderer is deprecated')) originalError(...args); };
 let user = null, navigation = [], permissionCalls = 0, permissionResult;
+let loginResult, loginCalls = 0, logoutCalls = 0;
 let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [], updateResult, sendResult;
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
 const native = {
-  View: 'View', Text: 'Text', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
+  View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
   Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
   StyleSheet: { create: value => value, hairlineWidth: 1, absoluteFill: { position: 'absolute', inset: 0 } },
@@ -28,20 +29,22 @@ const stubs = {
   'expo-router': { useRouter: () => router, useFocusEffect: callback => React.useEffect(callback, [callback]) },
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 48, bottom: 34 }) },
   'expo-location': { requestForegroundPermissionsAsync: () => { permissionCalls++; return permissionResult(); } },
-  '@/src/context/AuthContext': { useAuth: () => ({ user }) },
-  '@/src/components/Typography': { Text: 'Text' },
+  '@/src/context/AuthContext': { useAuth: () => ({ user, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
+  '@/src/components/Typography': { Text: 'Text', TextInput: 'TextInput' },
   '@/src/components/Map': { Map: 'Map' },
   '@/src/components/V10Icon': { V10Icon: 'Icon' },
+  '@/src/components/Icon': { Icon: 'Icon' },
   '@/src/components/ui': { Loader: 'Loader' },
   '@/src/theme': { colors: {}, font: {} },
+  '@/src/lib/format': { apiError: error => error.message },
   '@/src/utils/storage': { storage: { setItem: async (...args) => storageWrites.push(args) } },
   '@tanstack/react-query': {
     useQueryClient: () => queryClient,
     useQuery: ({ queryKey }) => ({ isPending: false, isError: false, refetch: async () => {}, ...queryData[queryKey[0]] }),
   },
   '@/src/lib/api': {
-    authApi: { me: async () => ({}) },
-    driverApi: { current: async () => ({}), identityVerification: async () => ({}) },
+    authApi: { me: async () => ({}) }, authenticatedFileSource: async () => null,
+    driverApi: { ratings: async () => ({}), current: async () => ({}), identityVerification: async () => ({}) },
     settingsApi: { get: async () => ({}), update: async data => { updates.push(['request', data]); return updateResult(data); } },
     messagesApi: { list: async () => ({}), send: async (...args) => { sent.push(args); return sendResult(); } },
   },
@@ -145,5 +148,59 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => quickButtons()[0].props.onPress());
   assert.match(text(tree), /ikke bekreftet sendt/);
   await unmount(tree);
+  const Login = load('driver-app', 'app/driver-login.tsx').default;
+  async function fillLogin(tree) {
+    await act(async () => {
+      tree.root.findByProps({ testID: 'driver-login-identifier' }).props.onChangeText('  driver@example.test  ');
+      tree.root.findByProps({ testID: 'driver-login-password' }).props.onChangeText('test-only-password');
+    });
+  }
+  tree = await mount(Login); navigation = [];
+  await act(async () => button(tree, 'driver-login-submit').props.onPress());
+  assert.equal(loginCalls, 0, 'Blank credentials must not invoke authentication');
+  await fillLogin(tree);
+  const loginRequest = deferred();
+  loginResult = (identifier, password) => { assert.equal(identifier, 'driver@example.test'); assert.equal(password, 'test-only-password'); return loginRequest.promise; };
+  await act(async () => { button(tree, 'driver-login-submit').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
+  assert.equal(loginCalls, 1, 'Rapid login taps must not race authentication');
+  await act(async () => loginRequest.resolve({ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'verified' }));
+  assert.equal(navigation.at(-1)[1], '/(driver)/home');
+  await unmount(tree);
+  for (const [result, target, rejected] of [
+    [{ role: 'user', approved: true }, null, true],
+    [{ role: 'driver', approved: false }, null, true],
+    [{ twofa_required: true }, null, false],
+    [{ role: 'driver', approved: true, legal_accepted: false }, '/driver-legal-consent', false],
+    [{ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }, '/driver-identity', false],
+    [{ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'verified', identity_recheck_required: true }, '/driver-identity', false],
+  ]) {
+    navigation = []; const previousLogout = logoutCalls;
+    loginResult = async () => result;
+    tree = await mount(Login); await fillLogin(tree);
+    await act(async () => button(tree, 'driver-login-submit').props.onPress());
+    assert.equal(navigation.at(-1)?.[1] || null, target);
+    assert.equal(logoutCalls - previousLogout, rejected ? 1 : 0);
+    await unmount(tree);
+  }
+  loginResult = async () => { throw new Error('Login offline'); };
+  tree = await mount(Login); await fillLogin(tree);
+  await act(async () => button(tree, 'driver-login-submit').props.onPress());
+  assert.match(text(tree), /Login offline/);
+  assert.equal(button(tree, 'driver-login-submit').props.disabled, false);
+  await unmount(tree);
+
+  const Profile = load('driver-app', 'app/(driver)/profile.tsx').default;
+  user = { id: 'driver-test', fullName: 'Test Driver', identity_verification_status: 'verified', identity_recheck_required: true };
+  queryData = { me: { data: user }, 'driver-ratings': { data: { count: 2, average: 4.5 } } };
+  tree = await mount(Profile);
+  assert.doesNotMatch(text(tree), /Verifisert/);
+  assert.match(text(tree), /2 vurderinger/);
+  navigation = [];
+  for (const [id, target] of [['documents', '/driver-documents'], ['vehicles', '/driver-vehicles'], ['fleet', '/driver-fleet'], ['activity', '/driver-trips'], ['navigation', '/driver-navigation'], ['settings', '/driver-settings']]) {
+    await act(async () => button(tree, 'driver-profile-' + id).props.onPress());
+    assert.equal(navigation.at(-1)[1], target);
+  }
+  await unmount(tree);
+  console.log('PASS: Driver login empty/offline/duplicate attempts, role/approval/2FA/legal/selfie gates; compact profile routes and truthful verification/rating counts.');
   console.log('PASS: manual location, permission grant/denial/error, legal/session routing, duplicate permission taps, confirmed navigation save, rejected navigation response, concurrent navigation taps, closed-trip messaging, active-trip messages, duplicate quick replies and send failure.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

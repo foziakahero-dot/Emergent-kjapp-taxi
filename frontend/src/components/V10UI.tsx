@@ -25,10 +25,11 @@ export function V10Section({ title, children }: { title: string; children: React
 export function V10Row({ icon, title, subtitle, right, onPress, border = false, testID, disabled = false }: {
   icon: string; title: string; subtitle?: string; right?: React.ReactNode; onPress?: () => void; border?: boolean; testID?: string; disabled?: boolean;
 }) {
-  const content = <><View style={v10.icon}><V10Icon name={icon} size={20} /></View><View style={{ flex: 1 }}>
-    <Text style={v10.body}>{title}</Text>{subtitle ? <Text style={v10.caption}>{subtitle}</Text> : null}
+  const content = <>{border ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} /> : null}<View style={v10.icon}><V10Icon name={icon} size={20} /></View><View style={{ flex: 1 }}>
+    <Text style={v10.body}>{title}</Text>{subtitle ? <Text style={[v10.caption, { marginTop: 2 }]}>{subtitle}</Text> : null}
   </View>{right ?? (onPress ? <V10Icon name="chevR" size={18} color={colors.textMuted} /> : null)}</>;
-  const style = [v10.row, border && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line }];
+  // Match the original prototype's computed button row padding (the scoped button reset overrides .s10-row).
+  const style = [v10.row, onPress && { paddingVertical: 0, paddingHorizontal: 0 }];
   return onPress ? <Pressable accessibilityRole="button" testID={testID} disabled={disabled} accessibilityState={{ disabled }} onPress={onPress}
     style={({ pressed }) => [...style, pressed && { backgroundColor: colors.cardSubtle }, disabled && { opacity: .55 }]}>{content}</Pressable> : <View testID={testID} style={style}>{content}</View>;
 }

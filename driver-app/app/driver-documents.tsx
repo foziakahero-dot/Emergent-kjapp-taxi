@@ -10,7 +10,7 @@ import { Loader } from '@/src/components/ui';
 export default function DriverDocuments() {
   const router = useRouter();
   const { user } = useAuth();
-  const me = useQuery({ queryKey: ['me'], queryFn: authApi.me, enabled: !!user?.id });
+  const me = useQuery({ queryKey: ['me', user?.id], queryFn: authApi.me, enabled: !!user?.id });
   const identity = useQuery({ queryKey: ['driver-identity'], queryFn: driverApi.identityVerification, enabled: !!user?.id });
   const data = me.data;
   const identityStatus = identity.data?.status;

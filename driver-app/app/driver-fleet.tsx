@@ -13,7 +13,7 @@ import { Loader } from '@/src/components/ui';
 export default function DriverFleet() {
   const router = useRouter();
   const { user } = useAuth();
-  const me = useQuery({ queryKey: ['me'], queryFn: authApi.me, enabled: !!user?.id });
+  const me = useQuery({ queryKey: ['me', user?.id], queryFn: authApi.me, enabled: !!user?.id });
   const fleet = me.data || user;
   return <V10Screen testID="driver-fleet-screen">
     <V10Header title="Fleet" onBack={() => router.back()} />

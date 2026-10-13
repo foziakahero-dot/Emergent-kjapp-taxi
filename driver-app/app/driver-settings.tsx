@@ -152,6 +152,9 @@ export default function DriverSettings() {
             ))}
           </View>
 
+          <Text style={s.sectionTitle}>Min konto</Text>
+          <View style={s.card}><LinkRow icon="user" label="Konto og profil" onPress={() => router.push('/driver-account')} s={s} testID="ds-account" /></View>
+
           <Text style={s.sectionTitle}>Mine biler</Text>
           <View style={s.card}>
             <LinkRow icon="car" label={user?.car && user?.plate ? `${user.car} · ${user.plate}` : 'Velg bil fra flåten'}
