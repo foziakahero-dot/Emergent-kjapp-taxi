@@ -134,9 +134,12 @@ export default function RootLayout() {
               <Stack.Screen name="reset-password/[token]" />
               <Stack.Screen name="driver-legal-consent" />
               <Stack.Screen name="(driver)" />
+              <Stack.Screen name="driver-earnings-detail" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-earnings-report" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-account" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-identity" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-trip/[tripId]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-fleet" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-documents" options={{ animation: 'slide_from_right' }} />

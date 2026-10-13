@@ -14,29 +14,29 @@ const { act } = renderer;
 const originalError = console.error;
 console.error = (...args) => { if (!String(args[0]).includes('react-test-renderer is deprecated')) originalError(...args); };
 let user = null, navigation = [], permissionCalls = 0, permissionResult;
-let loginResult, loginCalls = 0, logoutCalls = 0;
+let loginResult, loginCalls = 0, logoutCalls = 0, vehicleResult, vehicleCalls = 0, currentTripId = 'trip-paid';
 let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [], updateResult, sendResult;
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
 const native = {
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
-  Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
+  AppState: { addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
   StyleSheet: { create: value => value, hairlineWidth: 1, absoluteFill: { position: 'absolute', inset: 0 } },
 };
-const queryClient = { setQueryData: (key, data) => updates.push([key, data]), invalidateQueries: async x => invalidated.push(x.queryKey) };
+const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
   'react': React, 'react/jsx-runtime': appRequire('react/jsx-runtime'), 'react-native': native,
-  'expo-router': { useRouter: () => router, useFocusEffect: callback => React.useEffect(callback, [callback]) },
+  'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({ tripId: currentTripId }), useFocusEffect: callback => React.useEffect(callback, [callback]) },
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 48, bottom: 34 }) },
   'expo-location': { requestForegroundPermissionsAsync: () => { permissionCalls++; return permissionResult(); } },
-  '@/src/context/AuthContext': { useAuth: () => ({ user, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
+  '@/src/context/AuthContext': { useAuth: () => ({ user, refresh: async () => {}, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
   '@/src/components/Typography': { Text: 'Text', TextInput: 'TextInput' },
   '@/src/components/Map': { Map: 'Map' },
   '@/src/components/V10Icon': { V10Icon: 'Icon' },
   '@/src/components/Icon': { Icon: 'Icon' },
   '@/src/components/ui': { Loader: 'Loader' },
   '@/src/theme': { colors: {}, font: {} },
-  '@/src/lib/format': { apiError: error => error.message },
+  '@/src/lib/format': { apiError: error => error.message, vehicleMeta: () => ({ name: 'SNAR' }), kr: value => value == null ? '– kr' : Math.round(value) + ' kr' },
   '@/src/utils/storage': { storage: { setItem: async (...args) => storageWrites.push(args) } },
   '@tanstack/react-query': {
     useQueryClient: () => queryClient,
@@ -44,7 +44,8 @@ const stubs = {
   },
   '@/src/lib/api': {
     authApi: { me: async () => ({}) }, authenticatedFileSource: async () => null,
-    driverApi: { ratings: async () => ({}), current: async () => ({}), identityVerification: async () => ({}) },
+    apiError: error => error.message,
+    driverApi: { summary: async () => ({}), weekly: async () => ({}), payouts: async () => ({}), vehicles: async () => ({}), history: async () => ({}), selectVehicle: async id => { vehicleCalls++; return vehicleResult(id); }, ratings: async () => ({}), current: async () => ({}), identityVerification: async () => ({}) },
     settingsApi: { get: async () => ({}), update: async data => { updates.push(['request', data]); return updateResult(data); } },
     messagesApi: { list: async () => ({}), send: async (...args) => { sent.push(args); return sendResult(); } },
   },
@@ -201,6 +202,77 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     assert.equal(navigation.at(-1)[1], target);
   }
   await unmount(tree);
+  const historyHelpers = load('driver-app', 'src/lib/driverHistory.ts');
+  assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'pending', driver_earnings: 999 }), null);
+  assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'paid', driver_earnings: null }), null);
+  assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'paid', driver_earnings: 0 }), 0);
+  assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'paid', driver_earnings: NaN }), null);
+  assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'paid', driver_earnings: -1 }), null);
+  const grouped = historyHelpers.groupHistory([{ trip_id: 'timezone', created_at: '2026-10-13T22:30:00Z' }], new Date('2026-10-14T08:00:00Z'));
+  assert.equal(grouped[0].title, 'I dag', 'History grouping uses Oslo calendar dates');
+  assert.equal(historyHelpers.historyDate('not-a-date'), 'Dato mangler');
+
+  const Vehicles = load('driver-app', 'app/driver-vehicles.tsx').default;
+  queryData = { 'driver-vehicles': { data: { vehicles: [{ id: 'one', selected: true, car: 'One', plate: 'TEST1' }, { id: 'two', selected: false, car: 'Two', plate: 'TEST2' }, { id: 'busy', busy: true }, { id: 'parked', active: false }] } } };
+  tree = await mount(Vehicles);
+  assert.equal(!!button(tree, 'driver-vehicle-busy').props.disabled, true);
+  assert.equal(!!button(tree, 'driver-vehicle-parked').props.disabled, true);
+  vehicleResult = async () => ({ vehicle_id: 'other', selected: true });
+  await act(async () => button(tree, 'driver-vehicle-two').props.onPress());
+  assert.equal(queryData['driver-vehicles'].data.vehicles[0].selected, true, 'Unconfirmed vehicle response preserves selected car');
+  assert.match(text(tree), /ikke bekreftet/);
+  const vehicleRequest = deferred(); vehicleResult = () => vehicleRequest.promise;
+  const countBefore = vehicleCalls;
+  await act(async () => { button(tree, 'driver-vehicle-two').props.onPress(); button(tree, 'driver-vehicle-two').props.onPress(); });
+  assert.equal(vehicleCalls, countBefore + 1, 'Duplicate car selection is guarded');
+  await act(async () => vehicleRequest.resolve({ vehicle_id: 'two', selected: true }));
+  assert.equal(queryData['driver-vehicles'].data.vehicles.find(v => v.id === 'two').selected, true);
+  assert.equal(queryData['driver-vehicles'].data.vehicles.find(v => v.id === 'one').selected, false);
+  await unmount(tree);
+
+  const Activity = load('driver-app', 'app/driver-trips.tsx').default;
+  queryData = { 'driver-history': { data: { trips: [{ trip_id: 'trip-paid', status: 'completed', payment_status: 'paid', driver_earnings: 162, price: 184, pickup_address: 'Area A', dropoff_address: 'Area B', created_at: '2026-10-13T08:00:00Z' }, { trip_id: 'trip-unpaid', status: 'completed', payment_status: 'pending', driver_earnings: 999, price: 1000, created_at: '2026-10-13T08:30:00Z' }] } } };
+  tree = await mount(Activity);
+  assert.match(text(tree), /162 kr/); assert.doesNotMatch(text(tree), /999 kr/);
+  await act(async () => button(tree, 'driver-history-trip-trip-paid').props.onPress());
+  assert.equal(navigation.at(-1)[1], '/driver-trip/trip-paid');
+  await unmount(tree);
+  const TripDetail = load('driver-app', 'app/driver-trip/[tripId].tsx').default;
+  tree = await mount(TripDetail);
+  assert.match(text(tree), /skjult etter turen/); assert.match(text(tree), /162 kr/);
+  await unmount(tree);
+  currentTripId = 'trip-unpaid'; tree = await mount(TripDetail);
+  assert.doesNotMatch(text(tree), /999 kr/); assert.match(text(tree), /betaling er bekreftet/);
+  await unmount(tree);
+  currentTripId = 'not-in-history'; tree = await mount(TripDetail);
+  assert.match(text(tree), /Turen er ikke tilgjengelig/); await unmount(tree);
+  const Earnings = load('driver-app', 'app/(driver)/earnings.tsx').default;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  queryData = {
+    'driver-summary': { data: { income: 321, trips: 2, online_minutes: 60, bonus: 0 } },
+    'driver-weekly': { data: { days: [{ date: todayIso, income: 222, trips: 2, gross_income: 250 }] } },
+    'driver-payouts': { data: { earned_net_7d: 222, stripe_connect_ready: false, next_payout_date: null } },
+    'driver-history': { data: { trips: [{ trip_id: 'unpaid-now', payment_status: 'pending', driver_earnings: 999, created_at: new Date().toISOString() }] } },
+  };
+  tree = await mount(Earnings);
+  assert.match(text(tree), /321 kr/); assert.doesNotMatch(text(tree), /999 kr/);
+  await act(async () => button(tree, 'driver-earnings-detail-open').props.onPress());
+  assert.equal(navigation.at(-1)[1], '/driver-earnings-detail'); await unmount(tree);
+  queryData['driver-summary'].isError = true;
+  tree = await mount(Earnings); assert.doesNotMatch(text(tree), /321 kr/); assert.match(text(tree), /Kunne ikke hente inntektsdata/); await unmount(tree);
+  queryData['driver-summary'].isError = false;
+  const EarningsDetail = load('driver-app', 'app/driver-earnings-detail.tsx').default;
+  tree = await mount(EarningsDetail); assert.match(text(tree), /321 kr/);
+  await act(async () => button(tree, 'driver-earnings-period-week').props.onPress());
+  assert.match(text(tree), /222 kr/); assert.doesNotMatch(text(tree), /999 kr/);
+  assert.doesNotMatch(text(tree), /Neste utbetaling/); await unmount(tree);
+  queryData['driver-weekly'].data = {};
+  tree = await mount(EarningsDetail);
+  await act(async () => button(tree, 'driver-earnings-period-week').props.onPress());
+  assert.equal(tree.root.findAll(node => node.type === 'Text' && node.props.testID === 'driver-earnings-period-net')[0].props.children, '— kr', 'Missing weekly data must not become a zero-income claim');
+  await unmount(tree);
+  console.log('PASS: Driver overview/detail income comes from authoritative summaries, excludes unconfirmed trip income, hides errored totals, does not invent payout dates and does not turn missing weekly data into zero.');
+  console.log('PASS: Driver assigned/busy/parked vehicle selection, server confirmation, duplicate taps, paid-only trip income, Oslo date grouping, history/detail routing and privacy-limited trip detail.');
   console.log('PASS: Driver login empty/offline/duplicate attempts, role/approval/2FA/legal/selfie gates; compact profile routes and truthful verification/rating counts.');
   console.log('PASS: manual location, permission grant/denial/error, legal/session routing, duplicate permission taps, confirmed navigation save, rejected navigation response, concurrent navigation taps, closed-trip messaging, active-trip messages, duplicate quick replies and send failure.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

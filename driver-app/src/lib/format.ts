@@ -1,6 +1,6 @@
 export function kr(value?: number | null): string {
-  if (value == null || isNaN(value as number)) return '– kr';
-  return `${Math.round(value)} kr`;
+  if (value == null || !Number.isFinite(Number(value))) return '– kr';
+  return `${Math.round(value).toLocaleString('nb-NO')} kr`;
 }
 
 export function greeting(name?: string): string {

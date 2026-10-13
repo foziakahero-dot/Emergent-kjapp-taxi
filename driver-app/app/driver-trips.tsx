@@ -1,199 +1,34 @@
-import { Text } from '@/src/components/Typography';
-import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import React from 'react';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { colors, font, makeStyles } from '@/src/theme';
-import { Icon } from '@/src/components/Icon';
-import { Loader } from '@/src/components/ui';
+import { useAuth } from '@/src/context/AuthContext';
 import { driverApi } from '@/src/lib/api';
+import { confirmedTripIncome, groupHistory, historyDate, historyTrips, tripStatusLabel } from '@/src/lib/driverHistory';
 import { kr } from '@/src/lib/format';
-
-type Filter = 'all' | 'week' | 'today';
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'today', label: 'I dag' },
-  { key: 'week', label: 'Uke' },
-  { key: 'all', label: 'Alle' },
-];
-
-const STATUS: Record<string, { label: string; color: string }> = {
-  arrived: { label: 'Fullført', color: colors.online },
-  completed: { label: 'Fullført', color: colors.online },
-  rated: { label: 'Fullført', color: colors.online },
-  cancelled_by_driver: { label: 'Avbrutt', color: colors.danger },
-  cancelled: { label: 'Avbrutt', color: colors.danger },
-};
-
-function fmtDate(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleDateString('no-NO', { day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit' });
-}
+import { Text } from '@/src/components/Typography';
+import { V10Icon } from '@/src/components/V10Icon';
+import { V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
+import { Loader } from '@/src/components/ui';
+import { colors } from '@/src/theme';
 
 export default function DriverTrips() {
-  const insets = useSafeAreaInsets();
-  const s = useStyles();
   const router = useRouter();
-  const [filter, setFilter] = useState<Filter>('all');
-  const [detail, setDetail] = useState<any>(null);
-
-  const { data: hist, isLoading, isError, refetch } = useQuery({ queryKey: ['driver-history'], queryFn: driverApi.history });
-  const all = hist?.trips || hist?.history || (Array.isArray(hist) ? hist : []);
-
-  const trips = useMemo(() => {
-    if (filter === 'all') return all;
-    const since = filter === 'today'
-      ? new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
-      : new Date(Date.now() - 7 * 864e5).toISOString();
-    return all.filter((t: any) => (t.created_at || '') >= since);
-  }, [all, filter]);
-
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
-      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} style={s.back} testID="driver-trips-back">
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </Pressable>
-        <Text style={s.title}>Mine turer</Text>
-      </View>
-
-      <View style={s.segs}>
-        {FILTERS.map((f) => (
-          <Pressable key={f.key} onPress={() => setFilter(f.key)} style={[s.seg, filter === f.key && s.segOn]} testID={`trips-filter-${f.key}`}>
-            <Text style={[s.segText, filter === f.key && s.segTextOn]}>{f.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}>
-        {isLoading ? (
-          <View style={{ paddingTop: 60 }}><Loader /></View>
-        ) : isError ? (
-          <View style={s.errorState}>
-            <Text style={s.empty}>Kunne ikke hente turhistorikken. Prøv igjen når forbindelsen er tilbake.</Text>
-            <Pressable accessibilityRole="button" onPress={() => void refetch()} testID="driver-trips-retry" style={s.retry}>
-              <Text style={s.retryText}>Prøv igjen</Text>
-            </Pressable>
-          </View>
-        ) : trips.length ? (
-          trips.map((t: any, i: number) => {
-            const st = STATUS[t.status] || { label: t.status, color: colors.textMuted };
-            return (
-              <Pressable key={t.trip_id || i} style={s.row} onPress={() => setDetail(t)} testID={`trip-row-${i}`}>
-                <View style={s.rowIcon}><Icon name="navigation" size={16} color={st.color} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.rowTitle} numberOfLines={1}>{t.dropoff_address}</Text>
-                  <Text style={s.rowSub}>{fmtDate(t.created_at)} · {t.distance_km} km</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={s.rowPrice}>{t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'}</Text>
-                  <Text style={[s.rowStatus, { color: st.color }]}>{st.label}</Text>
-                </View>
-              </Pressable>
-            );
-          })
-        ) : (
-          <Text style={s.empty}>Ingen turer i denne perioden.</Text>
-        )}
-      </ScrollView>
-
-      <Modal visible={!!detail} transparent animationType="slide" onRequestClose={() => setDetail(null)}>
-        <View style={s.sheetBackdrop}>
-          <Pressable style={{ flex: 1 }} onPress={() => setDetail(null)} />
-          <View style={[s.detailSheet, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={s.handle} />
-            {detail ? (
-              <>
-                <Text style={s.detailDate}>{fmtDate(detail.created_at)}</Text>
-                <View style={[s.epRow, { marginTop: 14 }]}><View style={s.beacon} /><Text style={s.epText} numberOfLines={2}>{detail.pickup_address}</Text></View>
-                <View style={s.epLine} />
-                <View style={s.epRow}><View style={s.square} /><Text style={s.epText} numberOfLines={2}>{detail.dropoff_address}</Text></View>
-
-                <View style={s.metrics}>
-                  <Metric label="Avstand" value={`${detail.distance_km} km`} s={s} />
-                  <View style={s.mDiv} />
-                  <Metric label="Tid" value={`${detail.duration_min} min`} s={s} />
-                  <View style={s.mDiv} />
-                  <Metric label="Ref" value={String(detail.trip_id || '').slice(0, 6)} s={s} />
-                </View>
-
-                <View style={s.breakCard}>
-                  <BreakRow label="Bruttopris" value={kr(detail.price)} s={s} />
-                  {detail.driver_earnings != null ? (
-                    <>
-                      <BreakRow label="SNAR serviceavgift" value={`− ${kr(Math.max(0, (detail.price || 0) - detail.driver_earnings))}`} muted s={s} />
-                      <View style={s.breakDivider} />
-                      <BreakRow label="Din inntekt" value={kr(detail.driver_earnings)} bold s={s} />
-                    </>
-                  ) : (
-                    <>
-                      <View style={s.breakDivider} />
-                      <BreakRow label="Betaling" value="Venter på bekreftet betaling" muted s={s} />
-                    </>
-                  )}
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
+  const { user } = useAuth();
+  const history = useQuery({ queryKey: ['driver-history', user?.id], queryFn: driverApi.history, enabled: !!user?.id });
+  const trips = historyTrips(history.data);
+  return <V10Screen testID="driver-activity-screen"><V10Header title="Aktivitet" onBack={() => router.back()} />
+    {history.isPending ? <Loader label="Henter turer…" /> : history.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente turhistorikken" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void history.refetch()} /> : !trips.length ? <View style={{ marginTop: 24 }}><V10State icon="activity" title="Ingen turer ennå" body="Turene du har kjørt, vises her." action="Til cockpit" onAction={() => router.navigate('/(driver)/home')} /></View> : groupHistory(trips).map(group =>
+      <V10Section key={group.title} title={group.title}><V10Group>{group.trips.map((trip, index) => {
+        const income = confirmedTripIncome(trip);
+        const cancelled = ['cancelled', 'cancelled_by_driver'].includes(trip.status || '');
+        return <Pressable key={trip.trip_id} testID={`driver-history-trip-${trip.trip_id}`} accessibilityRole="button" onPress={() => router.push(`/driver-trip/${encodeURIComponent(trip.trip_id!)}` as any)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          {index ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: colors.line }} /> : null}
+          <View style={v10.icon}><V10Icon name={cancelled ? 'x' : 'trip'} size={20} /></View>
+          <View style={{ flex: 1 }}><Text style={[v10.body, { fontSize: 15 }]} numberOfLines={2}>{trip.pickup_address || 'Hentested skjult'} → {trip.dropoff_address || 'Destinasjon skjult'}</Text>
+            <Text style={v10.caption}>{historyDate(trip.created_at, true)} · {tripStatusLabel(trip)}</Text></View>
+          <Text style={v10.body}>{income !== null ? kr(income) : cancelled ? '—' : 'Avventer'}</Text>
+        </Pressable>;
+      })}</V10Group></V10Section>)}
+  </V10Screen>;
 }
-
-function Metric({ label, value, s }: any) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={s.mLabel}>{label}</Text>
-      <Text style={s.mValue}>{value}</Text>
-    </View>
-  );
-}
-function BreakRow({ label, value, muted, bold, s }: any) {
-  return (
-    <View style={s.breakRow}>
-      <Text style={[s.breakLabel, bold && { color: colors.text, fontSize: 15 }]}>{label}</Text>
-      <Text style={[s.breakValue, muted && { color: colors.textMuted }, bold && { fontSize: 18, color: colors.online }]}>{value}</Text>
-    </View>
-  );
-}
-
-const useStyles = makeStyles((c) => ({
-  header: { paddingHorizontal: 20, paddingBottom: 14, gap: 16 },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  title: { fontFamily: font.display, fontSize: 26, color: c.text },
-  segs: { flexDirection: 'row', backgroundColor: c.cardSubtle, borderRadius: 999, padding: 4, marginHorizontal: 20, marginBottom: 8 },
-  seg: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 999 },
-  segOn: { backgroundColor: c.online },
-  segText: { color: c.textMuted, fontSize: 13, fontFamily: font.semibold },
-  segTextOn: { color: c.accentOn },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.line },
-  rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center' },
-  rowTitle: { color: c.text, fontSize: 14 },
-  rowSub: { color: c.textMuted, fontSize: 12, marginTop: 2 },
-  rowPrice: { color: c.text, fontFamily: font.mono, fontSize: 15 },
-  rowStatus: { fontSize: 11, marginTop: 2 },
-  empty: { color: c.textMuted, fontSize: 14, marginTop: 40, textAlign: 'center' },
-  errorState: { alignItems: 'center', paddingHorizontal: 20 },
-  retry: { minHeight: 48, marginTop: 16, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
-  retryText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.68)' },
-  detailSheet: { backgroundColor: c.elevated, borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: c.line, paddingHorizontal: 22, paddingTop: 10 },
-  handle: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: c.lineStrong, marginBottom: 14 },
-  detailDate: { color: c.textMuted, fontSize: 13 },
-  epRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  epLine: { width: 1, height: 16, backgroundColor: c.lineStrong, marginLeft: 5, marginVertical: 3 },
-  beacon: { width: 11, height: 11, borderRadius: 6, backgroundColor: c.online },
-  square: { width: 11, height: 11, borderRadius: 2, backgroundColor: c.text },
-  epText: { color: c.text, fontSize: 14, flex: 1 },
-  metrics: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingVertical: 14, borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.line },
-  mDiv: { width: 1, height: 28, backgroundColor: c.line },
-  mLabel: { color: c.textMuted, fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase' },
-  mValue: { color: c.text, fontFamily: font.mono, fontSize: 14, marginTop: 4 },
-  breakCard: { marginTop: 18 },
-  breakRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7 },
-  breakLabel: { color: c.textSecondary, fontSize: 14 },
-  breakValue: { color: c.text, fontFamily: font.mono, fontSize: 14 },
-  breakDivider: { height: 1, backgroundColor: c.line, marginVertical: 6 },
-}));
