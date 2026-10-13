@@ -11,3 +11,11 @@ All 27 targeted backend tests pass (7 pickup, 13 settings/push, 7 support/AI), a
 ## Deployment result
 
 QA commit `1e17796b4b69a0a6a06435e0ee93b9d552906f0e` is deployed as `dep-db7an8t9fdbs73dgjqqg`. Render confirms **live**, finished 2026-10-13 22:09:18 UTC / 2026-10-14 00:09 Oslo. Startup completed and no error-level app logs were found in the inspected post-deploy interval through 23:37 UTC. Canonical health/readiness and authenticated integration are still unverified: terminal access timed out and automatic browser approval could not complete because the usage limit was reached. No blocked-browser workaround was attempted. The QA branch contains the backend rollout, not the new combined mobile candidate.
+
+## Fresh continuation evidence — 2026-10-14 01:51 Oslo
+
+The combined mobile candidate is saved as `b847dc1a5c6ed6bc285c4935b1dc8fcf2cb8c192` in draft PR #101, targeting QA, with GitHub reporting mergeable=true. Both app typechecks, all behavioral/controller suites, 27 targeted backend cases and 12 QA guard fixtures pass. The candidate backend blob matches the deployed QA source exactly (`cf449b4022e2c1757bc3760237f49876384d157f`).
+
+A fresh PR-triggered Actions run, `38486477203`, is completed with startup_failure. Its actual GitHub annotation says the job was not started because recent account payments failed or the spending limit needs increasing. No jobs/artifacts were produced. Do not retry builds until the account billing/spending obstruction is resolved through an authorized human payment path.
+
+The previous browser usage limit no longer blocked opening QA. The free Render instance woke up; startup completed and the application log confirms `GET /api/health` HTTP 200 at 2026-10-13 23:50:45 UTC. Reading the resulting browser page was rejected by the browser URL policy because its protocol was not allowed. No alternate-browser, raw-page, protocol or indirect workaround was attempted. The JSON body, canonical readiness and authenticated integration remain unverified. Deployment live plus HTTP 200 is not full database/Stripe/ride certification.
