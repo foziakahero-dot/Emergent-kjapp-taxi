@@ -44,6 +44,7 @@ function load(app, file) {
     if (app === 'frontend' && name === './api' && absolute.endsWith(path.join('frontend', 'src', 'lib', 'useAvailableCars.ts'))) {
       return { carsApi: { nearby: async () => ({ cars: [] }) } };
     }
+    if (name === '@/src/components/VehicleAsset') return { VehicleAsset: 'VehicleAsset' };
     if (name === 'react') return React;
     if (name.startsWith('./')) { const target = path.relative(path.join(root, app), path.resolve(path.dirname(absolute), name)); return load(app, fs.existsSync(path.join(root, app, target + '.tsx')) ? target + '.tsx' : target + '.ts'); }
     if (name === 'react/jsx-runtime') return customerRequire(name);
