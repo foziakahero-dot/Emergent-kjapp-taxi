@@ -14,7 +14,7 @@ type Message = { role: 'assistant' | 'user'; text: string };
 const FAQ = ['Hvordan fungerer fastpris?', 'Jeg glemte noe i bilen', 'Endre destinasjon underveis', 'Refusjon og klage på en tur'];
 
 /** Figma Support layout, with replies and ticket IDs supplied by SNAR. */
-export function CustomerSupport({ onBack }: { onBack: () => void }) {
+export function CustomerSupport({ onBack, initialMessage = '' }: { onBack: () => void; initialMessage?: string }) {
   const { colors } = useTheme();
   const s = useStyles();
   const insets = useSafeAreaInsets();
@@ -25,7 +25,7 @@ export function CustomerSupport({ onBack }: { onBack: () => void }) {
   const requestLock = useRef(false);
   const sessionId = useRef(`support_${user?.id || 'customer'}_${Date.now()}`).current;
   const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', text: 'Hei! Jeg er SNAR AI-assistent. Spør meg om det meste, eller velg et vanlig tema under. Trenger du et menneske, kan du sende en henvendelse.' }]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(initialMessage);
   const [failed, setFailed] = useState('');
   const lastTicket = useRef<{ message: string; ticket: string } | null>(null);
   const [busy, setBusy] = useState(false);

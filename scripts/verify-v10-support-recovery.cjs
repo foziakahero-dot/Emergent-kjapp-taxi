@@ -122,5 +122,16 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
  await act(async()=>button(tree,'support-escalate').props.onPress());
  assert.equal(tickets.length,count);assert.match(text(tree),/kontaktinformasjon/);
  await unmount(tree);
+ // Support overview accepts the backend's actual array and hides failed cached trip data.
+ user={id:'support-customer',email:'qa@example.test'};
+ queryData={'customer-active-trip':{data:null},trips:{data:[{trip_id:'owned-trip',dropoff_address:'Actual destination'}]}};
+ const Overview=load('frontend','app/support.tsx').default;tree=await mount(Overview);
+ assert.match(text(tree),/Actual destination/);
+ await act(async()=>button(tree,'customer-support-chat-open').props.onPress());
+ assert.equal(navigation.at(-1)[1].params.tripId,'owned-trip');await unmount(tree);
+ queryData={'customer-active-trip':{data:{trip_id:'stale-trip',dropoff_address:'Stale destination'},isError:true},trips:{isError:true,data:[{trip_id:'stale-history',dropoff_address:'Stale history'}]}};
+ tree=await mount(Overview);assert.doesNotMatch(text(tree),/Stale destination|Stale history/);await unmount(tree);
+ await act(async()=>{tree=renderer.create(React.createElement(Support,{initialMessage:'Feil pris\nTurreferanse: owned-trip',onBack(){}}));});
+ assert.equal(tree.root.findByProps({testID:'support-message-input'}).props.value,'Feil pris\nTurreferanse: owned-trip');assert.equal(tickets.length,count,'Prefilling trip context never sends a ticket');await unmount(tree);
  console.log('PASS: Actual support AI-failure draft recovery, explicit retry without duplicate bubbles, serialized requests, unconfirmed ticket handling, real ticket IDs, confirmed-ticket deduplication and missing contact gate.');
 })().catch(error=>{console.error(error);process.exit(1)});
