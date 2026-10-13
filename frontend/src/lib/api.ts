@@ -109,6 +109,12 @@ export const paymentApi = {
 };
 
 export const aiApi = {
+  voiceConfig: () => api.get('/ai/voice/config').then(r => r.data),
+  voiceBooking: (data: any) => api.post('/ai/voice/booking', data, { timeout: 55000 }).then(r => r.data),
+  voiceProposal: (data: any) => api.post('/ai/voice/booking/proposal', data).then(r => r.data),
+  voiceConfirm: (proposal_id: string) => withReservation(() => api.post('/ai/voice/booking/confirm', {
+    proposal_id, confirmed: true, waiting_policy_accepted: true,
+  })),
   chat: (message: string, session_id?: string) =>
     api.post('/ai/chat', { message, session_id }).then((r) => r.data),
   transcribe: (audio_base64: string, mime_type = 'audio/m4a', language = 'no') =>
@@ -179,3 +185,4 @@ export const customerProfileApi = {
     return { uri: `${BACKEND}/api/me/profile-photo?v=${encodeURIComponent(version)}`, headers: token ? { Authorization: `Bearer ${token}` } : undefined };
   },
 };
+

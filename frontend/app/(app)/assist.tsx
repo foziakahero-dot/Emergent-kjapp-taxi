@@ -1,6 +1,6 @@
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -15,6 +15,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
+import { VoiceBookingPanel } from '@/src/components/VoiceBookingPanel';
 import { aiApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 
@@ -73,6 +74,47 @@ export default function Assist() {
   const [vehicle, setVehicle] = useState<string | null>(null);
   const [results, setResults] = useState<Place[]>([]);
   const [error, setError] = useState('');
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<any>(null);
+  const voiceLock = useRef(false);
+  const recordingRequested = useRef(false);
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    void aiApi.voiceConfig().then(config => { if (alive.current) setVoiceEnabled(config.enabled === true); }).catch(() => {});
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active' && recordingRequested.current) {
+        recordingRequested.current = false;
+        void recorder.stop().then(async () => {
+          if (recorder.uri) await FileSystem.deleteAsync(recorder.uri, { idempotent: true }).catch(() => {});
+          await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+        }).catch(() => {});
+        setError('Taleopptaket ble avbrutt da appen gikk i bakgrunnen.');
+      }
+    });
+    return () => {
+      alive.current = false; recordingRequested.current = false; subscription.remove();
+      void recorder.stop().then(async () => {
+        if (recorder.uri) await FileSystem.deleteAsync(recorder.uri, { idempotent: true }).catch(() => {});
+        await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+      }).catch(() => {});
+    };
+  }, [recorder]);
+
+  const proposeVoice = async (data: any) => {
+    const permission = await Location.getForegroundPermissionsAsync().catch(() => null);
+    // Do not request GPS permission just to process a spoken pickup address.
+    let location;
+    if (permission?.granted) {
+      const position = await Location.getLastKnownPositionAsync({ maxAge: 30000 }).catch(() => null);
+      if (position) location = { lat: position.coords.latitude, lng: position.coords.longitude };
+    }
+    const result = await aiApi.voiceBooking({ ...data, language: 'no-NO', ...(location ? { location } : {}) });
+    if (!alive.current) return;
+    setVoiceResult(result);
+    setResults([]); setEstimate(null); setStep('chat');
+  };
 
   useEffect(() => {
     const t = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 60);
@@ -253,6 +295,15 @@ export default function Assist() {
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
     if (!text || sending) return;
+    if (voiceEnabled && /bestill|book|taxi|hent|kjør|kjor|reise/i.test(text)) {
+      if (voiceLock.current) return;
+      voiceLock.current = true; setSending(true); setInput(''); setError('');
+      setVoiceResult(null);
+      try { await proposeVoice({ transcript: text }); }
+      catch (e) { if (alive.current) setError(apiError(e)); }
+      finally { voiceLock.current = false; if (alive.current) setSending(false); }
+      return;
+    }
     setInput('');
 
     if (step === 'destination') {
@@ -286,15 +337,16 @@ export default function Assist() {
     }
   };
 
-  const toggleVoice = async () => {
-    if (transcribing || sending) return;
-    setError('');
-
-    if (recorderState.isRecording) {
+  const consumeRecording = async () => {
+      if (voiceLock.current) return;
+      voiceLock.current = true;
+      recordingRequested.current = false;
       setTranscribing(true);
+      let recordingUri: string | null = null;
       try {
-        await recorder.stop();
+        if (recorderState.isRecording) await recorder.stop();
         const uri = recorder.uri;
+        recordingUri = uri;
         if (!uri) throw new Error('Fant ikke lydopptaket.');
         const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
         const lower = uri.toLowerCase();
@@ -302,6 +354,10 @@ export default function Assist() {
           : lower.endsWith('.webm') ? 'audio/webm'
           : lower.endsWith('.mp4') ? 'audio/mp4'
           : 'audio/m4a';
+        if (voiceEnabled) {
+          await proposeVoice({ audio_base64: b64, mime_type: mime });
+          return;
+        }
         const r = await aiApi.transcribe(b64, mime, 'no');
         const text = String(r?.text || '').trim();
         if (text) await send(text);
@@ -309,22 +365,46 @@ export default function Assist() {
       } catch (e) {
         setError(apiError(e));
       } finally {
-        setTranscribing(false);
+        if (recordingUri) await FileSystem.deleteAsync(recordingUri, { idempotent: true }).catch(() => {});
+        await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+        voiceLock.current = false;
+        if (alive.current) setTranscribing(false);
       }
+  };
+
+  useEffect(() => {
+    if (recordingRequested.current && !recorderState.isRecording && recorderState.durationMillis >= 29000) {
+      void consumeRecording();
+    }
+  }, [recorderState.isRecording, recorderState.durationMillis]);
+
+  const toggleVoice = async () => {
+    if (transcribing || sending || voiceLock.current) return;
+    setError('');
+    if (recorderState.isRecording || recordingRequested.current) {
+      await consumeRecording();
       return;
     }
 
     try {
+      voiceLock.current = true;
+      setVoiceResult(null);
       const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!alive.current) return;
       if (!permission.granted) {
         setError('Mikrofontilgang må være aktivert for talebestilling.');
         return;
       }
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
-      recorder.record({ forDuration: 15 });
+      if (!alive.current) return;
+      recordingRequested.current = true;
+      recorder.record({ forDuration: 30 });
     } catch (e) {
+      recordingRequested.current = false;
       setError(apiError(e));
+    } finally {
+      voiceLock.current = false;
     }
   };
 
@@ -378,6 +458,8 @@ export default function Assist() {
       </View>
 
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={s.messages} keyboardShouldPersistTaps="handled">
+        {voiceResult ? <VoiceBookingPanel key={voiceResult.session_id || voiceResult.transcript} result={voiceResult} onEdit={() => { setVoiceResult(null); resetBooking(); }} /> : null}
+        {voiceEnabled ? <Pressable accessibilityRole="button" onPress={() => router.navigate('/(app)/home')}><Text style={s.voiceBody}>Bruk vanlig bestilling</Text></Pressable> : null}
         {step === 'chat' && messages.length <= 1 ? (
           <View style={s.voiceIntro}>
             <View style={s.voiceIcon}>
@@ -596,3 +678,4 @@ const useStyles = makeStyles((c) => ({
   send: { width: 46, height: 46, borderRadius: 16, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { opacity: 0.45 },
 }));
+
