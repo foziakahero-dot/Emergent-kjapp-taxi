@@ -1,6 +1,7 @@
 """Controlled voice proposal workflow. The model never receives mutation tools."""
 from datetime import datetime, timedelta, timezone
 import uuid
+import re
 from typing import Literal
 
 from fastapi import Depends, HTTPException, Request
@@ -96,10 +97,16 @@ class VoiceBooking:
         require_enabled()
         transcript = body.transcript.strip() if body.transcript else await self.speech.transcribe(body.audio_base64, body.mime_type, body.language)
         intent = await self.model.extract(transcript)
+        normalize = lambda value: re.sub(r"\s+", " ", value.casefold()).strip()
+        # Address phrases must be present in the customer's own utterance.
+        # The model can interpret requirements, but cannot invent place names.
+        if any(normalize(address) not in normalize(transcript) for address in (intent.pickup, intent.destination) if address):
+            return {"status": "clarification", "transcript": transcript, "message": "Skriv hentested og destinasjon tydelig, så søker vi etter stedene du oppgir."}
         # These contracts do not exist yet; never silently book them as a ride now.
         if intent.intent != "book_trip":
             return {"status": "clarification", "transcript": transcript, "message": "Skriv hentested og destinasjon for turen."}
-        if intent.scheduled or intent.multiple_stops or intent.unsupported_requirements:
+        future_time = re.search(r"\b(?:i morgen|imorgen|senere|tomorrow|tonight|next week|kl(?:okken)?\.?\s*\d{1,2}(?:[:.]\d{2})?|på (?:mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag))\b", transcript, re.I)
+        if intent.scheduled or future_time or intent.multiple_stops or intent.unsupported_requirements:
             return {"status": "clarification", "transcript": transcript, "message": "Denne bestillingen trenger flere valg. Bruk vanlig bestilling eller beskriv en direkte tur nå."}
         pickup = await self.candidates(intent.pickup, request) if intent.pickup else []
         if not pickup and not intent.pickup and intent.use_current_location and body.location:
