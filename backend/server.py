@@ -3950,7 +3950,11 @@ STRIKTE REGLER:
 @api.post("/ai/chat")
 async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_current_user)):
     await _enforce_rate_limit(request, "ai-chat", 30, 60)
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    message = (body.message or "").strip()
+    if not message or len(message) > 4000:
+        raise HTTPException(status_code=400, detail="Skriv en melding på 1–4000 tegn.")
+    if not AI_LLM_KEY:
+        raise HTTPException(status_code=503, detail="AI-assistenten er utilgjengelig. Du kan fortsatt sende en henvendelse til kundestøtte.")
 
     session_id = body.session_id or f"user_{current['id']}"
 
@@ -3959,22 +3963,24 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
         "user_id": current["id"],
         "session_id": session_id,
         "role": "user",
-        "content": body.message,
+        "content": message,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    chat = LlmChat(
-        api_key=AI_LLM_KEY,
-        session_id=session_id,
-        system_message=AI_SYSTEM,
-    ).with_model("openai", "gpt-5.6-sol")
-
     try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=AI_LLM_KEY,
+            session_id=session_id,
+            system_message=AI_SYSTEM,
+        ).with_model("openai", "gpt-5.6-sol")
         # session_id gjør at emergentintegrations selv beholder samtalehistorikk mellom kall
         reply = await asyncio.wait_for(
-            chat.send_message(UserMessage(text=body.message)),
+            chat.send_message(UserMessage(text=message)),
             timeout=25.0,
         )
+        if not isinstance(reply, str) or not reply.strip():
+            raise ValueError("Empty AI reply")
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="SNAR AI bruker lenger tid enn vanlig. Prøv igjen om et øyeblikk.")
     except Exception as e:
