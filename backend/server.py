@@ -2824,6 +2824,27 @@ async def active_trip(current=Depends(require_customer)):
     return trip
 
 
+class TripPickupPreferenceUpdate(BaseModel):
+    waiting_inside: bool
+
+
+@api.patch("/trips/{trip_id}/pickup-preference")
+async def update_trip_pickup_preference(trip_id: str, body: TripPickupPreferenceUpdate, current=Depends(require_customer)):
+    """Customer-owned pickup instructions; never changes ride or payment state."""
+    stamp = datetime.now(timezone.utc).isoformat()
+    result = await db.trips.update_one(
+        _real_trip_filter({
+            "trip_id": trip_id, "user_id": current["id"],
+            "status": {"$in": ["driver_on_way", "at_pickup"]},
+            "driver_id": {"$nin": [None, ""]},
+        }),
+        {"$set": {"pickup_waiting_inside": body.waiting_inside, "pickup_preference_updated_at": stamp}},
+    )
+    if result.matched_count != 1:
+        raise HTTPException(status_code=409, detail="Henteinstruksen kan bare endres for din aktive tur før turstart.")
+    return {"ok": True, "waiting_inside": body.waiting_inside, "updated_at": stamp}
+
+
 @api.get("/trips/{trip_id}")
 async def get_trip(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
@@ -4304,6 +4325,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
             haversine_km(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"]) / 30 * 60)))
         updates.update({
             "eta_min": eta,
+            "driver_pickup_geometry": route.get("geometry") if route else None,
             "driver_start_lat": d_lat,
             "driver_start_lng": d_lng,
             "driver_lat": d_lat,
@@ -4929,6 +4951,7 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
             {"$set": {
                 "eta_min": eta_min,
                 "driver_distance_to_pickup_km": distance_km,
+                "driver_pickup_geometry": route.get("geometry") if route else None,
                 "eta_updated_at": now.isoformat(),
             }},
         )

@@ -358,9 +358,11 @@ const act = renderer.act;
     useRouter: () => bookingRouter,
     useFocusEffect: effect => React.useEffect(effect, [effect]),
   });
+  let preferenceCalls = 0, preferenceResult, readyCalls = 0, readyResult, authorizationCalls = 0;
   let cancelRequests = 0, previews = 0, cancellationMode = 'reject', shareRequests = 0, safetyMode = 'reject';
   stubs.set('@/src/lib/api', {
-    tripsApi: { get: async () => serverTrip, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
+    messagesApi: { send: async () => { readyCalls++; return readyResult(); } },
+    tripsApi: { get: async () => serverTrip, pickupPreference: async () => { preferenceCalls++; return preferenceResult(); }, authorize: async () => { authorizationCalls++; return serverTrip; }, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
       cancel: async () => { cancelRequests++; if (cancellationMode === 'lost-response') serverTrip = { ...serverTrip, status: 'cancelled' }; throw new Error('Network failed'); } },
     safetyApi: { shareLink: async () => { shareRequests++; throw new Error('Network failed'); },
       log: () => safetyMode === 'never-resolve' ? new Promise(() => {}) : Promise.reject(new Error('Network failed')) },
@@ -379,6 +381,43 @@ const act = renderer.act;
   await act(async () => booking.root.findByProps({ testID: 'active-trip-reopen' }).props.onPress());
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1);
   await act(async () => booking.unmount());
+  // Actual Customer trip wiring: preferences are confirmed, serialized and never start a ride.
+  let resolvePreference;
+  preferenceResult = () => new Promise(resolve => { resolvePreference = resolve; });
+  serverTrip = { ...serverTrip, pickup_waiting_inside: false, driver_lat: 59.9, driver_lng: 10.7, driver_location_at: new Date().toISOString(), driver_pickup_geometry: { coordinates: [[10.7, 59.9], [10.71, 59.91]] } };
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  assert.deepEqual(booking.root.findByType('Map').props.route, serverTrip.driver_pickup_geometry.coordinates);
+  assert.equal(booking.root.findByType('Map').props.dropoff, null);
+  await act(async () => { const change = booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.onPress; change(); change(); });
+  assert.equal(preferenceCalls, 1, 'Inside instructions must serialize rapid taps');
+  assert.equal(booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.accessibilityState.checked, false, 'Preference cannot be shown as saved before server confirmation');
+  await act(async () => resolvePreference({ ok: true, waiting_inside: true }));
+  assert.equal(booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.accessibilityState.checked, true);
+  preferenceResult = async () => ({ ok: false });
+  await act(async () => booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.onPress());
+  assert.equal(booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.accessibilityState.checked, true, 'Unconfirmed write preserves last confirmed preference');
+  await act(async () => booking.root.findByProps({ testID: 'customer-pickup-guide' }).props.onPress());
+  await act(async () => booking.root.findByProps({ testID: 'pickup-walking-directions' }).props.onPress());
+  assert.ok(callsToDialer.at(-1).includes('travelmode=walking'));
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'at_pickup' };
+  let resolveReady;
+  readyResult = () => new Promise(resolve => { resolveReady = resolve; });
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => { const ready = booking.root.findByProps({ testID: 'customer-in-car' }).props.onPress; ready(); ready(); });
+  assert.equal(readyCalls, 1);
+  await act(async () => resolveReady({ id: 'confirmed-message' }));
+  assert.equal(serverTrip.status, 'at_pickup', 'Customer readiness does not manufacture driver start');
+  assert.ok(JSON.stringify(booking.toJSON()).includes('Sjåføren er varslet'));
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'payment_authorizing' };
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => { const authorize = booking.root.findByProps({ testID: 'booking-authorize' }).props.onPress; authorize(); authorize(); });
+  assert.equal(authorizationCalls, 1);
+  assert.equal(serverTrip.status, 'payment_authorizing', 'Unchanged bank status cannot be displayed as successful authorization');
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'driver_on_way' };
+  console.log('PASS: Actual Customer pickup geometry, confirmed/failed inside instructions, walking link, serialized readiness message and bank-state authorization.');
   // Failed cancellation cannot exit; duplicate confirmation must not submit twice.
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => { const cancel = booking.root.findByProps({ testID: 'assigned-trip-cancel' }).props.onPress; cancel(); cancel(); });

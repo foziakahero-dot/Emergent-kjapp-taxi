@@ -47,7 +47,7 @@ export function DriverCockpitView(p: Props) {
   if (offerStart.current.id !== p.offer?.trip_id) offerStart.current = { id: p.offer?.trip_id, remaining: p.offerRemaining };
   const trip = p.current;
   const name = trip?.customer?.name || 'Kunden din';
-  const inside = /venter inne|venter i resepsjonen|waiting inside/i.test(trip?.passenger_note || '');
+  const inside = typeof trip?.pickup_waiting_inside === 'boolean' ? trip.pickup_waiting_inside : /venter inne|venter i resepsjonen|waiting inside/i.test(trip?.passenger_note || '');
   const eta = !p.error && p.gpsReady && known(trip?.eta_min) && trip.eta_min > 0 ? Math.ceil(trip.eta_min) : null;
   const arrived = Date.parse(trip?.at_pickup_at || '');
   const free = known(trip?.waiting_policy?.free_minutes) ? Math.max(0, trip.waiting_policy.free_minutes * 60) : null;

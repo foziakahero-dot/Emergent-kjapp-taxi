@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle, type ViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
@@ -68,3 +68,11 @@ export const v10 = StyleSheet.create({
   icon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 16 },
 });
+
+export function V10Sheet({ children, paddingBottom = 34, testID, onLayout }: { children: React.ReactNode; paddingBottom?: number; testID?: string; onLayout?: ViewProps['onLayout'] }) {
+  const insets = useSafeAreaInsets();
+  return <View testID={testID} onLayout={onLayout} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: '0 -8px 40px -12px rgba(11,26,44,.18)' }}>
+    <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
+    <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(paddingBottom, insets.bottom) }}>{children}</ScrollView>
+  </View>;
+}

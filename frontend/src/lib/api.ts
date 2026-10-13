@@ -72,6 +72,7 @@ export const tripsApi = {
   authorize: (id: string) => withReservation(() => api.post(`/trips/${id}/authorization/retry`)),
   retryPayment: (id: string) => api.post(`/trips/${id}/payment/retry`).then(r => r.data),
   active: () => api.get('/trips/active').then((r) => r.data),
+  pickupPreference: (id: string, waiting_inside: boolean) => api.patch(`/trips/${id}/pickup-preference`, { waiting_inside }).then(r => r.data),
   get: (id: string) => api.get(`/trips/${id}`).then((r) => r.data),
   complete: (id: string) => api.post(`/trips/${id}/complete`).then((r) => r.data),
   cancelPreview: (id: string) => api.get(`/trips/${id}/cancel-preview`).then((r) => r.data),
