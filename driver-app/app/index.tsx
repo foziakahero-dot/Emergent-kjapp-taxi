@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
+import DriverApproval from './driver-approval';
 import { SplashAction, SplashBackground, SplashBrand } from '@/src/components/SplashArt';
 
 export default function Index() {
@@ -18,7 +19,7 @@ export default function Index() {
     if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) {
       const identityStatus = user.identity_verification_status || 'not_submitted';
       const identityGate = Boolean(user.identity_recheck_required) || identityStatus !== 'verified';
-      router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
+      router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
     } else if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted !== true) {
       router.replace('/driver-legal-consent');
     }
@@ -35,6 +36,7 @@ export default function Index() {
 
   if (user && (user.role !== 'driver' || user.approved !== true)) {
     const pendingApproval = user.role === 'driver' && user.approved !== true;
+    if (pendingApproval) return <DriverApproval />;
     return (
       <View style={[s.splash, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }]}>
         <View style={s.center}>

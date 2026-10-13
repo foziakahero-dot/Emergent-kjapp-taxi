@@ -1,5 +1,6 @@
 import React, { createContext, forwardRef, useContext } from 'react';
 import { StyleSheet, Text as NativeText, TextInput as NativeTextInput, type TextProps, type TextInputProps, type TextStyle } from 'react-native';
+import { useAccessibilityPreferences } from '@/src/lib/accessibilityPreferences';
 import { colors, font } from '@/src/theme';
 
 const weights: Record<string, string> = {
@@ -27,9 +28,11 @@ export function resolveFont(style: TextStyle, inherited = font.body): TextStyle 
 
 export const Text = forwardRef<NativeText, TextProps>(function Text({ style, ...props }, ref) {
   const inherited = useContext(TypographyContext);
+  const { largeText } = useAccessibilityPreferences();
   const flattened = StyleSheet.flatten(style) || {};
   const size = flattened.fontSize ?? inherited.size;
-  const resolved = { ...resolveFont(flattened, inherited.family), color: flattened.color ?? inherited.color, lineHeight: flattened.lineHeight ?? lineHeights[size] ?? size * 1.5 };
+  const factor = largeText ? 1.15 : 1;
+  const resolved = { ...resolveFont(flattened, inherited.family), color: flattened.color ?? inherited.color, fontSize: size * factor, lineHeight: (flattened.lineHeight ?? lineHeights[size] ?? size * 1.5) * factor };
   return (
     <TypographyContext.Provider value={{ family: resolved.fontFamily || inherited.family, color: resolved.color, size }}>
       <NativeText {...props} ref={ref} style={[style, resolved]} />
@@ -38,6 +41,9 @@ export const Text = forwardRef<NativeText, TextProps>(function Text({ style, ...
 });
 
 export const TextInput = forwardRef<NativeTextInput, TextInputProps>(function TextInput({ style, ...props }, ref) {
-  const resolved = resolveFont(StyleSheet.flatten(style) || {});
+  const { largeText } = useAccessibilityPreferences();
+  const flattened = StyleSheet.flatten(style) || {};
+  const factor = largeText ? 1.15 : 1;
+  const resolved = { ...resolveFont(flattened), ...(flattened.fontSize != null ? { fontSize: flattened.fontSize * factor } : {}), ...(flattened.lineHeight != null ? { lineHeight: flattened.lineHeight * factor } : {}) };
   return <NativeTextInput {...props} ref={ref} style={[style, resolved]} />;
 });

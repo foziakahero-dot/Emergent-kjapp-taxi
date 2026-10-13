@@ -32,7 +32,7 @@ export default function DriverLogin() {
       if (res?.legal_accepted !== true) { router.replace('/driver-legal-consent'); return; }
       const identityStatus = res?.identity_verification_status || 'not_submitted';
       const identityGate = Boolean(res?.identity_recheck_required) || identityStatus !== 'verified';
-      router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
+      router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
     } catch (e) { setError(apiError(e)); }
     finally { busy.current = false; setLoading(false); }
   };

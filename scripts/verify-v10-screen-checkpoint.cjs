@@ -21,7 +21,7 @@ let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
 class Value { constructor(value) { this.value = value; } setValue(value) { this.value = value; } stopAnimation() {} interpolate(config) { return config; } }
 const native = {
-  Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }) }, Easing: { linear: value => value },
+  Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }) }, Easing: { linear: value => value, bezier: (...values) => values },
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
   AppState: { addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
@@ -44,7 +44,7 @@ const stubs = {
   '@/src/components/ui': { Loader: 'Loader' },
   '@/src/theme': { colors: {}, font: {}, makeStyles: factory => () => factory({}) },
   '@/src/lib/format': { apiError: error => error.message, vehicleMeta: () => ({ name: 'SNAR' }), kr: value => value == null ? '– kr' : Math.round(value) + ' kr' },
-  '@/src/utils/storage': { storage: { setItem: async (...args) => storageWrites.push(args) } },
+  '@/src/utils/storage': { storage: { getItem: async () => null, setItem: async (...args) => storageWrites.push(args) } },
   '@tanstack/react-query': {
     useQueryClient: () => queryClient,
     useQuery: ({ queryKey }) => ({ isPending: false, isError: false, refetch: async () => {}, ...queryData[queryKey[0]] }),
@@ -181,8 +181,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     [{ role: 'driver', approved: false }, null, true],
     [{ twofa_required: true }, null, false],
     [{ role: 'driver', approved: true, legal_accepted: false }, '/driver-legal-consent', false],
-    [{ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }, '/driver-identity', false],
-    [{ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'verified', identity_recheck_required: true }, '/driver-identity', false],
+    [{ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }, '/driver-approval', false],
+    [{ role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'verified', identity_recheck_required: true }, '/driver-approval', false],
   ]) {
     navigation = []; const previousLogout = logoutCalls;
     loginResult = async () => result;
@@ -482,6 +482,86 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   customerActive = { trip_id: 'existing-trip', status: 'in_trip' };
   tree = await mount(CustomerHome);
   assert.equal(tree.root.findAllByProps({ testID: 'home-where-to' }).length, 0, 'An active trip cannot display a new booking flow'); await unmount(tree);
+  // Actual settings controllers: OS permission, confirmed save and synchronous locks.
+  let pushAllowed = false, notificationWrites = 0, notificationResult;
+  stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };
+  user = { id: 'settings-customer', role: 'user' };
+  queryData = { 'customer-notification-settings': { data: { notifications: false, trip_updates: true } }, 'customer-notification-trip': { data: null } };
+  stubs['@/src/lib/api'].settingsApi.update = async value => { notificationWrites++; return notificationResult(value); };
+  const CustomerNotifications = load('frontend', 'app/customer-notifications.tsx').default;
+  tree = await mount(CustomerNotifications);
+  await act(async () => button(tree, 'setting-notifications').props.onPress());
+  assert.equal(notificationWrites, 0, 'Denied OS registration cannot enable server notifications');
+  pushAllowed = true; const settingRequest = deferred(); notificationResult = () => settingRequest.promise;
+  await act(async () => { button(tree, 'setting-notifications').props.onPress(); button(tree, 'setting-notifications').props.onPress(); });
+  assert.equal(notificationWrites, 1);
+  assert.equal(button(tree, 'setting-notifications').props.accessibilityState.checked, false);
+  await act(async () => settingRequest.resolve({ notifications: true }));
+  assert.equal(button(tree, 'setting-notifications').props.accessibilityState.checked, true);
+  notificationResult = async () => ({ notifications: false, trip_updates: true });
+  await act(async () => button(tree, 'setting-trip_updates').props.onPress());
+  assert.equal(button(tree, 'setting-trip_updates').props.accessibilityState.checked, true, 'Unconfirmed update retains previous value');
+  assert.match(text(tree), /Varselvalget ble ikke bekreftet/); await unmount(tree);
+  const CompactSettings = load('frontend', 'app/settings.tsx').default;
+  tree = await mount(CompactSettings); await act(async () => button(tree, 'settings-data').props.onPress()); assert.equal(navigation.at(-1)[1], '/customer-data'); await unmount(tree);
+  user = { id: 'settings-driver', role: 'driver' };
+  queryData = { 'driver-v10-settings': { data: { req_sound: true } } };
+  notificationResult = async () => ({ req_sound: true });
+  const DriverSettings = load('driver-app', 'app/driver-settings.tsx').default;
+  tree = await mount(DriverSettings); const cacheValueBeforeSettings = saved.get('driver_req_sound');
+  await act(async () => button(tree, 'driver-setting-req_sound').props.onPress());
+  assert.equal(button(tree, 'driver-setting-req_sound').props.accessibilityState.checked, true);
+  assert.equal(saved.get('driver_req_sound'), cacheValueBeforeSettings, 'Unconfirmed server preference cannot change native cache');
+  const soundSetting = deferred(); notificationResult = () => soundSetting.promise;
+  const writesBefore = notificationWrites;
+  await act(async () => { button(tree, 'driver-setting-req_sound').props.onPress(); button(tree, 'driver-setting-req_sound').props.onPress(); });
+  assert.equal(notificationWrites, writesBefore + 1);
+  await act(async () => soundSetting.resolve({ req_sound: false }));
+  assert.equal(button(tree, 'driver-setting-req_sound').props.accessibilityState.checked, false);
+  assert.equal(saved.get('driver_req_sound'), 'false'); await unmount(tree);
+  console.log('PASS: Actual Customer notification permission/confirmed write/duplicates/rejection, compact data routing and Driver sound server/native-cache confirmation.');
+  // Actual approval and selfie routes: registered documents are not invented approvals.
+  const Approval = load('driver-app', 'app/driver-approval.tsx').default;
+  user = { id: 'identity-driver', role: 'driver', approved: true, legal_accepted: true, fullName: 'Actual Driver' };
+  queryData = { 'driver-approval-account': { data: { ...user, drivers_license_path: 'stored-file' } }, 'driver-approval-identity': { data: { status: 'pending_review' } } };
+  tree = await mount(Approval);
+  assert.equal(button(tree, 'driver-approval-continue'), undefined, 'Pending selfie cannot enter cockpit');
+  assert.match(text(tree), /Registrert/); assert.match(text(tree), /Dokument mangler/);
+  const documentRows = tree.root.findAll(node => node.type === 'Pressable' && String(node.props.testID).includes('license_path'));
+  assert.equal(documentRows[0].props.testID, 'driver-approval-taxi_license_path', 'Missing document appears first');
+  await unmount(tree);
+  queryData['driver-approval-identity'] = { data: { status: 'verified' } };
+  tree = await mount(Approval); await act(async () => button(tree, 'driver-approval-continue').props.onPress()); assert.equal(navigation.at(-1)[1], '/'); await unmount(tree);
+  queryData['driver-approval-account'] = { data: { ...user, identity_recheck_required: true } };
+  tree = await mount(Approval); assert.equal(button(tree, 'driver-approval-continue'), undefined); await unmount(tree);
+  let cameraPermission = { granted: false, canAskAgain: true }, cameraPermissionResult, cameraPermissionCalls = 0, captures = 0, captureResult, selfieCalls = 0, selfieResult, identityStatus = { status: 'not_submitted' };
+  stubs['expo-camera'] = { useCameraPermissions: () => [cameraPermission, async () => { cameraPermissionCalls++; return cameraPermissionResult(); }], CameraView: React.forwardRef((props, ref) => { React.useImperativeHandle(ref, () => ({ takePictureAsync: async () => { captures++; return captureResult(); } })); return React.createElement('CameraView', props); }) };
+  Object.assign(stubs['@/src/lib/api'].driverApi, { identityVerification: async () => identityStatus, submitIdentitySelfie: async () => { selfieCalls++; return selfieResult(); } });
+  const Identity = load('driver-app', 'app/driver-identity.tsx').default;
+  cameraPermissionResult = async () => ({ granted: false });
+  tree = await mount(Identity); await act(async () => button(tree, 'driver-identity-camera').props.onPress());
+  assert.match(text(tree), /Kameratilgang må være aktivert/); assert.equal(tree.root.findAllByType('CameraView').length, 0);
+  const permissionRequest = deferred(); cameraPermissionResult = () => permissionRequest.promise;
+  await act(async () => { button(tree, 'driver-identity-camera').props.onPress(); button(tree, 'driver-identity-camera').props.onPress(); });
+  assert.equal(cameraPermissionCalls, 2, 'Only one permission request may run after previous denial');
+  await act(async () => permissionRequest.resolve({ granted: true }));
+  assert.equal(button(tree, 'driver-selfie-capture').props.disabled, true);
+  await act(async () => button(tree, 'driver-selfie-capture').props.onPress()); assert.equal(captures, 0, 'Camera readiness is required');
+  await act(async () => tree.root.findByType('CameraView').props.onCameraReady());
+  const captureRequest = deferred(); captureResult = () => captureRequest.promise;
+  await act(async () => { button(tree, 'driver-selfie-capture').props.onPress(); button(tree, 'driver-selfie-capture').props.onPress(); }); assert.equal(captures, 1);
+  await act(async () => captureRequest.resolve({ uri: 'file://actual-selfie' }));
+  selfieResult = async () => ({});
+  await act(async () => button(tree, 'driver-selfie-submit').props.onPress()); assert.match(text(tree), /Innsendingen ble ikke bekreftet/); assert.ok(button(tree, 'driver-selfie-submit'));
+  const selfieRequest = deferred(); selfieResult = () => selfieRequest.promise;
+  await act(async () => { button(tree, 'driver-selfie-submit').props.onPress(); button(tree, 'driver-selfie-submit').props.onPress(); }); assert.equal(selfieCalls, 2, 'Submission serializes double taps and retains failed photo for retry');
+  await act(async () => selfieRequest.resolve({ id: 'actual-verification', status: 'pending_review', submitted_at: '2026-10-13T10:00:00Z' }));
+  assert.match(text(tree), /Til kontroll/); assert.equal(button(tree, 'driver-identity-continue'), undefined, 'Uploaded selfie is not verified identity'); await unmount(tree);
+  identityStatus = { status: 'verified' };
+  tree = await mount(Identity); assert.ok(button(tree, 'driver-identity-continue')); await unmount(tree);
+  user = { ...user, identity_recheck_required: true };
+  tree = await mount(Identity); assert.equal(button(tree, 'driver-identity-continue'), undefined); await unmount(tree);
+  console.log('PASS: Actual Driver approval missing-first/truthful document state and identity/recheck gates; camera permission/readiness/capture/submission serialization, rejected upload retains photo and confirmed upload stays pending manual review.');
   // Real receipt route: provider return alone is not payment; rating is explicit and confirmed.
   stubs['expo-web-browser'] = { openBrowserAsync: async () => {} };
   stubs['expo-linear-gradient'] = { LinearGradient: 'LinearGradient' };

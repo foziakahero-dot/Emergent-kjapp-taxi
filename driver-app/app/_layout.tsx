@@ -1,9 +1,9 @@
 import { useReducedMotion } from '@/src/components/Motion';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, router } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { useFonts } from 'expo-font';
@@ -24,6 +24,9 @@ const queryClient = new QueryClient({
 });
 
 function NativeRuntimeBridge() {
+  const pathname = usePathname();
+  const path = useRef(pathname);
+  path.current = pathname;
   const { user, refresh } = useAuth();
 
   useEffect(() => {
@@ -75,7 +78,7 @@ function NativeRuntimeBridge() {
         if (['recheck_required', 'retry_required', 'pending_review'].includes(status)) {
           await stopDriverBackgroundLocation().catch(() => {});
           await refresh().catch(() => {});
-          if (alive) router.replace('/driver-identity');
+          if (alive && !['/driver-identity', '/driver-approval'].includes(path.current)) router.replace('/driver-approval');
         }
       } catch {
         // A transient network failure must never manufacture an identity decision.
@@ -138,6 +141,7 @@ export default function RootLayout() {
               <Stack.Screen name="driver-earnings-report" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-account" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-approval" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-identity" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trip/[tripId]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />

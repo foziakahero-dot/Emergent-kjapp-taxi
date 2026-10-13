@@ -11,10 +11,10 @@ export default function DriverDocuments() {
   const router = useRouter();
   const { user } = useAuth();
   const me = useQuery({ queryKey: ['me', user?.id], queryFn: authApi.me, enabled: !!user?.id });
-  const identity = useQuery({ queryKey: ['driver-identity'], queryFn: driverApi.identityVerification, enabled: !!user?.id });
+  const identity = useQuery({ queryKey: ['driver-identity', user?.id], queryFn: driverApi.identityVerification, enabled: !!user?.id });
   const data = me.data;
   const identityStatus = identity.data?.status;
-  const verified = identityStatus === 'verified';
+  const verified = identityStatus === 'verified' && !data?.identity_recheck_required;
   const pending = identityStatus === 'pending_review';
   return <V10Screen testID="driver-documents-screen">
     <V10Header title="Dokumenter" onBack={() => router.back()} />

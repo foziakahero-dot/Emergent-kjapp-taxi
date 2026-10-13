@@ -913,6 +913,11 @@ class TripDestinationUpdate(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    notif_requests: Optional[bool] = None
+    notif_messages: Optional[bool] = None
+    notif_payouts: Optional[bool] = None
+    req_sound: Optional[bool] = None
+    req_vibrate: Optional[bool] = None
     navigation_app: Optional[Literal["google", "waze", "apple"]] = None
     ai_voice: Optional[str] = None
     notifications: Optional[bool] = None
@@ -1261,7 +1266,7 @@ def _is_expo_push_token(token: str) -> bool:
     return isinstance(token, str) and token.startswith(("ExpoPushToken[", "ExponentPushToken["))
 
 
-async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> list[str]:
+async def _expo_send(tokens: list[str], title: str, body: str, data: dict, delivery_options: Optional[dict] = None) -> list[str]:
     """Send real native notifications through Expo Push -> APNs/FCM.
 
     Expo tokens are preferred for the React Native apps because getDevicePushTokenAsync()
@@ -1273,9 +1278,8 @@ async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> li
         "to": token,
         "title": title,
         "body": body,
-        "sound": "default",
+        **(delivery_options or {"sound": "default", "channelId": "kjapp_trips"}),
         "priority": "high",
-        "channelId": "kjapp_trips",
         "data": {k: str(v) for k, v in (data or {}).items()},
     } for token in tokens]
     dead = []
@@ -1301,7 +1305,7 @@ async def _expo_send(tokens: list[str], title: str, body: str, data: dict) -> li
     return dead
 
 
-async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None):
+async def send_native_push(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, offer_options: Optional[dict] = None):
     """Push to real mobile devices.
 
     Current Expo apps register Expo Push tokens, which Expo delivers through APNs on
@@ -1326,7 +1330,7 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
     data = {"url": url, "tag": tag or ""}
 
     if expo_tokens:
-        dead.extend(await _expo_send(expo_tokens, title, body, data))
+        dead.extend(await _expo_send(expo_tokens, title, body, data, delivery_options=offer_options))
 
     if legacy_fcm_tokens and _fcm_app():
         try:
@@ -1338,12 +1342,53 @@ async def send_native_push(user_id: str, title: str, body: str, url: str = "/app
         await db.native_push_tokens.delete_many({"token": {"$in": list(set(dead))}})
 
 
+_TRIP_NOTIFICATION_TAGS = {
+    "driver_assigned", "driver_at_pickup", "driver_approaching", "trip_started",
+    "trip_destination_changed", "trip_completed", "trip_cancelled", "trip_no_show",
+    "trip_arrived", "trip_ended_early", "trip_payment_paid", "trip_payment_action_required",
+    "trip_payment_failed", "trip_payment_expired", "trip_released", "trip_operator_cancelled",
+    "trip_reassigning", "trip_price_adjusted",
+}
+_OPTIONAL_NOTIFICATION_TAGS = _TRIP_NOTIFICATION_TAGS | {"trip_message", "kjapp-new-trip", "driver_payout"}
+
+
+def _driver_offer_push_options(settings: dict) -> dict:
+    sound = settings.get("req_sound") is not False
+    vibrate = settings.get("req_vibrate") is not False
+    channel = "kjapp_trips" if sound and vibrate else "kjapp_trips_sound" if sound else "kjapp_trips_vibrate" if vibrate else "kjapp_trips_quiet"
+    return {"sound": "default" if sound else None, "channelId": channel}
+
+
+def _notification_preference_allows(settings: dict, tag: str) -> bool:
+    if tag == "kjapp-new-trip":
+        return settings.get("notif_requests") is not False
+    if tag == "driver_payout":
+        return settings.get("notif_payouts") is not False
+    if tag == "trip_message":
+        return settings.get("notifications") is not False and settings.get("notif_messages") is not False
+    if tag in _TRIP_NOTIFICATION_TAGS:
+        return settings.get("notifications") is not False and settings.get("trip_updates") is not False
+    return True
+
+
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/app", tag: str = None, require_interaction: bool = False):
     """Deliver a notification to every channel the user has: real mobile app (FCM/APNs) + web push."""
     if APP_ENV == "qa":
         print("[PUSH/disabled-qa] external push delivery is disabled")
         return
-    await send_native_push(user_id, title, body, url, tag)
+    if tag in _OPTIONAL_NOTIFICATION_TAGS:
+        try:
+            preferences = await db.settings.find_one({"user_id": user_id}) or {}
+        except Exception:
+            # Optional delivery must not turn a committed ride/message into an API error.
+            print("[PUSH/preferences-unavailable] optional notification skipped")
+            return
+        if not _notification_preference_allows(preferences, tag):
+            return
+    if tag == "kjapp-new-trip":
+        await send_native_push(user_id, title, body, url, tag, offer_options=_driver_offer_push_options(preferences))
+    else:
+        await send_native_push(user_id, title, body, url, tag)
     if not PUSH_AVAILABLE:
         return
     vapid = await db.vapid.find_one({"_id": "keys"})

@@ -16,6 +16,7 @@ let clock = 0, timerId = 0, nativeListeners = 0;
 const timers = new Map(), accessibility = new Set(), cache = new Map();
 const timingCalls = [];
 const stubs = new Map();
+stubs.set('@/src/utils/storage', { storage: { getItem: async () => null, setItem: async () => {} } });
 class Value {
   constructor(value) { this.value = value; }
   setValue(value) { this.value = value; }
@@ -117,6 +118,47 @@ const act = renderer.act;
       assert.ok(Math.abs(dx * -Math.cos(angle * Math.PI / 180) - dy * Math.sin(angle * Math.PI / 180)) < 1e-9, 'CSS gradient angle must survive non-square layouts');
     }
   }
+  // Actual accessibility screen changes typography/motion across mounted components after persistence.
+  stubs.set('expo-router', { useRouter: () => ({ back() {} }) });
+  const AccessibleScreen = load('frontend', 'app/customer-accessibility.tsx').default;
+  const AccessibleText = load('frontend', 'src/components/Typography.tsx').Text;
+  const useAccessibleMotion = load('frontend', 'src/components/Motion.tsx').useReducedMotion;
+  let observedMotion, preferencesWrites = 0, resolvePreferenceWrite;
+  const preferenceStorage = stubs.get('@/src/utils/storage').storage;
+  const originalPreferenceWrite = preferenceStorage.setItem;
+  function MotionProbe() { observedMotion = useAccessibleMotion(); return null; }
+  let accessible;
+  await act(async () => { accessible = renderer.create(React.createElement(React.Fragment, null, React.createElement(AccessibleScreen), React.createElement(AccessibleText, { testID: 'scale-parent', style: { fontSize: 14 } }, React.createElement(AccessibleText, { testID: 'scale-child' }, 'Nested')), React.createElement(MotionProbe))); });
+  const accessibleSwitch = id => accessible.root.findAll(node => node.type === 'Pressable' && node.props.testID === id)[0];
+  preferenceStorage.setItem = async () => { preferencesWrites++; return new Promise(resolve => { resolvePreferenceWrite = resolve; }); };
+  await act(async () => { accessibleSwitch('accessibility-large-text').props.onPress(); accessibleSwitch('accessibility-large-text').props.onPress(); });
+  assert.equal(preferencesWrites, 1);
+  assert.equal(accessibleSwitch('accessibility-large-text').props.accessibilityState.checked, false, 'Text setting waits for persisted acknowledgement');
+  await act(async () => resolvePreferenceWrite());
+  for (const id of ['scale-parent', 'scale-child']) assert.equal(native.StyleSheet.flatten(accessible.root.findAll(node => node.type === 'NativeText' && node.props.testID === id)[0].props.style).fontSize, 14 * 1.15, 'Nested text scales once, not twice');
+  preferenceStorage.setItem = async () => { throw new Error('Disk unavailable'); };
+  await act(async () => accessibleSwitch('accessibility-reduced-motion').props.onPress());
+  assert.equal(observedMotion, false); assert.equal(accessibleSwitch('accessibility-reduced-motion').props.accessibilityState.checked, false);
+  assert.equal(accessible.root.findAllByProps({ testID: 'accessibility-save-error' }).length > 0, true);
+  preferenceStorage.setItem = originalPreferenceWrite;
+  await act(async () => accessibleSwitch('accessibility-reduced-motion').props.onPress()); assert.equal(observedMotion, true);
+  const preferenceModule = load('frontend', 'src/lib/accessibilityPreferences.ts');
+  await act(async () => { for (const listener of accessibility) listener(true); await preferenceModule.saveAccessibilityPreference('reduceMotion', false); });
+  assert.equal(observedMotion, true, 'Local preference cannot override OS reduced motion');
+  await act(async () => { for (const listener of accessibility) listener(false); await preferenceModule.saveAccessibilityPreference('largeText', false); });
+  assert.equal(observedMotion, false);
+  await act(async () => accessible.unmount());
+  const DriverText = load('driver-app', 'src/components/Typography.tsx').Text;
+  const DriverPreferences = load('driver-app', 'src/lib/accessibilityPreferences.ts');
+  const useDriverMotion = load('driver-app', 'src/components/Motion.tsx').useReducedMotion;
+  let driverMotion;
+  function DriverMotionProbe() { driverMotion = useDriverMotion(); return null; }
+  await act(async () => { accessible = renderer.create(React.createElement(React.Fragment, null, React.createElement(DriverText, { testID: 'driver-scale-parent', style: { fontSize: 20 } }, React.createElement(DriverText, { testID: 'driver-scale-child' }, 'Driver nested')), React.createElement(DriverMotionProbe))); });
+  await act(async () => DriverPreferences.saveAccessibilityPreference('largeText', true));
+  for (const id of ['driver-scale-parent', 'driver-scale-child']) assert.equal(native.StyleSheet.flatten(accessible.root.findAll(node => node.type === 'NativeText' && node.props.testID === id)[0].props.style).fontSize, 23);
+  await act(async () => DriverPreferences.saveAccessibilityPreference('reduceMotion', true)); assert.equal(driverMotion, true);
+  await act(async () => { await DriverPreferences.saveAccessibilityPreference('largeText', false); await DriverPreferences.saveAccessibilityPreference('reduceMotion', false); accessible.unmount(); });
+  console.log('PASS: Actual accessibility persistence/duplicates/failure, global text scaling with nested inheritance, local reduced motion and OS preference priority.');
   stubs.set('expo-blur', { BlurTargetView: 'BlurTargetView', BlurView: 'BlurView' });
   const { FloatingTabBar, TabBarVisibilityProvider, useHideTabBar } = load('frontend', 'src/components/FloatingTabBar.tsx');
   const tabRoutes = ['home', 'history', 'assist', 'messages', 'profile', 'wallet'].map(name => ({ name, key: `route-${name}` }));
