@@ -15,6 +15,7 @@ import httpx
 import stripe
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
+from byteplus_deepwiki import install_byteplus_deepwiki
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
@@ -6636,6 +6637,9 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 install_marketing_waitlist(api, db)
+
+# Isolated developer experiment: BytePlus ModelArk + DeepWiki MCP. Superadmin only.
+install_byteplus_deepwiki(api, require_superadmin=require_superadmin)
 
 # Focused admin control-center routes. Reuses existing db/auth/audit/payment services.
 install_admin_control_center(
