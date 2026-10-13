@@ -1,8 +1,11 @@
-import { Text, TextInput } from '@/src/components/Typography';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CustomerAssistView } from '@/src/components/CustomerAssistView';
+import { confirmedPaymentMethod } from '@/src/components/CustomerBookingView';
+import { useHideTabBar } from '@/src/components/FloatingTabBar';
+import { useAuth } from '@/src/context/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollView } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import {
   AudioModule,
@@ -12,21 +15,18 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
-import { colors, font, makeStyles } from '@/src/theme';
-import { Icon } from '@/src/components/Icon';
-import { VehicleAsset, VehicleKind } from '@/src/components/VehicleAsset';
-import { aiApi, placesApi, tripsApi } from '@/src/lib/api';
+import { type VehicleKind } from '@/src/components/VehicleAsset';
+import { aiApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 type Place = { name: string; lat: number; lng: number };
 type Step = 'chat' | 'destination' | 'category' | 'confirm' | 'booking';
 
-const QUICK = ['Bestill taxi', 'Hva koster en tur?', 'Kundeservice'];
 const PRIMARY_TYPES: VehicleKind[] = ['ai-first', 'trygg', 'premium'];
 
 function vehicleCopy(type: string) {
-  if (type === 'trygg') return { name: 'SNAR XL', tagline: 'Mer plass · 7 seter' };
+  if (type === 'trygg') return { name: 'SNAR XL', tagline: 'Mer plass' };
   if (type === 'premium') return { name: 'Premium', tagline: 'Executive comfort' };
   return { name: 'SNAR', tagline: 'Rask og enkel' };
 }
@@ -47,17 +47,22 @@ function bookingDestinationFrom(text: string): string | null {
 
 function normalizePlaces(raw: any[]): Place[] {
   return (raw || [])
-    .filter((p: any) => p?.name && Number.isFinite(Number(p?.lat)) && Number.isFinite(Number(p?.lng)))
+    .filter((p: any) => p?.name && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Math.abs(Number(p.lat)) <= 90 && Number.isFinite(Number(p.lng)) && Math.abs(Number(p.lng)) <= 180)
     .map((p: any) => ({ name: p.name, lat: Number(p.lat), lng: Number(p.lng) }));
 }
 
 export default function Assist() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const s = useStyles();
+  const { user } = useAuth();
+  const bookingLock = useRef(false), requestLock = useRef(false), voiceLock = useRef(false), voiceSession = useRef(false), wasRecording = useRef(false), voiceGeneration = useRef(0), alive = useRef(true);
+  const [voiceOpen, setVoiceOpen] = useState(false), [waitingAccepted, setWaitingAccepted] = useState(false);
+  useHideTabBar(voiceOpen);
+  const { data: methodsData, isError: methodsError, refetch: refreshMethods } = useQuery({ queryKey: ['assist-payment-methods', user?.id], queryFn: paymentApi.list, enabled: !!user?.id });
+  useFocusEffect(useCallback(() => { if (user?.id) void refreshMethods(); }, [user?.id, refreshMethods]));
   const scroll = useRef<ScrollView>(null);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; voiceGeneration.current++; voiceSession.current = false; try { void recorder.stop().catch(() => {}); } catch {} void setAudioModeAsync({ allowsRecording: false }).catch(() => {}); }; }, [recorder]);
 
   const [messages, setMessages] = useState<Msg[]>([
     { role: 'assistant', content: 'Si for eksempel «Kjør meg til Gardermoen», eller start en vanlig bestilling.' },
@@ -88,7 +93,7 @@ export default function Assist() {
     setEstimate(null);
     setVehicle(null);
     setResults([]);
-    setError('');
+    setError(''); setWaitingAccepted(false);
   };
 
   const resolvePickup = async (): Promise<Place | null> => {
@@ -111,8 +116,8 @@ export default function Assist() {
   };
 
   const startBooking = async () => {
-    if (sending) return;
-    setError('');
+    if (sending || requestLock.current) return;
+    requestLock.current = true; setError('');
     setSending(true);
     setResults([]);
     add({ role: 'user', content: 'Bestill taxi' });
@@ -125,13 +130,13 @@ export default function Assist() {
       add({ role: 'assistant', content: apiError(e) });
       resetBooking();
     } finally {
-      setSending(false);
+      requestLock.current = false; setSending(false);
     }
   };
 
   const startBookingTo = async (originalText: string, destinationQuery: string) => {
-    if (sending) return;
-    setError('');
+    if (sending || requestLock.current) return;
+    requestLock.current = true; setError('');
     setSending(true);
     setResults([]);
     add({ role: 'user', content: originalText });
@@ -141,7 +146,7 @@ export default function Assist() {
         role: 'assistant',
         content: 'Planlagte turer er ikke aktivert i SNAR-backenden ennå. Jeg bestiller derfor ikke denne som en tur nå. Du kan fortsatt be om en bil nå.',
       });
-      setSending(false);
+      requestLock.current = false; setSending(false);
       return;
     }
 
@@ -162,14 +167,14 @@ export default function Assist() {
       add({ role: 'assistant', content: apiError(e) });
       resetBooking();
     } finally {
-      setSending(false);
+      requestLock.current = false; setSending(false);
     }
   };
 
   const searchDestination = async (text: string) => {
     const q = text.trim();
-    if (q.length < 2) return;
-    setError('');
+    if (q.length < 2 || requestLock.current) return;
+    requestLock.current = true; setError('');
     setSending(true);
     setResults([]);
     add({ role: 'user', content: q });
@@ -182,13 +187,13 @@ export default function Assist() {
     } catch (e) {
       add({ role: 'assistant', content: apiError(e) });
     } finally {
-      setSending(false);
+      requestLock.current = false; setSending(false);
     }
   };
 
   const chooseDestination = async (place: Place) => {
-    if (!pickup) return;
-    setResults([]);
+    if (!pickup || requestLock.current) return;
+    requestLock.current = true; setResults([]);
     setDropoff(place);
     setSending(true);
     add({ role: 'user', content: `Til ${place.name}` });
@@ -207,7 +212,7 @@ export default function Assist() {
       setDropoff(null);
       setStep('destination');
     } finally {
-      setSending(false);
+      requestLock.current = false; setSending(false);
     }
   };
 
@@ -215,15 +220,18 @@ export default function Assist() {
     const option = estimate?.options?.find((o: any) => o.vehicle_type === type);
     if (!option) return;
     const copy = vehicleCopy(type);
-    setVehicle(type);
+    setVehicle(type); setWaitingAccepted(false);
     setStep('confirm');
     add({ role: 'user', content: copy.name });
     add({ role: 'assistant', content: `${copy.name} · ${kr(option.price)}. Kontroller turen under og bekreft selv.` });
   };
 
   const confirm = async () => {
-    if (!pickup || !dropoff || !vehicle) return;
-    setStep('booking');
+    if (!pickup || !dropoff || !vehicle || bookingLock.current || sending) return;
+    if (!selectedOption || !Number.isFinite(selectedOption.price) || selectedOption.price <= 0) { setError('Prisen må hentes på nytt før bestilling.'); return; }
+    if (!payMethod) { setError('Legg til og verifiser et betalingskort før bestilling.'); router.push('/payment-methods'); return; }
+    if (selectedOption.waiting_policy && !waitingAccepted) { setError('Bekreft ventetid og kortreservasjon først.'); return; }
+    bookingLock.current = true; setStep('booking');
     setSending(true);
     setError('');
     try {
@@ -235,25 +243,33 @@ export default function Assist() {
         dropoff_lat: dropoff.lat,
         dropoff_lng: dropoff.lng,
         vehicle_type: vehicle,
+        ...(selectedOption.waiting_policy ? { waiting_policy_token: selectedOption.waiting_policy.token, quoted_price: selectedOption.price, quoted_pricing_version: estimate.pricing_version } : {}),
       });
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
-      if (e?.response?.status === 402) {
-        add({ role: 'assistant', content: 'Legg til en verifisert betalingsmåte før turen kan bestilles.' });
-        router.push('/payment-methods');
+      const active = await tripsApi.active().catch(() => null);
+      if (active?.trip_id) { router.replace(`/booking/${active.trip_id}`); return; }
+      if (e?.response?.data?.detail?.code === 'quote_changed') {
+        setWaitingAccepted(false); setVehicle(null); setStep('category');
+        const fresh = await tripsApi.estimate({ pickup_lat: pickup.lat, pickup_lng: pickup.lng, dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng }).catch(() => null);
+        setEstimate(fresh); setError('Prisen er endret. Velg bil og bekreft det nye tilbudet.');
       } else {
-        add({ role: 'assistant', content: apiError(e) });
+        if (e?.response?.status === 402) { setError('Legg til en verifisert betalingsmåte før turen kan bestilles.'); router.push('/payment-methods'); }
+        else setError(apiError(e));
+        setStep('confirm');
       }
-      setStep('confirm');
-    } finally {
-      setSending(false);
-    }
+    } finally { bookingLock.current = false; setSending(false); }
   };
 
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim();
-    if (!text || sending) return;
+    if (!text || sending || requestLock.current) return;
     setInput('');
+    if (hasFutureRideTime(text) && (step !== 'chat' || /bestill|book|taxi|kjør|kjor|hent|reise/i.test(text))) {
+      add({ role: 'user', content: text });
+      add({ role: 'assistant', content: 'Planlagte turer er ikke aktivert i SNAR-backenden ennå. Velg en vanlig bestilling for en bil nå.' });
+      return;
+    }
 
     if (step === 'destination') {
       await searchDestination(text);
@@ -272,7 +288,7 @@ export default function Assist() {
       }
     }
 
-    setSending(true);
+    requestLock.current = true; setSending(true);
     setError('');
     add({ role: 'user', content: text });
     try {
@@ -282,317 +298,66 @@ export default function Assist() {
     } catch (e) {
       add({ role: 'assistant', content: apiError(e) });
     } finally {
-      setSending(false);
+      requestLock.current = false; setSending(false);
     }
   };
 
+  const processVoice = async (stop = true) => {
+    if (voiceLock.current || !voiceSession.current) return;
+    const sequence = voiceGeneration.current;
+    voiceLock.current = true; voiceSession.current = false; setTranscribing(true);
+    try {
+      if (stop) await recorder.stop();
+      const uri = recorder.uri;
+      if (!uri) throw new Error('Fant ikke lydopptaket.');
+      const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      if (!alive.current || sequence !== voiceGeneration.current) return;
+      const lower = uri.toLowerCase();
+      const mime = lower.endsWith('.wav') ? 'audio/wav' : lower.endsWith('.webm') ? 'audio/webm' : lower.endsWith('.mp4') ? 'audio/mp4' : 'audio/m4a';
+      const response = await aiApi.transcribe(b64, mime, 'no');
+      if (!alive.current || sequence !== voiceGeneration.current) return;
+      const text = String(response?.text || '').trim();
+      if (text) await send(text); else setError('Jeg hørte ikke noe tydelig. Prøv igjen.');
+    } catch (error) { if (alive.current && sequence === voiceGeneration.current) setError(apiError(error)); }
+    finally { voiceLock.current = false; if (alive.current) setTranscribing(false); await setAudioModeAsync({ allowsRecording: false }).catch(() => {}); }
+  };
   const toggleVoice = async () => {
-    if (transcribing || sending) return;
+    setVoiceOpen(true);
+    if (transcribing || sending || voiceLock.current) return;
     setError('');
-
-    if (recorderState.isRecording) {
-      setTranscribing(true);
-      try {
-        await recorder.stop();
-        const uri = recorder.uri;
-        if (!uri) throw new Error('Fant ikke lydopptaket.');
-        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-        const lower = uri.toLowerCase();
-        const mime = lower.endsWith('.wav') ? 'audio/wav'
-          : lower.endsWith('.webm') ? 'audio/webm'
-          : lower.endsWith('.mp4') ? 'audio/mp4'
-          : 'audio/m4a';
-        const r = await aiApi.transcribe(b64, mime, 'no');
-        const text = String(r?.text || '').trim();
-        if (text) await send(text);
-        else setError('Jeg hørte ikke noe tydelig. Prøv igjen.');
-      } catch (e) {
-        setError(apiError(e));
-      } finally {
-        setTranscribing(false);
-      }
-      return;
-    }
-
+    if (recorderState.isRecording) { await processVoice(); return; }
+    const sequence = ++voiceGeneration.current;
+    voiceLock.current = true;
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
-      if (!permission.granted) {
-        setError('Mikrofontilgang må være aktivert for talebestilling.');
-        return;
-      }
+      if (!alive.current || sequence !== voiceGeneration.current) return;
+      if (!permission.granted) { setError('Mikrofontilgang må være aktivert for talebestilling.'); return; }
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await recorder.prepareToRecordAsync();
-      recorder.record({ forDuration: 15 });
-    } catch (e) {
-      setError(apiError(e));
+      if (!alive.current || sequence !== voiceGeneration.current) { await setAudioModeAsync({ allowsRecording: false }); return; }
+      voiceSession.current = true; recorder.record({ forDuration: 15 });
+    } catch (error) {
+      voiceSession.current = false;
+      if (alive.current && sequence === voiceGeneration.current) setError(apiError(error));
+      await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
     }
+    finally { voiceLock.current = false; }
+  };
+  useEffect(() => {
+    const finished = wasRecording.current && !recorderState.isRecording;
+    wasRecording.current = recorderState.isRecording;
+    if (finished && voiceSession.current && !voiceLock.current) void processVoice(false);
+  }, [recorderState.isRecording]);
+  const closeVoice = async () => {
+    voiceGeneration.current++; voiceSession.current = false; wasRecording.current = false;
+    if (recorderState.isRecording) await recorder.stop().catch(() => {});
+    await setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    setVoiceOpen(false);
   };
 
   const selectedOption = vehicle ? estimate?.options?.find((o: any) => o.vehicle_type === vehicle) : null;
   const visibleOptions = (estimate?.options || []).filter((o: any) => PRIMARY_TYPES.includes(o.vehicle_type as VehicleKind));
-  const voiceLabel = recorderState.isRecording
-    ? 'Lytter · trykk for å stoppe'
-    : transcribing
-      ? 'Tolker tale…'
-      : sending
-        ? 'Henter sikre data…'
-        : step === 'destination'
-          ? 'Klar for destinasjon'
-          : 'Klar';
-
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={8}
-    >
-      <View style={[s.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={s.back}
-          accessibilityRole="button"
-          accessibilityLabel="Tilbake"
-          testID="assist-back"
-        >
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={s.eyebrow}>SNAR ASSIST</Text>
-          <Text style={s.title}>Bestill med tale eller tekst</Text>
-        </View>
-        {step !== 'chat' ? (
-          <Pressable testID="customer-app-app-assist-363"
-            onPress={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }}
-            style={s.cancel}
-            accessibilityRole="button"
-          >
-            <Text style={s.cancelText}>Avbryt</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      <View style={s.voiceStatus}>
-        <View style={[s.voiceDot, recorderState.isRecording && s.voiceDotActive]} />
-        <Text style={[s.voiceStatusText, recorderState.isRecording && { color: colors.accent }]}>{voiceLabel}</Text>
-        <Text style={s.voicePrivacy}>Pris og ETA kommer alltid fra SNAR</Text>
-      </View>
-
-      <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={s.messages} keyboardShouldPersistTaps="handled">
-        {step === 'chat' && messages.length <= 1 ? (
-          <View style={s.voiceIntro}>
-            <View style={s.voiceIcon}>
-              <Icon name="mic" size={24} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.voiceTitle}>Si hvor du skal</Text>
-              <Text style={s.voiceBody}>For eksempel «Kjør meg til Gardermoen». SNAR bruker posisjonen din som hentested og viser sikre stedstreff før pris og ETA.</Text>
-            </View>
-          </View>
-        ) : null}
-
-        <View style={s.transcript}>
-          {messages.map((m, i) => (
-            <View key={`${m.role}-${i}`} style={s.transcriptRow}>
-              <Text style={[s.transcriptRole, m.role === 'user' && { color: colors.textSecondary }]}>
-                {m.role === 'user' ? 'DU' : 'SNAR'}
-              </Text>
-              <Text style={s.transcriptText}>{m.content}</Text>
-            </View>
-          ))}
-        </View>
-
-        {step === 'chat' && messages.length <= 1 ? (
-          <View style={s.quickWrap}>
-            {QUICK.map((q) => (
-              <Pressable testID="customer-app-app-assist-406" key={q} style={s.quick} onPress={() => send(q)}>
-                <Text style={s.quickText}>{q}</Text>
-                <Icon name="chevron-right" size={16} color={colors.textMuted} />
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        {results.map((p, i) => (
-          <Pressable key={`${p.name}-${i}`} style={s.result} onPress={() => chooseDestination(p)} testID={`assist-place-${i}`}>
-            <View style={s.resultIcon}><Icon name="map-pin" size={17} color={colors.accent} /></View>
-            <Text style={s.resultText} numberOfLines={2}>{p.name}</Text>
-            <Icon name="chevron-right" size={17} color={colors.textMuted} />
-          </Pressable>
-        ))}
-
-        {step === 'category' && visibleOptions.length ? (
-          <View style={s.options}>
-            <View style={s.optionHeading}>
-              <Text style={s.optionTitle}>Velg bil</Text>
-              <Text style={s.optionMeta}>{estimate?.duration_min} min estimert</Text>
-            </View>
-            {visibleOptions.map((o: any) => {
-              const kind = o.vehicle_type as VehicleKind;
-              const copy = vehicleCopy(kind);
-              return (
-                <Pressable
-                  key={o.vehicle_type}
-                  style={s.vehicle}
-                  onPress={() => chooseVehicle(o.vehicle_type)}
-                  testID={`assist-vehicle-${o.vehicle_type}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${copy.name}, ${copy.tagline}, ${kr(o.price)}`}
-                >
-                  <View style={s.vehicleArt}>
-                    <VehicleAsset kind={kind} width={104} height={58} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.vehicleName}>{copy.name}</Text>
-                    <Text style={s.vehicleSub}>{copy.tagline}</Text>
-                  </View>
-                  <Text style={s.vehiclePrice}>{kr(o.price)}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {step === 'confirm' && selectedOption ? (
-          <View style={s.confirmCard}>
-            <Text style={s.confirmLabel}>KONTROLLER FØR BESTILLING</Text>
-            <Text style={s.confirmRoute} numberOfLines={3}>{pickup?.name} → {dropoff?.name}</Text>
-            <View style={s.confirmMeta}>
-              <Text style={s.confirmMetaText}>{estimate?.distance_km} km · {estimate?.duration_min} min</Text>
-              <Text style={s.confirmPrice}>{kr(selectedOption.price)}</Text>
-            </View>
-            <Text style={s.confirmHint}>Ingen tur opprettes før du trykker bekreft.</Text>
-            <Pressable style={s.confirmBtn} onPress={confirm} disabled={sending} testID="assist-confirm">
-              {sending ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.confirmBtnText}>Bekreft SNAR</Text>}
-            </Pressable>
-          </View>
-        ) : null}
-
-        {sending && step !== 'booking' ? (
-          <View style={s.loadingRow}>
-            <ActivityIndicator color={colors.accent} />
-            <Text style={s.loadingText}>Henter data…</Text>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      {error ? <Text style={s.error}>{error}</Text> : null}
-
-      <View style={[s.composer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <Pressable
-          style={[s.mic, recorderState.isRecording && s.micRecording]}
-          onPress={toggleVoice}
-          disabled={transcribing}
-          testID="assist-mic"
-          accessibilityRole="button"
-          accessibilityLabel={recorderState.isRecording ? 'Stopp taleopptak' : 'Start taleopptak'}
-        >
-          {transcribing
-            ? <ActivityIndicator color={colors.accent} />
-            : <Icon name="mic" size={20} color={recorderState.isRecording ? colors.accentOn : colors.accent} />}
-        </Pressable>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder={step === 'destination' ? 'Hvor skal du?' : 'Kjør meg til…'}
-          placeholderTextColor={colors.textMuted}
-          style={s.input}
-          returnKeyType="send"
-          onSubmitEditing={() => send()}
-          editable={!sending && !transcribing && step !== 'category' && step !== 'confirm' && step !== 'booking'}
-          testID="assist-input"
-        />
-        <Pressable
-          style={[s.send, (!input.trim() || sending || transcribing) && s.sendDisabled]}
-          onPress={() => send()}
-          disabled={!input.trim() || sending || transcribing}
-          testID="assist-send"
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-        >
-          <Icon name="navigation" size={18} color={colors.accentOn} />
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
-  );
+  const methods = Array.isArray(methodsData) ? methodsData : (methodsData?.payment_methods || methodsData?.methods || []);
+  const payMethod = methodsError ? null : confirmedPaymentMethod(methods);
+  return <CustomerAssistView messages={messages} input={input} onInput={setInput} step={step} busy={sending} transcribing={transcribing} recording={recorderState.isRecording} voiceOpen={voiceOpen} pickup={pickup} dropoff={dropoff} estimate={estimate} options={visibleOptions} selected={selectedOption} payment={payMethod} consent={waitingAccepted} onConsent={() => setWaitingAccepted(value => !value)} error={error} results={results} scrollRef={scroll} onBack={() => router.back()} onCancel={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }} onSend={text => void send(text)} onVoice={() => void toggleVoice()} onCloseVoice={() => void closeVoice()} onPlace={place => void chooseDestination(place)} onVehicle={chooseVehicle} onConfirm={() => void confirm()} onPayment={() => router.push('/payment-methods')} />;
 }
-
-const useStyles = makeStyles((c) => ({
-  header: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10,
-    borderBottomWidth: 1, borderBottomColor: c.line,
-  },
-  back: {
-    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
-  },
-  eyebrow: { color: c.accent, fontFamily: font.semibold, fontSize: 10, letterSpacing: 1.5 },
-  title: { color: c.text, fontFamily: font.display, fontSize: 18, marginTop: 2 },
-  cancel: { minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: c.line },
-  cancelText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 12 },
-  voiceStatus: {
-    minHeight: 40, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, gap: 8,
-    backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.line,
-  },
-  voiceDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.textMuted },
-  voiceDotActive: { backgroundColor: c.accent },
-  voiceStatusText: { color: c.textSecondary, fontSize: 11, fontFamily: font.medium },
-  voicePrivacy: { color: c.textMuted, fontSize: 10, marginLeft: 'auto' },
-  messages: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20, gap: 12 },
-  voiceIntro: {
-    flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: c.cardSubtle,
-    borderRadius: 18, borderWidth: 1, borderColor: c.line, padding: 15,
-  },
-  voiceIcon: {
-    width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: c.accentSoft, borderWidth: 1, borderColor: 'rgba(0,229,245,0.22)',
-  },
-  voiceTitle: { color: c.text, fontFamily: font.display, fontSize: 16 },
-  voiceBody: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 4 },
-  transcript: { gap: 1, backgroundColor: c.card, borderRadius: 16, borderWidth: 1, borderColor: c.line, overflow: 'hidden' },
-  transcriptRow: { flexDirection: 'row', gap: 12, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: c.line },
-  transcriptRole: { width: 42, color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 1.2, paddingTop: 2 },
-  transcriptText: { color: c.text, fontSize: 13, lineHeight: 19, flex: 1 },
-  quickWrap: { gap: 8 },
-  quick: {
-    minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderRadius: 14, paddingHorizontal: 15, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line,
-  },
-  quickText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 13 },
-  result: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 14, padding: 13, minHeight: 62 },
-  resultIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  resultText: { color: c.text, fontSize: 13, flex: 1 },
-  options: { gap: 9 },
-  optionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2, marginBottom: 2 },
-  optionTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
-  optionMeta: { color: c.textMuted, fontSize: 11 },
-  vehicle: {
-    minHeight: 90, flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 16,
-    paddingHorizontal: 10, paddingVertical: 8,
-  },
-  vehicleArt: { width: 108, height: 62, alignItems: 'center', justifyContent: 'center' },
-  vehicleName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  vehicleSub: { color: c.textMuted, fontSize: 11, marginTop: 2 },
-  vehiclePrice: { color: c.accent, fontFamily: font.mono, fontSize: 14 },
-  confirmCard: { backgroundColor: c.card, borderWidth: 1, borderColor: 'rgba(0,229,245,0.40)', borderRadius: 18, padding: 16 },
-  confirmLabel: { color: c.accent, fontFamily: font.bold, fontSize: 9, letterSpacing: 1.6 },
-  confirmRoute: { color: c.text, fontFamily: font.medium, fontSize: 14, lineHeight: 20, marginTop: 10 },
-  confirmMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  confirmMetaText: { color: c.textMuted, fontSize: 12 },
-  confirmPrice: { color: c.text, fontFamily: font.mono, fontSize: 23 },
-  confirmHint: { color: c.textMuted, fontSize: 11, lineHeight: 16, marginTop: 10 },
-  confirmBtn: { height: 54, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
-  confirmBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: 12 },
-  loadingText: { color: c.textMuted, fontSize: 12 },
-  error: { color: c.danger, fontSize: 12, paddingHorizontal: 18, paddingVertical: 7, backgroundColor: c.dangerSoft },
-  composer: {
-    flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: c.line, backgroundColor: c.surface,
-  },
-  mic: { width: 46, height: 46, borderRadius: 23, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
-  micRecording: { backgroundColor: c.accent, borderColor: c.accent },
-  input: { flex: 1, height: 48, borderRadius: 16, backgroundColor: c.card, borderWidth: 1, borderColor: c.line, paddingHorizontal: 15, color: c.text, fontFamily: font.body, fontSize: 14 },
-  send: { width: 46, height: 46, borderRadius: 16, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  sendDisabled: { opacity: 0.45 },
-}));
