@@ -16,12 +16,14 @@ async function tick(milliseconds) { testClock += milliseconds; await act(async (
 const originalError = console.error;
 console.error = (...args) => { if (!String(args[0]).includes('react-test-renderer is deprecated')) originalError(...args); };
 let user = null, navigation = [], permissionCalls = 0, permissionResult;
+let socialLoginResult, socialCalls = 0;
 let loginResult, loginCalls = 0, logoutCalls = 0, vehicleResult, vehicleCalls = 0, currentTripId = 'trip-paid';
 let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [], updateResult, sendResult;
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
 class Value { constructor(value) { this.value = value; } setValue(value) { this.value = value; } stopAnimation() {} interpolate(config) { return config; } }
 const native = {
   Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }) }, Easing: { linear: value => value, bezier: (...values) => values },
+  Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
   AppState: { addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
@@ -29,20 +31,21 @@ const native = {
 };
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
+  'expo-status-bar': { StatusBar: 'StatusBar' },
   'react-native-svg': new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => key in target ? target[key] : String(key) }),
   '@/src/components/Motion': { useReducedMotion: () => reduceMotion },
   'react': React, 'react/jsx-runtime': appRequire('react/jsx-runtime'), 'react-native': native,
   'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({ tripId: currentTripId }), useFocusEffect: callback => React.useEffect(callback, [callback]) },
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 48, bottom: 34 }) },
   'expo-location': { requestForegroundPermissionsAsync: () => { permissionCalls++; return permissionResult(); } },
-  '@/src/context/AuthContext': { useAuth: () => ({ user, refresh: async () => {}, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
+  '@/src/context/AuthContext': { useAuth: () => ({ user, refresh: async () => {}, signInWithGoogle: async () => { socialCalls++; return socialLoginResult(); }, signInWithApple: async () => { socialCalls++; return socialLoginResult(); }, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
   '@/src/components/Typography': { Text: 'Text', TextInput: 'TextInput' },
   '@/src/components/Map': { Map: 'Map' },
   '@/src/components/V10Icon': { V10Icon: 'Icon' },
   '@/src/components/Icon': { Icon: 'Icon' },
   '@/src/components/CustomerPhoto': { CustomerPhoto: 'CustomerPhoto' },
   '@/src/components/ui': { Loader: 'Loader' },
-  '@/src/theme': { colors: {}, font: {}, makeStyles: factory => () => factory({}) },
+  '@/src/theme': { colors: {}, font: {}, saveColorThemeMode: async () => true, useColorTheme: () => ({mode:'light',effective:'light',ready:true}), themedStyles: factory => factory(), makeStyles: factory => () => factory({}) },
   '@/src/lib/format': { apiError: error => error.message, vehicleMeta: () => ({ name: 'SNAR' }), kr: value => value == null ? '– kr' : Math.round(value) + ' kr' },
   '@/src/utils/storage': { storage: { getItem: async () => null, setItem: async (...args) => storageWrites.push(args) } },
   '@tanstack/react-query': {
@@ -199,6 +202,24 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(button(tree, 'driver-login-submit').props.disabled, false);
   await unmount(tree);
 
+  stubs['@/src/components/AppleSignInButton'] = { AppleSignInButton: 'AppleButton' };
+  const CustomerLogin = load('frontend', 'app/login.tsx').default;
+  tree = await mount(CustomerLogin); const loginBeforeCustomer = loginCalls;
+  await act(async () => button(tree, 'login-submit').props.onPress()); assert.equal(loginCalls, loginBeforeCustomer);
+  const fillCustomer = async () => act(async () => { tree.root.findByProps({ testID: 'login-email' }).props.onChangeText('  customer@example.test  '); tree.root.findByProps({ testID: 'login-password' }).props.onChangeText('test-only-password'); });
+  await fillCustomer(); const customerLoginRequest = deferred();
+  loginResult = (identifier, password) => { assert.equal(identifier, 'customer@example.test'); assert.equal(password, 'test-only-password'); return customerLoginRequest.promise; };
+  socialLoginResult = async () => ({ id: 'social', role: 'user', legal_accepted: true });
+  await act(async () => { button(tree, 'login-submit').props.onPress(); button(tree, 'login-submit').props.onPress(); button(tree, 'login-google').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); });
+  assert.equal(loginCalls, loginBeforeCustomer + 1); assert.equal(socialCalls, 0, 'Password/Google/Apple cannot race each other');
+  await act(async () => customerLoginRequest.resolve({ id: 'customer', role: 'user', legal_accepted: true })); assert.equal(navigation.at(-1)[1], '/(app)/home'); await unmount(tree);
+  for (const [response, target, message] of [[{ id: 'customer', role: 'user', legal_accepted: false }, '/legal-consent', null], [{ id: 'driver', role: 'driver', legal_accepted: true }, null, /sjåførkonto/], [{ twofa_required: true }, null, /tofaktor/], [{}, null, /ikke bekreftet/]]) {
+    navigation = []; tree = await mount(CustomerLogin); await fillCustomer(); loginResult = async () => response;
+    await act(async () => button(tree, 'login-submit').props.onPress());
+    if (target) assert.equal(navigation.at(-1)[1], target); else { assert.equal(navigation.length, 0); assert.match(text(tree), message); }
+    await unmount(tree);
+  }
+  console.log('PASS: Actual Customer sign-in blank/duplicate/shared provider lock, canonical role/legal/2FA gates and rejection of unconfirmed authentication.');
   const Profile = load('driver-app', 'app/(driver)/profile.tsx').default;
   user = { id: 'driver-test', fullName: 'Test Driver', identity_verification_status: 'verified', identity_recheck_required: true };
   queryData = { me: { data: user }, 'driver-ratings': { data: { count: 2, average: 4.5 } } };

@@ -6,7 +6,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import MapboxGL from '@rnmapbox/maps';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { carsApi } from '@/src/lib/api';
 import { Icon } from './Icon';
 import { CarSvg, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
@@ -34,6 +34,7 @@ const samePoint = (a?: LL | null, b?: LL | null) =>
   !!a && !!b && Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lng - b.lng) < 1e-7;
 
 function MarkerDot({ kind }: { kind: 'pickup' | 'dropoff' }) {
+  useColorTheme();
   if (kind === 'pickup') {
     return (
       <View style={{
@@ -63,6 +64,7 @@ function MarkerDot({ kind }: { kind: 'pickup' | 'dropoff' }) {
 }
 
 function CarMarker({ car, active = false }: { car: Car; active?: boolean }) {
+  useColorTheme();
   return (
     <View style={{
       width: active ? 56 : 42,
@@ -99,6 +101,7 @@ export function InteractiveMap({
   testID?: string;
   interactive?: boolean;
 }) {
+  useColorTheme();
   const cameraRef = useRef<any>(null);
   const zoomRef = useRef(15);
   const [ready, setReady] = useState(false);
@@ -417,6 +420,7 @@ export function InteractiveMap({
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
+  useColorTheme();
   return (
     <Pressable
       onPress={onPress}

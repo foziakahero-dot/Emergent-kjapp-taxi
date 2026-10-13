@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 export function AppleSignInButton({
   loading,
@@ -10,6 +10,7 @@ export function AppleSignInButton({
   loading?: boolean;
   onPress: () => void | Promise<void>;
 }) {
+  useColorTheme();
   if (loading) {
     return (
       <View

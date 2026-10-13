@@ -8,7 +8,7 @@ import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Row, V10Screen, v10 } from '@/src/components/V10UI';
 import { V10HoldAction } from '@/src/components/V10HoldAction';
 import { kr } from '@/src/lib/format';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 type Props = {
   user: any; online: boolean; busy: boolean; error: string; summary: any; current: any; completed: any; offer: any;
@@ -22,6 +22,7 @@ type Props = {
 const known = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
 const minutes = (value: unknown) => known(value) ? `${Math.floor((value as number) / 60)} t ${(value as number) % 60} min` : '—';
 function Ring({ value, size = 64, color = colors.success, children }: { value: number | null; size?: number; color?: string; children?: React.ReactNode }) {
+  useColorTheme();
   const radius = (size - 8) / 2, length = 2 * Math.PI * radius;
   return <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}><Svg width={size} height={size} style={StyleSheet.absoluteFill}>
     <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.lineStrong} strokeWidth={3} fill="none" />
@@ -29,14 +30,17 @@ function Ring({ value, size = 64, color = colors.success, children }: { value: n
   </Svg>{children}</View>;
 }
 function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBottom?: number }) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
-  return <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: '0 -8px 40px -12px rgba(11,26,44,.18)' }}>
+  return <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3 }}>
     <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
     <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(padBottom, insets.bottom) }}>{children}</ScrollView>
   </View>;
 }
-function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) { return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
+function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  useColorTheme(); return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
 export function DriverCockpitView(p: Props) {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [phase, setPhase] = useState<'base' | 'arrival' | 'start' | 'arriving' | 'complete'>('base');
@@ -54,8 +58,8 @@ export function DriverCockpitView(p: Props) {
   const left = free !== null && Number.isFinite(arrived) && arrived <= clock ? Math.max(0, Math.ceil(free - (clock - arrived) / 1000)) : null;
   const contact = <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 8 }}><View style={{ flex: 1 }}><V10Action kind="soft" small height={52} label="Ring" icon="phone" onPress={p.onCall} disabled={!trip?.customer?.phone} /></View><View style={{ flex: 1 }}><V10Action kind="soft" small height={52} label="Melding" icon="message" onPress={p.onChat} /></View></View>;
   const header = <View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: p.online ? 16 : 20, right: p.online ? 16 : 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-    {p.online ? <View style={{ flex: 1, minHeight: 48, borderRadius: 20, paddingVertical: 10, paddingLeft: 16, paddingRight: 12, backgroundColor: 'rgba(255,255,255,.78)', flexDirection: 'row', alignItems: 'center', gap: 12 }}><V10Badge tone="positive">Online</V10Badge><Text style={[v10.secondary, { color: colors.text }]}>{minutes(p.summary?.online_minutes)}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dagens inntekt" onPress={() => router.navigate('/(driver)/earnings')} style={{ marginLeft: 'auto' }}><Text style={{ fontFamily: font.semibold, fontSize: 17, lineHeight: 23 }}>{kr(p.summary?.income)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Gå offline" testID="driver-online-toggle" disabled={p.busy || !!trip} onPress={p.onOnline} style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}><V10Icon name="power" size={18} color={colors.textMuted} /></Pressable></View> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: 'rgba(255,255,255,.78)' }}><View style={{ width: 32, height: 32, borderRadius: 10.88, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 11.52, fontFamily: font.semibold }}>{(p.user?.fullName || 'S').split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</Text></View><V10Badge>Offline</V10Badge></View>}
-    {!p.online ? <Pressable accessibilityRole="button" accessibilityLabel="Innstillinger" onPress={() => router.push('/driver-settings')} style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: 'rgba(255,255,255,.78)', alignItems: 'center', justifyContent: 'center' }}><V10Icon name="settings" /></Pressable> : null}
+    {p.online ? <View style={{ flex: 1, minHeight: 48, borderRadius: 20, paddingVertical: 10, paddingLeft: 16, paddingRight: 12, backgroundColor: colors.glass, flexDirection: 'row', alignItems: 'center', gap: 12 }}><V10Badge tone="positive">Online</V10Badge><Text style={[v10.secondary, { color: colors.text }]}>{minutes(p.summary?.online_minutes)}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dagens inntekt" onPress={() => router.navigate('/(driver)/earnings')} style={{ marginLeft: 'auto' }}><Text style={{ fontFamily: font.semibold, fontSize: 17, lineHeight: 23 }}>{kr(p.summary?.income)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Gå offline" testID="driver-online-toggle" disabled={p.busy || !!trip} onPress={p.onOnline} style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}><V10Icon name="power" size={18} color={colors.textMuted} /></Pressable></View> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass }}><View style={{ width: 32, height: 32, borderRadius: 10.88, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 11.52, fontFamily: font.semibold }}>{(p.user?.fullName || 'S').split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</Text></View><V10Badge>Offline</V10Badge></View>}
+    {!p.online ? <Pressable accessibilityRole="button" accessibilityLabel="Innstillinger" onPress={() => router.push('/driver-settings')} style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: colors.glass, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="settings" /></Pressable> : null}
   </View>;
   if (p.completed && !trip && !(p.offer && p.online)) {
     const done = p.completed, paid = done.payment_status === 'paid' && known(done.driver_earnings) && done.driver_earnings >= 0;
@@ -94,7 +98,7 @@ export function DriverCockpitView(p: Props) {
       {p.extras ? <Text style={v10.caption}>{p.extras}</Text> : null}{p.offer.passenger_note ? <Text style={v10.secondary}>{p.offer.passenger_note}</Text> : null}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.line }}><Text style={v10.secondary}>Estimert pris</Text><Text style={{ fontFamily: font.semibold, fontSize: 28, lineHeight: 38 }}>{kr(p.offer.price)}</Text></View>
       <View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 96 }}><V10Action height={64} kind="soft" label="Avslå" onPress={p.onDecline} disabled={p.busy} testID={`driver-decline-${p.offer.trip_id}`} /></View><View style={{ flex: 1 }}><V10Action height={64} label={p.offerExpired ? 'Utløpt' : 'Aksepter'} onPress={p.onAccept} busy={p.busy} disabled={p.offerExpired} testID={`driver-accept-${p.offer.trip_id}`} /></View></View>
-    </Sheet> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}><View style={{ borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: 'rgba(255,255,255,.78)' }}><Text style={[v10.secondary, { color: colors.text }]}>Venter på tur · {p.user?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={v10.caption}>{p.gpsReady ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text></View></View> : <Sheet padBottom={108}>
+    </Sheet> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}><View style={{ borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass }}><Text style={[v10.secondary, { color: colors.text }]}>Venter på tur · {p.user?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={v10.caption}>{p.gpsReady ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text></View></View> : <Sheet padBottom={108}>
       <Pressable accessibilityRole="button" onPress={() => router.push('/driver-vehicles')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingBottom: 14 }}><View style={{ width: 72, height: 44, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="vehicle" size={32} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.user?.car || 'Velg kjøretøy'}</Text><Text style={v10.caption}>{p.user?.plate || 'Ingen aktiv bil valgt'}</Text></View><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       <View style={{ flexDirection: 'row', gap: 12, paddingTop: 14, paddingBottom: 18, borderTopWidth: 1, borderTopColor: colors.line }}><Kpi label="I dag" value={kr(p.summary?.income).replace(/\s+kr$/, '')} unit="kr" /><Kpi label="Turer" value={known(p.summary?.trips) ? String(p.summary.trips) : '—'} /><Kpi label="Online" value={known(p.summary?.online_minutes) ? `${Math.floor(p.summary.online_minutes / 60)}:${String(p.summary.online_minutes % 60).padStart(2, '0')}` : '—'} unit="t" /></View><V10Action height={58} icon="power" label="Gå online" onPress={p.onOnline} busy={p.busy} testID="driver-go-online" />
     </Sheet>}

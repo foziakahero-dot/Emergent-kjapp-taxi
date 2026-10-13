@@ -4,7 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { Text } from '@/src/components/Typography';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { DesignToggle } from '@/src/components/DesignToggle';
@@ -16,6 +16,7 @@ import { storage } from '@/src/utils/storage';
 import { kr, vehicleMeta } from '@/src/lib/format';
 
 export default function DriverAccount() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const qc = useQueryClient();
@@ -185,12 +186,17 @@ export default function DriverAccount() {
     </ScrollView>
   </View>;
 }
-function Section({ children }: { children: React.ReactNode }) { return <Text style={s.section}>{children}</Text>; }
-function Badge({ label }: { label: string }) { return <View style={s.badge}><Text style={{ color: '#FFFFFF', fontSize: 10, fontFamily: font.semibold }}>{label}</Text></View>; }
-function Outline({ label, onPress, style }: { label: string; onPress: () => void; style?: object }) { return <Pressable style={[s.outline, style]} onPress={onPress}><Text style={{ color: colors.accent, fontSize: 14, fontFamily: font.semibold }}>{label}</Text></Pressable>; }
-function Setting({ icon, label, sub, onPress }: { icon: IconName; label: string; sub: string; onPress: () => void }) { return <Pressable style={[s.row, { marginTop: 0 }]} onPress={onPress}><View style={s.settingIcon}><Icon name={icon} size={20} color={colors.textSecondary} /></View><View style={{ flex: 1 }}><Text style={s.label}>{label}</Text><Text style={s.sub}>{sub}</Text></View><Icon name="chevron-right" size={16} color={colors.textMuted} /></Pressable>; }
-function Stat({ label, value, color }: { label: string; value: string; color: string }) { return <View style={[s.card, { flex: 1, boxShadow: '0 2px 6px rgba(11,14,20,0.04)' }]}><Text style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.8, color: colors.textMuted, textTransform: 'uppercase' }}>{label}</Text><Text style={{ marginTop: 8, fontFamily: font.semibold, fontSize: 24, letterSpacing: -0.48, color }}>{value.endsWith(' kr') ? <>{value.slice(0, -3)}<Text style={{ fontFamily: font.body, fontSize: 12, color: colors.textSecondary }}> kr</Text></> : value}</Text></View>; }
-const s = StyleSheet.create({
+function Section({ children }: { children: React.ReactNode }) {
+  useColorTheme(); return <Text style={s.section}>{children}</Text>; }
+function Badge({ label }: { label: string }) {
+  useColorTheme(); return <View style={s.badge}><Text style={{ color: '#FFFFFF', fontSize: 10, fontFamily: font.semibold }}>{label}</Text></View>; }
+function Outline({ label, onPress, style }: { label: string; onPress: () => void; style?: object }) {
+  useColorTheme(); return <Pressable style={[s.outline, style]} onPress={onPress}><Text style={{ color: colors.accent, fontSize: 14, fontFamily: font.semibold }}>{label}</Text></Pressable>; }
+function Setting({ icon, label, sub, onPress }: { icon: IconName; label: string; sub: string; onPress: () => void }) {
+  useColorTheme(); return <Pressable style={[s.row, { marginTop: 0 }]} onPress={onPress}><View style={s.settingIcon}><Icon name={icon} size={20} color={colors.textSecondary} /></View><View style={{ flex: 1 }}><Text style={s.label}>{label}</Text><Text style={s.sub}>{sub}</Text></View><Icon name="chevron-right" size={16} color={colors.textMuted} /></Pressable>; }
+function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+  useColorTheme(); return <View style={[s.card, { flex: 1, boxShadow: '0 2px 6px rgba(11,14,20,0.04)' }]}><Text style={{ fontFamily: font.mono, fontSize: 9, letterSpacing: 1.8, color: colors.textMuted, textTransform: 'uppercase' }}>{label}</Text><Text style={{ marginTop: 8, fontFamily: font.semibold, fontSize: 24, letterSpacing: -0.48, color }}>{value.endsWith(' kr') ? <>{value.slice(0, -3)}<Text style={{ fontFamily: font.body, fontSize: 12, color: colors.textSecondary }}> kr</Text></> : value}</Text></View>; }
+const s = themedStyles(() => StyleSheet.create({
   title: { fontFamily: font.semibold, fontSize: 24, letterSpacing: -0.48, color: colors.text },
   account: { marginTop: 24, flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: 24, padding: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
   avatarWrap: { width: 72, height: 72 }, avatar: { width: 72, height: 72, borderRadius: 36, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
@@ -210,4 +216,4 @@ const s = StyleSheet.create({
   outline: { marginTop: 12, borderRadius: 16, paddingVertical: 12, alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
   error: { fontSize: 12, color: colors.danger, marginTop: 8 },
   logout: { marginTop: 20, borderRadius: 16, paddingVertical: 14, alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(244,67,54,0.25)' },
-});
+}));

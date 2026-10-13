@@ -5,7 +5,7 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, v10 } from '@/src/components/V10UI';
 import { VehicleAsset } from '@/src/components/VehicleAsset';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { kr } from '@/src/lib/format';
 
 export type BookingStage = 'route' | 'vehicles' | 'payment';
@@ -18,6 +18,7 @@ export function paymentLabel(method: any) {
   return method ? `${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}` : 'Legg til betalingskort';
 }
 export function CustomerJourney({ pickup, destination, stops = [], onPickup, onDestination }: { pickup: string; destination?: string; stops?: any[]; onPickup?: () => void; onDestination?: () => void }) {
+  useColorTheme();
   const rows: { name: string; action?: () => void }[] = [{ name: pickup, action: onPickup }, ...stops.map(stop => ({ name: stop.name || stop.address })), { name: destination || 'Velg reisemål', action: onDestination }];
   return <View style={{ gap: 10 }}>{rows.map((row, i) => <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
     <View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: i === 0 ? 5 : 3, backgroundColor: i === 0 ? colors.accent : colors.text }} /></View>
@@ -38,6 +39,7 @@ type Props = {
 };
 const vehicleNames: Record<string, string> = { 'ai-first': 'SNAR', trygg: 'SNAR XL', premium: 'Premium' };
 export function CustomerBookingView(p: Props) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const vehicleName = vehicleNames[p.vehicle] || 'SNAR';
   const sheet = (children: React.ReactNode, home = false) => <ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
@@ -78,10 +80,13 @@ export function CustomerBookingView(p: Props) {
   </>;
 }
 export function finiteMetric(value: any, unit: string) { return value != null && Number.isFinite(Number(value)) && Number(value) >= 0 ? `${Number(value).toLocaleString('nb-NO', { maximumFractionDigits: 1 })} ${unit}` : '—'; }
-function Tool({ id, icon, label, onPress }: { id: string; icon: string; label: string; onPress: () => void }) { return <Pressable testID={id} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.tool}><V10Icon name={icon} /></Pressable>; }
-function Metric({ label, value }: { label: string; value: string }) { return <View><Text style={v10.caption}>{label}</Text><Text style={v10.heading}>{value}</Text></View>; }
-function Info({ title, value, onPress }: { title: string; value: string; onPress?: () => void }) { const content = <><Text style={v10.caption}>{title}</Text><Text style={v10.body}>{value}</Text></>; return onPress ? <Pressable onPress={onPress} testID="booking-payment-row" style={styles.info}>{content}</Pressable> : <View style={styles.info}>{content}</View>; }
-const styles = StyleSheet.create({
+function Tool({ id, icon, label, onPress }: { id: string; icon: string; label: string; onPress: () => void }) {
+  useColorTheme(); return <Pressable testID={id} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.tool}><V10Icon name={icon} /></Pressable>; }
+function Metric({ label, value }: { label: string; value: string }) {
+  useColorTheme(); return <View><Text style={v10.caption}>{label}</Text><Text style={v10.heading}>{value}</Text></View>; }
+function Info({ title, value, onPress }: { title: string; value: string; onPress?: () => void }) {
+  useColorTheme(); const content = <><Text style={v10.caption}>{title}</Text><Text style={v10.body}>{value}</Text></>; return onPress ? <Pressable onPress={onPress} testID="booking-payment-row" style={styles.info}>{content}</Pressable> : <View style={styles.info}>{content}</View>; }
+const styles = themedStyles(() => StyleSheet.create({
   sheet: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, boxShadow: '0 -6px 28px rgba(11,26,44,.12)' },
   handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 },
   tool: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, boxShadow: '0 4px 14px rgba(11,26,44,.1)' },
@@ -93,4 +98,4 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: 'row', gap: 24, marginVertical: 20, paddingVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
   info: { flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.cardSubtle, gap: 2 },
   vehicle: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingLeft: 6, paddingRight: 14, borderRadius: 18, borderWidth: 1.5, borderColor: 'transparent' },
-});
+}));

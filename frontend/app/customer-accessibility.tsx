@@ -6,8 +6,9 @@ import { DesignToggle } from '@/src/components/DesignToggle';
 import { V10Action, V10Group, V10Header, V10Row, V10Screen, v10 } from '@/src/components/V10UI';
 import { useReducedMotion } from '@/src/components/Motion';
 import { saveAccessibilityPreference, useAccessibilityPreferences, type AccessibilityPreferences } from '@/src/lib/accessibilityPreferences';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 export default function CustomerAccessibility() {
+  useColorTheme();
   const router = useRouter();
   const preferences = useAccessibilityPreferences(), reduced = useReducedMotion();
   const lock = useRef(false);

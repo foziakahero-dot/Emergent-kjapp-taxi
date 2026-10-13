@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Pressable, View } from 'react-native';
 import { Text } from '@/src/components/Typography';
 import { useReducedMotion } from '@/src/components/Motion';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 /** A real 900 ms hold: releasing or unmounting cancels; accessible activation is deliberate. */
 export function V10HoldAction({ label, onConfirm, onError, disabled = false, testID }: { label: string; onConfirm: () => void | Promise<void>; onError: (error: unknown) => void; disabled?: boolean; testID?: string }) {
+  useColorTheme();
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

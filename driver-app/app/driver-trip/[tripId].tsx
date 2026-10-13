@@ -10,9 +10,10 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Group, V10Header, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 export default function DriverTripDetail() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const { tripId } = useLocalSearchParams<{ tripId: string }>();

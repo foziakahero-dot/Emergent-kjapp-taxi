@@ -9,11 +9,12 @@ import { Map } from '@/src/components/Map';
 import { Text } from '@/src/components/Typography';
 import { V10Group, V10Header, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 function point(lat: unknown, lng: unknown) { return typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null; }
 function time(iso?: string) { const date = new Date(iso || ''); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : null; }
 export default function CustomerTripDetail() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const { tripId } = useLocalSearchParams<{ tripId: string }>();

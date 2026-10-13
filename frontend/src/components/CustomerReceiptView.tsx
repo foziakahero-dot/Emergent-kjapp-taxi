@@ -8,7 +8,7 @@ import { BrandBadge } from '@/src/components/BrandBadge';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Group, V10Header, V10Screen, V10Sheet, v10 } from '@/src/components/V10UI';
 import { finiteMetric } from '@/src/components/CustomerBookingView';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { kr } from '@/src/lib/format';
 
 type Props = { trip: any; initialReceipt: boolean; rating: number; rated: boolean; ratingBusy: boolean; ratingError: string; paymentBusy: boolean; paymentError: string; refreshError: boolean; photo: any;
@@ -21,6 +21,7 @@ export function receiptDate(iso?: string, clock = false) {
   return Number.isFinite(value.getTime()) ? clock ? value.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' }) : value.toLocaleString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' }) : null;
 }
 export function CustomerReceiptView(p: Props) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const paid = p.trip.payment_status === 'paid';
   const [stage, setStage] = useState<Stage>(p.initialReceipt ? 'receipt' : paid ? 'paid' : 'complete');
@@ -63,6 +64,9 @@ export function CustomerReceiptView(p: Props) {
     </V10Sheet>
   </View>;
 }
-function Divider() { return <View style={{ marginVertical: 20, borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.lineStrong }} />; }
-function JourneyRow({ first, title, sub }: { first?: boolean; title: string; sub: string | null }) { return <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: first ? 5 : 2, backgroundColor: first ? colors.accent : colors.text }} /><View style={{ flex: 1 }}><Text style={v10.body}>{title}</Text>{sub ? <Text style={v10.caption}>{sub}</Text> : null}</View></View>; }
-function ReceiptRow({ label, value }: { label: string; value: string }) { return <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 7 }}><Text style={v10.secondary}>{label}</Text><Text style={[v10.secondary, { color: colors.text, fontFamily: font.semibold, maxWidth: '64%', textAlign: 'right' }]}>{value}</Text></View>; }
+function Divider() {
+  useColorTheme(); return <View style={{ marginVertical: 20, borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.lineStrong }} />; }
+function JourneyRow({ first, title, sub }: { first?: boolean; title: string; sub: string | null }) {
+  useColorTheme(); return <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: first ? 5 : 2, backgroundColor: first ? colors.accent : colors.text }} /><View style={{ flex: 1 }}><Text style={v10.body}>{title}</Text>{sub ? <Text style={v10.caption}>{sub}</Text> : null}</View></View>; }
+function ReceiptRow({ label, value }: { label: string; value: string }) {
+  useColorTheme(); return <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 7 }}><Text style={v10.secondary}>{label}</Text><Text style={[v10.secondary, { color: colors.text, fontFamily: font.semibold, maxWidth: '64%', textAlign: 'right' }]}>{value}</Text></View>; }

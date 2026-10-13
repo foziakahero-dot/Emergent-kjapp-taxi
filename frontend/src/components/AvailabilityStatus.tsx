@@ -1,12 +1,13 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
 import { Text } from './Typography';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Availability, rideSearchProgress } from '@/src/lib/carAvailability';
 
 export function AvailabilityStatus({ search, trip }: {
   search: Availability & { now: number; seconds: number | null; retry: () => void }; trip?: any;
 }) {
+  useColorTheme();
   const progress = trip ? rideSearchProgress(trip, search.now) : null;
   const title = search.issue === 'offline' ? 'Får ikke oppdatert ledige biler'
     : search.cars.length ? `${search.cars.length} ledig${search.cars.length > 1 ? 'e biler' : ' bil'} nær hentestedet`

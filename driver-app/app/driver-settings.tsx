@@ -10,9 +10,10 @@ import { Text } from '@/src/components/Typography';
 import { DesignToggle } from '@/src/components/DesignToggle';
 import { Loader } from '@/src/components/ui';
 import { V10Action, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
-import { colors } from '@/src/theme';
+import { colors, saveColorThemeMode, useColorTheme } from '@/src/theme';
 
 export default function DriverSettings() {
+  const theme = useColorTheme();
   const { user, logout } = useAuth();
   const router = useRouter(), qc = useQueryClient();
   const key = ['driver-v10-settings', user?.id];
@@ -39,6 +40,13 @@ export default function DriverSettings() {
     catch { setError('Kunne ikke lagre visningsvalget. Prøv igjen.'); }
     finally { lock.current = false; setBusy(false); }
   };
+  const changeTheme = async (dark: boolean) => {
+    if (lock.current || !theme.ready) return;
+    lock.current = true; setBusy(true); setError('');
+    try { if (!await saveColorThemeMode(dark ? 'dark' : 'light')) throw new Error('Valget ble ikke lagret.'); }
+    catch { setError('Kunne ikke lagre utseendet. Prøv igjen.'); }
+    finally { lock.current = false; setBusy(false); }
+  };
   const signOut = async () => {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
@@ -50,7 +58,7 @@ export default function DriverSettings() {
     <V10Section title="Turer"><V10Group><V10Row icon="vehicle" title="Kjøretøy" subtitle={[user?.car, user?.plate].filter(Boolean).join(' · ') || 'Velg tildelt bil'} onPress={() => router.push('/driver-vehicles')} />
       {query.isPending ? <Loader /> : query.isError ? <V10State warning icon="wifiOff" title="Kunne ikke hente innstillinger" body="Oppdater før du endrer kjørevalg." action="Prøv igjen" onAction={() => void query.refetch()} /> : <>{(['req_sound', ...(Platform.OS === 'android' ? ['req_vibrate'] : [])] as ('req_sound' | 'req_vibrate')[]).map(field => <V10Row key={field} border icon="bell" title={field === 'req_sound' ? 'Lyd for ny tur' : 'Vibrasjon for ny tur'} subtitle={field === 'req_sound' ? 'Standard varsellyd på enheten' : 'Vibrasjon ved nye turforespørsler'} right={<DesignToggle value={data?.[field] !== false} onChange={value => void save(field, value)} label={field === 'req_sound' ? 'Lyd for ny tur' : 'Vibrasjon for ny tur'} disabled={busy || !data} testID={`driver-setting-${field}`} />} />)}</>}
     </V10Group></V10Section>
-    <V10Section title="Visning"><V10Group><V10Row icon="moon" title="Mørk cockpit" subtitle="Mørkt tema er ikke tilgjengelig ennå." right={<DesignToggle value={false} onChange={() => {}} label="Mørk cockpit, ikke tilgjengelig" disabled />} />
+    <V10Section title="Visning"><V10Group><V10Row icon="moon" title="Mørk cockpit" right={<DesignToggle value={theme.effective === 'dark'} onChange={value => void changeTheme(value)} label="Mørk cockpit" disabled={busy || !theme.ready} testID="driver-theme-dark" />} />
       <V10Row border icon="text" title="Stor tekst i cockpit" right={<DesignToggle value={preferences.largeText} onChange={value => void local('largeText', value)} label="Stor tekst i cockpit" disabled={busy || !preferences.ready} testID="driver-setting-large-text" />} />
       <V10Row border icon="sliders" title="Redusert bevegelse" subtitle="Telefonens bevegelsesvalg beholdes alltid." right={<DesignToggle value={preferences.reduceMotion} onChange={value => void local('reduceMotion', value)} label="Redusert bevegelse" disabled={busy || !preferences.ready} testID="driver-setting-reduced-motion" />} />
     </V10Group></V10Section>

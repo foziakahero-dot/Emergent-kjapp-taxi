@@ -4,7 +4,7 @@ import { Linking, Modal, Platform, Pressable, ScrollView, Switch, View } from 'r
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
@@ -21,6 +21,7 @@ const DRIVE: { key: string; label: string; sub: string }[] = [
 ];
 
 export default function DriverAccountSettings() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
@@ -239,6 +240,7 @@ export default function DriverAccountSettings() {
 }
 
 function ToggleRow({ t, on, onToggle, border, s }: any) {
+  useColorTheme();
   return (
     <View style={[s.row, border && s.rowBorder]}>
       <View style={{ flex: 1 }}>
@@ -251,6 +253,7 @@ function ToggleRow({ t, on, onToggle, border, s }: any) {
 }
 
 function LinkRow({ icon, label, onPress, border, s, testID }: { icon: IconName; label: string; onPress: () => void; border?: boolean; s: any; testID?: string }) {
+  useColorTheme();
   return (
     <Pressable style={[s.linkRow, border && s.rowBorder]} onPress={onPress} testID={testID}>
       <View style={s.linkIcon}><Icon name={icon} size={18} color={colors.accent} /></View>

@@ -4,11 +4,12 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
+  useColorTheme();
   const { login, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -59,7 +60,7 @@ export default function DriverLogin() {
     </ScrollView>
   </KeyboardAvoidingView>;
 }
-const s = StyleSheet.create({
+const s = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg }, content: { flexGrow: 1, paddingHorizontal: 24 },
   overline: { fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: .66, textTransform: 'uppercase', color: colors.textMuted },
   title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, marginTop: 6, color: colors.text },
@@ -74,4 +75,4 @@ const s = StyleSheet.create({
   forgotText: { fontFamily: font.medium, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, marginTop: 12 },
   footer: { marginTop: 'auto', paddingTop: 32 }, note: { fontSize: 12, lineHeight: 16, color: colors.textMuted, textAlign: 'center' },
-});
+}));

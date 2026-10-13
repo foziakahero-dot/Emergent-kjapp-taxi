@@ -5,13 +5,14 @@ import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSh
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { KjappMark } from '@/src/components/KjappMark';
 import { LinearGradient } from 'expo-linear-gradient';
 import { apiError } from '@/src/lib/format';
 
 export default function Register() {
+  useColorTheme();
   const { register } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();

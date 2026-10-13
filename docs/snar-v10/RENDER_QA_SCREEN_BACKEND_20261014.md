@@ -7,3 +7,7 @@ Promote the tested backend delta from the screen implementation branch: customer
 AI-chat previously imported/constructed the provider outside error handling and attempted to use an intentionally empty QA key. It now returns explicit 503 without provider calls when unavailable, validates trimmed messages, handles initialization/timeout/empty responses, and keeps human support intake independent of AI. This does not activate BytePlus or certify live AI/transcription.
 
 All 27 targeted backend tests pass (7 pickup, 13 settings/push, 7 support/AI), and the unchanged QA safety/build guard fixtures pass from the complete source checkout. Deployment status, live health/readiness and authenticated integration must be recorded after rollout. No APK or physical ride test is implied by a successful Render deployment.
+
+## Deployment result
+
+QA commit `1e17796b4b69a0a6a06435e0ee93b9d552906f0e` is deployed as `dep-db7an8t9fdbs73dgjqqg`. Render confirms **live**, finished 2026-10-13 22:09:18 UTC / 2026-10-14 00:09 Oslo. Startup completed and no error-level app logs were found in the inspected post-deploy interval through 23:37 UTC. Canonical health/readiness and authenticated integration are still unverified: terminal access timed out and automatic browser approval could not complete because the usage limit was reached. No blocked-browser workaround was attempted. The QA branch contains the backend rollout, not the new combined mobile candidate.

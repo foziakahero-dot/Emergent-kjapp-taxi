@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
 import { gdprApi, settingsApi } from '@/src/lib/api';
@@ -18,6 +18,7 @@ const TOGGLES: { key: string; label: string; sub: string }[] = [
 ];
 
 export default function CustomerData() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();

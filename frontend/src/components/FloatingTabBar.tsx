@@ -5,11 +5,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Text } from '@/src/components/Typography';
 import { Icon } from '@/src/components/Icon';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 type Target = RefObject<View | null>;
 const Visibility = createContext({ hidden: false, setHidden: (_hidden: boolean) => {}, targets: {} as Record<string, Target>, registerTarget: (_key: string, _target?: Target) => {} });
 export function TabBarVisibilityProvider({ children }: { children: React.ReactNode }) {
+  useColorTheme();
   const [hidden, setHidden] = useState(false);
   const [targets, setTargets] = useState<Record<string, Target>>({});
   const registerTarget = useCallback((key: string, target?: Target) => setTargets(previous => {
@@ -20,6 +21,7 @@ export function TabBarVisibilityProvider({ children }: { children: React.ReactNo
   return <Visibility.Provider value={{ hidden, setHidden, targets, registerTarget }}>{children}</Visibility.Provider>;
 }
 export function TabScene({ routeKey, children }: { routeKey: string; children: React.ReactNode }) {
+  useColorTheme();
   const target = useRef<View>(null);
   const { registerTarget } = useContext(Visibility);
   useEffect(() => { registerTarget(routeKey, target); return () => registerTarget(routeKey); }, [registerTarget, routeKey]);
@@ -31,6 +33,7 @@ export function useHideTabBar(hidden: boolean) {
 }
 
 export function FloatingTabBar({ state, descriptors, navigation, driver = false }: BottomTabBarProps & { driver?: boolean }) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const { hidden, targets } = useContext(Visibility);
   const focused = state.routes[state.index];
@@ -42,7 +45,7 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
     earnings: 'trending-up',
   };
   return <View style={{ position: 'absolute', left: 16, right: 16, bottom: insets.bottom + 16, borderRadius: 24, boxShadow: '0 12px 32px rgba(11,26,44,0.12)' }}>
-    <View style={{ height: 66, overflow: 'hidden', borderRadius: 24, borderWidth: 1, borderColor: colors.line, backgroundColor: driver ? 'rgba(255,255,255,0.94)' : 'rgba(255,255,255,0.86)', paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' }}>
+    <View style={{ height: 66, overflow: 'hidden', borderRadius: 24, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.glass, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' }}>
       <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
       {visible.map(route => {
         const options = descriptors[route.key].options;

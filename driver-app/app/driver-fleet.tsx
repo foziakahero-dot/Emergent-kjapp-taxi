@@ -7,10 +7,11 @@ import { authApi } from '@/src/lib/api';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Badge, V10Group, V10Header, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { Loader } from '@/src/components/ui';
 
 export default function DriverFleet() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const me = useQuery({ queryKey: ['me', user?.id], queryFn: authApi.me, enabled: !!user?.id });

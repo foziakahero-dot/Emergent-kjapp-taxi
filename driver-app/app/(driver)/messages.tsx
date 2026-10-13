@@ -8,11 +8,12 @@ import { driverApi, messagesApi } from '@/src/lib/api';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Header, V10Screen, V10State, v10 } from '@/src/components/V10UI';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Loader } from '@/src/components/ui';
 
 const activeStatuses = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
 export default function DriverMessages() {
+  useColorTheme();
   const { user } = useAuth();
   const router = useRouter();
   const [focused, setFocused] = useState(false);
@@ -30,6 +31,7 @@ export default function DriverMessages() {
 }
 
 function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const lock = useRef(false);

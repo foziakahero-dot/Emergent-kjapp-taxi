@@ -8,9 +8,10 @@ import { Map } from '@/src/components/Map';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, v10 } from '@/src/components/V10UI';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme, themedStyles } from '@/src/theme';
 
 export default function Permissions() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -64,7 +65,7 @@ export default function Permissions() {
   );
 }
 
-const s = StyleSheet.create({
+const s = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 10, paddingHorizontal: 20, boxShadow: '0 -8px 32px rgba(11,26,44,.12)' },
@@ -72,4 +73,4 @@ const s = StyleSheet.create({
   icon: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
   actions: { marginTop: 24, gap: 4 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, marginTop: 12 },
-});
+}));

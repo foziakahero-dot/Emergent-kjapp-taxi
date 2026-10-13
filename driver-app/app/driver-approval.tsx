@@ -7,9 +7,10 @@ import { authApi, driverApi } from '@/src/lib/api';
 import { Text } from '@/src/components/Typography';
 import { Loader } from '@/src/components/ui';
 import { V10Action, V10Badge, V10Group, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 export default function DriverApproval() {
+  useColorTheme();
   const { user, refresh, logout } = useAuth();
   const router = useRouter();
   const account = useQuery({ queryKey: ['driver-approval-account', user?.id], queryFn: authApi.me, enabled: user?.role === 'driver' });

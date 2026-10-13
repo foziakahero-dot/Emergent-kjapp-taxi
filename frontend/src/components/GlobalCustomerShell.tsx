@@ -9,7 +9,7 @@ import { Text } from '@/src/components/Typography';
 import { Icon } from '@/src/components/Icon';
 import { tripsApi } from '@/src/lib/api';
 import { driverPresence } from '@/src/lib/tripPresence';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 const routes = ['home', 'history', 'assist', 'messages', 'profile'].map(name => ({ name, key: `global-${name}` }));
 const titles = ['Hjem', 'Aktivitet', 'SNAR AI', 'Meldinger', 'Profil'];
@@ -24,6 +24,7 @@ type ActiveTripSummary = {
 };
 
 function JourneyIsland({ trip, stale, bottomInset, onPress }: { trip: ActiveTripSummary; stale: boolean; bottomInset: number; onPress: () => void }) {
+  useColorTheme();
   const labels: Record<string, string> = {
     payment_authorizing: 'Bekrefter kortreservasjon',
     searching: 'Søker sjåfør',
@@ -76,6 +77,7 @@ function JourneyIsland({ trip, stale, bottomInset, onPress }: { trip: ActiveTrip
 }
 
 export function GlobalCustomerShell({ children }: { children: React.ReactNode }) {
+  useColorTheme();
   const { user } = useAuth();
   const segments = useSegments();
   const insets = useSafeAreaInsets();

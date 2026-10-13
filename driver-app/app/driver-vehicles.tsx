@@ -9,10 +9,11 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Badge, V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 type AssignedVehicle = { id: string; car?: string; plate?: string; vehicle_type?: string; active?: boolean; selected?: boolean; busy?: boolean };
 export default function DriverVehicles() {
+  useColorTheme();
   const router = useRouter();
   const { user, refresh } = useAuth();
   const qc = useQueryClient();

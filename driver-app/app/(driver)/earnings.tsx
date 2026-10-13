@@ -10,10 +10,11 @@ import { DriverWeekChart } from '@/src/components/DriverWeekChart';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 const number = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null;
 export default function DriverEarnings() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const [focused, setFocused] = useState(false);
@@ -48,5 +49,6 @@ export default function DriverEarnings() {
   </V10Screen>;
 }
 function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  useColorTheme();
   return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>;
 }

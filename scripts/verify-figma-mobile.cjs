@@ -24,7 +24,10 @@ class Value {
   stopAnimation() {}
 }
 const animation = () => ({ start() {}, stop() {} });
+const themeListeners = new Set(); let systemColorScheme = 'light';
 const native = {
+  Appearance: { getColorScheme: () => systemColorScheme, addChangeListener: listener => { themeListeners.add(listener); return { remove: () => themeListeners.delete(listener) }; } },
+  Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   Text: 'NativeText', TextInput: 'NativeTextInput', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' },
   StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', inset: 0 }, flatten: value => Array.isArray(value) ? Object.assign({}, ...value.filter(Boolean).map(native.StyleSheet.flatten)) : value },
   AccessibilityInfo: {
@@ -159,6 +162,38 @@ const act = renderer.act;
   await act(async () => DriverPreferences.saveAccessibilityPreference('reduceMotion', true)); assert.equal(driverMotion, true);
   await act(async () => { await DriverPreferences.saveAccessibilityPreference('largeText', false); await DriverPreferences.saveAccessibilityPreference('reduceMotion', false); accessible.unmount(); });
   console.log('PASS: Actual accessibility persistence/duplicates/failure, global text scaling with nested inheritance, local reduced motion and OS preference priority.');
+  // Actual theme picker, component/style reactivity, failure and system changes without remount.
+  const ThemeRow = load('frontend', 'src/components/ThemeModeRow.tsx').ThemeModeRow;
+  const themeModule = load('frontend', 'src/theme.ts');
+  const ThemeInput = load('frontend', 'src/components/Typography.tsx').TextInput;
+  const ThemeAction = load('frontend', 'src/components/V10UI.tsx').V10Action;
+  let retainedDraft, probeMounts = 0;
+  function ThemeProbe() { const selected = themeModule.useColorTheme(); const [draft, setDraft] = React.useState('Active booking draft'); retainedDraft = draft; React.useEffect(() => { probeMounts++; }, []); return React.createElement(React.Fragment, null, React.createElement(ThemeRow), React.createElement(ThemeInput, { testID: 'theme-draft', value: draft, onChangeText: setDraft }), React.createElement(ThemeAction, {kind:'ink',label:'Theme action',onPress() {}}), React.createElement(AccessibleText, { testID: 'theme-text' }, selected.effective)); }
+  let themed;
+  await act(async () => { themed = renderer.create(React.createElement(ThemeProbe)); });
+  const themeButton = id => themed.root.findAll(node => node.type === 'Pressable' && node.props.testID === id)[0];
+  const themeTextColor = () => native.StyleSheet.flatten(themed.root.findAll(node => node.type === 'NativeText' && node.props.testID === 'theme-text')[0].props.style).color;
+  await act(async () => themeButton('theme-open').props.onPress());
+  let resolveThemeWrite, themeWriteCount = 0;
+  preferenceStorage.setItem = async () => { themeWriteCount++; return new Promise(resolve => { resolveThemeWrite = resolve; }); };
+  await act(async () => { themeButton('theme-choice-dark').props.onPress(); themeButton('theme-choice-dark').props.onPress(); });
+  assert.equal(themeWriteCount, 1); assert.equal(themeTextColor(), '#0B1A2C', 'Theme cannot flip before persistence succeeds');
+  await act(async () => resolveThemeWrite()); assert.equal(themeTextColor(), '#EEF2F7');
+  assert.equal(native.StyleSheet.flatten(themed.root.findAll(node => node.type === 'NativeText' && node.props.children === 'Theme action')[0].props.style).color, '#0B1A2C', 'Inverse action remains readable in dark mode');
+  assert.equal(retainedDraft, 'Active booking draft'); assert.equal(probeMounts, 1, 'Theme changes preserve screen state and do not remount the app');
+  await act(async () => themeButton('theme-open').props.onPress());
+  preferenceStorage.setItem = async () => { throw new Error('Disk unavailable'); };
+  await act(async () => themeButton('theme-choice-light').props.onPress()); assert.equal(themeTextColor(), '#EEF2F7'); assert.equal(themed.root.findAllByProps({ testID: 'theme-error' }).length > 0, true);
+  preferenceStorage.setItem = originalPreferenceWrite;
+  await act(async () => themeButton('theme-choice-system').props.onPress()); assert.equal(themeTextColor(), '#0B1A2C');
+  await act(async () => { systemColorScheme = 'dark'; for (const listener of themeListeners) listener({ colorScheme: 'dark' }); }); assert.equal(themeTextColor(), '#EEF2F7');
+  await act(async () => { systemColorScheme = 'light'; for (const listener of themeListeners) listener({ colorScheme: 'light' }); await themeModule.saveColorThemeMode('light'); themed.unmount(); });
+  const driverThemeModule = load('driver-app', 'src/theme.ts');
+  function DriverThemeProbe() { const selected = driverThemeModule.useColorTheme(); return React.createElement('DriverTheme', { effective: selected.effective }); }
+  await act(async () => { themed = renderer.create(React.createElement(DriverThemeProbe)); }); assert.equal(themed.root.findByType('DriverTheme').props.effective, 'dark', 'Driver defaults to original dark cockpit');
+  await act(async () => driverThemeModule.saveColorThemeMode('light')); assert.equal(themed.root.findByType('DriverTheme').props.effective, 'light');
+  await act(async () => { await driverThemeModule.saveColorThemeMode('dark'); themed.unmount(); });
+  console.log('PASS: Actual persistent light/dark/system theme, Driver dark default, storage failure/duplicates, dynamic colors and retained input/screen state.');
   stubs.set('expo-blur', { BlurTargetView: 'BlurTargetView', BlurView: 'BlurView' });
   const { FloatingTabBar, TabBarVisibilityProvider, useHideTabBar } = load('frontend', 'src/components/FloatingTabBar.tsx');
   const tabRoutes = ['home', 'history', 'assist', 'messages', 'profile', 'wallet'].map(name => ({ name, key: `route-${name}` }));
@@ -294,6 +329,9 @@ const act = renderer.act;
   assert.equal(tickets, 1);
   await act(async () => resolveTicket({ data: { ok: true, ticket_id: 'server-ticket-007' } }));
   assert.ok(support.root.findAllByType('NativeText').some(node => String(node.props.children).includes('server-ticket-007')));
+  await act(async () => support.root.findByProps({ testID: 'support-escalate' }).props.onPress());
+  assert.equal(tickets, 1, 'A confirmed identical ticket is not submitted again');
+  await act(async () => support.root.findByProps({ testID: 'support-message-input' }).props.onChangeText('En annen sak som må bekreftes'));
   await act(async () => support.root.findByProps({ testID: 'support-escalate' }).props.onPress());
   await act(async () => resolveTicket({ data: {} }));
   assert.ok(support.root.findAllByType('NativeText').some(node => node.props.accessibilityRole === 'alert'));
@@ -502,6 +540,18 @@ const act = renderer.act;
   }
   assert.equal(driverPresence({ driver_lat: null, driver_lng: null }, now).hasPosition, false);
   assert.equal(driverPresence({ driver_lat: 91, driver_lng: 10.7 }, now).hasPosition, false);
+  const { destinationProximity } = load('frontend', 'src/lib/tripPresence.ts');
+  const nearDestination = { ...position, trip_id: 'unit-trip', status: 'in_trip', driver_location_at: new Date(now).toISOString(), dropoff_lat: 59.9001, dropoff_lng: 10.7001, dropoff_address: 'Actual destination' };
+  assert.equal(destinationProximity(nearDestination, now).near, true);
+  assert.equal(destinationProximity({ ...nearDestination, status: 'driver_on_way' }, now), null);
+  assert.equal(destinationProximity({ ...nearDestination, driver_location_at: new Date(now - 31000).toISOString() }, now), null);
+  assert.equal(destinationProximity({ ...nearDestination, dropoff_lat: null }, now), null);
+  serverTrip = nearDestination;
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  assert.equal(booking.root.findAllByProps({ testID: 'customer-arriving-view' }).length, 1);
+  assert.equal(booking.root.findByProps({ testID: 'customer-arrival-driver-authority' }).props.disabled, true);
+  assert.equal(serverTrip.status, 'in_trip', 'Customer proximity cannot end a ride');
+  await act(async () => booking.unmount());
   serverTrip = { ...serverTrip, status: 'completed' };
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   assert.ok(navigations.includes('/receipt/unit-trip'));

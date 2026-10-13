@@ -2,7 +2,7 @@ import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { messagesApi } from '@/src/lib/api';
 
@@ -19,6 +19,7 @@ export function ChatSheet({
   onClose: () => void;
   peerName?: string;
 }) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const sendLock = useRef(false);

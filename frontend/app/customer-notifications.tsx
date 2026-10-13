@@ -9,9 +9,10 @@ import { Text } from '@/src/components/Typography';
 import { DesignToggle } from '@/src/components/DesignToggle';
 import { Loader } from '@/src/components/ui';
 import { V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 export default function CustomerNotifications() {
+  useColorTheme();
   const { user } = useAuth();
   const router = useRouter(), qc = useQueryClient();
   const key = ['customer-notification-settings', user?.id];

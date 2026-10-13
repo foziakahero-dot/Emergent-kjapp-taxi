@@ -11,7 +11,7 @@ import { View, Pressable, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
-import { colors, FONT_ASSETS } from '@/src/theme';
+import { colors, FONT_ASSETS, useColorTheme } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
 
@@ -20,6 +20,7 @@ const queryClient = new QueryClient({
 });
 
 function SessionGate({ children }: { children: React.ReactNode }) {
+  useColorTheme();
   const { user, sessionError, refresh } = useAuth();
   if (user === undefined && sessionError) return <View style={{ flex: 1, justifyContent: 'center', padding: 28, gap: 16 }}>
     <Text accessibilityRole="alert" style={{ color: colors.text }}>{sessionError}</Text>
@@ -78,6 +79,7 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  const theme = useColorTheme();
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded] = useFonts(FONT_ASSETS);
   useEffect(() => installClientErrorMonitor(), []);
@@ -91,7 +93,7 @@ export default function RootLayout() {
             <NativePaymentProvider>
             <SessionGate>
             <NativeRuntimeBridge />
-            <StatusBar style="dark" />
+            <StatusBar style={theme.effective === 'dark' ? 'light' : 'dark'} />
             <GlobalCustomerShell>
             <Stack
               screenOptions={{

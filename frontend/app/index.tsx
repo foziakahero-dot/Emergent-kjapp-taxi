@@ -4,7 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import { SplashBackground, SplashBrand } from '@/src/components/SplashArt';
 import { KjappMark } from '@/src/components/KjappMark';
@@ -13,6 +13,7 @@ import { V10Icon } from '@/src/components/V10Icon';
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
 export default function Index() {
+  useColorTheme();
   const { user, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -77,6 +78,7 @@ export default function Index() {
 }
 
 function Benefit({ icon, title, detail }: { icon: 'car' | 'clock' | 'sparkles'; title: string; detail: string }) {
+  useColorTheme();
   const s = useStyles();
   return <View style={s.benefit}>
     <View style={s.benefitIcon}><V10Icon name={icon === 'car' ? 'vehicle' : icon === 'sparkles' ? 'ai' : icon} size={20} color={colors.text} /></View>

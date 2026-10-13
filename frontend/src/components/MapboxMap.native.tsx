@@ -12,7 +12,7 @@ import Mapbox, {
 } from '@rnmapbox/maps';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { Text } from './Typography';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
@@ -43,12 +43,14 @@ type Props = {
 };
 
 function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+  useColorTheme();
   const smooth = useSmoothPosition(car);
   if (!smooth) return null;
   return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
+  useColorTheme();
   if (kind === 'dropoff') {
     return (
       <Svg width={32} height={32} viewBox="0 0 32 32">
@@ -80,6 +82,7 @@ export function MapboxInteractiveMap({
   focusMode = 'route',
   contentInsets,
 }: Props) {
+  useColorTheme();
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
@@ -296,6 +299,7 @@ export function MapboxInteractiveMap({
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
+  useColorTheme();
   return (
     <Pressable
       onPress={onPress}

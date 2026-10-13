@@ -4,12 +4,13 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import DriverApproval from './driver-approval';
 import { SplashAction, SplashBackground, SplashBrand } from '@/src/components/SplashArt';
 
 export default function Index() {
+  useColorTheme();
   const { user, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();

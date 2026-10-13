@@ -1,10 +1,11 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Text } from '@/src/components/Typography';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { v10 } from '@/src/components/V10UI';
 
 export function DriverWeekChart({ days }: { days: { date?: string; income?: number }[] }) {
+  useColorTheme();
   const usable = days.filter(day => typeof day.income === 'number' && Number.isFinite(day.income));
   if (!usable.length) return <Text style={v10.secondary}>Ingen grafdata tilgjengelig.</Text>;
   const maximum = Math.max(1, ...usable.map(day => day.income!));

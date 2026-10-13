@@ -9,10 +9,11 @@ import { isNavigationApp, navigationStorageKey, type NavigationApp } from '@/src
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { Loader } from '@/src/components/ui';
 
 export default function DriverNavigation() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const qc = useQueryClient();

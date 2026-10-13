@@ -5,13 +5,14 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { driverApi, apiError } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
 export default function DriverProfilePhoto() {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();

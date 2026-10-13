@@ -4,16 +4,18 @@ import Svg, { Path } from 'react-native-svg';
 import { BrandBadge } from '@/src/components/BrandBadge';
 import { Text } from '@/src/components/Typography';
 import { useReducedMotion } from '@/src/components/Motion';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export function SplashBackground({ inverse = false }: { inverse?: boolean }) {
+  useColorTheme();
   return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: inverse ? colors.surfaceInverse : colors.bg }]} />;
 }
 
 /** One light traces the original chevrons; it never represents loading progress. */
 export function SplashBrand({ inverse = false, label }: { inverse?: boolean; label?: string }) {
+  useColorTheme();
   const reduced = useReducedMotion();
   const light = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -45,6 +47,7 @@ export function SplashBrand({ inverse = false, label }: { inverse?: boolean; lab
 }
 
 export function SplashAction({ label, onPress, testID }: { label: string; onPress: () => void; testID?: string }) {
+  useColorTheme();
   return <Pressable accessibilityRole="button" onPress={onPress} testID={testID}
     style={({ pressed }) => ({ marginTop: 56, minHeight: 56, borderRadius: 16, backgroundColor: colors.accent, paddingHorizontal: 32, justifyContent: 'center', transform: [{ scale: pressed ? .97 : 1 }] })}>
     <Text style={{ fontFamily: font.semibold, fontSize: 16, lineHeight: 22, color: colors.accentOn }}>{label}</Text>

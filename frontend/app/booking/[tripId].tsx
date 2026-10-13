@@ -6,12 +6,13 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useReducedMotion } from '@/src/components/Motion';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
+import { CustomerSafetyView } from '@/src/components/CustomerSafetyView';
 import { CustomerTripView } from '@/src/components/CustomerTripView';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { KjappMark } from '@/src/components/KjappMark';
@@ -32,6 +33,7 @@ const META: Record<string, { title: string; sub: string }> = {
 };
 
 export default function BookingFlow() {
+  useColorTheme();
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const insets = useSafeAreaInsets();
   const s = useStyles();
@@ -161,7 +163,8 @@ export default function BookingFlow() {
     if (safetyLock.current) return;
     safetyLock.current = true; setActionError(''); setSafetyBusy(true);
     try {
-      await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
+      const confirmed = await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
+      if (confirmed?.ok !== true || !confirmed?.event_id) throw new Error('Rapporten ble ikke bekreftet av SNAR.');
       setSafetyOpen(false);
     } catch (error) { setActionError(`Rapporten ble ikke sendt. ${apiError(error)}`); }
     finally { safetyLock.current = false; setSafetyBusy(false); }
@@ -279,34 +282,11 @@ export default function BookingFlow() {
       />}
       {pickupNotice ? <View style={{ position: 'absolute', top: insets.top + 60, left: 16, right: 16, zIndex: 60, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{pickupNotice}</Text></View> : null}
 
-      <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
-        <Pressable testID="customer-app-booking-tripId-337" style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
-          <View style={s.safetySheet} onStartShouldSetResponder={() => true}>
-            <View style={s.safetyHead}>
-              <View>
-                <Text style={s.safetyOverline}>SNAR SIKKERHET</Text>
-                <Text style={s.safetyTitle}>Hjelp på turen</Text>
-              </View>
-              <Pressable testID="customer-app-booking-tripId-344" onPress={() => setSafetyOpen(false)} disabled={safetyBusy} accessibilityLabel="Lukk sikkerhetsmeny">
-                <Icon name="x" size={20} color={colors.text} />
-              </Pressable>
-            </View>
-            {actionError ? <Text testID="safety-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text> : null}
-            <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. SNAR-support erstatter ikke nødetatene.</Text>
-            <Pressable style={s.emergencyAction} onPress={callEmergency} disabled={safetyBusy} testID="safety-call-112">
-              <Icon name="phone" size={18} color={colors.text} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Åpne telefonappen og ring nødnummeret</Text></View>
-            </Pressable>
-            <Pressable style={s.safetyAction} onPress={shareTrip} disabled={safetyBusy} testID="safety-share-trip">
-              <Icon name="navigation" size={18} color={colors.accent} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Del live-turen</Text><Text style={s.safetyActionSub}>Lenken utløper automatisk etter 24 timer</Text></View>
-            </Pressable>
-            <Pressable style={s.safetyAction} onPress={reportSafety} disabled={safetyBusy} testID="safety-report">
-              <Icon name="flag" size={18} color={colors.accent} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til SNAR</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
-            </Pressable>
-          </View>
-        </Pressable>
+      <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => !safetyBusy && setSafetyOpen(false)}>
+        <View style={[s.modalBackdrop, { padding: 0 }]}>
+          <Pressable testID="customer-app-booking-tripId-337" style={StyleSheet.absoluteFill} onPress={() => !safetyBusy && setSafetyOpen(false)} accessibilityLabel="Lukk sikkerhetsmeny" />
+          <CustomerSafetyView trip={trip} busy={safetyBusy} error={actionError} onClose={() => setSafetyOpen(false)} onShare={() => void shareTrip()} onReport={() => void reportSafety()} onEmergency={() => void callEmergency()} />
+        </View>
       </Modal>
 
       <ChatSheet

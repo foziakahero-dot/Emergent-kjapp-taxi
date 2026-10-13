@@ -1,6 +1,6 @@
 import React from 'react';
 import Svg, { Path, Circle, Rect, Line, Polyline, Ellipse, G } from 'react-native-svg';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 // Paths from the approved SNAR V10 design source, preserved without redrawing.
 const P: Record<string, React.ReactNode> = {
   home: <><Path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></>,
@@ -73,5 +73,6 @@ const P: Record<string, React.ReactNode> = {
 };
 
 export function V10Icon({ name, size = 22, color = colors.text, stroke = 1.8 }: { name: string; size?: number; color?: string; stroke?: number }) {
+  useColorTheme();
   return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color} stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">{P[name] ?? P.more}</Svg>;
 }

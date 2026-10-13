@@ -12,7 +12,7 @@ import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable,
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Map } from '@/src/components/Map';
 import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
@@ -20,6 +20,7 @@ import { useAuth } from '@/src/context/AuthContext';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
 export default function Home() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
@@ -340,6 +341,7 @@ export default function Home() {
 }
 
 export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
+  useColorTheme();
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);

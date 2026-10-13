@@ -9,10 +9,11 @@ import { Text, TextInput } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Header, V10Screen, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 const chatStatuses = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
 export default function CustomerMessages() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const [focused, setFocused] = useState(false);
@@ -25,6 +26,7 @@ export default function CustomerMessages() {
   </V10Screen>;
 }
 function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();

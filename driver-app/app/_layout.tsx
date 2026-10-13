@@ -9,7 +9,7 @@ import { View } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
-import { colors, FONT_ASSETS } from '@/src/theme';
+import { colors, FONT_ASSETS, useColorTheme } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { driverApi } from '@/src/lib/api';
 import {
@@ -112,6 +112,7 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  const theme = useColorTheme();
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded] = useFonts(FONT_ASSETS);
   useEffect(() => installClientErrorMonitor(), []);
@@ -123,7 +124,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <NativeRuntimeBridge />
-            <StatusBar style="dark" />
+            <StatusBar style={theme.effective === 'dark' ? 'light' : 'dark'} />
             <Stack
               screenOptions={{
                 headerShown: false,

@@ -4,11 +4,12 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/src/context/AuthContext';
 import { customerProfileApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { Text } from './Typography';
 import { FigmaGradient } from './FigmaGradient';
 
 export function CustomerPhoto({ initials, size = 56, shape = 'circle', showLabel = true }: { initials: string; size?: number; shape?: 'circle' | 'v10'; showLabel?: boolean }) {
+  useColorTheme();
   const { user, refresh } = useAuth();
   const [source, setSource] = useState<any>(null);
   const [choosing, setChoosing] = useState(false);

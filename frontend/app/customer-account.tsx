@@ -5,7 +5,7 @@ import React, { useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { useAuth } from '@/src/context/AuthContext';
@@ -16,6 +16,7 @@ import { CustomerSupport } from '@/src/components/CustomerSupport';
 import { CustomerProfileDetails, type ProfileDetail } from '@/src/components/CustomerProfileDetails';
 
 export default function CustomerAccount() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();

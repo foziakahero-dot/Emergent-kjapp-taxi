@@ -6,9 +6,10 @@ import { useAuth } from '@/src/context/AuthContext';
 import { tripsApi } from '@/src/lib/api';
 import { Text } from '@/src/components/Typography';
 import { V10Action, V10Group, V10Header, V10Row, V10Screen, V10Section, v10 } from '@/src/components/V10UI';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 export default function CustomerSupportOverview() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const active = useQuery({ queryKey: ['customer-active-trip', user?.id], queryFn: tripsApi.active, enabled: !!user?.id });

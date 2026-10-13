@@ -3,12 +3,13 @@ import { ActivityIndicator, Animated, Pressable, View } from 'react-native';
 import { Text } from '@/src/components/Typography';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { cssEase, useReducedMotion } from '@/src/components/Motion';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 /** Animate the Figma thumb, then call the existing canonical trip action. */
 export function SlideConfirm({ label, onConfirm, onError, disabled, testID }: {
   label: string; onConfirm: () => void | Promise<void>; onError: (error: unknown) => void; disabled?: boolean; testID?: string;
 }) {
+  useColorTheme();
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

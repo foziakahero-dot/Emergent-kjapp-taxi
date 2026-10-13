@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
 import { driverApi } from '@/src/lib/api';
@@ -23,6 +23,7 @@ const PERIODS: { key: Period; label: string }[] = [
 ];
 
 export default function DriverEarningsReport() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
@@ -210,6 +211,7 @@ export default function DriverEarningsReport() {
 }
 
 function BreakRow({ label, value, muted, bold, accentGreen, s }: any) {
+  useColorTheme();
   return (
     <View style={s.breakRow}>
       <Text style={[s.breakLabel, bold && { color: colors.text, fontSize: 15 }]}>{label}</Text>
@@ -219,6 +221,7 @@ function BreakRow({ label, value, muted, bold, accentGreen, s }: any) {
 }
 
 function ChartBars({ days, max }: { days: any[]; max: number }) {
+  useColorTheme();
   const [w, setW] = useState(0);
   const H = 120;
   const n = days.length || 7;

@@ -9,10 +9,11 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Badge, V10Group, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 const liveStatuses = new Set(['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip']);
 export default function History() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const history = useQuery({ queryKey: ['trips', user?.id], queryFn: tripsApi.list, enabled: !!user?.id });

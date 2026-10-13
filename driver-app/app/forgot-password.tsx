@@ -5,12 +5,13 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { BrandBadge } from '@/src/components/BrandBadge';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function DriverForgotPassword() {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();

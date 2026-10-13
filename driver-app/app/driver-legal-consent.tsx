@@ -4,12 +4,13 @@ import { Linking, Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import { Icon } from '@/src/components/Icon';
 import { apiError } from '@/src/lib/format';
 
 export default function DriverLegalConsent() {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();

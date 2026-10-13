@@ -4,7 +4,7 @@ import { Platform, Pressable, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
@@ -18,6 +18,7 @@ const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjap
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function PaymentMethods() {
+  useColorTheme();
   const { setup, session_id } = useLocalSearchParams<{ setup?: string; session_id?: string }>();
   const { user } = useAuth();
   const router = useRouter();

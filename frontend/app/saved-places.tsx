@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
 import { mePlacesApi, placesApi } from '@/src/lib/api';
@@ -18,6 +18,7 @@ const LABELS: { label: string; icon: IconName }[] = [
 ];
 
 export default function SavedPlaces() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();

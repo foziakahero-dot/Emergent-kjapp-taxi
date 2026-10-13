@@ -9,9 +9,10 @@ import { kr } from '@/src/lib/format';
 import { Text } from '@/src/components/Typography';
 import { V10Action, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 export default function DriverEarningsDetail() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const [period, setPeriod] = useState<'day' | 'week'>('day');

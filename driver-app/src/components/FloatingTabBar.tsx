@@ -7,11 +7,12 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Text } from '@/src/components/Typography';
 import { Icon } from '@/src/components/Icon';
 import { V10Icon } from '@/src/components/V10Icon';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 type Target = RefObject<View | null>;
 const Visibility = createContext({ hidden: false, setHidden: (_hidden: boolean) => {}, targets: {} as Record<string, Target>, registerTarget: (_key: string, _target?: Target) => {} });
 export function TabBarVisibilityProvider({ children }: { children: React.ReactNode }) {
+  useColorTheme();
   const [hidden, setHidden] = useState(false);
   const [targets, setTargets] = useState<Record<string, Target>>({});
   const registerTarget = useCallback((key: string, target?: Target) => setTargets(previous => {
@@ -22,6 +23,7 @@ export function TabBarVisibilityProvider({ children }: { children: React.ReactNo
   return <Visibility.Provider value={{ hidden, setHidden, targets, registerTarget }}>{children}</Visibility.Provider>;
 }
 export function TabScene({ routeKey, children }: { routeKey: string; children: React.ReactNode }) {
+  useColorTheme();
   const target = useRef<View>(null);
   const { registerTarget } = useContext(Visibility);
   useEffect(() => { registerTarget(routeKey, target); return () => registerTarget(routeKey); }, [registerTarget, routeKey]);
@@ -40,13 +42,14 @@ const customerGlyphs: Record<string, React.ReactNode> = {
 };
 
 export function FloatingTabBar({ state, descriptors, navigation, driver = false }: BottomTabBarProps & { driver?: boolean }) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const { hidden, targets } = useContext(Visibility);
   const focused = state.routes[state.index];
   if (hidden && focused.name === 'home') return null;
   const visible = state.routes.filter(route => (driver ? ['home', 'earnings', 'intel', 'messages', 'profile'] : ['home', 'history', 'wallet', 'profile']).includes(route.name));
   return <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(22, insets.bottom - 12), borderRadius: 24, boxShadow: '0 8px 24px -8px rgba(11,26,44,.14), 0 0 0 1px rgba(11,26,44,.04)' }}>
-    <View style={{ overflow: 'hidden', borderRadius: 24, backgroundColor: 'rgba(255,255,255,.78)', paddingHorizontal: 6, height: 66, alignItems: 'center', justifyContent: 'space-around', flexDirection: 'row' }}>
+    <View style={{ overflow: 'hidden', borderRadius: 24, backgroundColor: colors.glass, paddingHorizontal: 6, height: 66, alignItems: 'center', justifyContent: 'space-around', flexDirection: 'row' }}>
       <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
       {visible.map(route => {
         const options = descriptors[route.key].options;

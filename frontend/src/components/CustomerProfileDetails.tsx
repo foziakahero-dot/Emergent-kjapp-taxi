@@ -8,10 +8,11 @@ import { Icon, type IconName } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { gdprApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 
 export type ProfileDetail = 'safety' | 'privacy' | 'language';
 export function CustomerProfileDetails({ view, onBack, onDelete, onSupport }: { view: ProfileDetail; onBack: () => void; onDelete: () => void; onSupport: () => void }) {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -71,11 +72,13 @@ export function CustomerProfileDetails({ view, onBack, onDelete, onSupport }: { 
     </ScrollView>
   </View>;
 }
-function UnavailableToggle({ label, sub }: { label: string; sub: string }) { return <View style={s.card}><View style={{ flex: 1 }}><Text style={s.label}>{label}</Text><Text style={s.sub}>{sub}</Text></View><DesignToggle label={`${label}, ikke aktivert`} value={false} disabled onChange={() => {}} /></View>; }
+function UnavailableToggle({ label, sub }: { label: string; sub: string }) {
+  useColorTheme(); return <View style={s.card}><View style={{ flex: 1 }}><Text style={s.label}>{label}</Text><Text style={s.sub}>{sub}</Text></View><DesignToggle label={`${label}, ikke aktivert`} value={false} disabled onChange={() => {}} /></View>; }
 function Row({ icon, label, sub, onPress, color = colors.accent, soft = colors.accentSoft, disabled, testID }: { icon: IconName; label: string; sub: string; onPress?: () => void; color?: string; soft?: string; disabled?: boolean; testID?: string }) {
+  useColorTheme();
   return <Pressable style={s.card} onPress={onPress} disabled={disabled || !onPress} testID={testID} accessibilityRole={onPress ? 'button' : undefined}><View style={[s.icon, { backgroundColor: soft }]}><Icon name={icon} size={20} color={color} /></View><View style={{ flex: 1 }}><Text style={s.label}>{label}</Text><Text style={s.sub}>{sub}</Text></View>{onPress && <Icon name="chevron-right" size={16} color={colors.textMuted} />}</Pressable>;
 }
-const s = StyleSheet.create({
+const s = themedStyles(() => StyleSheet.create({
   back: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.lineStrong, alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, fontFamily: font.semibold, fontSize: 24, letterSpacing: -0.48 },
   card: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 16 },
@@ -83,4 +86,4 @@ const s = StyleSheet.create({
   label: { fontFamily: font.semibold, fontSize: 14, color: colors.text }, sub: { fontSize: 12, color: colors.textSecondary },
   note: { fontSize: 12, color: colors.textSecondary, lineHeight: 17 }, error: { fontSize: 12, color: colors.danger },
   outline: { alignItems: 'center', paddingVertical: 14, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.lineStrong },
-});
+}));

@@ -10,9 +10,10 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 export default function DriverTrips() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const history = useQuery({ queryKey: ['driver-history', user?.id], queryFn: driverApi.history, enabled: !!user?.id });

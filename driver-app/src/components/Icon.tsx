@@ -1,6 +1,6 @@
 import React from 'react';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
-import { colors as theme } from '@/src/theme';
+import { colors as theme, useColorTheme } from '@/src/theme';
 
 // Lucide-style 24x24 stroke icons. Only the glyphs used across KJAPP.
 type IconName =
@@ -70,6 +70,7 @@ export function Icon({
   strokeWidth?: number;
   fill?: string;
 }) {
+  useColorTheme();
   return (
     <Svg
       width={size}

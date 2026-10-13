@@ -6,9 +6,10 @@ import { useAuth } from '@/src/context/AuthContext';
 import { authApi, authenticatedFileSource, driverApi } from '@/src/lib/api';
 import { Text } from '@/src/components/Typography';
 import { V10Badge, V10Group, V10Row, V10Screen, v10 } from '@/src/components/V10UI';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 export default function DriverProfile() {
+  useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
   const me = useQuery({ queryKey: ['me', user?.id], queryFn: authApi.me, enabled: !!user?.id });

@@ -6,9 +6,10 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { paymentApi } from '@/src/lib/api';
 import { Icon } from '@/src/components/Icon';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 
 export default function Wallet() {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const s = useStyles();

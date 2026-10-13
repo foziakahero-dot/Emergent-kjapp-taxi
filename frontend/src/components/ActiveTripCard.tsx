@@ -2,10 +2,11 @@ import React from 'react';
 import { driverPresence } from '@/src/lib/tripPresence';
 import { Pressable, View } from 'react-native';
 import { Text } from './Typography';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 export const LIVE_TRIP_STATUSES = ['searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip'];
 export function ActiveTripCard({ trip, onOpen, offline = false }: { trip: any; onOpen: () => void; offline?: boolean }) {
+  useColorTheme();
   const labels: Record<string, string> = { searching: 'Søker sjåfør', booking: 'Bestiller', driver_on_way: 'Sjåfør på vei', at_pickup: 'Sjåføren er fremme', in_trip: 'Turen pågår', arrived: 'Se kvittering og betaling' };
   const eta = Number(trip?.eta_min);
   const staleLocation = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && !driverPresence(trip).fresh;

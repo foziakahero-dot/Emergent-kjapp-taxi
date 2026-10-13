@@ -49,7 +49,7 @@ const stubs = {
   '@/src/components/Icon': { Icon: 'Icon' },
   '@/src/components/CustomerPhoto': { CustomerPhoto: 'CustomerPhoto' },
   '@/src/components/ui': { Loader: 'Loader' },
-  '@/src/theme': { colors: {}, font: {}, useTheme: () => ({ colors: {}, font: {} }), makeStyles: factory => () => factory({}) },
+  '@/src/theme': { colors: {}, font: {}, useTheme: () => ({ colors: {}, font: {} }), useColorTheme: () => ({}), themedStyles: factory => factory(), makeStyles: factory => () => factory({}) },
   '@/src/lib/format': { apiError: error => error.message, vehicleMeta: () => ({ name: 'SNAR' }), kr: value => value == null ? '– kr' : Math.round(value) + ' kr' },
   '@/src/utils/storage': { storage: { setItem: async (...args) => storageWrites.push(args) } },
   '@tanstack/react-query': {

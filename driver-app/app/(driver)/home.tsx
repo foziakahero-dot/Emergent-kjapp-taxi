@@ -7,7 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { BrandBadge } from '@/src/components/BrandBadge';
@@ -54,6 +54,7 @@ function actionCanRetry(action: CriticalTripAction, status?: string) {
 }
 
 export default function DriverHome() {
+  useColorTheme();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const { user } = useAuth();

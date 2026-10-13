@@ -2,9 +2,10 @@ import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Linking, Pressable, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import Svg, { Ellipse } from 'react-native-svg';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
@@ -53,6 +54,7 @@ const STATUS: Record<string, { title: string; body: string; tone: 'good' | 'warn
 };
 
 export default function DriverIdentity() {
+  useColorTheme();
   const router = useRouter();
   const { refresh, user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -129,6 +131,7 @@ export default function DriverIdentity() {
   const meta = STATUS[status] || { title: 'Ukjent kontrollstatus', body: 'Oppdater kontrollstatus før du fortsetter.', tone: 'neutral' as const };
 
   if (cameraOpen || photo) return <View testID="driver-identity-camera-screen" style={{ flex: 1, backgroundColor: '#0a141f', alignItems: 'center', paddingTop: Math.max(110, insets.top + 48), paddingHorizontal: 24 }}>
+    <StatusBar style="light" />
     <View style={{ width: 240, height: 300 }}>
       <View style={{ position: 'absolute', inset: 0, borderRadius: 120, overflow: 'hidden' }}>{photo ? <Image source={{ uri: photo }} style={{ width: 240, height: 300 }} resizeMode="cover" /> : <CameraView ref={camera} testID="driver-selfie-live-camera" style={{ width: 240, height: 300 }} facing="front" onCameraReady={() => setCameraReady(true)} onMountError={() => { setErr('Kameraet kunne ikke åpnes. Prøv igjen.'); setCameraOpen(false); }} />}</View>
       <Svg width={240} height={300} viewBox="0 0 240 300" pointerEvents="none" style={{ position: 'absolute', inset: 0 }}><Ellipse cx={120} cy={150} rx={116} ry={146} fill="none" stroke="rgba(255,255,255,.6)" strokeWidth={3} strokeDasharray={[12, 6]} /></Svg>
