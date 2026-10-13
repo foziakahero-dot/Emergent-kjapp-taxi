@@ -18,6 +18,7 @@ import httpx
 import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
+from voice_booking import VoiceBooking, install_voice_booking
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
@@ -1382,6 +1383,7 @@ async def progress_trip(trip_id: str):
 # ------------------ Lifespan ------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await voice_booking.indexes()
     # Restore encrypted admin configuration before workers or onboarding start.
     await integration_settings.refresh()
     await db.users.create_index("email", unique=True)
@@ -2093,8 +2095,7 @@ async def trip_estimate(body: EstimateRequest):
         duration = route["duration_min"]
         geometry = route["geometry"]
     else:
-        est, duration = fallback_route_points(points)
-        geometry = None
+        raise HTTPException(503, "Kunne ikke beregne kjørerute akkurat nå. Prøv igjen litt senere.")
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
@@ -2694,8 +2695,11 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         eta_min = route["duration_min"]
         geometry = route["geometry"]
     else:
-        est, eta_min = fallback_route_points(points)
-        geometry = None
+        await db.users.update_one(
+            {"_id": user_oid, "booking_request_lock": trip_id},
+            {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
+        )
+        raise HTTPException(503, "Kunne ikke beregne kjørerute akkurat nå. Prøv igjen litt senere.")
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
@@ -11509,6 +11513,12 @@ handle_native_payment_webhook = install_mobile_commerce(
 
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 
+voice_booking = VoiceBooking(
+    db, search=search_places, reverse=reverse_geocode, estimate=trip_estimate,
+    book=request_trip, get_trip=get_trip, estimate_model=EstimateRequest, trip_model=TripRequest,
+)
+install_voice_booking(api, voice_booking, require_customer=require_customer, rate_limit=_enforce_rate_limit)
+
 app.include_router(api)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
@@ -11524,3 +11534,4 @@ if os.path.isdir(_ADMIN_DIST):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8001, reload=True)
+
