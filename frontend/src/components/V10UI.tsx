@@ -23,9 +23,9 @@ export function V10Section({ title, children }: { title: string; children: React
   return <View style={{ marginTop: 24 }}><Text style={{ marginHorizontal: 4, marginBottom: 10, fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: .66, textTransform: 'uppercase', color: colors.textMuted }}>{title}</Text>{children}</View>;
 }
 export function V10Row({ icon, title, subtitle, right, onPress, border = false, testID, disabled = false }: {
-  icon: string; title: string; subtitle?: string; right?: React.ReactNode; onPress?: () => void; border?: boolean; testID?: string; disabled?: boolean;
+  icon?: string; title: string; subtitle?: string; right?: React.ReactNode; onPress?: () => void; border?: boolean; testID?: string; disabled?: boolean;
 }) {
-  const content = <>{border ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} /> : null}<View style={v10.icon}><V10Icon name={icon} size={20} /></View><View style={{ flex: 1 }}>
+  const content = <>{border ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} /> : null}{icon ? <View style={v10.icon}><V10Icon name={icon} size={20} /></View> : null}<View style={{ flex: 1 }}>
     <Text style={v10.body}>{title}</Text>{subtitle ? <Text style={[v10.caption, { marginTop: 2 }]}>{subtitle}</Text> : null}
   </View>{right ?? (onPress ? <V10Icon name="chevR" size={18} color={colors.textMuted} /> : null)}</>;
   // Match the original prototype's computed button row padding (the scoped button reset overrides .s10-row).

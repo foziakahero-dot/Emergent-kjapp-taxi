@@ -1,126 +1,43 @@
-import { FigmaGradient } from '@/src/components/FigmaGradient';
-import { Text } from '@/src/components/Typography';
 import React, { useCallback } from 'react';
-import { FlatList, Pressable, RefreshControl, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { colors, font, makeStyles } from '@/src/theme';
-import { Icon } from '@/src/components/Icon';
-import { Loader } from '@/src/components/ui';
+import { useAuth } from '@/src/context/AuthContext';
 import { tripsApi } from '@/src/lib/api';
-import { kr } from '@/src/lib/format';
+import { kr, vehicleMeta } from '@/src/lib/format';
+import { Text } from '@/src/components/Typography';
+import { V10Icon } from '@/src/components/V10Icon';
+import { V10Badge, V10Group, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
+import { Loader } from '@/src/components/ui';
+import { colors, font } from '@/src/theme';
 
-const STATUS_LABEL: Record<string, string> = {
-  completed: 'Fullført',
-  rated: 'Fullført',
-  arrived: 'Fullført',
-  cancelled: 'Avbrutt',
-  cancelled_by_driver: 'Avbrutt',
-  in_trip: 'Pågår',
-  driver_on_way: 'Pågår',
-  searching: 'Søker',
-};
-
+const liveStatuses = new Set(['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip']);
 export default function History() {
-  const insets = useSafeAreaInsets();
-  const s = useStyles();
   const router = useRouter();
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
-    queryKey: ['trips'],
-    queryFn: tripsApi.list,
-  });
-
-  useFocusEffect(
-    useCallback(() => {
-      void refetch();
-    }, [refetch]),
-  );
-
-  const trips = (data?.trips || []).filter((t: any) => t.status !== 'searching' && t.status !== 'booking');
-
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={[s.header, { paddingTop: insets.top + 56 }]}>
-        <Text style={s.title}>Aktivitet</Text>
-      </View>
-      {isLoading ? (
-        <View style={s.center}><Loader label="Henter turer…" /></View>
-      ) : isError ? (
-        <View style={s.center} testID="history-load-error">
-          <Icon name="history" size={40} color={colors.textMuted} />
-          <Text style={s.emptyText}>Kunne ikke hente turhistorikken.</Text>
-          <Pressable style={s.retry} onPress={() => refetch()} testID="history-retry">
-            <Text style={s.retryText}>Prøv igjen</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={trips}
-          keyExtractor={(t) => t.id || t.trip_id}
-          contentContainerStyle={{ paddingHorizontal: 28, paddingBottom: insets.bottom + 112, gap: 10 }}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} />}
-          ListEmptyComponent={
-            <View style={s.center}>
-              <Icon name="history" size={40} color={colors.textMuted} />
-              <Text style={s.emptyText}>Ingen turer ennå.</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            const receiptState = ['completed', 'rated', 'arrived'].includes(item.status);
-            const tripId = item.trip_id || item.id;
-            const statusLabel = item.status === 'arrived' && item.payment_status !== 'paid'
-              ? 'Betaling behandles'
-              : STATUS_LABEL[item.status] || item.status;
-            return (
-              <Pressable
-                style={s.row}
-                testID={`trip-${tripId || 'unknown'}`}
-                onPress={() => tripId && router.push(receiptState ? `/receipt/${tripId}` : `/booking/${tripId}`)}
-                disabled={!tripId}
-              >
-                <View style={s.rowIcon}>
-                  <Icon name={receiptState ? 'file-text' : 'navigation'} size={18} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.rowTitle} numberOfLines={1}>{item.dropoff_address}</Text>
-                  <Text style={s.rowSub} numberOfLines={1}>
-                    {new Date(item.created_at).toLocaleDateString('no-NO', { day: 'numeric', month: 'short' })} · {statusLabel}
-                  </Text>
-                  {receiptState ? (
-                    <Text style={s.receiptLink} testID={`receipt-link-${tripId || 'unknown'}`}>
-                      {item.payment_status === 'paid' ? 'Betalt · Se kvittering' : 'Se kvittering'}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={s.trailing}>
-                  <Text style={s.rowPrice}>{kr(item.price)}</Text>
-                  {receiptState ? <Icon name="chevron-right" size={16} color={colors.textMuted} /> : null}
-                </View>
-              </Pressable>
-            );
-          }}
-        />
-      )}
-    </View>
-  );
+  const { user } = useAuth();
+  const history = useQuery({ queryKey: ['trips', user?.id], queryFn: tripsApi.list, enabled: !!user?.id });
+  const active = useQuery({ queryKey: ['customer-active-trip', user?.id], queryFn: tripsApi.active, enabled: !!user?.id });
+  useFocusEffect(useCallback(() => { void history.refetch(); void active.refetch(); }, [history.refetch, active.refetch]));
+  const trips: any[] = Array.isArray(history.data?.trips) ? history.data.trips : [];
+  const past = trips.filter(trip => !liveStatuses.has(trip.status));
+  const live = active.data?.trip_id && liveStatuses.has(active.data.status) ? active.data : null;
+  const weekStart = new Date(); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - (weekStart.getDay() + 6) % 7);
+  const groups = [{ title: 'Denne uken', trips: past.filter(trip => Date.parse(trip.created_at) >= weekStart.getTime()) }, { title: 'Tidligere', trips: past.filter(trip => !(Date.parse(trip.created_at) >= weekStart.getTime())) }].filter(group => group.trips.length);
+  return <V10Screen dock testID="customer-activity-screen">
+    <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, marginTop: 8, marginBottom: 20 }}>Aktivitet</Text>
+    {live && !active.isError ? <Pressable accessibilityRole="button" testID="history-active-trip" onPress={() => router.push(`/booking/${live.trip_id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, padding: 16, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.text }}><V10Badge tone="critical">Pågår</V10Badge><Text style={[v10.body, { flex: 1 }]}>Til {live.dropoff_address || 'destinasjonen din'}</Text><V10Icon name="chevR" size={18} /></Pressable> : null}
+    {active.isError ? <Text style={v10.caption}>Kunne ikke oppdatere aktiv tur.</Text> : null}
+    {history.isPending ? <Loader label="Henter turer…" /> : history.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente turhistorikken" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void history.refetch()} /> : !past.length ? <View style={{ marginTop: 24 }}><V10State icon="activity" title="Ingen turer ennå" body="Gjennomførte og avbrutte turer vises her." action="Til hjem" onAction={() => router.navigate('/(app)/home')} /></View> : groups.map(group => <V10Section key={group.title} title={group.title}><V10Group>{group.trips.map((trip, index) => {
+      const id = trip.trip_id || trip.id;
+      const cancelled = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
+      const date = new Date(trip.created_at);
+      const label = cancelled ? 'Avbrutt' : trip.payment_status === 'paid' ? 'Fullført' : 'Betaling behandles';
+      return <Pressable key={id || index} accessibilityRole="button" testID={`trip-${id || 'unknown'}`} disabled={!id} onPress={() => router.push(`/customer-trip/${encodeURIComponent(id)}` as any)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, opacity: cancelled ? .7 : 1 }}>
+        {index ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: colors.line }} /> : null}
+        <View style={v10.icon}><V10Icon name={cancelled ? 'x' : 'destination'} size={20} /></View>
+        <View style={{ flex: 1 }}><Text style={[v10.body, cancelled && { textDecorationLine: 'line-through' }]} numberOfLines={2}>{trip.dropoff_address || 'SNAR-tur'}</Text><Text style={v10.caption}>{Number.isFinite(date.getTime()) ? date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' }) + ' ' + date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' }) : 'Dato mangler'} · {vehicleMeta(trip.vehicle_type || 'ai-first').name}</Text></View>
+        <View style={{ alignItems: 'flex-end' }}><Text style={v10.body}>{cancelled ? '—' : kr(trip.price)}</Text><Text style={v10.caption}>{label}</Text></View>
+      </Pressable>;
+    })}</V10Group></V10Section>)}
+  </V10Screen>;
 }
-
-const useStyles = makeStyles((c) => ({
-  header: { paddingHorizontal: 28, paddingBottom: 18 },
-  title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, color: c.text, letterSpacing: -0.8 },
-  center: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
-  emptyText: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
-  retry: { minHeight: 44, borderRadius: 12, backgroundColor: c.accent, paddingHorizontal: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  retryText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
-  row: {
-    minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16,
-    borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line,
-  },
-  rowIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  rowTitle: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  rowSub: { color: c.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 0 },
-  receiptLink: { color: c.accent, fontFamily: font.semibold, fontSize: 12, lineHeight: 16, marginTop: 4 },
-  trailing: { alignItems: 'flex-end', justifyContent: 'center', gap: 4 },
-  rowPrice: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-}));

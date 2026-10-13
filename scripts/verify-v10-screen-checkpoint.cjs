@@ -34,6 +34,7 @@ const stubs = {
   '@/src/components/Map': { Map: 'Map' },
   '@/src/components/V10Icon': { V10Icon: 'Icon' },
   '@/src/components/Icon': { Icon: 'Icon' },
+  '@/src/components/CustomerPhoto': { CustomerPhoto: 'CustomerPhoto' },
   '@/src/components/ui': { Loader: 'Loader' },
   '@/src/theme': { colors: {}, font: {} },
   '@/src/lib/format': { apiError: error => error.message, vehicleMeta: () => ({ name: 'SNAR' }), kr: value => value == null ? '– kr' : Math.round(value) + ' kr' },
@@ -43,6 +44,8 @@ const stubs = {
     useQuery: ({ queryKey }) => ({ isPending: false, isError: false, refetch: async () => {}, ...queryData[queryKey[0]] }),
   },
   '@/src/lib/api': {
+    tripsApi: { active: async () => ({}), list: async () => ({}), get: async () => ({}) },
+    mePlacesApi: { list: async () => ({}) }, paymentApi: { list: async () => ({}) },
     authApi: { me: async () => ({}) }, authenticatedFileSource: async () => null,
     apiError: error => error.message,
     driverApi: { summary: async () => ({}), weekly: async () => ({}), payouts: async () => ({}), vehicles: async () => ({}), history: async () => ({}), selectVehicle: async id => { vehicleCalls++; return vehicleResult(id); }, ratings: async () => ({}), current: async () => ({}), identityVerification: async () => ({}) },
@@ -271,6 +274,60 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => button(tree, 'driver-earnings-period-week').props.onPress());
   assert.equal(tree.root.findAll(node => node.type === 'Text' && node.props.testID === 'driver-earnings-period-net')[0].props.children, '— kr', 'Missing weekly data must not become a zero-income claim');
   await unmount(tree);
+  const CustomerProfile = load('frontend', 'app/(app)/profile.tsx').default;
+  user = { id: 'customer-test', role: 'user', fullName: 'Test Customer', phone: '00000000' };
+  queryData = { 'me-places': { data: { places: [{ label: 'Hjem', name: 'Saved home' }] } }, 'payment-methods': { data: { payment_methods: [] } } };
+  tree = await mount(CustomerProfile); assert.match(text(tree), /Saved home/);
+  for (const [id, target] of [['profile-place-home', '/saved-places?label=Hjem'], ['profile-payments', '/payment-methods'], ['profile-accessibility', '/customer-accessibility'], ['profile-settings', '/settings'], ['profile-help', '/support']]) {
+    await act(async () => button(tree, id).props.onPress()); assert.equal(navigation.at(-1)[1], target);
+  }
+  await unmount(tree);
+
+  const CustomerMessages = load('frontend', 'app/(app)/messages.tsx').default;
+  queryData = { 'customer-active-trip': { data: { trip_id: 'closed', status: 'completed', driver_id: 'driver' } } };
+  tree = await mount(CustomerMessages); assert.match(text(tree), /Ingen aktive samtaler/); await unmount(tree);
+  queryData = { 'customer-active-trip': { data: { trip_id: 'searching', status: 'searching', driver_id: null } } };
+  tree = await mount(CustomerMessages); assert.match(text(tree), /når en sjåfør er tildelt/); await unmount(tree);
+  queryData = {
+    'customer-active-trip': { data: { trip_id: 'customer-active', status: 'driver_on_way', driver_id: 'driver', driver: { name: 'Test Driver', plate: 'TEST1' }, dropoff_address: 'Destination' } },
+    'customer-trip-messages': { data: { messages: [{ id: 'mine', from_role: 'passenger', text: 'My confirmed message' }, { id: 'theirs', from_role: 'driver', text: 'Driver message' }] } },
+  };
+  tree = await mount(CustomerMessages);
+  const bubbles = tree.root.findAll(node => node.type === 'View' && node.props.style?.maxWidth === '78%');
+  assert.equal(bubbles[0].props.style.alignSelf, 'flex-end', 'Actual passenger sender role renders as own message');
+  assert.equal(bubbles[1].props.style.alignSelf, 'flex-start');
+  await act(async () => tree.root.findByProps({ testID: 'customer-message-input' }).props.onChangeText('  Customer draft  '));
+  const customerRequest = deferred(); sendResult = () => customerRequest.promise;
+  const sentBefore = sent.length;
+  await act(async () => { button(tree, 'customer-message-send').props.onPress(); button(tree, 'customer-message-send').props.onPress(); });
+  assert.equal(sent.length, sentBefore + 1); assert.deepEqual(sent.at(-1), ['customer-active', 'Customer draft']);
+  await act(async () => customerRequest.resolve({ ok: true }));
+  assert.equal(tree.root.findByProps({ testID: 'customer-message-input' }).props.value, '');
+  await act(async () => tree.root.findByProps({ testID: 'customer-message-input' }).props.onChangeText('Keep this after failure'));
+  sendResult = async () => { throw new Error('network'); };
+  await act(async () => button(tree, 'customer-message-send').props.onPress());
+  assert.equal(tree.root.findByProps({ testID: 'customer-message-input' }).props.value, 'Keep this after failure');
+  assert.match(text(tree), /ikke bekreftet sendt/);
+  await unmount(tree);
+  queryData['customer-active-trip'].isError = true;
+  tree = await mount(CustomerMessages); assert.match(text(tree), /Kunne ikke hente reisestatus/); assert.doesNotMatch(text(tree), /My confirmed message/); await unmount(tree);
+
+  const CustomerHistory = load('frontend', 'app/(app)/history.tsx').default;
+  queryData = { trips: { data: { trips: [{ trip_id: 'finished', status: 'completed', payment_status: 'paid', created_at: new Date().toISOString(), dropoff_address: 'Destination', price: 184 }, { trip_id: 'cancelled', status: 'cancelled', created_at: new Date().toISOString(), price: 999 }] } }, 'customer-active-trip': { data: { trip_id: 'live-trip', status: 'in_trip', dropoff_address: 'Live destination' } } };
+  tree = await mount(CustomerHistory);
+  assert.doesNotMatch(text(tree), /999 kr/);
+  await act(async () => button(tree, 'trip-finished').props.onPress()); assert.equal(navigation.at(-1)[1], '/customer-trip/finished');
+  await act(async () => button(tree, 'history-active-trip').props.onPress()); assert.equal(navigation.at(-1)[1], '/booking/live-trip'); await unmount(tree);
+  const CustomerTrip = load('frontend', 'app/customer-trip/[tripId].tsx').default;
+  queryData = { 'customer-trip-detail': { data: { trip_id: 'customer-detail', status: 'completed', payment_status: 'paid', price: 184, created_at: new Date().toISOString(), driver: { name: 'Test Driver' } } } };
+  tree = await mount(CustomerTrip); assert.match(text(tree), /Kartdata er ikke tilgjengelig/);
+  await act(async () => button(tree, 'customer-trip-receipt').props.onPress()); assert.equal(navigation.at(-1)[1], '/receipt/customer-detail'); await unmount(tree);
+  queryData['customer-trip-detail'].data.status = 'in_trip';
+  queryData['customer-trip-detail'].data.payment_status = 'reserved';
+  tree = await mount(CustomerTrip);
+  await act(async () => button(tree, 'customer-trip-receipt').props.onPress()); assert.equal(navigation.at(-1)[1], '/booking/customer-detail');
+  assert.doesNotMatch(text(tree), /Betalt/); await unmount(tree);
+  console.log('PASS: Customer compact profile routes/saved data, active-trip-only chat, correct passenger bubbles, duplicate sends, failure preserves draft, status errors hide stale conversation, active/history/detail/receipt routing and absent-map handling.');
   console.log('PASS: Driver overview/detail income comes from authoritative summaries, excludes unconfirmed trip income, hides errored totals, does not invent payout dates and does not turn missing weekly data into zero.');
   console.log('PASS: Driver assigned/busy/parked vehicle selection, server confirmation, duplicate taps, paid-only trip income, Oslo date grouping, history/detail routing and privacy-limited trip detail.');
   console.log('PASS: Driver login empty/offline/duplicate attempts, role/approval/2FA/legal/selfie gates; compact profile routes and truthful verification/rating counts.');

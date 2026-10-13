@@ -136,6 +136,8 @@ export default function Settings() {
           <View style={{ paddingTop: 60 }}>{!settingsError ? <Loader /> : null}</View>
         ) : (
           <>
+            <Text style={s.sectionTitle}>Konto</Text>
+            <Pressable accessibilityRole="button" testID="settings-account" onPress={() => router.push('/customer-account')} style={s.infoRow}><Text style={s.rowLabel}>Konto og profil</Text><Icon name="chevron-right" size={18} /></Pressable>
             <Text style={s.sectionTitle}>Turvarsler</Text>
             <View style={s.card}>
               {TOGGLES.map((t, i) => (

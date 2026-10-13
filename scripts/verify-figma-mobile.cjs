@@ -156,6 +156,8 @@ const act = renderer.act;
   stubs.set('expo-router', { useRouter: () => ({ push: route => profileRoutes.push(route), replace: () => {}, back: () => {} }) });
   stubs.set('@/src/lib/socialSignIn', { googleIdentity: async () => null });
   stubs.set('@/src/lib/api', { authApi: { nativeConfig: async () => ({}), linkGoogle: async () => {} }, gdprApi: { delete: async () => {} } });
+  stubs.set('@tanstack/react-query', { useQuery: () => ({ data: null, isPending: true }) });
+  stubs.set('@/src/lib/api', { mePlacesApi: { list() {} }, paymentApi: { list() {} } });
   const CustomerProfile = load('frontend', 'app/(app)/profile.tsx').default;
   let customerProfile;
   await act(async () => { customerProfile = renderer.create(React.createElement(CustomerProfile)); });

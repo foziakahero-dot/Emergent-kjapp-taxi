@@ -8,7 +8,7 @@ import { colors } from '@/src/theme';
 import { Text } from './Typography';
 import { FigmaGradient } from './FigmaGradient';
 
-export function CustomerPhoto({ initials, size = 56 }: { initials: string; size?: number }) {
+export function CustomerPhoto({ initials, size = 56, shape = 'circle', showLabel = true }: { initials: string; size?: number; shape?: 'circle' | 'v10'; showLabel?: boolean }) {
   const { user, refresh } = useAuth();
   const [source, setSource] = useState<any>(null);
   const [choosing, setChoosing] = useState(false);
@@ -50,12 +50,12 @@ export function CustomerPhoto({ initials, size = 56 }: { initials: string; size?
     catch (e) { if (mounted.current) setError(apiError(e)); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   };
-  const avatarStyle = { width: size, height: size, borderRadius: size / 2 };
+  const avatarStyle = { width: size, height: size, borderRadius: shape === 'v10' ? size * .34 : size / 2 };
   return <View style={{ alignItems: 'center', maxWidth: size + 8, gap: 4 }}>
     <Pressable accessibilityRole="button" accessibilityLabel="Endre profilbilde" testID="profile-photo-edit" disabled={busy} onPress={() => setChoosing(true)}>
-      {source ? <Image source={source} style={avatarStyle} onError={() => setSource(null)} /> : <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={[avatarStyle, { alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: '#FFFFFF', fontSize: 20 }}>{initials}</Text></FigmaGradient>}
+      {source ? <Image source={source} style={avatarStyle} onError={() => setSource(null)} /> : shape === 'v10' ? <View style={[avatarStyle, { backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: colors.text, fontSize: size * .36, fontWeight: '600' }}>{initials}</Text></View> : <FigmaGradient colors={['#FF3B3B', '#FF0000']} style={[avatarStyle, { alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: '#FFFFFF', fontSize: 20 }}>{initials}</Text></FigmaGradient>}
     </Pressable>
-    {busy ? <><ActivityIndicator color={colors.accent} /><Text>{progress}%</Text></> : <Text style={{ fontSize: 10, color: colors.textSecondary }}>Endre bilde</Text>}
+    {busy ? <><ActivityIndicator color={colors.accent} /><Text>{progress}%</Text></> : showLabel ? <Text style={{ fontSize: 10, color: colors.textSecondary }}>Endre bilde</Text> : null}
     {error ? <Text testID="profile-photo-error" accessibilityRole="alert" style={{ fontSize: 11, color: colors.danger }}>{error}</Text> : null}
     <Modal visible={choosing} transparent animationType="fade" onRequestClose={() => setChoosing(false)}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,31,63,0.4)', justifyContent: 'center', padding: 28 }}>
