@@ -141,3 +141,11 @@ The authoritative screen lists and layout are `src/CustomerApp.tsx`, `src/Driver
 4. Remaining design dependencies: scheduling/flight prediction, Driver demand forecasts, notification history, customer receipt PDF/VAT endpoint, extra document/vehicle fields, SMS/BankID, high contrast/spoken guidance and provider configuration. Preserve truthful unavailable states until their contracts exist.
 
 Read `PHASE5_RESUME_CHECKPOINT_2026-10-12.md` for earlier infrastructure/build evidence. Full 67-numbered-screen pixel-identical completion and beta readiness are not claimed. No main merge, production deployment, store release or OTA occurred.
+
+## Fresh continuation evidence — 2026-10-14 01:51 Oslo
+
+The combined mobile candidate is saved as `b847dc1a5c6ed6bc285c4935b1dc8fcf2cb8c192` in draft PR #101, targeting QA, with GitHub reporting mergeable=true. Both app typechecks, all behavioral/controller suites, 27 targeted backend cases and 12 QA guard fixtures pass. The candidate backend blob matches the deployed QA source exactly (`cf449b4022e2c1757bc3760237f49876384d157f`).
+
+A fresh PR-triggered Actions run, `38486477203`, is completed with startup_failure. Its actual GitHub annotation says the job was not started because recent account payments failed or the spending limit needs increasing. No jobs/artifacts were produced. Do not retry builds until the account billing/spending obstruction is resolved through an authorized human payment path.
+
+The previous browser usage limit no longer blocked opening QA. The free Render instance woke up; startup completed and the application log confirms `GET /api/health` HTTP 200 at 2026-10-13 23:50:45 UTC. Reading the resulting browser page was rejected by the browser URL policy because its protocol was not allowed. No alternate-browser, raw-page, protocol or indirect workaround was attempted. The JSON body, canonical readiness and authenticated integration remain unverified. Deployment live plus HTTP 200 is not full database/Stripe/ride certification.
