@@ -1,23 +1,19 @@
-import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
+import { Platform, Share } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
-import { Icon } from '@/src/components/Icon';
-import { Button, Loader } from '@/src/components/ui';
+import { Loader } from '@/src/components/ui';
+import { CustomerReceiptView } from '@/src/components/CustomerReceiptView';
+import { V10Screen, V10State } from '@/src/components/V10UI';
 import { payNative } from '@/src/lib/nativePayment';
-import { paymentApi, tripsApi } from '@/src/lib/api';
-import { apiError, kr, vehicleMeta } from '@/src/lib/format';
+import { paymentApi, tripsApi, tripDriverPhotoSource } from '@/src/lib/api';
+import { apiError, kr } from '@/src/lib/format';
 
 const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjappapp.no';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function Receipt() {
-  const { tripId } = useLocalSearchParams<{ tripId: string }>();
-  const insets = useSafeAreaInsets();
-  const s = useStyles();
+  const { tripId, view } = useLocalSearchParams<{ tripId: string; view?: string }>();
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
   const [rating, setRating] = useState(0);
@@ -25,11 +21,20 @@ export default function Receipt() {
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [loadError, setLoadError] = useState(false);
+  const [ratingBusy, setRatingBusy] = useState(false), [ratingError, setRatingError] = useState('');
+  const [photo, setPhoto] = useState<any>(null);
+  const ratingLock = useRef(false), loadSequence = useRef(0), mounted = useRef(true), currentRoute = useRef(tripId);
+  currentRoute.current = tripId;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; loadSequence.current++; }; }, []);
+  const routeIsCurrent = () => mounted.current && currentRoute.current === tripId;
 
   const loadTrip = useCallback(async () => {
     if (!tripId) return null;
+    const request = ++loadSequence.current;
     try {
       const t = await tripsApi.get(tripId);
+      if (!routeIsCurrent() || request !== loadSequence.current) return null;
+      if (t?.trip_id !== tripId) throw new Error('Turen ble ikke bekreftet.');
       setTrip(t);
       setLoadError(false);
       if (t.passenger_rating) {
@@ -38,14 +43,18 @@ export default function Receipt() {
       }
       return t;
     } catch {
-      setLoadError(true);
+      if (routeIsCurrent() && request === loadSequence.current) setLoadError(true);
       return null;
     }
   }, [tripId]);
 
+  useEffect(() => { setTrip(null); setRating(0); setRated(false); setRatingError(''); setPaymentError(''); void loadTrip(); }, [loadTrip]);
   useEffect(() => {
-    loadTrip();
-  }, [loadTrip]);
+    let active = true;
+    setPhoto(null);
+    if (trip?.driver_id) void tripDriverPhotoSource(tripId!).then(source => { if (active) setPhoto(source); }).catch(() => {});
+    return () => { active = false; };
+  }, [tripId, trip?.driver_id]);
 
   useEffect(() => {
     if (!tripId || trip?.payment_status !== 'paid' || trip?.status !== 'arrived') return;
@@ -69,15 +78,17 @@ export default function Receipt() {
     return () => clearInterval(timer);
   }, [tripId, trip?.payment_status, loadTrip]);
 
-  const submitRating = async (stars: number) => {
-    if (!tripId || trip?.payment_status !== 'paid') return;
-    setRating(stars);
+  const submitRating = async (feedback: string) => {
+    if (!tripId || ratingLock.current || rated || trip?.payment_status !== 'paid' || !['arrived', 'completed'].includes(trip?.status) || !Number.isInteger(rating) || rating < 1 || rating > 5) return;
+    ratingLock.current = true; setRatingBusy(true); setRatingError('');
     try {
-      await tripsApi.rate(tripId, { rating: stars, feedback: '' });
-      setRated(true);
-    } catch {
-      await loadTrip();
-    }
+      const confirmed = await tripsApi.rate(tripId, { rating, feedback });
+      if (confirmed?.ok !== true) throw new Error('Vurderingen ble ikke bekreftet.');
+      if (routeIsCurrent()) { setRated(true); setTrip((previous: any) => ({ ...previous, passenger_rating: rating, status: 'rated' })); }
+    } catch (error) {
+      const canonical = await loadTrip();
+      if (routeIsCurrent() && !canonical?.passenger_rating) setRatingError(`Vurderingen ble ikke lagret. ${apiError(error)}`);
+    } finally { ratingLock.current = false; if (routeIsCurrent()) setRatingBusy(false); }
   };
 
   const verifyCheckout = async (sessionId: string) => {
@@ -100,7 +111,7 @@ export default function Receipt() {
 
   const paymentLock = useRef(false);
   const pay = async () => {
-    if (!tripId || paying || paymentLock.current) return;
+    if (!tripId || paying || paymentLock.current || trip?.payment_status === 'paid' || trip?.payment_flow === 'reservation' || !['arrived', 'completed'].includes(trip?.status)) return;
     paymentLock.current = true;
     setPaymentError('');
     setPaying(true);
@@ -108,7 +119,7 @@ export default function Receipt() {
       const nativeResult = await payNative(tripId);
       if (nativeResult !== null) {
         await loadTrip();
-        if (!nativeResult) setPaymentError('Betalingen er ikke bekreftet. Du kan åpne betalingen igjen eller sjekke status.');
+        if (!nativeResult && routeIsCurrent()) setPaymentError('Betalingen er ikke bekreftet. Du kan åpne betalingen igjen eller sjekke status.');
         return;
       }
       const result = await paymentApi.checkout(tripId, CHECKOUT_ORIGIN);
@@ -121,180 +132,27 @@ export default function Receipt() {
 
       await WebBrowser.openBrowserAsync(result.checkout_url);
       const paid = await verifyCheckout(result.session_id);
-      if (!paid) {
+      if (!paid && routeIsCurrent()) {
         setPaymentError('Betalingen er ikke bekreftet ennå. Hvis du betalte, vent noen sekunder og prøv «Sjekk betaling».');
       }
     } catch (e) {
-      setPaymentError(apiError(e));
+      if (routeIsCurrent()) setPaymentError(apiError(e));
     } finally {
       paymentLock.current = false;
-      setPaying(false);
+      if (routeIsCurrent()) setPaying(false);
     }
   };
 
-  if (!trip) {
-    if (loadError) {
-      return (
-        <View style={s.loading} testID="receipt-load-error">
-          <View style={s.loadErrorIcon}><Icon name="file-text" size={24} color={colors.accent} /></View>
-          <Text style={s.loadErrorTitle}>Kunne ikke hente kvitteringen</Text>
-          <Text style={s.loadErrorSub}>Sjekk nettet ditt og prøv igjen. Ingen betaling startes på nytt automatisk.</Text>
-          <Pressable style={s.retryBtn} onPress={loadTrip} testID="receipt-retry">
-            <Text style={s.retryBtnText}>Prøv igjen</Text>
-          </Pressable>
-        </View>
-      );
-    }
-    return <View style={s.loading}><Loader label="Henter kvittering…" /></View>;
-  }
-
-  const v = vehicleMeta(trip.vehicle_type);
-  const isPaid = trip.payment_status === 'paid';
-  const automaticPayment = trip.payment_flow === 'reservation';
-  const paymentNeedsAction = trip.payment_status === 'requires_action' || trip.payment_status === 'failed';
-  const paymentLabel = isPaid ? 'Betalt' : automaticPayment ? 'Betaling behandles automatisk' : paymentNeedsAction ? 'Betaling må fullføres' : 'Venter på betaling';
-  const paymentHint = automaticPayment
-    ? 'Turbeløpet ble reservert før turstart. SNAR trekker beløpet automatisk og oppdaterer kvitteringen. Du skal ikke betale på nytt.'
-    : paymentNeedsAction
-    ? 'Automatisk betaling kunne ikke fullføres uten ny godkjenning. Du kan betale sikkert med kort nedenfor.'
-    : 'Stripe åpnes i et sikkert betalingsvindu. Beløpet kommer fra turen på serveren.';
-
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      contentContainerStyle={[s.screen, { paddingTop: insets.top + 22, paddingBottom: insets.bottom + 36 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <Pressable onPress={() => router.replace('/(app)/home')} accessibilityRole="button" accessibilityLabel="Tilbake til hjem" testID="receipt-back" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, marginBottom: 12 }}>
-        <Icon name="arrow-left" size={20} color={colors.text} /><Text>Tilbake til hjem</Text>
-      </Pressable>
-      <View style={s.receiptHeader}>
-        <View style={[s.statusCheck, !isPaid && s.pendingCircle]}>
-          <Icon name={isPaid ? 'check' : 'card'} size={20} color={isPaid ? colors.accentOn : colors.accent} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[s.receiptEyebrow, { color: isPaid ? colors.online : colors.warning }]}>
-            {isPaid ? 'BETALT AUTOMATISK' : paymentLabel.toUpperCase()}
-          </Text>
-          <Text style={s.receiptTitle}>Takk for turen!</Text>
-        </View>
-      </View>
-
-      <View style={s.fareCard}>
-        <View style={s.fareRow}><Text style={s.fareLabel}>Avstand</Text><Text style={s.fareValue}>{trip.distance_km} km</Text></View>
-        <View style={s.fareRow}><Text style={s.fareLabel}>Varighet</Text><Text style={s.fareValue}>{trip.duration_min} min</Text></View>
-        <View style={s.fareRow}><Text style={s.fareLabel}>Kjøretøy</Text><Text style={s.fareValue}>{v.name}</Text></View>
-        {trip.waiting_policy ? <>
-          <View style={s.fareRow}><Text style={s.fareLabel}>Avtalt turpris</Text><Text style={s.fareValue}>{kr(trip.quoted_ride_price)}</Text></View>
-          <View style={s.fareRow}><Text style={s.fareLabel}>Ventetid etter {trip.waiting_policy.free_minutes} min gratis</Text><Text style={s.fareValue}>{kr(trip.waiting_fee_total || 0)}</Text></View>
-        </> : null}
-        {trip.receipt_id ? <View style={s.fareRow}><Text style={s.fareLabel}>Kvittering</Text><Text style={s.fareValue} numberOfLines={1}>{trip.receipt_id}</Text></View> : null}
-        <View style={s.totalRow}>
-          <Text style={s.totalLabel}>Totalt</Text>
-          <Text style={s.totalValue}>{kr(trip.price)}</Text>
-        </View>
-        <View style={s.paymentFoot}>
-          <Icon name="card" size={15} color={colors.textSecondary} />
-          <Text style={s.paymentFootText}>{isPaid ? 'Betaling registrert' : paymentLabel}</Text>
-        </View>
-      </View>
-
-      {!isPaid ? (
-        <View style={s.paymentCard}>
-          <View style={s.paymentHead}>
-            <View style={s.paymentIcon}><Icon name="lock" size={18} color={colors.accent} /></View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.paymentTitle}>{automaticPayment ? 'Betales automatisk' : 'Betal turen sikkert'}</Text>
-              <Text style={s.paymentSub}>{paymentHint}</Text>
-            </View>
-          </View>
-          {!automaticPayment ? <Button label={`Betal ${kr(trip.price)} med kort`} onPress={pay} loading={paying} testID="receipt-pay" style={{ marginTop: 16 }} /> : null}
-          <Pressable onPress={loadTrip} disabled={paying} style={s.refreshPayment} testID="receipt-check-payment">
-            <Icon name="history" size={15} color={colors.textSecondary} />
-            <Text style={s.refreshText}>Sjekk betaling</Text>
-          </Pressable>
-          {paymentError ? <Text style={s.paymentError}>{paymentError}</Text> : null}
-        </View>
-      ) : null}
-
-      <View style={s.ratingCard}>
-        {trip.driver ? (
-          <View style={s.driverRow}>
-            <View style={s.driverAvatar}>
-              <Text style={s.driverAvatarText}>{String(trip.driver.name || 'K').slice(0, 1).toUpperCase()}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.driverName}>{trip.driver.name}</Text>
-              <Text style={s.driverCar}>{trip.driver.car} · {trip.driver.plate}</Text>
-            </View>
-          </View>
-        ) : null}
-        <Text style={s.ratingPrompt}>{rated ? 'Takk for vurderingen!' : 'Hvordan var turen?'}</Text>
-        {isPaid ? (
-          <View style={s.stars}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => !rated && submitRating(n)} disabled={rated} testID={`rate-star-${n}`} style={s.starHit} accessibilityRole="button" accessibilityLabel={`${n} stjerner`}>
-                <Icon name="star" size={30} color={n <= rating ? colors.accent : colors.lineStrong} fill={n <= rating ? colors.accent : 'none'} />
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <Text style={s.ratingLocked}>Vurdering åpnes når betalingen er bekreftet.</Text>
-        )}
-      </View>
-
-      {true ? (
-        <Button label={isPaid ? 'Ferdig' : 'Til hjem'} onPress={() => router.replace('/(app)/home')} testID="receipt-done" style={{ marginTop: 22 }} />
-      ) : null}
-    </ScrollView>
-  );
+  const home = () => router.replace('/(app)/home');
+  if (!trip) return <V10Screen>{loadError ? <V10State warning icon="wifiOff" title="Kunne ikke hente kvitteringen" body="Sjekk forbindelsen og prøv igjen. Ingen betaling startes på nytt automatisk." action="Prøv igjen" onAction={() => void loadTrip()} /> : <Loader label="Henter kvittering…" />}</V10Screen>;
+  if (!['arrived', 'completed', 'rated'].includes(trip.status)) return <V10Screen><V10State icon="trip" title="Turen er ikke avsluttet" body="Åpne turen for å se bekreftet status." action="Åpne tur" onAction={() => router.replace(`/booking/${tripId}`)} /></V10Screen>;
+  const shareReceipt = async () => {
+    try { await Share.share({ message: [`SNAR · ${trip.receipt_id || trip.trip_id}`, trip.pickup_address, `Til ${trip.dropoff_address || 'destinasjon'}`, kr(trip.price), trip.payment_status === 'paid' ? 'Betaling registrert' : 'Betaling ikke bekreftet'].filter(Boolean).join('\n') }); }
+    catch (error) { if (routeIsCurrent()) setPaymentError(`Kunne ikke åpne deling. ${apiError(error)}`); }
+  };
+  return <CustomerReceiptView key={tripId} trip={trip} initialReceipt={view === 'receipt'} rating={rating} rated={rated}
+    ratingBusy={ratingBusy} ratingError={ratingError} paymentBusy={paying} paymentError={paymentError} refreshError={loadError} photo={photo}
+    onPhotoError={() => setPhoto(null)} onRating={setRating} onSubmit={feedback => void submitRating(feedback)} onPay={() => void pay()}
+    onRefresh={() => void loadTrip()} onHome={home} onBack={() => router.back()} onSupport={() => router.push('/support')}
+    onShare={() => void shareReceipt()} />;
 }
-
-const useStyles = makeStyles((c) => ({
-  loading: { flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
-  loadErrorIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  loadErrorTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 16, textAlign: 'center' },
-  loadErrorSub: { color: c.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 },
-  retryBtn: { minHeight: 50, borderRadius: 25, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, marginTop: 18 },
-  retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 14 },
-
-  screen: { paddingHorizontal: 28, backgroundColor: c.bg },
-  receiptHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  statusCheck: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.online },
-  pendingCircle: { backgroundColor: c.accentSoft, borderWidth: 1, borderColor: c.accent },
-  receiptEyebrow: { fontFamily: font.mono, fontSize: 10, letterSpacing: 1.4 },
-  receiptTitle: { color: c.text, fontFamily: font.semibold, fontSize: 20, marginTop: 2 },
-
-  fareCard: { marginTop: 24, borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  fareRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  fareLabel: { color: c.textSecondary, fontSize: 14 },
-  fareValue: { maxWidth: '58%', color: c.text, fontFamily: font.medium, fontSize: 14, textAlign: 'right' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.line },
-  totalLabel: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
-  totalValue: { color: c.text, fontFamily: font.semibold, fontSize: 16 },
-  paymentFoot: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10 },
-  paymentFootText: { color: c.textSecondary, fontSize: 12 },
-
-  paymentCard: { marginTop: 16, borderRadius: 20, borderWidth: 1, borderColor: c.line, padding: 18, backgroundColor: c.surface },
-  paymentHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  paymentIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  paymentTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
-  paymentSub: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 3 },
-  refreshPayment: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 6 },
-  refreshText: { color: c.textSecondary, fontSize: 13 },
-  paymentError: { color: c.danger, fontSize: 12, lineHeight: 17, marginTop: 4, textAlign: 'center' },
-
-  ratingCard: { marginTop: 22, alignItems: 'center', borderRadius: 24, padding: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
-  driverRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 12, backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  driverAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
-  driverAvatarText: { color: c.accentOn, fontFamily: font.bold, fontSize: 18 },
-  driverName: { color: c.text, fontFamily: font.semibold, fontSize: 14 },
-  driverCar: { color: c.textSecondary, fontFamily: font.mono, fontSize: 10.5, marginTop: 3 },
-  ratingPrompt: { color: c.text, fontFamily: font.medium, fontSize: 14, marginTop: 16 },
-  stars: { flexDirection: 'row', justifyContent: 'center', gap: 2, marginTop: 10 },
-  starHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  ratingLocked: { color: c.textMuted, fontSize: 12, marginTop: 10, textAlign: 'center' },
-}));
-
-
-
