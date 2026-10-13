@@ -147,9 +147,11 @@ export default function Home() {
     }, [loadMethods, loadPlaces, router]),
   );
 
-  const refreshLocation = useCallback(async () => {
+  const refreshLocation = useCallback(async (requestPermission = true) => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = requestPermission
+        ? await Location.requestForegroundPermissionsAsync()
+        : await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') {
         setLocationReady(false);
         setLocDenied(true);
@@ -173,7 +175,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void refreshLocation();
+    // Respect the manual-address choice; only an explicit location action opens the OS prompt.
+    void refreshLocation(false);
     placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
     loadMethods();
     loadPlaces();

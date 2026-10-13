@@ -1,6 +1,6 @@
 import { Text } from '@/src/components/Typography';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
@@ -26,10 +26,9 @@ export default function Index() {
 
   if (user === undefined || (user?.role === 'driver' && user?.approved === true)) {
     return (
-      <View style={s.splash}>
-        <SplashBackground />
-        <SplashBrand />
-        <ActivityIndicator color={colors.online} style={{ marginTop: 28 }} />
+      <View style={[s.splash, { backgroundColor: '#08131F' }]}>
+        <SplashBackground inverse />
+        <SplashBrand inverse label="Driver" />
       </View>
     );
   }

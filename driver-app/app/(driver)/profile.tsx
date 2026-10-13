@@ -111,11 +111,11 @@ export default function DriverProfile() {
       </View>
       <Outline label="Endre passord" onPress={() => router.push('/forgot-password')} />
       <Section>Du kjører for</Section>
-      <View style={s.row} testID="driver-fleet-card">
+      <Pressable accessibilityRole="button" onPress={() => router.push('/driver-fleet')} style={s.row} testID="driver-fleet-card">
         <FigmaGradient angle={135} colors={[colors.surfaceInverse, colors.surfaceInverse]} style={s.fleetIcon}><Icon name="shield" size={20} color="#FFFFFF" /></FigmaGradient>
         <View style={{ flex: 1 }}><Text style={s.label}>{u.fleet_name || 'Ikke tilknyttet'}</Text><Text style={s.sub}>Org.nr {u.fleet_org_number || '—'}</Text></View>
         {!!u.fleet_id && <Badge label="Tilknyttet" />}
-      </View>
+      </Pressable>
       <Section>Kjøretøy</Section>
       <Text style={[s.sub, { marginTop: 4 }]}>Velg blant kjøretøy tildelt av flåteeier.</Text>
       <View style={[s.card, { marginTop: 12 }]} testID="driver-active-vehicle-card">
@@ -142,6 +142,7 @@ export default function DriverProfile() {
         {verified ? <Badge label="Verifisert" /> : <Icon name="chevron-right" size={16} color={colors.textMuted} />}
       </Pressable>
       <Section>Dokumenter</Section>
+      <Outline label="Åpne dokumentoversikt" onPress={() => router.push('/driver-documents')} />
       <View style={[s.card, { marginTop: 12, gap: 8 }]}>
         {docs.map(d => <View key={d.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: d.path ? colors.success : colors.warning }} />
@@ -166,6 +167,7 @@ export default function DriverProfile() {
         <Icon name="chevron-right" size={16} color={colors.textMuted} />
       </Pressable>
       <Section>Appinnstillinger</Section>
+      <Outline label="Navigasjon" onPress={() => router.push('/driver-navigation')} />
       <View style={{ marginTop: 12, gap: 12 }}>
         <Setting icon="car" label="Kjøremodus" sub="Ikke forstyrr under kjøring" onPress={() => void Linking.openSettings()} />
         <View style={[s.row, { marginTop: 0 }]}>

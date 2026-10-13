@@ -1,6 +1,6 @@
 import { Text } from '@/src/components/Typography';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
@@ -8,7 +8,7 @@ import { colors, font, makeStyles } from '@/src/theme';
 import { Button } from '@/src/components/ui';
 import { SplashBackground, SplashBrand } from '@/src/components/SplashArt';
 import { KjappMark } from '@/src/components/KjappMark';
-import { Icon } from '@/src/components/Icon';
+import { V10Icon } from '@/src/components/V10Icon';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
@@ -26,10 +26,9 @@ export default function Index() {
 
   if (user === undefined || (user && isCustomerRole(user.role))) {
     return (
-      <View style={s.splash}>
-        <SplashBackground />
-        <SplashBrand />
-        <ActivityIndicator color={colors.accent} style={{ marginTop: 28 }} />
+      <View style={[s.splash, { backgroundColor: colors.surfaceInverse }]}>
+        <SplashBackground inverse />
+        <SplashBrand inverse />
       </View>
     );
   }
@@ -57,13 +56,12 @@ export default function Index() {
   }
 
   return (
-    <ScrollView contentContainerStyle={[s.onboarding, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 24 }]} testID="onboarding">
-      <SplashBackground />
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={[s.onboarding, { paddingTop: Math.max(96, insets.top + 48), paddingBottom: Math.max(40, insets.bottom + 6) }]} testID="onboarding">
       <KjappMark size={48} />
       <Text style={s.onboardingTitle}>Reis enkelt.{'\n'}<Text style={s.onboardingMuted}>Hele Norge.</Text></Text>
       <View style={s.benefits}>
-        <Benefit icon="car" title="Lokale løyvehavere" detail="Godkjente sjåfører fra norske taxiselskaper." />
-        <Benefit icon="card" title="Pris før du bestiller" detail="Se serverens turpris før du bekrefter." />
+        <Benefit icon="car" title="Lokale løyvehavere" detail="Godkjente sjåfører og elbiler fra norske taxiselskaper." />
+        <Benefit icon="clock" title="Fast pris før du bestiller" detail="Ingen overraskelser. Prisen du ser er prisen du betaler." />
         <Benefit icon="sparkles" title="Si hva du trenger" detail="Bruk SNAR AI til å utforske reisemuligheter." />
       </View>
       <View style={s.onboardingActions}>
@@ -78,11 +76,11 @@ export default function Index() {
   );
 }
 
-function Benefit({ icon, title, detail }: { icon: 'car' | 'card' | 'sparkles'; title: string; detail: string }) {
+function Benefit({ icon, title, detail }: { icon: 'car' | 'clock' | 'sparkles'; title: string; detail: string }) {
   const s = useStyles();
   return <View style={s.benefit}>
-    <View style={s.benefitIcon}><Icon name={icon} size={20} color={colors.text} /></View>
-    <View style={{ flex: 1, gap: 3 }}>
+    <View style={s.benefitIcon}><V10Icon name={icon === 'car' ? 'vehicle' : icon === 'sparkles' ? 'ai' : icon} size={20} color={colors.text} /></View>
+    <View style={{ flex: 1 }}>
       <Text style={s.benefitTitle}>{title}</Text>
       <Text style={s.benefitDetail}>{detail}</Text>
     </View>
@@ -95,16 +93,16 @@ const useStyles = makeStyles((c) => ({
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     title: { color: c.text, fontFamily: font.display, fontSize: 24, textAlign: 'center', marginTop: 32 },
     subtitle: { color: c.textSecondary, fontFamily: font.body, fontSize: 16, lineHeight: 24, marginTop: 14, textAlign: 'center' },
-    onboardingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 40, lineHeight: 44, letterSpacing: -1, marginTop: 32 },
-    onboardingMuted: { color: c.textMuted, fontFamily: font.semibold, fontSize: 40, lineHeight: 44, letterSpacing: -1 },
+    onboardingTitle: { color: c.text, fontFamily: font.semibold, fontSize: 40, lineHeight: 44, letterSpacing: -1.4, marginTop: 32 },
+    onboardingMuted: { color: c.textMuted, fontFamily: font.semibold, fontSize: 40, lineHeight: 44, letterSpacing: -1.4 },
     benefits: { gap: 22, marginTop: 40 },
     benefit: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
     benefitIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-    benefitTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 23 },
-    benefitDetail: { color: c.textSecondary, fontSize: 14, lineHeight: 20 },
-    onboardingActions: { marginTop: 40, gap: 4 },
+    benefitTitle: { color: c.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 22 },
+    benefitDetail: { color: c.textSecondary, fontSize: 14, lineHeight: 20, letterSpacing: -0.154 },
+    onboardingActions: { marginTop: 'auto', paddingTop: 32, gap: 4 },
     primaryAction: { minHeight: 56, borderRadius: 16, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
     primaryActionText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 16, lineHeight: 22 },
-    secondaryAction: { minHeight: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-    secondaryActionText: { color: c.text, fontFamily: font.semibold, fontSize: 14, lineHeight: 20 }
+    secondaryAction: { minHeight: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+    secondaryActionText: { color: c.textSecondary, fontFamily: font.medium, fontSize: 16, lineHeight: 22 }
 }));

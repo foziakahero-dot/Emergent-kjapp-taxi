@@ -137,6 +137,9 @@ export default function RootLayout() {
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-identity" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-fleet" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-documents" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-navigation" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
         </QueryClientProvider>
