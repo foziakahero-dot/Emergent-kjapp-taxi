@@ -375,3 +375,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 28/29 (2026-10-15, Oslo)
+
+26/27 is published as `5e6d000`. Read `DRIVER_PAIR_28_29_20261015.md`: source quick-reply press/tracking/acknowledged feedback, source navigation fade and real persisted provider settings. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue with 30/31 after publication. Native provider/haptic/pixel acceptance remains open.
+
+---
+

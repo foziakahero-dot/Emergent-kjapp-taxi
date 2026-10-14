@@ -11,6 +11,7 @@ import { V10Icon } from '@/src/components/V10Icon';
 import { V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { colors, useColorTheme } from '@/src/theme';
 import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 
 export default function DriverNavigation() {
   useColorTheme();
@@ -36,7 +37,7 @@ export default function DriverNavigation() {
     } catch { setError('Kunne ikke lagre navigasjonsvalget. Prøv igjen.'); }
     finally { busy.current = false; setSaving(false); }
   };
-  return <V10Screen testID="driver-navigation-screen">
+  return <V10Screen testID="driver-navigation-screen"><V10Entrance fade>
     <V10Header title="Navigasjon" onBack={() => router.back()} />
     {settings.isPending ? <Loader /> : settings.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente navigasjonsvalget" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void settings.refetch()} /> :
       <V10Section title="Standard navigasjon"><V10Group>
@@ -47,5 +48,5 @@ export default function DriverNavigation() {
         </Pressable>)}
       </V10Group></V10Section>}
     {error ? <Text accessibilityRole="alert" style={[v10.secondary, { marginTop: 12, color: colors.danger }]}>{error}</Text> : null}
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

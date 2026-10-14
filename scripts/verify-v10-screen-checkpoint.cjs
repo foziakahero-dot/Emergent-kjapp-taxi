@@ -249,17 +249,21 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     'driver-trip-messages': { data: { messages: [{ id: 'one', from_role: 'user', text: 'Test incoming message' }] } },
   };
   const sending = deferred(); sendResult = () => sending.promise;
+  const beforeMessageFeedback = hapticCalls.length;
   tree = await mount(Messages);
   assert.match(text(tree), /Test incoming message/);
   const quickButtons = () => tree.root.findAll(node => node.type === 'Pressable' && node.props.accessibilityState && 'disabled' in node.props.accessibilityState);
   await act(async () => { quickButtons()[0].props.onPress(); quickButtons()[1].props.onPress(); });
   assert.equal(sent.length, 1, 'Only one quick reply may be in flight');
+  assert.equal(hapticCalls.length, beforeMessageFeedback, 'Unconfirmed message cannot emit success feedback');
   assert.deepEqual(sent[0], ['active', 'Jeg er fremme']);
   await act(async () => sending.resolve({ ok: true }));
+  assert.equal(hapticCalls.length, beforeMessageFeedback + 1);
   assert.equal(invalidated.at(-1)[1], 'active');
   sendResult = async () => { throw new Error('network'); };
   await act(async () => quickButtons()[0].props.onPress());
   assert.match(text(tree), /ikke bekreftet sendt/);
+  assert.equal(hapticCalls.length, beforeMessageFeedback + 1, 'Failed message cannot emit success feedback');
   await unmount(tree);
   stubs['@/src/components/AppleSignInButton'] = { AppleSignInButton: 'AppleButton' };
   const Login = load('driver-app', 'app/driver-login.tsx').default;

@@ -10,6 +10,7 @@ import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Header, V10Screen, V10State, v10 } from '@/src/components/V10UI';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Loader } from '@/src/components/ui';
+import * as Haptics from 'expo-haptics';
 
 const activeStatuses = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
 export default function DriverMessages() {
@@ -42,7 +43,7 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
   const send = async (text: string) => {
     if (lock.current || !focused) return;
     lock.current = true; setSending(text); setError('');
-    try { await messagesApi.send(trip.trip_id, text); await qc.invalidateQueries({ queryKey: ['driver-trip-messages', trip.trip_id] }); }
+    try { await messagesApi.send(trip.trip_id, text); await qc.invalidateQueries({ queryKey: ['driver-trip-messages', trip.trip_id] }); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }
     catch { setError('Meldingen ble ikke bekreftet sendt. Kontroller samtalen før du prøver igjen.'); }
     finally { lock.current = false; setSending(''); }
   };
@@ -63,8 +64,8 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
     {error ? <Text accessibilityRole="alert" style={[v10.secondary, { paddingHorizontal: 16, paddingBottom: 8, color: colors.danger }]}>{error}</Text> : null}
     <View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 86, gap: 8 }}>
       {[['Jeg er fremme', '2 min unna'], ['Finner deg ikke', 'Står i taxifilen']].map((row, index) => <View key={index} style={{ flexDirection: 'row', gap: 8 }}>{row.map(text =>
-        <Pressable key={text} accessibilityRole="button" accessibilityState={{ disabled: !!sending }} disabled={!!sending} onPress={() => void send(text)} style={{ flex: 1, minHeight: 52, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 }}>
-          {sending === text ? <ActivityIndicator color={colors.text} /> : <Text style={{ fontFamily: font.semibold, fontSize: 14, lineHeight: 20 }}>{text}</Text>}
+        <Pressable key={text} accessibilityRole="button" accessibilityState={{ disabled: !!sending }} disabled={!!sending} onPress={() => void send(text)} style={({ pressed }) => ({ flex: 1, minHeight: 52, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, transform: [{ scale: pressed ? .97 : 1 }] })}>
+          {sending === text ? <ActivityIndicator color={colors.text} /> : <Text style={{ fontFamily: font.semibold, fontSize: 14, lineHeight: 20, letterSpacing: -.14 }}>{text}</Text>}
         </Pressable>)}</View>)}
     </View>
   </View>;
