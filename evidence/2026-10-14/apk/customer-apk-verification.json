@@ -1,0 +1,29 @@
+{
+  "file": "SNAR_Customer_QA_20261014.apk",
+  "bytes": 237394943,
+  "sha256": "fa0c33b0ab345f353c254fe916a94e56a88fd159ab8af3cca09326cf1bcaa115",
+  "package": "no.kjapp.app",
+  "version": "1.0.0",
+  "min_sdk": "24",
+  "target_sdk": "36",
+  "qa_backend_present": true,
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ],
+  "archive_integrity": "PASS",
+  "hermes_bundle_bytes": 4482512,
+  "device_runtime_test": "PENDING",
+  "eas_build_id": "17f1f1c5-7707-4524-847a-01d4acc7169d",
+  "source_commit": "16956e53f46e18619acefe6e101bc5b42bd13bff",
+  "profile": "qa",
+  "eas_status": "Succeeded",
+  "build_time": "25m45s",
+  "v10_screen_markers": {
+    "route-adjust-pickup": true,
+    "route-choose-vehicle": true,
+    "booking-payment-row": true
+  }
+}

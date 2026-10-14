@@ -1,0 +1,29 @@
+{
+  "file": "SNAR_Driver_QA_20261014.apk",
+  "bytes": 246016910,
+  "sha256": "3d394db93763e9ddf6c9fdc65d53ce00ffd76fba18f470f910bc9e06ed28781c",
+  "package": "no.kjapp.driver",
+  "version": "1.0.0",
+  "min_sdk": "24",
+  "target_sdk": "36",
+  "qa_backend_present": true,
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ],
+  "archive_integrity": "PASS",
+  "hermes_bundle_bytes": 4096620,
+  "device_runtime_test": "PENDING",
+  "eas_build_id": "2da03c07-1e26-4040-825b-bcd4404a3bf7",
+  "source_commit": "b75c0ab7036c7b4afaa50f8624753b79cb8b69d1",
+  "profile": "qa",
+  "eas_status": "Succeeded",
+  "build_time": "23m21s",
+  "v10_screen_markers": {
+    "driver-passenger-confirm": true,
+    "driver-arriving-review": true,
+    "driver-trip-minimize": true
+  }
+}

@@ -24,9 +24,18 @@ The user explicitly authorized both Android QA APKs through Expo EAS, a persiste
 
 Driver job: `2da03c07-1e26-4040-825b-bcd4404a3bf7`, source `b75c0ab7036c7b4afaa50f8624753b79cb8b69d1`, profile `qa`, Android, preview environment. Expo reports **Succeeded**, build time 23m21s, with an APK artifact. Artifact verification is recorded separately after download.
 
-Customer job: `17f1f1c5-7707-4524-847a-01d4acc7169d`, source `16956e53f46e18619acefe6e101bc5b42bd13bff`, profile `qa`, Android, preview. The actual EAS pre-install, clean dependency install, doctor, prebuild, post-install TypeScript/package checks and JavaScript bundle all passed. Native Gradle compilation is in progress.
+Customer job: `17f1f1c5-7707-4524-847a-01d4acc7169d`, source `16956e53f46e18619acefe6e101bc5b42bd13bff`, profile `qa`, Android, preview. The actual EAS pre-install, clean dependency install, doctor, prebuild, post-install TypeScript/package checks and JavaScript bundle all passed. Expo reports **Succeeded**, build time 25m45s, with an APK artifact.
 
-The actual QA support smoke test returned the expected clear AI-disabled 503 and created support ticket `6acecbb4dd6507e3be5dea55` with HTTP 201. Inspection of the existing AdminSupport client found that it reads `body`/`contact_email`, while public intake historically wrote only `message`/`contact`. The endpoint now preserves both schemas, and admin listing normalizes existing public tickets without changing the database. All eight actual support/AI endpoint tests pass. This backend correction is being deployed to Render QA; deployment completion must be verified independently.
+The actual QA support smoke test returned the expected clear AI-disabled 503 and created support ticket `6acecbb4dd6507e3be5dea55` with HTTP 201. Inspection of the existing AdminSupport client found that it reads `body`/`contact_email`, while public intake historically wrote only `message`/`contact`. The endpoint now preserves both schemas, and admin listing normalizes existing public tickets without changing the database. All eight actual support/AI endpoint tests pass. The correction is **live** on Render QA at source `eb840af50e3a036559d467ec914012fd266b59d9`, deployment `dep-db7cs967bikc73adg1v0`, finished 2026-10-14 00:36:26 UTC. Live health/readiness and both account logins passed again after rollout. A new live support ticket `6acecefc3cdf78c6223396e0` returned HTTP 201; Mongo readback confirmed the canonical body and contact fields.
+
+## Delivered APK verification
+
+Both actual EAS APK artifacts were downloaded and retained for the user. ZIP integrity, expected Android identity, ARM64 native libraries, the canonical QA backend and V10 UI markers in the Hermes bundle passed. Both contain ARM64, ARMv7, x86 and x86_64 libraries, min SDK 24 and target SDK 36.
+
+- Customer: `SNAR_Customer_QA_20261014.apk`, 237394943 bytes, SHA-256 `fa0c33b0ab345f353c254fe916a94e56a88fd159ab8af3cca09326cf1bcaa115`, package `no.kjapp.app`.
+- Driver: `SNAR_Driver_QA_20261014.apk`, 246016910 bytes, SHA-256 `3d394db93763e9ddf6c9fdc65d53ce00ffd76fba18f470f910bc9e06ed28781c`, package `no.kjapp.driver`.
+
+Machine-readable artifact and live backend evidence is in `evidence/2026-10-14/apk/`. Test instructions are in `docs/snar-v10/ANDROID_QA_TESTING_20261014.md`. APKs and private login handoff are delivered separately, not committed into Git.
 
 GitHub Actions is separately blocked by the account payment/spending annotation; direct EAS builds do not depend on that runner. Main, production Render, app stores and OTA are unchanged.
 
