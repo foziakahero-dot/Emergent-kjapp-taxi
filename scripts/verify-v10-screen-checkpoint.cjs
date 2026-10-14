@@ -505,8 +505,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   reduceMotion = false;
 
   const Cockpit = load('driver-app', 'src/components/DriverCockpitView.tsx').DriverCockpitView;
-  let advances = 0;
-  const props = { user: { fullName: 'Test Driver', plate: 'TEST' }, online: true, busy: false, error: '', summary: { income: 321, trips: 2, online_minutes: 60 }, current: null, completed: null, offer: null, offerRemaining: null, offerExpired: false, offerDistance: null, offerDuration: null, gpsReady: true, minimized: false, extras: '', onOnline() {}, onAccept() {}, onDecline() {}, onAdvance: async () => { advances++; }, onCancel() {}, onNoShow() {}, onCall() {}, onChat() {}, onNavigate() {}, onEmergency() {}, onMinimize() {}, onContinue() {}, onPause() {}, onError() {} };
+  let advances = 0, pickupNavigations = 0;
+  const props = { user: { fullName: 'Test Driver', plate: 'TEST' }, online: true, busy: false, error: '', summary: { income: 321, trips: 2, online_minutes: 60 }, current: null, completed: null, offer: null, offerRemaining: null, offerExpired: false, offerDistance: null, offerDuration: null, gpsReady: true, minimized: false, extras: '', onOnline() {}, onAccept() {}, onDecline() {}, onAdvance: async () => { advances++; }, onCancel() {}, onNoShow() {}, onCall() {}, onChat() {}, onNavigate() { pickupNavigations++; }, onEmergency() {}, onMinimize() {}, onContinue() {}, onPause() {}, onError() {} };
   tree = await mount(() => React.createElement(Cockpit, { ...props, online: false, busy: true }));
   assert.match(text(tree), /Venter på bekreftelse fra SNAR/);
   assert.equal(button(tree, 'driver-go-online'), undefined, 'Pending shift view hides the old offline actions');
@@ -514,6 +514,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await unmount(tree);
   const currentPickup = { trip_id: 'scene-trip', status: 'driver_on_way', customer: { name: 'Test Customer', phone: '00000000' }, pickup_address: 'Pickup', dropoff_address: 'Destination', price: 184 };
   await act(async () => { tree = renderer.create(React.createElement(Cockpit, { ...props, current: currentPickup })); });
+  await act(async () => button(tree, 'driver-pickup-navigation').props.onPress()); assert.equal(pickupNavigations, 1); assert.equal(advances, 0, 'Navigation cannot advance the trip');
   await act(async () => button(tree, 'driver-arrival-review').props.onPress()); assert.equal(advances, 0, 'Arrival review is UI only');
   await act(async () => button(tree, 'driver-advance').props.onPress()); assert.equal(advances, 1); await unmount(tree);
   await act(async () => { tree = renderer.create(React.createElement(Cockpit, { ...props, current: { ...currentPickup, status: 'at_pickup' } })); });

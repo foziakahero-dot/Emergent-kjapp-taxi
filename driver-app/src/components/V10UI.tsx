@@ -38,23 +38,24 @@ export function V10Row({ icon, title, subtitle, right, onPress, border = false, 
   return onPress ? <Pressable accessibilityRole="button" testID={testID} disabled={disabled} accessibilityState={{ disabled }} onPress={onPress}
     style={({ pressed }) => [...style, pressed && { backgroundColor: colors.cardSubtle }, disabled && { opacity: .55 }]}>{content}</Pressable> : <View testID={testID} style={style}>{content}</View>;
 }
-export function V10Badge({ children, tone = 'neutral', inline = false }: { children: React.ReactNode; tone?: 'positive' | 'warning' | 'critical' | 'neutral'; inline?: boolean }) {
+export function V10Badge({ children, tone = 'neutral', inline = false, icon }: { children: React.ReactNode; tone?: 'positive' | 'warning' | 'critical' | 'neutral'; inline?: boolean; icon?: string }) {
   useColorTheme();
   const palette = { positive: [colors.success, colors.positiveSoft], warning: [colors.warning, colors.warningSoft], critical: [colors.danger, colors.dangerSoft], neutral: [colors.textSecondary, colors.cardSubtle] }[tone];
   return <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: inline ? 'center' : 'flex-start', gap: 6, minHeight: 24, paddingHorizontal: 8, borderRadius: 8, backgroundColor: palette[1] }}>
     <View style={{ width: 6, height: 6, borderRadius: tone === 'positive' ? 3 : 2, backgroundColor: palette[0], transform: [{ rotate: tone === 'critical' ? '45deg' : '0deg' }] }} />
+    {icon ? <V10Icon name={icon} size={12} color={palette[0]} /> : null}
     <Text style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: palette[0] }}>{children}</Text>
   </View>;
 }
-export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height, labelSize }: {
-  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number; labelSize?: number;
+export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height, labelSize, iconSize }: {
+  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number; labelSize?: number; iconSize?: number;
 }) {
   useColorTheme();
   const color = kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text;
   const backgroundColor = { primary: colors.accent, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
-    style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, boxShadow: kind === 'primary' ? `0 6px 20px -10px ${colors.accent}` : undefined, transform: [{ scale: pressed ? .97 : 1 }] })}>
-    {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={small ? 18 : 22} /> : null}
+    style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: small ? 0 : 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, boxShadow: kind === 'primary' ? `0 6px 20px -10px ${colors.accent}` : undefined, transform: [{ scale: pressed ? .97 : 1 }] })}>
+    {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={iconSize ?? (small ? 18 : 22)} /> : null}
     <Text style={{ color, fontFamily: font.semibold, fontSize: labelSize ?? (small ? 14 : 16), lineHeight: labelSize ? labelSize * 1.375 : small ? 20 : 22, letterSpacing: -.16 }}>{label}</Text>
   </Pressable>;
 }

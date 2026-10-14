@@ -315,3 +315,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 07 and 08–09 (2026-10-15, Oslo)
+
+05/06 is published as `b7ec067`. Read `DRIVER_PAIR_07_09_20261015.md`: offer geometry/ring/icon/price now measured against the source; pickup navigation has three source-sized actions and the fresh actual ETA, with no invented turn guidance. Typecheck and both suites pass; eight source/native-component frames have no page errors. Continue with 10/11 after publishing. Physical device, map/provider and complete pixel acceptance remain open.
+
+---
+
