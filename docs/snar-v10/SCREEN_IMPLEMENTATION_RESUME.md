@@ -1,3 +1,9 @@
+# Current checkpoint — Customer 35/36 reconciled (2026-10-14)
+
+Read CUSTOMER_PAIR_35_36_20261014.md and FLEET_V2_NEW_SOURCE_20261014.md. The current Reisestudio is implemented. Scheduling is a reachable disabled preview; global states remain contextual and partial where source contracts are absent. Continue Driver 03/04 and the remaining pairs. GitHub public pushes are blocked by automatic approval review pending explicit approval of that exact destination; preserve local commits and deliver a private patch. No APK.
+
+---
+
 # Current checkpoint — supplied Fleet v2 ZIP retrieved and compared (2026-10-14)
 
 The access blocker below is resolved. Read FLEET_V2_NEW_SOURCE_20261014.md and the frozen reference/fleet-v2-20261014/manifest.json. Customer 02/06 now contains the actual Reisestudio; the screen-specific source for 19–34 is unchanged. Shared Customer signature styling is ported. Continue Customer 35/36, then Driver studio and audit. Keep native/provider acceptance distinct from source/layout checks. No APK build is requested.

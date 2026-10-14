@@ -340,7 +340,7 @@ export default function Home() {
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
         onPlace={place => { const destination = normalizeSearchPlace(place); if (destination) { setQuote(null); setMapFocusRevision(value => value + 1); setDropoff(destination); } }}
-        onLocate={() => { void refreshLocation().then(confirmed => { if (confirmed) { setSelectedPickup(null); setMapFocusRevision(value => value + 1); } }); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')}
+        onLocate={() => { void refreshLocation().then(confirmed => { if (confirmed) { setSelectedPickup(null); setMapFocusRevision(value => value + 1); } }); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')} onSchedule={() => router.push('/scheduled-trip')}
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')} onConsent={() => setWaitingAccepted(value => !value)}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}

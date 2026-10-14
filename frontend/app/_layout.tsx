@@ -125,6 +125,7 @@ export default function RootLayout() {
               <Stack.Screen name="(app)" />
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="scheduled-trip" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="payment-methods" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="customer-trip/[tripId]" options={{ animation: 'slide_from_right' }} />
