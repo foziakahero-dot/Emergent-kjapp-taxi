@@ -42,7 +42,7 @@ export default function Login() {
       router.replace('/legal-consent');
       return;
     }
-    router.replace('/(app)/home');
+    router.replace('/permissions');
   };
 
   const submit = async () => {

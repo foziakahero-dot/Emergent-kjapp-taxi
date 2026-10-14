@@ -28,7 +28,7 @@ export default function LegalConsent() {
     setError('');
     try {
       await acceptLegal();
-      router.replace('/(app)/home');
+      router.replace('/permissions');
     } catch (e) {
       setError(apiError(e));
     } finally {

@@ -31,6 +31,10 @@ const native = {
 };
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
+  'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
+  './V10Glass': { V10Glass: 'V10Glass' },
+  './V10CustomerAvatar': { V10CustomerAvatar: 'V10CustomerAvatar' },
+  './V10Entrance': { V10Entrance: ({children,...props}) => React.createElement('V10Entrance',props,children) },
   'expo-status-bar': { StatusBar: 'StatusBar' },
   'react-native-svg': new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => key in target ? target[key] : String(key) }),
   '@/src/components/V10Entrance': { V10Entrance: ({children}) => React.createElement('V10Entrance',null,children) },
@@ -243,7 +247,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   socialLoginResult = async () => ({ id: 'social', role: 'user', legal_accepted: true });
   await act(async () => { button(tree, 'login-submit').props.onPress(); button(tree, 'login-submit').props.onPress(); button(tree, 'login-google').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); });
   assert.equal(loginCalls, loginBeforeCustomer + 1); assert.equal(socialCalls, 0, 'Password/Google/Apple cannot race each other');
-  await act(async () => customerLoginRequest.resolve({ id: 'customer', role: 'user', legal_accepted: true })); assert.equal(navigation.at(-1)[1], '/(app)/home'); await unmount(tree);
+  await act(async () => customerLoginRequest.resolve({ id: 'customer', role: 'user', legal_accepted: true })); assert.equal(navigation.at(-1)[1], '/permissions'); await unmount(tree);
   for (const [response, target, message] of [[{ id: 'customer', role: 'user', legal_accepted: false }, '/legal-consent', null], [{ id: 'driver', role: 'driver', legal_accepted: true }, null, /sjåførkonto/], [{ twofa_required: true }, null, /tofaktor/], [{}, null, /ikke bekreftet/]]) {
     navigation = []; tree = await mount(CustomerLogin); await fillCustomer(); loginResult = async () => response;
     await act(async () => button(tree, 'login-submit').props.onPress());
@@ -544,6 +548,48 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   customerActive = { trip_id: 'existing-trip', status: 'in_trip' };
   tree = await mount(CustomerHome);
   assert.equal(tree.root.findAllByProps({ testID: 'home-where-to' }).length, 0, 'An active trip cannot display a new booking flow'); await unmount(tree);
+  // Customer 05/06: full map viewport, dock events and stale private photo/location responses.
+  user = { id: 'viewport-customer', role: 'user', legal_accepted: true };
+  stubs['@/src/components/FloatingTabBar'] = { ...load('frontend','src/components/FloatingTabBar.tsx') };
+  const Tabs = ({children,...props}) => React.createElement('Tabs',props,children);
+  Tabs.Screen = 'TabScreen'; stubs['expo-router'].Tabs = Tabs;
+  const CustomerTabs = load('frontend','app/(app)/_layout.tsx').default;
+  tree = await mount(CustomerTabs);
+  const sceneLayout = tree.root.findByType('Tabs').props.screenLayout;
+  assert.equal(sceneLayout({route:{key:'home',name:'home'},children:null}).props.children.props.style.marginBottom,0,'Home map must extend below its floating dock');
+  assert.equal(sceneLayout({route:{key:'profile',name:'profile'},children:null}).props.children.props.style.marginBottom,112,'Scrollable profile keeps dock clearance');
+  await unmount(tree);
+  const { FloatingTabBar } = stubs['@/src/components/FloatingTabBar'];
+  const routes = ['home','history','assist','messages','profile','wallet'].map(name=>({key:name,name}));
+  let tabEvents=[], tabNavigations=[], preventTab=false;
+  const dockProps = {state:{index:0,routes},descriptors:Object.fromEntries(routes.map(route=>[route.key,{options:{title:route.name}}])),navigation:{emit:event=>{tabEvents.push(event);return{defaultPrevented:preventTab}},navigate:name=>tabNavigations.push(name)}};
+  tree = await mount(()=>React.createElement(FloatingTabBar,dockProps));
+  assert.equal(tree.root.findAllByType('Pressable').length,5,'Hidden wallet cannot become a sixth dock item');
+  await act(async()=>{button(tree,'tab-home').props.onPress();button(tree,'tab-assist').props.onPress()});
+  assert.deepEqual(tabNavigations,['assist'],'Focused home emits event without duplicate navigation');
+  preventTab=true;await act(async()=>button(tree,'tab-profile').props.onPress());assert.deepEqual(tabNavigations,['assist'],'A prevented router event cannot navigate');
+  await unmount(tree);
+  const themeStub=stubs['@/src/theme'].useColorTheme;stubs['@/src/theme'].useColorTheme=()=>({mode:'dark',effective:'dark',ready:true});
+  tree=await mount(()=>React.createElement(FloatingTabBar,dockProps));assert.equal(tree.root.findByType('BlurView').props.tint,'dark');await unmount(tree);stubs['@/src/theme'].useColorTheme=themeStub;
+  let photoRequests=[];stubs['@/src/lib/api'].customerProfileApi={photoSource:version=>{const request=deferred();photoRequests.push({version,...request});return request.promise}};
+  const Avatar=load('frontend','src/components/V10CustomerAvatar.tsx').V10CustomerAvatar;
+  tree=await mount(()=>React.createElement(Avatar,{initials:'A',version:'older'}));
+  await act(async()=>tree.update(React.createElement(Avatar,{initials:'B',version:'newer'})));
+  await act(async()=>photoRequests[0].resolve({uri:'private-old-photo'}));assert.equal(tree.root.findAllByType('Image').length,0,'Old profile response cannot expose the previous photo');
+  await act(async()=>photoRequests[1].resolve({uri:'private-current-photo'}));assert.equal(tree.root.findByType('Image').props.source.uri,'private-current-photo');
+  await act(async()=>tree.root.findByType('Image').props.onError());assert.match(text(tree),/B/);assert.equal(tree.root.findAllByType('Image').length,0);await unmount(tree);
+  customerActive=null;const initialReverse=deferred();let reverseCount=0;
+  stubs['@/src/lib/api'].placesApi.reverse=async()=>++reverseCount===1?initialReverse.promise:{label:'Newest pickup'};
+  tree=await mount(CustomerHome);
+  const beforeLocationPrompts=permissionCalls;const locationPrompt=deferred();permissionResult=()=>locationPrompt.promise;
+  await act(async()=>{button(tree,'home-recenter').props.onPress();button(tree,'home-recenter').props.onPress()});
+  assert.equal(permissionCalls,beforeLocationPrompts+1,'Recenter cannot race multiple OS permission requests');
+  await act(async()=>locationPrompt.resolve({status:'granted'}));
+  await act(async()=>initialReverse.resolve({label:'Obsolete pickup'}));
+  await act(async()=>button(tree,'home-where-to').props.onPress());
+  assert.match(text(tree),/Newest pickup/);assert.doesNotMatch(text(tree),/Obsolete pickup/);await unmount(tree);
+  stubs['@/src/lib/api'].placesApi.reverse=async()=>({label:'Actual pickup'});
+  console.log('PASS: Customer 05/06 full map viewport, dock events/theme, stale private avatar response, serialized recenter and newest location response.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };

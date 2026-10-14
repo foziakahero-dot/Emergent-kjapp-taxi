@@ -1,3 +1,9 @@
+# Current authoritative order — Customer 05/06 (2026-10-14)
+
+The user's uploaded screen-index image supersedes all older next-pair instructions below. Continue Customer in pairs: 05 Posisjon + 06 Hjem/kart, then 07 Søk destinasjon + 08 Ruteforhåndsvisning, then 09 Kjøretøyvalg + 10 Betaling, then 11 Bekreft + 12 Søker sjåfør (35 Planlagt tur is an optional branch and needs its real contract). Do not jump to Driver approval/selfie. BankID is excluded; Google/Apple use existing native contracts. Push each verified pair on implementation/snar-v10-screens-20261013.
+
+05/06 now corrects post-login navigation through permission, the native home viewport beneath the floating dock, original dock icons/pressed state/dark inverse color, measured source sheet entry, map-backed glass and actual private customer avatar. Location and photo stale responses are guarded. Read CUSTOMER_PAIR_05_06_20261014.md for checks and limits. Native map, blur, OS safe areas and provider login need device evidence; existing APKs predate these changes.
+
 # Local native verification — three screen pairs saved (2026-10-14)
 
 Read `SCREEN_PAIRS_NATIVE_VERIFICATION_20261014.md`. Customer and Driver Android/iOS offline Metro/Hermes exports all exit 0 with the canonical QA URL; both TypeScript and behavioral checks pass. These are not signed APK/iOS builds, and existing APKs predate the code. QA provider configuration, Driver Google iOS configuration and physical pixel/device validation remain unresolved. Next pair: Driver approval/selfie, then Customer route/vehicle selection. Continue from the saved branch and verify existing implementations before editing.
@@ -169,3 +175,4 @@ The combined mobile candidate is saved as `b847dc1a5c6ed6bc285c4935b1dc8fcf2cb8c
 A fresh PR-triggered Actions run, `38486477203`, is completed with startup_failure. Its actual GitHub annotation says the job was not started because recent account payments failed or the spending limit needs increasing. No jobs/artifacts were produced. Do not retry builds until the account billing/spending obstruction is resolved through an authorized human payment path.
 
 The previous browser usage limit no longer blocked opening QA. The free Render instance woke up; startup completed and the application log confirms `GET /api/health` HTTP 200 at 2026-10-13 23:50:45 UTC. Reading the resulting browser page was rejected by the browser URL policy because its protocol was not allowed. No alternate-browser, raw-page, protocol or indirect workaround was attempted. The JSON body, canonical readiness and authenticated integration remain unverified. Deployment live plus HTTP 200 is not full database/Stripe/ride certification.
+

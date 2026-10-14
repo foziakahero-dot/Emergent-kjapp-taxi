@@ -21,7 +21,7 @@ export default function CustomerTabsLayout() {
   return (
     <TabBarVisibilityProvider>
     <Tabs
-      screenLayout={({ children, route }) => <TabScene routeKey={route.key}><View style={{ flex: 1, marginBottom: 112 }}>{children}</View></TabScene>}
+      screenLayout={({ children, route }) => <TabScene routeKey={route.key}><View style={{ flex: 1, marginBottom: route.name === 'home' ? 0 : 112 }}>{children}</View></TabScene>}
       tabBar={props => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >

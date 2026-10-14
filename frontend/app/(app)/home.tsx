@@ -1,7 +1,9 @@
+import { BlurTargetView } from 'expo-blur';
 import { V10Icon } from '@/src/components/V10Icon';
 import { v10 } from '@/src/components/V10UI';
 import { CustomerBookingView, confirmedPaymentMethod, type BookingStage } from '@/src/components/CustomerBookingView';
 import { recentDestinations } from '@/src/lib/recentPlaces';
+import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
@@ -41,6 +43,9 @@ export default function Home() {
   const [waitingAccepted, setWaitingAccepted] = useState(false);
   const [selType, setSelType] = useState('ai-first');
   const bookingLock = useRef(false);
+  const mapBlurTarget = useRef<View>(null);
+  const locationSequence = useRef(0);
+  const locationRequest = useRef(false);
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -135,10 +140,14 @@ export default function Home() {
   );
 
   const refreshLocation = useCallback(async (requestPermission = true) => {
+    if (requestPermission && locationRequest.current) return false;
+    if (requestPermission) locationRequest.current = true;
+    const sequence = ++locationSequence.current;
     try {
       const { status } = requestPermission
         ? await Location.requestForegroundPermissionsAsync()
         : await Location.getForegroundPermissionsAsync();
+      if (sequence !== locationSequence.current) return false;
       if (status !== 'granted') {
         setLocationReady(false);
         setLocDenied(true);
@@ -147,24 +156,29 @@ export default function Home() {
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      if (sequence !== locationSequence.current) return false;
+      if (!validPosition(p)) throw new Error('Ugyldig posisjon');
       setLoc(p);
       setLocationReady(true);
       setLocDenied(false);
       setPickupLabel('Din posisjon');
-      placesApi.reverse(p.lat, p.lng).then((r) => r?.label && setPickupLabel(r.label)).catch(() => {});
+      placesApi.reverse(p.lat, p.lng).then((r) => { if (sequence === locationSequence.current && r?.label) setPickupLabel(r.label); }).catch(() => {});
       return true;
     } catch {
+      if (sequence !== locationSequence.current) return false;
       setLocationReady(false);
       setLocDenied(true);
       setPickupLabel('Posisjon ikke tilgjengelig');
       return false;
-    }
+    } finally { if (requestPermission) locationRequest.current = false; }
   }, []);
 
   useEffect(() => {
     // Respect the manual-address choice; only an explicit location action opens the OS prompt.
     void refreshLocation(false);
-    placesApi.list(true).then((r) => setFeatured(r.places || [])).catch(() => {});
+    let current = true;
+    placesApi.list(true).then((r) => { if (current) setFeatured(r.places || []); }).catch(() => {});
+    return () => { current = false; locationSequence.current++; };
   }, [refreshLocation]);
 
   useEffect(() => {
@@ -276,6 +290,7 @@ export default function Home() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <BlurTargetView ref={mapBlurTarget} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
       <Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         user={locationReady ? loc : null}
@@ -291,6 +306,7 @@ export default function Home() {
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
+      </BlurTargetView>
 
       {activeTrip ? <View testID="home-active-card" onLayout={e => setActiveCardHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 16 }}>
         <ActiveTripCard trip={activeTrip} offline={activeTripOffline} onOpen={() => router.push(activeTrip.status === 'arrived' ? `/receipt/${activeTrip.trip_id}` : `/booking/${activeTrip.trip_id}`)} />
@@ -301,7 +317,7 @@ export default function Home() {
         destination={dropoff} estimate={estimate} vehicle={selType} price={selectedPrice}
         nearest={nearest} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
-        error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}

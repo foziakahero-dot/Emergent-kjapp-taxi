@@ -235,18 +235,6 @@ export function InteractiveMap({
           {baseTiles}
           {labelTiles}
 
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 110,
-              backgroundColor: 'rgba(244,246,250,0.18)',
-              pointerEvents: 'none',
-            }}
-          />
-
           <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
             {routeLine ? (
               <>

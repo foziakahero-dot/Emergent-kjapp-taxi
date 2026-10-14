@@ -53,8 +53,8 @@ export default function ProfileSetup() {
           </View>
         </View>
       </View>
-      <Button label="Fullfør" onPress={() => router.replace('/(app)/home')} testID="setup-finish" style={{ marginTop: 32 }} />
-      <Pressable onPress={() => router.replace('/(app)/home')} style={{ marginTop: 12, alignItems: 'center' }} testID="setup-skip"><Text style={{ color: colors.textSecondary, fontFamily: font.medium, fontSize: 12 }}>Hopp over for nå</Text></Pressable>
+      <Button label="Fullfør" onPress={() => router.replace('/permissions')} testID="setup-finish" style={{ marginTop: 32 }} />
+      <Pressable onPress={() => router.replace('/permissions')} style={{ marginTop: 12, alignItems: 'center' }} testID="setup-skip"><Text style={{ color: colors.textSecondary, fontFamily: font.medium, fontSize: 12 }}>Hopp over for nå</Text></Pressable>
     </ScrollView>
   </View>;
 }
