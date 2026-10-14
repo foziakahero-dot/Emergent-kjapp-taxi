@@ -7,6 +7,7 @@ from types import SimpleNamespace, ModuleType
 import sys
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
+from typing import Optional
 
 class HTTPException(Exception):
     def __init__(self, status_code, detail):
@@ -16,7 +17,7 @@ def endpoints(key='fixture-key'):
     source = ast.parse(Path(__file__).resolve().parents[1].joinpath('server.py').read_text())
     nodes = []
     for node in source.body:
-        if isinstance(node, ast.AsyncFunctionDef) and node.name in {'ai_chat', 'create_public_support_ticket'}:
+        if isinstance(node, ast.AsyncFunctionDef) and node.name in {'ai_chat', 'create_public_support_ticket', 'admin_tickets'}:
             node.decorator_list = []
             nodes.append(node)
     chats = SimpleNamespace(insert_one=AsyncMock())
@@ -25,7 +26,10 @@ def endpoints(key='fixture-key'):
                'Request':object, 'Depends':lambda value:None, 'get_current_user':None,
                'HTTPException':HTTPException, '_enforce_rate_limit':AsyncMock(),
                'db':SimpleNamespace(chat_messages=chats, support_tickets=tickets),
-               'datetime':datetime, 'timezone':timezone, 'asyncio':asyncio}
+               'datetime':datetime, 'timezone':timezone, 'asyncio':asyncio,
+               'Optional':Optional, 'require_admin':None,
+               '_page_params':lambda page,size:(page,size,(page-1)*size),
+               '_paged':lambda rows,total,page,size,key:{key:rows,'total':total}}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), 'actual-support-chat-endpoints', 'exec'), context)
     return context, chats, tickets
 
@@ -96,6 +100,32 @@ class SupportChatTests(unittest.IsolatedAsyncioTestCase):
         response=await ctx['create_public_support_ticket'](SimpleNamespace(topic='annet',name='QA customer',contact='qa@example.test',message='Actual issue description'),None)
         self.assertEqual(response,{'ok':True,'ticket_id':'confirmed-ticket'})
         self.assertEqual(tickets.insert_one.call_args.args[0]['message'],'Actual issue description')
+        self.assertEqual(tickets.insert_one.call_args.args[0]['body'],'Actual issue description')
+        self.assertEqual(tickets.insert_one.call_args.args[0]['contact_email'],'qa@example.test')
+
+    async def test_admin_reads_existing_public_ticket_body_and_contact_without_migration(self):
+        ctx,_,tickets=endpoints('')
+        rows=[{'_id':'existing-public-ticket','message':'Customer support issue','contact':'qa@example.test','name':'QA Customer'},
+              {'_id':'canonical-ticket','body':'Canonical issue','contact_email':'other@example.test','message':'Old text','contact':'old@example.test'}]
+        class Cursor:
+            def sort(self,*args): return self
+            def skip(self,*args): return self
+            def limit(self,*args): return self
+            def __aiter__(self): self.items=iter(rows); return self
+            async def __anext__(self):
+                try: return dict(next(self.items))
+                except StopIteration: raise StopAsyncIteration
+        tickets.count_documents=AsyncMock(return_value=2)
+        tickets.find=Mock(return_value=Cursor())
+        response=await ctx['admin_tickets'](status='open',category=None,current={'id':'admin'})
+        first,second=response['tickets']
+        self.assertEqual(first['body'],'Customer support issue')
+        self.assertEqual(first['contact_email'],'qa@example.test')
+        self.assertEqual(first['contact_name'],'QA Customer')
+        self.assertEqual(first['id'],'existing-public-ticket')
+        self.assertNotIn('_id',first)
+        self.assertEqual(second['body'],'Canonical issue')
+        self.assertEqual(second['contact_email'],'other@example.test')
 
 if __name__=='__main__':
     unittest.main()
