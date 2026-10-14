@@ -12,6 +12,7 @@ import { V10SearchIndicator } from '@/src/components/V10SearchIndicator';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { V10Glass } from '@/src/components/V10Glass';
 import type { RefObject } from 'react';
+import { useTripSpeech } from '@/src/lib/useTripSpeech';
 import { destinationProximity, driverApproaching, pickupFreeWait } from '@/src/lib/tripPresence';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
@@ -31,6 +32,7 @@ function Contacts({ p }: { p: Props }) {
   useColorTheme(); return <View style={{ flexDirection: 'row', gap: 8 }}><View style={{ flex: 1 }}><V10Action height={52} kind="soft" small icon="phone" label="Ring" onPress={p.onCall} disabled={!p.trip.driver?.phone} testID="action-call-driver" /></View><View style={{ flex: 1 }}><V10Action height={52} kind="soft" small icon="message" label="Melding" onPress={p.onChat} testID="action-message" /></View></View>; }
 export function CustomerTripView(p: Props) {
   useColorTheme();
+  useTripSpeech(p.trip, p.offline);
   const insets = useSafeAreaInsets();
   const [guide, setGuide] = useState(false);
   useEffect(() => { p.onGuideChange?.(guide); return () => p.onGuideChange?.(false); }, [guide, p.onGuideChange]);

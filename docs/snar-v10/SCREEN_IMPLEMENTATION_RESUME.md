@@ -1,4 +1,8 @@
-# Latest pair — Customer 31/32; automatic continuation (2026-10-14)
+# Latest pair — Customer 33/34; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_33_34_20261014.md. All four accessibility controls persist; high contrast updates the shared light/dark palettes and opt-in Expo 57 Speech reads actual trip status/fresh ETA/plate with dedup/offline/cleanup guards. Source geometry, settings navigation and actual logout remain. Customer type and behavioral suites pass; light/dark layouts have no JS errors. New native speech requires a future native build; no build is requested yet. Next automatically: 35 Planlagt tur and 36 Tilstander, then Driver audit.
+
+# Previous pair — Customer 31/32; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_31_32_20261014.md. Payment card has source entry/elevation/tabular geometry while actual Stripe verification remains. Support distinguishes canonical live versus historical trips, uses source topics and opens actual contextual chat/tickets. Next automatically: 33 Tilgjengelighet + 34 Innstillinger, then 35/36 and Driver. Native provider/device pixel acceptance remains open.
 

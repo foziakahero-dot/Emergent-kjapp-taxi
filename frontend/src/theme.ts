@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react';
+import { getAccessibilityPreferences, subscribeAccessibilityPreferences } from '@/src/lib/accessibilityPreferences';
 import { storage } from '@/src/utils/storage';
 import { Appearance, StyleSheet } from 'react-native';
 import { Inter_300Light } from '@expo-google-fonts/inter/300Light';
@@ -75,14 +76,17 @@ const darkColors: ThemeColors = {
 export type ColorThemeMode = 'light' | 'dark' | 'system';
 export const COLOR_THEME_KEY = 'snar_customer_color_theme_v1';
 let systemDark = Appearance?.getColorScheme?.() === 'dark';
+const lightHighContrast: ThemeColors = { ...lightColors, textSecondary: '#26384B', textMuted: '#40536A', line: 'rgba(11,26,44,.35)', lineStrong: 'rgba(11,26,44,.65)' };
+const darkHighContrast: ThemeColors = { ...darkColors, text: '#FFFFFF', textSecondary: '#E1E8F1', textMuted: '#BDCBDC', line: 'rgba(255,255,255,.35)', lineStrong: 'rgba(255,255,255,.65)' };
 const defaultMode: ColorThemeMode = 'light';
-function palette(mode: ColorThemeMode) { return (mode === 'dark' || (mode === 'system' && systemDark)) ? darkColors : lightColors; }
+function palette(mode: ColorThemeMode) { const dark = mode === 'dark' || (mode === 'system' && systemDark); return getAccessibilityPreferences().highContrast ? dark ? darkHighContrast : lightHighContrast : dark ? darkColors : lightColors; }
 let themeSnapshot: { mode: ColorThemeMode; effective: 'light' | 'dark'; ready: boolean; palette: ThemeColors } = { mode: defaultMode, effective: (palette(defaultMode) === darkColors ? 'dark' : 'light') as 'light' | 'dark', ready: false, palette: palette(defaultMode) };
+let accessibilitySubscription: (() => void) | undefined;
 let loading: Promise<void> | undefined, saving = false, nativeSubscription: ReturnType<typeof Appearance.addChangeListener> | undefined;
 const themeListeners = new Set<() => void>();
 function publishTheme(mode: ColorThemeMode, ready = true) {
   const selected = palette(mode);
-  themeSnapshot = { mode, effective: selected === darkColors ? 'dark' : 'light', ready, palette: selected };
+  themeSnapshot = { mode, effective: mode === 'dark' || (mode === 'system' && systemDark) ? 'dark' : 'light', ready, palette: selected };
   themeListeners.forEach(listener => listener());
 }
 async function loadColorTheme() {
@@ -91,12 +95,13 @@ async function loadColorTheme() {
 }
 function subscribeTheme(listener: () => void) {
   themeListeners.add(listener);
+  if (themeListeners.size === 1) accessibilitySubscription = subscribeAccessibilityPreferences(() => publishTheme(themeSnapshot.mode, themeSnapshot.ready));
   if (themeListeners.size === 1 && Appearance?.addChangeListener) nativeSubscription = Appearance.addChangeListener(({ colorScheme }) => {
     systemDark = colorScheme === 'dark';
     if (themeSnapshot.mode === 'system') publishTheme('system', themeSnapshot.ready);
   });
   if (!loading) loading = loadColorTheme();
-  return () => { themeListeners.delete(listener); if (!themeListeners.size) { nativeSubscription?.remove(); nativeSubscription = undefined; } };
+  return () => { themeListeners.delete(listener); if (!themeListeners.size) { nativeSubscription?.remove(); nativeSubscription = undefined; accessibilitySubscription?.(); accessibilitySubscription = undefined; } };
 }
 export function useColorTheme() { return useSyncExternalStore(subscribeTheme, () => themeSnapshot, () => themeSnapshot); }
 export async function saveColorThemeMode(mode: ColorThemeMode) {

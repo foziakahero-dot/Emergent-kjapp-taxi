@@ -16,6 +16,7 @@ let clock = 0, timerId = 0, nativeListeners = 0;
 const timers = new Map(), accessibility = new Set(), cache = new Map();
 const timingCalls = [];
 const stubs = new Map();
+const spoken=[];let speechStops=0;stubs.set('expo-speech',{speak(text,options){spoken.push({text,options})},stop:async()=>{speechStops++}});
 stubs.set('@/src/utils/storage', { storage: { getItem: async () => null, setItem: async () => {} } });
 class Value {
   constructor(value) { this.value = value; }
@@ -154,6 +155,17 @@ const act = renderer.act;
   assert.equal(observedMotion, true, 'Local preference cannot override OS reduced motion');
   await act(async () => { for (const listener of accessibility) listener(false); await preferenceModule.saveAccessibilityPreference('largeText', false); });
   assert.equal(observedMotion, false);
+
+  const accessibilityTheme=load('frontend','src/theme.ts');const originalContrastLine=accessibilityTheme.colors.lineStrong;
+  await act(async()=>accessibleSwitch('accessibility-high-contrast').props.onPress());assert.equal(accessibleSwitch('accessibility-high-contrast').props.accessibilityState.checked,true);assert.notEqual(accessibilityTheme.colors.lineStrong,originalContrastLine,'High contrast updates the actual shared palette');
+  await act(async()=>accessibleSwitch('accessibility-voice-support').props.onPress());assert.ok(spoken.at(-1).text.includes('Stemmestøtte er aktivert'));
+  const {useTripSpeech}=load('frontend','src/lib/useTripSpeech.ts');let spokenTrip={trip_id:'spoken-trip',status:'driver_on_way',driver_id:'actual-driver',driver:{plate:'ACTUAL42'},driver_lat:59.91,driver_lng:10.75,driver_location_at:new Date().toISOString(),eta_min:3},spokenOffline=false;
+  function SpeechProbe(){useTripSpeech(spokenTrip,spokenOffline);return null;}
+  let speechTree;await act(async()=>{speechTree=renderer.create(React.createElement(SpeechProbe))});assert.match(spoken.at(-1).text,/3 minutter/);assert.match(spoken.at(-1).text,/ACTUAL42/);const spokenCount=spoken.length;
+  await act(async()=>speechTree.update(React.createElement(SpeechProbe)));assert.equal(spoken.length,spokenCount,'Unchanged polling cannot repeat speech');
+  spokenOffline=true;await act(async()=>speechTree.update(React.createElement(SpeechProbe)));assert.equal(spoken.length,spokenCount,'Offline data does not speak an ETA');
+  await act(async()=>{speechTree.unmount();});assert.ok(speechStops>0);
+  await act(async()=>{await preferenceModule.saveAccessibilityPreference('voiceSupport',false);await preferenceModule.saveAccessibilityPreference('highContrast',false)});assert.equal(accessibilityTheme.colors.lineStrong,originalContrastLine);
   await act(async () => accessible.unmount());
   const DriverText = load('driver-app', 'src/components/Typography.tsx').Text;
   const DriverPreferences = load('driver-app', 'src/lib/accessibilityPreferences.ts');
