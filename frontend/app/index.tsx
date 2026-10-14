@@ -1,3 +1,4 @@
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -59,11 +60,11 @@ export default function Index() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={[s.onboarding, { paddingTop: Math.max(96, insets.top + 48), paddingBottom: Math.max(40, insets.bottom + 6) }]} testID="onboarding">
       <KjappMark size={48} />
-      <Text style={s.onboardingTitle}>Reis enkelt.{'\n'}<Text style={s.onboardingMuted}>Hele Norge.</Text></Text>
+      <V10Entrance><Text style={s.onboardingTitle}>Reis enkelt.{'\n'}<Text style={s.onboardingMuted}>Hele Norge.</Text></Text></V10Entrance>
       <View style={s.benefits}>
-        <Benefit icon="car" title="Lokale løyvehavere" detail="Godkjente sjåfører og elbiler fra norske taxiselskaper." />
-        <Benefit icon="clock" title="Fast pris før du bestiller" detail="Ingen overraskelser. Prisen du ser er prisen du betaler." />
-        <Benefit icon="sparkles" title="Si hva du trenger" detail="Bruk SNAR AI til å utforske reisemuligheter." />
+        <V10Entrance><Benefit icon="car" title="Lokale løyvehavere" detail="Godkjente sjåfører og elbiler fra norske taxiselskaper." /></V10Entrance>
+        <V10Entrance delay={60}><Benefit icon="clock" title="Fast pris før du bestiller" detail="Ingen overraskelser. Prisen du ser er prisen du betaler." /></V10Entrance>
+        <V10Entrance delay={120}><Benefit icon="sparkles" title="Si hva du trenger" detail="Bruk SNAR AI til å utforske reisemuligheter." /></V10Entrance>
       </View>
       <View style={s.onboardingActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/permissions')} testID="onboarding-next" style={s.primaryAction}>

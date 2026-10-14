@@ -247,6 +247,7 @@ const act = renderer.act;
   stubs.set('@/src/components/KjappMark', { KjappMark: 'KjappMark' });
   stubs.set('@/src/components/Icon', { Icon: 'Icon' });
   stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: null, logout: async () => {} }) });
+  stubs.set('@/src/components/V10Entrance', { V10Entrance: ({children}) => React.createElement('V10Entrance',null,children) });
   stubs.set('expo-router', { useRouter: () => ({ push: route => onboardingRoutes.push(route), replace: () => {}, back: () => {} }) });
   const CustomerIndex = load('frontend', 'app/index.tsx').default;
   let onboarding;

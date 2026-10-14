@@ -1,3 +1,4 @@
+import { V10Entrance } from '@/src/components/V10Entrance';
 import React, { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -47,11 +48,11 @@ export default function Permissions() {
 
   return (
     <View style={s.screen} testID="permissions">
-      <Map interactive={false} style={StyleSheet.absoluteFill} />
+      <Map interactive={false} showControls={false} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={[s.scroll, { paddingTop: insets.top + 12 }]} keyboardShouldPersistTaps="handled">
-        <View style={[s.sheet, { paddingBottom: Math.max(34, insets.bottom) }]}>
+        <V10Entrance sheet style={[s.sheet, { paddingBottom: Math.max(34, insets.bottom) }]}>
           <View style={s.handle} />
-          <View style={s.icon}><V10Icon name="locate" color={colors.accent} /></View>
+          <View style={s.icon}><V10Icon name="locate" size={22} color={colors.accent} /></View>
           <Text style={[v10.title, { marginTop: 18 }]}>Hvor står du nå?</Text>
           <Text style={[v10.secondary, { marginTop: 8 }]}>SNAR bruker posisjonen din for å finne nærmeste bil og sende sjåføren til riktig inngang. Du kan også skrive inn hentestedet selv.</Text>
           {error ? <Text accessibilityRole="alert" style={s.error} testID="permissions-error">{error}</Text> : null}
@@ -59,7 +60,7 @@ export default function Permissions() {
             <V10Action label="Del posisjon" onPress={shareLocation} busy={busy} testID="permissions-continue" />
             <V10Action label="Skriv inn adresse selv" kind="ghost" onPress={continueFlow} disabled={busy} testID="permissions-manual" />
           </View>
-        </View>
+        </V10Entrance>
       </ScrollView>
     </View>
   );

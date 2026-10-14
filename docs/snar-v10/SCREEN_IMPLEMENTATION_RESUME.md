@@ -1,3 +1,7 @@
+# Latest pair — introduction and permission (2026-10-14)
+
+Read `INTRO_PERMISSION_PAIR_20261014.md`. Source 210ms staggered entrance and measured 280ms permission sheet are saved and verified, alongside the earlier auth/registration and Customer home/search pairs. Next pair in the file is Driver account approval + selfie verification (03/04), then Customer route/vehicle choice (08/09). Preserve existing source-matched implementations; document real API/physical/provider limitations. QA Google/Apple configuration and Driver Google iOS remain outstanding, and existing APKs predate all these changes.
+
 # Latest pair — Customer home and destination search (2026-10-14)
 
 Read `HOME_SEARCH_PAIR_20261014.md`. Home uses quiet real-supply refresh, shared nearby-car framing on web/native, source vehicle geometry, explicit camera recenter and the V10 address sheet. Tests and web layout checks pass; live QA returned zero qualified cars at the checked pickup. Physical map/GPS/pixel acceptance and QA OAuth credentials remain outstanding. Next pair: Customer introduction and location permission. BankID is excluded; work and push two screens at a time. Existing APKs predate these commits.

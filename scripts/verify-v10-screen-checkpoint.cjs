@@ -33,6 +33,7 @@ const queryClient = { setQueryData: (key, data) => { const value = typeof data =
 const stubs = {
   'expo-status-bar': { StatusBar: 'StatusBar' },
   'react-native-svg': new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => key in target ? target[key] : String(key) }),
+  '@/src/components/V10Entrance': { V10Entrance: ({children}) => React.createElement('V10Entrance',null,children) },
   '@/src/components/Motion': { useReducedMotion: () => reduceMotion },
   'react': React, 'react/jsx-runtime': appRequire('react/jsx-runtime'), 'react-native': native,
   'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({ tripId: currentTripId }), useFocusEffect: callback => React.useEffect(callback, [callback]) },
@@ -692,6 +693,22 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await unmount(tree);
   queryData['payment-methods'] = { isError: true, data: [card] };
   tree = await mount(PaymentMethods); assert.equal(tree.root.findAllByProps({ testID: 'payment-primary-card' }).length, 0, 'Fetch failure hides stale card'); await unmount(tree);
+  stubs['./Motion'] = { useReducedMotion: () => reduceMotion };
+  const Entrance = load('frontend','src/components/V10Entrance.tsx').V10Entrance;
+  const originalTiming = native.Animated.timing; let entrances = [], stoppedEntrances = 0;
+  native.Animated.timing = (value, config) => { entrances.push(config); return { start() {}, stop() { stoppedEntrances++; } }; };
+  reduceMotion = false;
+  tree = await mount(() => React.createElement(Entrance,{sheet:true},React.createElement('Text',null,'Permission content')));
+  assert.equal(entrances.length,0,'A measured sheet must not animate before its actual height is known');
+  await act(async () => tree.root.findByType('AnimatedView').props.onLayout({nativeEvent:{layout:{height:320}}}));
+  assert.equal(entrances.length,1);assert.equal(entrances[0].duration,280);
+  await act(async () => tree.root.findByType('AnimatedView').props.onLayout({nativeEvent:{layout:{height:370}}}));
+  assert.equal(entrances.length,1,'An error growing the permission sheet must not replay entry motion');
+  await unmount(tree);assert.equal(stoppedEntrances,1,'Unmount cancels the pending entry animation');
+  reduceMotion = true;tree = await mount(() => React.createElement(Entrance,{delay:120},React.createElement('Text',null,'Benefit')));
+  assert.equal(entrances.length,1,'Reduced motion does not schedule entry movement');await unmount(tree);
+  native.Animated.timing = originalTiming;reduceMotion = false;
+  console.log('PASS: V10 measured-sheet entry waits for layout, does not replay on errors, cancels on unmount and respects reduced motion.');
   console.log('PASS: Actual receipt reservation/no-double-charge, native/payment status gate, explicit rating submit/feedback/retry/serialization, truthful receipt fields, canonical cards, serialized setup/remove and failed-card refresh.');
   console.log('PASS: Actual CustomerHome route/vehicle/payment/confirmation flow, route camera, real canonical card, waiting consent, duplicate booking lock, quoted-price token and active-trip exclusion.');
   console.log('PASS: Actual DriverHome minimize/reopen persistence, semantic versus network rejection, queued recovery and serialized offer acceptance/decline.');
