@@ -16,7 +16,7 @@ async function tick(milliseconds) { testClock += milliseconds; await act(async (
 const originalError = console.error;
 console.error = (...args) => { if (!String(args[0]).includes('react-test-renderer is deprecated')) originalError(...args); };
 let user = null, navigation = [], permissionCalls = 0, permissionResult;
-let socialLoginResult, socialCalls = 0;
+let socialLoginResult, socialCalls = 0, registerResult, registerCalls = 0;
 let loginResult, loginCalls = 0, logoutCalls = 0, vehicleResult, vehicleCalls = 0, currentTripId = 'trip-paid';
 let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [], updateResult, sendResult;
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
@@ -38,7 +38,7 @@ const stubs = {
   'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({ tripId: currentTripId }), useFocusEffect: callback => React.useEffect(callback, [callback]) },
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 48, bottom: 34 }) },
   'expo-location': { requestForegroundPermissionsAsync: () => { permissionCalls++; return permissionResult(); } },
-  '@/src/context/AuthContext': { useAuth: () => ({ user, refresh: async () => {}, signInWithGoogle: async () => { socialCalls++; return socialLoginResult(); }, signInWithApple: async () => { socialCalls++; return socialLoginResult(); }, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
+  '@/src/context/AuthContext': { useAuth: () => ({ user, register: async data => { registerCalls++; return registerResult(data); }, refresh: async () => {}, signInWithGoogle: async () => { socialCalls++; return socialLoginResult(); }, signInWithApple: async () => { socialCalls++; return socialLoginResult(); }, login: async (...args) => { loginCalls++; return loginResult(...args); }, logout: async () => { logoutCalls++; } }) },
   '@/src/components/Typography': { Text: 'Text', TextInput: 'TextInput' },
   '@/src/components/Map': { Map: 'Map' },
   '@/src/components/V10Icon': { V10Icon: 'Icon' },
@@ -161,6 +161,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => quickButtons()[0].props.onPress());
   assert.match(text(tree), /ikke bekreftet sendt/);
   await unmount(tree);
+  stubs['@/src/components/AppleSignInButton'] = { AppleSignInButton: 'AppleButton' };
   const Login = load('driver-app', 'app/driver-login.tsx').default;
   async function fillLogin(tree) {
     await act(async () => {
@@ -203,6 +204,35 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await unmount(tree);
 
   stubs['@/src/components/AppleSignInButton'] = { AppleSignInButton: 'AppleButton' };
+  navigation = []; socialCalls = 0;
+  tree = await mount(Login); const driverSocialRequest = deferred();
+  socialLoginResult = () => driverSocialRequest.promise;
+  await act(async () => { button(tree, 'driver-login-google').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
+  assert.equal(socialCalls, 1, 'Driver social providers share the password lock');
+  await act(async () => driverSocialRequest.resolve({ id: 'driver', role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }));
+  assert.equal(navigation.at(-1)[1], '/driver-approval'); await unmount(tree);
+  tree = await mount(Login); socialLoginResult = async () => null; navigation = [];
+  await act(async () => button(tree, 'driver-login-google').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
+  tree = await mount(Login); socialLoginResult = async () => { throw new Error('Provider unavailable'); };
+  await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.match(text(tree), /Provider unavailable/); assert.equal(button(tree, 'driver-login-submit').props.disabled, false); await unmount(tree);
+  const Register = load('frontend', 'app/register.tsx').default;
+  tree = await mount(Register); registerCalls = 0; navigation = [];
+  await act(async () => button(tree, 'register-submit').props.onPress()); assert.equal(registerCalls, 0);
+  await act(async () => { for (const [id,value] of [['register-name','QA Customer'],['register-email',' qa@example.test '],['register-password','test-only-password']]) tree.root.findByProps({testID:id}).props.onChangeText(value); });
+  await act(async () => button(tree, 'register-submit').props.onPress()); assert.equal(registerCalls, 0, 'Terms must be explicitly accepted');
+  await act(async () => button(tree, 'register-legal-consent').props.onPress());
+  const registrationRequest = deferred(); registerResult = data => { assert.equal(data.email, 'qa@example.test'); assert.equal(data.accepted_terms, true); return registrationRequest.promise; };
+  const beforeRegistrationSocial = socialCalls;
+  await act(async () => { button(tree, 'register-submit').props.onPress(); button(tree, 'register-submit').props.onPress(); button(tree, 'register-google').props.onPress(); });
+  assert.equal(registerCalls, 1); assert.equal(socialCalls, beforeRegistrationSocial);
+  await act(async () => registrationRequest.resolve({id:'new-customer',role:'user',legal_accepted:true})); assert.equal(navigation.at(-1)[1], '/profile-setup'); await unmount(tree);
+  tree = await mount(Register); navigation = []; socialLoginResult = async () => ({id:'new-social',role:'user',legal_accepted:false});
+  await act(async () => button(tree,'register-google').props.onPress()); assert.equal(navigation.at(-1)[1], '/legal-consent'); await unmount(tree);
+  tree = await mount(Register); socialLoginResult = async () => { throw new Error('Registration provider offline'); };
+  await act(async () => button(tree,'register-google').props.onPress()); assert.match(text(tree),/Registration provider offline/); assert.equal(button(tree,'register-submit').props.disabled,false); await unmount(tree);
+  console.log('PASS: Driver social login locks/cancellation/failure/selfie gate; Customer registration consent, duplicates, provider/legal flow and retry.');
+
+  socialCalls = 0;
   const CustomerLogin = load('frontend', 'app/login.tsx').default;
   tree = await mount(CustomerLogin); const loginBeforeCustomer = loginCalls;
   await act(async () => button(tree, 'login-submit').props.onPress()); assert.equal(loginCalls, loginBeforeCustomer);

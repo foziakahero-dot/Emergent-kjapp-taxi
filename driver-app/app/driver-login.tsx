@@ -1,3 +1,5 @@
+import { V10Action, v10 } from '@/src/components/V10UI';
+import { AppleSignInButton } from '@/src/components/AppleSignInButton';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,7 +12,7 @@ import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
   useColorTheme();
-  const { login, logout } = useAuth();
+  const { login, logout, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const busy = useRef(false);
@@ -19,12 +21,19 @@ export default function DriverLogin() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [provider, setProvider] = useState<'google' | 'apple' | null>(null);
   const submit = async () => {
     if (busy.current) return;
     if (!identifier.trim() || !password) { setError('Skriv inn e-post eller telefonnummer og passord.'); return; }
     busy.current = true; setError(''); setLoading(true);
     try {
       const res = await login(identifier.trim(), password);
+      await finishLogin(res);
+    } catch (e) { setError(apiError(e)); }
+    finally { busy.current = false; setLoading(false); }
+  };
+  const finishLogin = async (res: any) => {
+      if (!res) return;
       if (res?.twofa_required) { setError('Kontoen krever tofaktor — logg inn via web-portalen.'); return; }
       if (res?.role !== 'driver') { await logout(); setError('Denne kontoen er ikke en SNAR-sjåførkonto.'); return; }
       if (res?.approved !== true) {
@@ -34,8 +43,13 @@ export default function DriverLogin() {
       const identityStatus = res?.identity_verification_status || 'not_submitted';
       const identityGate = Boolean(res?.identity_recheck_required) || identityStatus !== 'verified';
       router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
-    } catch (e) { setError(apiError(e)); }
-    finally { busy.current = false; setLoading(false); }
+  };
+  const socialSignIn = async (selected: 'google' | 'apple') => {
+    if (busy.current) return;
+    busy.current = true; setLoading(true); setProvider(selected); setError('');
+    try { await finishLogin(await (selected === 'google' ? signInWithGoogle() : signInWithApple())); }
+    catch (e) { setError(apiError(e)); }
+    finally { busy.current = false; setLoading(false); setProvider(null); }
   };
   return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, { paddingTop: Math.max(110, insets.top + 62), paddingBottom: Math.max(40, insets.bottom + 6) }]}>
@@ -53,8 +67,13 @@ export default function DriverLogin() {
         {loading ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Logg inn</Text>}
       </Pressable>
       <Pressable accessibilityRole="button" disabled={loading} onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password"><Text style={s.forgotText}>Glemt passord?</Text></Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 }}><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /><Text style={v10.caption}>eller</Text><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /></View>
+      <View style={{ gap: 8 }}>
+        <AppleSignInButton loading={provider === 'apple'} disabled={loading && provider !== 'apple'} onPress={() => socialSignIn('apple')} />
+        <V10Action kind="soft" icon="google" label="Fortsett med Google" busy={provider === 'google'} disabled={loading && provider !== 'google'} onPress={() => void socialSignIn('google')} testID="driver-login-google" />
+      </View>
       <View style={s.footer}>
-        <Text style={s.note}>Kun for inviterte og godkjente sjåfører med kjøreseddel.</Text>
+        <Text style={s.note}>Ny sjåfør? Registrer deg via invitasjonen fra løyvehaveren.</Text>
         <Text style={[s.note, { marginTop: 4 }]}>Første innlogging og nye telefoner kan kreve selfie-kontroll.</Text>
       </View>
     </ScrollView>

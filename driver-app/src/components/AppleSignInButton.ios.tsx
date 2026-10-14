@@ -5,20 +5,22 @@ import { colors, useColorTheme } from '@/src/theme';
 
 export function AppleSignInButton({
   loading,
+  disabled,
   onPress,
 }: {
   loading?: boolean;
+  disabled?: boolean;
   onPress: () => void | Promise<void>;
 }) {
-  useColorTheme();
+  const theme = useColorTheme();
   if (loading) {
     return (
       <View
         style={{
-          marginTop: 10,
+          
           width: '100%',
-          height: 54,
-          borderRadius: 27,
+          height: 56,
+          borderRadius: 16,
           backgroundColor: colors.text,
           alignItems: 'center',
           justifyContent: 'center',
@@ -30,12 +32,12 @@ export function AppleSignInButton({
   }
 
   return (
-    <View style={{ marginTop: 10, width: '100%' }}>
+    <View pointerEvents={disabled ? 'none' : 'auto'} style={{ width: '100%', opacity: disabled ? .5 : 1 }}>
       <AppleAuthentication.AppleAuthenticationButton
-        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-        cornerRadius={27}
-        style={{ width: '100%', height: 54 }}
+        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+        buttonStyle={theme.effective === 'dark' ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+        cornerRadius={16}
+        style={{ width: '100%', height: 56 }}
         onPress={onPress}
       />
     </View>

@@ -1,3 +1,7 @@
+# Current user scope — two screens at a time (2026-10-14)
+
+BankID is excluded. Customer registration and Driver Google/Apple presentation are saved; read `AUTH_REGISTRATION_PAIR_20261014.md` for the concrete QA OAuth and Driver iOS blockers. Continue on Customer home/live-car availability and destination search, then the next pair in the original file. Commit/push each verified pair and preserve real integrations. Existing APKs predate these changes. Do not claim complete native pixel or provider acceptance without device evidence.
+
 # Current user scope — splash and login only (2026-10-14)
 
 The user stopped the broad screen implementation and instructed us to finish and push Customer/Driver splash and login before moving on. Read `SPLASH_LOGIN_CHECKPOINT_20261014.md` first. Native splash/launch and password-login presentation fixes are saved in this checkpoint, but original SMS/BankID login parity and physical native verification remain outstanding. Do not claim these screens are fully pixel-certified or continue other screens. Existing QA APKs predate these fixes and need a rebuild to include native splash assets.
