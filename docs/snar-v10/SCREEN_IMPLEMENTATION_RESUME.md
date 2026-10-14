@@ -357,3 +357,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 22/23 (2026-10-15, Oslo)
+
+20/21 is published as `84eb73c`. Read `DRIVER_PAIR_22_23_20261015.md`: page fade, source vehicle plate/selection geometry, actual-history privacy and paid/missing-gross fee captions. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue with 24/25 after publishing. Provider/native/pixel acceptance remains open.
+
+---
+

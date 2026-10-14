@@ -9,6 +9,7 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Badge, V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { colors, font, useColorTheme } from '@/src/theme';
 
 type AssignedVehicle = { id: string; car?: string; plate?: string; vehicle_type?: string; active?: boolean; selected?: boolean; busy?: boolean };
@@ -37,7 +38,7 @@ export default function DriverVehicles() {
     } catch (e) { setError(apiError(e)); }
     finally { lock.current = false; setBusyId(''); }
   };
-  return <V10Screen testID="driver-vehicles-screen"><V10Header title="Kjøretøy" onBack={() => router.back()} />
+  return <V10Screen testID="driver-vehicles-screen"><V10Entrance fade><V10Header title="Kjøretøy" onBack={() => router.back()} />
     {query.isPending ? <Loader label="Henter tildelte biler…" /> : query.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente kjøretøyene" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void query.refetch()} /> : !vehicles.length ?
       <V10State icon="vehicle" title="Ingen biler tildelt" body="Be løyvehaveren tildele en registrert bil i Fleet før du går online." action="Til fleet" onAction={() => router.replace('/driver-fleet')} /> : <>
       <View style={{ height: 180, borderRadius: 24, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -45,7 +46,7 @@ export default function DriverVehicles() {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginTop: 16 }}>
         <View style={{ flex: 1 }}><Text style={v10.title}>{selected?.car || 'Velg kjøretøy'}</Text><Text style={v10.secondary}>{selected ? vehicleMeta(selected.vehicle_type || 'ai-first').name : 'Velg blant biler tildelt deg'}</Text></View>
-        {selected?.plate ? <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 22, letterSpacing: .96, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1.5, borderColor: colors.text }}>{selected.plate}</Text> : null}
+        {selected?.plate ? <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 21, letterSpacing: .96, fontVariant: ['tabular-nums'], paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1.5, borderColor: colors.text }}>{selected.plate}</Text> : null}
       </View>
       {selected ? <View style={{ marginTop: 12 }}><V10Badge tone="positive">Tildelt deg</V10Badge></View> : null}
       <V10Section title="Tilgjengelige i fleeten"><V10Group>{vehicles.map((vehicle, index) => {
@@ -54,12 +55,12 @@ export default function DriverVehicles() {
           style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, opacity: vehicle.active === false || vehicle.busy ? .55 : 1 }}>
           {index ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: colors.line }} /> : null}
           <View style={{ width: 56, height: 38, borderRadius: 10, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="vehicle" size={24} /></View>
-          <View style={{ flex: 1 }}><Text style={v10.body}>{vehicle.plate || 'Uten skilt'}</Text><Text style={v10.caption}>{vehicle.car || 'Bil uten modellnavn'}{vehicle.active === false ? ' · Parkert' : vehicle.busy ? ' · I bruk' : ''}</Text></View>
+          <View style={{ flex: 1 }}><Text style={[v10.body, { fontVariant: ['tabular-nums'] }]}>{vehicle.plate || 'Uten skilt'}</Text><Text style={v10.caption}>{vehicle.car || 'Bil uten modellnavn'}{vehicle.active === false ? ' · Parkert' : vehicle.busy ? ' · I bruk' : ''}</Text></View>
           {busyId === vehicle.id ? <Loader /> : <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: vehicle.selected ? 7 : 1.5, borderColor: vehicle.selected ? colors.text : colors.lineStrong }} />}
         </Pressable>;
       })}</V10Group></V10Section>
       <Text style={[v10.caption, { marginTop: 12, marginHorizontal: 4 }]}>Gå offline og avslutt aktiv tur før du bytter bil.</Text>
       {error ? <Text accessibilityRole="alert" testID="driver-vehicle-error" style={[v10.secondary, { marginTop: 12, color: colors.danger }]}>{error}</Text> : null}
     </>}
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

@@ -401,6 +401,12 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   tree = await mount(TripDetail);
   assert.match(text(tree), /skjult etter turen/); assert.match(text(tree), /162 kr/);
   await unmount(tree);
+  const paidHistoryTrip = queryData['driver-history'].data.trips[0];
+  paidHistoryTrip.price = undefined; tree = await mount(TripDetail);
+  assert.match(text(tree), /Betaling bekreftet/); assert.doesNotMatch(text(tree), /Inntekt vises når betaling/); await unmount(tree);
+  paidHistoryTrip.price = 100; tree = await mount(TripDetail);
+  assert.match(text(tree), /plattformbeløp ikke tilgjengelig/); assert.doesNotMatch(text(tree), /plattform 0 kr/); await unmount(tree);
+  paidHistoryTrip.price = 184;
   currentTripId = 'trip-unpaid'; tree = await mount(TripDetail);
   assert.doesNotMatch(text(tree), /999 kr/); assert.match(text(tree), /betaling er bekreftet/);
   await unmount(tree);
