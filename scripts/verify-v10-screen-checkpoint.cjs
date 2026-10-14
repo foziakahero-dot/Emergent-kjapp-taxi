@@ -32,6 +32,7 @@ const native = {
 };
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
+  'expo-image': { Image: 'DriverImage' },
   'expo-speech': {speak(){},stop:async()=>{}},
   'expo-haptics': { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async style => { hapticCalls.push(style); } },
   'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
@@ -102,6 +103,27 @@ const button = (tree, id) => tree.root.findAll(node => node.type === 'Pressable'
 async function mount(Component) { let tree; await act(async () => { tree = renderer.create(React.createElement(Component)); }); return tree; }
 async function unmount(tree) { await act(async () => tree.unmount()); }
 (async () => {
+  const { DriverAvatar } = load('driver-app', 'src/components/DriverAvatar.tsx');
+  const originalAvatarQuery = stubs['@tanstack/react-query'].useQuery;
+  let avatarQuery, avatarAccount = { id: 'driver-a', fullName: 'Ada Berg' };
+  stubs['@tanstack/react-query'].useQuery = options => { avatarQuery = options; return { data: { uri: 'authenticated-avatar' } }; };
+  let avatarTree = await mount(() => React.createElement(DriverAvatar, { account: avatarAccount, size: 32 }));
+  assert.equal(avatarQuery.enabled, false);
+  assert.equal(avatarTree.root.findAllByType('DriverImage').length, 0, 'Missing photo path cannot display stale private data');
+  assert.match(text(avatarTree), /AB/);
+  avatarAccount = { ...avatarAccount, profile_photo_path: '/private/avatar-a' };
+  await act(async () => avatarTree.update(React.createElement(DriverAvatar, { account: avatarAccount, size: 32 })));
+  assert.deepEqual(Array.from(avatarQuery.queryKey), ['driver-profile-photo-source', 'driver-a', '/private/avatar-a']);
+  assert.equal(avatarQuery.enabled, true);
+  await act(async () => avatarTree.root.findByType('DriverImage').props.onError());
+  assert.equal(avatarTree.root.findAllByType('DriverImage').length, 0, 'Broken private photos fall back to initials');
+  avatarAccount = { id: 'driver-b', fullName: 'Bente Moe', profile_photo_path: '/private/avatar-a' };
+  await act(async () => avatarTree.update(React.createElement(DriverAvatar, { account: avatarAccount, size: 32 })));
+  assert.equal(avatarQuery.queryKey[1], 'driver-b', 'Private photo cache is scoped to the account');
+  assert.equal(avatarTree.root.findAllByType('DriverImage').length, 1, 'A previous account image failure cannot hide a new account image');
+  await unmount(avatarTree);
+  stubs['@tanstack/react-query'].useQuery = originalAvatarQuery;
+  console.log('PASS: Driver avatar missing-path gate, account-scoped query and image-failure fallback.');
   const { ExperienceStudio } = load('frontend', 'src/components/ExperienceStudio.tsx');
   const choices = [{id:'ai-first',label:'Effektiv',icon:'navigation',title:'Effektiv reise',sub:'Standard · estimert henting 3 min',body:'Se rute og pris.'},{id:'comfort',label:'Pusterom',icon:'moon',title:'Pusterom',sub:'Comfort · ikke tilgjengelig',body:'Ikke tilgjengelig',disabled:true},{id:'premium',label:'Signatur',icon:'star',title:'Signaturreise',sub:'Premium · estimert henting 6 min',body:'Se Premium.'}];
   let applied=[],continued=0,applyResult=deferred();

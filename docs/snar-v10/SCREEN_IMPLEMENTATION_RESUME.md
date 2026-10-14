@@ -303,3 +303,9 @@ Continue automatically with Driver 03/04, checking and publishing each pair. Pre
 
 ---
 
+# Latest Driver pair — 03/04 (2026-10-15, Oslo)
+
+Pair 01/02 is published as `24cec6a`. Pair 03/04 evidence and limitations are in `DRIVER_PAIR_03_04_20261015.md`: source approval fade/inset outline, shared badge centering, offline header entrance/shadows and account-scoped authenticated avatar with failure fallback. Driver typecheck and both component/behavior suites pass; approval/offline/studio browser fixtures have no page errors. Continue automatically with 05/06 after publishing this pair. Existing backend and native/device limitations remain explicit; do not call all Driver screens finished or pixel-identical.
+
+---
+

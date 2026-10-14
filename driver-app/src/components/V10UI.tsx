@@ -32,16 +32,16 @@ export function V10Row({ icon, title, subtitle, right, onPress, border = false, 
   useColorTheme();
   const content = <>{border ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} /> : null}{icon ? <View style={v10.icon}><V10Icon name={icon} size={20} /></View> : null}<View style={{ flex: 1 }}>
     <Text style={v10.body}>{title}</Text>{subtitle ? <Text style={[v10.caption, { marginTop: 2 }]}>{subtitle}</Text> : null}
-  </View>{right ?? (onPress ? <V10Icon name="chevR" size={18} color={colors.textMuted} /> : null)}</>;
+  </View>{right != null ? <View style={{ alignSelf: 'center' }}>{right}</View> : onPress ? <V10Icon name="chevR" size={18} color={colors.textMuted} /> : null}</>;
   // Match the original prototype's computed button row padding (the scoped button reset overrides .s10-row).
   const style = [v10.row, onPress && { paddingVertical: 0, paddingHorizontal: 0 }];
   return onPress ? <Pressable accessibilityRole="button" testID={testID} disabled={disabled} accessibilityState={{ disabled }} onPress={onPress}
     style={({ pressed }) => [...style, pressed && { backgroundColor: colors.cardSubtle }, disabled && { opacity: .55 }]}>{content}</Pressable> : <View testID={testID} style={style}>{content}</View>;
 }
-export function V10Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'positive' | 'warning' | 'critical' | 'neutral' }) {
+export function V10Badge({ children, tone = 'neutral', inline = false }: { children: React.ReactNode; tone?: 'positive' | 'warning' | 'critical' | 'neutral'; inline?: boolean }) {
   useColorTheme();
   const palette = { positive: [colors.success, colors.positiveSoft], warning: [colors.warning, colors.warningSoft], critical: [colors.danger, colors.dangerSoft], neutral: [colors.textSecondary, colors.cardSubtle] }[tone];
-  return <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, minHeight: 24, paddingHorizontal: 8, borderRadius: 8, backgroundColor: palette[1] }}>
+  return <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: inline ? 'center' : 'flex-start', gap: 6, minHeight: 24, paddingHorizontal: 8, borderRadius: 8, backgroundColor: palette[1] }}>
     <View style={{ width: 6, height: 6, borderRadius: tone === 'positive' ? 3 : 2, backgroundColor: palette[0], transform: [{ rotate: tone === 'critical' ? '45deg' : '0deg' }] }} />
     <Text style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: palette[0] }}>{children}</Text>
   </View>;
