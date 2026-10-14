@@ -73,6 +73,7 @@
         }
       ],
       "expo-web-browser",
+      "expo-sharing",
       "expo-apple-authentication",
       "expo-asset",
       [
