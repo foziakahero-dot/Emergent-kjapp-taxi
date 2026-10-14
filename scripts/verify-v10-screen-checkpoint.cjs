@@ -534,6 +534,10 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => button(tree, 'driver-advance').props.onPressIn()); await tick(900); assert.equal(advances, 3); await unmount(tree);
   await act(async () => { tree = renderer.create(React.createElement(Cockpit, { ...props, completed: { payment_status: 'pending', driver_earnings: 999, price: 1000 } })); });
   assert.doesNotMatch(text(tree), /999 kr/); assert.match(text(tree), /Betaling avventer/); await unmount(tree);
+  tree = await mount(() => React.createElement(Cockpit, { ...props, completed: { trip_id: 'paid-summary', payment_status: 'paid', driver_earnings: 161.92, price: 184, commission_rate: .12 } }));
+  assert.match(text(tree), /161,92/); assert.match(text(tree), /−22,08/); assert.match(text(tree), /184,00/); await unmount(tree);
+  tree = await mount(() => React.createElement(Cockpit, { ...props, completed: { trip_id: 'inconsistent-summary', payment_status: 'paid', driver_earnings: 200, price: 184 } }));
+  assert.match(text(tree), /Avventer/); assert.doesNotMatch(text(tree), /−0,00/, 'Inconsistent gross/net cannot invent a zero platform fee'); await unmount(tree);
   // Exercise the actual DriverHome wiring, not just the presentation callbacks.
   user = { id: 'integration-driver', role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'verified' };
   let serverTrip = { ...currentPickup, trip_id: 'integration-trip', pickup_lat: 59.91, pickup_lng: 10.74, dropoff_lat: 59.92, dropoff_lng: 10.75, geometry: { coordinates: [[10.74, 59.91], [10.75, 59.92]] }, pickup_route: { geometry: { coordinates: [[10.73, 59.90], [10.74, 59.91]] } } };

@@ -339,3 +339,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 16/17 (2026-10-15, Oslo)
+
+14/15 is published as `9986a8f`. See `DRIVER_PAIR_16_17_20261015.md`: completion remains guarded; source summary fade/pop, tabular numerals and exact two-decimal breakdown, with unpaid/unknown data guarded. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue with 18/19 after publication. No APK or native/pixel certification.
+
+---
+

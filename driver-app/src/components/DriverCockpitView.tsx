@@ -26,6 +26,7 @@ type Props = {
   onError: (error: unknown) => void;
 };
 const known = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+const breakdownAmount = (value: unknown) => known(value) && (value as number) >= 0 ? (value as number).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Avventer';
 const minutes = (value: unknown) => known(value) ? `${Math.floor((value as number) / 60)} t ${(value as number) % 60} min` : '—';
 function Ring({ value, size = 64, color = colors.success, stroke = 3, radius = size / 2 - stroke, children }: { value: number | null; size?: number; color?: string; stroke?: number; radius?: number; children?: React.ReactNode }) {
   useColorTheme();
@@ -100,12 +101,26 @@ export function DriverCockpitView(p: Props) {
   </V10Entrance>;
   if (p.completed && !trip && !(p.offer && p.online)) {
     const done = p.completed, paid = done.payment_status === 'paid' && known(done.driver_earnings) && done.driver_earnings >= 0;
-    return <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}><V10Screen testID="driver-summary-screen">
+    const platformAmount = paid && known(done.price) && done.price >= done.driver_earnings ? done.price - done.driver_earnings : null;
+    const rows = [
+      ['Kundepris', breakdownAmount(done.price)],
+      [known(done.commission_rate) ? `SNAR plattform (${Math.round(done.commission_rate * 100)} %)` : 'SNAR plattform', platformAmount !== null ? `−${breakdownAmount(platformAmount)}` : 'Avventer'],
+      ['Din andel', paid ? breakdownAmount(done.driver_earnings) : 'Avventer'],
+      ['Tid', known(done.duration_min) ? `${done.duration_min} min` : '—'],
+      ['Distanse', known(done.distance_km) ? `${done.distance_km.toLocaleString('nb-NO')} km` : '—'],
+    ];
+    return <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}><V10Screen testID="driver-summary-screen"><V10Entrance fade>
       {p.error ? <Text accessibilityRole="alert" style={{ color: colors.danger }}>{p.error}</Text> : null}
-      <View style={{ marginTop: 24 }}><V10Badge tone="positive">Tur fullført</V10Badge><Text style={[v10.caption, { marginTop: 16 }]}>Din inntekt</Text><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: paid ? 52 : 32, lineHeight: 56, letterSpacing: -1.82 }}>{paid ? kr(done.driver_earnings) : 'Betaling avventer'}</Text><Text style={v10.secondary}>{paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text></View>
-      <V10Group style={{ marginTop: 24, paddingVertical: 6, paddingHorizontal: 16 }}>{[['Kundepris', kr(done.price)], [known(done.commission_rate) ? `SNAR plattform (${Math.round(done.commission_rate * 100)} %)` : 'SNAR plattform', paid && known(done.price) ? `− ${kr(Math.max(0, done.price - done.driver_earnings))}` : 'Avventer'], ['Din andel', paid ? kr(done.driver_earnings) : 'Avventer'], ['Tid', known(done.duration_min) ? `${done.duration_min} min` : '—'], ['Distanse', known(done.distance_km) ? `${done.distance_km.toLocaleString('nb-NO')} km` : '—']].map(([label, value], index) => <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, gap: 12 }}><Text style={index === 2 ? v10.body : v10.secondary}>{label}</Text><Text style={index === 2 ? v10.body : { fontSize: 16, lineHeight: 23 }}>{value}</Text></View>)}</V10Group>
+      <V10Entrance pop key={`${done.trip_id}:${paid ? 'paid' : 'pending'}`} style={{ marginTop: 24 }}>
+        <V10Badge tone="positive">Tur fullført</V10Badge><Text style={[v10.caption, { marginTop: 16 }]}>Din inntekt</Text>
+        <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: paid ? 52 : 32, lineHeight: 56, letterSpacing: -1.82, fontVariant: ['tabular-nums'] }}>{paid ? kr(done.driver_earnings) : 'Betaling avventer'}</Text>
+        <Text style={v10.secondary}>{paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text>
+      </V10Entrance>
+      <V10Group style={{ marginTop: 24, paddingVertical: 6, paddingHorizontal: 16 }}>{rows.map(([label, value], index) => <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, gap: 12 }}>
+        <Text style={index === 2 ? v10.body : v10.secondary}>{label}</Text><Text style={index === 2 ? [v10.body, { fontVariant: ['tabular-nums'] }] : { fontFamily: font.medium, fontSize: 16, lineHeight: 23, fontVariant: ['tabular-nums'] }}>{value}</Text>
+      </View>)}</V10Group>
       <View style={{ marginTop: 24, gap: 4 }}><V10Action height={58} label="Fortsett å kjøre" onPress={p.onContinue} busy={p.busy} testID="driver-summary-continue" /><V10Action kind="ghost" label="Ta pause" onPress={p.onPause} disabled={p.busy} testID="driver-summary-pause" /></View>
-    </V10Screen></View>;
+    </V10Entrance></V10Screen></View>;
   }
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
     {!trip && !(p.offer && p.online) ? header : null}
