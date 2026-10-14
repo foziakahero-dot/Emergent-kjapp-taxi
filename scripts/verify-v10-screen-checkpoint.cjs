@@ -525,6 +525,16 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(bookingRequests[0].quoted_pricing_version, 7); assert.equal(bookingRequests[0].quoted_price, 184);
   await act(async () => requesting.resolve({ trip_id: 'created-customer-trip' }));
   assert.equal(navigation.at(-1)[1], '/booking/created-customer-trip'); await unmount(tree);
+  stubs['./Typography'] = { Text: 'Text', TextInput: 'TextInput' };
+  const Status = load('frontend', 'src/components/AvailabilityStatus.tsx').AvailabilityStatus;
+  for (const sample of [{phase:'loading',issue:null,cars:[]},{phase:'waiting',issue:'empty',cars:[]},{phase:'available',issue:null,cars:[{id:'real-car'}]},{phase:'loading',issue:null,cars:[{id:'real-car'}]}]) {
+    tree = await mount(() => React.createElement(Status,{compact:true,search:{...sample,attempt:3,nextAt:Date.now()+8000,seconds:8,now:Date.now(),retry:()=>{}}}));
+    assert.doesNotMatch(text(tree),/Søker|Forsøk|sekunder|Neste/,'Home never presents a dispatch countdown while browsing');
+    if(sample.cars.length)assert.match(text(tree),/1 ledig bil/);await unmount(tree);
+  }
+  tree = await mount(() => React.createElement(Status,{search:{phase:'waiting',issue:'empty',cars:[],attempt:2,now:Date.now(),seconds:10,retry:()=>{}},trip:{search_attempt:2}}));
+  assert.match(text(tree),/Forsøk 2 av 3/,'A real dispatched trip keeps canonical progress');await unmount(tree);
+  console.log('PASS: quiet home availability across load/empty/live refresh; real booking preserves bounded search progress.');
   const helpers = load('frontend', 'src/components/CustomerBookingView.tsx');
   assert.equal(helpers.confirmedPaymentMethod([{ ...card, verified: false }]), undefined);
   assert.equal(helpers.confirmedPaymentMethod([{ ...card, setup_status: 'processing' }]), undefined);

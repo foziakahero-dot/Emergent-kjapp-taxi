@@ -5,7 +5,7 @@ import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } 
 import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
-import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { V10VehicleBody, V10RasterCar } from './V10VehicleMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
@@ -68,7 +68,9 @@ export function InteractiveMap({
   style,
   testID,
   interactive = true,
+  showControls = true,
   focusMode = 'route',
+  focusRevision = 0,
   contentInsets,
 }: {
   pickup?: LL | null;
@@ -80,7 +82,9 @@ export function InteractiveMap({
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  showControls?: boolean;
   focusMode?: MapFocusMode;
+  focusRevision?: number;
   contentInsets?: Partial<MapContentInsets>;
 }) {
   useColorTheme();
@@ -88,6 +92,7 @@ export function InteractiveMap({
   const [center, setCenter] = useState<LL>(user || OSLO);
   const [zoom, setZoom] = useState(15);
   const [manual, setManual] = useState(false);
+  useEffect(() => { setManual(false); }, [focusRevision]);
   const smoothCar = useSmoothPosition(activeCar);
 
   const centerRef = useRef(center);
@@ -250,17 +255,13 @@ export function InteractiveMap({
               </>
             ) : null}
 
-            {cars.map((c, i) => (
-              <G key={`car-${i}`} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${20 / 24}) translate(-12, -12)`}>
-                <CarShape {...CAR_IDLE} />
-              </G>
-            ))}
+            {cars.map((c, i) => <V10RasterCar key={(c as any).id || `car-${i}`} car={c} projectX={sx} projectY={sy} />)}
 
             {smoothCar ? (
               <>
                 <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${36 / 24}) translate(-12, -12)`}>
-                  <CarShape {...CAR_ACTIVE} />
+                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
+                  <V10VehicleBody />
                 </G>
               </>
             ) : null}
@@ -294,7 +295,7 @@ export function InteractiveMap({
             {ATTRIB}
           </Text>
 
-          {interactive ? (
+          {interactive && showControls ? (
             <View style={{ position: 'absolute', right: 14, top: Platform.OS === 'web' ? 108 : 116, gap: 8 }} pointerEvents="box-none">
               <Ctrl name="plus" onPress={() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }} testID="map-zoom-in" />
               <Ctrl name="minus" onPress={() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }} testID="map-zoom-out" />

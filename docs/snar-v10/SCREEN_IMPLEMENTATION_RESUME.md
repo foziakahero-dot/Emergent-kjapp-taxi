@@ -1,3 +1,7 @@
+# Latest pair — Customer home and destination search (2026-10-14)
+
+Read `HOME_SEARCH_PAIR_20261014.md`. Home uses quiet real-supply refresh, shared nearby-car framing on web/native, source vehicle geometry, explicit camera recenter and the V10 address sheet. Tests and web layout checks pass; live QA returned zero qualified cars at the checked pickup. Physical map/GPS/pixel acceptance and QA OAuth credentials remain outstanding. Next pair: Customer introduction and location permission. BankID is excluded; work and push two screens at a time. Existing APKs predate these commits.
+
 # Current user scope — two screens at a time (2026-10-14)
 
 BankID is excluded. Customer registration and Driver Google/Apple presentation are saved; read `AUTH_REGISTRATION_PAIR_20261014.md` for the concrete QA OAuth and Driver iOS blockers. Continue on Customer home/live-car availability and destination search, then the next pair in the original file. Commit/push each verified pair and preserve real integrations. Existing APKs predate these changes. Do not claim complete native pixel or provider acceptance without device evidence.

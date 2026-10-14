@@ -4,10 +4,19 @@ import { Text } from './Typography';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Availability, rideSearchProgress } from '@/src/lib/carAvailability';
 
-export function AvailabilityStatus({ search, trip }: {
-  search: Availability & { now: number; seconds: number | null; retry: () => void }; trip?: any;
+export function AvailabilityStatus({ search, trip, compact = false }: {
+  search: Availability & { now: number; seconds: number | null; retry: () => void }; trip?: any; compact?: boolean;
 }) {
   useColorTheme();
+  if (compact && !trip) {
+    const title = search.issue === 'offline' ? 'Kan ikke oppdatere ledige biler akkurat nå.'
+      : search.cars.length ? `${search.cars.length} ledig${search.cars.length > 1 ? 'e biler' : ' bil'} i nærheten`
+      : search.issue === 'empty' ? 'Ingen ledige biler i nærheten akkurat nå.' : 'Ledige biler vises på kartet.';
+    return <View testID="availability-status" style={{ paddingTop: 12, gap: 4 }}>
+      <Text testID="availability-caption" style={{ color: colors.textSecondary, fontSize: 12 }}>{title}</Text>
+      {search.issue === 'offline' || search.phase === 'exhausted' ? <Pressable testID="availability-retry" accessibilityRole="button" accessibilityLabel="Oppdater ledige biler" onPress={search.retry} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent, fontFamily: font.medium, fontSize: 12 }}>Oppdater</Text></Pressable> : null}
+    </View>;
+  }
   const progress = trip ? rideSearchProgress(trip, search.now) : null;
   const title = search.issue === 'offline' ? 'Får ikke oppdatert ledige biler'
     : search.cars.length ? `${search.cars.length} ledig${search.cars.length > 1 ? 'e biler' : ' bil'} nær hentestedet`

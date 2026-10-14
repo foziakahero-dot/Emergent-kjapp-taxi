@@ -1,20 +1,9 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { Animated, View } from 'react-native';
-import Svg, { Circle, Defs, G, Path, Rect, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { cssEaseOut, useReducedMotion } from '@/src/components/Motion';
 
-export function MapCar({ heading = 0, active = false }: { heading?: number; active?: boolean }) {
-  const id = `car-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  return <Svg width={30} height={30} viewBox="0 0 30 30">
-    <Defs><RadialGradient id={id}><Stop offset="0" stopColor="#FF0000" stopOpacity={0.22} /><Stop offset="0.7" stopColor="#FF0000" stopOpacity={0} /></RadialGradient></Defs>
-    <Circle cx={15} cy={15} r={15} fill={`url(#${id})`} />
-    <G transform={`rotate(${heading} 15 15)`}>
-      <Rect x={9} y={4} width={12} height={22} rx={4} fill={active ? '#FF0000' : '#001F3F'} stroke="#FFFFFF" strokeWidth={1.5} />
-      <Path d="M11 8h8l-1 5h-6z" fill="#DDE8F1" /><Rect x={11} y={17} width={8} height={5} rx={1.5} fill="#DDE8F1" />
-      <Path d="M10 6h3m4 0h3" stroke="#FFFFFF" strokeWidth={1.4} />
-    </G>
-  </Svg>;
-}
+export { V10VehicleMarker as MapCar } from './V10VehicleMarker';
 
 export function PositionDot() {
   const id = `position-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;

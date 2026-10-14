@@ -32,7 +32,7 @@ type Props = {
   error: string; firstName: string; initials: string; places: any[]; placesIssue: boolean;
   locationReady: boolean; onStage: (stage: BookingStage) => void; onReview: (value: boolean) => void;
   onVehicle: (type: string) => void; onSearch: (target: 'pickup' | 'dropoff') => void;
-  onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void;
+  onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void; onNotifications?: () => void;
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void; onConsent: () => void;
   onBook: () => void; onBack: () => void; onHeight: (height: number) => void; stops: any[];
   availability?: React.ReactNode;
@@ -50,7 +50,8 @@ export function CustomerBookingView(p: Props) {
   const error = p.error ? <Text accessibilityRole="alert" testID="home-error" style={[v10.secondary, { color: colors.danger, marginVertical: 12 }]}>{p.error}</Text> : null;
   if (!p.destination) return <>
     <View testID="home-header" style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-      <Pressable onPress={p.onProfile} accessibilityRole="button" accessibilityLabel="Åpne profilen" style={styles.identity}><View style={styles.avatar}><Text style={{ color: colors.onInverse, fontFamily: font.semibold }}>{p.initials}</Text></View><Text style={[v10.secondary, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>Hei, {p.firstName}</Text></Pressable>
+      <Pressable onPress={p.onProfile} accessibilityRole="button" accessibilityLabel="Åpne profilen" style={styles.identity}><View style={styles.avatar}><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 11.52 }}>{p.initials}</Text></View><Text style={[v10.secondary, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>Hei, {p.firstName}</Text></Pressable>
+      <Tool id="home-notifications" icon="bell" label="Varsler" onPress={p.onNotifications || p.onProfile} />
     </View>
     <View style={{ position: 'absolute', right: 20, bottom: insets.bottom + 316, gap: 8 }}><Tool id="home-voice" icon="voice" label="Snakk med SNAR" onPress={p.onVoice} /><Tool id="home-recenter" icon="locate" label="Min posisjon" onPress={p.onLocate} /></View>
     {sheet(<><Pressable testID="home-where-to" accessibilityRole="button" accessibilityLabel="Søk etter destinasjon" onPress={() => p.onSearch('dropoff')} style={styles.search}><V10Icon name="search" /><Text style={[v10.body, { flex: 1, fontSize: 18 }]}>Hvor skal du?</Text><View style={styles.now}><V10Icon name="clock" size={16} /><Text style={v10.caption}>Nå</Text></View></Pressable>
@@ -90,8 +91,8 @@ const styles = themedStyles(() => StyleSheet.create({
   sheet: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, boxShadow: '0 -6px 28px rgba(11,26,44,.12)' },
   handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 },
   tool: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, boxShadow: '0 4px 14px rgba(11,26,44,.1)' },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 6, paddingRight: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.surface, flexShrink: 1 },
-  avatar: { width: 32, height: 32, borderRadius: 11, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 6, paddingRight: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.glass, flexShrink: 1 },
+  avatar: { width: 32, height: 32, borderRadius: 11, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   search: { height: 60, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   now: { height: 34, borderRadius: 12, backgroundColor: colors.surface, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
   chip: { minHeight: 44, borderRadius: 12, backgroundColor: colors.cardSubtle, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 190 },

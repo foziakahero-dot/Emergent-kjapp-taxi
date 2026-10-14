@@ -38,7 +38,9 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  showControls?: boolean;
   focusMode?: MapFocusMode;
+  focusRevision?: number;
   contentInsets?: Partial<MapContentInsets>;
 };
 
@@ -79,13 +81,16 @@ export function MapboxInteractiveMap({
   style,
   testID,
   interactive = true,
+  showControls = true,
   focusMode = 'route',
+  focusRevision = 0,
   contentInsets,
 }: Props) {
   useColorTheme();
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
+  useEffect(() => { setManual(false); }, [focusRevision]);
   const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -159,7 +164,9 @@ export function MapboxInteractiveMap({
         style={{ flex: 1 }}
         testID={testID}
         interactive={interactive}
+        showControls={showControls}
         focusMode={focusMode}
+        focusRevision={focusRevision}
         contentInsets={contentInsets}
       />
       <View testID="map-error" style={{ position: 'absolute', left: 16, right: 16, top: 62, backgroundColor: colors.surface, padding: 10, borderRadius: 16 }}>
@@ -287,7 +294,7 @@ export function MapboxInteractiveMap({
       </MapView>
 
       {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
-      {interactive ? (
+      {interactive && showControls ? (
         <View style={{ position: 'absolute', right: 14, top: 116, gap: 8 }} pointerEvents="box-none">
           <Ctrl name="plus" onPress={() => void zoomBy(1)} testID="map-zoom-in" />
           <Ctrl name="minus" onPress={() => void zoomBy(-1)} testID="map-zoom-out" />
