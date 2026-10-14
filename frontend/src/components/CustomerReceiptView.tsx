@@ -11,7 +11,7 @@ import { Map } from '@/src/components/Map';
 import { BrandBadge } from '@/src/components/BrandBadge';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Group, V10Header, V10Screen, V10Sheet, v10 } from '@/src/components/V10UI';
-import { finiteMetric } from '@/src/components/CustomerBookingView';
+import { finiteMetric } from '@/src/components/BookingPrimitives';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { kr } from '@/src/lib/format';
 

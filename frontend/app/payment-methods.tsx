@@ -9,7 +9,7 @@ import { colors, font, useColorTheme } from '@/src/theme';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
-import { confirmedPaymentMethod } from '@/src/components/CustomerBookingView';
+import { confirmedPaymentMethod } from '@/src/components/BookingPrimitives';
 import { useAuth } from '@/src/context/AuthContext';
 import { Loader } from '@/src/components/ui';
 import { paymentApi } from '@/src/lib/api';

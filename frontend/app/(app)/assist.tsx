@@ -1,5 +1,5 @@
 import { CustomerAssistView } from '@/src/components/CustomerAssistView';
-import { confirmedPaymentMethod } from '@/src/components/CustomerBookingView';
+import { confirmedPaymentMethod } from '@/src/components/BookingPrimitives';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { useAuth } from '@/src/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';

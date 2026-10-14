@@ -3,7 +3,7 @@ import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,7 +11,6 @@ import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { BrandBadge } from '@/src/components/BrandBadge';
-import { ChatSheet } from '@/src/components/ChatSheet';
 import { useAuth } from '@/src/context/AuthContext';
 import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
@@ -58,6 +57,7 @@ export default function DriverHome() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const { user } = useAuth();
+  const router = useRouter();
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>(null);
@@ -69,7 +69,6 @@ export default function DriverHome() {
   const [summaryActionBusy, setSummaryActionBusy] = useState(false);
   const summaryActionLock = useRef(false);
   const [error, setError] = useState('');
-  const [chatOpen, setChatOpen] = useState(false);
   const [declineReasonsOpen, setDeclineReasonsOpen] = useState(false);
   const [offerClock, setOfferClock] = useState(Date.now());
   const watch = useRef<Location.LocationSubscription | null>(null);
@@ -580,7 +579,7 @@ export default function DriverHome() {
         onDecline={() => firstOffer && void decline(firstOffer.trip_id)}
         onAdvance={advance} onCancel={cancelCurrentTrip} onNoShow={noShow}
         onCall={() => current?.customer?.phone && void Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'))}
-        onChat={() => setChatOpen(true)} onNavigate={() => void openNavigation()} onEmergency={emergency}
+        onChat={() => router.push('/(driver)/messages')} onNavigate={() => void openNavigation()} onEmergency={emergency}
         onMinimize={value => {
           setTripMinimized(value);
           if (current?.trip_id) void (value ? storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id) : storage.removeItem(MINIMIZED_TRIP_KEY)).catch(() => setError('Kunne ikke lagre visningsvalget.'));
@@ -603,15 +602,7 @@ export default function DriverHome() {
         </View>
       ) : null}
 
-      {current ? (
-        <ChatSheet
-          tripId={current.trip_id}
-          role="driver"
-          visible={chatOpen}
-          onClose={() => setChatOpen(false)}
-          peerName={current.customer?.name || 'Kunde'}
-        />
-      ) : null}
+
     </View>
   );
 }

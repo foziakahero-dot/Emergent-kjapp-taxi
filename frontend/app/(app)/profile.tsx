@@ -1,6 +1,6 @@
 import React from 'react';
 import { V10Entrance } from '@/src/components/V10Entrance';
-import { confirmedPaymentMethod, paymentLabel } from '@/src/components/CustomerBookingView';
+import { confirmedPaymentMethod, paymentLabel } from '@/src/components/BookingPrimitives';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';

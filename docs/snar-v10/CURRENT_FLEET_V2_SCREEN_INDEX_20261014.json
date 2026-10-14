@@ -1,0 +1,743 @@
+{
+  "source_archive_sha256": "5bb43ac60579f335ba72c562cde7b62bc8b74bf6ce6586c82a0f3837f9e2dabd",
+  "figma_url": "https://www.figma.com/make/7947uNsMq8WNEq3eZSHmuz/SNAR-Fleet-v2-Design-System",
+  "native_pixel_certification": false,
+  "public_push": "blocked_by_automatic_approval_review",
+  "customer": [
+    {
+      "id": "splash",
+      "number": "01",
+      "title": "Splash",
+      "group": "Start",
+      "native_paths": [
+        "frontend/app/index.tsx",
+        "frontend/src/components/SplashArt.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "returning",
+      "number": "02",
+      "title": "Hjem, kjent bruker",
+      "group": "Start",
+      "native_paths": [
+        "frontend/app/(app)/home.tsx",
+        "frontend/src/components/CustomerBookingView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "onboarding",
+      "number": "03",
+      "title": "Introduksjon",
+      "group": "Start",
+      "native_paths": [
+        "frontend/app/index.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "signin",
+      "number": "04",
+      "title": "Logg inn",
+      "group": "Start",
+      "native_paths": [
+        "frontend/app/login.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "SMS absent; native SSO/provider acceptance remains open."
+    },
+    {
+      "id": "permission",
+      "number": "05",
+      "title": "Posisjon",
+      "group": "Start",
+      "native_paths": [
+        "frontend/app/permissions.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "home",
+      "number": "06",
+      "title": "Hjem / kart",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/app/(app)/home.tsx",
+        "frontend/src/components/ExperienceStudio.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "search",
+      "number": "07",
+      "title": "Søk destinasjon",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/app/(app)/home.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "route",
+      "number": "08",
+      "title": "Ruteforhåndsvisning",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/src/components/CustomerBookingView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "vehicles",
+      "number": "09",
+      "title": "Kjøretøyvalg",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/src/components/CustomerBookingView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "payment",
+      "number": "10",
+      "title": "Betaling",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/src/components/CustomerBookingView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "confirm",
+      "number": "11",
+      "title": "Bekreft",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/src/components/CustomerBookingView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "searching",
+      "number": "12",
+      "title": "Søker sjåfør",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "match",
+      "number": "13",
+      "title": "Sjåfør funnet",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "approaching",
+      "number": "14",
+      "title": "Sjåfør nærmer seg",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "pickupGuide",
+      "number": "15",
+      "title": "Henteveiledning",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "arrived",
+      "number": "16",
+      "title": "Sjåfør har ankommet",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "trip",
+      "number": "17",
+      "title": "Tur pågår",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "safety",
+      "number": "18",
+      "title": "Sikkerhet",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerSafetyView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "arriving",
+      "number": "19",
+      "title": "Ankommer",
+      "group": "Tur",
+      "native_paths": [
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "complete",
+      "number": "20",
+      "title": "Tur fullført",
+      "group": "Etter tur",
+      "native_paths": [
+        "frontend/src/components/CustomerReceiptView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "paid",
+      "number": "21",
+      "title": "Betaling fullført",
+      "group": "Etter tur",
+      "native_paths": [
+        "frontend/src/components/CustomerReceiptView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "receipt",
+      "number": "22",
+      "title": "Kvittering",
+      "group": "Etter tur",
+      "native_paths": [
+        "frontend/src/components/CustomerReceiptView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Canonical real receipt; full PDF/VAT contract absent."
+    },
+    {
+      "id": "rating",
+      "number": "23",
+      "title": "Vurdering",
+      "group": "Etter tur",
+      "native_paths": [
+        "frontend/src/components/CustomerReceiptView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "activity",
+      "number": "24",
+      "title": "Aktivitet",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/(app)/history.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "tripDetail",
+      "number": "25",
+      "title": "Turdetalj",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/customer-trip/[tripId].tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "messages",
+      "number": "26",
+      "title": "Meldinger",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/(app)/messages.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "notifications",
+      "number": "27",
+      "title": "Varsler",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/customer-notifications.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Canonical preferences and contextual trip notices; full inbox contract absent."
+    },
+    {
+      "id": "ai",
+      "number": "28",
+      "title": "SNAR AI",
+      "group": "Intelligens",
+      "native_paths": [
+        "frontend/src/components/CustomerAssistView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "voice",
+      "number": "29",
+      "title": "Stemme",
+      "group": "Intelligens",
+      "native_paths": [
+        "frontend/src/components/CustomerAssistView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "profile",
+      "number": "30",
+      "title": "Profil",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/(app)/profile.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "paymethods",
+      "number": "31",
+      "title": "Betalingsmåter",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/payment-methods.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "support",
+      "number": "32",
+      "title": "Support",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/support.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "accessibility",
+      "number": "33",
+      "title": "Tilgjengelighet",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/customer-accessibility.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "settings",
+      "number": "34",
+      "title": "Innstillinger",
+      "group": "Konto",
+      "native_paths": [
+        "frontend/app/settings.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "scheduled",
+      "number": "35",
+      "title": "Planlagt tur",
+      "group": "Bestilling",
+      "native_paths": [
+        "frontend/app/scheduled-trip.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Reachable disabled preview; scheduling/flight API absent."
+    },
+    {
+      "id": "states",
+      "number": "36",
+      "title": "Tomme / feil / offline",
+      "group": "Tilstander",
+      "native_paths": [
+        "frontend/src/components/V10UI.tsx",
+        "frontend/src/components/CustomerTripView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Contextual real states; prototype gallery/unsupported automatic success absent."
+    }
+  ],
+  "driver": [
+    {
+      "id": "splash",
+      "number": "01",
+      "title": "Splash",
+      "group": "Start",
+      "native_paths": [
+        "driver-app/app/index.tsx",
+        "driver-app/src/components/SplashArt.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "login",
+      "number": "02",
+      "title": "Logg inn",
+      "group": "Start",
+      "native_paths": [
+        "driver-app/app/driver-login.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Real auth and existing providers; BankID excluded."
+    },
+    {
+      "id": "approval",
+      "number": "03",
+      "title": "Godkjenning",
+      "group": "Start",
+      "native_paths": [
+        "driver-app/app/driver-approval.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "offline",
+      "number": "04",
+      "title": "Offline hjem",
+      "group": "Skift",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx",
+        "driver-app/src/components/ExperienceStudio.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "goingOnline",
+      "number": "05",
+      "title": "Går online",
+      "group": "Skift",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "online",
+      "number": "06",
+      "title": "Online cockpit",
+      "group": "Skift",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "offer",
+      "number": "07",
+      "title": "Ny tur",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "navPickup",
+      "number": "08–09",
+      "title": "Akseptert → kjør til henting",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "waitingInside",
+      "number": "10",
+      "title": "Kunden venter inne",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "arrivedAction",
+      "number": "11",
+      "title": "Ankommet",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "waiting",
+      "number": "12",
+      "title": "Venter på passasjer",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "startTrip",
+      "number": "13",
+      "title": "Start tur",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "active",
+      "number": "14",
+      "title": "Aktiv tur",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "arriving",
+      "number": "15",
+      "title": "Ankommer",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "complete",
+      "number": "16",
+      "title": "Fullfør tur",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "summary",
+      "number": "17",
+      "title": "Tursammendrag",
+      "group": "Tur",
+      "native_paths": [
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "earnings",
+      "number": "18",
+      "title": "Inntjening",
+      "group": "Økonomi",
+      "native_paths": [
+        "driver-app/app/(driver)/earnings.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "intel",
+      "number": "19",
+      "title": "SNAR Drive Intelligence",
+      "group": "Økonomi",
+      "native_paths": [
+        "driver-app/app/(driver)/intel.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Truthful unavailable state; no live forecast provider."
+    },
+    {
+      "id": "earningsDetail",
+      "number": "20",
+      "title": "Inntjening detalj",
+      "group": "Økonomi",
+      "native_paths": [
+        "driver-app/app/driver-earnings-detail.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "activity",
+      "number": "21",
+      "title": "Aktivitet",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-trips.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "tripDetail",
+      "number": "22",
+      "title": "Turdetalj",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-trip/[tripId].tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "vehicle",
+      "number": "23",
+      "title": "Kjøretøy",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-vehicles.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Assigned real vehicles; provider photo/battery/inspection metadata absent."
+    },
+    {
+      "id": "fleet",
+      "number": "24",
+      "title": "Fleet",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-fleet.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "profile",
+      "number": "25",
+      "title": "Profil",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/(driver)/profile.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "documents",
+      "number": "26",
+      "title": "Dokumenter",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-documents.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Real upload/identity status; independent expiry/approval contract absent."
+    },
+    {
+      "id": "verify",
+      "number": "27",
+      "title": "ID / selfie",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-identity.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Actual permission/camera/upload and manual review; no prototype auto-verification."
+    },
+    {
+      "id": "messages",
+      "number": "28",
+      "title": "Meldinger",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/(driver)/messages.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "navSettings",
+      "number": "29",
+      "title": "Navigasjon",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-navigation.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "settings",
+      "number": "30",
+      "title": "Innstillinger",
+      "group": "Konto",
+      "native_paths": [
+        "driver-app/app/driver-settings.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Physical native/provider pixel acceptance remains open."
+    },
+    {
+      "id": "states",
+      "number": "31",
+      "title": "Globale tilstander",
+      "group": "Tilstander",
+      "native_paths": [
+        "driver-app/src/components/V10UI.tsx",
+        "driver-app/src/components/DriverCockpitView.tsx"
+      ],
+      "status": "adapter_present_native_acceptance_open",
+      "limitations": "Contextual real states; prototype gallery/unsupported automatic success absent."
+    }
+  ]
+}

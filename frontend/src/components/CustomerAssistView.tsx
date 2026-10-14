@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Group, V10Row, V10Sheet, v10 } from '@/src/components/V10UI';
-import { CustomerJourney, finiteMetric, paymentLabel } from '@/src/components/CustomerBookingView';
+import { CustomerJourney, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 import { Map } from '@/src/components/Map';
 import { VehicleAsset, type VehicleKind } from '@/src/components/VehicleAsset';
 import { V10VoiceBars } from '@/src/components/V10VoiceBars';

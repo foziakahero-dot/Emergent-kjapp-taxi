@@ -7,7 +7,7 @@ import { DesignToggle } from '@/src/components/DesignToggle';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Sheet, V10State, v10 } from '@/src/components/V10UI';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
-import { CustomerJourney } from '@/src/components/CustomerBookingView';
+import { CustomerJourney } from '@/src/components/BookingPrimitives';
 import { V10SearchIndicator } from '@/src/components/V10SearchIndicator';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { V10Glass } from '@/src/components/V10Glass';

@@ -526,6 +526,9 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['@/src/lib/api'].safetyApi = { log: async () => ({}) };
   const Home = load('driver-app', 'app/(driver)/home.tsx').default;
   tree = await mount(Home);
+  await act(async()=>tree.root.findByType(Cockpit).props.onChat());
+  assert.equal(navigation.at(-1)[1],'/(driver)/messages','Actual trip contact opens the current full Driver messaging screen');
+  assert.equal(serverTrip.status,'driver_on_way','Opening messages cannot advance a trip');
   const map = () => tree.root.findAll(node => node.type === 'Map')[0];
   assert.equal(JSON.stringify(map().props.route), JSON.stringify(serverTrip.pickup_route.geometry.coordinates), 'Actual DriverHome uses driver-to-pickup geometry');
   assert.equal(map().props.dropoff, null, 'Pickup view must not duplicate the destination marker at pickup');

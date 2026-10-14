@@ -19,7 +19,6 @@ import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { KjappMark } from '@/src/components/KjappMark';
-import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
 import { safetyApi, tripDriverPhotoSource, tripsApi, messagesApi } from '@/src/lib/api';
 
@@ -48,7 +47,6 @@ export default function BookingFlow() {
   const [matchingHeight, setMatchingHeight] = useState(300);
   const [minimizedHeight, setMinimizedHeight] = useState(160);
   const [trip, setTrip] = useState<any>(null);
-  const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [safetyBusy, setSafetyBusy] = useState(false);
   const safetyLock = useRef(false);
@@ -69,7 +67,7 @@ export default function BookingFlow() {
   activeRoute.current = tripId;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    setMinimized(false); setPickupGuide(false); setChatOpen(false); setSafetyOpen(false); setReadySent(false);
+    setMinimized(false); setPickupGuide(false); setSafetyOpen(false); setReadySent(false);
     setNetworkIssue(false); setActionError(''); setPickupNotice('');
     cancelPhase.current = 'idle'; setCancelBusy(false);
   }, [tripId]);
@@ -303,7 +301,7 @@ export default function BookingFlow() {
         offline={networkIssue} gpsFresh={driverGpsFresh} available={available}
         insideBusy={insideBusy} readyBusy={readyBusy} readySent={readySent && readyAcknowledged.current === `${tripId}:${trip.driver_id || ''}`} authorizationBusy={authorizationBusy} cancelBusy={cancelBusy} canCancel={canCancel}
         onGuideChange={setPickupGuide}
-        onInside={value => void setWaitingInside(value)} onCall={callDriver} onChat={() => setChatOpen(true)}
+        onInside={value => void setWaitingInside(value)} onCall={callDriver} onChat={() => router.push('/(app)/messages')}
         onShare={() => void shareTrip()} onSafety={() => setSafetyOpen(true)} onCancel={() => void cancel()}
         onMinimize={() => setMinimized(true)} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
         onWalk={openWalkingDirections} onReady={() => void notifyReady()} onAuthorize={() => void authorize()}
@@ -311,7 +309,7 @@ export default function BookingFlow() {
       />}
       {pickupNotice ? <View style={{ position: 'absolute', top: insets.top + 60, left: 16, right: 16, zIndex: 60, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{pickupNotice}</Text></View> : null}
       </BlurTargetView>
-      {trip.status === 'in_trip' ? <V10TripDock target={sceneBlurTarget} active={chatOpen ? 'message' : safetyOpen ? 'safety' : 'driver'} onDriver={() => setMinimized(false)} onMessage={() => setChatOpen(true)} onSafety={() => setSafetyOpen(true)} onTrip={() => router.push(`/customer-trip/${tripId}`)} /> : null}
+      {trip.status === 'in_trip' ? <V10TripDock target={sceneBlurTarget} active={safetyOpen ? 'safety' : 'driver'} onDriver={() => setMinimized(false)} onMessage={() => router.push('/(app)/messages')} onSafety={() => setSafetyOpen(true)} onTrip={() => router.push(`/customer-trip/${tripId}`)} /> : null}
 
       <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => !safetyBusy && setSafetyOpen(false)}>
         <View style={[s.modalBackdrop, { padding: 0, backgroundColor: `${colors.bg}59` }]}>
@@ -320,13 +318,7 @@ export default function BookingFlow() {
         </View>
       </Modal>
 
-      <ChatSheet
-        tripId={tripId!}
-        role="passenger"
-        visible={chatOpen}
-        onClose={() => setChatOpen(false)}
-        peerName={trip.driver?.name || 'Din sjåfør'}
-      />
+
     </View>
   );
 }

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, type RefObject } from 'react';
 import { ExperienceStudio, type StudioOption } from './ExperienceStudio';
+import { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
+export { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 import { FigmaGradient } from './FigmaGradient';
 import { V10Glass } from './V10Glass';
 import { V10CustomerAvatar } from './V10CustomerAvatar';
@@ -15,22 +17,6 @@ import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { kr } from '@/src/lib/format';
 
 export type BookingStage = 'route' | 'vehicles' | 'payment';
-export function confirmedPaymentMethod(methods: any[]) {
-  // Mirror the reservation service: verified Stripe instruments, default first, newest next.
-  return (Array.isArray(methods) ? methods : []).filter(m => m && m.verified === true && m.setup_status === 'succeeded' && typeof m.stripe_payment_method_id === 'string' && m.stripe_payment_method_id.length > 0)
-    .sort((a, b) => Number(Boolean(b.is_default)) - Number(Boolean(a.is_default)) || String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
-}
-export function paymentLabel(method: any) {
-  return method ? `${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}` : 'Legg til betalingskort';
-}
-export function CustomerJourney({ pickup, destination, destinationDetail, stops = [], onPickup, onDestination }: { pickup: string; destination?: string; destinationDetail?: string; stops?: any[]; onPickup?: () => void; onDestination?: () => void }) {
-  useColorTheme();
-  const rows: { name: string; detail?: string; action?: () => void }[] = [{ name: pickup, detail: onPickup ? 'Juster hentepunkt' : undefined, action: onPickup }, ...stops.map(stop => ({ name: stop.name || stop.address })), { name: destination || 'Velg reisemål', detail: destinationDetail, action: onDestination }];
-  return <View style={{ gap: 14 }}>{rows.map((row, i) => <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-    <View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: i === 0 ? 5 : 3, backgroundColor: i === 0 ? colors.accent : colors.text }} /></View>
-    {row.action ? <Pressable testID={i === 0 ? 'booking-edit-pickup' : 'booking-change-dest'} accessibilityRole="button" onPress={row.action} style={{ flex: 1, minHeight: 36, justifyContent: 'center' }}><Text style={v10.body} numberOfLines={2}>{row.name}</Text>{row.detail ? <Text style={v10.caption}>{row.detail}</Text> : null}</Pressable> : <View style={{ flex: 1 }}><Text style={v10.body} numberOfLines={2}>{row.name}</Text>{row.detail ? <Text style={v10.caption}>{row.detail}</Text> : null}</View>}
-  </View>)}</View>;
-}
 type Props = {
   stage: BookingStage; reviewing: boolean; pickup: string; destination: any; estimate: any; quotedAt?: number | null;
   vehicleEtas?: Record<string, number>; vehicle: string; price: number | null; nearest: number | null; payment: any; methods: any[];
@@ -149,7 +135,6 @@ function PaymentChoice({ id, icon, title, subtitle, selected = false, disabled =
   </Pressable>;
 }
 
-export function finiteMetric(value: any, unit: string) { return value != null && Number.isFinite(Number(value)) && Number(value) >= 0 ? `${Number(value).toLocaleString('nb-NO', { maximumFractionDigits: 1 })} ${unit}` : '—'; }
 export function arrivalTime(duration: any, quotedAt?: number | null) {
   if (duration == null || !Number.isFinite(Number(duration)) || Number(duration) < 0 || quotedAt == null || !Number.isFinite(quotedAt)) return '—';
   const arrival = new Date(quotedAt + Number(duration) * 60000);
