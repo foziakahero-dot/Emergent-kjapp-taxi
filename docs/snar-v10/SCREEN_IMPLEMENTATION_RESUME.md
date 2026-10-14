@@ -1,4 +1,8 @@
-# Latest pair — Customer 19/20; automatic continuation (2026-10-14)
+# Latest pair — Customer 21/22; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_21_22_20261014.md. Source payment-check geometry/draw/pop and staggered paid content are implemented, with theme-correct positive-soft fill and real-paid-only feedback. Receipt journey slots/rows follow the source with sequential entry; factual receipt/share/payment handling remains. Customer type and both behavioral suites pass. Light/dark web fixtures for 19–22 render with actual fonts and no JS errors; native acceptance remains open. Next automatically: 23 Vurdering + 24 Aktivitet, then 25 Turdetalj + 26 Meldinger. User wants continuous pairs and no release build before Customer/Driver screens are complete.
+
+# Previous pair — Customer 19/20; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_19_20_20261014.md. Arrival uses fresh real GPS, destination-only camera framing and once-per-trip feedback. Summary uses original pop/metrics, count-up and measured route framing, and remains visible if the initial response is already paid. No proximity event ends a ride and no reserved ride exposes a second charge. Customer typecheck and both component/controller suites pass; physical pixel/device acceptance remains open.
 

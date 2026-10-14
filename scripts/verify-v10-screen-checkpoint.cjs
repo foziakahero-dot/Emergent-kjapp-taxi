@@ -831,6 +831,13 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['@/src/lib/nativePayment'] = { payNative: async () => { nativePayCalls++; return nativePayResult(); } };
   Object.assign(stubs['@/src/lib/api'].tripsApi, { get: async () => receiptTrip, complete: async () => ({ ok: true }), rate: async (...args) => { ratingCalls.push(args); return rateResult(); } });
   const Receipt = load('frontend', 'app/receipt/[tripId].tsx').default;
+  const PaymentCheck=load('frontend','src/components/V10PaymentCheck.tsx').V10PaymentCheck;
+  const checkTiming=native.Animated.timing;let checkAnimation,checkStops=0;
+  native.Animated.timing=(value,config)=>{checkAnimation={value,config};return {start(){},stop(){checkStops++;}}};
+  tree=await mount(PaymentCheck);assert.equal(checkAnimation.config.duration,420);assert.equal(checkAnimation.config.delay,160);
+  await act(async()=>checkAnimation.value.setValue(1));assert.equal(tree.root.findAllByProps({testID:'payment-check-path'})[0].props.strokeDashoffset,0);await unmount(tree);assert.equal(checkStops,1);assert.equal(checkAnimation.value.listeners.size,0);
+  reduceMotion=true;tree=await mount(PaymentCheck);assert.equal(tree.root.findAllByProps({testID:'payment-check-path'})[0].props.strokeDashoffset,0);await unmount(tree);reduceMotion=false;native.Animated.timing=checkTiming;
+
   tree = await mount(Receipt);
   assert.equal(button(tree, 'receipt-pay'), undefined, 'Reserved ride cannot expose a second charge');
   assert.equal(tree.root.findAllByProps({ testID: 'customer-paid-screen' }).length, 0);

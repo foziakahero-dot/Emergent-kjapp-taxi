@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { V10Entrance } from '@/src/components/V10Entrance';
+import { V10PaymentCheck } from '@/src/components/V10PaymentCheck';
 import { V10CountUp } from '@/src/components/V10CountUp';
 import { Image, Pressable, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -30,6 +31,12 @@ export function CustomerReceiptView(p: Props) {
   const [stage, setStage] = useState<Stage>(p.initialReceipt ? 'receipt' : 'complete');
   const [feedback, setFeedback] = useState<string[]>([]);
   const previousPaid = useRef(paid);
+  const announcedPaid = useRef('');
+  useEffect(() => {
+    if (stage !== 'paid' || !paid || announcedPaid.current === p.trip.trip_id) return;
+    announcedPaid.current = p.trip.trip_id;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, [stage, paid, p.trip.trip_id]);
   const [sheetHeight, setSheetHeight] = useState(300);
   useEffect(() => {
     if (paid && !previousPaid.current) setStage(current => current === 'complete' ? 'paid' : current);
@@ -46,18 +53,18 @@ export function CustomerReceiptView(p: Props) {
     <V10Group style={{ padding: 20 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}><BrandBadge size={32} /><Text style={[v10.caption, { flex: 1, textAlign: 'right' }]}>{p.trip.receipt_id ? `Nr. ${p.trip.receipt_id}` : 'Kvitteringsnummer ikke tilgjengelig'}{'\n'}{receiptDate(p.trip.created_at) || 'Dato ikke tilgjengelig'}</Text></View>
       <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 40, lineHeight: 48, letterSpacing: -1.2, marginTop: 20 }}>{receiptMoney(p.trip.price, true)}</Text><Text style={v10.secondary}>{paymentNote}</Text><Divider />
       <JourneyRow first title={p.trip.pickup_address || 'Hentested'} sub={receiptDate(p.trip.started_at || p.trip.created_at, true)} /><View style={{ height: 14 }} /><JourneyRow title={p.trip.dropoff_address || 'Destinasjon'} sub={[receiptDate(p.trip.arrived_at, true), finiteMetric(p.trip.duration_min, 'min'), finiteMetric(p.trip.distance_km, 'km')].filter(Boolean).join(' · ')} /><Divider />
-      <ReceiptRow label="Turpris" value={receiptMoney(p.trip.quoted_ride_price ?? p.trip.price)} />
-      {typeof p.trip.waiting_fee_total === 'number' && (p.trip.waiting_policy || p.trip.waiting_fee_total > 0) ? <ReceiptRow label="Ventetid" value={receiptMoney(p.trip.waiting_fee_total)} /> : null}
-      {typeof p.trip.service_fee === 'number' ? <ReceiptRow label="Servicegebyr" value={receiptMoney(p.trip.service_fee)} /> : null}
-      {typeof p.trip.vat_amount === 'number' ? <ReceiptRow label="Herav mva" value={receiptMoney(p.trip.vat_amount)} /> : null}
-      {p.trip.driver?.name ? <ReceiptRow label="Sjåfør" value={p.trip.driver.name} /> : null}
-      {p.trip.driver?.car || p.trip.driver?.plate ? <ReceiptRow label="Kjøretøy" value={[p.trip.driver.car, p.trip.driver.plate].filter(Boolean).join(' · ')} /> : null}
-      {p.trip.fleet_name || p.trip.driver?.fleet_name ? <ReceiptRow label="Løyvehaver" value={p.trip.fleet_name || p.trip.driver.fleet_name} /> : null}
+      <ReceiptRow delay={0} label="Turpris" value={receiptMoney(p.trip.quoted_ride_price ?? p.trip.price)} />
+      {typeof p.trip.waiting_fee_total === 'number' && (p.trip.waiting_policy || p.trip.waiting_fee_total > 0) ? <ReceiptRow delay={60} label="Ventetid" value={receiptMoney(p.trip.waiting_fee_total)} /> : null}
+      {typeof p.trip.service_fee === 'number' ? <ReceiptRow delay={120} label="Servicegebyr" value={receiptMoney(p.trip.service_fee)} /> : null}
+      {typeof p.trip.vat_amount === 'number' ? <ReceiptRow delay={180} label="Herav mva" value={receiptMoney(p.trip.vat_amount)} /> : null}
+      {p.trip.driver?.name ? <ReceiptRow delay={240} label="Sjåfør" value={p.trip.driver.name} /> : null}
+      {p.trip.driver?.car || p.trip.driver?.plate ? <ReceiptRow delay={300} label="Kjøretøy" value={[p.trip.driver.car, p.trip.driver.plate].filter(Boolean).join(' · ')} /> : null}
+      {p.trip.fleet_name || p.trip.driver?.fleet_name ? <ReceiptRow delay={360} label="Løyvehaver" value={p.trip.fleet_name || p.trip.driver.fleet_name} /> : null}
     </V10Group>{issues}
     <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}><View style={{ flex: 1 }}><V10Action small kind="soft" icon="download" label="Last ned PDF" disabled onPress={() => {}} testID="receipt-pdf-unavailable" /></View><View style={{ flex: 1 }}><V10Action small kind="soft" icon="help" label="Få hjelp" onPress={p.onSupport} /></View></View><Text style={[v10.caption, { marginTop: 8 }]}>PDF-kvittering er ikke tilgjengelig ennå. Du kan dele turens registrerte opplysninger ovenfor.</Text>
   </V10Screen>;
   if (stage === 'paid' && paid) return <View testID="customer-paid-screen" style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: 24, paddingBottom: 48, alignItems: 'center', justifyContent: 'center' }}>
-    <Svg width={88} height={88} viewBox="0 0 88 88" accessibilityLabel="Betaling bekreftet"><Circle cx={44} cy={44} r={42} fill="rgba(13,122,88,.1)" /><Path d="M28 45l11 11 21-23" fill="none" stroke={colors.success} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" /></Svg><Text style={[v10.title, { marginTop: 24 }]}>Betalt</Text><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 44, lineHeight: 54, letterSpacing: -1.32, marginTop: 4 }}>{kr(p.trip.price)}</Text><Text style={[v10.secondary, { marginTop: 14 }]}>Betalingen er bekreftet av SNAR.</Text>{issues}
+    <V10PaymentCheck /><V10Entrance delay={60} style={{ alignItems: 'center' }}><Text style={[v10.title, { marginTop: 24 }]}>Betalt</Text><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 44, lineHeight: 54, letterSpacing: -1.32, marginTop: 4, fontVariant: ['tabular-nums'] }}>{kr(p.trip.price)}</Text></V10Entrance><V10Entrance delay={120}><Text style={[v10.secondary, { marginTop: 0, textAlign: 'center' }]}>Betalingen er bekreftet av SNAR.</Text></V10Entrance>{issues}
     <View style={{ position: 'absolute', bottom: Math.max(40, insets.bottom + 6), left: 24, right: 24, gap: 4 }}><V10Action kind="ink" label="Ferdig" onPress={() => p.rated ? p.onHome() : setStage('rating')} testID="receipt-done" /><V10Action kind="ghost" label="Se kvittering" onPress={() => setStage('receipt')} testID="receipt-view" /></View>
   </View>;
   const pickup = point(p.trip.pickup_lat, p.trip.pickup_lng), dropoff = point(p.trip.dropoff_lat, p.trip.dropoff_lng);
@@ -79,6 +86,6 @@ export function CustomerReceiptView(p: Props) {
 function Divider() {
   useColorTheme(); return <View style={{ marginVertical: 20, borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.lineStrong }} />; }
 function JourneyRow({ first, title, sub }: { first?: boolean; title: string; sub: string | null }) {
-  useColorTheme(); return <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: first ? 5 : 2, backgroundColor: first ? colors.accent : colors.text }} /><View style={{ flex: 1 }}><Text style={v10.body}>{title}</Text>{sub ? <Text style={v10.caption}>{sub}</Text> : null}</View></View>; }
-function ReceiptRow({ label, value }: { label: string; value: string }) {
-  useColorTheme(); return <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 7 }}><Text style={v10.secondary}>{label}</Text><Text style={[v10.secondary, { color: colors.text, fontFamily: font.semibold, maxWidth: '64%', textAlign: 'right' }]}>{value}</Text></View>; }
+  useColorTheme(); return <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}><View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: first ? 5 : 3, backgroundColor: first ? colors.accent : colors.surfaceInverse }} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{title}</Text>{sub ? <Text style={v10.caption}>{sub}</Text> : null}</View></View>; }
+function ReceiptRow({ label, value, delay = 0 }: { label: string; value: string; delay?: number }) {
+  useColorTheme(); return <V10Entrance delay={delay} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 16, paddingVertical: 7 }}><Text style={v10.secondary}>{label}</Text><Text style={[v10.secondary, { color: colors.text, fontFamily: font.semibold, maxWidth: '64%', textAlign: 'right' }]}>{value}</Text></V10Entrance>; }
