@@ -46,8 +46,8 @@ export function V10Badge({ children, tone = 'neutral' }: { children: React.React
     <Text style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: palette[0] }}>{children}</Text>
   </View>;
 }
-export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height }: {
-  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number;
+export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height, labelSize }: {
+  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number; labelSize?: number;
 }) {
   useColorTheme();
   const color = kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text;
@@ -55,7 +55,7 @@ export function V10Action({ label, onPress, kind = 'primary', small = false, dis
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
     style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, boxShadow: kind === 'primary' ? `0 6px 20px -10px ${colors.accent}` : undefined, transform: [{ scale: pressed ? .97 : 1 }] })}>
     {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={small ? 18 : 22} /> : null}
-    <Text style={{ color, fontFamily: font.semibold, fontSize: small ? 14 : 16, lineHeight: small ? 20 : 22, letterSpacing: -.16 }}>{label}</Text>
+    <Text style={{ color, fontFamily: font.semibold, fontSize: labelSize ?? (small ? 14 : 16), lineHeight: labelSize ? labelSize * 1.375 : small ? 20 : 22, letterSpacing: -.16 }}>{label}</Text>
   </Pressable>;
 }
 export function V10State({ icon, title, body, action, onAction, warning = false }: { icon: string; title: string; body: string; action?: string; onAction?: () => void; warning?: boolean }) {
