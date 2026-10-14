@@ -1,3 +1,34 @@
+# Current source correction — Figma Make supplied by user (2026-10-14)
+
+This section supersedes every source-completeness claim and next-pair instruction below.
+
+Authoritative source for BOTH Customer and Driver:
+https://www.figma.com/make/7947uNsMq8WNEq3eZSHmuz/SNAR-Fleet-v2-Design-System?t=RGwJIZdmnH3jirmp-0
+
+The user requests continuous implementation, one or two screens at a time, automatically proceeding to the next screen. Finish Customer, then Driver. No APK/IPA/release/deployment/merge before the screen work is complete. Do not ask for permission to continue routine implementation.
+
+## Why the earlier source is insufficient
+
+The prior implementation used the older SNAR_V10_VSCode_Package.zip reference. The user's newer screenshot contains SNAR Personal / Reisestudio content absent from that archive. The current Figma Make manifest includes src/CustomerApp.tsx, src/DriverApp.tsx, src/snar10/ExperienceStudio.tsx and src/snar10/signature.css. These file names confirm the source difference, but their contents have NOT been retrieved or compared. Customer checkpoints 19–34 passed the documented type/behavior/layout checks against the older archive; they do NOT establish parity with this newer Make file. Reconcile all existing screens against the new source before claiming completeness or a final screen count.
+
+## Concrete access blocker
+
+Figma get_design_context, account snarapp, fileKey 7947uNsMq8WNEq3eZSHmuz, nodeId 0:1 succeeds but returns only resource_link entries. Reading file://figma/make/source/7947uNsMq8WNEq3eZSHmuz/src/App.tsx through the available codex_apps resource reader returns Unknown resource. The other connected Figma account reports no edit access. The browser cannot open this Make URL (Site Unavailable). No access permissions were changed.
+
+The manifest also lists public/downloads/snar10-kildekode.zip. A fresh code ZIP exported from THIS Make file would unblock exact comparison. Do not substitute the old archive or infer the new studio implementation from a single screenshot.
+
+## Saved implementation state
+
+Latest pushed implementation commit before this correction: f778e7778cdc4ce60defbc565e64786b1cb160be, on implementation/snar-v10-screens-20261013. Customer 33/34 adds persisted accessibility controls, shared contrast palettes and opt-in real trip speech. Native/provider/pixel acceptance remains open.
+
+Uncommitted work exists for old-source screen 35 in frontend/app/scheduled-trip.tsx and its home/booking/layout links. It is a disabled planning preview without a scheduling backend and has NOT been pushed or accepted against the new design. Preserve and reassess it once new source is available. Driver has not been advanced during the Customer 19–34 checkpoints.
+
+## Resume action
+
+Obtain the actual new Make source, inspect App.tsx, CustomerApp.tsx, DriverApp.tsx, ExperienceStudio.tsx, kit.tsx, signature.css and index.css, then map actual current screen IDs and compare existing implementations. Prioritize the verified SNAR Personal home/returning discrepancy, continue automatically in pairs with relevant checks and a push after each pair. Preserve actual existing FastAPI/Mongo, payment, chat and dispatch contracts; no fabricated backend behavior or new Supabase migration.
+
+---
+
 # Latest pair — Customer 33/34; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_33_34_20261014.md. All four accessibility controls persist; high contrast updates the shared light/dark palettes and opt-in Expo 57 Speech reads actual trip status/fresh ETA/plate with dedup/offline/cleanup guards. Source geometry, settings navigation and actual logout remain. Customer type and behavioral suites pass; light/dark layouts have no JS errors. New native speech requires a future native build; no build is requested yet. Next automatically: 35 Planlagt tur and 36 Tilstander, then Driver audit.
