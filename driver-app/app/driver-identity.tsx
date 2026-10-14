@@ -10,6 +10,7 @@ import Svg, { Ellipse } from 'react-native-svg';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { apiError, driverApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -130,7 +131,7 @@ export default function DriverIdentity() {
   const status = verification?.status === 'verified' && user?.identity_recheck_required ? 'recheck_required' : verification?.status || 'not_submitted';
   const meta = STATUS[status] || { title: 'Ukjent kontrollstatus', body: 'Oppdater kontrollstatus før du fortsetter.', tone: 'neutral' as const };
 
-  if (cameraOpen || photo) return <View testID="driver-identity-camera-screen" style={{ flex: 1, backgroundColor: '#0a141f', alignItems: 'center', paddingTop: Math.max(110, insets.top + 48), paddingHorizontal: 24 }}>
+  if (cameraOpen || photo) return <V10Entrance fade testID="driver-identity-camera-screen" style={{ flex: 1, backgroundColor: '#0a141f', alignItems: 'center', paddingTop: Math.max(110, insets.top + 48), paddingHorizontal: 24 }}>
     <StatusBar style="light" />
     <View style={{ width: 240, height: 300 }}>
       <View style={{ position: 'absolute', inset: 0, borderRadius: 120, overflow: 'hidden' }}>{photo ? <Image source={{ uri: photo }} style={{ width: 240, height: 300 }} resizeMode="cover" /> : <CameraView ref={camera} testID="driver-selfie-live-camera" style={{ width: 240, height: 300 }} facing="front" onCameraReady={() => setCameraReady(true)} onMountError={() => { setErr('Kameraet kunne ikke åpnes. Prøv igjen.'); setCameraOpen(false); }} />}</View>
@@ -138,8 +139,8 @@ export default function DriverIdentity() {
     </View><Text style={[v10.heading, { color: '#eef2f7', marginTop: 32, textAlign: 'center' }]}>{photo ? 'Kontroller bildet ditt' : 'Hold telefonen i øyehøyde'}</Text><Text style={[v10.secondary, { color: 'rgba(238,242,247,.65)', marginTop: 6, textAlign: 'center' }]}>{photo ? 'Send selfien til SNAR for manuell kontroll.' : 'Ha hele ansiktet synlig. Trykk for å ta selfien.'}</Text>
     {err ? <Text testID="driver-identity-error" accessibilityRole="alert" style={[v10.secondary, { color: '#ffb4ba', marginTop: 16 }]}>{err}</Text> : null}
     <View style={{ position: 'absolute', bottom: Math.max(40, insets.bottom + 6), left: 24, right: 24, gap: 4 }}><V10Action label={photo ? 'Send til kontroll' : 'Ta selfie'} onPress={() => void (photo ? submit() : capture())} busy={busy} disabled={!photo && !cameraReady} testID={photo ? 'driver-selfie-submit' : 'driver-selfie-capture'} /><V10Action kind="soft" label={photo ? 'Ta nytt bilde' : 'Avbryt'} disabled={busy} onPress={() => { if (photo) void openCamera(); else setCameraOpen(false); }} testID="driver-selfie-cancel" /></View>
-  </View>;
-  return <V10Screen testID="driver-identity-screen"><V10Header onBack={() => router.back()} />
+  </V10Entrance>;
+  return <V10Screen testID="driver-identity-screen"><V10Entrance fade><V10Header onBack={() => router.back()} />
     {!verification ? err ? <V10State warning icon="wifiOff" title="Kunne ikke hente identitetsstatus" body={err} action="Prøv igjen" onAction={() => void load()} /> : <Loader /> : <>
       <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="camera" size={26} /></View><Text style={[v10.title, { marginTop: 18 }]}>Bekreft at det er deg</Text><Text style={[v10.secondary, { marginTop: 8 }]}>Passasjerer stoler på at sjåføren i appen er den som kjører. Ta en fersk selfie. SNAR kontrollerer bildet manuelt.</Text>
       <View style={{ marginTop: 16, gap: 6 }}><V10Badge tone={meta.tone === 'good' ? 'positive' : meta.tone === 'warn' ? 'warning' : 'neutral'}>{meta.title}</V10Badge><Text style={v10.secondary}>{meta.body}</Text>
@@ -153,5 +154,5 @@ export default function DriverIdentity() {
       {!permission?.granted && permission?.canAskAgain === false ? <V10Action kind="ghost" label="Åpne kamerainnstillinger" onPress={() => void Linking.openSettings().catch(() => setErr('Kunne ikke åpne telefonens innstillinger.'))} /> : null}
       {err ? <Text testID="driver-identity-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{err}</Text> : null}<Text style={[v10.caption, { marginTop: 16 }]}>Løyvehaver ser bare verifiseringsstatus. Selfien er privat og kan bare åpnes av deg og SNAR-administratorer.</Text>
     </>}
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

@@ -6,6 +6,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { authApi, driverApi } from '@/src/lib/api';
 import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10State } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 
 export default function DriverDocuments() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function DriverDocuments() {
   const identityStatus = identity.data?.status;
   const verified = identityStatus === 'verified' && !data?.identity_recheck_required;
   const pending = identityStatus === 'pending_review';
-  return <V10Screen testID="driver-documents-screen">
+  return <V10Screen testID="driver-documents-screen"><V10Entrance fade>
     <V10Header title="Dokumenter" onBack={() => router.back()} />
     {me.isPending ? <Loader /> : me.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente dokumentene"
       body="Dokumentstatusen er ikke tilgjengelig akkurat nå." action="Prøv igjen" onAction={() => void me.refetch()} /> : <>
@@ -29,5 +30,5 @@ export default function DriverDocuments() {
       </V10Group>
       <View style={{ marginTop: 16 }}><V10Action label="Åpne identitetskontroll" icon="camera" kind="soft" onPress={() => router.push('/driver-identity')} /></View>
     </>}
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

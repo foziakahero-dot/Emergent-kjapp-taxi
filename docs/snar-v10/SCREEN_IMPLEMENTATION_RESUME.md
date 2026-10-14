@@ -369,3 +369,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 26/27 (2026-10-15, Oslo)
+
+24/25 is published as `bd45f19`. Read `DRIVER_PAIR_26_27_20261015.md`: source document/identity fade and guide checks, real capture/upload/manual-review semantics retained. Typecheck and checkpoint suite pass; twelve source/native-component frames including mocked camera have no page errors. Continue with 28/29 after publication; physical camera/native/pixel acceptance remains open.
+
+---
+
