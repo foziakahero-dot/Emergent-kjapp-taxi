@@ -22,9 +22,11 @@ The user explicitly authorized both Android QA APKs through Expo EAS, a persiste
 
 ## EAS jobs
 
-Driver job: `2da03c07-1e26-4040-825b-bcd4404a3bf7`, source `b75c0ab7036c7b4afaa50f8624753b79cb8b69d1`, profile `qa`, Android, preview environment. Observed in native Gradle compilation. No completed artifact is inferred from this status.
+Driver job: `2da03c07-1e26-4040-825b-bcd4404a3bf7`, source `b75c0ab7036c7b4afaa50f8624753b79cb8b69d1`, profile `qa`, Android, preview environment. Expo reports **Succeeded**, build time 23m21s, with an APK artifact. Artifact verification is recorded separately after download.
 
-Customer must be built again from the commit containing this checkpoint and the complete hook/dependency fixes. Actual completed build IDs and APK verification will be recorded after EAS produces artifacts.
+Customer job: `17f1f1c5-7707-4524-847a-01d4acc7169d`, source `16956e53f46e18619acefe6e101bc5b42bd13bff`, profile `qa`, Android, preview. The actual EAS pre-install, clean dependency install, doctor, prebuild, post-install TypeScript/package checks and JavaScript bundle all passed. Native Gradle compilation is in progress.
+
+The actual QA support smoke test returned the expected clear AI-disabled 503 and created support ticket `6acecbb4dd6507e3be5dea55` with HTTP 201. Inspection of the existing AdminSupport client found that it reads `body`/`contact_email`, while public intake historically wrote only `message`/`contact`. The endpoint now preserves both schemas, and admin listing normalizes existing public tickets without changing the database. All eight actual support/AI endpoint tests pass. This backend correction is being deployed to Render QA; deployment completion must be verified independently.
 
 GitHub Actions is separately blocked by the account payment/spending annotation; direct EAS builds do not depend on that runner. Main, production Render, app stores and OTA are unchanged.
 

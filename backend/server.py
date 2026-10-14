@@ -2279,6 +2279,11 @@ async def create_public_support_ticket(body: PublicSupportRequest, request: Requ
         "name": (body.name or "").strip()[:120],
         "contact": body.contact.strip()[:200],
         "message": body.message.strip()[:4000],
+        # The admin support client reads the canonical body/contact_email fields.
+        # Preserve the public intake fields for existing consumers too.
+        "body": body.message.strip()[:4000],
+        "contact_email": body.contact.strip()[:200],
+        "contact_name": (body.name or "").strip()[:120],
         "source": "kjappapp.no/help",
         "created_at": now_iso,
         "notes": [],
@@ -11031,6 +11036,10 @@ async def admin_tickets(status: Optional[str] = None, category: Optional[str] = 
     out = []
     async for t in db.support_tickets.find(filt).sort("created_at", -1).skip(skip).limit(page_size):
         t["id"] = str(t["_id"]); t.pop("_id", None)
+        # Existing public tickets must be readable without a data migration.
+        t["body"] = t.get("body") or t.get("message") or ""
+        t["contact_email"] = t.get("contact_email") or t.get("contact") or None
+        t["contact_name"] = t.get("contact_name") or t.get("name") or ""
         out.append(t)
     return _paged(out, total, page, page_size, "tickets")
 
