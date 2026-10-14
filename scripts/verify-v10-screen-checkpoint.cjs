@@ -384,6 +384,12 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.doesNotMatch(text(tree), /999 kr/);
   await act(async () => button(tree, 'trip-finished').props.onPress()); assert.equal(navigation.at(-1)[1], '/customer-trip/finished');
   await act(async () => button(tree, 'history-active-trip').props.onPress()); assert.equal(navigation.at(-1)[1], '/booking/live-trip'); await unmount(tree);
+
+  const {osloWeekStart,thisOsloWeek}=load('frontend','src/lib/osloCalendar.ts');
+  assert.equal(osloWeekStart(Date.parse('2026-10-11T22:30:00Z')),'2026-10-12','Oslo has already entered Monday while UTC remains Sunday');
+  assert.equal(thisOsloWeek('2026-10-11T22:10:00Z',Date.parse('2026-10-11T22:30:00Z')),true);
+  assert.equal(thisOsloWeek('2026-10-11T21:59:00Z',Date.parse('2026-10-11T22:30:00Z')),false);
+  assert.equal(thisOsloWeek('invalid'),false);
   const CustomerTrip = load('frontend', 'app/customer-trip/[tripId].tsx').default;
   queryData = { 'customer-trip-detail': { data: { trip_id: 'customer-detail', status: 'completed', payment_status: 'paid', price: 184, created_at: new Date().toISOString(), driver: { name: 'Test Driver' } } } };
   tree = await mount(CustomerTrip); assert.match(text(tree), /Kartdata er ikke tilgjengelig/);
@@ -863,6 +869,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => button(tree, 'receipt-done').props.onPress());
   await act(async () => button(tree, 'rate-star-5').props.onPress());
   assert.equal(ratingCalls.length, 0, 'Selecting stars cannot submit the rating');
+  assert.ok(button(tree, 'receipt-skip-rating'), 'Skip remains available after choosing stars');
   await act(async () => button(tree, 'rating-feedback-Ren bil').props.onPress());
   const ratingSubmission = deferred(); rateResult = () => ratingSubmission.promise;
   await act(async () => { button(tree, 'receipt-submit-rating').props.onPress(); button(tree, 'receipt-submit-rating').props.onPress(); });

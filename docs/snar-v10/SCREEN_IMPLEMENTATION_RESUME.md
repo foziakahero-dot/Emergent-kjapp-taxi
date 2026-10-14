@@ -1,4 +1,8 @@
-# Latest pair — Customer 21/22; automatic continuation (2026-10-14)
+# Latest pair — Customer 23/24; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_23_24_20261014.md. Original rating-star shape/control sizes now animate selection; skip stays visible after selecting a rating, explicit submission remains canonical. Activity has entry motion and Oslo-calendar week/time display, preserving real active/history routing and global Island. Customer type and behavioral checks pass; native acceptance remains open. Next automatically: 25 Turdetalj + 26 Meldinger, then 27 Varsler + 28 SNAR AI.
+
+# Previous pair — Customer 21/22; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_21_22_20261014.md. Source payment-check geometry/draw/pop and staggered paid content are implemented, with theme-correct positive-soft fill and real-paid-only feedback. Receipt journey slots/rows follow the source with sequential entry; factual receipt/share/payment handling remains. Customer type and both behavioral suites pass. Light/dark web fixtures for 19–22 render with actual fonts and no JS errors; native acceptance remains open. Next automatically: 23 Vurdering + 24 Aktivitet, then 25 Turdetalj + 26 Meldinger. User wants continuous pairs and no release build before Customer/Driver screens are complete.
 
