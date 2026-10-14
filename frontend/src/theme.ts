@@ -51,7 +51,7 @@ const lightColors = {
   online: '#0D7A58',
   onlineSoft: '#E6F6F0',
   onlineGlow: 'rgba(13,122,88,0.18)',
-  route: '#E00000',
+  route: '#0B1A2C',
   mapCanvas: '#F1EEE8',
   mapWater: '#DCE8EB',
   mapRoad: '#FFFFFF',

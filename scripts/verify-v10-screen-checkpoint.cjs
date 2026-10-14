@@ -20,7 +20,7 @@ let socialLoginResult, socialCalls = 0, registerResult, registerCalls = 0;
 let loginResult, loginCalls = 0, logoutCalls = 0, vehicleResult, vehicleCalls = 0, currentTripId = 'trip-paid';
 let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [], updateResult, sendResult;
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
-class Value { constructor(value) { this.value = value; } setValue(value) { this.value = value; } stopAnimation() {} interpolate(config) { return config; } }
+class Value { constructor(value) { this.value = value; this.listeners = new Map(); } setValue(value) { this.value = value; this.listeners.forEach(listener => listener({ value })); } addListener(listener) { const id = String(this.listeners.size + 1); this.listeners.set(id, listener); return id; } removeListener(id) { this.listeners.delete(id); } stopAnimation() {} interpolate(config) { return config; } }
 const native = {
   Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }) }, Easing: { linear: value => value, bezier: (...values) => values },
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
@@ -590,6 +590,44 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.match(text(tree),/Newest pickup/);assert.doesNotMatch(text(tree),/Obsolete pickup/);await unmount(tree);
   stubs['@/src/lib/api'].placesApi.reverse=async()=>({label:'Actual pickup'});
   console.log('PASS: Customer 05/06 full map viewport, dock events/theme, stale private avatar response, serialized recenter and newest location response.');
+  // Customer 07/08: bad places cannot book, newer route wins, drawing respects lifecycle/motion.
+  const homeExports = load('frontend','app/(app)/home.tsx');
+  assert.equal(homeExports.normalizeSearchPlace({name:'bad',lat:91,lng:10}),null);
+  assert.equal(homeExports.normalizeSearchPlace({name:'bad',lat:'',lng:10}),null);
+  assert.equal(homeExports.normalizeSearchPlace({name:' ',lat:59,lng:10}),null);
+  assert.equal(homeExports.normalizeSearchPlace({name:' Actual place ',lat:'59.91',lng:'10.75'}).name,'Actual place');
+  assert.equal(helpers.arrivalTime(11,Date.parse('2026-10-14T09:51:00Z')),'12:02','Arrival uses actual duration and Oslo timezone');
+  assert.equal(helpers.arrivalTime(null,Date.now()),'—');assert.equal(helpers.arrivalTime(11,null),'—');assert.equal(helpers.arrivalTime(-2,Date.now()),'—');
+  let routeRequests=[];stubs['@/src/lib/api'].tripsApi.estimate=()=>{const request=deferred();routeRequests.push(request);return request.promise};
+  stubs['@/src/lib/api'].placesApi.search=async()=>({results:[{name:'Bad location',lat:91,lng:10},{name:'Newest destination',address:'Actual address',lat:60.39,lng:5.32}]});
+  tree=await mount(CustomerHome);
+  await act(async()=>button(tree,'quick-Hjem').props.onPress());assert.equal(routeRequests.length,1);assert.equal(button(tree,'route-choose-vehicle').props.disabled,true);
+  await act(async()=>button(tree,'booking-change-dest').props.onPress());
+  await act(async()=>tree.root.findByProps({testID:'search-input'}).props.onChangeText('Bergen'));await tick(350);
+  assert.doesNotMatch(text(tree),/Bad location/);
+  await act(async()=>button(tree,'search-result-0').props.onPress());assert.equal(routeRequests.length,2);
+  await act(async()=>routeRequests[1].resolve({...quote,duration_min:21,geometry:{coordinates:[[10.74,59.91],[5.32,60.39]]}}));
+  await act(async()=>routeRequests[0].resolve(quote));
+  assert.match(text(tree),/21 min/);assert.doesNotMatch(text(tree),/11 min/);assert.equal(Boolean(button(tree,'route-choose-vehicle').props.disabled),false);await unmount(tree);
+  stubs['@/src/lib/api'].tripsApi.estimate=async()=>quote;
+  const routeReveal=load('frontend','src/components/useRouteReveal.ts');
+  const line=[[10,59],[10.02,59],[10.02,59.01]];
+  assert.equal(routeReveal.routePrefix(line,0).length,0);assert.equal(routeReveal.routePrefix(line,1),line);assert.equal(routeReveal.routePrefix([[200,59],[10,59]],.5).length,0);
+  let routeAnimations=[],routeStops=0;const priorTiming=native.Animated.timing;
+  native.Animated.timing=(value,config)=>{routeAnimations.push({value,config});return{start(){},stop(){routeStops++}}};
+  const RouteFrame=({route,enabled=true})=>React.createElement('RouteFrame',{route:routeReveal.useRouteReveal(route,enabled)});
+  await act(async()=>{tree=renderer.create(React.createElement(RouteFrame,{route:line}))});assert.equal(routeAnimations.length,1);assert.equal(routeAnimations[0].config.duration,900);
+  assert.equal(tree.root.findByType('RouteFrame').props.route.length,0);
+  await act(async()=>routeAnimations[0].value.setValue(.5));
+  const halfway=tree.root.findByType('RouteFrame').props.route;assert.equal(halfway.length,2);assert.ok(halfway[1][0]>10&&halfway[1][0]<10.02,'Drawing remains on the actual first route segment');
+  await act(async()=>tree.update(React.createElement(RouteFrame,{route:line.map(point=>[...point])})));
+  assert.equal(routeAnimations.length,1,'An identical server geometry cannot restart drawing');
+  await act(async()=>tree.update(React.createElement(RouteFrame,{route:[[10,59],[10.04,59.03]]})));
+  assert.equal(routeAnimations.length,2);assert.equal(routeStops,1);assert.equal(tree.root.findByType('RouteFrame').props.route.length,0,'New destination cannot flash the old route');
+  await unmount(tree);assert.equal(routeStops,2);assert.equal(routeAnimations[0].value.listeners.size,0,'Unmount removes the JS line listener');
+  reduceMotion=true;tree=await mount(()=>React.createElement(RouteFrame,{route:line}));assert.equal(JSON.stringify(tree.root.findByType('RouteFrame').props.route),JSON.stringify(line));assert.equal(routeAnimations.length,2);await unmount(tree);
+  native.Animated.timing=priorTiming;reduceMotion=false;
+  console.log('PASS: Customer 07/08 invalid places hidden, quote race/pending guard, actual Oslo arrival, server-route-only 900ms drawing, identical-route stability, cleanup and reduced motion.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };

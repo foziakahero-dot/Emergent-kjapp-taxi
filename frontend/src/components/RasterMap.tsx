@@ -2,7 +2,7 @@ import { fitMapView, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/sr
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
-import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Ellipse, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { V10VehicleBody, V10RasterCar } from './V10VehicleMarker';
@@ -62,6 +62,7 @@ export function InteractiveMap({
   pickup,
   dropoff,
   route,
+  focusRoute,
   cars = [],
   activeCar,
   user,
@@ -76,6 +77,7 @@ export function InteractiveMap({
   pickup?: LL | null;
   dropoff?: LL | null;
   route?: number[][] | null;
+  focusRoute?: number[][] | null;
   cars?: Car[];
   activeCar?: Car | null;
   user?: LL | null;
@@ -103,8 +105,8 @@ export function InteractiveMap({
   centerRef.current = center;
   zoomRef.current = zoom;
 
-  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode }),
-    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode]);
+  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode, focusRoute }),
+    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode, focusRoute]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -235,23 +237,11 @@ export function InteractiveMap({
           {baseTiles}
           {labelTiles}
 
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 110,
-              backgroundColor: 'rgba(244,246,250,0.18)',
-              pointerEvents: 'none',
-            }}
-          />
-
           <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
             {routeLine ? (
               <>
-                <Polyline points={routeLine} fill="none" stroke={colors.accent} strokeOpacity={0.30} strokeWidth={11} strokeLinecap="round" strokeLinejoin="round" />
-                <Polyline points={routeLine} fill="none" stroke={colors.accent} strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" />
+                <Polyline points={routeLine} fill="none" stroke={colors.surface} strokeOpacity={.9} strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
+                <Polyline points={routeLine} fill="none" stroke={colors.route} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
               </>
             ) : null}
 
@@ -268,20 +258,20 @@ export function InteractiveMap({
 
             {pickup ? (
               <G>
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={10} fill={colors.accentSoft} />
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={5.5} fill={colors.accent} />
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={2} fill={colors.accentOn} />
+                <Ellipse cx={sx(pickup.lng)} cy={sy(pickup.lat) + 3} rx={10} ry={3.5} fill="#000" opacity={.16} /><Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={11} fill={colors.surface} stroke={colors.surfaceInverse} strokeWidth={1.2} strokeOpacity={.15} />
+                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={6.4} fill={colors.accent} />
+                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={2.4} fill="#fff" />
               </G>
             ) : null}
 
             {dropoff ? (
               <G>
-                <Rect x={sx(dropoff.lng) - 7} y={sy(dropoff.lat) - 7} width={14} height={14} rx={3} fill={colors.bg} stroke={colors.accent} strokeWidth={2.5} />
-                <Rect x={sx(dropoff.lng) - 2.5} y={sy(dropoff.lat) - 2.5} width={5} height={5} fill={colors.text} />
+                <Ellipse cx={sx(dropoff.lng)} cy={sy(dropoff.lat) + 3} rx={10} ry={3.5} fill="#000" opacity={.16} /><Rect x={sx(dropoff.lng) - 10.5} y={sy(dropoff.lat) - 10.5} width={21} height={21} rx={6.5} fill={colors.surfaceInverse} />
+                <Rect x={sx(dropoff.lng) - 3.6} y={sy(dropoff.lat) - 3.6} width={7.2} height={7.2} rx={1.6} fill={colors.surface} />
               </G>
             ) : null}
 
-            {user ? (
+            {user && (!pickup || Math.abs(user.lat - pickup.lat) > 1e-6 || Math.abs(user.lng - pickup.lng) > 1e-6) ? (
               <G>
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(255,0,0,0.16)" />
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />

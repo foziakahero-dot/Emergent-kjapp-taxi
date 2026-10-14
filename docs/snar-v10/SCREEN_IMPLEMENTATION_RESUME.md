@@ -1,3 +1,7 @@
+# Latest verified pair — Customer 07/08 (2026-10-14)
+
+Read CUSTOMER_PAIR_07_08_20261014.md. Search/route have source motion, metrics/Oslo arrival, validated places, quote-response protection, full-road camera framing and matching route/marker styling. TypeScript, behavioral tests, web fixture inspection and Android/iOS offline exports pass. Next pair in the user's corrected order is 09 Kjøretøyvalg + 10 Betaling, then 11 Bekreft + 12 Søker sjåfør. The uploaded Customer index remains authoritative over older Driver-next instructions below. No signed build or native pixel acceptance is claimed.
+
 # Current authoritative order — Customer 05/06 (2026-10-14)
 
 The user's uploaded screen-index image supersedes all older next-pair instructions below. Continue Customer in pairs: 05 Posisjon + 06 Hjem/kart, then 07 Søk destinasjon + 08 Ruteforhåndsvisning, then 09 Kjøretøyvalg + 10 Betaling, then 11 Bekreft + 12 Søker sjåfør (35 Planlagt tur is an optional branch and needs its real contract). Do not jump to Driver approval/selfie. BankID is excluded; Google/Apple use existing native contracts. Push each verified pair on implementation/snar-v10-screens-20261013.
