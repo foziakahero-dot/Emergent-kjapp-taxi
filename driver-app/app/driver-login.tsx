@@ -2,7 +2,7 @@ import { V10Action, v10 } from '@/src/components/V10UI';
 import { AppleSignInButton } from '@/src/components/AppleSignInButton';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
@@ -63,9 +63,9 @@ export default function DriverLogin() {
         </View>
       </View>
       {error ? <Text accessibilityRole="alert" style={s.error} testID="driver-login-error">{error}</Text> : null}
-      <Pressable accessibilityRole="button" accessibilityState={{ disabled: loading, busy: loading }} disabled={loading} onPress={() => void submit()} testID="driver-login-submit" style={({ pressed }) => [s.primary, { transform: [{ scale: pressed ? .97 : 1 }] }]}>
-        {loading ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Logg inn</Text>}
-      </Pressable>
+      <View style={{ marginTop: 12 }}>
+        <V10Action label="Logg inn" height={58} busy={loading} onPress={() => void submit()} testID="driver-login-submit" />
+      </View>
       <Pressable accessibilityRole="button" disabled={loading} onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password"><Text style={s.forgotText}>Glemt passord?</Text></Pressable>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 }}><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /><Text style={v10.caption}>eller</Text><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /></View>
       <View style={{ gap: 8 }}>
@@ -88,8 +88,6 @@ const s = themedStyles(() => StyleSheet.create({
   field: { flexDirection: 'row', alignItems: 'center', minHeight: 60, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, paddingHorizontal: 16 },
   input: { flex: 1, fontSize: 18, lineHeight: 26, paddingVertical: 16, color: colors.text },
   reveal: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
-  primary: { minHeight: 58, borderRadius: 16, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', marginTop: 12 },
-  primaryText: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22, letterSpacing: -.16, color: colors.accentOn },
   forgot: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   forgotText: { fontFamily: font.medium, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20, marginTop: 12 },

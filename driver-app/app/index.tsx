@@ -81,10 +81,12 @@ export default function Index() {
   }
 
   return (
-    <View style={[s.splash, { paddingTop: insets.top, paddingBottom: insets.bottom, alignItems: 'center' }]} testID="driver-onboarding">
-      <SplashBackground />
-      <SplashBrand />
-      <SplashAction label="Start vakt" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
+    <View style={[s.splash, { backgroundColor: '#08131F', alignItems: 'center' }]} testID="driver-onboarding">
+      <SplashBackground inverse />
+      <SplashBrand inverse label="Driver" />
+      <View style={{ position: 'absolute', bottom: Math.max(40, insets.bottom + 6), left: 24, right: 24, alignItems: 'center' }}>
+        <SplashAction label="Start vakt" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
+      </View>
     </View>
   );
 }

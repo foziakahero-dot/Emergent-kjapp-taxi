@@ -293,3 +293,13 @@ A fresh PR-triggered Actions run, `38486477203`, is completed with startup_failu
 
 The previous browser usage limit no longer blocked opening QA. The free Render instance woke up; startup completed and the application log confirms `GET /api/health` HTTP 200 at 2026-10-13 23:50:45 UTC. Reading the resulting browser page was rejected by the browser URL policy because its protocol was not allowed. No alternate-browser, raw-page, protocol or indirect workaround was attempted. The JSON body, canonical readiness and authenticated integration remain unverified. Deployment live plus HTTP 200 is not full database/Stripe/ride certification.
 
+# Publication approved and Driver 01/02 checkpoint (2026-10-15, Oslo)
+
+The user explicitly approved publishing the prepared candidate to `foziakahero-dot/Emergent-kjapp-taxi`, branch `implementation/snar-v10-screens-20261013`, then continuing Driver screens. Publication succeeded through the connected GitHub API because shell Git has no write credential. Remote head `d080d5d467b2581178e619d8cf5f27b47b00d9d3` has tree `135f058405b2b9d2cc88f48752e24f794d442fb8`, identical to reviewed local head `7eda7a1`. All eight original checkpoint trees were preserved; GitHub assigned new commit IDs. PR #101 remains draft. The earlier publication blocker below is resolved.
+
+Driver 01/02 changes and measured evidence are in `DRIVER_PAIR_01_02_20261015.md`. Splash lockup/entrance and login primary shadow were corrected against the actual supplied ZIP. Driver typecheck and both screen/mobile behavior suites pass; source/native-component browser comparisons have no page errors. Actual provider/device acceptance remains open.
+
+Continue automatically with Driver 03/04, checking and publishing each pair. Preserve existing auth/dispatch/payment contracts. Use the supplied Fleet v2 source already extracted; do not ask for it again. No new APK, merge, deployment or production change is requested.
+
+---
+

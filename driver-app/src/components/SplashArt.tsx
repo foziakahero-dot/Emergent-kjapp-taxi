@@ -26,8 +26,8 @@ export function SplashBrand({ inverse = false, label }: { inverse?: boolean; lab
     wordmark.setValue(reduced ? 1 : 0);
     if (reduced) return;
     const entrance = Animated.parallel([
-      Animated.timing(reveal, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.sequence([Animated.delay(120), Animated.timing(wordmark, { toValue: 1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true })]),
+      Animated.timing(reveal, { toValue: 1, duration: 320, easing: Easing.bezier(.34, 1.32, .52, 1), useNativeDriver: true }),
+      Animated.sequence([Animated.delay(120), Animated.timing(wordmark, { toValue: 1, duration: 210, easing: Easing.bezier(.2, .8, .2, 1), useNativeDriver: true })]),
     ]);
     entrance.start();
     const animation = Animated.sequence([
@@ -48,8 +48,8 @@ export function SplashBrand({ inverse = false, label }: { inverse?: boolean; lab
           opacity={light.interpolate({ inputRange: [0, .85, 1], outputRange: [1, 1, 0] })} />
       </Svg>}
     </Animated.View>
-    <Animated.View style={{ alignItems: 'center', opacity: wordmark }}>
-      <Text style={{ fontFamily: font.semibold, fontSize: 22, lineHeight: 27, letterSpacing: 3.96, color }} testID="ob-brand">SNAR</Text>
+    <Animated.View style={{ alignItems: 'center', opacity: wordmark, transform: [{ translateY: wordmark.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }}>
+      <Text style={{ fontFamily: font.semibold, fontSize: 22, lineHeight: 28, letterSpacing: 3.96, color }} testID="ob-brand">SNAR</Text>
       {label ? <Text style={{ marginTop: 4, fontFamily: font.medium, fontSize: 12, lineHeight: 16, letterSpacing: 1.68, textTransform: 'uppercase', color: inverse ? '#6D7E93' : colors.textMuted }}>{label}</Text> : null}
     </Animated.View>
   </View>;
