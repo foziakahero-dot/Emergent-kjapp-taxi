@@ -7,13 +7,14 @@ import { V10Action, V10Group, V10Row, V10Sheet, v10 } from '@/src/components/V10
 import { CustomerJourney, finiteMetric, paymentLabel } from '@/src/components/CustomerBookingView';
 import { Map } from '@/src/components/Map';
 import { VehicleAsset, type VehicleKind } from '@/src/components/VehicleAsset';
+import { V10VoiceBars } from '@/src/components/V10VoiceBars';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { useTheme } from '@/src/theme';
 import { kr } from '@/src/lib/format';
 
 type Props = {
   messages: { role: string; content: string }[]; input: string; onInput: (text: string) => void;
-  step: string; busy: boolean; transcribing: boolean; recording: boolean; voiceOpen: boolean;
+  step: string; busy: boolean; transcribing: boolean; recording: boolean; metering?: number; voiceOpen: boolean;
   pickup: any; dropoff: any; estimate: any; options: any[]; selected: any; payment: any;
   consent: boolean; error: string; onConsent: () => void; onBack: () => void; onCancel: () => void;
   onSend: (text?: string) => void; onVoice: () => void; onCloseVoice: () => void;
@@ -42,8 +43,8 @@ export function CustomerAssistView(p: Props) {
   </>;
   const voiceButton = <Pressable testID="assist-mic" disabled={p.transcribing || p.busy} accessibilityRole="button" accessibilityLabel={p.recording ? 'Stopp taleopptak' : 'Start taleopptak'} onPress={p.onVoice} style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: p.recording ? colors.accent : colors.surface, alignItems: 'center', justifyContent: 'center' }}>{p.transcribing ? <ActivityIndicator color={colors.accent} /> : <V10Icon name="voice" color={p.recording ? colors.accentOn : colors.text} />}</Pressable>;
   if (p.voiceOpen) return <View style={{ flex: 1, backgroundColor: colors.mapCanvas }}>
-    <Map style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pickup={p.pickup} dropoff={p.dropoff} route={p.estimate?.geometry?.coordinates} contentInsets={{ top: insets.top + 24, bottom: sheetHeight + 32, left: 32, right: 32 }} focusMode={p.estimate ? 'route' : 'nearby'} testID="assist-map" />
-    <V10Sheet testID="assist-voice-sheet" onLayout={event => setSheetHeight(event.nativeEvent.layout.height)}><View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.surfaceInverse, flexDirection: 'row', gap: 3, alignItems: 'center', justifyContent: 'center' }}>{[8, 14, 20, 14, 8].map((height, i) => <View key={i} style={{ width: 3, height: p.recording ? height : 6, borderRadius: 2, backgroundColor: colors.onInverse }} />)}</View><View style={{ flex: 1 }}><Text style={v10.caption}>{p.recording ? 'Lytter…' : p.transcribing ? 'Forstår…' : p.busy ? 'Henter turforslag…' : p.selected ? 'Dette forstod jeg' : 'Snakk med SNAR'}</Text><Text style={[v10.body, { fontSize: 17 }]}>{p.recording ? 'Si hvor du skal. Trykk for å stoppe.' : p.messages.filter(message => message.role === 'user').at(-1)?.content || 'Start opptak for å si hvor du skal.'}</Text></View></View>
+    <Map style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pickup={p.pickup} dropoff={p.dropoff} route={p.estimate?.geometry?.coordinates} focusRoute={p.estimate?.geometry?.coordinates} showControls={false} contentInsets={{ top: insets.top + 24, bottom: sheetHeight + 32, left: 32, right: 32 }} focusMode={p.estimate ? 'route' : 'nearby'} testID="assist-map" />
+    <V10Sheet testID="assist-voice-sheet" onLayout={event => setSheetHeight(event.nativeEvent.layout.height)}><View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><V10VoiceBars recording={p.recording} metering={p.metering} /><View style={{ flex: 1 }}><Text style={v10.caption}>{p.recording ? 'Lytter…' : p.transcribing ? 'Forstår…' : p.busy ? 'Henter turforslag…' : p.selected ? 'Dette forstod jeg' : 'Snakk med SNAR'}</Text><Text style={[v10.body, { fontSize: 17 }]}>{p.recording ? 'Si hvor du skal. Trykk for å stoppe.' : p.messages.filter(message => message.role === 'user').at(-1)?.content || 'Start opptak for å si hvor du skal.'}</Text></View></View>
       <View style={{ marginTop: 16, alignItems: 'center' }}>{voiceButton}</View>{proposal}<View style={{ marginTop: 12 }}><V10Action testID="assist-voice-close" label="Tilbake til tekst" kind="ghost" onPress={p.onCloseVoice} /></View>
     </V10Sheet>
   </View>;

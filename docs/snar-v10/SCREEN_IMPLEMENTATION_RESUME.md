@@ -1,4 +1,8 @@
-# Latest pair — Customer 27/28; automatic continuation (2026-10-14)
+# Latest pair — Customer 29/30; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_29_30_20261014.md. Voice glyph uses actual recorder metering, source dimensions and reduced motion; voice map frames actual geometry. Profile has source entry/spacing, canonical verified-card summary and account/version-keyed private avatar cleanup. Customer type and main/Assist behavioral suites pass. Physical microphone/photo/provider/native pixel acceptance remains open. Next automatically: 31 Betalingsmåter + 32 Support, then 33 Tilgjengelighet + 34 Innstillinger and 35/36.
+
+# Previous pair — Customer 27/28; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_27_28_20261014.md. Notifications use actual inverse action/receipt groups with accessible 210ms collapse; ended rides cannot appear active. AI suggestions/messages/result object follow source entry motion and preserve real explicit booking/consent contracts. Customer type, component/controller and Assist suites pass; light/dark notification/AI-idle web fixtures have no JS errors. Unsupported inbox/scheduling/flight/provider contracts and physical/native acceptance remain open. Next automatically: 29 Stemme + 30 Profil, then 31 Betalingsmåter + 32 Support.
 

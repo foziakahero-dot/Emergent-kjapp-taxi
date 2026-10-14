@@ -60,7 +60,7 @@ export default function Assist() {
   const { data: methodsData, isError: methodsError, refetch: refreshMethods } = useQuery({ queryKey: ['assist-payment-methods', user?.id], queryFn: paymentApi.list, enabled: !!user?.id });
   useFocusEffect(useCallback(() => { if (user?.id) void refreshMethods(); }, [user?.id, refreshMethods]));
   const scroll = useRef<ScrollView>(null);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const recorderState = useAudioRecorderState(recorder);
   useEffect(() => { alive.current = true; return () => { alive.current = false; voiceGeneration.current++; voiceSession.current = false; try { void recorder.stop().catch(() => {}); } catch {} void setAudioModeAsync({ allowsRecording: false }).catch(() => {}); }; }, [recorder]);
 
@@ -359,5 +359,5 @@ export default function Assist() {
   const visibleOptions = (estimate?.options || []).filter((o: any) => PRIMARY_TYPES.includes(o.vehicle_type as VehicleKind));
   const methods = Array.isArray(methodsData) ? methodsData : (methodsData?.payment_methods || methodsData?.methods || []);
   const payMethod = methodsError ? null : confirmedPaymentMethod(methods);
-  return <CustomerAssistView messages={messages} input={input} onInput={setInput} step={step} busy={sending} transcribing={transcribing} recording={recorderState.isRecording} voiceOpen={voiceOpen} pickup={pickup} dropoff={dropoff} estimate={estimate} options={visibleOptions} selected={selectedOption} payment={payMethod} consent={waitingAccepted} onConsent={() => setWaitingAccepted(value => !value)} error={error} results={results} scrollRef={scroll} onBack={() => router.back()} onCancel={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }} onSend={text => void send(text)} onVoice={() => void toggleVoice()} onCloseVoice={() => void closeVoice()} onPlace={place => void chooseDestination(place)} onVehicle={chooseVehicle} onConfirm={() => void confirm()} onPayment={() => router.push('/payment-methods')} />;
+  return <CustomerAssistView messages={messages} input={input} onInput={setInput} step={step} busy={sending} transcribing={transcribing} recording={recorderState.isRecording} metering={recorderState.metering} voiceOpen={voiceOpen} pickup={pickup} dropoff={dropoff} estimate={estimate} options={visibleOptions} selected={selectedOption} payment={payMethod} consent={waitingAccepted} onConsent={() => setWaitingAccepted(value => !value)} error={error} results={results} scrollRef={scroll} onBack={() => router.back()} onCancel={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }} onSend={text => void send(text)} onVoice={() => void toggleVoice()} onCloseVoice={() => void closeVoice()} onPlace={place => void chooseDestination(place)} onVehicle={chooseVehicle} onConfirm={() => void confirm()} onPayment={() => router.push('/payment-methods')} />;
 }

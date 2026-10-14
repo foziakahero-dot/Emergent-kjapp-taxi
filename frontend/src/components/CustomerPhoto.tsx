@@ -11,7 +11,10 @@ import { FigmaGradient } from './FigmaGradient';
 export function CustomerPhoto({ initials, size = 56, shape = 'circle', showLabel = true }: { initials: string; size?: number; shape?: 'circle' | 'v10'; showLabel?: boolean }) {
   useColorTheme();
   const { user, refresh } = useAuth();
-  const [source, setSource] = useState<any>(null);
+  const photoKey = `${user?.id || ''}:${user?.customer_photo_version || ''}`;
+  const [photo, setPhoto] = useState<{ key: string; source: any } | null>(null);
+  const source = photo?.key === photoKey ? photo.source : null;
+  const setSource = (value: any) => setPhoto(value ? { key: photoKey, source: value } : null);
   const [choosing, setChoosing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -22,9 +25,10 @@ export function CustomerPhoto({ initials, size = 56, shape = 'circle', showLabel
   useEffect(() => {
     let active = true;
     if (!user?.customer_photo_version) { setSource(null); return; }
-    customerProfileApi.photoSource(user.customer_photo_version).then(value => { if (active) setSource(value); });
+    setSource(null);
+    customerProfileApi.photoSource(user.customer_photo_version).then(value => { if (active) setSource(value); }).catch(() => { if (active) setSource(null); });
     return () => { active = false; };
-  }, [user?.customer_photo_version]);
+  }, [photoKey]);
   const change = async (camera: boolean) => {
     if (lock.current) return;
     lock.current = true; setChoosing(false); setError('');
