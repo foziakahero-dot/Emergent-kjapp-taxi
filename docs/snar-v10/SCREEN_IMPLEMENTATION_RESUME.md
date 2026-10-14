@@ -1,3 +1,11 @@
+# Current checkpoint — Fleet v2 source reconciliation complete; publication blocked (2026-10-14)
+
+Read FLEET_V2_CONTINUATION_RESULT_20261014.md and CURRENT_FLEET_V2_SCREEN_INDEX_20261014.json. Current Customer/Driver studios, signature styling, real message routing and scheduled preview are saved in local commits. Source hash, both typechecks, component/controller, Assist, support and QA guards pass; web fixture evidence is separate from physical/native certification. Missing provider/contracts and native pixel acceptance remain open.
+
+Automatic approval review requires explicit user approval to publish this exact candidate to the public foziakahero-dot/Emergent-kjapp-taxi implementation/snar-v10-screens-20261013 branch. New commits are not remote. Do not retry via an alternate public write path. Recheck remote head before publishing after approval. Preserve the supplied ZIP identity/hash; never revert to the old V10 source or claim all native states are identical. No APK.
+
+---
+
 # Current checkpoint — Driver 03/04 and source studios (2026-10-14)
 
 Read DRIVER_PAIR_03_04_20261014.md. Both current source studios are implemented and checked. Driver targets are scoped to the authenticated driver and confirmed by local persistence. Continue Driver 05/06 then the remaining state/route pairs, preserving canonical trip transitions. All new checkpoint commits remain local pending the exact public-destination approval required by automatic review. No APK.
