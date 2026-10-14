@@ -507,6 +507,11 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const Cockpit = load('driver-app', 'src/components/DriverCockpitView.tsx').DriverCockpitView;
   let advances = 0;
   const props = { user: { fullName: 'Test Driver', plate: 'TEST' }, online: true, busy: false, error: '', summary: { income: 321, trips: 2, online_minutes: 60 }, current: null, completed: null, offer: null, offerRemaining: null, offerExpired: false, offerDistance: null, offerDuration: null, gpsReady: true, minimized: false, extras: '', onOnline() {}, onAccept() {}, onDecline() {}, onAdvance: async () => { advances++; }, onCancel() {}, onNoShow() {}, onCall() {}, onChat() {}, onNavigate() {}, onEmergency() {}, onMinimize() {}, onContinue() {}, onPause() {}, onError() {} };
+  tree = await mount(() => React.createElement(Cockpit, { ...props, online: false, busy: true }));
+  assert.match(text(tree), /Venter på bekreftelse fra SNAR/);
+  assert.equal(button(tree, 'driver-go-online'), undefined, 'Pending shift view hides the old offline actions');
+  assert.doesNotMatch(text(tree), /Du er online/, 'A pending request cannot announce online success');
+  await unmount(tree);
   const currentPickup = { trip_id: 'scene-trip', status: 'driver_on_way', customer: { name: 'Test Customer', phone: '00000000' }, pickup_address: 'Pickup', dropoff_address: 'Destination', price: 184 };
   await act(async () => { tree = renderer.create(React.createElement(Cockpit, { ...props, current: currentPickup })); });
   await act(async () => button(tree, 'driver-arrival-review').props.onPress()); assert.equal(advances, 0, 'Arrival review is UI only');
@@ -540,7 +545,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     current: async () => serverTrip,
     pending: async () => ({ trips: [] }),
     summary: async () => ({ online: true, income: 321, trips: 2, online_minutes: 60 }),
-    location: async () => ({ ok: true }), online: async () => ({ ok: true }),
+    location: async () => ({ ok: true }), online: async online => ({ online }),
     atPickup: async id => { mutations.push(['atPickup', id]); serverTrip = { ...serverTrip, status: 'at_pickup', at_pickup_at: new Date().toISOString() }; },
     start: async id => { mutations.push(['start', id]); serverTrip = { ...serverTrip, status: 'in_trip' }; },
     arrive: async id => { mutations.push(['arrive', id]); serverTrip = { ...serverTrip, status: 'arrived', payment_status: 'pending', driver_earnings: null }; },
@@ -595,6 +600,27 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => { button(tree, 'driver-accept-offer-test').props.onPress(); button(tree, 'driver-accept-offer-test').props.onPress(); button(tree, 'driver-decline-offer-test').props.onPress(); });
   assert.equal(acceptCalls, 1); assert.equal(declineCalls, 0, 'Accept and decline cannot race within the same client');
   await act(async () => accepting.resolve()); assert.match(text(tree), /Kjør til henting/); await unmount(tree);
+  serverTrip = null; serverOffers = [];
+  let shiftOnline = false, shiftCalls = 0, shiftRequest = deferred();
+  stubs['@/src/lib/api'].driverApi.summary = async () => ({ online: shiftOnline, income: 321, trips: 2, online_minutes: 60 });
+  stubs['@/src/lib/api'].driverApi.online = async next => { shiftCalls++; await shiftRequest.promise; shiftOnline = next; return { online: next }; };
+  tree = await mount(Home);
+  await act(async () => { const toggle = tree.root.findByType(Cockpit).props.onOnline; toggle(); toggle(); });
+  assert.equal(shiftCalls, 1, 'Rapid shift toggles send one request');
+  assert.equal(tree.root.findByType(Cockpit).props.online, false, 'Shift stays unconfirmed until the response');
+  await act(async () => shiftRequest.resolve());
+  assert.equal(tree.root.findByType(Cockpit).props.online, true);
+  stubs['@/src/lib/api'].driverApi.online = async () => { throw new Error('Shift offline'); };
+  await act(async () => tree.root.findByType(Cockpit).props.onOnline());
+  assert.match(text(tree), /Shift offline/); assert.equal(tree.root.findByType(Cockpit).props.online, true);
+  stubs['@/src/lib/api'].driverApi.online = async () => ({ online: true });
+  await act(async () => tree.root.findByType(Cockpit).props.onOnline());
+  assert.match(text(tree), /ikke bekreftet/); assert.equal(tree.root.findByType(Cockpit).props.online, true, 'An opposite acknowledgement cannot change shift state');
+  stubs['@/src/lib/api'].driverApi.online = async next => { shiftOnline = next; return { online: next }; };
+  await act(async () => tree.root.findByType(Cockpit).props.onOnline());
+  assert.equal(tree.root.findByType(Cockpit).props.online, false, 'Retry after a rejected response remains possible');
+  await unmount(tree);
+  console.log('PASS: Actual Driver shift duplicate lock, pending view, confirmed state, network failure, rejected acknowledgement and retry.');
   stubs['@/src/components/VehicleAsset'] = { VehicleAsset: 'VehicleAsset' };
   const supplyConfigs = [];
   const supplyCars = [{ id:'standard-live',type:'ai-first',lat:59.915,lng:10.748,eta_min:4 },{ id:'xl-live',type:'trygg',lat:59.914,lng:10.747,eta_min:7 },{ id:'premium-live',type:'premium',lat:59.913,lng:10.746,eta_min:6 }];

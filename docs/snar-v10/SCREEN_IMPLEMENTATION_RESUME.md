@@ -309,3 +309,9 @@ Pair 01/02 is published as `24cec6a`. Pair 03/04 evidence and limitations are in
 
 ---
 
+# Latest Driver pair — 05/06 (2026-10-15, Oslo)
+
+Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PAIR_05_06_20261015.md`: source-shaped pending shift card/ring and hidden old controls, canonical acknowledgement and duplicate-toggle guard, tabular online numerals. Driver typecheck and both behavioral suites pass; eight source/native-component frames have no page errors. Continue automatically with 07 and 08–09 after publishing this pair, then 10/11. Do not start another APK or call native/provider/pixel acceptance complete.
+
+---
+

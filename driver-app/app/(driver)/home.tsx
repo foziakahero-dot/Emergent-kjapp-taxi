@@ -66,6 +66,7 @@ export default function DriverHome() {
   const [summary, setSummary] = useState<any>(null);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [busy, setBusy] = useState(false);
+  const shiftActionLock = useRef(false);
   const [summaryActionBusy, setSummaryActionBusy] = useState(false);
   const summaryActionLock = useRef(false);
   const [error, setError] = useState('');
@@ -77,7 +78,7 @@ export default function DriverHome() {
   const offerActionLock = useRef(false);
   const seenPendingTripIds = useRef<Set<string> | null>(null);
   const completedSummaryVisible = !current && !(pending[0] && online);
-  useHideTabBar(Boolean((current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
+  useHideTabBar(Boolean(busy || summaryActionBusy || (current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
 
   const poll = useCallback(async () => {
     if (!user?.id) return;
@@ -289,15 +290,18 @@ export default function DriverHome() {
   }, [online, current?.status]);
 
   const toggleOnline = async () => {
+    if (shiftActionLock.current || busy || current) return;
+    shiftActionLock.current = true;
     const next = !online;
     setError('');
     setBusy(true);
     try {
-      await driverApi.online(next);
+      const response = await driverApi.online(next);
+      if (response?.online !== next) throw new Error('Vaktstatus ble ikke bekreftet av serveren. Prøv igjen.');
       setOnline(next);
       if (next) poll();
     } catch (e) { setError(apiError(e)); }
-    finally { setBusy(false); }
+    finally { shiftActionLock.current = false; setBusy(false); }
   };
 
   const accept = async (tripId: string) => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
@@ -12,6 +12,7 @@ import { usePersonalShiftGoal } from '@/src/lib/usePersonalShiftGoal';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { DriverAvatar } from '@/src/components/DriverAvatar';
+import { useReducedMotion } from '@/src/components/Motion';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
 
@@ -34,6 +35,21 @@ function Ring({ value, size = 64, color = colors.success, children }: { value: n
     {value !== null ? <Circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={3} fill="none" strokeDasharray={`${length} ${length}`} strokeDashoffset={length * (1 - Math.max(0, Math.min(1, value)))} strokeLinecap="round" rotation={-90} origin={`${size / 2}, ${size / 2}`} /> : null}
   </Svg>{children}</View>;
 }
+function ShiftStatusRing() {
+  const reduced = useReducedMotion();
+  const turn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    turn.setValue(0);
+    if (reduced) return;
+    const animation = Animated.loop(Animated.timing(turn, { toValue: 1, duration: 1200, easing: Easing.linear, useNativeDriver: true }));
+    animation.start();
+    return () => animation.stop();
+  }, [reduced, turn]);
+  return <View accessibilityRole="progressbar" accessibilityLabel="Oppdaterer vaktstatus" style={{ width: 72, height: 72, alignItems: 'center', justifyContent: 'center' }}>
+    <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }]}><Ring size={72} value={.25} /></Animated.View>
+    <V10Icon name="power" size={28} color={colors.success} />
+  </View>;
+}
 function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBottom?: number }) {
   useColorTheme();
   const insets = useSafeAreaInsets();
@@ -44,7 +60,7 @@ function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBot
   </V10Entrance>;
 }
 function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  useColorTheme(); return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
+  useColorTheme(); return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text, fontVariant: ['tabular-nums'] }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
 export function DriverCockpitView(p: Props) {
   useColorTheme();
   const router = useRouter();
@@ -70,8 +86,11 @@ export function DriverCockpitView(p: Props) {
   const left = free !== null && Number.isFinite(arrived) && arrived <= clock ? Math.max(0, Math.ceil(free - (clock - arrived) / 1000)) : null;
   const contact = <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 8 }}><View style={{ flex: 1 }}><V10Action kind="soft" small height={52} label="Ring" icon="phone" onPress={p.onCall} disabled={!trip?.customer?.phone} /></View><View style={{ flex: 1 }}><V10Action kind="soft" small height={52} label="Melding" icon="message" onPress={p.onChat} /></View></View>;
   const header = <V10Entrance key={p.online ? 'online' : 'offline'} style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: p.online ? 16 : 20, right: p.online ? 16 : 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-    {p.online ? <View style={{ flex: 1, minHeight: 60, borderRadius: 20, boxShadow: colors.elevation2, paddingVertical: 10, paddingLeft: 16, paddingRight: 12, backgroundColor: colors.glass, flexDirection: 'row', alignItems: 'center', gap: 12 }}><V10Badge inline tone="positive">Online</V10Badge><Text style={[v10.secondary, { color: colors.text }]}>{minutes(p.summary?.online_minutes)}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dagens inntekt" onPress={() => router.navigate('/(driver)/earnings')} style={{ marginLeft: 'auto' }}><Text style={{ fontFamily: font.semibold, fontSize: 17, lineHeight: 23 }}>{kr(p.summary?.income)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Gå offline" testID="driver-online-toggle" disabled={p.busy || !!trip} onPress={p.onOnline} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}><V10Icon name="power" size={20} color={colors.textMuted} /></Pressable></View> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><DriverAvatar account={p.user} size={32} /><V10Badge inline>Offline</V10Badge></View>}
+    {p.online ? <View style={{ flex: 1, minHeight: 60, borderRadius: 20, boxShadow: colors.elevation2, paddingVertical: 10, paddingLeft: 16, paddingRight: 12, backgroundColor: colors.glass, flexDirection: 'row', alignItems: 'center', gap: 12 }}><V10Badge inline tone="positive">Online</V10Badge><Text style={[v10.secondary, { color: colors.text, fontVariant: ['tabular-nums'] }]}>{minutes(p.summary?.online_minutes)}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dagens inntekt" onPress={() => router.navigate('/(driver)/earnings')} style={{ marginLeft: 'auto' }}><Text style={{ fontFamily: font.semibold, fontSize: 17, lineHeight: 23, fontVariant: ['tabular-nums'] }}>{kr(p.summary?.income)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Gå offline" testID="driver-online-toggle" disabled={p.busy || !!trip} onPress={p.onOnline} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}><V10Icon name="power" size={20} color={colors.text} /></Pressable></View> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><DriverAvatar account={p.user} size={32} /><V10Badge inline>Offline</V10Badge></View>}
     {!p.online ? <Pressable accessibilityRole="button" accessibilityLabel="Innstillinger" onPress={() => router.push('/driver-settings')} style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: colors.glass, boxShadow: colors.elevation2, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="settings" /></Pressable> : null}
+  </V10Entrance>;
+  if (p.busy && !trip && !p.offer && !p.completed) return <V10Entrance fade testID="driver-shift-pending" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+    <V10Entrance pop style={{ borderRadius: 28, paddingVertical: 28, paddingHorizontal: 32, backgroundColor: colors.glass, boxShadow: colors.elevation2, alignItems: 'center' }}><ShiftStatusRing /><Text style={[v10.heading, { marginTop: 16 }]}>Oppdaterer vaktstatus</Text><Text style={v10.secondary}>Venter på bekreftelse fra SNAR</Text></V10Entrance>
   </V10Entrance>;
   if (p.completed && !trip && !(p.offer && p.online)) {
     const done = p.completed, paid = done.payment_status === 'paid' && known(done.driver_earnings) && done.driver_earnings >= 0;
@@ -118,6 +137,5 @@ export function DriverCockpitView(p: Props) {
       <Pressable accessibilityRole="button" onPress={() => router.push('/driver-vehicles')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingBottom: 14 }}><View style={{ width: 72, height: 44, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="vehicle" size={32} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.user?.car || 'Velg kjøretøy'}</Text><Text style={v10.caption}>{p.user?.plate || 'Ingen aktiv bil valgt'}</Text></View><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       <View style={{ flexDirection: 'row', gap: 12, paddingTop: 14, paddingBottom: 18, borderTopWidth: 1, borderTopColor: colors.line }}><Kpi label="I dag" value={kr(p.summary?.income).replace(/\s+kr$/, '')} unit="kr" /><Kpi label="Turer" value={known(p.summary?.trips) ? String(p.summary.trips) : '—'} /><Kpi label="Online" value={known(p.summary?.online_minutes) ? `${Math.floor(p.summary.online_minutes / 60)}:${String(p.summary.online_minutes % 60).padStart(2, '0')}` : '—'} unit="t" /></View><V10Action height={58} icon="power" label="Gå online" onPress={p.onOnline} busy={p.busy} testID="driver-go-online" />
     </Sheet>}
-    {p.busy && !trip && !p.offer ? <V10Entrance fade style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.bg}80` }]}><V10Entrance pop style={{ borderRadius: 28, paddingVertical: 28, paddingHorizontal: 32, backgroundColor: colors.glass, boxShadow: colors.elevation2, alignItems: 'center' }}><Ring size={72} value={null}><V10Icon name="power" size={28} color={colors.success} /></Ring><Text style={[v10.heading, { marginTop: 16 }]}>Oppdaterer vaktstatus</Text><Text style={v10.secondary}>Venter på bekreftelse fra SNAR</Text></V10Entrance></V10Entrance> : null}
   </View>;
 }
