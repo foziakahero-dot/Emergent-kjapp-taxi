@@ -22,7 +22,7 @@ let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
 class Value { constructor(value) { this.value = value; this.listeners = new Map(); } setValue(value) { this.value = value; this.listeners.forEach(listener => listener({ value })); } addListener(listener) { const id = String(this.listeners.size + 1); this.listeners.set(id, listener); return id; } removeListener(id) { this.listeners.delete(id); } stopAnimation() {} interpolate(config) { return config; } }
 const native = {
-  Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }) }, Easing: { linear: value => value, bezier: (...values) => values },
+  Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }), loop: animation => animation }, Easing: { linear: value => value, bezier: (...values) => values },
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
@@ -648,6 +648,34 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.match(tree.root.findByType('CategoryImage').props.source.uri,/photo-1560958089-b8a1929cea89/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');
   await act(async()=>tree.root.findByType('CategoryImage').props.onError());assert.equal(tree.root.findAllByType('CategoryImage').length,0);assert.equal(tree.root.findByType('VehicleAsset').props.kind,'ai-first');await unmount(tree);
   console.log('PASS: Customer 09/10 all-class home supply, actual per-class ETA, unavailable Comfort/provider guards, canonical card, real expiry, original illustration URL and CDN fallback.');
+  // Customer 11/12: canonical consent contract and server-owned matching lifecycle.
+  assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);
+  assert.equal(helpers.confirmedWaitingPolicy({token:'valid',free_minutes:5,per_minute:-1,max_fee:40}),false);
+  assert.equal(helpers.confirmedPaymentMethod([null,{verified:true}]),undefined);
+  stubs['@/src/lib/api'].tripsApi.estimate=async()=>({...quote,options:[{...quote.options[0],waiting_policy:{free_minutes:5,per_minute:4,max_fee:40}}]});
+  tree=await mount(CustomerHome);await act(async()=>button(tree,'quick-Hjem').props.onPress());await act(async()=>button(tree,'route-choose-vehicle').props.onPress());await act(async()=>button(tree,'booking-review').props.onPress());
+  assert.equal(button(tree,'waiting-policy-consent'),undefined);assert.equal(button(tree,'booking-confirm').props.disabled,true);
+  const requestsBeforeInvalidPolicy=bookingRequests.length;await act(async()=>button(tree,'booking-confirm').props.onPress());assert.equal(bookingRequests.length,requestsBeforeInvalidPolicy,'Missing policy token must never reach reservation');
+  stubs['@/src/lib/api'].tripsApi.estimate=async()=>quote;await act(async()=>button(tree,'booking-refresh-quote').props.onPress());
+  assert.match(text(tree),/Bekreft tur/);assert.equal(button(tree,'waiting-policy-consent').props.accessibilityState.checked,false,'Refreshing keeps review but requires new consent');await unmount(tree);
+  const originalTripRequest=stubs['@/src/lib/api'].tripsApi.request;
+  stubs['@/src/lib/api'].tripsApi.request=async body=>{bookingRequests.push(body);return{ok:true}};
+  tree=await mount(CustomerHome);await act(async()=>button(tree,'quick-Hjem').props.onPress());await act(async()=>button(tree,'route-choose-vehicle').props.onPress());await act(async()=>button(tree,'booking-review').props.onPress());await act(async()=>button(tree,'waiting-policy-consent').props.onPress());
+  const beforeUnconfirmedNavigation=navigation.length;await act(async()=>button(tree,'booking-confirm').props.onPress());
+  assert.equal(navigation.length,beforeUnconfirmedNavigation,'An unconfirmed response cannot navigate to an invented trip');assert.match(text(tree),/Bestillingen ble ikke bekreftet/);await unmount(tree);stubs['@/src/lib/api'].tripsApi.request=originalTripRequest;
+  stubs['@/src/components/AvailabilityStatus'].AvailabilityStatus=Status;
+  const TripPresentation=load('frontend','src/components/CustomerTripView.tsx').CustomerTripView;
+  let matchingCallbacks=[];const matchingProps={trip:{trip_id:'matching-test',status:'searching',search_attempt:2,search_next_attempt_at:new Date(Date.now()+30000).toISOString(),search_deadline_at:new Date(Date.now()+90000).toISOString(),pickup_address:'Actual pickup',dropoff_address:'Actual destination'},driverPhoto:null,eta:null,distance:null,offline:false,gpsFresh:false,available:{cars:[],phase:'waiting',issue:'empty',attempt:2,now:Date.now(),seconds:30,retry:()=>matchingCallbacks.push('retry')},insideBusy:false,readyBusy:false,authorizationBusy:false,cancelBusy:false,canCancel:true,onInside(){},onCall(){},onChat(){},onShare(){},onSafety(){},onCancel:()=>matchingCallbacks.push('cancel'),onMinimize(){},onHome:()=>matchingCallbacks.push('home'),onWalk(){},onReady(){},onAuthorize(){},onPhotoError(){},onSheetLayout(){}};
+  const oldMatchingTiming=native.Animated.timing;let matchingAnimations=[],matchingStops=0;
+  native.Animated.timing=(value,config)=>{matchingAnimations.push({value,config});return{start(){},stop(){matchingStops++}}};
+  await act(async()=>{tree=renderer.create(React.createElement(TripPresentation,matchingProps))});
+  assert.match(text(tree),/Finner sjåfør/);assert.match(text(tree),/Forsøk 2 av 3/);assert.match(text(tree),/Actual destination/);assert.doesNotMatch(text(tree),/Spør 3 biler|Majorstuen/);
+  assert.equal(matchingAnimations.length,2);assert.deepEqual(matchingAnimations.map(animation=>animation.config.duration),[1400,1500]);
+  await act(async()=>matchingAnimations.forEach(animation=>animation.value.setValue(1)));assert.equal(matchingCallbacks.length,0,'Activity animation cannot retry, book, assign or navigate');
+  await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:{...matchingProps.trip,status:'cancelled',cancel_reason:'no_driver_available'}})));
+  assert.equal(matchingStops,2,'Server terminal state stops both decorative loops');assert.ok(button(tree,'booking-home'));assert.equal(matchingCallbacks.length,0,'No-driver result waits for explicit retry');await unmount(tree);
+  reduceMotion=true;tree=await mount(()=>React.createElement(TripPresentation,matchingProps));assert.equal(matchingAnimations.length,2,'Reduced motion does not schedule matching activity');await unmount(tree);reduceMotion=false;native.Animated.timing=oldMatchingTiming;
+  console.log('PASS: Customer 11/12 invalid policy blocks booking, refreshed offer retains review/requires consent, source activity durations/cleanup/reduced motion, real dispatch progress and explicit no-driver recovery.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };

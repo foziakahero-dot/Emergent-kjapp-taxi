@@ -6,6 +6,8 @@ import { DesignToggle } from '@/src/components/DesignToggle';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Sheet, V10State, v10 } from '@/src/components/V10UI';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
+import { CustomerJourney } from '@/src/components/CustomerBookingView';
+import { V10SearchIndicator } from '@/src/components/V10SearchIndicator';
 import { destinationProximity } from '@/src/lib/tripPresence';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
@@ -37,13 +39,14 @@ export function CustomerTripView(p: Props) {
   const network = p.offline || !p.gpsFresh ? <Text accessibilityRole="alert" style={[v10.caption, { marginTop: 8, marginBottom: 8 }]}>{p.offline ? 'Venter på oppdatert turstatus.' : 'Venter på oppdatert sjåførposisjon.'}</Text> : null;
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
     {status === 'in_trip' ? <View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, flexDirection: 'row', gap: 12, alignItems: 'center' }}><View style={[v10.icon, { width: 36, height: 36, backgroundColor: colors.surfaceInverse }]}><V10Icon name="destination" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.dropoff_address}</Text><Text style={v10.caption}>{p.offline || !p.gpsFresh ? 'Venter på oppdatering' : 'Turen pågår'}</Text></View></View> : null}
-    <V10Sheet testID={searching ? 'booking-matching-card' : status === 'in_trip' ? 'customer-trip-sheet' : 'customer-pickup-sheet'} onLayout={event => p.onSheetLayout(event.nativeEvent.layout.height)} paddingBottom={status === 'in_trip' ? 106 : 34}>
+    <V10Sheet key={`${p.trip.trip_id}-${status}-${guide ? 'guide' : 'main'}`} testID={searching ? 'booking-matching-card' : status === 'in_trip' ? 'customer-trip-sheet' : 'customer-pickup-sheet'} onLayout={event => p.onSheetLayout(event.nativeEvent.layout.height)} paddingBottom={status === 'in_trip' ? 106 : 34}>
       {status === 'payment_authorizing' ? <><V10State icon="payment" title="Godkjenn kortreservasjonen" body="Ingen sjåfør bestilles før banken har godkjent turbeløpet." /><View style={{ marginTop: 20 }}><V10Action label="Godkjenn turbeløpet" onPress={p.onAuthorize} disabled={p.offline} busy={p.authorizationBusy} testID="booking-authorize" /></View>{p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} /> : null}</> : searching ? <>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}><View><Text style={v10.caption}>Bestiller</Text><Text style={v10.title}>Finner en bil til deg</Text></View><V10Icon name="ai" size={28} /></View>
-        <Text style={[v10.secondary, { marginTop: 6 }]}>Henting {p.trip.pickup_address || 'ved valgt hentested'}</Text>
+        <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><V10SearchIndicator /><View style={{ flex: 1 }}><Text style={v10.heading}>Finner sjåfør</Text><Text style={v10.secondary}>Ved {p.trip.pickup_address || 'valgt hentested'}</Text></View></View>
+        <V10SearchIndicator bar />
+        <CustomerJourney pickup={p.trip.pickup_address || 'Valgt hentested'} destination={p.trip.dropoff_address} />
         <View style={{ marginVertical: 16 }}><AvailabilityStatus search={p.available} trip={p.trip} /></View>
         {p.offline ? <Text testID="search-trip-offline" accessibilityRole="alert" style={v10.caption}>Mangler fersk turstatus. Søket fortsetter på serveren.</Text> : null}
-        <V10Action kind="ghost" label="Avbryt søk" onPress={p.onCancel} busy={p.cancelBusy} testID="searching-cancel" />
+        <V10Action kind="ghost" label="Avbryt søk" onPress={p.onCancel} disabled={!p.canCancel} busy={p.cancelBusy} testID="searching-cancel" />
       </> : cancelled ? <>
         <V10State icon={noDriver ? 'vehicle' : 'x'} title={noDriver ? 'Ingen ledig bil akkurat nå' : status === 'cancelled_by_driver' ? 'Sjåføren måtte avbryte' : 'Turen ble avbrutt'} body={noDriver ? 'Vi fant ingen sjåfør etter tre forsøk. Vil du prøve igjen om litt?' : 'Ingen aktiv tur pågår. Du kan starte en ny bestilling.'} />
         {noDriver ? <Text style={[v10.secondary, { marginTop: 12 }]}>{p.trip.reservation_status === 'released' ? 'Kortreservasjonen er frigitt. Banken kan bruke litt tid på å oppdatere saldoen.' : 'Kortreservasjonen frigis automatisk.'}</Text> : null}

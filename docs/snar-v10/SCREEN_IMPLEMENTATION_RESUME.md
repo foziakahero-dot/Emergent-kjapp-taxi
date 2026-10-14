@@ -1,3 +1,7 @@
+# Latest verified pair — Customer 11/12 (2026-10-14)
+
+Read CUSTOMER_PAIR_11_12_20261014.md. Confirmation now validates real waiting terms/token and confirmed trip ID; explicit quote refresh retains route/review and requires new consent. Matching uses source activity/journey and measured sheet entry while server state owns every attempt/assignment/end. Both behavioral suites, typecheck, 18 web fixtures and Android/iOS offline exports pass. Next source pair is 13 Sjåfør funnet + 14 Sjåfør nærmer seg, then 15 Henteveiledning + 16 Sjåfør har ankommet. The uploaded Customer index supersedes all older next-step headings below. Provider and physical-device acceptance remain open; no signed build or deployment.
+
 # Latest pair — Customer 09/10 (2026-10-14)
 
 Read CUSTOMER_PAIR_09_10_20261014.md. Home now fetches all qualified classes; vehicle rows use actual class ETA, source dimensions/names and original photo URLs with fallback. Payment mirrors canonical verified reservation card in the source grouped layout. Comfort and non-card reservation providers remain explicitly disabled because the real contract is absent; never relabel legacy enkelt as Comfort or imply a local choice changes the backend charge. Next pair: 11 Bekreft + 12 Søker sjåfør, then 13 Sjåfør funnet + 14 Sjåfør nærmer seg.

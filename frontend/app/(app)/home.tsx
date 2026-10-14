@@ -3,7 +3,7 @@ import { useRouteReveal } from '@/src/components/useRouteReveal';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { V10Icon } from '@/src/components/V10Icon';
 import { v10 } from '@/src/components/V10UI';
-import { CustomerBookingView, confirmedPaymentMethod, type BookingStage } from '@/src/components/CustomerBookingView';
+import { CustomerBookingView, confirmedPaymentMethod, confirmedWaitingPolicy, type BookingStage } from '@/src/components/CustomerBookingView';
 import { recentDestinations } from '@/src/lib/recentPlaces';
 import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
@@ -43,6 +43,7 @@ export default function Home() {
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const [estimate, setEstimate] = useState<any>(null);
   const [quotedAt, setQuotedAt] = useState<number | null>(null);
+  const [quoteRevision, setQuoteRevision] = useState(0);
   const setQuote = useCallback((result: any) => { setEstimate(result); setQuotedAt(result ? Date.now() : null); }, []);
   const [waitingAccepted, setWaitingAccepted] = useState(false);
   const [selType, setSelType] = useState('ai-first');
@@ -196,7 +197,7 @@ export default function Home() {
     }).then(result => { if (current) { setQuote(result); setError(''); } })
       .catch(error => { if (current) setError(apiError(error)); });
     return () => { current = false; };
-  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops]);
+  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops, quoteRevision]);
 
   const vehicleEtas: Record<string, number> = {};
   for (const car of cars) {
@@ -226,7 +227,11 @@ export default function Home() {
       setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
       return;
     }
-    if (waitingPolicy && !waitingAccepted) {
+    if (!confirmedWaitingPolicy(waitingPolicy)) {
+      setError('Vilkårene for ventetid kunne ikke bekreftes. Oppdater tilbudet.');
+      return;
+    }
+    if (!waitingAccepted) {
       setError('Bekreft ventetid og kortreservasjon før bestilling.');
       return;
     }
@@ -255,6 +260,7 @@ export default function Home() {
           quoted_pricing_version: estimate.pricing_version,
         } : {}),
       });
+      if (typeof trip?.trip_id !== 'string' || !trip.trip_id.trim()) throw new Error('Bestillingen ble ikke bekreftet av SNAR.');
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
       try {
@@ -292,7 +298,7 @@ export default function Home() {
   const previewRoute = useRouteReveal(routeGeom, Boolean(!activeTrip && dropoff));
   // Payment and waiting consent are completed on the review screen.
   const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
-  const canBook = canReview && Boolean(payMethod && (!waitingPolicy || waitingAccepted));
+  const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy) && waitingAccepted);
   const selectedPrice = priceFor(selType);
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
   const initials = (user?.fullName || 'SNAR').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
@@ -335,6 +341,7 @@ export default function Home() {
         onLocate={() => { setMapFocusRevision(value => value + 1); void refreshLocation(); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')}
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')} onConsent={() => setWaitingAccepted(value => !value)}
+        onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
         onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}
         availability={(locationReady || selectedPickup) ? <AvailabilityStatus compact search={available} /> : null}

@@ -15,7 +15,7 @@ import { kr } from '@/src/lib/format';
 export type BookingStage = 'route' | 'vehicles' | 'payment';
 export function confirmedPaymentMethod(methods: any[]) {
   // Mirror the reservation service: verified Stripe instruments, default first, newest next.
-  return methods.filter(m => m.verified === true && m.setup_status === 'succeeded' && typeof m.stripe_payment_method_id === 'string' && m.stripe_payment_method_id.length > 0)
+  return (Array.isArray(methods) ? methods : []).filter(m => m && m.verified === true && m.setup_status === 'succeeded' && typeof m.stripe_payment_method_id === 'string' && m.stripe_payment_method_id.length > 0)
     .sort((a, b) => Number(Boolean(b.is_default)) - Number(Boolean(a.is_default)) || String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
 }
 export function paymentLabel(method: any) {
@@ -38,7 +38,7 @@ type Props = {
   onVehicle: (type: string) => void; onSearch: (target: 'pickup' | 'dropoff') => void;
   onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void; onNotifications?: () => void;
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void; onConsent: () => void;
-  onBook: () => void; onBack: () => void; onHeight: (height: number) => void; stops: any[];
+  onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; stops: any[];
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
 };
 const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', trygg: 'XL', premium: 'Premium' };
@@ -67,10 +67,10 @@ export function CustomerBookingView(p: Props) {
       {p.placesIssue ? <Pressable testID="home-places-retry" onPress={p.onRetryPlaces}><Text testID="home-places-error" style={[v10.caption, { marginTop: 8 }]}>Kunne ikke oppdatere faste steder. Prøv igjen.</Text></Pressable> : null}{error}</>, true)}
   </>;
   return <><View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20 }}><Tool id="booking-back" icon="chevL" label="Tilbake" onPress={back} target={p.mapBlurTarget} /></View>
-    {sheet(p.reviewing ? <><Text style={[v10.heading, { marginBottom: 16 }]}>Bekreft tur</Text><CustomerJourney pickup={p.pickup} destination={p.destination.name} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
+    {sheet(p.reviewing ? <><Text style={[v10.heading, { marginBottom: 16 }]}>Bekreft tur</Text><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={arrivalTime(p.estimate?.duration_min, p.quotedAt) !== '—' ? `Ankomst ca. ${arrivalTime(p.estimate.duration_min, p.quotedAt)}` : p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}><Info title="Kjøretøy" value={vehicleName} /><Info title="Betaling" value={paymentLabel(p.payment)} onPress={() => { p.onReview(false); p.onStage('payment'); }} /></View>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}><Text style={v10.secondary}>Fast pris, inkl. mva</Text><Text style={v10.title}>{kr(p.price)}</Text></View>
-      {p.waitingPolicy ? <Pressable testID="waiting-policy-consent" accessibilityRole="checkbox" accessibilityState={{ checked: p.waitingAccepted }} onPress={p.onConsent} style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}><V10Icon name={p.waitingAccepted ? 'check' : 'clock'} size={20} /><Text style={[v10.secondary, { flex: 1 }]}>Jeg godtar {p.waitingPolicy.free_minutes} min gratis ventetid, deretter {kr(p.waitingPolicy.per_minute)}/min, maks {kr(p.waitingPolicy.max_fee)}. Kortet reserveres for opptil {kr(Number(p.price || 0) + p.waitingPolicy.max_fee)}. Bare turpris og faktisk ventetid trekkes; resten frigjøres.</Text></Pressable> : null}
+      {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Pressable testID="waiting-policy-consent" accessibilityRole="checkbox" accessibilityState={{ checked: p.waitingAccepted, disabled: p.busy }} disabled={p.busy} onPress={p.onConsent} style={{ flexDirection: 'row', gap: 10, minHeight: 44 }}><View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: p.waitingAccepted ? colors.accent : colors.lineStrong, backgroundColor: p.waitingAccepted ? colors.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>{p.waitingAccepted ? <V10Icon name="check" size={15} color={colors.accentOn} /> : null}</View><Text style={[v10.secondary, { flex: 1 }]}>Jeg godtar ventetid: {p.waitingPolicy.free_minutes} min gratis, så {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text></Pressable><Text style={[v10.caption, { marginTop: 6 }]}>Reserverer opptil {kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} på kortet. Bare turpris og faktisk ventetid trekkes; resten frigjøres.</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vilkårene for ventetid kunne ikke bekreftes.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
       {error}<V10Action testID="booking-confirm" label="Bekreft og bestill" disabled={!p.canBook} busy={p.busy} onPress={p.onBook} />
     </> : p.stage === 'route' ? <><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={styles.metrics}><Metric label="Kjøretid" value={finiteMetric(p.estimate?.duration_min, 'min')} /><Metric label="Distanse" value={finiteMetric(p.estimate?.distance_km, 'km')} /><Metric label="Ankomst" value={arrivalTime(p.estimate?.duration_min, p.quotedAt)} /></View>
@@ -122,6 +122,10 @@ function VehicleChoice({ choice, option, selected, eta, onSelect }: { choice: ty
   </Pressable>;
 }
 export function validVehiclePrice(price: any) { return typeof price === 'number' && Number.isFinite(price) && price > 0; }
+export function confirmedWaitingPolicy(policy: any): boolean {
+  return typeof policy?.token === 'string' && policy.token.trim().length > 0
+    && ['free_minutes', 'per_minute', 'max_fee'].every(key => typeof policy[key] === 'number' && Number.isFinite(policy[key]) && policy[key] >= 0);
+}
 export function cardExpiryLabel(card: any) {
   return Number.isInteger(card?.exp_month) && card.exp_month >= 1 && card.exp_month <= 12 && Number.isInteger(card.exp_year)
     ? `Utløper ${String(card.exp_month).padStart(2, '0')}/${String(card.exp_year).slice(-2)}` : null;

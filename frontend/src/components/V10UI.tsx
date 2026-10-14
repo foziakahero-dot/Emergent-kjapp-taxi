@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type StyleP
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
+import { V10Entrance } from './V10Entrance';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 
 export function V10Screen({ children, dock = false, style, testID }: { children: React.ReactNode; dock?: boolean; style?: StyleProp<ViewStyle>; testID?: string }) {
@@ -80,8 +81,8 @@ export const v10 = themedStyles(() => StyleSheet.create({
 export function V10Sheet({ children, paddingBottom = 34, testID, onLayout }: { children: React.ReactNode; paddingBottom?: number; testID?: string; onLayout?: ViewProps['onLayout'] }) {
   useColorTheme();
   const insets = useSafeAreaInsets();
-  return <View testID={testID} onLayout={onLayout} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3 }}>
+  return <V10Entrance sheet testID={testID} onLayout={onLayout} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3 }}>
     <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
     <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(paddingBottom, insets.bottom) }}>{children}</ScrollView>
-  </View>;
+  </V10Entrance>;
 }
