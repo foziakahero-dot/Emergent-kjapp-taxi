@@ -1,0 +1,10 @@
+name: SNAR Customer Paid Beta APK
+
+# Manual EAS workflow. No GitHub Actions trigger.
+jobs:
+  build_customer_paid_beta_apk:
+    name: Build SNAR Customer Paid Beta APK
+    type: build
+    params:
+      platform: android
+      profile: qa
