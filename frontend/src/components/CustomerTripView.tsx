@@ -9,11 +9,12 @@ import { V10Action, V10Badge, V10Sheet, V10State, v10 } from '@/src/components/V
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { CustomerJourney } from '@/src/components/CustomerBookingView';
 import { V10SearchIndicator } from '@/src/components/V10SearchIndicator';
-import { destinationProximity, driverApproaching } from '@/src/lib/tripPresence';
+import { V10Entrance } from '@/src/components/V10Entrance';
+import { destinationProximity, driverApproaching, pickupFreeWait } from '@/src/lib/tripPresence';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
 
-type Props = { trip: any; driverPhoto: any; eta: number | null; distance: string | null; offline: boolean; gpsFresh: boolean; available: React.ComponentProps<typeof AvailabilityStatus>['search']; insideBusy: boolean; readyBusy: boolean; authorizationBusy: boolean; cancelBusy: boolean; canCancel: boolean;
+type Props = { trip: any; driverPhoto: any; eta: number | null; distance: string | null; offline: boolean; gpsFresh: boolean; available: React.ComponentProps<typeof AvailabilityStatus>['search']; insideBusy: boolean; readyBusy: boolean; readySent?: boolean; authorizationBusy: boolean; cancelBusy: boolean; canCancel: boolean; onGuideChange?: (open: boolean) => void;
   onInside: (inside: boolean) => void; onCall: () => void; onChat: () => void; onShare: () => void; onSafety: () => void; onCancel: () => void; onMinimize: () => void; onHome: () => void; onWalk: () => void; onReady: () => void; onAuthorize: () => void; onPhotoError: () => void; onSheetLayout: (height: number) => void };
 function DriverCard({ p, compact = false }: { p: Props; compact?: boolean }) {
   useColorTheme();
@@ -30,16 +31,27 @@ export function CustomerTripView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const [guide, setGuide] = useState(false);
+  useEffect(() => { p.onGuideChange?.(guide); return () => p.onGuideChange?.(false); }, [guide, p.onGuideChange]);
   useEffect(() => setGuide(false), [p.trip.trip_id, p.trip.status]);
   const status = p.trip.status;
   const announcedDriver = useRef('');
+  const announcedArrival = useRef('');
   useEffect(() => {
-    if (status !== 'driver_on_way' || !p.trip.driver_id || p.offline) return;
+    if (!['driver_on_way', 'at_pickup'].includes(status) || !p.trip.driver_id || p.offline) return;
     const key = `${p.trip.trip_id}:${p.trip.driver_id}`;
-    if (announcedDriver.current === key) return;
-    announcedDriver.current = key;
+    const marker = status === 'at_pickup' ? announcedArrival : announcedDriver;
+    if (marker.current === key) return;
+    marker.current = key;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   }, [p.trip.trip_id, p.trip.driver_id, status, p.offline]);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (status !== 'at_pickup' || p.offline) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [status, p.offline, p.trip.trip_id]);
+  const freeWait = !p.offline ? pickupFreeWait(p.trip, now) : null;
   const displayedEta = !p.offline && p.gpsFresh && typeof p.eta === 'number' && Number.isFinite(p.eta) && p.eta > 0 ? p.eta : null;
   const approaching = !p.offline && p.gpsFresh && driverApproaching(p.trip);
   const proximity = !p.offline ? destinationProximity(p.trip) : null;
@@ -74,8 +86,8 @@ export function CustomerTripView(p: Props) {
         <View style={{ marginTop: 10 }}><Contacts p={p} /></View><V10Action kind="ghost" small label="Vis henteveiledning" onPress={() => setGuide(true)} testID="customer-pickup-guide" />
         {p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} testID="assigned-trip-cancel" /> : null}
       </> : status === 'at_pickup' ? <>
-        <View style={{ alignItems: 'center', paddingTop: 6, paddingBottom: 16 }}><V10Badge tone="positive">Sjåføren er her</V10Badge><Text style={{ width: '100%', textAlign: 'center', fontFamily: font.semibold, fontSize: 44, lineHeight: 58, letterSpacing: 3.52, marginTop: 14, paddingVertical: 10, borderRadius: 18, borderWidth: 1.5, borderColor: colors.text }}>{p.trip.driver?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={[v10.heading, { marginTop: 14 }]}>{p.trip.driver?.car || 'Bilen din'}</Text><Text style={v10.secondary}>{first} venter ved hentestedet</Text></View>{network}<Contacts p={p} />
-        <View style={{ marginTop: 10 }}><V10Action label="Jeg er i bilen · varsle sjåføren" onPress={p.onReady} disabled={p.offline} busy={p.readyBusy} testID="customer-in-car" /><Text style={[v10.caption, { marginTop: 8, textAlign: 'center' }]}>Sjåføren bekrefter turstart.</Text></View>
+        <V10Entrance pop testID="pickup-identity" style={{ alignItems: 'center', paddingTop: 6, paddingBottom: 16 }}><View style={{ alignSelf: 'center' }}><V10Badge tone="positive">Sjåføren er her</V10Badge></View><Text style={{ width: '100%', textAlign: 'center', fontFamily: font.semibold, fontSize: p.trip.driver?.plate ? 44 : 20, lineHeight: p.trip.driver?.plate ? 53 : 26, letterSpacing: p.trip.driver?.plate ? 3.52 : -.36, marginTop: 14, paddingVertical: 10, borderRadius: 18, borderWidth: 1.5, borderColor: colors.text }}>{p.trip.driver?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={[v10.heading, { marginTop: 14 }]}>{p.trip.driver?.car || 'Bilen din'}</Text><Text style={v10.secondary}>{first} venter ved hentestedet{freeWait ? <Text style={{ fontVariant: ['tabular-nums'] }}> · gratis venting ca. {freeWait}</Text> : null}</Text></V10Entrance>{network}<Contacts p={p} />
+        <View style={{ marginTop: 10 }}><V10Action label={p.readySent ? 'Sjåføren er varslet' : 'Jeg er i bilen · varsle sjåføren'} onPress={p.onReady} disabled={p.offline || p.readySent} busy={p.readyBusy} testID="customer-in-car" /><Text style={[v10.caption, { marginTop: 8, textAlign: 'center' }]}>Sjåføren bekrefter turstart.</Text></View>
         {p.trip.waiting_policy ? <Text style={[v10.caption, { marginTop: 12 }]} testID="pickup-waiting-policy">{p.trip.waiting_policy.free_minutes} min gratis ventetid. Deretter {kr(p.trip.waiting_policy.per_minute)}/min, maks {kr(p.trip.waiting_policy.max_fee)}.</Text> : null}
         {p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} testID="assigned-trip-cancel" /> : null}
       </> : status === 'in_trip' && proximity?.near ? <>

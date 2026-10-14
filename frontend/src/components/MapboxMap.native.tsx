@@ -273,12 +273,6 @@ export function MapboxInteractiveMap({
           <MarkerCar key={car.id || `car-${index}`} car={car} />
         ))}
 
-        {smoothCar ? (
-          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap anchor={{ x: .5, y: activeCar?.eta_min != null ? 52 / 77 : .5 }}>
-            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active /></View></View> : <MapCar heading={smoothCar.heading} active />}
-          </MarkerView>
-        ) : null}
-
         {pickup ? (
           <MarkerView coordinate={[pickup.lng, pickup.lat]} allowOverlap>
             <PointMarker kind="pickup" />
@@ -296,6 +290,12 @@ export function MapboxInteractiveMap({
             <PointMarker kind="user" />
           </MarkerView>
         ) : null}
+        {smoothCar ? (
+          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap anchor={{ x: .5, y: activeCar?.eta_min != null ? 52 / 77 : .5 }}>
+            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active /></View></View> : <MapCar heading={smoothCar.heading} active />}
+          </MarkerView>
+        ) : null}
+
       </MapView>
 
       {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}

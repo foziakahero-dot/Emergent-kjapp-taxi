@@ -1,4 +1,5 @@
 import { driverPresence } from '@/src/lib/tripPresence';
+import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { apiError, kr } from '@/src/lib/format';
@@ -39,6 +40,7 @@ export default function BookingFlow() {
   const s = useStyles();
   const router = useRouter();
   const [minimized, setMinimized] = useState(false);
+  const [pickupGuide, setPickupGuide] = useState(false);
   const [matchingHeight, setMatchingHeight] = useState(300);
   const [minimizedHeight, setMinimizedHeight] = useState(160);
   const [trip, setTrip] = useState<any>(null);
@@ -56,12 +58,14 @@ export default function BookingFlow() {
   const driverPhotoSource = driverPhoto?.key === photoKey ? driverPhoto.source : null;
   const insideLock = useRef(false), readyLock = useRef(false), authorizationLock = useRef(false);
   const [insideBusy, setInsideBusy] = useState(false), [readyBusy, setReadyBusy] = useState(false), [authorizationBusy, setAuthorizationBusy] = useState(false);
+  const [readySent, setReadySent] = useState(false);
+  const readyAcknowledged = useRef('');
   const [pickupNotice, setPickupNotice] = useState('');
   const activeRoute = useRef(tripId), mounted = useRef(true);
   activeRoute.current = tripId;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    setMinimized(false); setChatOpen(false); setSafetyOpen(false);
+    setMinimized(false); setPickupGuide(false); setChatOpen(false); setSafetyOpen(false); setReadySent(false);
     setNetworkIssue(false); setActionError(''); setPickupNotice('');
     cancelPhase.current = 'idle'; setCancelBusy(false);
   }, [tripId]);
@@ -210,9 +214,10 @@ export default function BookingFlow() {
     finally { insideLock.current = false; if (routeIsCurrent()) setInsideBusy(false); }
   };
   const notifyReady = async () => {
-    if (!tripId || readyLock.current || trip?.status !== 'at_pickup' || networkIssue) return;
+    const key = `${tripId}:${trip?.driver_id || ''}`;
+    if (!tripId || readyLock.current || readyAcknowledged.current === key || trip?.status !== 'at_pickup' || networkIssue) return;
     readyLock.current = true; setReadyBusy(true); setActionError(''); setPickupNotice('');
-    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Meldingen mangler leveringsbekreftelse.'); if (routeIsCurrent()) setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); }
+    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Meldingen mangler leveringsbekreftelse.'); if (routeIsCurrent()) { readyAcknowledged.current = key; setReadySent(true); setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); } }
     catch (error) { if (routeIsCurrent()) setActionError(`Meldingen ble ikke bekreftet sendt. ${apiError(error)}`); }
     finally { readyLock.current = false; if (routeIsCurrent()) setReadyBusy(false); }
   };
@@ -225,7 +230,7 @@ export default function BookingFlow() {
   };
   const openWalkingDirections = () => {
     const lat = trip?.pickup_lat, lng = trip?.pickup_lng;
-    if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) { setActionError('Hentestedets kartposisjon er ikke tilgjengelig. Ring sjåføren for hjelp.'); return; }
+    if (!validPosition({ lat, lng })) { setActionError('Hentestedets kartposisjon er ikke tilgjengelig. Ring sjåføren for hjelp.'); return; }
     void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${lat},${lng}`)}&travelmode=walking`).catch(() => setActionError('Kunne ikke åpne gangveiledningen. Ring sjåføren for hjelp.'));
   };
 
@@ -257,9 +262,9 @@ export default function BookingFlow() {
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
   const etaValue = Number(trip.eta_min);
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
-  const driverDistance = Number(trip.driver_distance_to_pickup_km);
+  const driverDistance = trip.driver_distance_to_pickup_km;
   const driverDistanceLabel = !networkIssue && driverGpsFresh && Number.isFinite(driverDistance) && driverDistance >= 0
-    ? `${driverDistance.toFixed(driverDistance < 10 ? 1 : 0)} km unna`
+    ? driverDistance < 1 ? `${Math.round(driverDistance * 1000)} m unna` : `${driverDistance.toLocaleString('nb-NO', { maximumFractionDigits: 1 })} km unna`
     : null;
 
   return (
@@ -270,7 +275,7 @@ export default function BookingFlow() {
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={trip.status === 'in_trip' ? { lat: trip.dropoff_lat, lng: trip.dropoff_lng } : null}
         route={route}
-        focusRoute={route}
+        focusRoute={pickupGuide ? null : route}
         showControls={false}
         cars={searching ? available.cars : []}
         focusMode={searching ? 'nearby' : 'route'}
@@ -280,6 +285,7 @@ export default function BookingFlow() {
         testID="booking-map"
       />
 
+      {trip.status === 'at_pickup' ? <View testID="pickup-map-dim" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: .25 }]} /> : null}
       {LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
       {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View testID="booking-minimized-card" onLayout={e => setMinimizedHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
         <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
@@ -287,7 +293,8 @@ export default function BookingFlow() {
       </View> : <CustomerTripView
         trip={trip} driverPhoto={driverPhotoSource} eta={etaMinutes} distance={driverDistanceLabel}
         offline={networkIssue} gpsFresh={driverGpsFresh} available={available}
-        insideBusy={insideBusy} readyBusy={readyBusy} authorizationBusy={authorizationBusy} cancelBusy={cancelBusy} canCancel={canCancel}
+        insideBusy={insideBusy} readyBusy={readyBusy} readySent={readySent && readyAcknowledged.current === `${tripId}:${trip.driver_id || ''}`} authorizationBusy={authorizationBusy} cancelBusy={cancelBusy} canCancel={canCancel}
+        onGuideChange={setPickupGuide}
         onInside={value => void setWaitingInside(value)} onCall={callDriver} onChat={() => setChatOpen(true)}
         onShare={() => void shareTrip()} onSafety={() => setSafetyOpen(true)} onCancel={() => void cancel()}
         onMinimize={() => setMinimized(true)} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}

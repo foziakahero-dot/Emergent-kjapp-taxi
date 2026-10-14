@@ -247,20 +247,6 @@ export function InteractiveMap({
 
             {cars.map((c, i) => <V10RasterCar key={(c as any).id || `car-${i}`} car={c} projectX={sx} projectY={sy} />)}
 
-            {smoothCar ? (
-              <>
-                <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
-                  <V10VehicleBody />
-                </G>
-              </>
-            ) : null}
-
-            {smoothCar && activeCar?.eta_min != null ? <G transform={`translate(${sx(smoothCar.lng)},${sy(smoothCar.lat) - 52})`}>
-              <Rect x={-(String(activeCar.eta_min).length + 4) * 3.5 - 10} width={(String(activeCar.eta_min).length + 4) * 7 + 20} height={24} rx={9} fill={colors.surfaceInverse} />
-              <SvgText y={16} textAnchor="middle" fontFamily={font.semibold} fontSize={12.5} fill={colors.onInverse}>{activeCar.eta_min} min</SvgText>
-            </G> : null}
-
             {pickup ? (
               <G>
                 <Ellipse cx={sx(pickup.lng)} cy={sy(pickup.lat) + 3} rx={10} ry={3.5} fill="#000" opacity={.16} /><Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={11} fill={colors.surface} stroke={colors.surfaceInverse} strokeWidth={1.2} strokeOpacity={.15} />
@@ -284,6 +270,20 @@ export function InteractiveMap({
                 <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill={colors.text} fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>
             ) : null}
+            {smoothCar ? (
+              <>
+                <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
+                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
+                  <V10VehicleBody />
+                </G>
+              </>
+            ) : null}
+
+            {smoothCar && activeCar?.eta_min != null ? <G transform={`translate(${sx(smoothCar.lng)},${sy(smoothCar.lat) - 52})`}>
+              <Rect x={-(String(activeCar.eta_min).length + 4) * 3.5 - 10} width={(String(activeCar.eta_min).length + 4) * 7 + 20} height={24} rx={9} fill={colors.surfaceInverse} />
+              <SvgText y={16} textAnchor="middle" fontFamily={font.semibold} fontSize={12.5} fill={colors.onInverse}>{activeCar.eta_min} min</SvgText>
+            </G> : null}
+
           </Svg>
 
           <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>

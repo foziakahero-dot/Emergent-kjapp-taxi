@@ -1,3 +1,7 @@
+# Latest pair — Customer 15/16 (2026-10-14)
+
+Read CUSTOMER_PAIR_15_16_20261014.md. Guidance uses real pickup; arrival identity/pop/wait estimate follows source; confirmed ready message disables repeat and never starts the ride. Continue 17 Tur pågår + 18 Sikkerhet. Type, component/controller, web and offline native-bundle checks pass with physical-device limits documented. Uploaded Customer order stays authoritative; no signed app or deployment.
+
 # Latest verified pair — Customer 13/14 (2026-10-14)
 
 Read CUSTOMER_PAIR_13_14_20261014.md. Driver card/tag follows source and fresh real data; old route/photo state is suppressed on a changed trip reference. TypeScript, both behavioral suites, native camera checks, 22 web fixtures and offline Android/iOS exports pass. Next: 15 Henteveiledning + 16 Sjåfør har ankommet, then 17 Tur pågår + 18 Sikkerhet. Physical device/marker/haptic/photo certification and search-map sweep/pulses remain open; no new signed app.

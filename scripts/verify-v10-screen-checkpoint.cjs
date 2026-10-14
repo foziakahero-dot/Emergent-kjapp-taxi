@@ -39,7 +39,7 @@ const stubs = {
   './V10Entrance': { V10Entrance: ({children,...props}) => React.createElement('V10Entrance',props,children) },
   'expo-status-bar': { StatusBar: 'StatusBar' },
   'react-native-svg': new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => key in target ? target[key] : String(key) }),
-  '@/src/components/V10Entrance': { V10Entrance: ({children}) => React.createElement('V10Entrance',null,children) },
+  '@/src/components/V10Entrance': { V10Entrance: ({children,...props}) => React.createElement('V10Entrance',props,children) },
   '@/src/components/Motion': { useReducedMotion: () => reduceMotion },
   'react': React, 'react/jsx-runtime': appRequire('react/jsx-runtime'), 'react-native': native,
   'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({ tripId: currentTripId }), useFocusEffect: callback => React.useEffect(callback, [callback]) },
@@ -693,6 +693,14 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const etaTexts=tree.root.findAllByProps({testID:'driver-arrival-eta'})[0];assert.ok(etaTexts.findAllByType('Text').some(node=>Array.isArray(node.props.children)&&node.props.children[0]==='—'),'Stale ETA is suppressed even if old numeric props remain');
   await unmount(tree);
   console.log('PASS: Customer 13/14 fresh road-only approach, invalid/stale proximity suppression, canonical driver/card, medium assignment feedback once per view and stale numeric ETA suppression.');
+  const {pickupFreeWait}=load('frontend','src/lib/tripPresence.ts');
+  const arrivalClock=Date.parse('2026-10-14T09:00:42Z');const waitingTrip={status:'at_pickup',at_pickup_at:'2026-10-14T09:00:00Z',waiting_policy:{free_minutes:5}};
+  assert.equal(pickupFreeWait(waitingTrip,arrivalClock),'4:18');assert.equal(pickupFreeWait(waitingTrip,arrivalClock+400000),'0:00');
+  for(const partial of [{status:'in_trip'},{at_pickup_at:'invalid'},{at_pickup_at:'2026-10-14T10:00:00Z'},{waiting_policy:{free_minutes:-1}}])assert.equal(pickupFreeWait({...waitingTrip,...partial},arrivalClock),null);
+  const beforeArrivalFeedback=hapticCalls.length;
+  tree=await mount(()=>React.createElement(TripPresentation,{...matchingProps,trip:{...freshDriverTrip,status:'at_pickup',at_pickup_at:new Date(Date.now()-42000).toISOString(),waiting_policy:{free_minutes:5,per_minute:4,max_fee:40}},gpsFresh:true,readySent:true}));
+  assert.ok(tree.root.findAllByProps({testID:'pickup-identity'})[0].props.pop);assert.equal(button(tree,'customer-in-car').props.disabled,true);assert.match(text(tree),/Sjåføren er varslet/);assert.equal(hapticCalls.length,beforeArrivalFeedback+1);await unmount(tree);
+  console.log('PASS: Customer 15/16 real pickup guidance, confirmed readiness/no repeat/start, server-timestamp wait estimate, unknown/future/ended clock suppression and arrival feedback.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };
@@ -856,6 +864,9 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await unmount(tree);assert.equal(stoppedEntrances,1,'Unmount cancels the pending entry animation');
   reduceMotion = true;tree = await mount(() => React.createElement(Entrance,{delay:120},React.createElement('Text',null,'Benefit')));
   assert.equal(entrances.length,1,'Reduced motion does not schedule entry movement');await unmount(tree);
+  reduceMotion=false;tree=await mount(()=>React.createElement(Entrance,{pop:true},React.createElement('Text',null,'Plate')));
+  assert.equal(entrances.length,2);assert.equal(entrances[1].duration,320);assert.deepEqual(Array.from(tree.root.findByType('AnimatedView').props.style[1].transform[0].scale.outputRange),[.94,1]);await unmount(tree);
+  reduceMotion=true;tree=await mount(()=>React.createElement(Entrance,{pop:true},React.createElement('Text',null,'Plate')));assert.equal(entrances.length,2);await unmount(tree);
   native.Animated.timing = originalTiming;reduceMotion = false;
   console.log('PASS: V10 measured-sheet entry waits for layout, does not replay on errors, cancels on unmount and respects reduced motion.');
   console.log('PASS: Actual receipt reservation/no-double-charge, native/payment status gate, explicit rating submit/feedback/retry/serialization, truthful receipt fields, canonical cards, serialized setup/remove and failed-card refresh.');

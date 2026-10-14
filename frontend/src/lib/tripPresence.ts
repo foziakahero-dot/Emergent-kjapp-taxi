@@ -25,3 +25,13 @@ export function driverApproaching(trip: any, now = Date.now()) {
     && typeof trip.driver_distance_to_pickup_km === 'number' && Number.isFinite(trip.driver_distance_to_pickup_km)
     && trip.driver_distance_to_pickup_km >= 0 && trip.driver_distance_to_pickup_km <= .3;
 }
+
+/** Display estimate from the server arrival timestamp; actual waiting fees stay server-owned. */
+export function pickupFreeWait(trip: any, now = Date.now()): string | null {
+  const minutes = trip?.waiting_policy?.free_minutes;
+  const arrived = typeof trip?.at_pickup_at === 'string' ? Date.parse(trip.at_pickup_at) : NaN;
+  if (trip?.status !== 'at_pickup' || typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 0
+    || !Number.isFinite(arrived) || arrived > now || !Number.isFinite(now)) return null;
+  const seconds = Math.max(0, Math.ceil(minutes * 60 - (now - arrived) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
