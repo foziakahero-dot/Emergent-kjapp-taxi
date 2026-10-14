@@ -124,6 +124,13 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await unmount(avatarTree);
   stubs['@tanstack/react-query'].useQuery = originalAvatarQuery;
   console.log('PASS: Driver avatar missing-path gate, account-scoped query and image-failure fallback.');
+  const Intelligence = load('driver-app', 'app/(driver)/intel.tsx').default;
+  navigation = []; let intelligenceTree = await mount(Intelligence);
+  assert.equal(button(intelligenceTree, 'driver-intelligence-navigate').props.disabled, true, 'No guidance without a real recommendation');
+  assert.doesNotMatch(text(intelligenceTree), /620 kr|82 %|Høy sikkerhet/, 'Prototype forecast and battery values are not account facts');
+  assert.equal(navigation.length, 0);
+  await act(async () => button(intelligenceTree, 'driver-intelligence-stay').props.onPress());
+  assert.equal(navigation.at(-1)[1], '/(driver)/home'); await unmount(intelligenceTree);
   const { ExperienceStudio } = load('frontend', 'src/components/ExperienceStudio.tsx');
   const choices = [{id:'ai-first',label:'Effektiv',icon:'navigation',title:'Effektiv reise',sub:'Standard · estimert henting 3 min',body:'Se rute og pris.'},{id:'comfort',label:'Pusterom',icon:'moon',title:'Pusterom',sub:'Comfort · ikke tilgjengelig',body:'Ikke tilgjengelig',disabled:true},{id:'premium',label:'Signatur',icon:'star',title:'Signaturreise',sub:'Premium · estimert henting 6 min',body:'Se Premium.'}];
   let applied=[],continued=0,applyResult=deferred();

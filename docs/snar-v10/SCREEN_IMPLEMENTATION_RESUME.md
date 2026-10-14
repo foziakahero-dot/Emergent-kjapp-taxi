@@ -345,3 +345,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 18/19 (2026-10-15, Oslo)
+
+16/17 is published as `ada674e`. Read `DRIVER_PAIR_18_19_20261015.md`: earnings headline/layout corrections, real weekly data, and the source-shaped Drive Intelligence page with explicit unavailable slots and disabled guidance. Forecast/charging feature contracts remain absent. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue with 20/21 after publication. Machine-readable publication status is corrected; do not reuse the historical public-push blocker.
+
+---
+

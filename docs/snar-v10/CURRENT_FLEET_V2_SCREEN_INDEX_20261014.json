@@ -2,7 +2,7 @@
   "source_archive_sha256": "5bb43ac60579f335ba72c562cde7b62bc8b74bf6ce6586c82a0f3837f9e2dabd",
   "figma_url": "https://www.figma.com/make/7947uNsMq8WNEq3eZSHmuz/SNAR-Fleet-v2-Design-System",
   "native_pixel_certification": false,
-  "public_push": "blocked_by_automatic_approval_review",
+  "public_push": "approved_and_published_to_implementation_branch",
   "customer": [
     {
       "id": "splash",
@@ -604,7 +604,7 @@
         "driver-app/app/(driver)/intel.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Truthful unavailable state; no live forecast provider."
+      "limitations": "Source page structure present with truthful unavailable map/cards; forecast, income-estimate and charging contracts remain absent. Native acceptance open."
     },
     {
       "id": "earningsDetail",
@@ -739,5 +739,7 @@
       "status": "adapter_present_native_acceptance_open",
       "limitations": "Contextual real states; prototype gallery/unsupported automatic success absent."
     }
-  ]
+  ],
+  "driver_web_review_through": "19",
+  "driver_web_review_date": "2026-10-15"
 }
