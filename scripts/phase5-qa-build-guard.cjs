@@ -1,4 +1,4 @@
-const APPROVED_QA_BACKEND = 'https://api-qa.snarapp.no';
+const APPROVED_QA_BACKEND = 'https://api.kjappapp.no';
 
 function assertQaBackend(profile, backendUrl) {
   if (profile !== 'qa') return;
@@ -21,4 +21,3 @@ if (require.main === module) {
     process.exitCode = 1;
   }
 }
-
