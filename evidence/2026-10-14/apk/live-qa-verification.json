@@ -1,0 +1,19 @@
+{
+  "backend_source": "eb840af50e3a036559d467ec914012fd266b59d9",
+  "deployment": "dep-db7cs967bikc73adg1v0",
+  "deployment_status": "live",
+  "finished_at_utc": "2026-10-14T00:36:26.299588Z",
+  "health_readiness": "PASS",
+  "database_isolated": true,
+  "stripe_test_mode": true,
+  "customer_login": "PASS",
+  "driver_login": "PASS",
+  "auth_me_both_roles": "PASS",
+  "legal_acceptance": "tester_required",
+  "assigned_qa_vehicle": "QA0014",
+  "human_support_http_status": 201,
+  "human_support_ticket": "6acecefc3cdf78c6223396e0",
+  "ticket_body_and_contact": "PASS",
+  "ai_chat": "expected_503_qa_disabled",
+  "device_trip_payment_acceptance": "PENDING"
+}
