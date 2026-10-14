@@ -31,8 +31,8 @@ export function V10HoldAction({ label, onConfirm, onError, disabled = false, tes
   };
   return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="Hold inne i 0,9 sekunder for å bekrefte" accessibilityState={{ disabled: disabled || pending, busy: pending }} disabled={disabled || pending}
     accessibilityActions={[{ name: 'activate', label }]} onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'activate') void confirm(); }}
-    onPressIn={begin} onPressOut={cancel} style={{ height: 58, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.accent, opacity: disabled ? .55 : 1 }}>
+    onPressIn={begin} onPressOut={cancel} style={{ height: 58, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.accent, boxShadow: `0 6px 20px -10px ${colors.accent}`, opacity: disabled ? .55 : 1 }}>
     <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,.18)', width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }} />
-    <View pointerEvents="none" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>{pending ? <ActivityIndicator color={colors.accentOn} /> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><Text style={{ fontFamily: font.semibold, fontSize: 16, lineHeight: 22, color: colors.accentOn }}>{label}</Text><Text style={{ fontFamily: font.medium, fontSize: 12, lineHeight: 16, color: colors.accentOn, opacity: .7 }}>Hold</Text></View>}</View>
+    <View pointerEvents="none" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>{pending ? <ActivityIndicator color={colors.accentOn} /> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><Text style={{ fontFamily: font.semibold, fontSize: 16, lineHeight: 22, letterSpacing: -.16, color: colors.accentOn }}>{label}</Text><Text style={{ fontFamily: font.medium, fontSize: 12, lineHeight: 16, letterSpacing: -.16, color: colors.accentOn, opacity: .7 }}>Hold</Text></View>}</View>
   </Pressable>;
 }

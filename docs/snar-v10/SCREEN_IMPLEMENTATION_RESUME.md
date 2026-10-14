@@ -327,3 +327,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 12/13 (2026-10-15, Oslo)
+
+10/11 is published as `976e23e`. Read `DRIVER_PAIR_12_13_20261015.md`: waiting-ring geometry, tabular confirmation price, source hold-button shadow/tracking with all safety behavior retained. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue automatically with 14/15 after publication, then 16/17. Physical-device/provider/map/pixel acceptance remains open; no APK.
+
+---
+
