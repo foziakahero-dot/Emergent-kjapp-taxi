@@ -35,6 +35,7 @@ const stubs = {
   'expo-speech': {speak(){},stop:async()=>{}},
   'expo-haptics': { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async style => { hapticCalls.push(style); } },
   'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
+  'expo-linear-gradient': { LinearGradient: 'LinearGradient' },
   './V10CategoryImage': { V10CategoryImage: 'V10CategoryImage' },
   './V10MinimizeHandle': { V10MinimizeHandle: 'V10MinimizeHandle' },
   './V10Glass': { V10Glass: 'V10Glass' },
@@ -85,6 +86,10 @@ function load(app, file) {
       const relative = name.slice(2);
       return load(app, relative + (fs.existsSync(path.join(root, app, relative + '.tsx')) ? '.tsx' : '.ts'));
     }
+    if (name.startsWith('./') || name.startsWith('../')) {
+      const relative = path.join(path.dirname(file), name);
+      return load(app, relative + (fs.existsSync(path.join(root, app, relative + '.tsx')) ? '.tsx' : '.ts'));
+    }
     throw new Error(`Unmocked dependency ${name}`);
   };
   vm.runInNewContext(compiled, { require: localRequire, module, exports: module.exports, console, process: { env: {} }, Set, setTimeout: (callback, delay) => { const id = ++testTimerId; testTimers.set(id, { callback, at: testClock + delay }); return id; }, clearTimeout: id => testTimers.delete(id), setInterval: () => ++testTimerId, clearInterval() {} }, { filename: absolute });
@@ -97,6 +102,30 @@ const button = (tree, id) => tree.root.findAll(node => node.type === 'Pressable'
 async function mount(Component) { let tree; await act(async () => { tree = renderer.create(React.createElement(Component)); }); return tree; }
 async function unmount(tree) { await act(async () => tree.unmount()); }
 (async () => {
+  const { ExperienceStudio } = load('frontend', 'src/components/ExperienceStudio.tsx');
+  const choices = [{id:'ai-first',label:'Effektiv',icon:'navigation',title:'Effektiv reise',sub:'Standard · estimert henting 3 min',body:'Se rute og pris.'},{id:'comfort',label:'Pusterom',icon:'moon',title:'Pusterom',sub:'Comfort · ikke tilgjengelig',body:'Ikke tilgjengelig',disabled:true},{id:'premium',label:'Signatur',icon:'star',title:'Signaturreise',sub:'Premium · estimert henting 6 min',body:'Se Premium.'}];
+  let applied=[],continued=0,applyResult=deferred();
+  let studioTree=await mount(()=>React.createElement(ExperienceStudio,{product:'customer',value:'ai-first',options:choices,onApply:value=>{applied.push(value);return applyResult.promise},onContinue:()=>{continued++}}));
+  await act(async()=>button(studioTree,'customer-studio-open').props.onPress());
+  assert.equal(button(studioTree,'customer-studio-choice-comfort').props.disabled,true,'Unsupported Comfort cannot change the real vehicle class');
+  await act(async()=>button(studioTree,'customer-studio-choice-premium').props.onPress());
+  assert.deepEqual(applied,[],'A studio draft does not book or change the current vehicle');
+  await act(async()=>button(studioTree,'customer-studio-cancel').props.onPress());
+  await act(async()=>button(studioTree,'customer-studio-open').props.onPress());
+  assert.equal(button(studioTree,'customer-studio-choice-ai-first').props.accessibilityState.selected,true,'Cancel discards unconfirmed draft');
+  await act(async()=>button(studioTree,'customer-studio-choice-premium').props.onPress());
+  await act(async()=>{button(studioTree,'customer-studio-apply').props.onPress();button(studioTree,'customer-studio-apply').props.onPress()});
+  assert.deepEqual(applied,['premium'],'Apply serializes simultaneous taps');
+  await act(async()=>applyResult.resolve(false));
+  assert.match(text(studioTree),/Valget kunne ikke lagres/);assert.equal(continued,0,'A failed save cannot continue');
+  applyResult=deferred();await act(async()=>button(studioTree,'customer-studio-apply').props.onPress());
+  await act(async()=>applyResult.reject(new Error('storage unavailable')));
+  assert.equal(continued,0);assert.equal(studioTree.root.findAllByProps({testID:'customer-studio-dialog'}).length,1,'Save errors preserve the open draft');
+  applyResult=deferred();await act(async()=>button(studioTree,'customer-studio-apply').props.onPress());await act(async()=>applyResult.resolve(true));
+  assert.equal(continued,1);assert.equal(studioTree.root.findAllByProps({testID:'customer-studio-dialog'}).length,0);await unmount(studioTree);
+  studioTree=await mount(()=>React.createElement(ExperienceStudio,{product:'driver',value:'2200',options:[{...choices[0],id:'2200',sub:'Dagsmål 2 200 kr'}],earnings:null,onApply:()=>true,onContinue:()=>{}}));
+  assert.match(text(studioTree),/Dagens inntekt er ikke tilgjengelig/);assert.doesNotMatch(text(studioTree),/0 av 2/,'Missing income is not invented as zero');await unmount(studioTree);
+  console.log('PASS: New-source Reisestudio draft/cancel, unavailable class, async apply failures/retry, duplicate lock and no automatic booking; missing driver income stays unavailable.');
   const Permissions = load('frontend', 'app/permissions.tsx').default;
   let tree = await mount(Permissions);
   await act(async () => button(tree, 'permissions-manual').props.onPress());

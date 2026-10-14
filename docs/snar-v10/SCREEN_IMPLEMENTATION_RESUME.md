@@ -1,3 +1,9 @@
+# Current checkpoint — supplied Fleet v2 ZIP retrieved and compared (2026-10-14)
+
+The access blocker below is resolved. Read FLEET_V2_NEW_SOURCE_20261014.md and the frozen reference/fleet-v2-20261014/manifest.json. Customer 02/06 now contains the actual Reisestudio; the screen-specific source for 19–34 is unchanged. Shared Customer signature styling is ported. Continue Customer 35/36, then Driver studio and audit. Keep native/provider acceptance distinct from source/layout checks. No APK build is requested.
+
+---
+
 # Current source correction — Figma Make supplied by user (2026-10-14)
 
 This section supersedes every source-completeness claim and next-pair instruction below.
