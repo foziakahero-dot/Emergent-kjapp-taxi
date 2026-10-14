@@ -1,4 +1,8 @@
-# Latest pair — Customer 29/30; automatic continuation (2026-10-14)
+# Latest pair — Customer 31/32; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_31_32_20261014.md. Payment card has source entry/elevation/tabular geometry while actual Stripe verification remains. Support distinguishes canonical live versus historical trips, uses source topics and opens actual contextual chat/tickets. Next automatically: 33 Tilgjengelighet + 34 Innstillinger, then 35/36 and Driver. Native provider/device pixel acceptance remains open.
+
+# Previous pair — Customer 29/30; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_29_30_20261014.md. Voice glyph uses actual recorder metering, source dimensions and reduced motion; voice map frames actual geometry. Profile has source entry/spacing, canonical verified-card summary and account/version-keyed private avatar cleanup. Customer type and main/Assist behavioral suites pass. Physical microphone/photo/provider/native pixel acceptance remains open. Next automatically: 31 Betalingsmåter + 32 Support, then 33 Tilgjengelighet + 34 Innstillinger and 35/36.
 

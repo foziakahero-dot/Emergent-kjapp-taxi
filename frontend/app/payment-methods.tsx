@@ -1,3 +1,4 @@
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
@@ -105,18 +106,18 @@ export default function PaymentMethods() {
   const verified = (method: any) => confirmedPaymentMethod([method]) != null;
   const expiry = primary && Number.isInteger(primary.exp_month) && primary.exp_month >= 1 && primary.exp_month <= 12 && Number.isInteger(primary.exp_year) ? `${String(primary.exp_month).padStart(2, '0')}/${String(primary.exp_year).slice(-2)}` : null;
   const removeButton = (method: any) => <Pressable disabled={busy} onPress={() => void remove(method.id)} testID={`pm-remove-${method.id}`} accessibilityRole="button" accessibilityLabel={`Fjern ${method.label || 'betalingskort'} ${method.last4 || ''}`} accessibilityState={{ disabled: busy }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="x" size={18} color={colors.textMuted} /></Pressable>;
-  return <V10Screen testID="payment-methods-screen"><V10Header title="Betalingsmåter" onBack={() => router.back()} />
+  return <V10Screen testID="payment-methods-screen"><V10Header title="Betalingsmåter" onBack={() => router.back()} /><V10Entrance>
     {isLoading ? <Loader /> : isError ? <V10State warning icon="wifiOff" title="Kunne ikke hente betalingsmåter" body="Dette betyr ikke at kortene dine er borte. Prøv å hente listen på nytt." action="Prøv igjen" onAction={() => void refetch()} /> : <>
       {notice ? <Text accessibilityLiveRegion="polite" testID="pm-notice" style={[v10.secondary, { marginBottom: 12, color: colors.success }]}>{notice}</Text> : null}
       {error ? <Text accessibilityRole="alert" testID="pm-error" style={[v10.secondary, { marginBottom: 12, color: colors.danger }]}>{error}</Text> : null}
-      {primary ? <FigmaGradient angle={135} colors={['#0b1a2c', '#1c3350']} style={{ height: 180, borderRadius: 24, padding: 20, justifyContent: 'space-between', overflow: 'hidden', boxShadow: '0 6px 18px -4px rgba(11,26,44,.16)' }} testID="payment-primary-card">
+      {primary ? <FigmaGradient angle={135} colors={['#0b1a2c', '#1c3350']} style={{ height: 180, borderRadius: 24, padding: 20, justifyContent: 'space-between', overflow: 'hidden', boxShadow: colors.elevation2 }} testID="payment-primary-card">
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>Kort for bestilling</Text><Text style={{ color: '#fff', fontFamily: font.bold, fontStyle: 'italic', fontSize: 20 }}>{String(primary.label || primary.type || 'Kort').toUpperCase()}</Text></View>
-        <Text style={{ color: '#fff', fontFamily: font.medium, fontSize: 20, letterSpacing: 2.4 }}>•••• •••• •••• {primary.last4 || '—'}</Text><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{expiry ? `Utløper ${expiry}` : 'Verifisert av Stripe'}</Text>
+        <Text style={{ color: '#fff', fontFamily: font.medium, fontSize: 20, letterSpacing: 2.4, fontVariant: ['tabular-nums'] }}>•••• •••• •••• {primary.last4 || '—'}</Text><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{expiry ? `Utløper ${expiry}` : 'Verifisert av Stripe'}</Text>
       </FigmaGradient> : <V10State icon="payment" title="Ingen verifisert betalingsmåte" body="Legg til og verifiser et kort før du bestiller en tur." />}
       {primary ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}><V10Badge tone="positive">Verifisert</V10Badge>{removeButton(primary)}</View> : null}
       {others.length ? <V10Section title="Andre kort"><V10Group>{others.map((method: any, index: number) => <V10Row key={method.id} border={index > 0} icon="payment" title={`${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}`} subtitle={verified(method) ? 'Verifisert av Stripe' : 'Ikke verifisert · kan ikke reservere tur'} right={removeButton(method)} testID={`pm-${method.id}`} />)}</V10Group></V10Section> : null}
       <V10Section title="Betaling på enheten"><V10Group><V10Row icon="payment" title="Apple Pay og Google Pay" subtitle={nativeConfig?.enabled === true ? `Native betaling er konfigurert${nativeConfig.test_mode ? ' i testmodus' : ''}. Lommebok krever støtte på enheten.` : 'Ikke aktivert for denne appen.'} testID="wallet-native-status" /></V10Group></V10Section>
       <View style={{ marginTop: 16 }}><V10Action kind="soft" icon="plus" label="Legg til kort" onPress={() => void addStripeCard()} busy={busy} testID="pm-stripe" /></View><Text style={[v10.caption, { marginTop: 12 }]}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Kort for neste tur bestemmes av det verifiserte standardkortet, eller det nyeste verifiserte kortet.</Text>
     </>}
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

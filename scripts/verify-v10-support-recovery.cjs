@@ -29,6 +29,9 @@ const native = {
 };
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
+  './V10Entrance': {V10Entrance:({children,...props})=>React.createElement('V10Entrance',props,children)},
+  './V10MinimizeHandle': {V10MinimizeHandle:'V10MinimizeHandle'},
+  '@/src/components/V10Entrance': {V10Entrance:({children,...props})=>React.createElement('V10Entrance',props,children)},
   'expo-status-bar': { StatusBar: 'StatusBar' },
   'expo-web-browser': { openBrowserAsync: async () => ({type:'dismiss'}) },
   '@/src/components/FigmaGradient': { FigmaGradient: 'Gradient' },
