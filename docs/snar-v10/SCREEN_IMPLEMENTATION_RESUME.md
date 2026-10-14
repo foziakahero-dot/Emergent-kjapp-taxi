@@ -363,3 +363,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 24/25 (2026-10-15, Oslo)
+
+22/23 is published as `d1ff816`. Read `DRIVER_PAIR_24_25_20261015.md`: source fade/numeric treatment, real fleet-active flag and shared authenticated profile avatar/fallback. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue with 26/27 after publication. Existing missing metadata and native/pixel acceptance remain open.
+
+---
+

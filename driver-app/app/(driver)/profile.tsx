@@ -1,12 +1,14 @@
 import React from 'react';
-import { Image, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/src/context/AuthContext';
-import { authApi, authenticatedFileSource, driverApi } from '@/src/lib/api';
+import { authApi, driverApi } from '@/src/lib/api';
 import { Text } from '@/src/components/Typography';
 import { V10Badge, V10Group, V10Row, V10Screen, v10 } from '@/src/components/V10UI';
-import { colors, font, useColorTheme } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
+import { DriverAvatar } from '@/src/components/DriverAvatar';
+import { V10Entrance } from '@/src/components/V10Entrance';
 
 export default function DriverProfile() {
   useColorTheme();
@@ -15,19 +17,17 @@ export default function DriverProfile() {
   const me = useQuery({ queryKey: ['me', user?.id], queryFn: authApi.me, enabled: !!user?.id });
   const ratings = useQuery({ queryKey: ['driver-ratings', user?.id], queryFn: driverApi.ratings, enabled: !!user?.id });
   const data = { ...(user || {}), ...(me.data || {}) } as any;
-  const profilePhoto = useQuery({ queryKey: ['driver-profile-photo-source', user?.id, data.profile_photo_path], queryFn: () => authenticatedFileSource(data.profile_photo_path), enabled: !!user?.id && !!data.profile_photo_path });
   const name = data.fullName || 'Sjåfør';
-  const initials = name.split(' ').map((part: string) => part[0]).join('').slice(0, 2);
   const verified = data.identity_verification_status === 'verified' && !data.identity_recheck_required;
   const missing = [data.drivers_license_path, data.taxi_license_path].filter(value => !value).length;
   const rating = typeof ratings.data?.average === 'number' && ratings.data?.count > 0 ? ratings.data.average.toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
-  return <V10Screen dock testID="driver-profile-screen">
+  return <V10Screen dock testID="driver-profile-screen"><V10Entrance fade>
     <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center', marginVertical: 16 }}>
       <Pressable accessibilityRole="button" accessibilityLabel="Endre profilbilde" onPress={() => router.push('/driver-profile-photo')} testID="driver-profile-photo-open" style={{ width: 72, height: 72, borderRadius: 24.48, overflow: 'hidden', backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}>
-        {profilePhoto.data ? <Image source={profilePhoto.data} style={{ width: 72, height: 72 }} /> : <Text style={{ fontFamily: font.semibold, fontSize: 25.92, color: colors.text }}>{initials}</Text>}
+        <DriverAvatar account={{ ...data, id: user?.id }} size={72} />
       </Pressable>
       <View style={{ flex: 1 }}><Text style={v10.title}>{name}</Text>
-        <Text style={v10.secondary}>{ratings.isError ? 'Vurderinger utilgjengelige' : ratings.isPending ? 'Henter vurderinger…' : rating ? `★ ${rating}${typeof data.trip_count === 'number' ? ` · ${data.trip_count.toLocaleString('nb-NO')} turer` : ` · ${ratings.data.count} vurderinger`}` : 'Ingen vurderinger ennå'}</Text>
+        <Text style={[v10.secondary, { fontVariant: ['tabular-nums'] }]}>{ratings.isError ? 'Vurderinger utilgjengelige' : ratings.isPending ? 'Henter vurderinger…' : rating ? `★ ${rating}${typeof data.trip_count === 'number' ? ` · ${data.trip_count.toLocaleString('nb-NO')} turer` : ` · ${ratings.data.count} vurderinger`}` : 'Ingen vurderinger ennå'}</Text>
         {verified ? <View style={{ marginTop: 6 }}><V10Badge tone="positive">Verifisert</V10Badge></View> : null}
       </View>
     </View>
@@ -42,5 +42,5 @@ export default function DriverProfile() {
       <V10Row icon="navigation" title="Navigasjon" onPress={() => router.push('/driver-navigation')} testID="driver-profile-navigation" />
       <V10Row border icon="settings" title="Innstillinger" onPress={() => router.push('/driver-settings')} testID="driver-profile-settings" />
     </V10Group>
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

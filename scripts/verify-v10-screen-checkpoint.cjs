@@ -362,6 +362,13 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     assert.equal(navigation.at(-1)[1], target);
   }
   await unmount(tree);
+  const Fleet = load('driver-app', 'app/driver-fleet.tsx').default;
+  queryData = { me: { data: { ...user, fleet_id: 'actual-fleet', fleet_active: false } } };
+  tree = await mount(Fleet); assert.match(text(tree), /Inaktiv fleet/); await unmount(tree);
+  queryData.me.data.fleet_active = true;
+  tree = await mount(Fleet); assert.match(text(tree), /Aktiv fleet/); await unmount(tree);
+  delete queryData.me.data.fleet_active;
+  tree = await mount(Fleet); assert.match(text(tree), /Tilknyttet/); assert.doesNotMatch(text(tree), /Aktiv fleet/); await unmount(tree);
   const historyHelpers = load('driver-app', 'src/lib/driverHistory.ts');
   assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'pending', driver_earnings: 999 }), null);
   assert.equal(historyHelpers.confirmedTripIncome({ payment_status: 'paid', driver_earnings: null }), null);
