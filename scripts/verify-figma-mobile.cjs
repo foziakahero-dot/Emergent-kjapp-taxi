@@ -26,6 +26,7 @@ class Value {
 const animation = () => ({ start() {}, stop() {} });
 const themeListeners = new Set(); let systemColorScheme = 'light';
 const native = {
+  PanResponder: { create: config => ({ panHandlers: config }) },
   Appearance: { getColorScheme: () => systemColorScheme, addChangeListener: listener => { themeListeners.add(listener); return { remove: () => themeListeners.delete(listener) }; } },
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   Text: 'NativeText', TextInput: 'NativeTextInput', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' },
@@ -55,6 +56,7 @@ function load(app, file) {
     if (name === 'react-native') return native;
     if (name === 'expo-linear-gradient') return { LinearGradient: 'Gradient' };
     if (name === 'expo-image') return { Image: 'CategoryImage' };
+    if (name === 'expo-blur') return { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView:'BlurView' };
     if (name === 'expo-haptics') return { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async () => {} };
     if (name === 'react-native-svg') return new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => target[key] ?? String(key) });
     if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
@@ -435,7 +437,7 @@ const act = renderer.act;
   native.Linking = { openURL: async url => { callsToDialer.push(url); } };
   let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, dropoff_address: 'Fixture destination', driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
   const navigations = [];let bookingRouteId='unit-trip';
-  const bookingRouter = { replace: url => navigations.push(url) };
+  const bookingRouter = { replace: url => navigations.push(url), push: url => navigations.push(url) };
   stubs.set('expo-router', {
     useLocalSearchParams: () => ({ tripId: bookingRouteId }),
     useRouter: () => bookingRouter,
@@ -525,10 +527,17 @@ const act = renderer.act;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Fixture destination'), 'Active trip banner must use the server destination');
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0, 'Active trip destination banner must replace pickup-arrival status');
-  await act(async () => { const share = booking.root.findByProps({ testID: 'ontrip-share' }).props.onPress; share(); share(); });
+  assert.equal(booking.root.findAllByProps({testID:'trip-dock'}).length,1);
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-trip'}).props.onPress());assert.equal(navigations.pop(),'/customer-trip/unit-trip');
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-message'}).props.onPress());assert.equal(booking.root.findByType('ChatSheet').props.visible,true);
+  await act(async()=>booking.root.findByType('ChatSheet').props.onClose());
+  await act(async()=>booking.root.findByProps({testID:'active-trip-minimize'}).props.onPress());assert.equal(booking.root.findAllByProps({testID:'active-trip-reopen'}).length,1);
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-driver'}).props.onPress());assert.equal(booking.root.findAll(node=>node.type==='AnimatedView'&&node.props.testID==='customer-trip-sheet').length,1);
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-safety'}).props.onPress());
+  await act(async () => { const share = booking.root.findByProps({ testID: 'safety-share-trip' }).props.onPress; share(); share(); });
   assert.equal(shareRequests, 1);
   assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'booking-action-error').length, 1);
-  await act(async () => booking.root.findByProps({ testID: 'ontrip-safety' }).props.onPress());
+  await act(async () => booking.root.findByProps({ testID: 'trip-dock-safety' }).props.onPress());
   await act(async () => booking.root.findByProps({ testID: 'safety-report' }).props.onPress());
   assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'safety-action-error').length, 1);
   assert.equal(booking.root.findByType('Modal').props.visible, true);

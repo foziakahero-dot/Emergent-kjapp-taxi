@@ -340,7 +340,7 @@ export default function Home() {
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
         onPlace={place => { const destination = normalizeSearchPlace(place); if (destination) { setQuote(null); setMapFocusRevision(value => value + 1); setDropoff(destination); } }}
-        onLocate={() => { setMapFocusRevision(value => value + 1); void refreshLocation(); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')}
+        onLocate={() => { void refreshLocation().then(confirmed => { if (confirmed) { setSelectedPickup(null); setMapFocusRevision(value => value + 1); } }); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')}
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')} onConsent={() => setWaitingAccepted(value => !value)}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
@@ -433,6 +433,7 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, targ
 
 export function normalizeSearchPlace(place: any): { name: string; lat: number; lng: number; address?: string } | null {
   if (typeof place?.name !== 'string' || !place.name.trim() || place.lat == null || place.lng == null || place.lat === '' || place.lng === '') return null;
+  if (![place.lat, place.lng].every(value => typeof value === 'number' || (typeof value === 'string' && value.trim().length > 0))) return null;
   const point = { lat: Number(place.lat), lng: Number(place.lng) };
   return validPosition(point) ? { name: place.name.trim(), ...point, ...(typeof place.address === 'string' && place.address ? { address: place.address } : {}) } : null;
 }

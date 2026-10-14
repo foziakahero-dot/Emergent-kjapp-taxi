@@ -1,4 +1,6 @@
 import { driverPresence } from '@/src/lib/tripPresence';
+import { BlurTargetView } from 'expo-blur';
+import { V10TripDock } from '@/src/components/V10TripDock';
 import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
@@ -41,6 +43,8 @@ export default function BookingFlow() {
   const router = useRouter();
   const [minimized, setMinimized] = useState(false);
   const [pickupGuide, setPickupGuide] = useState(false);
+  const mapBlurTarget = useRef<View>(null);
+  const sceneBlurTarget = useRef<View>(null);
   const [matchingHeight, setMatchingHeight] = useState(300);
   const [minimizedHeight, setMinimizedHeight] = useState(160);
   const [trip, setTrip] = useState<any>(null);
@@ -260,7 +264,7 @@ export default function BookingFlow() {
   const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
   const canCancel = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
-  const etaValue = Number(trip.eta_min);
+  const etaValue = trip.eta_min;
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
   const driverDistance = trip.driver_distance_to_pickup_km;
   const driverDistanceLabel = !networkIssue && driverGpsFresh && Number.isFinite(driverDistance) && driverDistance >= 0
@@ -269,8 +273,9 @@ export default function BookingFlow() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <BlurTargetView ref={sceneBlurTarget} style={{ flex: 1 }}>
       {actionError ? <View style={{ position: 'absolute', zIndex: 100, top: insets.top + 60, left: 16, right: 16, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text testID="booking-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text></View> : null}
-      <Map
+      <BlurTargetView ref={mapBlurTarget} style={StyleSheet.absoluteFill}><Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={trip.status === 'in_trip' ? { lat: trip.dropoff_lat, lng: trip.dropoff_lng } : null}
@@ -283,7 +288,7 @@ export default function BookingFlow() {
           bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
         activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
         testID="booking-map"
-      />
+      /></BlurTargetView>
 
       {trip.status === 'at_pickup' ? <View testID="pickup-map-dim" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: .25 }]} /> : null}
       {LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
@@ -292,6 +297,7 @@ export default function BookingFlow() {
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
       </View> : <CustomerTripView
         trip={trip} driverPhoto={driverPhotoSource} eta={etaMinutes} distance={driverDistanceLabel}
+        mapBlurTarget={mapBlurTarget}
         offline={networkIssue} gpsFresh={driverGpsFresh} available={available}
         insideBusy={insideBusy} readyBusy={readyBusy} readySent={readySent && readyAcknowledged.current === `${tripId}:${trip.driver_id || ''}`} authorizationBusy={authorizationBusy} cancelBusy={cancelBusy} canCancel={canCancel}
         onGuideChange={setPickupGuide}
@@ -302,9 +308,11 @@ export default function BookingFlow() {
         onPhotoError={() => setDriverPhoto(current => current?.key === photoKey ? null : current)} onSheetLayout={setMatchingHeight}
       />}
       {pickupNotice ? <View style={{ position: 'absolute', top: insets.top + 60, left: 16, right: 16, zIndex: 60, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{pickupNotice}</Text></View> : null}
+      </BlurTargetView>
+      {trip.status === 'in_trip' ? <V10TripDock target={sceneBlurTarget} active={chatOpen ? 'message' : safetyOpen ? 'safety' : 'driver'} onDriver={() => setMinimized(false)} onMessage={() => setChatOpen(true)} onSafety={() => setSafetyOpen(true)} onTrip={() => router.push(`/customer-trip/${tripId}`)} /> : null}
 
       <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => !safetyBusy && setSafetyOpen(false)}>
-        <View style={[s.modalBackdrop, { padding: 0 }]}>
+        <View style={[s.modalBackdrop, { padding: 0, backgroundColor: `${colors.bg}59` }]}>
           <Pressable testID="customer-app-booking-tripId-337" style={StyleSheet.absoluteFill} onPress={() => !safetyBusy && setSafetyOpen(false)} accessibilityLabel="Lukk sikkerhetsmeny" />
           <CustomerSafetyView trip={trip} busy={safetyBusy} error={actionError} onClose={() => setSafetyOpen(false)} onShare={() => void shareTrip()} onReport={() => void reportSafety()} onEmergency={() => void callEmergency()} />
         </View>

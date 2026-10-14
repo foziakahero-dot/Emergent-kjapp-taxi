@@ -45,7 +45,7 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
     home: 'home', history: 'history', assist: 'sparkles', messages: 'message', profile: 'user',
     earnings: 'trending-up',
   };
-  return <View style={{ position: 'absolute', left: 16, right: 16, bottom: driver ? insets.bottom + 16 : Math.max(22, insets.bottom + 6), borderRadius: 24, boxShadow: '0 12px 32px rgba(11,26,44,0.12)' }}>
+  return <View style={{ position: 'absolute', left: 16, right: 16, bottom: driver ? insets.bottom + 16 : Math.max(22, insets.bottom + 6), borderRadius: 24, boxShadow: colors.elevation2 }}>
     <View style={{ height: 66, overflow: 'hidden', borderRadius: 24, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.glass, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' }}>
       <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint={theme.effective === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} pointerEvents="none" />
       {visible.map(route => {

@@ -1,3 +1,9 @@
+# Latest pair — Customer 17/18; uploaded visible sequence saved (2026-10-14)
+
+Read CUSTOMER_PAIR_17_18_20261014.md. Seven paired checkpoints cover 05–18 in the user's uploaded order: position/home, search/route, vehicle/payment, confirm/matching, driver/approach, guide/arrival, live trip/safety. Existing returning/intro/login/splash implementations remain from earlier checkpoints. All-class real supply, stale-response/route/photo guards, source panels/dock, actual consent/payment/dispatch and explicit driver start are preserved. Next pair in the original file is 19 Ankommer + 20 Tur fullført, then 21 Betaling fullført + 22 Kvittering.
+
+Physical pixel/device acceptance and signed builds remain open. Do not claim all screens are identical or native-certified. Search-map pulse/sweep, completed-road fade and unsupported Comfort/non-card reservation/provider/scheduling contracts remain documented. Continue in Customer order, two screens per push; older Driver-next or release instructions below are historical and superseded.
+
 # Latest pair — Customer 15/16 (2026-10-14)
 
 Read CUSTOMER_PAIR_15_16_20261014.md. Guidance uses real pickup; arrival identity/pop/wait estimate follows source; confirmed ready message disables repeat and never starts the ride. Continue 17 Tur pågår + 18 Sikkerhet. Type, component/controller, web and offline native-bundle checks pass with physical-device limits documented. Uploaded Customer order stays authoritative; no signed app or deployment.

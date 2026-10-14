@@ -12,6 +12,6 @@ export function CustomerSafetyView({ trip, busy, error, onClose, onShare, onRepo
       <V10Row border icon="safety" title={trip.driver?.name || 'Sjåføren din'} subtitle={[trip.driver?.car, trip.driver?.plate].filter(Boolean).join(' · ') || 'Bilinformasjon ikke tilgjengelig'} />
       <V10Row border icon="help" title="Rapporter et problem" subtitle="Registrerer en sikkerhetshendelse knyttet til turen" onPress={onReport} disabled={busy} testID="safety-report" />
     </V10Group>{error ? <Text testID="safety-action-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{error}</Text> : null}
-    <View style={{ marginTop: 16 }}><V10Action label="Ring 112" icon="phone" onPress={onEmergency} busy={busy} testID="safety-call-112" /></View><Text style={[v10.caption, { textAlign: 'center', marginTop: 8 }]}>Ved akutt fare: ring nødnummeret. Telefonappen åpnes direkte. SNAR-support erstatter ikke nødetatene.</Text>
+    <View style={{ marginTop: 16 }}><V10Action label="Ring 112" kind="danger" icon="phone" onPress={onEmergency} busy={busy} testID="safety-call-112" /></View><Text style={[v10.caption, { textAlign: 'center', marginTop: 8 }]}>Ved akutt fare: ring nødnummeret. Telefonappen åpnes direkte. SNAR-support erstatter ikke nødetatene.</Text>
   </V10Sheet>;
 }

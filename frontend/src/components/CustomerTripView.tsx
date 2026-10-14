@@ -10,11 +10,13 @@ import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { CustomerJourney } from '@/src/components/CustomerBookingView';
 import { V10SearchIndicator } from '@/src/components/V10SearchIndicator';
 import { V10Entrance } from '@/src/components/V10Entrance';
+import { V10Glass } from '@/src/components/V10Glass';
+import type { RefObject } from 'react';
 import { destinationProximity, driverApproaching, pickupFreeWait } from '@/src/lib/tripPresence';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
 
-type Props = { trip: any; driverPhoto: any; eta: number | null; distance: string | null; offline: boolean; gpsFresh: boolean; available: React.ComponentProps<typeof AvailabilityStatus>['search']; insideBusy: boolean; readyBusy: boolean; readySent?: boolean; authorizationBusy: boolean; cancelBusy: boolean; canCancel: boolean; onGuideChange?: (open: boolean) => void;
+type Props = { trip: any; driverPhoto: any; eta: number | null; distance: string | null; offline: boolean; gpsFresh: boolean; available: React.ComponentProps<typeof AvailabilityStatus>['search']; insideBusy: boolean; readyBusy: boolean; readySent?: boolean; authorizationBusy: boolean; cancelBusy: boolean; canCancel: boolean; onGuideChange?: (open: boolean) => void; mapBlurTarget?: RefObject<View | null>;
   onInside: (inside: boolean) => void; onCall: () => void; onChat: () => void; onShare: () => void; onSafety: () => void; onCancel: () => void; onMinimize: () => void; onHome: () => void; onWalk: () => void; onReady: () => void; onAuthorize: () => void; onPhotoError: () => void; onSheetLayout: (height: number) => void };
 function DriverCard({ p, compact = false }: { p: Props; compact?: boolean }) {
   useColorTheme();
@@ -61,8 +63,8 @@ export function CustomerTripView(p: Props) {
   const first = (p.trip.driver?.name || 'Sjåføren').split(' ')[0];
   const network = p.offline || !p.gpsFresh ? <Text accessibilityRole="alert" style={[v10.caption, { marginTop: 8, marginBottom: 8 }]}>{p.offline ? 'Venter på oppdatert turstatus.' : 'Venter på oppdatert sjåførposisjon.'}</Text> : null;
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-    {status === 'in_trip' ? <View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, flexDirection: 'row', gap: 12, alignItems: 'center' }}><View style={[v10.icon, { width: 36, height: 36, backgroundColor: colors.surfaceInverse }]}><V10Icon name="destination" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.dropoff_address}</Text><Text style={v10.caption}>{p.offline || !p.gpsFresh ? 'Venter på oppdatering' : 'Turen pågår'}</Text></View></View> : null}
-    <V10Sheet key={`${p.trip.trip_id}-${status}-${guide ? 'guide' : 'main'}`} testID={searching ? 'booking-matching-card' : status === 'in_trip' ? 'customer-trip-sheet' : 'customer-pickup-sheet'} onLayout={event => p.onSheetLayout(event.nativeEvent.layout.height)} paddingBottom={status === 'in_trip' ? 106 : 34}>
+    {status === 'in_trip' ? <V10Entrance style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, borderRadius: 20, overflow: 'hidden', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, flexDirection: 'row', gap: 12, alignItems: 'center' }}><V10Glass target={p.mapBlurTarget} /><View style={[v10.icon, { width: 36, height: 36, backgroundColor: colors.surfaceInverse }]}><V10Icon name="destination" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.dropoff_address}</Text><Text style={v10.caption}>{p.offline || !p.gpsFresh ? 'Venter på oppdatering' : 'Turen pågår'}</Text></View></V10Entrance> : null}
+    <V10Sheet key={`${p.trip.trip_id}-${status}-${guide ? 'guide' : 'main'}`} testID={searching ? 'booking-matching-card' : status === 'in_trip' ? 'customer-trip-sheet' : 'customer-pickup-sheet'} onMinimize={status === 'in_trip' ? p.onMinimize : undefined} onLayout={event => p.onSheetLayout(event.nativeEvent.layout.height)} paddingBottom={status === 'in_trip' ? Math.max(106, insets.bottom + 90) : 34}>
       {status === 'payment_authorizing' ? <><V10State icon="payment" title="Godkjenn kortreservasjonen" body="Ingen sjåfør bestilles før banken har godkjent turbeløpet." /><View style={{ marginTop: 20 }}><V10Action label="Godkjenn turbeløpet" onPress={p.onAuthorize} disabled={p.offline} busy={p.authorizationBusy} testID="booking-authorize" /></View>{p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} /> : null}</> : searching ? <>
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><V10SearchIndicator /><View style={{ flex: 1 }}><Text style={v10.heading}>Finner sjåfør</Text><Text style={v10.secondary}>Ved {p.trip.pickup_address || 'valgt hentested'}</Text></View></View>
         <V10SearchIndicator bar />
@@ -96,7 +98,6 @@ export function CustomerTripView(p: Props) {
         <View style={{ marginTop: 18 }}><V10Action kind="ink" label="Venter på sjåførens avslutning" disabled onPress={() => {}} testID="customer-arrival-driver-authority" /></View><View style={{ marginTop: 10 }}><V10Action small kind="soft" label="Minimer turen" onPress={p.onMinimize} testID="active-trip-minimize" /><V10Action small kind="ghost" label="Sikkerhet" onPress={p.onSafety} testID="ontrip-safety" /></View>
       </> : status === 'in_trip' ? <>
         <DriverCard p={p} compact />{network}<View style={{ marginTop: 14 }}><V10Action small kind="soft" icon="chevD" label="Minimer — turen følger deg" onPress={p.onMinimize} testID="active-trip-minimize" /></View>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}><View style={{ flex: 1 }}><V10Action small kind="soft" icon="share" label="Del tur" onPress={p.onShare} testID="ontrip-share" /></View><View style={{ flex: 1 }}><V10Action small kind="soft" icon="message" label="Melding" onPress={p.onChat} testID="ontrip-chat" /></View><View style={{ flex: 1 }}><V10Action small kind="soft" icon="safety" label="Sikkerhet" onPress={p.onSafety} testID="ontrip-safety" /></View></View>
       </> : <V10State icon="trip" title="Oppdaterer turstatus" body="Venter på bekreftet status fra SNAR." />}
     </V10Sheet>
   </View>;

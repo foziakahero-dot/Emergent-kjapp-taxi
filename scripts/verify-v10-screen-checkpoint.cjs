@@ -22,6 +22,7 @@ let queryData = {}, updates = [], storageWrites = [], sent = [], invalidated = [
 const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(method => [method, target => navigation.push([method, target])]));
 class Value { constructor(value) { this.value = value; this.listeners = new Map(); } setValue(value) { this.value = value; this.listeners.forEach(listener => listener({ value })); } addListener(listener) { const id = String(this.listeners.size + 1); this.listeners.set(id, listener); return id; } removeListener(id) { this.listeners.delete(id); } stopAnimation() {} interpolate(config) { return config; } }
 const native = {
+  PanResponder: { create: config => ({ panHandlers: config }) },
   Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }), loop: animation => animation }, Easing: { linear: value => value, bezier: (...values) => values },
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
@@ -34,6 +35,7 @@ const stubs = {
   'expo-haptics': { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async style => { hapticCalls.push(style); } },
   'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
   './V10CategoryImage': { V10CategoryImage: 'V10CategoryImage' },
+  './V10MinimizeHandle': { V10MinimizeHandle: 'V10MinimizeHandle' },
   './V10Glass': { V10Glass: 'V10Glass' },
   './V10CustomerAvatar': { V10CustomerAvatar: 'V10CustomerAvatar' },
   './V10Entrance': { V10Entrance: ({children,...props}) => React.createElement('V10Entrance',props,children) },
@@ -701,6 +703,19 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   tree=await mount(()=>React.createElement(TripPresentation,{...matchingProps,trip:{...freshDriverTrip,status:'at_pickup',at_pickup_at:new Date(Date.now()-42000).toISOString(),waiting_policy:{free_minutes:5,per_minute:4,max_fee:40}},gpsFresh:true,readySent:true}));
   assert.ok(tree.root.findAllByProps({testID:'pickup-identity'})[0].props.pop);assert.equal(button(tree,'customer-in-car').props.disabled,true);assert.match(text(tree),/Sjåføren er varslet/);assert.equal(hapticCalls.length,beforeArrivalFeedback+1);await unmount(tree);
   console.log('PASS: Customer 15/16 real pickup guidance, confirmed readiness/no repeat/start, server-timestamp wait estimate, unknown/future/ended clock suppression and arrival feedback.');
+  const {V10TripDock}=load('frontend','src/components/V10TripDock.tsx');let tripDockActions=[];
+  const tripDockProps={onDriver:()=>tripDockActions.push('driver'),onMessage:()=>tripDockActions.push('message'),onSafety:()=>tripDockActions.push('safety'),onTrip:()=>tripDockActions.push('trip')};
+  tree=await mount(()=>React.createElement(V10TripDock,tripDockProps));assert.equal(tree.root.findAllByType('Pressable').length,4);
+  for(const id of ['driver','message','safety','trip'])await act(async()=>button(tree,'trip-dock-'+id).props.onPress());assert.deepEqual(tripDockActions,['driver','message','safety','trip']);await unmount(tree);
+  const Island=load('frontend','src/components/ActiveTripCard.tsx').ActiveTripCard;
+  let islandOpens=0;tree=await mount(()=>React.createElement(Island,{trip:{...freshDriverTrip,status:'in_trip',eta_min:4},onOpen:()=>islandOpens++}));
+  assert.equal(tree.root.findAllByType('Text').some(node=>node.props.children===' min'),false,'Pickup ETA cannot be relabelled as destination ETA on a live ride');assert.equal(button(tree,'active-trip-reopen').props.style({pressed:false}).minHeight,60);await act(async()=>button(tree,'active-trip-reopen').props.onPress());assert.equal(islandOpens,1);await unmount(tree);
+  assert.equal(homeExports.normalizeSearchPlace({name:'bad',lat:true,lng:10}),null);
+  const Handle=load('frontend','src/components/V10MinimizeHandle.tsx').V10MinimizeHandle;let handleMinimizes=0;
+  tree=await mount(()=>React.createElement(Handle,{onMinimize:()=>handleMinimizes++}));const handle=tree.root.findByType('View');
+  await act(async()=>{handle.props.onPanResponderRelease(null,{dy:-50,dx:0});handle.props.onPanResponderRelease(null,{dy:40,dx:70});handle.props.onPanResponderRelease(null,{dy:40,dx:2});handle.props.onAccessibilityAction({nativeEvent:{actionName:'activate'}})});
+  assert.equal(handleMinimizes,2,'Only deliberate downward gesture and accessible activation minimize; upward/horizontal gestures do not');await unmount(tree);
+  console.log('PASS: Customer 17/18 real four-action trip dock, active island/reopen, no invented destination ETA and retained safe emergency/report/share flows.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Entrance } from './V10Entrance';
+import { V10MinimizeHandle } from './V10MinimizeHandle';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 
 export function V10Screen({ children, dock = false, style, testID }: { children: React.ReactNode; dock?: boolean; style?: StyleProp<ViewStyle>; testID?: string }) {
@@ -48,11 +49,11 @@ export function V10Badge({ children, tone = 'neutral' }: { children: React.React
   </View>;
 }
 export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height }: {
-  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number;
+  label: string; onPress: () => void; kind?: 'primary' | 'danger' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number;
 }) {
   useColorTheme();
-  const color = kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text;
-  const backgroundColor = { primary: colors.accent, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
+  const color = kind === 'primary' || kind === 'danger' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text;
+  const backgroundColor = { primary: colors.accent, danger: colors.danger, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
     style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, transform: [{ scale: pressed ? .97 : 1 }] })}>
     {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={small ? 18 : 22} /> : null}
@@ -78,11 +79,12 @@ export const v10 = themedStyles(() => StyleSheet.create({
   row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 16 },
 }));
 
-export function V10Sheet({ children, paddingBottom = 34, testID, onLayout }: { children: React.ReactNode; paddingBottom?: number; testID?: string; onLayout?: ViewProps['onLayout'] }) {
+export function V10Sheet({ children, paddingBottom = 34, testID, onLayout, onMinimize }: { children: React.ReactNode; paddingBottom?: number; testID?: string; onLayout?: ViewProps['onLayout']; onMinimize?: () => void }) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   return <V10Entrance sheet testID={testID} onLayout={onLayout} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3 }}>
     <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
+    {onMinimize ? <V10MinimizeHandle onMinimize={onMinimize} /> : null}
     <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(paddingBottom, insets.bottom) }}>{children}</ScrollView>
   </V10Entrance>;
 }
