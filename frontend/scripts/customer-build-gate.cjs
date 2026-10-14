@@ -12,7 +12,6 @@ if (profile === 'qa') {
     process.exitCode = 1;
   });
 } else {
-require('./apply-customer-beta-hotfix.cjs');
 if (gate.nativeTestBuildAuthorized === true && gate.nativeTestBuildProfiles?.includes(profile)) {
   const app = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8')).expo;
   const eas = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'eas.json'), 'utf8'));

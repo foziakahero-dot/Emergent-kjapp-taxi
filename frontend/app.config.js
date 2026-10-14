@@ -6,6 +6,9 @@ module.exports = ({ config: base }) => {
     process.env.EXPO_PUBLIC_BACKEND_URL
   );
   const plugins = base.plugins.filter(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) !== '@stripe/stripe-react-native');
+  if (!plugins.some(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) === 'expo-sharing')) {
+    plugins.push('expo-sharing');
+  }
 
   // EAS may expose the iOS OAuth client either as a public build variable or as
   // a build-only variable. Support both names so the native URL scheme is baked
