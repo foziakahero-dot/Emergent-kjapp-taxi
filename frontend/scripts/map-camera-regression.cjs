@@ -23,7 +23,7 @@ Module._load = function (id, parent, isMain) {
   if (id === '@rnmapbox/maps') return { __esModule: true, default: { setAccessToken() {} }, Camera, MapView: 'MapView', MarkerView: 'MarkerView', ShapeSource: 'ShapeSource', LineLayer: 'LineLayer', StyleImport: 'StyleImport' };
   if (id === 'react-native-svg') return { __esModule: true, default: 'Svg', Circle: 'Circle', Ellipse: 'Ellipse', Rect: 'Rect' };
   if (id === '@/src/lib/mapFocus') return old.call(this, root + '/src/lib/mapFocus.ts', parent, isMain);
-  if (id === '@/src/theme') return { colors: {}, useColorTheme: () => ({ effective: 'light' }) };
+  if (id === '@/src/theme') return { colors: {}, font: {}, useColorTheme: () => ({ effective: 'light' }) };
   if (id === './useSmoothPosition') return { useSmoothPosition: p => p };
   if (id === './RasterMap') return { InteractiveMap: 'RasterMap' };
   if (id === './Typography') return { Text: 'Text' };
@@ -63,6 +63,10 @@ Module._load = function (id, parent, isMain) {
     app.root.findByType('MapView').props.onDidFinishLoadingMap();
   });
   assert.deepEqual(calls.at(-1).config.padding, { paddingTop: 160, paddingRight: 48, paddingBottom: 440, paddingLeft: 48 }, 'A lone pickup uses the same unobscured viewport');
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap,{...props,activeCar:{lat:59.913,lng:10.755,heading:30,eta_min:4}})));
+  assert.ok(app.root.findAllByType('Text').some(node=>JSON.stringify(node.props.children).includes('4')), 'Fresh assigned-car ETA stays attached to its actual map marker');
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap,{...props,activeCar:{lat:59.913,lng:10.755,heading:30}})));
+  assert.equal(app.root.findAllByType('Text').some(node=>JSON.stringify(node.props.children).includes('min')),false,'Without a fresh ETA the marker tag disappears');
   await renderer.act(async () => app.unmount());
   console.log('PASS: native Mapbox bounds, panel resizing, manual panning and single-point camera padding');
 })().catch(error => { console.error(error); process.exitCode = 1; });

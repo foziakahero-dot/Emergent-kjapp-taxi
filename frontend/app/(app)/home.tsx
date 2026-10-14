@@ -16,6 +16,7 @@ import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable,
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Map } from '@/src/components/Map';
 import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
@@ -261,6 +262,7 @@ export default function Home() {
         } : {}),
       });
       if (typeof trip?.trip_id !== 'string' || !trip.trip_id.trim()) throw new Error('Bestillingen ble ikke bekreftet av SNAR.');
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
       try {

@@ -18,3 +18,10 @@ export function destinationProximity(trip: any, now = Date.now()) {
   const meters = Math.round(6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, Math.max(0, a)))));
   return { meters, near: meters <= 400 };
 }
+
+/** Approach is based on fresh server road distance, never the prototype timer. */
+export function driverApproaching(trip: any, now = Date.now()) {
+  return trip?.status === 'driver_on_way' && driverPresence(trip, now).fresh
+    && typeof trip.driver_distance_to_pickup_km === 'number' && Number.isFinite(trip.driver_distance_to_pickup_km)
+    && trip.driver_distance_to_pickup_km >= 0 && trip.driver_distance_to_pickup_km <= .3;
+}

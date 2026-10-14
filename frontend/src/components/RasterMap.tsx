@@ -3,13 +3,13 @@ import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, Ellipse, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { colors, useColorTheme } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { V10VehicleBody, V10RasterCar } from './V10VehicleMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; eta_min?: number };
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -95,7 +95,7 @@ export function InteractiveMap({
   const [zoom, setZoom] = useState(15);
   const [manual, setManual] = useState(false);
   useEffect(() => { setManual(false); }, [focusRevision]);
-  const smoothCar = useSmoothPosition(activeCar);
+  const smoothCar = useSmoothPosition(activeCar, 900);
 
   const centerRef = useRef(center);
   const zoomRef = useRef(zoom);
@@ -255,6 +255,11 @@ export function InteractiveMap({
                 </G>
               </>
             ) : null}
+
+            {smoothCar && activeCar?.eta_min != null ? <G transform={`translate(${sx(smoothCar.lng)},${sy(smoothCar.lat) - 52})`}>
+              <Rect x={-(String(activeCar.eta_min).length + 4) * 3.5 - 10} width={(String(activeCar.eta_min).length + 4) * 7 + 20} height={24} rx={9} fill={colors.surfaceInverse} />
+              <SvgText y={16} textAnchor="middle" fontFamily={font.semibold} fontSize={12.5} fill={colors.onInverse}>{activeCar.eta_min} min</SvgText>
+            </G> : null}
 
             {pickup ? (
               <G>

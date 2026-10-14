@@ -55,6 +55,7 @@ function load(app, file) {
     if (name === 'react-native') return native;
     if (name === 'expo-linear-gradient') return { LinearGradient: 'Gradient' };
     if (name === 'expo-image') return { Image: 'CategoryImage' };
+    if (name === 'expo-haptics') return { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async () => {} };
     if (name === 'react-native-svg') return new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => target[key] ?? String(key) });
     if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
     if (name.startsWith('@expo-google-fonts/')) return new Proxy({}, { get: (_target, key) => key === '__esModule' ? true : `asset:${String(key)}` });
@@ -433,10 +434,10 @@ const act = renderer.act;
   native.Share = { share: async () => ({}) }; native.Alert = { alert: (...args) => dialogs.push(args) };
   native.Linking = { openURL: async url => { callsToDialer.push(url); } };
   let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, dropoff_address: 'Fixture destination', driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
-  const navigations = [];
+  const navigations = [];let bookingRouteId='unit-trip';
   const bookingRouter = { replace: url => navigations.push(url) };
   stubs.set('expo-router', {
-    useLocalSearchParams: () => ({ tripId: 'unit-trip' }),
+    useLocalSearchParams: () => ({ tripId: bookingRouteId }),
     useRouter: () => bookingRouter,
     useFocusEffect: effect => React.useEffect(effect, [effect]),
   });
@@ -532,6 +533,18 @@ const act = renderer.act;
   await act(async () => booking.root.findByProps({ testID: 'safety-call-112' }).props.onPress());
   assert.ok(callsToDialer.includes('tel:112'), 'Emergency dialer must not wait for backend logging');
   await act(async () => booking.unmount());
+  // Changing trip reference hides previous private details before a new request resolves.
+  serverTrip={...serverTrip,status:'driver_on_way',driver_id:'old-driver'};
+  await act(async()=>{booking=renderer.create(React.createElement(Booking))});
+  assert.ok(booking.root.findAllByType('NativeText').some(node=>node.props.children==='FIXTURE'));
+  const bookingApi=stubs.get('@/src/lib/api');const originalGetTrip=bookingApi.tripsApi.get;let resolveNewTrip;
+  bookingApi.tripsApi.get=()=>new Promise(resolve=>{resolveNewTrip=resolve});bookingRouteId='new-unit-trip';
+  await act(async()=>booking.update(React.createElement(Booking)));
+  assert.equal(booking.root.findAllByProps({testID:'booking-map'}).length,0,'The previous trip map cannot leak onto a new trip route');
+  assert.equal(booking.root.findAllByType('NativeText').some(node=>node.props.children==='FIXTURE'),false);
+  await act(async()=>resolveNewTrip(serverTrip));
+  assert.equal(booking.root.findAllByProps({testID:'booking-load-error'}).length,1,'A mismatched server trip reference is rejected');
+  await act(async()=>booking.unmount());bookingRouteId='unit-trip';bookingApi.tripsApi.get=originalGetTrip;
   // Missing/invalid/old/future GPS never produces a current ETA.
   const { driverPresence } = load('frontend', 'src/lib/tripPresence.ts');
   const now = Date.now(), position = { driver_lat: 59.9, driver_lng: 10.7 };

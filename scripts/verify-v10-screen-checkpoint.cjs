@@ -11,7 +11,7 @@ const renderer = appRequire('react-test-renderer');
 const ts = appRequire('typescript');
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const { act } = renderer;
-let testClock = 0, testTimerId = 0, reduceMotion = false; const testTimers = new Map();
+let testClock = 0, testTimerId = 0, reduceMotion = false; const testTimers = new Map(), hapticCalls = [];
 async function tick(milliseconds) { testClock += milliseconds; await act(async () => { for (const [id, timer] of [...testTimers]) if (timer.at <= testClock) { testTimers.delete(id); timer.callback(); } }); }
 const originalError = console.error;
 console.error = (...args) => { if (!String(args[0]).includes('react-test-renderer is deprecated')) originalError(...args); };
@@ -31,6 +31,7 @@ const native = {
 };
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
+  'expo-haptics': { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async style => { hapticCalls.push(style); } },
   'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
   './V10CategoryImage': { V10CategoryImage: 'V10CategoryImage' },
   './V10Glass': { V10Glass: 'V10Glass' },
@@ -676,6 +677,22 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(matchingStops,2,'Server terminal state stops both decorative loops');assert.ok(button(tree,'booking-home'));assert.equal(matchingCallbacks.length,0,'No-driver result waits for explicit retry');await unmount(tree);
   reduceMotion=true;tree=await mount(()=>React.createElement(TripPresentation,matchingProps));assert.equal(matchingAnimations.length,2,'Reduced motion does not schedule matching activity');await unmount(tree);reduceMotion=false;native.Animated.timing=oldMatchingTiming;
   console.log('PASS: Customer 11/12 invalid policy blocks booking, refreshed offer retains review/requires consent, source activity durations/cleanup/reduced motion, real dispatch progress and explicit no-driver recovery.');
+  // Customer 13/14: actual fresh road proximity, stable assignment and ETA safety.
+  const {driverApproaching}=load('frontend','src/lib/tripPresence.ts');
+  const freshDriverTrip={...matchingProps.trip,status:'driver_on_way',driver_id:'real-driver',driver:{name:'Actual Driver',car:'Actual car',plate:'ACTUAL1',rating:4.9,phone:'test'},driver_lat:59.91,driver_lng:10.75,driver_location_at:new Date().toISOString(),driver_distance_to_pickup_km:.2};
+  assert.equal(driverApproaching(freshDriverTrip),true);
+  assert.equal(driverApproaching({...freshDriverTrip,driver_location_at:new Date(Date.now()-31000).toISOString()}),false);
+  for(const distance of [undefined,-1,NaN,.5])assert.equal(driverApproaching({...freshDriverTrip,driver_distance_to_pickup_km:distance}),false);
+  const beforeDriverHaptics=hapticCalls.length;
+  await act(async()=>{tree=renderer.create(React.createElement(TripPresentation,{...matchingProps,trip:freshDriverTrip,eta:2,gpsFresh:true}))});
+  assert.match(text(tree),/Ankommer hentestedet/);assert.match(text(tree),/ACTUAL1/);assert.equal(hapticCalls.length,beforeDriverHaptics+1);assert.equal(hapticCalls.at(-1),'medium');
+  await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:{...freshDriverTrip,driver_location_at:new Date().toISOString()},eta:1,gpsFresh:true})));
+  assert.equal(hapticCalls.length,beforeDriverHaptics+1,'Repeated server polls cannot replay driver-found haptics');
+  await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:freshDriverTrip,eta:2,gpsFresh:false,offline:true})));
+  assert.doesNotMatch(text(tree),/Ankommer hentestedet/);assert.match(text(tree),/Venter på oppdatert turstatus/);
+  const etaTexts=tree.root.findAllByProps({testID:'driver-arrival-eta'})[0];assert.ok(etaTexts.findAllByType('Text').some(node=>Array.isArray(node.props.children)&&node.props.children[0]==='—'),'Stale ETA is suppressed even if old numeric props remain');
+  await unmount(tree);
+  console.log('PASS: Customer 13/14 fresh road-only approach, invalid/stale proximity suppression, canonical driver/card, medium assignment feedback once per view and stale numeric ETA suppression.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };

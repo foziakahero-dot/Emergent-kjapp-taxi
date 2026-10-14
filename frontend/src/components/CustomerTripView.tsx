@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
@@ -8,7 +9,7 @@ import { V10Action, V10Badge, V10Sheet, V10State, v10 } from '@/src/components/V
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { CustomerJourney } from '@/src/components/CustomerBookingView';
 import { V10SearchIndicator } from '@/src/components/V10SearchIndicator';
-import { destinationProximity } from '@/src/lib/tripPresence';
+import { destinationProximity, driverApproaching } from '@/src/lib/tripPresence';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
 
@@ -16,11 +17,11 @@ type Props = { trip: any; driverPhoto: any; eta: number | null; distance: string
   onInside: (inside: boolean) => void; onCall: () => void; onChat: () => void; onShare: () => void; onSafety: () => void; onCancel: () => void; onMinimize: () => void; onHome: () => void; onWalk: () => void; onReady: () => void; onAuthorize: () => void; onPhotoError: () => void; onSheetLayout: (height: number) => void };
 function DriverCard({ p, compact = false }: { p: Props; compact?: boolean }) {
   useColorTheme();
-  const name = p.trip.driver?.name || 'Sjåføren din', size = compact ? 40 : 52;
-  return <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+  const name = p.trip.driver?.name || 'Sjåføren din', size = compact ? 48 : 56;
+  return <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
     <View style={{ width: size, height: size, borderRadius: size * .34, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cardSubtle }}>{p.driverPhoto ? <Image source={p.driverPhoto} style={{ width: size, height: size }} onError={p.onPhotoError} testID="customer-driver-photo" /> : <Text style={{ fontFamily: font.semibold, fontSize: size * .36 }}>{name.split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</Text>}</View>
-    <View style={{ flex: 1 }}><Text style={v10.body}>{name}</Text><Text style={v10.caption}>{[p.trip.driver?.car, typeof p.trip.driver?.rating === 'number' ? `★ ${p.trip.driver.rating.toLocaleString('nb-NO')}` : null].filter(Boolean).join(' · ') || 'Bilinformasjon ikke tilgjengelig'}</Text></View>
-    {p.trip.driver?.plate ? <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 14, letterSpacing: .5, lineHeight: 20, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1.5, borderColor: colors.text }}>{p.trip.driver.plate}</Text> : null}
+    <View style={{ flex: 1 }}><Text style={v10.body}>{name.trim().split(/\s+/)[0]}{typeof p.trip.driver?.rating === 'number' && Number.isFinite(p.trip.driver.rating) ? <Text style={v10.caption}> ★ {p.trip.driver.rating.toLocaleString('nb-NO', { maximumFractionDigits: 2 })}</Text> : null}</Text><Text style={v10.secondary}>{p.trip.driver?.car || 'Bilinformasjon ikke tilgjengelig'}</Text></View>
+    {p.trip.driver?.plate ? <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 15, letterSpacing: .9, lineHeight: 20, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, backgroundColor: colors.cardSubtle, borderWidth: 1, borderColor: colors.lineStrong }}>{p.trip.driver.plate}</Text> : null}
   </View>;
 }
 function Contacts({ p }: { p: Props }) {
@@ -31,6 +32,16 @@ export function CustomerTripView(p: Props) {
   const [guide, setGuide] = useState(false);
   useEffect(() => setGuide(false), [p.trip.trip_id, p.trip.status]);
   const status = p.trip.status;
+  const announcedDriver = useRef('');
+  useEffect(() => {
+    if (status !== 'driver_on_way' || !p.trip.driver_id || p.offline) return;
+    const key = `${p.trip.trip_id}:${p.trip.driver_id}`;
+    if (announcedDriver.current === key) return;
+    announcedDriver.current = key;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, [p.trip.trip_id, p.trip.driver_id, status, p.offline]);
+  const displayedEta = !p.offline && p.gpsFresh && typeof p.eta === 'number' && Number.isFinite(p.eta) && p.eta > 0 ? p.eta : null;
+  const approaching = !p.offline && p.gpsFresh && driverApproaching(p.trip);
   const proximity = !p.offline ? destinationProximity(p.trip) : null;
   const searching = ['searching', 'booking'].includes(status);
   const cancelled = ['cancelled', 'cancelled_by_driver'].includes(status);
@@ -57,7 +68,7 @@ export function CustomerTripView(p: Props) {
         <Text style={[v10.overline, { marginTop: 18, marginBottom: 8 }]}>Se etter</Text><DriverCard p={p} compact />
         <View style={{ marginTop: 16 }}><Contacts p={p} /></View><View style={{ marginTop: 10 }}><V10Action kind="ink" label="Åpne gangveiledning" onPress={p.onWalk} testID="pickup-walking-directions" /><V10Action kind="ghost" label="Tilbake" onPress={() => setGuide(false)} /></View>
       </> : <>
-        <View testID="driver-arrival-eta" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}><View style={{ flex: 1 }}><Text style={v10.caption}>Sjåfør funnet</Text><Text style={v10.title}>{first} er på vei</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38 }}>{p.eta ?? '—'}<Text style={v10.secondary}> min</Text></Text></View>
+        <View testID="driver-arrival-eta" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}><View style={{ flex: 1 }}><Text style={v10.caption}>{approaching ? 'Ankommer hentestedet' : 'Sjåfør funnet'}</Text><Text style={v10.title}>{first} er på vei</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38, fontVariant: ['tabular-nums'] }}>{displayedEta ?? '—'}<Text style={v10.secondary}> min</Text></Text></View>
         <DriverCard p={p} />{network}
         <View style={{ flexDirection: 'row', gap: 14, paddingTop: 14, paddingBottom: 6, minHeight: 44, alignItems: 'center' }}><V10Icon name="inside" size={20} /><Text style={[v10.body, { flex: 1 }]}>Jeg venter inne</Text><DesignToggle label="Jeg venter inne" value={p.trip.pickup_waiting_inside === true} onChange={p.onInside} disabled={p.insideBusy || p.offline} testID="customer-waiting-inside" /></View>
         <View style={{ marginTop: 10 }}><Contacts p={p} /></View><V10Action kind="ghost" small label="Vis henteveiledning" onPress={() => setGuide(true)} testID="customer-pickup-guide" />

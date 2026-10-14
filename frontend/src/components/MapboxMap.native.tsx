@@ -12,13 +12,13 @@ import Mapbox, {
 } from '@rnmapbox/maps';
 import Svg, { Circle, Ellipse, Rect } from 'react-native-svg';
 import { Text } from './Typography';
-import { colors, useColorTheme } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
 
 type LL = { lat: number; lng: number };
-type Car = { id?: string; lat: number; lng: number; heading?: number };
+type Car = { id?: string; lat: number; lng: number; heading?: number; eta_min?: number };
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -96,7 +96,7 @@ export function MapboxInteractiveMap({
   const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const smoothCar = useSmoothPosition(activeCar);
+  const smoothCar = useSmoothPosition(activeCar, 900);
 
   const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode, focusRoute }),
     [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode, focusRoute]);
@@ -274,7 +274,9 @@ export function MapboxInteractiveMap({
         ))}
 
         {smoothCar ? (
-          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap><MapCar heading={smoothCar.heading} active /></MarkerView>
+          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap anchor={{ x: .5, y: activeCar?.eta_min != null ? 52 / 77 : .5 }}>
+            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active /></View></View> : <MapCar heading={smoothCar.heading} active />}
+          </MarkerView>
         ) : null}
 
         {pickup ? (

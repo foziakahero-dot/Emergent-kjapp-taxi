@@ -51,16 +51,23 @@ export default function BookingFlow() {
   const [actionError, setActionError] = useState('');
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
+  const [driverPhoto, setDriverPhoto] = useState<{ key: string; source: any } | null>(null);
+  const photoKey = trip?.trip_id === tripId && trip?.driver_id ? `${tripId}:${trip.driver_id}:${trip.driver?.photo_version || ''}` : '';
+  const driverPhotoSource = driverPhoto?.key === photoKey ? driverPhoto.source : null;
   const insideLock = useRef(false), readyLock = useRef(false), authorizationLock = useRef(false);
   const [insideBusy, setInsideBusy] = useState(false), [readyBusy, setReadyBusy] = useState(false), [authorizationBusy, setAuthorizationBusy] = useState(false);
   const [pickupNotice, setPickupNotice] = useState('');
   const activeRoute = useRef(tripId), mounted = useRef(true);
   activeRoute.current = tripId;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    setMinimized(false); setChatOpen(false); setSafetyOpen(false);
+    setNetworkIssue(false); setActionError(''); setPickupNotice('');
+    cancelPhase.current = 'idle'; setCancelBusy(false);
+  }, [tripId]);
   const routeIsCurrent = () => mounted.current && activeRoute.current === tripId;
   const nav = useRef(false);
-  const searching = ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
+  const searching = trip?.trip_id === tripId && ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
   const available = useAvailableCars({ enabled: searching, lat: trip?.pickup_lat, lng: trip?.pickup_lng,
     vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [], continuous: true });
 
@@ -69,11 +76,12 @@ export default function BookingFlow() {
     let fetching = false;
     nav.current = false;
     const fetchTrip = async () => {
-      if (fetching) return;
+      if (fetching || AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
       fetching = true;
       try {
         const t = await tripsApi.get(tripId!);
         if (!mounted) return;
+        if (t?.trip_id !== tripId) throw new Error('Ugyldig turreferanse.');
         setTrip(t);
         setNetworkIssue(false);
         if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
@@ -100,38 +108,41 @@ export default function BookingFlow() {
 
   useEffect(() => {
     let mounted = true;
-    const activeDriver = trip?.driver_id && ['driver_on_way', 'at_pickup', 'in_trip', 'arrived'].includes(trip?.status);
+    const activeDriver = photoKey && ['driver_on_way', 'at_pickup', 'in_trip', 'arrived'].includes(trip?.status);
     if (!activeDriver) {
-      setDriverPhotoSource(null);
+      setDriverPhoto(null);
       return () => { mounted = false; };
     }
     void tripDriverPhotoSource(tripId!).then((source) => {
-      if (mounted) setDriverPhotoSource(source);
+      if (mounted) setDriverPhoto({ key: photoKey, source });
     }).catch(() => {
-      if (mounted) setDriverPhotoSource(null);
+      if (mounted) setDriverPhoto(null);
     });
     return () => { mounted = false; };
-  }, [trip?.driver_id, trip?.status, tripId]);
+  }, [photoKey, trip?.status, tripId]);
 
-  const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };
+  const releaseCancel = () => { if (routeIsCurrent()) { cancelPhase.current = 'idle'; setCancelBusy(false); } };
   const cancel = async () => {
     if (cancelPhase.current !== 'idle') return;
     cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');
     try {
       const preview = await tripsApi.cancelPreview(tripId!);
+      if (!routeIsCurrent()) return;
       const fee = Number(preview?.cancellation_fee ?? 0);
       if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilkår.');
       cancelPhase.current = 'confirm';
       Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.', [
         { text: 'Behold tur', style: 'cancel', onPress: releaseCancel },
         { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
-          if (cancelPhase.current !== 'confirm') return;
+          if (!routeIsCurrent() || cancelPhase.current !== 'confirm') return;
           cancelPhase.current = 'submitting';
           try {
             const result = await tripsApi.cancel(tripId!);
+            if (!routeIsCurrent()) return;
             if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');
             router.replace('/(app)/home');
           } catch (error) {
+            if (!routeIsCurrent()) return;
             // A response can be lost after the server commits cancellation.
             try {
               const canonical = await tripsApi.get(tripId!);
@@ -144,6 +155,7 @@ export default function BookingFlow() {
         } },
       ], { cancelable: true, onDismiss: () => { if (cancelPhase.current === 'confirm') releaseCancel(); } });
     } catch (error) {
+      if (!routeIsCurrent()) return;
       setActionError(`Kunne ikke hente avbestillingsvilkårene. ${apiError(error)}`);
       releaseCancel();
     }
@@ -217,7 +229,7 @@ export default function BookingFlow() {
     void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${lat},${lng}`)}&travelmode=walking`).catch(() => setActionError('Kunne ikke åpne gangveiledningen. Ring sjåføren for hjelp.'));
   };
 
-  if (!trip) {
+  if (!trip || trip.trip_id !== tripId) {
     if (networkIssue) {
       return (
         <View style={s.loading} testID="booking-load-error">
@@ -258,11 +270,13 @@ export default function BookingFlow() {
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={trip.status === 'in_trip' ? { lat: trip.dropoff_lat, lng: trip.dropoff_lng } : null}
         route={route}
+        focusRoute={route}
+        showControls={false}
         cars={searching ? available.cars : []}
         focusMode={searching ? 'nearby' : 'route'}
-        contentInsets={searching ? { top: insets.top + 88, right: 48,
-          bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : 160 + matchingHeight + 32, left: 48 } : undefined}
-        activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading } : null}
+        contentInsets={{ top: insets.top + 88, right: 72,
+          bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
+        activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
         testID="booking-map"
       />
 
@@ -278,7 +292,7 @@ export default function BookingFlow() {
         onShare={() => void shareTrip()} onSafety={() => setSafetyOpen(true)} onCancel={() => void cancel()}
         onMinimize={() => setMinimized(true)} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
         onWalk={openWalkingDirections} onReady={() => void notifyReady()} onAuthorize={() => void authorize()}
-        onPhotoError={() => setDriverPhotoSource(null)} onSheetLayout={setMatchingHeight}
+        onPhotoError={() => setDriverPhoto(current => current?.key === photoKey ? null : current)} onSheetLayout={setMatchingHeight}
       />}
       {pickupNotice ? <View style={{ position: 'absolute', top: insets.top + 60, left: 16, right: 16, zIndex: 60, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{pickupNotice}</Text></View> : null}
 

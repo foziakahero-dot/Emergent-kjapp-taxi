@@ -1,3 +1,7 @@
+# Latest verified pair — Customer 13/14 (2026-10-14)
+
+Read CUSTOMER_PAIR_13_14_20261014.md. Driver card/tag follows source and fresh real data; old route/photo state is suppressed on a changed trip reference. TypeScript, both behavioral suites, native camera checks, 22 web fixtures and offline Android/iOS exports pass. Next: 15 Henteveiledning + 16 Sjåfør har ankommet, then 17 Tur pågår + 18 Sikkerhet. Physical device/marker/haptic/photo certification and search-map sweep/pulses remain open; no new signed app.
+
 # Latest verified pair — Customer 11/12 (2026-10-14)
 
 Read CUSTOMER_PAIR_11_12_20261014.md. Confirmation now validates real waiting terms/token and confirmed trip ID; explicit quote refresh retains route/review and requires new consent. Matching uses source activity/journey and measured sheet entry while server state owns every attempt/assignment/end. Both behavioral suites, typecheck, 18 web fixtures and Android/iOS offline exports pass. Next source pair is 13 Sjåfør funnet + 14 Sjåfør nærmer seg, then 15 Henteveiledning + 16 Sjåfør har ankommet. The uploaded Customer index supersedes all older next-step headings below. Provider and physical-device acceptance remain open; no signed build or deployment.
