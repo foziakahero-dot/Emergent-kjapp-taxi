@@ -43,16 +43,16 @@ export default function DriverLogin() {
       <Text style={s.title}>Logg inn for å kjøre</Text>
       <Text style={s.subtitle}>Bruk e-post eller telefonnummeret registrert hos løyvehaveren din.</Text>
       <View style={s.fields}>
-        <View style={s.field}><TextInput accessibilityLabel="E-post eller telefon" testID="driver-login-identifier" placeholder="E-post eller telefon" autoCapitalize="none" autoCorrect={false} value={identifier} onChangeText={setIdentifier} autoComplete="username" editable={!loading} style={s.input} /></View>
-        <View style={s.field}><TextInput accessibilityLabel="Passord" testID="driver-login-password" placeholder="Passord" secureTextEntry={!show} value={password} onChangeText={setPassword} autoComplete="current-password" editable={!loading} style={s.input} onSubmitEditing={() => void submit()} returnKeyType="go" />
-          <Pressable accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'} onPress={() => setShow(v => !v)} style={s.reveal} testID="driver-login-toggle-password"><Icon name={show ? 'eye-off' : 'eye'} size={20} color={colors.textSecondary} /></Pressable>
+        <View style={s.field}><TextInput accessibilityLabel="E-post eller telefon" testID="driver-login-identifier" placeholder="E-post eller telefon" autoCapitalize="none" autoCorrect={false} returnKeyType="next" value={identifier} onChangeText={setIdentifier} autoComplete="username" editable={!loading} placeholderTextColor={colors.textMuted} style={s.input} /></View>
+        <View style={s.field}><TextInput accessibilityLabel="Passord" testID="driver-login-password" placeholder="Passord" secureTextEntry={!show} value={password} onChangeText={setPassword} autoComplete="current-password" editable={!loading} placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => void submit()} returnKeyType="go" />
+          <Pressable accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'} disabled={loading} onPress={() => setShow(v => !v)} style={s.reveal} testID="driver-login-toggle-password"><Icon name={show ? 'eye-off' : 'eye'} size={20} color={colors.textSecondary} /></Pressable>
         </View>
       </View>
       {error ? <Text accessibilityRole="alert" style={s.error} testID="driver-login-error">{error}</Text> : null}
       <Pressable accessibilityRole="button" accessibilityState={{ disabled: loading, busy: loading }} disabled={loading} onPress={() => void submit()} testID="driver-login-submit" style={({ pressed }) => [s.primary, { transform: [{ scale: pressed ? .97 : 1 }] }]}>
         {loading ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.primaryText}>Logg inn</Text>}
       </Pressable>
-      <Pressable accessibilityRole="button" onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password"><Text style={s.forgotText}>Glemt passord?</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={loading} onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password"><Text style={s.forgotText}>Glemt passord?</Text></Pressable>
       <View style={s.footer}>
         <Text style={s.note}>Kun for inviterte og godkjente sjåfører med kjøreseddel.</Text>
         <Text style={[s.note, { marginTop: 4 }]}>Første innlogging og nye telefoner kan kreve selfie-kontroll.</Text>

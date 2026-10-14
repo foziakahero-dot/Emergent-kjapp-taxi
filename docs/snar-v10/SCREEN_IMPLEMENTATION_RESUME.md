@@ -1,3 +1,7 @@
+# Current user scope — splash and login only (2026-10-14)
+
+The user stopped the broad screen implementation and instructed us to finish and push Customer/Driver splash and login before moving on. Read `SPLASH_LOGIN_CHECKPOINT_20261014.md` first. Native splash/launch and password-login presentation fixes are saved in this checkpoint, but original SMS/BankID login parity and physical native verification remain outstanding. Do not claim these screens are fully pixel-certified or continue other screens. Existing QA APKs predate these fixes and need a rebuild to include native splash assets.
+
 # Customer + Driver screen implementation — resume here
 
 Updated 2026-10-14 (Europe/Oslo). This is an implementation checkpoint, not release certification.

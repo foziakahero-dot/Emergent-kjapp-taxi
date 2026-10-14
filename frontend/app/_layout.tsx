@@ -1,7 +1,9 @@
+import * as SplashScreen from 'expo-splash-screen';
+import { LaunchSplash } from '@/src/components/SplashArt';
 import { useReducedMotion } from '@/src/components/Motion';
 import { GlobalCustomerShell } from '@/src/components/GlobalCustomerShell';
 import { NativePaymentProvider } from '@/src/components/NativePaymentProvider';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,6 +16,9 @@ import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { colors, FONT_ASSETS, useColorTheme } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
+
+// Keep the native SNAR mark visible until the bundled font is ready.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -81,9 +86,16 @@ function NativeRuntimeBridge() {
 export default function RootLayout() {
   const theme = useColorTheme();
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
-  const [fontsLoaded] = useFonts(FONT_ASSETS);
+  const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
+  const [launchFinished, setLaunchFinished] = useState(false);
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return;
+    void SplashScreen.hideAsync().catch(() => {});
+    const timer = setTimeout(() => setLaunchFinished(true), 1800);
+    return () => clearTimeout(timer);
+  }, [fontsLoaded, fontError]);
   useEffect(() => installClientErrorMonitor(), []);
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!launchFinished) return <><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontsLoaded || fontError) void SplashScreen.hideAsync().catch(() => {}); }} /></>;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
