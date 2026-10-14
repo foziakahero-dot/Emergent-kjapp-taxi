@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { V10Entrance } from '@/src/components/V10Entrance';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
@@ -37,7 +39,7 @@ export function ExperienceStudio({ product, value, options, earnings, onApply, o
     try {
       const saved = await onApply(choice.id);
       if (!mounted.current) return;
-      if (saved) { setOpen(false); onContinue(); }
+      if (saved) { setOpen(false); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onContinue(); }
       else setError('Valget kunne ikke lagres. Prøv igjen.');
     } catch { if (mounted.current) setError('Valget kunne ikke lagres. Prøv igjen.'); }
     finally { applyLock.current = false; if (mounted.current) setBusy(false); }
@@ -65,6 +67,7 @@ export function ExperienceStudio({ product, value, options, earnings, onApply, o
     <Text style={{ marginTop: 8, fontFamily: font.medium, fontSize: 8, lineHeight: 10, letterSpacing: .96, color: colors.textSecondary }}>{driver ? 'PERSONLIG MÅL' : 'PERSONLIG REISESTIL'}</Text>
     {driver ? <View accessibilityRole="progressbar" accessibilityLabel="Dagens inntekt mot personlig mål" accessibilityValue={progress === null ? { text: 'Inntekt ikke tilgjengelig' } : { min: 0, max: 100, now: progress }} style={{ height: 3, marginTop: 8, borderRadius: 8, backgroundColor: colors.lineStrong, overflow: 'hidden' }}>{progress !== null ? <View style={{ width: `${progress}%`, height: 3, backgroundColor: colors.success }} /> : null}</View> : null}
     <Modal testID={`${product}-studio-modal`} visible={open} animationType="none" presentationStyle="fullScreen" onRequestClose={close}>
+      <V10Entrance fade style={{ flex: 1 }}>
       <ScrollView testID={`${product}-studio-dialog`} accessibilityViewIsModal accessibilityLabel={driver ? 'Skiftstudio' : 'Reisestudio'} keyboardShouldPersistTaps="handled" style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingTop: Math.max(56, insets.top + 8), paddingHorizontal: 24, paddingBottom: Math.max(32, insets.bottom) }}>
         <V10Header title={driver ? 'Skiftstudio' : 'Reisestudio'} onBack={close} />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><V10Icon name="ai" size={16} color={colors.textSecondary} /><Text style={eyebrow}>DESIGNET RUNDT DEG</Text></View>
@@ -76,10 +79,11 @@ export function ExperienceStudio({ product, value, options, earnings, onApply, o
         <View accessibilityRole="tablist" style={{ height: 66, marginVertical: 16, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', borderRadius: 18, borderWidth: 1, borderColor: colors.glassLine, backgroundColor: colors.surface, boxShadow: colors.elevation2 }}>
           {options.map(item => <Pressable key={item.id} testID={`${product}-studio-choice-${item.id}`} accessibilityRole="tab" aria-selected={item.id === draft} accessibilityLabel={item.label} accessibilityState={{ selected: item.id === draft, disabled: Boolean(item.disabled || busy) }} disabled={item.disabled || busy} onPress={() => setDraft(item.id)} style={({ pressed }) => ({ width: '30%', height: 54, borderRadius: 16, gap: 3, alignItems: 'center', justifyContent: 'center', backgroundColor: item.id === draft ? colors.accentSoft : 'transparent', opacity: item.disabled ? .5 : 1, transform: [{ scale: pressed ? .9 : 1 }] })}><V10Icon name={item.icon} size={22} color={item.id === draft ? colors.accent : colors.textMuted} /><Text style={{ fontFamily: font.medium, fontSize: 10.5, lineHeight: 14, color: item.id === draft ? colors.accent : colors.textMuted }}>{item.label}</Text>{item.id === draft ? <View style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: colors.accent }} /> : null}</Pressable>)}
         </View>
-        <View style={{ padding: 16, gap: 8, borderWidth: 1, borderColor: colors.lineStrong, borderRadius: 18 }}><Text style={v10.overline}>{driver ? 'Ditt personlige mål' : 'Ditt neste steg'}</Text><Text style={v10.heading}>{choice.sub}</Text><Text style={v10.caption}>{driver ? 'Lagres på denne enheten. Du styrer skiftet selv.' : 'Bilvalget følger deg videre. Ingen tur bestilles her.'}</Text></View>
+        <View style={{ padding: 16, gap: 8, borderWidth: 1, borderColor: colors.lineStrong, borderRadius: 18 }}><Text style={v10.overline}>{driver ? 'Ditt personlige mål' : 'Ditt neste steg'}</Text><Text style={v10.heading}>{choice.sub}</Text><Text style={[v10.caption, driver && { minHeight: 32 }]}>{driver ? 'Lagres på denne enheten. Du styrer skiftet selv.' : 'Bilvalget følger deg videre. Ingen tur bestilles her.'}</Text></View>
         {error ? <Text accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 16 }]}>{error}</Text> : null}
         <View style={{ marginTop: 24, gap: 4 }}><StudioAction testID={`${product}-studio-apply`} label={driver ? 'Lagre mål og se innsikt' : 'Bruk reisestilen og se ruten'} onPress={() => void apply()} disabled={busy || choice.disabled} /><StudioAction testID={`${product}-studio-cancel`} label="Tilbake uten endringer" onPress={close} disabled={busy} ghost /></View>
       </ScrollView>
+      </V10Entrance>
     </Modal>
   </View>;
 }

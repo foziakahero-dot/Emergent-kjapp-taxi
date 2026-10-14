@@ -1,3 +1,9 @@
+# Current checkpoint — Driver 03/04 and source studios (2026-10-14)
+
+Read DRIVER_PAIR_03_04_20261014.md. Both current source studios are implemented and checked. Driver targets are scoped to the authenticated driver and confirmed by local persistence. Continue Driver 05/06 then the remaining state/route pairs, preserving canonical trip transitions. All new checkpoint commits remain local pending the exact public-destination approval required by automatic review. No APK.
+
+---
+
 # Current checkpoint — Customer 35/36 reconciled (2026-10-14)
 
 Read CUSTOMER_PAIR_35_36_20261014.md and FLEET_V2_NEW_SOURCE_20261014.md. The current Reisestudio is implemented. Scheduling is a reachable disabled preview; global states remain contextual and partial where source contracts are absent. Continue Driver 03/04 and the remaining pairs. GitHub public pushes are blocked by automatic approval review pending explicit approval of that exact destination; preserve local commits and deliver a private patch. No APK.

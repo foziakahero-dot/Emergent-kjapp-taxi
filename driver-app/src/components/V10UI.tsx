@@ -53,7 +53,7 @@ export function V10Action({ label, onPress, kind = 'primary', small = false, dis
   const color = kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text;
   const backgroundColor = { primary: colors.accent, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
-    style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, transform: [{ scale: pressed ? .97 : 1 }] })}>
+    style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, boxShadow: kind === 'primary' ? `0 6px 20px -10px ${colors.accent}` : undefined, transform: [{ scale: pressed ? .97 : 1 }] })}>
     {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={small ? 18 : 22} /> : null}
     <Text style={{ color, fontFamily: font.semibold, fontSize: small ? 14 : 16, lineHeight: small ? 20 : 22, letterSpacing: -.16 }}>{label}</Text>
   </Pressable>;

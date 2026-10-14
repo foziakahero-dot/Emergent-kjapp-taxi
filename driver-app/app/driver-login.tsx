@@ -85,7 +85,7 @@ const s = themedStyles(() => StyleSheet.create({
   title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, marginTop: 6, color: colors.text },
   subtitle: { fontSize: 14, lineHeight: 20, letterSpacing: -.154, color: colors.textSecondary, marginTop: 8 },
   fields: { marginTop: 28, gap: 8 },
-  field: { flexDirection: 'row', alignItems: 'center', minHeight: 60, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16 },
+  field: { flexDirection: 'row', alignItems: 'center', minHeight: 60, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, paddingHorizontal: 16 },
   input: { flex: 1, fontSize: 18, lineHeight: 26, paddingVertical: 16, color: colors.text },
   reveal: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
   primary: { minHeight: 58, borderRadius: 16, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', marginTop: 12 },

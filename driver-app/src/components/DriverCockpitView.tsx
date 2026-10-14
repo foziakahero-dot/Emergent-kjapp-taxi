@@ -7,6 +7,10 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Row, V10Screen, v10 } from '@/src/components/V10UI';
 import { V10HoldAction } from '@/src/components/V10HoldAction';
+import { ExperienceStudio, type StudioOption } from '@/src/components/ExperienceStudio';
+import { usePersonalShiftGoal } from '@/src/lib/usePersonalShiftGoal';
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { kr } from '@/src/lib/format';
 import { colors, font, useColorTheme } from '@/src/theme';
 
@@ -32,10 +36,11 @@ function Ring({ value, size = 64, color = colors.success, children }: { value: n
 function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBottom?: number }) {
   useColorTheme();
   const insets = useSafeAreaInsets();
-  return <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3 }}>
+  return <V10Entrance sheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3, overflow: 'hidden' }}>
+    <FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" />
     <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
     <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(padBottom, insets.bottom) }}>{children}</ScrollView>
-  </View>;
+  </V10Entrance>;
 }
 function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
   useColorTheme(); return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
@@ -43,6 +48,12 @@ export function DriverCockpitView(p: Props) {
   useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { goal, save } = usePersonalShiftGoal(p.user?.id);
+  const studioOptions: StudioOption[] = [
+    { id: '2200', label: 'Balanse', icon: 'heart', title: 'Et godt skift. På dine premisser.', sub: 'Dagsmål 2 200 kr', body: 'Et oversiktlig mål med plass til pauser. Du bestemmer tempoet, og alle anbefalinger er valgfrie.' },
+    { id: '2800', label: 'Fokus', icon: 'earnings', title: 'Færre distraksjoner. Klar retning.', sub: 'Dagsmål 2 800 kr', body: 'Hold dagens mål synlig og åpne Drive Intelligence for tilgjengelig innsikt.' },
+    { id: '3400', label: 'Ambisjon', icon: 'arrowUp', title: 'Sikt høyere. Kjør like trygt.', sub: 'Dagsmål 3 400 kr', body: 'Et ambisiøst, personlig mål — aldri et inntektsløfte. Sikker kjøring og pauser kommer alltid først.' },
+  ];
   const [phase, setPhase] = useState<'base' | 'arrival' | 'start' | 'arriving' | 'complete'>('base');
   const [clock, setClock] = useState(Date.now());
   useEffect(() => { setPhase('base'); }, [p.current?.trip_id, p.current?.status]);
@@ -99,6 +110,7 @@ export function DriverCockpitView(p: Props) {
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.line }}><Text style={v10.secondary}>Estimert pris</Text><Text style={{ fontFamily: font.semibold, fontSize: 28, lineHeight: 38 }}>{kr(p.offer.price)}</Text></View>
       <View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 96 }}><V10Action height={64} kind="soft" label="Avslå" onPress={p.onDecline} disabled={p.busy} testID={`driver-decline-${p.offer.trip_id}`} /></View><View style={{ flex: 1 }}><V10Action height={64} label={p.offerExpired ? 'Utløpt' : 'Aksepter'} onPress={p.onAccept} busy={p.busy} disabled={p.offerExpired} testID={`driver-accept-${p.offer.trip_id}`} /></View></View>
     </Sheet> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}><View style={{ borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass }}><Text style={[v10.secondary, { color: colors.text }]}>Venter på tur · {p.user?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={v10.caption}>{p.gpsReady ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text></View></View> : <Sheet padBottom={108}>
+      <ExperienceStudio key={p.user?.id} product="driver" value={goal} options={studioOptions} earnings={p.summary?.income} onApply={save} onContinue={() => router.push('/(driver)/intel')} />
       <Pressable accessibilityRole="button" onPress={() => router.push('/driver-vehicles')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingBottom: 14 }}><View style={{ width: 72, height: 44, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="vehicle" size={32} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.user?.car || 'Velg kjøretøy'}</Text><Text style={v10.caption}>{p.user?.plate || 'Ingen aktiv bil valgt'}</Text></View><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       <View style={{ flexDirection: 'row', gap: 12, paddingTop: 14, paddingBottom: 18, borderTopWidth: 1, borderTopColor: colors.line }}><Kpi label="I dag" value={kr(p.summary?.income).replace(/\s+kr$/, '')} unit="kr" /><Kpi label="Turer" value={known(p.summary?.trips) ? String(p.summary.trips) : '—'} /><Kpi label="Online" value={known(p.summary?.online_minutes) ? `${Math.floor(p.summary.online_minutes / 60)}:${String(p.summary.online_minutes % 60).padStart(2, '0')}` : '—'} unit="t" /></View><V10Action height={58} icon="power" label="Gå online" onPress={p.onOnline} busy={p.busy} testID="driver-go-online" />
     </Sheet>}

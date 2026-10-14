@@ -42,15 +42,15 @@ const customerGlyphs: Record<string, React.ReactNode> = {
 };
 
 export function FloatingTabBar({ state, descriptors, navigation, driver = false }: BottomTabBarProps & { driver?: boolean }) {
-  useColorTheme();
+  const theme = useColorTheme();
   const insets = useSafeAreaInsets();
   const { hidden, targets } = useContext(Visibility);
   const focused = state.routes[state.index];
   if (hidden && focused.name === 'home') return null;
   const visible = state.routes.filter(route => (driver ? ['home', 'earnings', 'intel', 'messages', 'profile'] : ['home', 'history', 'wallet', 'profile']).includes(route.name));
-  return <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(22, insets.bottom - 12), borderRadius: 24, boxShadow: '0 8px 24px -8px rgba(11,26,44,.14), 0 0 0 1px rgba(11,26,44,.04)' }}>
-    <View style={{ overflow: 'hidden', borderRadius: 24, backgroundColor: colors.glass, paddingHorizontal: 6, height: 66, alignItems: 'center', justifyContent: 'space-around', flexDirection: 'row' }}>
-      <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
+  return <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(22, insets.bottom - 12), borderRadius: 24, boxShadow: colors.elevation2 }}>
+    <View style={{ overflow: 'hidden', borderRadius: 24, borderWidth: 1, borderColor: colors.glassLine, backgroundColor: colors.glass, paddingHorizontal: 6, height: 66, alignItems: 'center', justifyContent: 'space-around', flexDirection: 'row' }}>
+      <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint={theme.effective === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} pointerEvents="none" />
       {visible.map(route => {
         const options = descriptors[route.key].options;
         const selected = focused.key === route.key;
