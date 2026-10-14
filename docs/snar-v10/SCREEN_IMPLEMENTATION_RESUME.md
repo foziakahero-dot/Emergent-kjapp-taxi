@@ -1,4 +1,10 @@
-# Latest pair — Customer 17/18; uploaded visible sequence saved (2026-10-14)
+# Latest pair — Customer 19/20; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_19_20_20261014.md. Arrival uses fresh real GPS, destination-only camera framing and once-per-trip feedback. Summary uses original pop/metrics, count-up and measured route framing, and remains visible if the initial response is already paid. No proximity event ends a ride and no reserved ride exposes a second charge. Customer typecheck and both component/controller suites pass; physical pixel/device acceptance remains open.
+
+User explicitly instructs automatic continuation in pairs (one screen at a time where necessary), checking and pushing each pair, then continuing Customer and Driver without waiting for another prompt. Next is 21 Betaling fullført + 22 Kvittering, then 23 Vurdering + 24 Aktivitet. No signed-build/release step is requested before screens are finished.
+
+# Previous pair — Customer 17/18; uploaded visible sequence saved (2026-10-14)
 
 Read CUSTOMER_PAIR_17_18_20261014.md. Seven paired checkpoints cover 05–18 in the user's uploaded order: position/home, search/route, vehicle/payment, confirm/matching, driver/approach, guide/arrival, live trip/safety. Existing returning/intro/login/splash implementations remain from earlier checkpoints. All-class real supply, stale-response/route/photo guards, source panels/dock, actual consent/payment/dispatch and explicit driver start are preserved. Next pair in the original file is 19 Ankommer + 20 Tur fullført, then 21 Betaling fullført + 22 Kvittering.
 

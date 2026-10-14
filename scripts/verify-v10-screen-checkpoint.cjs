@@ -716,6 +716,31 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async()=>{handle.props.onPanResponderRelease(null,{dy:-50,dx:0});handle.props.onPanResponderRelease(null,{dy:40,dx:70});handle.props.onPanResponderRelease(null,{dy:40,dx:2});handle.props.onAccessibilityAction({nativeEvent:{actionName:'activate'}})});
   assert.equal(handleMinimizes,2,'Only deliberate downward gesture and accessible activation minimize; upward/horizontal gestures do not');await unmount(tree);
   console.log('PASS: Customer 17/18 real four-action trip dock, active island/reopen, no invented destination ETA and retained safe emergency/report/share flows.');
+  const nearingTrip={...freshDriverTrip,status:'in_trip',dropoff_lat:59.911,dropoff_lng:10.751,driver_location_at:new Date().toISOString()};
+  const destinationHaptics=hapticCalls.length;
+  await act(async()=>{tree=renderer.create(React.createElement(TripPresentation,{...matchingProps,trip:nearingTrip,gpsFresh:true}))});
+  assert.equal(tree.root.findAllByProps({testID:'customer-arriving-view'}).length,1);
+  assert.equal(button(tree,'customer-arrival-driver-authority').props.disabled,true,'GPS proximity cannot complete a ride');
+  assert.equal(hapticCalls.length,destinationHaptics+1);
+  await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:{...nearingTrip,driver_lat:59.9111},gpsFresh:true})));
+  assert.equal(hapticCalls.length,destinationHaptics+1,'Arrival feedback is emitted once per trip');
+  await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:nearingTrip,gpsFresh:true,offline:true})));
+  assert.equal(tree.root.findAllByProps({testID:'customer-arriving-view'}).length,0,'Offline data cannot trigger arrival presentation');await unmount(tree);
+  stubs['./carAvailability']=load('frontend','src/lib/carAvailability.ts');
+  const {mapFocusPoints}=load('frontend','src/lib/mapFocus.ts');
+  const arrivalFocus=mapFocusPoints({pickup:{lat:60,lng:11},dropoff:{lat:59.911,lng:10.751},activeCar:{lat:59.912,lng:10.752},focusMode:'destination',focusRoute:[[11,60],[10.751,59.911]]});
+  assert.equal(arrivalFocus.length,2);assert.ok(arrivalFocus.every(p=>p.lat<59.92),'Arrival excludes departed pickup/full route from camera bounds');
+  console.log('PASS: Customer 19 actual destination camera bounds, fresh-only proximity, once-per-trip feedback and server-owned completion.');
+  const CountUp=load('frontend','src/components/V10CountUp.tsx').V10CountUp;
+  const countTiming=native.Animated.timing;let countAnimation,countStops=0;
+  native.Animated.timing=(value,config)=>{countAnimation={value,config};return {start(){},stop(){countStops++;}}};
+  tree=await mount(()=>React.createElement(CountUp,{value:184,format:n=>Math.round(n)+' kr'}));
+  assert.equal(countAnimation.config.duration,700);await act(async()=>countAnimation.value.setValue(.5));assert.match(text(tree),/92 kr/);
+  await act(async()=>countAnimation.value.setValue(1));assert.match(text(tree),/184 kr/);await unmount(tree);assert.equal(countStops,1);assert.equal(countAnimation.value.listeners.size,0);
+  const latestCount=countAnimation;reduceMotion=true;tree=await mount(()=>React.createElement(CountUp,{value:184,format:n=>Math.round(n)+' kr'}));assert.equal(countAnimation,latestCount);assert.match(text(tree),/184 kr/);await unmount(tree);
+  tree=await mount(()=>React.createElement(CountUp,{value:NaN,format:n=>String(n)}));assert.doesNotMatch(text(tree),/NaN/);assert.match(text(tree),/Ikke tilgjengelig/);await unmount(tree);reduceMotion=false;native.Animated.timing=countTiming;
+
+
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };
@@ -826,6 +851,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(button(tree, 'receipt-pdf-unavailable').props.disabled, true);
   await unmount(tree);
   tree = await mount(Receipt);
+  assert.ok(button(tree, 'receipt-confirm-paid'), 'A ride already paid on arrival still shows its completion summary first');
+  await act(async () => button(tree, 'receipt-confirm-paid').props.onPress());
   await act(async () => button(tree, 'receipt-done').props.onPress());
   await act(async () => button(tree, 'rate-star-5').props.onPress());
   assert.equal(ratingCalls.length, 0, 'Selecting stars cannot submit the rating');

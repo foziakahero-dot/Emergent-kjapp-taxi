@@ -1,4 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { V10Entrance } from '@/src/components/V10Entrance';
+import { V10CountUp } from '@/src/components/V10CountUp';
 import { Image, Pressable, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,9 +27,18 @@ export function CustomerReceiptView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const paid = p.trip.payment_status === 'paid';
-  const [stage, setStage] = useState<Stage>(p.initialReceipt ? 'receipt' : paid ? 'paid' : 'complete');
+  const [stage, setStage] = useState<Stage>(p.initialReceipt ? 'receipt' : 'complete');
   const [feedback, setFeedback] = useState<string[]>([]);
-  useEffect(() => { if (paid) setStage(current => current === 'complete' ? 'paid' : current); }, [paid]);
+  const previousPaid = useRef(paid);
+  const [sheetHeight, setSheetHeight] = useState(300);
+  useEffect(() => {
+    if (paid && !previousPaid.current) setStage(current => current === 'complete' ? 'paid' : current);
+    previousPaid.current = paid;
+  }, [paid]);
+  useEffect(() => {
+    if (p.initialReceipt) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, [p.trip.trip_id, p.initialReceipt]);
   const automatic = p.trip.payment_flow === 'reservation';
   const paymentNote = paid ? 'Betaling registrert' : automatic ? 'Turbeløpet ble reservert før turstart. SNAR trekker beløpet automatisk. Du skal ikke betale på nytt.' : 'Betalingen er ikke bekreftet. Beløpet kommer fra turen på serveren.';
   const issues = <>{p.refreshError ? <Text accessibilityRole="alert" style={[v10.caption, { color: colors.danger, marginTop: 12 }]}>Kunne ikke oppdatere status. Viser sist bekreftede turdata.</Text> : null}{p.paymentError ? <Text testID="receipt-payment-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{p.paymentError}</Text> : null}</>;
@@ -50,17 +62,17 @@ export function CustomerReceiptView(p: Props) {
   </View>;
   const pickup = point(p.trip.pickup_lat, p.trip.pickup_lng), dropoff = point(p.trip.dropoff_lat, p.trip.dropoff_lng);
   return <View style={{ flex: 1, backgroundColor: colors.bg }}>
-    {pickup && dropoff ? <Map style={{ position: 'absolute', inset: 0 }} pickup={pickup} dropoff={dropoff} route={p.trip.geometry?.coordinates} interactive={false} contentInsets={{ top: insets.top + 24, bottom: insets.bottom + 380, left: 40, right: 40 }} /> : null}
+    {pickup && dropoff ? <Map style={{ position: 'absolute', inset: 0 }} pickup={pickup} dropoff={dropoff} route={p.trip.geometry?.coordinates} focusRoute={p.trip.geometry?.coordinates} showControls={false} interactive={false} contentInsets={{ top: insets.top + 24, bottom: sheetHeight + 32, left: 40, right: 40 }} /> : null}
     <Pressable testID="receipt-back" onPress={p.onHome} accessibilityRole="button" accessibilityLabel="Tilbake til hjem" style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, width: 48, height: 48, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevL" /></Pressable>
-    <V10Sheet testID={stage === 'rating' && paid ? 'customer-rating-sheet' : 'customer-complete-sheet'}>
+    <V10Sheet key={stage} testID={stage === 'rating' && paid ? 'customer-rating-sheet' : 'customer-complete-sheet'} onLayout={event => setSheetHeight(event.nativeEvent.layout.height)}>
       {stage === 'rating' && paid ? <><View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><View style={{ width: 52, height: 52, borderRadius: 17.68, overflow: 'hidden', backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}>{p.photo ? <Image source={p.photo} onError={p.onPhotoError} style={{ width: 52, height: 52 }} /> : <Text style={v10.heading}>{(p.trip.driver?.name || 'S').slice(0, 1)}</Text>}</View><View style={{ flex: 1 }}><Text style={v10.heading}>{p.rated ? 'Takk for vurderingen!' : `Hvordan var turen${p.trip.driver?.name ? ` med ${p.trip.driver.name.split(' ')[0]}` : ''}?`}</Text><Text style={v10.caption}>Valgfritt</Text></View></View>
         <View accessibilityRole="radiogroup" accessibilityLabel="Vurdering" style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 24, marginHorizontal: 8 }}>{[1, 2, 3, 4, 5].map(n => <Pressable key={n} disabled={p.rated || p.ratingBusy} onPress={() => p.onRating(n)} testID={`rate-star-${n}`} accessibilityRole="radio" accessibilityLabel={`${n} stjerner`} accessibilityState={{ checked: p.rating === n, disabled: p.rated || p.ratingBusy }} style={{ width: 52, height: 52, alignItems: 'center', justifyContent: 'center', transform: [{ scale: n <= p.rating ? 1.08 : 1 }] }}><Svg width={34} height={34} viewBox="0 0 24 24"><Path d="m12 3.5 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" fill={n <= p.rating ? colors.text : 'none'} stroke={n <= p.rating ? colors.text : colors.lineStrong} strokeWidth={1.6} strokeLinejoin="round" /></Svg></Pressable>)}</View>
         {p.rating >= 4 && !p.rated ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>{['Rolig kjøring', 'Ren bil', 'Presis', 'Hyggelig'].map(label => <Pressable key={label} testID={`rating-feedback-${label}`} accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked: feedback.includes(label), disabled: p.ratingBusy }} disabled={p.ratingBusy} onPress={() => setFeedback(current => current.includes(label) ? current.filter(item => item !== label) : [...current, label])} style={{ minHeight: 36, borderRadius: 12, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: feedback.includes(label) ? colors.surfaceInverse : colors.cardSubtle }}><Text style={[v10.secondary, { color: feedback.includes(label) ? colors.onInverse : colors.text }]}>{label}</Text></Pressable>)}</View> : null}
         {p.ratingError ? <Text testID="receipt-rating-error" accessibilityRole="alert" style={[v10.secondary, { marginBottom: 12, color: colors.danger }]}>{p.ratingError}</Text> : null}<V10Action kind="ink" label={p.rated ? 'Ferdig' : p.rating ? 'Send' : 'Hopp over'} onPress={() => p.rated || !p.rating ? p.onHome() : p.onSubmit(p.rating >= 4 ? feedback.join(' · ') : '')} busy={p.ratingBusy} testID="receipt-submit-rating" />
-      </> : <><Text style={v10.caption}>Turen er fullført{receiptDate(p.trip.arrived_at, true) ? ` · ${receiptDate(p.trip.arrived_at, true)}` : ''}</Text><Text style={v10.title}>{p.trip.dropoff_address ? `Velkommen til ${p.trip.dropoff_address}` : 'Takk for turen'}</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}>{[['Tid', finiteMetric(p.trip.duration_min, 'min')], ['Distanse', finiteMetric(p.trip.distance_km, 'km')], ['Pris', kr(p.trip.price)]].map(([label, value]) => <View key={label} style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.cardSubtle }}><Text style={v10.caption}>{label}</Text><Text style={[v10.body, { fontSize: 18 }]}>{value}</Text></View>)}</View><Text style={v10.secondary}>{paymentNote}</Text>
-        {!paid && !automatic ? <View style={{ marginTop: 16 }}><V10Action label={`Betal ${kr(p.trip.price)}`} onPress={p.onPay} busy={p.paymentBusy} testID="receipt-pay" /></View> : null}{issues}<View style={{ marginTop: 8 }}><V10Action kind="ghost" label="Sjekk betaling" onPress={p.onRefresh} disabled={p.paymentBusy} testID="receipt-check-payment" /><V10Action small kind="ghost" label="Se turdetaljer" onPress={() => setStage('receipt')} testID="receipt-view" /></View>
-      </>}
+      </> : <V10Entrance pop testID="customer-complete-summary"><Text style={v10.caption}>Turen er fullført{receiptDate(p.trip.arrived_at, true) ? ` · ${receiptDate(p.trip.arrived_at, true)}` : ''}</Text><Text style={v10.title}>{p.trip.dropoff_address ? `Velkommen til ${p.trip.dropoff_address}` : 'Takk for turen'}</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}>{[{ label: 'Tid', value: p.trip.duration_min, format: (value: number) => finiteMetric(value, 'min') }, { label: 'Distanse', value: p.trip.distance_km, format: (value: number) => finiteMetric(value, 'km') }, { label: 'Pris', value: p.trip.price, format: kr }].map(metric => <View key={metric.label} style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.cardSubtle }}><Text style={v10.caption}>{metric.label}</Text><V10CountUp value={metric.value} format={metric.format} style={[v10.body, { fontSize: 18, fontVariant: ['tabular-nums'] }]} /></View>)}</View><Text style={v10.secondary}>{paymentNote}</Text>
+        {paid ? <View style={{ marginTop: 16 }}><V10Action label="Se betaling" onPress={() => setStage('paid')} testID="receipt-confirm-paid" /></View> : null}{!paid && !automatic ? <View style={{ marginTop: 16 }}><V10Action label={`Betal ${kr(p.trip.price)}`} onPress={p.onPay} busy={p.paymentBusy} testID="receipt-pay" /></View> : null}{issues}<View style={{ marginTop: 8 }}><V10Action kind="ghost" label="Sjekk betaling" onPress={p.onRefresh} disabled={p.paymentBusy} testID="receipt-check-payment" /><V10Action small kind="ghost" label="Se turdetaljer" onPress={() => setStage('receipt')} testID="receipt-view" /></View>
+      </V10Entrance>}
     </V10Sheet>
   </View>;
 }

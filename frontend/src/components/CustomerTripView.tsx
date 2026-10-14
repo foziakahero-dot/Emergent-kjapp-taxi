@@ -38,6 +38,7 @@ export function CustomerTripView(p: Props) {
   const status = p.trip.status;
   const announcedDriver = useRef('');
   const announcedArrival = useRef('');
+  const announcedDestination = useRef('');
   useEffect(() => {
     if (!['driver_on_way', 'at_pickup'].includes(status) || !p.trip.driver_id || p.offline) return;
     const key = `${p.trip.trip_id}:${p.trip.driver_id}`;
@@ -56,15 +57,21 @@ export function CustomerTripView(p: Props) {
   const freeWait = !p.offline ? pickupFreeWait(p.trip, now) : null;
   const displayedEta = !p.offline && p.gpsFresh && typeof p.eta === 'number' && Number.isFinite(p.eta) && p.eta > 0 ? p.eta : null;
   const approaching = !p.offline && p.gpsFresh && driverApproaching(p.trip);
-  const proximity = !p.offline ? destinationProximity(p.trip) : null;
+  const proximity = !p.offline && p.gpsFresh ? destinationProximity(p.trip) : null;
+  const nearingDestination = proximity?.near === true;
+  useEffect(() => {
+    if (!nearingDestination || announcedDestination.current === p.trip.trip_id) return;
+    announcedDestination.current = p.trip.trip_id;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, [nearingDestination, p.trip.trip_id]);
   const searching = ['searching', 'booking'].includes(status);
   const cancelled = ['cancelled', 'cancelled_by_driver'].includes(status);
   const noDriver = status === 'cancelled' && p.trip.cancel_reason === 'no_driver_available';
   const first = (p.trip.driver?.name || 'Sjåføren').split(' ')[0];
   const network = p.offline || !p.gpsFresh ? <Text accessibilityRole="alert" style={[v10.caption, { marginTop: 8, marginBottom: 8 }]}>{p.offline ? 'Venter på oppdatert turstatus.' : 'Venter på oppdatert sjåførposisjon.'}</Text> : null;
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-    {status === 'in_trip' ? <V10Entrance style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, borderRadius: 20, overflow: 'hidden', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, flexDirection: 'row', gap: 12, alignItems: 'center' }}><V10Glass target={p.mapBlurTarget} /><View style={[v10.icon, { width: 36, height: 36, backgroundColor: colors.surfaceInverse }]}><V10Icon name="destination" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.dropoff_address}</Text><Text style={v10.caption}>{p.offline || !p.gpsFresh ? 'Venter på oppdatering' : 'Turen pågår'}</Text></View></V10Entrance> : null}
-    <V10Sheet key={`${p.trip.trip_id}-${status}-${guide ? 'guide' : 'main'}`} testID={searching ? 'booking-matching-card' : status === 'in_trip' ? 'customer-trip-sheet' : 'customer-pickup-sheet'} onMinimize={status === 'in_trip' ? p.onMinimize : undefined} onLayout={event => p.onSheetLayout(event.nativeEvent.layout.height)} paddingBottom={status === 'in_trip' ? Math.max(106, insets.bottom + 90) : 34}>
+    {status === 'in_trip' && !nearingDestination ? <V10Entrance style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20, right: 20, borderRadius: 20, overflow: 'hidden', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, flexDirection: 'row', gap: 12, alignItems: 'center' }}><V10Glass target={p.mapBlurTarget} /><View style={[v10.icon, { width: 36, height: 36, backgroundColor: colors.surfaceInverse }]}><V10Icon name="destination" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.trip.dropoff_address}</Text><Text style={v10.caption}>{p.offline || !p.gpsFresh ? 'Venter på oppdatering' : 'Turen pågår'}</Text></View></V10Entrance> : null}
+    <V10Sheet key={`${p.trip.trip_id}-${status}-${nearingDestination ? 'destination' : guide ? 'guide' : 'main'}`} testID={searching ? 'booking-matching-card' : status === 'in_trip' ? 'customer-trip-sheet' : 'customer-pickup-sheet'} onMinimize={status === 'in_trip' ? p.onMinimize : undefined} onLayout={event => p.onSheetLayout(event.nativeEvent.layout.height)} paddingBottom={status === 'in_trip' ? Math.max(106, insets.bottom + 90) : 34}>
       {status === 'payment_authorizing' ? <><V10State icon="payment" title="Godkjenn kortreservasjonen" body="Ingen sjåfør bestilles før banken har godkjent turbeløpet." /><View style={{ marginTop: 20 }}><V10Action label="Godkjenn turbeløpet" onPress={p.onAuthorize} disabled={p.offline} busy={p.authorizationBusy} testID="booking-authorize" /></View>{p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} /> : null}</> : searching ? <>
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><V10SearchIndicator /><View style={{ flex: 1 }}><Text style={v10.heading}>Finner sjåfør</Text><Text style={v10.secondary}>Ved {p.trip.pickup_address || 'valgt hentested'}</Text></View></View>
         <V10SearchIndicator bar />
@@ -93,7 +100,7 @@ export function CustomerTripView(p: Props) {
         {p.trip.waiting_policy ? <Text style={[v10.caption, { marginTop: 12 }]} testID="pickup-waiting-policy">{p.trip.waiting_policy.free_minutes} min gratis ventetid. Deretter {kr(p.trip.waiting_policy.per_minute)}/min, maks {kr(p.trip.waiting_policy.max_fee)}.</Text> : null}
         {p.canCancel ? <V10Action kind="ghost" label="Avbestill tur" onPress={p.onCancel} busy={p.cancelBusy} testID="assigned-trip-cancel" /> : null}
       </> : status === 'in_trip' && proximity?.near ? <>
-        <View testID="customer-arriving-view" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}><View style={{ flex: 1 }}><Text style={v10.caption}>Nesten fremme</Text><Text style={v10.title}>{p.trip.dropoff_address || 'Reisemålet ditt'}</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38 }}>{proximity.meters}<Text style={v10.secondary}> m</Text></Text></View><Text style={[v10.caption, { marginTop: 4 }]}>Omtrentlig avstand i luftlinje fra siste ferske GPS-posisjon.</Text>
+        <View testID="customer-arriving-view" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}><View style={{ flex: 1 }}><Text style={v10.caption}>Nesten fremme</Text><Text style={v10.title}>{p.trip.dropoff_address || 'Reisemålet ditt'}</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, fontVariant: ['tabular-nums'] }}>{proximity.meters}<Text style={v10.secondary}> m</Text></Text></View><Text style={[v10.caption, { marginTop: 4 }]}>Omtrentlig avstand i luftlinje fra siste ferske GPS-posisjon.</Text>
         <Text style={[v10.secondary, { marginTop: 8 }]}>{p.trip.payment_flow === 'reservation' ? 'Turbeløpet trekkes automatisk etter at sjåføren avslutter turen.' : 'Sjåføren avslutter turen før betaling og kvittering åpnes.'}</Text>
         <View style={{ marginTop: 18 }}><V10Action kind="ink" label="Venter på sjåførens avslutning" disabled onPress={() => {}} testID="customer-arrival-driver-authority" /></View><View style={{ marginTop: 10 }}><V10Action small kind="soft" label="Minimer turen" onPress={p.onMinimize} testID="active-trip-minimize" /><V10Action small kind="ghost" label="Sikkerhet" onPress={p.onSafety} testID="ontrip-safety" /></View>
       </> : status === 'in_trip' ? <>

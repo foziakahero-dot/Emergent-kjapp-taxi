@@ -1,6 +1,6 @@
 import { validPosition } from './carAvailability';
 type LL = { lat: number; lng: number };
-export type MapFocusMode = 'nearby' | 'route';
+export type MapFocusMode = 'nearby' | 'route' | 'destination';
 export type MapContentInsets = { top: number; right: number; bottom: number; left: number };
 const DEFAULT_INSETS: MapContentInsets = { top: 90, right: 58, bottom: 170, left: 58 };
 
@@ -66,7 +66,9 @@ export function mapFocusPoints({ user, pickup, dropoff, activeCar, cars = [], fo
     if (Number.isFinite(minLat)) extents.push({ lat: minLat, lng: minLng }, { lat: maxLat, lng: maxLng });
   }
   // Frame the complete road geometry once, independently of the animated line prefix.
-  const points = nearby ? [pickup || user, ...cars] : extents.length ? [pickup || user, dropoff, activeCar, ...extents] : [user, pickup, dropoff, activeCar];
+  // Arrival frames the actual destination and driver, without the departed pickup
+  // or complete road geometry forcing the camera back out to the whole journey.
+  const points = focusMode === 'destination' ? [dropoff, activeCar] : nearby ? [pickup || user, ...cars] : extents.length ? [pickup || user, dropoff, activeCar, ...extents] : [user, pickup, dropoff, activeCar];
   const seen = new Set<string>();
   return points.filter((p): p is LL => {
     if (!validPosition(p)) return false;

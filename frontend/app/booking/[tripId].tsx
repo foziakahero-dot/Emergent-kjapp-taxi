@@ -1,4 +1,4 @@
-import { driverPresence } from '@/src/lib/tripPresence';
+import { destinationProximity, driverPresence } from '@/src/lib/tripPresence';
 import { BlurTargetView } from 'expo-blur';
 import { V10TripDock } from '@/src/components/V10TripDock';
 import { validPosition } from '@/src/lib/carAvailability';
@@ -271,6 +271,7 @@ export default function BookingFlow() {
     ? driverDistance < 1 ? `${Math.round(driverDistance * 1000)} m unna` : `${driverDistance.toLocaleString('nb-NO', { maximumFractionDigits: 1 })} km unna`
     : null;
 
+  const nearingDestination = !networkIssue && driverGpsFresh && destinationProximity(trip)?.near === true;
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <BlurTargetView ref={sceneBlurTarget} style={{ flex: 1 }}>
@@ -280,10 +281,11 @@ export default function BookingFlow() {
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
         dropoff={trip.status === 'in_trip' ? { lat: trip.dropoff_lat, lng: trip.dropoff_lng } : null}
         route={route}
-        focusRoute={pickupGuide ? null : route}
+        focusRoute={pickupGuide || nearingDestination ? null : route}
         showControls={false}
         cars={searching ? available.cars : []}
-        focusMode={searching ? 'nearby' : 'route'}
+        focusMode={searching ? 'nearby' : nearingDestination ? 'destination' : 'route'}
+        focusRevision={nearingDestination ? 1 : 0}
         contentInsets={{ top: insets.top + 88, right: 72,
           bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
         activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
