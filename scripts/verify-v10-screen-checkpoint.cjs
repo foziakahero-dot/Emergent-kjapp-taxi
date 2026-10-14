@@ -32,6 +32,7 @@ const native = {
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
   'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
+  './V10CategoryImage': { V10CategoryImage: 'V10CategoryImage' },
   './V10Glass': { V10Glass: 'V10Glass' },
   './V10CustomerAvatar': { V10CustomerAvatar: 'V10CustomerAvatar' },
   './V10Entrance': { V10Entrance: ({children,...props}) => React.createElement('V10Entrance',props,children) },
@@ -498,7 +499,9 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(acceptCalls, 1); assert.equal(declineCalls, 0, 'Accept and decline cannot race within the same client');
   await act(async () => accepting.resolve()); assert.match(text(tree), /Kjør til henting/); await unmount(tree);
   stubs['@/src/components/VehicleAsset'] = { VehicleAsset: 'VehicleAsset' };
-  stubs['@/src/lib/useAvailableCars'] = { useAvailableCars: () => ({ cars: [{ eta_min: 4 }], phase: 'ready' }) };
+  const supplyConfigs = [];
+  const supplyCars = [{ id:'standard-live',type:'ai-first',lat:59.915,lng:10.748,eta_min:4 },{ id:'xl-live',type:'trygg',lat:59.914,lng:10.747,eta_min:7 },{ id:'premium-live',type:'premium',lat:59.913,lng:10.746,eta_min:6 }];
+  stubs['@/src/lib/useAvailableCars'] = { useAvailableCars: config => { supplyConfigs.push(config); return { cars:supplyCars,phase:'ready' }; } };
   stubs['@/src/components/AvailabilityStatus'] = { AvailabilityStatus: 'AvailabilityStatus' };
   stubs['@/src/components/ActiveTripCard'] = { ActiveTripCard: 'ActiveTripCard', LIVE_TRIP_STATUSES: ['searching', 'driver_on_way', 'at_pickup', 'in_trip'] };
   stubs['@/src/lib/recentPlaces'] = { recentDestinations: () => [] };
@@ -513,13 +516,20 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   Object.assign(stubs['@/src/lib/api'].tripsApi, { active: async () => customerActive, list: async () => [], estimate: async () => quote, request: async body => { bookingRequests.push(body); return requesting.promise; } });
   const CustomerHome = load('frontend', 'app/(app)/home.tsx').default;
   tree = await mount(CustomerHome);
+  assert.equal(supplyConfigs.at(-1).vehicleType,undefined,'Home must show all real vehicle classes instead of only Standard');
+  assert.equal(tree.root.findByType('Map').props.cars.length,3);
   await act(async () => button(tree, 'quick-Hjem').props.onPress());
   assert.match(text(tree), /Kjøretid|11 min/);
   assert.equal(tree.root.findAll(node => node.type === 'Map')[0].props.focusMode, 'route');
   await act(async () => button(tree, 'route-choose-vehicle').props.onPress());
+  assert.match(text(tree),/4 min unna/);assert.match(text(tree),/7 min unna/);assert.match(text(tree),/6 min unna/);
+  assert.equal(button(tree,'vehicle-comfort').props.disabled,true,'A legacy enkelt quote cannot manufacture a Comfort class');
   await act(async () => button(tree, 'booking-payment-row').props.onPress());
   assert.match(text(tree), /4321/);
-  assert.doesNotMatch(text(tree), /Apple Pay|Equinor|4821/);
+  assert.doesNotMatch(text(tree), /Equinor|4821/);
+  assert.equal(button(tree,'booking-pay-card').props.accessibilityState.checked,true);
+  for (const id of ['apple','google','business','vipps']) { const choice=button(tree,`booking-pay-${id}`);assert.equal(choice.props.disabled,true);await act(async()=>choice.props.onPress()); }
+  assert.ok(button(tree,'booking-payment-done'),'Unavailable provider cannot pretend selection succeeded');
   await act(async () => button(tree, 'booking-payment-done').props.onPress());
   await act(async () => button(tree, 'booking-review').props.onPress());
   assert.equal(button(tree, 'booking-confirm').props.disabled, true, 'Waiting consent is required before request');
@@ -628,6 +638,16 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   reduceMotion=true;tree=await mount(()=>React.createElement(RouteFrame,{route:line}));assert.equal(JSON.stringify(tree.root.findByType('RouteFrame').props.route),JSON.stringify(line));assert.equal(routeAnimations.length,2);await unmount(tree);
   native.Animated.timing=priorTiming;reduceMotion=false;
   console.log('PASS: Customer 07/08 invalid places hidden, quote race/pending guard, actual Oslo arrival, server-route-only 900ms drawing, identical-route stability, cleanup and reduced motion.');
+  // Customer 09/10: exact class names, invalid prices, canonical reservation and artwork fallback.
+  assert.equal(helpers.validVehiclePrice(NaN),false);assert.equal(helpers.validVehiclePrice(-1),false);assert.equal(helpers.validVehiclePrice('184'),false);assert.equal(helpers.validVehiclePrice(184),true);
+  assert.equal(helpers.cardExpiryLabel({exp_month:8,exp_year:2028}),'Utløper 08/28');assert.equal(helpers.cardExpiryLabel({exp_month:13,exp_year:2028}),null);
+  customerActive={trip_id:'real-search',status:'searching',vehicle_type:'premium',pickup_lat:59.91,pickup_lng:10.74};tree=await mount(CustomerHome);assert.equal(supplyConfigs.at(-1).vehicleType,'premium','A real booked search retains its canonical class');await unmount(tree);customerActive=null;
+  stubs['expo-image']={Image:'CategoryImage'};
+  const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
+  tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));
+  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/photo-1560958089-b8a1929cea89/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');
+  await act(async()=>tree.root.findByType('CategoryImage').props.onError());assert.equal(tree.root.findAllByType('CategoryImage').length,0);assert.equal(tree.root.findByType('VehicleAsset').props.kind,'ai-first');await unmount(tree);
+  console.log('PASS: Customer 09/10 all-class home supply, actual per-class ETA, unavailable Comfort/provider guards, canonical card, real expiry, original illustration URL and CDN fallback.');
   // Actual settings controllers: OS permission, confirmed save and synchronous locks.
   let pushAllowed = false, notificationWrites = 0, notificationResult;
   stubs['@/src/lib/nativeRuntime'] = { registerNativePush: async () => pushAllowed };

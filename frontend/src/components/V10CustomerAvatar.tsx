@@ -14,5 +14,5 @@ export function V10CustomerAvatar({ initials, version }: { initials: string; ver
     return () => { current = false; };
   }, [version]);
   const style = { width: 32, height: 32, borderRadius: 10.88 };
-  return photo && photo.version === version ? <Image source={photo.source} style={style} onError={() => setPhoto(null)} /> : <View style={[style, { backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 11.52 }}>{initials}</Text></View>;
+  return photo && photo.version === version ? <Image source={photo.source} style={style} onError={() => setPhoto(current => current?.version === version ? null : current)} /> : <View style={[style, { backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 11.52 }}>{initials}</Text></View>;
 }

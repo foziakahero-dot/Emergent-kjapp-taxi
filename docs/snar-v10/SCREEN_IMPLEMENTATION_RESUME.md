@@ -1,3 +1,7 @@
+# Latest pair — Customer 09/10 (2026-10-14)
+
+Read CUSTOMER_PAIR_09_10_20261014.md. Home now fetches all qualified classes; vehicle rows use actual class ETA, source dimensions/names and original photo URLs with fallback. Payment mirrors canonical verified reservation card in the source grouped layout. Comfort and non-card reservation providers remain explicitly disabled because the real contract is absent; never relabel legacy enkelt as Comfort or imply a local choice changes the backend charge. Next pair: 11 Bekreft + 12 Søker sjåfør, then 13 Sjåfør funnet + 14 Sjåfør nærmer seg.
+
 # Latest verified pair — Customer 07/08 (2026-10-14)
 
 Read CUSTOMER_PAIR_07_08_20261014.md. Search/route have source motion, metrics/Oslo arrival, validated places, quote-response protection, full-road camera framing and matching route/marker styling. TypeScript, behavioral tests, web fixture inspection and Android/iOS offline exports pass. Next pair in the user's corrected order is 09 Kjøretøyvalg + 10 Betaling, then 11 Bekreft + 12 Søker sjåfør. The uploaded Customer index remains authoritative over older Driver-next instructions below. No signed build or native pixel acceptance is claimed.

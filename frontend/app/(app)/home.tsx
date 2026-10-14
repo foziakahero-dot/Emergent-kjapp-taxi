@@ -80,7 +80,7 @@ export default function Home() {
     enabled: Boolean(searchingTrip || (!activeTrip && (locationReady || selectedPickup))),
     lat: searchingTrip ? activeTrip.pickup_lat : pickupPoint.lat,
     lng: searchingTrip ? activeTrip.pickup_lng : pickupPoint.lng,
-    vehicleType: searchingTrip ? activeTrip.vehicle_type : selType,
+    vehicleType: searchingTrip ? activeTrip.vehicle_type : undefined,
     specialNeeds: searchingTrip ? activeTrip.special_needs : specialNeeds,
     // Home quietly refreshes supply; only a real trip shows dispatch/search progress.
     continuous: true,
@@ -198,8 +198,12 @@ export default function Home() {
     return () => { current = false; };
   }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops]);
 
-  const etaValues = cars.map((car) => Number(car.eta_min)).filter((n) => Number.isFinite(n) && n > 0);
-  const nearest = etaValues.length ? Math.min(...etaValues) : null;
+  const vehicleEtas: Record<string, number> = {};
+  for (const car of cars) {
+    const eta = Number(car.eta_min);
+    if (typeof car.type === 'string' && Number.isFinite(eta) && eta > 0) vehicleEtas[car.type] = Math.min(vehicleEtas[car.type] ?? Infinity, eta);
+  }
+  const nearest = vehicleEtas[selType] ?? null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
   useEffect(() => setWaitingAccepted(false), [estimate, selType]);
@@ -321,7 +325,7 @@ export default function Home() {
       {!activeTrip ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
-        nearest={nearest} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
+        nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} stops={stops}
