@@ -351,3 +351,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 20/21 (2026-10-15, Oslo)
+
+18/19 is published as `a58ebaa`. See `DRIVER_PAIR_20_21_20261015.md` for source fade/numeric/layout corrections and retained actual income/history behavior. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue with 22/23 after publishing; native/pixel acceptance remains open.
+
+---
+

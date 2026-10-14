@@ -10,6 +10,7 @@ import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Group, V10Header, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { colors, useColorTheme } from '@/src/theme';
 
 export default function DriverTrips() {
@@ -18,7 +19,7 @@ export default function DriverTrips() {
   const { user } = useAuth();
   const history = useQuery({ queryKey: ['driver-history', user?.id], queryFn: driverApi.history, enabled: !!user?.id });
   const trips = historyTrips(history.data);
-  return <V10Screen testID="driver-activity-screen"><V10Header title="Aktivitet" onBack={() => router.back()} />
+  return <V10Screen testID="driver-activity-screen"><V10Entrance fade><V10Header title="Aktivitet" onBack={() => router.back()} />
     {history.isPending ? <Loader label="Henter turer…" /> : history.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente turhistorikken" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void history.refetch()} /> : !trips.length ? <View style={{ marginTop: 24 }}><V10State icon="activity" title="Ingen turer ennå" body="Turene du har kjørt, vises her." action="Til cockpit" onAction={() => router.navigate('/(driver)/home')} /></View> : groupHistory(trips).map(group =>
       <V10Section key={group.title} title={group.title}><V10Group>{group.trips.map((trip, index) => {
         const income = confirmedTripIncome(trip);
@@ -27,9 +28,9 @@ export default function DriverTrips() {
           {index ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: colors.line }} /> : null}
           <View style={v10.icon}><V10Icon name={cancelled ? 'x' : 'trip'} size={20} /></View>
           <View style={{ flex: 1 }}><Text style={[v10.body, { fontSize: 15 }]} numberOfLines={2}>{trip.pickup_address || 'Hentested skjult'} → {trip.dropoff_address || 'Destinasjon skjult'}</Text>
-            <Text style={v10.caption}>{historyDate(trip.created_at, true)} · {tripStatusLabel(trip)}</Text></View>
-          <Text style={v10.body}>{income !== null ? kr(income) : cancelled ? '—' : 'Avventer'}</Text>
+            <Text style={[v10.caption, { fontVariant: ['tabular-nums'] }]}>{historyDate(trip.created_at, true)} · {tripStatusLabel(trip)}</Text></View>
+          <Text style={[v10.body, { fontVariant: ['tabular-nums'] }]}>{income !== null ? kr(income) : cancelled ? '—' : 'Avventer'}</Text>
         </Pressable>;
       })}</V10Group></V10Section>)}
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }

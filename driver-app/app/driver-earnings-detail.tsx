@@ -9,6 +9,7 @@ import { kr } from '@/src/lib/format';
 import { Text } from '@/src/components/Typography';
 import { V10Action, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { colors, font, useColorTheme } from '@/src/theme';
 
 export default function DriverEarningsDetail() {
@@ -31,13 +32,13 @@ export default function DriverEarningsDetail() {
   const incomeQuery = period === 'day' ? summary : weekly;
   const trips = historyTrips(history.data).filter(trip => (trip.created_at || '') >= since);
   const payoutDate = payouts.data?.next_payout_date && Number.isFinite(new Date(payouts.data.next_payout_date).getTime()) ? historyDate(payouts.data.next_payout_date) : null;
-  return <V10Screen testID="driver-earnings-detail-screen"><V10Header title="Inntjening" onBack={() => router.back()} />
+  return <V10Screen testID="driver-earnings-detail-screen"><V10Entrance fade><V10Header title="Inntjening" onBack={() => router.back()} />
     <View style={{ flexDirection: 'row', backgroundColor: colors.cardSubtle, borderRadius: 10, padding: 3 }}>
       {(['day', 'week'] as const).map(key => <Pressable key={key} testID={`driver-earnings-period-${key}`} accessibilityRole="tab" accessibilityState={{ selected: period === key }} aria-selected={period === key} onPress={() => setPeriod(key)} style={{ flex: 1, minHeight: 36, borderRadius: 8, backgroundColor: period === key ? colors.surface : 'transparent', alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.text, fontFamily: font.medium, fontSize: 12 }}>{key === 'day' ? 'I dag' : 'Denne uken'}</Text></Pressable>)}
     </View>
     {incomeQuery.isPending ? <Loader /> : incomeQuery.isError ? <View style={{ marginTop: 20 }}><V10State icon="wifiOff" warning title="Kunne ikke hente inntekten" body="Oppdater for å vise bekreftede tall." action="Prøv igjen" onAction={() => void incomeQuery.refetch()} /></View> : <>
-      <Text testID="driver-earnings-period-net" style={{ color: colors.text, fontFamily: font.semibold, fontSize: 40, lineHeight: 60, letterSpacing: -1.2, marginTop: 20 }}>{typeof income === 'number' && Number.isFinite(income) ? kr(income) : '— kr'}</Text>
-      <Text style={v10.secondary}>{typeof tripsCount === 'number' ? `${tripsCount} betalte turer` : 'Turantall ikke tilgjengelig'}{period === 'day' && typeof summary.data?.online_minutes === 'number' ? ` · ${Math.floor(summary.data.online_minutes / 60)} t ${summary.data.online_minutes % 60} min` : ''}</Text>
+      <Text testID="driver-earnings-period-net" style={{ color: colors.text, fontFamily: font.semibold, fontSize: 40, lineHeight: 52, letterSpacing: -1.2, fontVariant: ['tabular-nums'], marginTop: 20 }}>{typeof income === 'number' && Number.isFinite(income) ? kr(income) : '— kr'}</Text>
+      <Text style={[v10.secondary, { fontVariant: ['tabular-nums'] }]}>{typeof tripsCount === 'number' ? `${tripsCount} betalte turer` : 'Turantall ikke tilgjengelig'}{period === 'day' && typeof summary.data?.online_minutes === 'number' ? ` · ${Math.floor(summary.data.online_minutes / 60)} t ${summary.data.online_minutes % 60} min` : ''}</Text>
     </>}
     <V10Section title="Oppgjør via fleet">{payouts.isPending ? <Loader /> : payouts.isError ? <V10State icon="wifiOff" title="Oppgjør kunne ikke hentes" body="Prøv igjen for å se oppdatert informasjon." action="Prøv igjen" onAction={() => void payouts.refetch()} /> : <V10Group>
       <V10Row icon="payment" title={payoutDate ? `Neste utbetaling · ${payoutDate}` : 'Utbetaling via løyvehaveren'} subtitle={user?.fleet_name || 'Kontakt løyvehaveren for oppgjørsinformasjon'} />
@@ -47,9 +48,9 @@ export default function DriverEarningsDetail() {
       const income = confirmedTripIncome(trip);
       return <Pressable key={trip.trip_id} accessibilityRole="button" onPress={() => router.push(`/driver-trip/${encodeURIComponent(trip.trip_id!)}` as any)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         {index ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: colors.line }} /> : null}
-        <Text style={[v10.caption, { width: 40 }]}>{historyDate(trip.created_at, true)}</Text><Text style={[v10.body, { flex: 1, fontSize: 15 }]} numberOfLines={2}>{trip.pickup_address} → {trip.dropoff_address}</Text><Text style={v10.body}>{income !== null ? kr(income) : 'Avventer'}</Text>
+        <Text style={[v10.caption, { width: 40, fontVariant: ['tabular-nums'] }]}>{historyDate(trip.created_at, true)}</Text><Text style={[v10.body, { flex: 1, fontSize: 15 }]} numberOfLines={2}>{trip.pickup_address} → {trip.dropoff_address}</Text><Text style={[v10.body, { fontVariant: ['tabular-nums'] }]}>{income !== null ? kr(income) : 'Avventer'}</Text>
       </Pressable>;
     })}</V10Group>}</V10Section>
     <View style={{ marginTop: 16 }}><V10Action kind="soft" label="Måned og detaljerte rapporter" onPress={() => router.push('/driver-earnings-report')} /></View>
-  </V10Screen>;
+  </V10Entrance></V10Screen>;
 }
