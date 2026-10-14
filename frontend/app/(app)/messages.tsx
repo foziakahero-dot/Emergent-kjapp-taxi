@@ -1,10 +1,12 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Linking, Platform, Pressable, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/context/AuthContext';
-import { messagesApi, tripsApi } from '@/src/lib/api';
+import * as Haptics from 'expo-haptics';
+import { V10Entrance } from '@/src/components/V10Entrance';
+import { messagesApi, tripsApi, tripDriverPhotoSource } from '@/src/lib/api';
 import { Text, TextInput } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Header, V10Screen, V10State, v10 } from '@/src/components/V10UI';
@@ -37,6 +39,14 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
   const [error, setError] = useState('');
   const messages = useQuery({ queryKey: ['customer-trip-messages', trip.trip_id], queryFn: () => messagesApi.list(trip.trip_id), enabled: focused, refetchInterval: focused ? 2500 : false });
   const name = trip.driver?.name || 'Sjåføren din';
+  const photoKey = `${trip.trip_id}:${trip.driver_id}:${trip.driver?.photo_version || ''}`;
+  const [photo, setPhoto] = useState<{ key: string; source: any } | null>(null);
+  const photoSource = photo?.key === photoKey ? photo.source : null;
+  useEffect(() => {
+    let current = true; setPhoto(null);
+    void tripDriverPhotoSource(trip.trip_id).then(source => { if (current) setPhoto({ key: photoKey, source }); }).catch(() => {});
+    return () => { current = false; };
+  }, [photoKey, trip.trip_id]);
   const send = async (preset?: string) => {
     const text = (preset ?? draft).trim();
     if (!text || !focused || lock.current) return;
@@ -44,6 +54,7 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
     lock.current = true; setSending(true); setError('');
     try {
       await messagesApi.send(trip.trip_id, text);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       if (!preset) setDraft(previous => previous.trim() === text ? '' : previous);
       await qc.invalidateQueries({ queryKey: ['customer-trip-messages', trip.trip_id] });
     } catch { setError('Meldingen ble ikke bekreftet sendt. Kontroller samtalen før du prøver igjen.'); }
@@ -52,7 +63,7 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
   return <KeyboardAvoidingView testID="customer-messages-conversation" style={{ flex: 1, backgroundColor: colors.bg, paddingTop: Math.max(56, insets.top + 8) }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={{ paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <Pressable accessibilityRole="button" accessibilityLabel="Tilbake til turen" onPress={() => router.push(`/booking/${trip.trip_id}`)} style={{ marginLeft: -12, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevL" /></Pressable>
-      <View style={{ width: 40, height: 40, borderRadius: 13.6, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontFamily: font.semibold, fontSize: 14.4 }}>{name.split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</Text></View>
+      <View style={{ width: 40, height: 40, borderRadius: 13.6, overflow: 'hidden', backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}>{photoSource ? <Image source={photoSource} onError={() => setPhoto(current => current?.key === photoKey ? null : current)} style={{ width: 40, height: 40 }} testID="message-driver-photo" /> : <Text style={{ fontFamily: font.semibold, fontSize: 14.4 }}>{name.split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</Text>}</View>
       <View style={{ flex: 1 }}><Text style={v10.body}>{name.split(' ')[0]}{trip.driver?.plate ? ` · ${trip.driver.plate}` : ''}</Text><Text style={v10.caption}>Tur til {trip.dropoff_address || 'destinasjonen din'} · pågår</Text></View>
       {trip.driver?.phone ? <Pressable accessibilityRole="button" accessibilityLabel="Ring sjåføren" onPress={() => void Linking.openURL(`tel:${trip.driver.phone}`).catch(() => setError('Kunne ikke åpne telefonen.'))} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="phone" /></Pressable> : null}
     </View>
@@ -62,7 +73,7 @@ function Conversation({ trip, focused }: { trip: any; focused: boolean }) {
       onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
       renderItem={({ item }) => {
         const mine = item.from_role === 'passenger';
-        return <View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '78%', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 18, borderBottomRightRadius: mine ? 6 : 18, borderBottomLeftRadius: mine ? 18 : 6, backgroundColor: mine ? colors.surfaceInverse : colors.cardSubtle }}><Text style={{ fontFamily: font.body, fontSize: 15.5, lineHeight: 21, color: mine ? colors.onInverse : colors.text }}>{item.text}</Text></View>;
+        return <V10Entrance style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '78%' }}><View style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '100%', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 18, borderBottomRightRadius: mine ? 6 : 18, borderBottomLeftRadius: mine ? 18 : 6, backgroundColor: mine ? colors.surfaceInverse : colors.cardSubtle }}><Text style={{ fontFamily: font.body, fontSize: 15.5, lineHeight: 21, color: mine ? colors.onInverse : colors.text }}>{item.text}</Text></View></V10Entrance>;
       }} />}
     {messages.isError ? <View style={{ paddingHorizontal: 16 }}><V10Action label="Hent meldinger på nytt" small kind="soft" onPress={() => void messages.refetch()} /></View> : null}
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 20, paddingTop: 8 }}>{['Jeg kommer ut nå', 'Står ved inngang B', '2 min'].map(label => <Pressable key={label} accessibilityRole="button" disabled={sending} onPress={() => void send(label)} style={{ minHeight: 36, borderRadius: 12, paddingHorizontal: 14, backgroundColor: colors.cardSubtle, justifyContent: 'center' }}><Text style={{ fontFamily: font.medium, fontSize: 14 }}>{label}</Text></Pressable>)}</View>

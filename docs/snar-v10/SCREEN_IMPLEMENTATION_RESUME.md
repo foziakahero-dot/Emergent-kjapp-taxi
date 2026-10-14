@@ -1,4 +1,8 @@
-# Latest pair — Customer 23/24; automatic continuation (2026-10-14)
+# Latest pair — Customer 25/26; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_25_26_20261014.md. Trip detail has source map/journey geometry, Oslo times and direct historical receipt routing; stale trip IDs are suppressed. Messages have source bubble entry, successful-send feedback and trip-scoped private driver avatar with stale-photo guards. Existing actual chat/payments remain. Next automatically: 27 Varsler + 28 SNAR AI, then 29 Stemme + 30 Profil. Native/device acceptance remains open.
+
+# Previous pair — Customer 23/24; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_23_24_20261014.md. Original rating-star shape/control sizes now animate selection; skip stays visible after selecting a rating, explicit submission remains canonical. Activity has entry motion and Oslo-calendar week/time display, preserving real active/history routing and global Island. Customer type and behavioral checks pass; native acceptance remains open. Next automatically: 25 Turdetalj + 26 Meldinger, then 27 Varsler + 28 SNAR AI.
 

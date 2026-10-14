@@ -62,6 +62,7 @@ const stubs = {
     useQuery: ({ queryKey }) => ({ isPending: false, isError: false, refetch: async () => {}, ...queryData[queryKey[0]] }),
   },
   '@/src/lib/api': {
+    tripDriverPhotoSource: async () => null,
     tripsApi: { active: async () => ({}), list: async () => ({}), get: async () => ({}) },
     mePlacesApi: { list: async () => ({}) }, paymentApi: { list: async () => ({}) },
     authApi: { me: async () => ({}) }, authenticatedFileSource: async () => null,
@@ -359,7 +360,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     'customer-trip-messages': { data: { messages: [{ id: 'mine', from_role: 'passenger', text: 'My confirmed message' }, { id: 'theirs', from_role: 'driver', text: 'Driver message' }] } },
   };
   tree = await mount(CustomerMessages);
-  const bubbles = tree.root.findAll(node => node.type === 'View' && node.props.style?.maxWidth === '78%');
+  const bubbles = tree.root.findAll(node => node.type === 'V10Entrance' && node.props.style?.maxWidth === '78%');
   assert.equal(bubbles[0].props.style.alignSelf, 'flex-end', 'Actual passenger sender role renders as own message');
   assert.equal(bubbles[1].props.style.alignSelf, 'flex-start');
   await act(async () => tree.root.findByProps({ testID: 'customer-message-input' }).props.onChangeText('  Customer draft  '));
@@ -390,10 +391,11 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(thisOsloWeek('2026-10-11T22:10:00Z',Date.parse('2026-10-11T22:30:00Z')),true);
   assert.equal(thisOsloWeek('2026-10-11T21:59:00Z',Date.parse('2026-10-11T22:30:00Z')),false);
   assert.equal(thisOsloWeek('invalid'),false);
+  currentTripId = 'customer-detail';
   const CustomerTrip = load('frontend', 'app/customer-trip/[tripId].tsx').default;
   queryData = { 'customer-trip-detail': { data: { trip_id: 'customer-detail', status: 'completed', payment_status: 'paid', price: 184, created_at: new Date().toISOString(), driver: { name: 'Test Driver' } } } };
   tree = await mount(CustomerTrip); assert.match(text(tree), /Kartdata er ikke tilgjengelig/);
-  await act(async () => button(tree, 'customer-trip-receipt').props.onPress()); assert.equal(navigation.at(-1)[1], '/receipt/customer-detail'); await unmount(tree);
+  await act(async () => button(tree, 'customer-trip-receipt').props.onPress()); assert.equal(navigation.at(-1)[1], '/receipt/customer-detail?view=receipt'); await unmount(tree);
   queryData['customer-trip-detail'].data.status = 'in_trip';
   queryData['customer-trip-detail'].data.payment_status = 'reserved';
   tree = await mount(CustomerTrip);
