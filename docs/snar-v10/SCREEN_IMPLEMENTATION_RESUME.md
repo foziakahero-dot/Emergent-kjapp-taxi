@@ -321,3 +321,9 @@ Driver 01/02 and 03/04 are published as `24cec6a` and `1c1b4df`. Read `DRIVER_PA
 
 ---
 
+# Latest Driver pair — 10/11 (2026-10-15, Oslo)
+
+07 and 08–09 are published as `ab2e679`. See `DRIVER_PAIR_10_11_20261015.md` for waiting-inside source motion/shadow and actual arrival review checks. Typecheck and checkpoint suite pass; eight source/native-component frames have no page errors. Continue automatically with 12/13 after publishing. No APK; native/provider/pixel acceptance remains open.
+
+---
+

@@ -513,6 +513,11 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.doesNotMatch(text(tree), /Du er online/, 'A pending request cannot announce online success');
   await unmount(tree);
   const currentPickup = { trip_id: 'scene-trip', status: 'driver_on_way', customer: { name: 'Test Customer', phone: '00000000' }, pickup_address: 'Pickup', dropoff_address: 'Destination', price: 184 };
+  tree = await mount(() => React.createElement(Cockpit, { ...props, current: { ...currentPickup, pickup_waiting_inside: true } }));
+  assert.equal(tree.root.findAllByProps({ testID: 'driver-waiting-inside' }).length > 0, true);
+  assert.equal(advances, 0, 'Waiting-inside status cannot confirm arrival'); await unmount(tree);
+  tree = await mount(() => React.createElement(Cockpit, { ...props, current: { ...currentPickup, pickup_waiting_inside: false, passenger_note: 'Venter i resepsjonen' } }));
+  assert.equal(tree.root.findAllByProps({ testID: 'driver-waiting-inside' }).length, 0, 'Explicit server state overrides note inference'); await unmount(tree);
   await act(async () => { tree = renderer.create(React.createElement(Cockpit, { ...props, current: currentPickup })); });
   await act(async () => button(tree, 'driver-pickup-navigation').props.onPress()); assert.equal(pickupNavigations, 1); assert.equal(advances, 0, 'Navigation cannot advance the trip');
   await act(async () => button(tree, 'driver-arrival-review').props.onPress()); assert.equal(advances, 0, 'Arrival review is UI only');
