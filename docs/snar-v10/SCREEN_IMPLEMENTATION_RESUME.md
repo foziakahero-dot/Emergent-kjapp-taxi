@@ -1,3 +1,7 @@
+# Local native verification — three screen pairs saved (2026-10-14)
+
+Read `SCREEN_PAIRS_NATIVE_VERIFICATION_20261014.md`. Customer and Driver Android/iOS offline Metro/Hermes exports all exit 0 with the canonical QA URL; both TypeScript and behavioral checks pass. These are not signed APK/iOS builds, and existing APKs predate the code. QA provider configuration, Driver Google iOS configuration and physical pixel/device validation remain unresolved. Next pair: Driver approval/selfie, then Customer route/vehicle selection. Continue from the saved branch and verify existing implementations before editing.
+
 # Latest pair — introduction and permission (2026-10-14)
 
 Read `INTRO_PERMISSION_PAIR_20261014.md`. Source 210ms staggered entrance and measured 280ms permission sheet are saved and verified, alongside the earlier auth/registration and Customer home/search pairs. Next pair in the file is Driver account approval + selfie verification (03/04), then Customer route/vehicle choice (08/09). Preserve existing source-matched implementations; document real API/physical/provider limitations. QA Google/Apple configuration and Driver Google iOS remain outstanding, and existing APKs predate all these changes.
