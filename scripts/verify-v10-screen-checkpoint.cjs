@@ -42,7 +42,7 @@ const stubs = {
   'expo-status-bar': { StatusBar: 'StatusBar' },
   'react-native-svg': new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => key in target ? target[key] : String(key) }),
   '@/src/components/V10Entrance': { V10Entrance: ({children,...props}) => React.createElement('V10Entrance',props,children) },
-  '@/src/components/Motion': { useReducedMotion: () => reduceMotion },
+  '@/src/components/Motion': { useReducedMotion: () => reduceMotion, Collapse: ({open,children})=>React.createElement('Collapse',{open},children) },
   'react': React, 'react/jsx-runtime': appRequire('react/jsx-runtime'), 'react-native': native,
   'expo-router': { useRouter: () => router, useLocalSearchParams: () => ({ tripId: currentTripId }), useFocusEffect: callback => React.useEffect(callback, [callback]) },
   'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 48, bottom: 34 }) },
@@ -757,6 +757,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['@/src/lib/api'].settingsApi.update = async value => { notificationWrites++; return notificationResult(value); };
   const CustomerNotifications = load('frontend', 'app/customer-notifications.tsx').default;
   tree = await mount(CustomerNotifications);
+  await act(async()=>button(tree,'notification-settings-group').props.onPress());assert.equal(button(tree,'notification-settings-group').props.accessibilityState.expanded,false);
+  await act(async()=>button(tree,'notification-settings-group').props.onPress());assert.equal(button(tree,'notification-settings-group').props.accessibilityState.expanded,true);
   await act(async () => button(tree, 'setting-notifications').props.onPress());
   assert.equal(notificationWrites, 0, 'Denied OS registration cannot enable server notifications');
   pushAllowed = true; const settingRequest = deferred(); notificationResult = () => settingRequest.promise;
@@ -769,6 +771,10 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => button(tree, 'setting-trip_updates').props.onPress());
   assert.equal(button(tree, 'setting-trip_updates').props.accessibilityState.checked, true, 'Unconfirmed update retains previous value');
   assert.match(text(tree), /Varselvalget ble ikke bekreftet/); await unmount(tree);
+  queryData['customer-notification-trip']={data:{trip_id:'ended',status:'completed',payment_status:'paid'}};
+  queryData['customer-notification-history']={data:{trips:[{trip_id:'real-receipt',status:'completed',payment_status:'paid',price:184,dropoff_address:'Actual destination'}]}};
+  tree=await mount(CustomerNotifications);assert.equal(button(tree,'notifications-active-trip'),undefined,'Ended trip must not appear active in notifications');
+  await act(async()=>button(tree,'notification-receipt-real-receipt').props.onPress());assert.equal(navigation.at(-1)[1],'/receipt/real-receipt?view=receipt');await unmount(tree);
   const CompactSettings = load('frontend', 'app/settings.tsx').default;
   tree = await mount(CompactSettings); await act(async () => button(tree, 'settings-data').props.onPress()); assert.equal(navigation.at(-1)[1], '/customer-data'); await unmount(tree);
   user = { id: 'settings-driver', role: 'driver' };

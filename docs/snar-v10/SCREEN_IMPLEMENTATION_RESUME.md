@@ -1,4 +1,8 @@
-# Latest pair — Customer 25/26; automatic continuation (2026-10-14)
+# Latest pair — Customer 27/28; automatic continuation (2026-10-14)
+
+Read CUSTOMER_PAIR_27_28_20261014.md. Notifications use actual inverse action/receipt groups with accessible 210ms collapse; ended rides cannot appear active. AI suggestions/messages/result object follow source entry motion and preserve real explicit booking/consent contracts. Customer type, component/controller and Assist suites pass; light/dark notification/AI-idle web fixtures have no JS errors. Unsupported inbox/scheduling/flight/provider contracts and physical/native acceptance remain open. Next automatically: 29 Stemme + 30 Profil, then 31 Betalingsmåter + 32 Support.
+
+# Previous pair — Customer 25/26; automatic continuation (2026-10-14)
 
 Read CUSTOMER_PAIR_25_26_20261014.md. Trip detail has source map/journey geometry, Oslo times and direct historical receipt routing; stale trip IDs are suppressed. Messages have source bubble entry, successful-send feedback and trip-scoped private driver avatar with stale-photo guards. Existing actual chat/payments remain. Next automatically: 27 Varsler + 28 SNAR AI, then 29 Stemme + 30 Profil. Native/device acceptance remains open.
 

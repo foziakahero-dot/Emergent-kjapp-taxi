@@ -47,7 +47,7 @@ function bookingDestinationFrom(text: string): string | null {
 
 function normalizePlaces(raw: any[]): Place[] {
   return (raw || [])
-    .filter((p: any) => p?.name && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Math.abs(Number(p.lat)) <= 90 && Number.isFinite(Number(p.lng)) && Math.abs(Number(p.lng)) <= 180)
+    .filter((p: any) => typeof p?.name === 'string' && p.name.trim() && [p.lat, p.lng].every(value => typeof value === 'number' || (typeof value === 'string' && value.trim().length > 0)) && p.lat != null && p.lng != null && Number.isFinite(Number(p.lat)) && Math.abs(Number(p.lat)) <= 90 && Number.isFinite(Number(p.lng)) && Math.abs(Number(p.lng)) <= 180)
     .map((p: any) => ({ name: p.name, lat: Number(p.lat), lng: Number(p.lng) }));
 }
 
