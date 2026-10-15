@@ -84,14 +84,22 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  return <AuthProvider><RootContent /></AuthProvider>;
+}
+
+function RootContent() {
   const theme = useColorTheme();
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
   const [launchFinished, setLaunchFinished] = useState(false);
   useEffect(() => {
-    if (!fontsLoaded && !fontError) return;
-    void SplashScreen.hideAsync().catch(() => {});
-    const timer = setTimeout(() => setLaunchFinished(true), 1800);
+    // Session restoration runs concurrently; stalled font loading cannot trap startup.
+    const finish = () => {
+      setLaunchFinished(true);
+      void SplashScreen.hideAsync().catch(() => {});
+    };
+    if (fontsLoaded || fontError) { finish(); return; }
+    const timer = setTimeout(finish, 5000);
     return () => clearTimeout(timer);
   }, [fontsLoaded, fontError]);
   useEffect(() => installClientErrorMonitor(), []);
@@ -101,7 +109,6 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <AuthProvider>
             <NativePaymentProvider>
             <SessionGate>
             <NativeRuntimeBridge />
@@ -138,7 +145,6 @@ export default function RootLayout() {
             </GlobalCustomerShell>
             </SessionGate>
             </NativePaymentProvider>
-          </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

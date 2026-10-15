@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { withDeadline } from '@/src/lib/deadline';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 import { unregisterNativePush } from '@/src/lib/nativeRuntime';
@@ -39,17 +40,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const epoch = ++sessionEpoch.current;
     setSessionError('');
-    const token = await storage.getItem(TOKEN_KEY);
-    if (epoch !== sessionEpoch.current) return;
-    if (!token) {
-      setUser(null);
-      return;
-    }
     try {
-      const u = await authApi.me();
+      const token = await withDeadline(storage.getItem(TOKEN_KEY), 3000);
+      if (epoch !== sessionEpoch.current) return;
+      if (!token) { setUser(null); return; }
+      const u = await withDeadline(authApi.me(), 12000);
       if (epoch !== sessionEpoch.current) return;
       if (u?.role !== 'user') {
-        await storage.removeItem(TOKEN_KEY);
+        await withDeadline(storage.removeItem(TOKEN_KEY), 3000);
         if (epoch !== sessionEpoch.current) return;
         setUser(null);
         return;
@@ -58,7 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       if (epoch !== sessionEpoch.current) return;
       if (error?.response?.status === 401) {
-        await storage.removeItem(TOKEN_KEY);
+        try { await withDeadline(storage.removeItem(TOKEN_KEY), 3000); }
+        catch { if (epoch === sessionEpoch.current) setSessionError('Kunne ikke rydde innloggingen. Prøv igjen.'); return; }
         if (epoch !== sessionEpoch.current) return;
         setUser(null);
       } else {

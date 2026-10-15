@@ -17,6 +17,11 @@ from admin_control_center import _stripe_snapshot, stripe_destination_for_trip
 from qa_safety import is_safe_qa_web_origin
 
 
+def native_google_client(name="GOOGLE_CLIENT_ID"):
+    prefix = "QA_" if os.getenv("APP_ENV", "").strip().lower() == "qa" else ""
+    return os.getenv(prefix + name, "").strip()
+
+
 class NativeIdentity(BaseModel):
     identity_token: str = Field(min_length=10, max_length=20000)
     client: Literal["customer", "driver"] = "customer"
@@ -81,18 +86,14 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.get("/auth/native/config")
     async def identity_config(client: Literal["customer", "driver"] = "customer"):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            return {"google_enabled": False, "google_web_client_id": "", "google_ios_client_id": ""}
-        google_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        google_id = native_google_client()
         return {"google_enabled": bool(google_id), "google_web_client_id": google_id,
-            "google_ios_client_id": os.getenv("GOOGLE_DRIVER_IOS_CLIENT_ID" if client == "driver" else "GOOGLE_IOS_CLIENT_ID", "").strip()}
+            "google_ios_client_id": native_google_client("GOOGLE_DRIVER_IOS_CLIENT_ID" if client == "driver" else "GOOGLE_IOS_CLIENT_ID")}
 
     @api.post("/auth/google/native")
     async def google_native(body: NativeIdentity, request: Request, response: Response):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
         await rate_limit(request, "google-native", 30, 900)
-        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        client_id = native_google_client()
         if not client_id:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert")
         try:
@@ -105,12 +106,10 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/link")
     async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Google-kobling krever QA-spesifikk OAuth-konfigurasjon.")
         await rate_limit(request, "google-link", 20, 900)
         if body.client != "customer":
             raise HTTPException(403, "Kun kundekonto kan kobles her")
-        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        client_id = native_google_client()
         if not client_id:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert")
         try:

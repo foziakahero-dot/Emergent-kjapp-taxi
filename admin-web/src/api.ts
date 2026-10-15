@@ -4,7 +4,7 @@ const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
-const isProductionAdminHost = host === 'admin.kjappapp.no';
+const isProductionAdminHost = host === 'admin.kjappapp.no' || host === 'admin.snarapp.no';
 const isVercelPreviewHost = host.endsWith('.vercel.app');
 
 // Production uses the production API directly. Vercel previews are intentionally isolated:
