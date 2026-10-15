@@ -241,3 +241,35 @@ def test_native_beta_payment_rejects_live_keys(env, monkeypatch):
 def test_native_beta_supports_restricted_test_key(env):
     env.stripe.api_key = 'rk_test_fixture'
     assert env.client.get('/payments/native/config').json()['enabled'] is True
+
+
+def test_qa_native_google_never_falls_back_to_production(env, monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'qa')
+    monkeypatch.delenv('QA_GOOGLE_CLIENT_ID', raising=False)
+    config = env.client.get('/auth/native/config').json()
+    assert config['google_enabled'] is False
+    assert config['google_web_client_id'] == ''
+    assert sign_in(env).status_code == 503
+    env.verify.assert_not_awaited()
+
+
+def test_qa_native_google_uses_explicit_qa_audience(env, monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'qa')
+    monkeypatch.setenv('QA_GOOGLE_CLIENT_ID', 'qa-web-client')
+    monkeypatch.setenv('QA_GOOGLE_IOS_CLIENT_ID', 'qa-customer-ios')
+    monkeypatch.setenv('QA_GOOGLE_DRIVER_IOS_CLIENT_ID', 'qa-driver-ios')
+    config = env.client.get('/auth/native/config').json()
+    assert config == {'google_enabled': True, 'google_web_client_id': 'qa-web-client', 'google_ios_client_id': 'qa-customer-ios'}
+    assert env.client.get('/auth/native/config?client=driver').json()['google_ios_client_id'] == 'qa-driver-ios'
+    assert sign_in(env).status_code == 200
+    env.verify.assert_awaited_once_with('verified-token', 'qa-web-client')
+
+
+def test_qa_google_link_still_verifies_identity(env, monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'qa')
+    monkeypatch.setenv('QA_GOOGLE_CLIENT_ID', 'qa-web-client')
+    env.verify.side_effect = commerce.HTTPException(401, 'Invalid audience')
+    result = env.client.post('/auth/google/link', json={'identity_token': 'wrong-audience-token'})
+    assert result.status_code == 401
+    assert not env.db.raw.users.find_one({'_id': env.uid}).get('google_sub')
+    env.verify.assert_awaited_once_with('wrong-audience-token', 'qa-web-client')
