@@ -22,7 +22,7 @@ type Props = {
   vehicleEtas?: Record<string, number>; vehicle: string; price: number | null; nearest: number | null; payment: any; methods: any[];
   waitingPolicy: any; waitingAccepted: boolean; busy: boolean; canReview: boolean; canBook: boolean;
   error: string; firstName: string; initials: string; places: any[]; placesIssue: boolean;
-  locationReady: boolean; onStage: (stage: BookingStage) => void; onReview: (value: boolean) => void;
+  locationReady: boolean; locationHint?: string; onStage: (stage: BookingStage) => void; onReview: (value: boolean) => void;
   onVehicle: (type: string) => void; onSearch: (target: 'pickup' | 'dropoff') => void;
   onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void; onNotifications?: () => void; onSchedule?: () => void;
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void; onConsent: () => void;
@@ -59,7 +59,7 @@ export function CustomerBookingView(p: Props) {
         {p.places.slice(0, 3).map((place, i) => <Pressable key={place.id || `${place.name}-${i}`} testID={`quick-${place.label || i}`} onPress={() => p.onPlace(place)} accessibilityRole="button" style={styles.chip}><V10Icon name={place.label === 'Hjem' ? 'home' : place.label === 'Jobb' ? 'work' : 'clock'} size={18} /><Text style={v10.secondary} numberOfLines={1}>{place.label || place.name}</Text></Pressable>)}
         {!p.places.length && <Pressable testID="home-add-place" onPress={p.onPlaces} style={styles.chip}><V10Icon name="plus" size={18} /><Text style={v10.secondary}>Legg til fast sted</Text></Pressable>}
       </ScrollView>
-      {!p.locationReady ? <Pressable testID="home-location-required" onPress={() => p.onSearch('pickup')} style={{ paddingTop: 12 }}><Text style={v10.secondary}>Velg hentested eller del posisjonen din.</Text></Pressable> : p.availability}
+      {!p.locationReady ? <Pressable testID="home-location-required" accessibilityRole="button" onPress={() => p.onSearch('pickup')} style={{ paddingTop: 12 }}><Text style={v10.secondary}>{p.locationHint || 'Velg hentested eller del posisjonen din.'}</Text><Text style={[v10.body, { marginTop: 6 }]}>Velg hentested manuelt</Text></Pressable> : p.availability}
       {p.placesIssue ? <Pressable testID="home-places-retry" onPress={p.onRetryPlaces}><Text testID="home-places-error" style={[v10.caption, { marginTop: 8 }]}>Kunne ikke oppdatere faste steder. Prøv igjen.</Text></Pressable> : null}{error}</>, true)}
   </>;
   return <><View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20 }}><Tool id="booking-back" icon="chevL" label="Tilbake" onPress={back} target={p.mapBlurTarget} /></View>
@@ -70,6 +70,7 @@ export function CustomerBookingView(p: Props) {
       {error}<V10Action testID="booking-confirm" label="Bekreft og bestill" disabled={!p.canBook} busy={p.busy} onPress={p.onBook} />
     </> : p.stage === 'route' ? <><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={styles.metrics}><Metric label="Kjøretid" value={finiteMetric(p.estimate?.duration_min, 'min')} /><Metric label="Distanse" value={finiteMetric(p.estimate?.distance_km, 'km')} /><Metric label="Ankomst" value={arrivalTime(p.estimate?.duration_min, p.quotedAt)} /></View>
+      {!p.locationReady ? <Pressable testID="route-manual-pickup" accessibilityRole="button" onPress={() => p.onSearch('pickup')} style={{ marginBottom: 12 }}><Text style={v10.secondary}>{p.locationHint || 'Velg hentested for å beregne rute og pris.'}</Text><Text style={[v10.body, { marginTop: 6 }]}>Velg hentested manuelt</Text></Pressable> : null}
       {error}<View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 56 }}><Pressable testID="route-adjust-pickup" accessibilityRole="button" accessibilityLabel="Juster hentested" onPress={() => p.onSearch('pickup')} style={{ height: 56, borderRadius: 16, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="pickup" /></Pressable></View><View style={{ flex: 1 }}><V10Action testID="route-choose-vehicle" label="Velg bil" disabled={!p.canReview} onPress={() => p.onStage('vehicles')} /></View></View>
     </> : p.stage === 'vehicles' ? <><View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 12 }}><Text style={[v10.heading, { flex: 1 }]}>Velg bil</Text><Text style={v10.caption} numberOfLines={1}>Til {p.destination.name} · {finiteMetric(p.estimate?.duration_min, 'min')}</Text></View>
       <View style={{ gap: 6 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type}

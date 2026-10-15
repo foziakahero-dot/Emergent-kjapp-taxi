@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { carsApi } from './api';
-import { Availability, CarAvailabilitySearch } from './carAvailability';
+import { Availability, CarAvailabilitySearch, visibleCars } from './carAvailability';
 
 export function useAvailableCars({ enabled, lat, lng, vehicleType, specialNeeds = [], continuous = false }: {
   enabled: boolean; lat?: number; lng?: number; vehicleType?: string; specialNeeds?: string[]; continuous?: boolean;
@@ -13,7 +13,7 @@ export function useAvailableCars({ enabled, lat, lng, vehicleType, specialNeeds 
   const needsKey = [...specialNeeds].sort().join(',');
   useFocusEffect(useCallback(() => {
     if (!enabled || lat == null || lng == null) { setState({ cars: [], phase: 'loading', issue: null, attempt: 0, nextAt: null }); return; }
-    const next = new CarAvailabilitySearch(() => carsApi.nearby(lat, lng, vehicleType, needsKey ? needsKey.split(',') : []), setState, continuous);
+    const next = new CarAvailabilitySearch(() => carsApi.nearby(lat, lng, vehicleType, needsKey ? needsKey.split(',') : []), state => { setNow(Date.now()); setState(state); }, continuous);
     search.current = next;
     setState(next.state);
     next.setActive(AppState.currentState === 'active');
@@ -25,6 +25,9 @@ export function useAvailableCars({ enabled, lat, lng, vehicleType, specialNeeds 
     const timer = setInterval(() => { if (AppState.currentState === 'active') setNow(Date.now()); }, 1000);
     return () => clearInterval(timer);
   }, [enabled]);
-  return { ...state, now, seconds: state.nextAt ? Math.max(0, Math.ceil((state.nextAt - now) / 1000)) : null,
+  const cars = visibleCars(state, now);
+  return { ...state, cars, phase: state.phase === 'available' && !cars.length ? 'waiting' as const : state.phase,
+    issue: state.phase === 'available' && !cars.length ? 'empty' as const : state.issue,
+    now, seconds: state.nextAt ? Math.max(0, Math.ceil((state.nextAt - now) / 1000)) : null,
     retry: useCallback(() => search.current?.retry(), []) };
 }

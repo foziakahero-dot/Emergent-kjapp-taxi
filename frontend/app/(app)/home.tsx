@@ -6,13 +6,14 @@ import { v10 } from '@/src/components/V10UI';
 import { CustomerBookingView, confirmedPaymentMethod, confirmedWaitingPolicy, type BookingStage } from '@/src/components/CustomerBookingView';
 import { recentDestinations } from '@/src/lib/recentPlaces';
 import { validPosition } from '@/src/lib/carAvailability';
+import { readPickupLocation, locationIssueText } from '@/src/lib/pickupLocation';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,7 +47,7 @@ export default function Home() {
   const [selectedPickup, setSelectedPickup] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const pickupPoint = selectedPickup || loc;
   const [pickupLabel, setPickupLabel] = useState('Finner posisjonen din…');
-  const [locDenied, setLocDenied] = useState(false);
+  const [locationHint, setLocationHint] = useState('');
   const [locationReady, setLocationReady] = useState(false);
   const [featured, setFeatured] = useState<any[]>([]);
   const [dropoff, setDropoff] = useState<{ name: string; lat: number; lng: number } | null>(null);
@@ -139,31 +140,26 @@ export default function Home() {
     if (requestPermission) locationRequest.current = true;
     const sequence = ++locationSequence.current;
     try {
-      const { status } = requestPermission
-        ? await Location.requestForegroundPermissionsAsync()
-        : await Location.getForegroundPermissionsAsync();
+      const result = await readPickupLocation(Location, requestPermission);
       if (sequence !== locationSequence.current) return false;
-      if (status !== 'granted') {
+      if (!result.point) {
         setLocationReady(false);
-        setLocDenied(true);
-        setPickupLabel('Posisjon ikke tilgjengelig');
+        setLocationHint(locationIssueText[result.issue || 'unavailable']);
+        setPickupLabel('Velg hentested');
         return false;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      if (sequence !== locationSequence.current) return false;
-      if (!validPosition(p)) throw new Error('Ugyldig posisjon');
+      const p = result.point;
       setLoc(p);
       setLocationReady(true);
-      setLocDenied(false);
+      setLocationHint('');
       setPickupLabel('Din posisjon');
       placesApi.reverse(p.lat, p.lng).then((r) => { if (sequence === locationSequence.current && r?.label) setPickupLabel(r.label); }).catch(() => {});
       return true;
     } catch {
       if (sequence !== locationSequence.current) return false;
       setLocationReady(false);
-      setLocDenied(true);
-      setPickupLabel('Posisjon ikke tilgjengelig');
+      setLocationHint(locationIssueText.unavailable);
+      setPickupLabel('Velg hentested');
       return false;
     } finally { if (requestPermission) locationRequest.current = false; }
   }, []);
@@ -175,6 +171,13 @@ export default function Home() {
     placesApi.list(true).then((r) => { if (current) setFeatured(r.places || []); }).catch(() => {});
     return () => { current = false; locationSequence.current++; };
   }, [refreshLocation]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active' && !selectedPickup) void refreshLocation(false);
+    });
+    return () => subscription.remove();
+  }, [refreshLocation, selectedPickup]);
 
   useEffect(() => {
     let current = true;
@@ -210,7 +213,7 @@ export default function Home() {
     if (bookingLock.current || activeTrip || !activeTripChecked || activeTripOffline) return;
     if (!dropoff) return;
     if (!locationReady && !selectedPickup) {
-      setError('SNAR trenger en fersk posisjon før du kan bestille tur.');
+        setError('Velg hentested manuelt, eller del posisjonen din før du bestiller.');
       return;
     }
     if (!estimate || priceFor(selType) == null) {
@@ -325,7 +328,7 @@ export default function Home() {
         nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
-        locationReady={Boolean(locationReady || selectedPickup)} stops={stops}
+        locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
         onPlace={place => { const destination = normalizeSearchPlace(place); if (destination) { setQuote(null); setMapFocusRevision(value => value + 1); setDropoff(destination); } }}
@@ -355,6 +358,7 @@ export default function Home() {
             setQuote(null);
             setMapFocusRevision(value => value + 1);
             if (searchTarget === 'pickup') {
+              locationSequence.current++;
               setSelectedPickup(place);
             } else if (searchTarget === 'stop') {
               setStops((prev) => prev.length < 3 ? [...prev, place] : prev);

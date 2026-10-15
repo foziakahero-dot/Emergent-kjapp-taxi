@@ -1,6 +1,5 @@
 import { FloatingTabBar, TabBarVisibilityProvider, TabScene } from '@/src/components/FloatingTabBar';
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -21,7 +20,7 @@ export default function CustomerTabsLayout() {
   return (
     <TabBarVisibilityProvider>
     <Tabs
-      screenLayout={({ children, route }) => <TabScene routeKey={route.key}><View style={{ flex: 1, marginBottom: route.name === 'home' ? 0 : 112 }}>{children}</View></TabScene>}
+      screenLayout={({ children, route }) => <TabScene routeKey={route.key}>{children}</TabScene>}
       tabBar={props => <FloatingTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >

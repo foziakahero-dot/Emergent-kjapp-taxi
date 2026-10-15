@@ -487,11 +487,18 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   tree = await mount(CustomerMessages); assert.match(text(tree), /Kunne ikke hente reisestatus/); assert.doesNotMatch(text(tree), /My confirmed message/); await unmount(tree);
 
   const CustomerHistory = load('frontend', 'app/(app)/history.tsx').default;
-  queryData = { trips: { data: { trips: [{ trip_id: 'finished', status: 'completed', payment_status: 'paid', created_at: new Date().toISOString(), dropoff_address: 'Destination', price: 184 }, { trip_id: 'cancelled', status: 'cancelled', created_at: new Date().toISOString(), price: 999 }] } }, 'customer-active-trip': { data: { trip_id: 'live-trip', status: 'in_trip', dropoff_address: 'Live destination' } } };
+  // Match GET /api/trips: the production route returns a top-level array.
+  queryData = { trips: { data: [{ trip_id: 'finished', status: 'completed', payment_status: 'paid', created_at: new Date().toISOString(), dropoff_address: 'Destination', price: 184 }, { trip_id: 'cancelled', status: 'cancelled', created_at: new Date().toISOString(), price: 999 }, { trip_id: 'hidden-live', status: 'searching', created_at: new Date().toISOString() }] }, 'customer-active-trip': { data: { trip_id: 'live-trip', status: 'in_trip', dropoff_address: 'Live destination' } } };
   tree = await mount(CustomerHistory);
   assert.doesNotMatch(text(tree), /999 kr/);
+  assert.match(text(tree), /Destination|184 kr/);
+  assert.equal(button(tree, 'trip-hidden-live'), undefined);
   await act(async () => button(tree, 'trip-finished').props.onPress()); assert.equal(navigation.at(-1)[1], '/customer-trip/finished');
   await act(async () => button(tree, 'history-active-trip').props.onPress()); assert.equal(navigation.at(-1)[1], '/booking/live-trip'); await unmount(tree);
+  queryData.trips = { isError: true, data: undefined };
+  tree = await mount(CustomerHistory); assert.match(text(tree), /Kunne ikke hente turhistorikken/); await unmount(tree);
+  queryData.trips = { data: [] };
+  tree = await mount(CustomerHistory); assert.match(text(tree), /Ingen turer ennå/); await unmount(tree);
 
   const {osloWeekStart,thisOsloWeek}=load('frontend','src/lib/osloCalendar.ts');
   assert.equal(osloWeekStart(Date.parse('2026-10-11T22:30:00Z')),'2026-10-12','Oslo has already entered Monday while UTC remains Sunday');
@@ -666,12 +673,13 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const quote = { distance_km: 3.4, duration_min: 11, pricing_version: 7, geometry: { coordinates: [[10.74, 59.91], [10.75, 59.92]] }, options: [{ vehicle_type: 'ai-first', price: 184, waiting_policy: { token: 'waiting-policy', free_minutes: 5, per_minute: 4, max_fee: 40 } }, { vehicle_type: 'trygg', price: 240 }, { vehicle_type: 'premium', price: 300 }] };
   let bookingRequests = [], customerActive = null; const requesting = deferred();
   user = { id: 'customer-home', role: 'user', fullName: 'Actual Customer' };
-  Object.assign(stubs['expo-location'], { getForegroundPermissionsAsync: async () => ({ status: 'granted' }) });
+  Object.assign(stubs['expo-location'], { getForegroundPermissionsAsync: async () => ({ status: 'granted' }), hasServicesEnabledAsync: async () => true });
   stubs['@/src/lib/api'].placesApi = { list: async () => ({ places: [] }), reverse: async () => ({ label: 'Actual pickup' }), search: async () => ({ results: [] }) };
   stubs['@/src/lib/api'].mePlacesApi.list = async () => ({ places: [{ label: 'Hjem', name: 'Actual destination', lat: 59.92, lng: 10.75 }] });
   stubs['@/src/lib/api'].paymentApi.list = async () => [card];
   Object.assign(stubs['@/src/lib/api'].tripsApi, { active: async () => customerActive, list: async () => [], estimate: async () => quote, request: async body => { bookingRequests.push(body); return requesting.promise; } });
   const CustomerHome = load('frontend', 'app/(app)/home.tsx').default;
+  queryData['customer-active-trip'] = { data: null };
   tree = await mount(CustomerHome);
   assert.equal(supplyConfigs.at(-1).vehicleType,undefined,'Home must show all real vehicle classes instead of only Standard');
   assert.equal(tree.root.findByType('Map').props.cars.length,3);
@@ -713,6 +721,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(helpers.confirmedPaymentMethod([{ ...card, stripe_payment_method_id: null }]), undefined);
   assert.equal(helpers.confirmedPaymentMethod([card, { ...card, id: 'default', is_default: true, created_at: '2026-01-01' }]).id, 'default');
   customerActive = { trip_id: 'existing-trip', status: 'in_trip' };
+  queryData['customer-active-trip'] = { data: customerActive };
   tree = await mount(CustomerHome);
   assert.equal(tree.root.findAllByProps({ testID: 'home-where-to' }).length, 0, 'An active trip cannot display a new booking flow'); await unmount(tree);
   // Customer 05/06: full map viewport, dock events and stale private photo/location responses.
@@ -723,8 +732,10 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const CustomerTabs = load('frontend','app/(app)/_layout.tsx').default;
   tree = await mount(CustomerTabs);
   const sceneLayout = tree.root.findByType('Tabs').props.screenLayout;
-  assert.equal(sceneLayout({route:{key:'home',name:'home'},children:null}).props.children.props.style.marginBottom,0,'Home map must extend below its floating dock');
-  assert.equal(sceneLayout({route:{key:'profile',name:'profile'},children:null}).props.children.props.style.marginBottom,112,'Scrollable profile keeps dock clearance');
+  for (const name of ['home','history','assist','messages','profile']) {
+    const scene = sceneLayout({route:{key:name,name},children:'screen-content'});
+    assert.equal(scene.props.children,'screen-content','Every scene fills its blur target; scroll clearance belongs inside each screen');
+  }
   await unmount(tree);
   const { FloatingTabBar } = stubs['@/src/components/FloatingTabBar'];
   const routes = ['home','history','assist','messages','profile','wallet'].map(name=>({key:name,name}));
@@ -746,6 +757,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async()=>photoRequests[1].resolve({uri:'private-current-photo'}));assert.equal(tree.root.findByType('Image').props.source.uri,'private-current-photo');
   await act(async()=>tree.root.findByType('Image').props.onError());assert.match(text(tree),/B/);assert.equal(tree.root.findAllByType('Image').length,0);await unmount(tree);
   customerActive=null;const initialReverse=deferred();let reverseCount=0;
+  queryData['customer-active-trip'] = { data: null };
   stubs['@/src/lib/api'].placesApi.reverse=async()=>++reverseCount===1?initialReverse.promise:{label:'Newest pickup'};
   tree=await mount(CustomerHome);
   const beforeLocationPrompts=permissionCalls;const locationPrompt=deferred();permissionResult=()=>locationPrompt.promise;
@@ -798,7 +810,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   // Customer 09/10: exact class names, invalid prices, canonical reservation and artwork fallback.
   assert.equal(helpers.validVehiclePrice(NaN),false);assert.equal(helpers.validVehiclePrice(-1),false);assert.equal(helpers.validVehiclePrice('184'),false);assert.equal(helpers.validVehiclePrice(184),true);
   assert.equal(helpers.cardExpiryLabel({exp_month:8,exp_year:2028}),'Utløper 08/28');assert.equal(helpers.cardExpiryLabel({exp_month:13,exp_year:2028}),null);
-  customerActive={trip_id:'real-search',status:'searching',vehicle_type:'premium',pickup_lat:59.91,pickup_lng:10.74};tree=await mount(CustomerHome);assert.equal(supplyConfigs.at(-1).vehicleType,'premium','A real booked search retains its canonical class');await unmount(tree);customerActive=null;
+  customerActive={trip_id:'real-search',status:'searching',vehicle_type:'premium',pickup_lat:59.91,pickup_lng:10.74};queryData['customer-active-trip']={data:customerActive};tree=await mount(CustomerHome);assert.equal(supplyConfigs.at(-1).vehicleType,'premium','A real booked search retains its canonical class');await unmount(tree);customerActive=null;queryData['customer-active-trip']={data:null};
   stubs['expo-image']={Image:'CategoryImage'};
   const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
   tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));

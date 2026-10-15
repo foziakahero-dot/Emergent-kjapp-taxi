@@ -14,6 +14,7 @@ import { CustomerTripView } from '@/src/components/CustomerTripView';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -40,6 +41,7 @@ export default function BookingFlow() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [minimized, setMinimized] = useState(false);
   const [pickupGuide, setPickupGuide] = useState(false);
   const mapBlurTarget = useRef<View>(null);
@@ -72,6 +74,12 @@ export default function BookingFlow() {
     cancelPhase.current = 'idle'; setCancelBusy(false);
   }, [tripId]);
   const routeIsCurrent = () => mounted.current && activeRoute.current === tripId;
+  const minimizeTrip = () => {
+    if (!trip || !LIVE_TRIP_STATUSES.includes(trip.status)) return;
+    if (trip.user_id) queryClient.setQueryData(['customer-active-trip', trip.user_id], trip);
+    setMinimized(true);
+    router.replace('/(app)/home');
+  };
   const nav = useRef(false);
   const searching = trip?.trip_id === tripId && ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
   const available = useAvailableCars({ enabled: searching, lat: trip?.pickup_lat, lng: trip?.pickup_lng,
@@ -291,7 +299,7 @@ export default function BookingFlow() {
       /></BlurTargetView>
 
       {trip.status === 'at_pickup' ? <View testID="pickup-map-dim" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: .25 }]} /> : null}
-      {LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
+      {LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={minimizeTrip} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
       {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View testID="booking-minimized-card" onLayout={e => setMinimizedHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
         <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
@@ -303,7 +311,7 @@ export default function BookingFlow() {
         onGuideChange={setPickupGuide}
         onInside={value => void setWaitingInside(value)} onCall={callDriver} onChat={() => router.push('/(app)/messages')}
         onShare={() => void shareTrip()} onSafety={() => setSafetyOpen(true)} onCancel={() => void cancel()}
-        onMinimize={() => setMinimized(true)} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
+        onMinimize={minimizeTrip} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
         onWalk={openWalkingDirections} onReady={() => void notifyReady()} onAuthorize={() => void authorize()}
         onPhotoError={() => setDriverPhoto(current => current?.key === photoKey ? null : current)} onSheetLayout={setMatchingHeight}
       />}

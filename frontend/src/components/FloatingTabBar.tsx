@@ -6,6 +6,7 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { Icon } from '@/src/components/Icon';
+import { V10Glass } from '@/src/components/V10Glass';
 import { colors, font, useColorTheme } from '@/src/theme';
 
 type Target = RefObject<View | null>;
@@ -26,7 +27,7 @@ export function TabScene({ routeKey, children }: { routeKey: string; children: R
   const target = useRef<View>(null);
   const { registerTarget } = useContext(Visibility);
   useEffect(() => { registerTarget(routeKey, target); return () => registerTarget(routeKey); }, [registerTarget, routeKey]);
-  return <BlurTargetView ref={target} style={{ flex: 1 }}>{children}</BlurTargetView>;
+  return <BlurTargetView ref={target} style={{ flex: 1, backgroundColor: colors.bg }}>{children}</BlurTargetView>;
 }
 export function useHideTabBar(hidden: boolean) {
   const { setHidden } = useContext(Visibility);
@@ -47,7 +48,7 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
   };
   return <View style={{ position: 'absolute', left: 16, right: 16, bottom: driver ? insets.bottom + 16 : Math.max(22, insets.bottom + 6), borderRadius: 24, boxShadow: colors.elevation2 }}>
     <View style={{ height: 66, overflow: 'hidden', borderRadius: 24, borderWidth: 1, borderColor: colors.glassLine, backgroundColor: colors.glass, paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' }}>
-      <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint={theme.effective === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} pointerEvents="none" />
+      {driver ? <BlurView blurTarget={targets[focused.key]} blurMethod={targets[focused.key] ? 'dimezisBlurViewSdk31Plus' : 'none'} intensity={44} tint={theme.effective === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} pointerEvents="none" /> : <V10Glass target={targets[focused.key]} />}
       {visible.map(route => {
         const options = descriptors[route.key].options;
         const selected = focused.key === route.key;
@@ -60,11 +61,11 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
             if (!selected && !event.defaultPrevented) navigation.navigate(route.name, route.params);
           }} onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
           style={({ pressed }) => ({ flex: driver ? 1 : undefined, width: driver ? undefined : isAssistant ? 52 : 58, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 3, transform: [{ scale: pressed ? (driver ? .97 : .9) : 1 }] })}>
-          {selected && !driver && !isAssistant ? <View style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: colors.accent }} /> : null}
           <View style={isAssistant ? { width: 52, height: 52, borderRadius: 17, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' } : undefined}>
             {driver ? <Icon name={icons[route.name] || 'user'} size={20} color={color} /> : <V10Icon name={({home:'home',history:'activity',assist:'ai',messages:'message',profile:'profile'} as Record<string,string>)[route.name] || 'profile'} size={isAssistant ? 24 : 22} color={color} />}
           </View>
           {!isAssistant ? <Text style={{ color: driver ? (selected ? colors.accent : colors.textMuted) : color, fontFamily: font.medium, fontSize: 10.5, lineHeight: 14 }}>{label}</Text> : null}
+          {selected && !driver ? <View pointerEvents="none" style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: colors.accent }} /> : null}
         </Pressable>;
       })}
     </View>
