@@ -19,6 +19,9 @@ from qa_safety import validate_qa_stripe_configuration
 
 
 GROUPS = {
+    "resend": [("RESEND_API_KEY", "Resend API-nøkkel", True),
+               ("RESEND_FROM_EMAIL", "Verifisert avsenderadresse", False),
+               ("EMAIL_PROVIDER", "Aktiv e-posttjeneste: resend eller sendgrid", False)],
     "stripe": [("STRIPE_SECRET_KEY", "Hemmelig API-nøkkel", True),
                ("STRIPE_PUBLISHABLE_KEY", "Publiserbar API-nøkkel", False),
                ("STRIPE_WEBHOOK_SECRET", "Webhook-signeringsnøkkel", True)],
@@ -156,6 +159,16 @@ class IntegrationSettings:
                 from email_validator import validate_email, EmailNotValidError
                 try:
                     validate_email(values["SENDER_EMAIL"], check_deliverability=False)
+                except EmailNotValidError:
+                    raise HTTPException(400, "Oppgi en gyldig, verifisert avsenderadresse.") from None
+            if group == "resend":
+                if not values["RESEND_API_KEY"].startswith("re_"):
+                    raise HTTPException(400, "Oppgi en Resend API-nøkkel.")
+                if values["EMAIL_PROVIDER"] not in ("resend", "sendgrid"):
+                    raise HTTPException(400, "Velg resend eller sendgrid som e-posttjeneste.")
+                from email_validator import validate_email, EmailNotValidError
+                try:
+                    validate_email(values["RESEND_FROM_EMAIL"], check_deliverability=False)
                 except EmailNotValidError:
                     raise HTTPException(400, "Oppgi en gyldig, verifisert avsenderadresse.") from None
             if group == "fcm":
