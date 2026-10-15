@@ -5,7 +5,7 @@ import { Text } from './Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { colors, font, useColorTheme } from '@/src/theme';
 
-export const LIVE_TRIP_STATUSES = ['searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip'];
+export const LIVE_TRIP_STATUSES = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip'];
 export function ActiveTripCard({ trip, onOpen, offline = false }: { trip: any; onOpen: () => void; offline?: boolean }) {
   useColorTheme();
   const labels: Record<string, string> = { payment_authorizing: 'Godkjenn kortreservasjonen', searching: 'Søker sjåfør', booking: 'Bestiller', driver_on_way: 'Sjåfør på vei', at_pickup: 'Sjåføren er fremme', in_trip: 'Turen pågår', arrived: 'Se kvittering og betaling' };
