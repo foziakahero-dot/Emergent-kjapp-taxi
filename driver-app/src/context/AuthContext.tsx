@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { googleIdentity, appleIdentity } from '@/src/lib/socialSignIn';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
@@ -30,7 +30,7 @@ export type User = {
 } | null;
 
 type AuthCtx = {
-  user: User | undefined; // undefined = loading, null = signed out
+  user: User | undefined;
   login: (identifier: string, password: string) => Promise<any>;
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
@@ -42,6 +42,45 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx>(null as any);
 
 const DRIVER_INSTALLATION_KEY = 'kjapp_driver_installation_id_v1';
+const BACKEND_WAKE_RETRY_MS = [1200, 2500, 5000];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function authStatus(error: any): number | undefined {
+  const status = Number(error?.response?.status);
+  return Number.isFinite(status) ? status : undefined;
+}
+
+function isTransientBackendError(error: any): boolean {
+  const status = authStatus(error);
+  return (
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    error?.code === 'ECONNABORTED' ||
+    error?.code === 'ERR_NETWORK' ||
+    (!error?.response && Boolean(error?.request))
+  );
+}
+
+function isRejectedSession(error: any): boolean {
+  const status = authStatus(error);
+  return status === 401 || status === 403;
+}
+
+async function withBackendWakeRetry<T>(request: () => Promise<T>): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= BACKEND_WAKE_RETRY_MS.length; attempt += 1) {
+    try {
+      return await request();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientBackendError(error) || attempt === BACKEND_WAKE_RETRY_MS.length) throw error;
+      await sleep(BACKEND_WAKE_RETRY_MS[attempt]);
+    }
+  }
+  throw lastError;
+}
 
 async function getDriverInstallationId(): Promise<string> {
   const existing = await storage.getItem(DRIVER_INSTALLATION_KEY);
@@ -69,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      const u = await authApi.me();
+      const u = await withBackendWakeRetry(() => authApi.me());
       if (epoch !== sessionEpoch.current) return;
       if (u?.role !== 'driver' || u?.approved !== true) {
         await storage.removeItem(TOKEN_KEY);
@@ -77,9 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setUser(u);
-    } catch {
+    } catch (error) {
       if (epoch !== sessionEpoch.current) return;
-      await storage.removeItem(TOKEN_KEY);
+      if (isRejectedSession(error)) {
+        await storage.removeItem(TOKEN_KEY);
+      }
       setUser(null);
     }
   }, []);
@@ -103,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const epoch = ++sessionEpoch.current;
     const device_id = await getDriverInstallationId();
     if (epoch !== sessionEpoch.current) return null;
-    const res = await authApi.login({ email: identifier, password, client: 'driver', device_id });
+    const res = await withBackendWakeRetry(() =>
+      authApi.login({ email: identifier, password, client: 'driver', device_id }),
+    );
     if (epoch !== sessionEpoch.current) return null;
     if (res?.twofa_required) return res;
     return persistSession(res, epoch);
@@ -112,18 +155,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
     const epoch = ++sessionEpoch.current;
     const identity = provider === 'google'
-      ? await googleIdentity(await authApi.nativeConfig()) : await appleIdentity();
+      ? await googleIdentity(await withBackendWakeRetry(() => authApi.nativeConfig()))
+      : await appleIdentity();
     if (!identity || epoch !== sessionEpoch.current) return null;
     const device_id = await getDriverInstallationId();
     if (epoch !== sessionEpoch.current) return null;
-    const res = await authApi.nativeSignIn(provider, identity, device_id);
+    const res = await withBackendWakeRetry(() => authApi.nativeSignIn(provider, identity, device_id));
     return persistSession(res, epoch);
   };
+
   const signInWithGoogle = () => socialLogin('google');
   const signInWithApple = () => socialLogin('apple');
 
   const acceptLegal = async (): Promise<User> => {
-    const updated = await authApi.acceptLegal('2026-09');
+    const updated = await withBackendWakeRetry(() => authApi.acceptLegal('2026-09'));
     setUser(updated);
     return updated;
   };
