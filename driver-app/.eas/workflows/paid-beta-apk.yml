@@ -1,0 +1,10 @@
+name: SNAR Driver Paid Beta APK
+
+# Manual EAS workflow. No automatic GitHub push trigger.
+jobs:
+  build_driver_paid_beta_apk:
+    name: Build SNAR Driver Paid Beta APK
+    type: build
+    params:
+      platform: android
+      profile: qa
