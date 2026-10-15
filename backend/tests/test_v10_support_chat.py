@@ -1,5 +1,6 @@
 """Execute the actual support/AI endpoints without provider calls or real tickets."""
 import ast
+import logging
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,8 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from typing import Optional
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ai_configuration import provider_chat_session
 
 class HTTPException(Exception):
     def __init__(self, status_code, detail):
@@ -22,7 +25,8 @@ def endpoints(key='fixture-key'):
             nodes.append(node)
     chats = SimpleNamespace(insert_one=AsyncMock())
     tickets = SimpleNamespace(insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id='confirmed-ticket')))
-    context = {'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'ChatRequest':object, 'PublicSupportRequest':object,
+    context = {'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'APP_ENV':'qa', 'provider_chat_session':provider_chat_session,
+               'logging':logging, 'ChatRequest':object, 'PublicSupportRequest':object,
                'Request':object, 'Depends':lambda value:None, 'get_current_user':None,
                'HTTPException':HTTPException, '_enforce_rate_limit':AsyncMock(),
                'db':SimpleNamespace(chat_messages=chats, support_tickets=tickets),

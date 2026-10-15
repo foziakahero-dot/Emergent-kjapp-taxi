@@ -8,6 +8,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
+from bson.errors import InvalidId
 from pymongo.errors import DuplicateKeyError
 from fastapi import Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -267,6 +268,21 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     async def native_config():
         return payment_config()
 
+    @api.post("/payment-methods/{pm_id}/default")
+    async def set_default_card(pm_id: str, current=Depends(require_customer)):
+        try:
+            oid = ObjectId(pm_id)
+        except InvalidId:
+            raise HTTPException(400, "Ugyldig betalingsmåte") from None
+        method = await db.payment_methods.find_one({"_id": oid, "user_id": current["id"],
+            "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
+        if not method:
+            raise HTTPException(404, "Fant ikke verifisert betalingsmåte")
+        # A single-document pointer prevents two concurrent selections from
+        # creating multiple default cards. Existing trip reservations stay fixed.
+        await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"default_payment_method_id": pm_id}})
+        return {"default_payment_method_id": pm_id}
+
     async def _stripe_customer_for_user(current):
         user = await db.users.find_one({"_id": ObjectId(current["id"])})
         if not user:
@@ -278,6 +294,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                 email=user.get("email"),
                 name=user.get("fullName") or user.get("email"),
                 metadata={"user_id": current["id"]},
+                idempotency_key=f"snar-customer-v1-{current['id']}",
             )
             customer_id = customer.id
             await db.users.update_one(
@@ -296,7 +313,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         setup = await asyncio.to_thread(
             stripe.SetupIntent.create,
             customer=customer_id,
-            payment_method_types=["card"],
+            automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
             usage="off_session",
             metadata={"user_id": current["id"], "source": "kjapp_native_setup"},
         )
@@ -304,7 +321,10 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.get("/payments/native/setup-intent/{setup_intent_id}")
     async def native_setup_status(setup_intent_id: str, current=Depends(require_customer)):
-        customer_id = await _stripe_customer_for_user(current)
+        user = await db.users.find_one({"_id": ObjectId(current["id"])}) or {}
+        customer_id = user.get("stripe_customer_id")
+        if not customer_id:
+            raise HTTPException(404, "Fant ikke kortverifiseringen")
         try:
             setup = await asyncio.to_thread(stripe.SetupIntent.retrieve, setup_intent_id)
         except Exception:
@@ -315,6 +335,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             return {"ready": False, "status": setup.get("status")}
 
         pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, setup["payment_method"])
+        if pm.get("type") != "card" or str(pm.get("customer") or "") != customer_id:
+            raise HTTPException(409, "Kortet er ikke bekreftet for denne kunden")
         card = pm.get("card") or {}
         pm_id = pm.get("id")
         existing = await db.payment_methods.find_one({
@@ -328,11 +350,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                     "setup_status": "succeeded",
                     "verified": True,
                     "stripe_setup_intent_id": setup_intent_id,
+                    "wallet": (card.get("wallet") or {}).get("type"),
                 }},
             )
             existing["id"] = str(existing["_id"])
             existing.pop("_id", None)
-            existing.update({"setup_status": "succeeded", "verified": True, "stripe_setup_intent_id": setup_intent_id})
+            existing.update({"setup_status": "succeeded", "verified": True, "stripe_setup_intent_id": setup_intent_id,
+                "wallet": (card.get("wallet") or {}).get("type")})
             return {"ready": True, "verified": True, "card": existing}
 
         has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
@@ -348,11 +372,17 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             "stripe_setup_intent_id": setup_intent_id,
             "setup_status": "succeeded",
             "verified": True,
+            "wallet": (card.get("wallet") or {}).get("type"),
             "is_default": not has_any,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        result = await db.payment_methods.insert_one(doc)
-        doc["id"] = str(result.inserted_id)
+        query = {"user_id": current["id"], "stripe_payment_method_id": pm_id}
+        try:
+            await db.payment_methods.update_one(query, {"$setOnInsert": doc}, upsert=True)
+        except DuplicateKeyError:
+            pass
+        doc = await db.payment_methods.find_one(query)
+        doc["id"] = str(doc["_id"])
         doc.pop("_id", None)
         return {"ready": True, "verified": True, "card": doc}
 
@@ -427,7 +457,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                     "fleet_net": (amount_ore - fee) / 100, "settlement_model": "stripe_destination_charge",
                     "status": "initiated", "payment_status": "pending", "created_at": now}}, upsert=True)
             pi = await asyncio.to_thread(stripe.PaymentIntent.create,
-                amount=amount_ore, currency="nok", payment_method_types=["card"],
+                amount=amount_ore, currency="nok", automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
                 application_fee_amount=fee, transfer_data={"destination": destination["stripe_account_id"]},
                 metadata={"trip_id": body.trip_id, "user_id": current["id"], "source": "kjapp_native"},
                 idempotency_key=f"kjapp-native-v1-{body.trip_id}")
@@ -449,6 +479,19 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return {"payment_status": "paid" if paid else pi.get("status")}
 
     async def handle_native_webhook(event):
+        if not event.get("account") and event.get("type") == "setup_intent.succeeded":
+            setup = event["data"]["object"]
+            metadata = setup.get("metadata") or {}
+            if metadata.get("source") != "kjapp_native_setup":
+                return False
+            try:
+                user = await db.users.find_one({"_id": ObjectId(metadata.get("user_id"))})
+            except (InvalidId, TypeError):
+                return False
+            if not user:
+                return False
+            await native_setup_status(setup["id"], {"id": str(user["_id"]), "role": user.get("role")})
+            return True
         if event.get("account") or event.get("type") != "payment_intent.succeeded":
             return False
         pi = event["data"]["object"]

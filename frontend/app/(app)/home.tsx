@@ -23,6 +23,7 @@ import { colors, font, useColorTheme } from '@/src/theme';
 import { Map } from '@/src/components/Map';
 import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
+import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 import { useAuth } from '@/src/context/AuthContext';
 
 const OSLO = { lat: 59.9127, lng: 10.7461 };
@@ -76,6 +77,8 @@ export default function Home() {
   }, [dropoff]);
   const [reviewing, setReviewing] = useState(false);
   const [bookingStage, setBookingStage] = useState<BookingStage>('route');
+  const { data: wallet } = useQuery({ queryKey: ['native-wallet', user?.id], queryFn: () => nativeWalletAvailability(),
+    enabled: !!user?.id && bookingStage === 'payment' });
   useHideTabBar(Boolean(dropoff || searchOpen || reviewing));
   const [searchTarget, setSearchTarget] = useState<'pickup' | 'dropoff' | 'stop'>('dropoff');
   const [stops, setStops] = useState<any[]>([]);
@@ -117,6 +120,19 @@ export default function Home() {
     paymentApi.list().then(r => { if (sequence === methodsSequence.current) setMethods(Array.isArray(r) ? r : (r?.payment_methods || r?.methods || [])); })
       .catch(() => { if (sequence === methodsSequence.current) setMethods([]); });
   }, [user?.id]);
+
+  const setupWallet = async () => {
+    if (bookingLock.current || !wallet) return;
+    bookingLock.current = true; setBooking(true); setError('');
+    try {
+      const card = await setupNativePaymentMethod(true);
+      if (!card) return;
+      const result = await paymentApi.setDefault(card.id);
+      if (result.default_payment_method_id !== card.id) throw new Error('Betalingsmåten ble ikke bekreftet.');
+      loadMethods(); setBookingStage('vehicles');
+    } catch (error) { setError(apiError(error)); }
+    finally { bookingLock.current = false; setBooking(false); }
+  };
 
   const loadPlaces = useCallback(async () => {
     const sequence = ++placesSequence.current;
@@ -325,7 +341,7 @@ export default function Home() {
       {!activeTrip ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
-        nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
+        nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}

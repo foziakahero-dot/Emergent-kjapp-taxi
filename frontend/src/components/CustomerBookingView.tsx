@@ -6,7 +6,7 @@ import { FigmaGradient } from './FigmaGradient';
 import { V10Glass } from './V10Glass';
 import { V10CustomerAvatar } from './V10CustomerAvatar';
 import { V10Entrance } from './V10Entrance';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
@@ -28,6 +28,7 @@ type Props = {
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void; onConsent: () => void;
   onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; stops: any[];
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
+  wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
 const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', trygg: 'XL', premium: 'Premium' };
 const studioEta = (name: string, eta?: number) => typeof eta === 'number' && Number.isFinite(eta) && eta > 0 ? `${name} · estimert henting ${Math.ceil(eta)} min` : `${name} · hentetid ikke tilgjengelig`;
@@ -79,9 +80,9 @@ export function CustomerBookingView(p: Props) {
       {error}<V10Action testID="booking-review" label={`Bestill ${vehicleName} · ${kr(p.price)}`} disabled={!p.canReview} onPress={() => p.onReview(true)} />
     </> : <><Text style={[v10.heading, { marginBottom: 14 }]}>Betal med</Text>
       <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: colors.cardSubtle }}>
-        <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
+        {Platform.OS === 'ios' ? <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle={p.wallet?.kind === 'apple' ? 'Verifiser et kort med Apple Pay' : 'Ikke tilgjengelig på denne enheten'} disabled={p.busy || p.wallet?.kind !== 'apple' || !p.onWallet} onPress={() => p.wallet?.kind === 'apple' && p.onWallet?.()} /> : null}
         <PaymentChoice id="card" icon="payment" title={paymentLabel(p.payment)} subtitle={p.payment ? cardExpiryLabel(p.payment) || 'Verifisert betalingskort' : 'Verifiser et kort før bestilling'} selected={Boolean(p.payment)} onPress={() => p.payment ? p.onStage('vehicles') : p.onPayment()} />
-        <PaymentChoice id="google" icon="google" title="Google Pay" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
+        {Platform.OS === 'android' ? <PaymentChoice id="google" icon="google" title="Google Pay" subtitle={p.wallet?.kind === 'google' ? 'Verifiser et kort med Google Pay' : 'Ikke tilgjengelig på denne enheten'} disabled={p.busy || p.wallet?.kind !== 'google' || !p.onWallet} onPress={() => p.wallet?.kind === 'google' && p.onWallet?.()} /> : null}
         <PaymentChoice id="business" icon="work" title="SNAR Bedrift" subtitle="Bedriftsbetaling er ikke tilgjengelig" disabled onPress={() => {}} />
         <PaymentChoice id="vipps" icon="payment" title="Vipps" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
       </View>

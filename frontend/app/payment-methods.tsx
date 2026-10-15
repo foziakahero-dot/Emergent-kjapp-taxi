@@ -2,7 +2,6 @@ import { V10Entrance } from '@/src/components/V10Entrance';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { colors, font, useColorTheme } from '@/src/theme';
@@ -14,6 +13,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { Loader } from '@/src/components/ui';
 import { paymentApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
+import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 
 const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjappapp.no';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,6 +35,8 @@ export default function PaymentMethods() {
 
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: methodsKey, queryFn: paymentApi.list, enabled: !!user?.id });
   const { data: nativeConfig } = useQuery({ queryKey: ['native-payment-config'], queryFn: paymentApi.nativeConfig });
+  const { data: wallet } = useQuery({ queryKey: ['native-wallet', user?.id],
+    queryFn: () => nativeWalletAvailability(nativeConfig), enabled: !!user?.id && !!nativeConfig });
   const methods = data?.payment_methods || data?.methods || (Array.isArray(data) ? data : []);
 
   const verifySetup = async (sessionId: string) => {
@@ -78,22 +80,25 @@ export default function PaymentMethods() {
     finally { operation.current = false; if (current()) setBusy(false); }
   };
 
-  const addStripeCard = async () => {
+  const addStripeCard = async (walletRequired = false) => {
     if (operation.current) return;
     operation.current = true; setBusy(true);
     setNotice('');
     setError('');
     try {
+      if (Platform.OS !== 'web') {
+        const card = await setupNativePaymentMethod(walletRequired);
+        if (card) {
+          if (walletRequired) await paymentApi.setDefault(card.id);
+          await qc.invalidateQueries({ queryKey: methodsKey });
+          if (current()) setNotice('Betalingskortet er verifisert og klart for bestilling.');
+        } else if (current()) setNotice('Kortverifiseringen ble avbrutt.');
+        return;
+      }
       const { checkout_url, session_id: stripeSessionId } = await paymentApi.cardSetup(CHECKOUT_ORIGIN);
       if (!checkout_url || !stripeSessionId) throw new Error('Stripe svarte uten verifiseringslenke.');
 
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') window.location.assign(checkout_url);
-        return;
-      }
-
-      await WebBrowser.openBrowserAsync(checkout_url);
-      await verifySetup(stripeSessionId);
+      if (typeof window !== 'undefined') window.location.assign(checkout_url);
     } catch (e) {
       if (current()) setError(apiError(e));
     } finally {
@@ -101,11 +106,22 @@ export default function PaymentMethods() {
     }
   };
 
+  const selectDefault = async (id: string) => {
+    if (operation.current) return;
+    operation.current = true; setBusy(true); setError('');
+    try {
+      const result = await paymentApi.setDefault(id);
+      if (result.default_payment_method_id !== id) throw new Error('Standardkortet ble ikke bekreftet.');
+      await qc.invalidateQueries({ queryKey: methodsKey });
+      if (current()) setNotice('Standardkort for neste tur er oppdatert.');
+    } catch (error) { if (current()) setError(apiError(error)); }
+    finally { operation.current = false; if (current()) setBusy(false); }
+  };
   const primary = !isError && confirmedPaymentMethod(methods);
   const others = methods.filter((method: any) => method.id !== primary?.id);
   const verified = (method: any) => confirmedPaymentMethod([method]) != null;
   const expiry = primary && Number.isInteger(primary.exp_month) && primary.exp_month >= 1 && primary.exp_month <= 12 && Number.isInteger(primary.exp_year) ? `${String(primary.exp_month).padStart(2, '0')}/${String(primary.exp_year).slice(-2)}` : null;
-  const removeButton = (method: any) => <Pressable disabled={busy} onPress={() => void remove(method.id)} testID={`pm-remove-${method.id}`} accessibilityRole="button" accessibilityLabel={`Fjern ${method.label || 'betalingskort'} ${method.last4 || ''}`} accessibilityState={{ disabled: busy }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="x" size={18} color={colors.textMuted} /></Pressable>;
+  const removeButton = (method: any) => <Pressable disabled={busy} onPress={event => { event?.stopPropagation(); void remove(method.id); }} testID={`pm-remove-${method.id}`} accessibilityRole="button" accessibilityLabel={`Fjern ${method.label || 'betalingskort'} ${method.last4 || ''}`} accessibilityState={{ disabled: busy }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="x" size={18} color={colors.textMuted} /></Pressable>;
   return <V10Screen testID="payment-methods-screen"><V10Header title="Betalingsmåter" onBack={() => router.back()} /><V10Entrance>
     {isLoading ? <Loader /> : isError ? <V10State warning icon="wifiOff" title="Kunne ikke hente betalingsmåter" body="Dette betyr ikke at kortene dine er borte. Prøv å hente listen på nytt." action="Prøv igjen" onAction={() => void refetch()} /> : <>
       {notice ? <Text accessibilityLiveRegion="polite" testID="pm-notice" style={[v10.secondary, { marginBottom: 12, color: colors.success }]}>{notice}</Text> : null}
@@ -115,8 +131,8 @@ export default function PaymentMethods() {
         <Text style={{ color: '#fff', fontFamily: font.medium, fontSize: 20, letterSpacing: 2.4, fontVariant: ['tabular-nums'] }}>•••• •••• •••• {primary.last4 || '—'}</Text><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{expiry ? `Utløper ${expiry}` : 'Verifisert av Stripe'}</Text>
       </FigmaGradient> : <V10State icon="payment" title="Ingen verifisert betalingsmåte" body="Legg til og verifiser et kort før du bestiller en tur." />}
       {primary ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}><V10Badge tone="positive">Verifisert</V10Badge>{removeButton(primary)}</View> : null}
-      {others.length ? <V10Section title="Andre kort"><V10Group>{others.map((method: any, index: number) => <V10Row key={method.id} border={index > 0} icon="payment" title={`${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}`} subtitle={verified(method) ? 'Verifisert av Stripe' : 'Ikke verifisert · kan ikke reservere tur'} right={removeButton(method)} testID={`pm-${method.id}`} />)}</V10Group></V10Section> : null}
-      <V10Section title="Betaling på enheten"><V10Group><V10Row icon="payment" title="Apple Pay og Google Pay" subtitle={nativeConfig?.enabled === true ? `Native betaling er konfigurert${nativeConfig.test_mode ? ' i testmodus' : ''}. Lommebok krever støtte på enheten.` : 'Ikke aktivert for denne appen.'} testID="wallet-native-status" /></V10Group></V10Section>
+      {others.length ? <V10Section title="Andre kort"><V10Group>{others.map((method: any, index: number) => <V10Row key={method.id} border={index > 0} icon="payment" title={`${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}`} subtitle={verified(method) ? 'Trykk for å bruke til neste tur' : 'Ikke verifisert · kan ikke reservere tur'} onPress={verified(method) ? () => void selectDefault(method.id) : undefined} disabled={busy} right={removeButton(method)} testID={`pm-${method.id}`} />)}</V10Group></V10Section> : null}
+      {wallet ? <V10Section title="Betaling på enheten"><V10Group><V10Row icon={wallet.kind} title={wallet.label} subtitle={`Velg ${wallet.label} i betalingsarket for å verifisere et kort.`} onPress={() => void addStripeCard(true)} disabled={busy} testID="wallet-native-setup" /></V10Group></V10Section> : null}
       <View style={{ marginTop: 16 }}><V10Action kind="soft" icon="plus" label="Legg til kort" onPress={() => void addStripeCard()} busy={busy} testID="pm-stripe" /></View><Text style={[v10.caption, { marginTop: 12 }]}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Kort for neste tur bestemmes av det verifiserte standardkortet, eller det nyeste verifiserte kortet.</Text>
     </>}
   </V10Entrance></V10Screen>;

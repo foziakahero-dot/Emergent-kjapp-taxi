@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, Pressable, Text } from 'react-native';
+import { View, Pressable, StyleSheet, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
@@ -88,14 +88,19 @@ export default function RootLayout() {
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
   const [launchFinished, setLaunchFinished] = useState(false);
+  const [fontDeadline, setFontDeadline] = useState(false);
   useEffect(() => {
-    if (!fontsLoaded && !fontError) return;
+    // Start session restore alongside bundled fonts, not after another splash delay.
+    const minimum = setTimeout(() => setLaunchFinished(true), 1600);
+    const deadline = setTimeout(() => setFontDeadline(true), 5000);
+    return () => { clearTimeout(minimum); clearTimeout(deadline); };
+  }, []);
+  const fontReady = fontsLoaded || !!fontError || fontDeadline;
+  useEffect(() => {
+    if (!fontReady) return;
     void SplashScreen.hideAsync().catch(() => {});
-    const timer = setTimeout(() => setLaunchFinished(true), 1800);
-    return () => clearTimeout(timer);
-  }, [fontsLoaded, fontError]);
+  }, [fontReady]);
   useEffect(() => installClientErrorMonitor(), []);
-  if (!launchFinished) return <><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontsLoaded || fontError) void SplashScreen.hideAsync().catch(() => {}); }} /></>;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -141,6 +146,7 @@ export default function RootLayout() {
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
+      {!launchFinished || !fontReady ? <View testID="launch-overlay" style={[StyleSheet.absoluteFill, { zIndex: 1000, backgroundColor: colors.surfaceInverse }]}><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontReady) void SplashScreen.hideAsync().catch(() => {}); }} /></View> : null}
     </GestureHandlerRootView>
   );
 }

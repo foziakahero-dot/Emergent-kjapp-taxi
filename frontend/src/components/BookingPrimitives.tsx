@@ -10,7 +10,8 @@ export function confirmedPaymentMethod(methods: any[]) {
     .sort((a, b) => Number(Boolean(b.is_default)) - Number(Boolean(a.is_default)) || String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
 }
 export function paymentLabel(method: any) {
-  return method ? `${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}` : 'Legg til betalingskort';
+  const wallet = method?.wallet === 'google_pay' ? 'Google Pay · ' : method?.wallet === 'apple_pay' ? 'Apple Pay · ' : '';
+  return method ? `${wallet}${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}` : 'Legg til betalingskort';
 }
 export function CustomerJourney({ pickup, destination, destinationDetail, stops = [], onPickup, onDestination }: { pickup: string; destination?: string; destinationDetail?: string; stops?: any[]; onPickup?: () => void; onDestination?: () => void }) {
   useColorTheme();

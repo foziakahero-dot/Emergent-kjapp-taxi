@@ -693,7 +693,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.match(text(tree), /4321/);
   assert.doesNotMatch(text(tree), /Equinor|4821/);
   assert.equal(button(tree,'booking-pay-card').props.accessibilityState.checked,true);
-  for (const id of ['apple','google','business','vipps']) { const choice=button(tree,`booking-pay-${id}`);assert.equal(choice.props.disabled,true);await act(async()=>choice.props.onPress()); }
+  assert.equal(button(tree,'booking-pay-google'),undefined,'iOS cannot show Android wallet choices');
+  for (const id of ['apple','business','vipps']) { const choice=button(tree,`booking-pay-${id}`);assert.equal(choice.props.disabled,true);await act(async()=>choice.props.onPress()); }
   assert.ok(button(tree,'booking-payment-done'),'Unavailable provider cannot pretend selection succeeded');
   await act(async () => button(tree, 'booking-payment-done').props.onPress());
   await act(async () => button(tree, 'booking-review').props.onPress());
@@ -1050,6 +1051,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   user = { id: 'customer-payments' };
   queryData = { 'payment-methods': { data: [card, { ...card, id: 'fake-card', last4: '9999', verified: false }] }, 'native-payment-config': { data: { enabled: false } } };
   let setupCalls = 0, removeCalls = 0, setupResult, removeResult;
+  stubs['@/src/lib/nativePayment'] = { nativeWalletAvailability: async () => null,
+    setupNativePaymentMethod: async () => { setupCalls++; return setupResult(); } };
   Object.assign(stubs['@/src/lib/api'].paymentApi, { nativeConfig: async () => ({}), cardSetup: async () => { setupCalls++; return setupResult(); }, cardSetupStatus: async () => ({ ready: true, verified: false }), remove: async () => { removeCalls++; return removeResult(); } });
   const PaymentMethods = load('frontend', 'app/payment-methods.tsx').default;
   tree = await mount(PaymentMethods);
@@ -1057,8 +1060,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const setupRequest = deferred(); setupResult = () => setupRequest.promise;
   await act(async () => { button(tree, 'pm-stripe').props.onPress(); button(tree, 'pm-stripe').props.onPress(); button(tree, 'pm-remove-verified-card').props.onPress(); });
   assert.equal(setupCalls, 1); assert.equal(removeCalls, 0);
-  await act(async () => setupRequest.resolve({ checkout_url: 'https://fixture.invalid', session_id: 'setup-fixture' }));
-  assert.match(text(tree), /Kortet ble ikke verifisert/);
+  await act(async () => setupRequest.reject(new Error('Stripe har ikke bekreftet kortet ennå.')));
+  assert.match(text(tree), /ikke bekreftet kortet/);
   const removing = deferred(); removeResult = () => removing.promise;
   const invalidationsBeforeRemove = invalidated.length;
   await act(async () => { button(tree, 'pm-remove-verified-card').props.onPress(); button(tree, 'pm-remove-verified-card').props.onPress(); });

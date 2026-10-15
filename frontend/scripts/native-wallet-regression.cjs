@@ -1,0 +1,34 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const root = path.resolve(__dirname,'..');
+const ts = require(root+'/node_modules/typescript');
+const platform={OS:'android'}, env={EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID:'merchant.snar.qa'};
+let supported=true, result={}, status={ready:true,verified:true,card:{id:'verified-card'}}, setupCalls=0, statusCalls=0, initialized;
+let config={enabled:true,test_mode:true,publishable_key:'pk_test_synthetic',google_pay_enabled:true,apple_merchant_id:'merchant.snar.qa'};
+const api={nativeConfig:async()=>config,nativeSetup:async()=>{setupCalls++;return {setup_intent_id:'seti_synthetic',client_secret:'seti_synthetic_secret'}},nativeSetupStatus:async id=>{assert.equal(id,'seti_synthetic');statusCalls++;return status},nativeIntent:async()=>({payment_intent_id:'pi_synthetic',client_secret:'pi_synthetic_secret'}),nativeStatus:async()=>status};
+const sdk={initStripe:async()=>{},isPlatformPaySupported:async params=>{if(platform.OS==='android')assert.equal(params.googlePay.testEnv,true);return supported},initPaymentSheet:async options=>{initialized=options;return {}},presentPaymentSheet:async()=>result};
+const compiled=ts.transpileModule(fs.readFileSync(root+'/src/lib/nativePayment.native.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+const moduleValue={exports:{}};
+vm.runInNewContext(compiled,{module:moduleValue,exports:moduleValue.exports,process:{env},require:name=>{
+ if(name==='react-native')return {Platform:platform};if(name==='@stripe/stripe-react-native')return sdk;if(name==='./api')return {paymentApi:api};throw Error(name);
+}});
+const payment=moduleValue.exports;
+(async()=>{
+ assert.equal((await payment.nativeWalletAvailability()).kind,'google');
+ assert.equal((await payment.setupNativePaymentMethod(true)).id,'verified-card');
+ assert.equal(initialized.googlePay.currencyCode,'NOK');assert.equal(initialized.googlePay.testEnv,true);assert.equal(initialized.applePay,undefined);
+ assert.equal(initialized.setupIntentClientSecret,'seti_synthetic_secret');assert.equal(initialized.paymentIntentClientSecret,undefined);
+ result={error:{code:'Canceled',message:'Cancelled'}};const beforeStatus=statusCalls;
+ assert.equal(await payment.setupNativePaymentMethod(true),null);assert.equal(statusCalls,beforeStatus,'Cancellation cannot claim a verified method');
+ result={error:{code:'Failed',message:'Provider failure'}};await assert.rejects(()=>payment.setupNativePaymentMethod(true),/Provider failure/);
+ result={};status={ready:false,verified:false};await assert.rejects(()=>payment.setupNativePaymentMethod(true),/ikke bekreftet/);
+ supported=false;const beforeSetup=setupCalls;assert.equal(await payment.nativeWalletAvailability(),null);await assert.rejects(()=>payment.setupNativePaymentMethod(true),/ikke tilgjengelig/);assert.equal(setupCalls,beforeSetup,'Unsupported wallet cannot create a setup');
+ supported=true;platform.OS='ios';assert.equal((await payment.nativeWalletAvailability()).kind,'apple');
+ status={ready:true,verified:true,card:{id:'apple-card'}};assert.equal((await payment.setupNativePaymentMethod(true)).id,'apple-card');assert.equal(initialized.googlePay,undefined);assert.equal(initialized.applePay.merchantCountryCode,'NO');
+ config={...config,apple_merchant_id:'merchant.other'};assert.equal(await payment.nativeWalletAvailability(),null);
+ config={...config,apple_merchant_id:env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID,publishable_key:'pk_live_wrong',test_mode:false};await assert.rejects(()=>payment.setupNativePaymentMethod(),/bare testbetaling/);
+ config={...config,publishable_key:'pk_test_synthetic',test_mode:true};status={payment_status:'processing'};assert.equal(await payment.payNative('ride'),false,'SDK success cannot prove settlement');status={payment_status:'paid'};assert.equal(await payment.payNative('ride'),true);
+ console.log('PASS: Android Google Pay/iOS Apple Pay isolation, device support, native setup, cancellation/error/pending verification, test-only keys and server-confirmed settlement');
+})().catch(error=>{console.error(error);process.exitCode=1});

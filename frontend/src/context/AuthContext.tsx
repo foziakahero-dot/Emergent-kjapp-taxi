@@ -40,13 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const epoch = ++sessionEpoch.current;
     setSessionError('');
-    const token = await storage.getItem(TOKEN_KEY);
-    if (epoch !== sessionEpoch.current) return;
-    if (!token) {
-      setUser(null);
-      return;
-    }
     try {
+      const token = await storage.getItem(TOKEN_KEY);
+      if (epoch !== sessionEpoch.current) return;
+      if (!token) { setUser(null); return; }
       const u = await authApi.me();
       if (epoch !== sessionEpoch.current) return;
       if (u?.role !== 'user') {

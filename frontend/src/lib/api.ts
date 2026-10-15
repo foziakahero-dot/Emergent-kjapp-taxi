@@ -38,7 +38,7 @@ export const authApi = {
   checkResetToken: (token: string) => api.get(`/auth/reset-password/${token}`).then((r) => r.data),
   resetPassword: (token: string, new_password: string) => api.post('/auth/reset-password', { token, new_password }).then((r) => r.data),
   acceptLegal: (legal_version = '2026-09') => api.post('/auth/accept-legal', { accepted_terms: true, legal_version }).then((r) => r.data),
-  me: () => api.get('/auth/me').then((r) => r.data),
+  me: () => api.get('/auth/me', { timeout: 10000 }).then((r) => r.data),
   logout: (token?: string) => api.post('/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined).then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
   appleSignIn: (data: { identity_token: string; fullName?: string; email?: string | null }) =>
@@ -98,6 +98,9 @@ export const placesApi = {
 
 export const paymentApi = {
   nativeConfig: () => api.get('/payments/native/config').then((r) => r.data),
+  nativeSetup: () => api.post('/payments/native/setup-intent').then(r => r.data),
+  nativeSetupStatus: (id: string) => api.get(`/payments/native/setup-intent/${encodeURIComponent(id)}`).then(r => r.data),
+  setDefault: (id: string) => api.post(`/payment-methods/${encodeURIComponent(id)}/default`).then(r => r.data),
   nativeIntent: (trip_id: string) => api.post('/payments/native/intent', { trip_id }).then((r) => r.data),
   nativeStatus: (id: string) => api.get(`/payments/native/intent/${id}`).then((r) => r.data),
   list: () => api.get('/payment-methods').then((r) => r.data),

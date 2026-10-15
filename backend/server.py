@@ -19,6 +19,8 @@ import httpx
 import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
+from ai_configuration import configured_ai_key, provider_chat_session
+from payment_method_selection import selected_payment_method
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
@@ -72,7 +74,7 @@ IS_PRODUCTION = APP_ENV == "production"
 DEFAULT_PUBLIC_WEB_ORIGIN = "" if APP_ENV == "qa" else "https://snarapp.no"
 validate_qa_configuration(os.environ)
 EMERGENT_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("EMERGENT_LLM_KEY", "")
-AI_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("SNAR_AI_KEY", "") or EMERGENT_LLM_KEY
+AI_LLM_KEY = configured_ai_key(os.environ, APP_ENV)
 CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").strip()[:32] or "2026-09"
 APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"
 
@@ -834,7 +836,7 @@ class TwoFAVerifyLoginRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, max_length=160)
 
 
 class TripStop(BaseModel):
@@ -1443,6 +1445,8 @@ async def lifespan(app: FastAPI):
     await db.places.create_index("slug", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.payment_methods.create_index([("user_id", 1), ("stripe_payment_method_id", 1)], unique=True,
+        partialFilterExpression={"stripe_payment_method_id": {"$type": "string"}})
     await db.receipt_ledger.create_index("trip_id", unique=True)
     await db.receipt_ledger.create_index("receipt_number", unique=True)
     await db.receipt_ledger.create_index([("paid_at", -1)])
@@ -3724,12 +3728,17 @@ async def list_trip_messages(trip_id: str, current=Depends(get_current_user)):
 # ---- Payment methods ----
 @api.get("/payment-methods")
 async def list_payment_methods(current=Depends(require_customer)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])}) or {}
+    default_id = user.get("default_payment_method_id")
+    selected = await selected_payment_method(db, current["id"], user) if default_id else None
     cursor = db.payment_methods.find({"user_id": current["id"]})
     methods = []
     async for m in cursor:
         m["id"] = str(m["_id"])
         m.pop("_id", None)
         m["verified"] = bool(m.get("verified") is True and m.get("setup_status") == "succeeded" and m.get("stripe_payment_method_id"))
+        if default_id:
+            m["is_default"] = bool(selected and m["id"] == str(selected["_id"]))
         methods.append(m)
     return methods
 
@@ -3997,7 +4006,7 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(
             api_key=AI_LLM_KEY,
-            session_id=session_id,
+            session_id=provider_chat_session(APP_ENV, current['id'], session_id),
             system_message=AI_SYSTEM,
         ).with_model("openai", "gpt-5.6-sol")
         # session_id gjør at emergentintegrations selv beholder samtalehistorikk mellom kall
@@ -4010,7 +4019,7 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="SNAR AI bruker lenger tid enn vanlig. Prøv igjen om et øyeblikk.")
     except Exception as e:
-        print(f"[ai/chat] error: {e}")
+        logging.warning("AI chat provider failed (%s)", type(e).__name__)
         raise HTTPException(status_code=502, detail="AI-tjenesten er midlertidig utilgjengelig. Prøv igjen om litt.")
 
     await db.chat_messages.insert_one({
@@ -8376,15 +8385,7 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     if not customer_id:
         return {"attempted": False, "reason": "no_stripe_customer"}
 
-    pm = await db.payment_methods.find_one(
-        {
-            "user_id": user_id,
-            "verified": True,
-            "setup_status": "succeeded",
-            "stripe_payment_method_id": {"$exists": True, "$ne": None},
-        },
-        sort=[("is_default", -1), ("created_at", -1)],
-    )
+    pm = await selected_payment_method(db, user_id, user)
     if not pm:
         return {"attempted": False, "reason": "no_verified_payment_method"}
 
@@ -11562,8 +11563,8 @@ def _apply_integration_settings(values):
         STRIPE_WEBHOOK_SECRET = values["STRIPE_WEBHOOK_SECRET"]
     if "MAPTILER_API_KEY" in values:
         MAPTILER_API_KEY = values["MAPTILER_API_KEY"]
-    if "SNAR_AI_KEY" in values:
-        AI_LLM_KEY = values["SNAR_AI_KEY"] or EMERGENT_LLM_KEY
+    if "SNAR_AI_KEY" in values or "QA_SNAR_AI_KEY" in values or "QA_AI_ENABLED" in values:
+        AI_LLM_KEY = configured_ai_key(os.environ, APP_ENV)
     if "FCM_SERVICE_ACCOUNT_JSON" in values and previous_fcm != values["FCM_SERVICE_ACCOUNT_JSON"]:
         if FCM_APP is not None:
             import firebase_admin

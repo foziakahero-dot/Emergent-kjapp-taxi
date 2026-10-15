@@ -23,9 +23,10 @@ class Cursor:
 
 class Collection:
     def __init__(self, collection): self.raw = collection
-    async def find_one(self, query): return self.raw.find_one(query)
+    async def find_one(self, query, **kwargs): return self.raw.find_one(query, **kwargs)
     async def update_one(self, query, update, **kwargs): return self.raw.update_one(query, update, **kwargs)
     async def insert_one(self, data): return self.raw.insert_one(data)
+    async def count_documents(self, query): return self.raw.count_documents(query)
     def find(self, query): return Cursor(self.raw.find(query))
 
 

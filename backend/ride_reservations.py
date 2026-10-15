@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 from bson import ObjectId
 from fastapi import HTTPException
+from payment_method_selection import selected_payment_method
 
 
 def value(obj, key, default=None):
@@ -58,10 +59,7 @@ class RideReservations:
         record = await self.record(trip)
         if not record:
             user = await self.db.users.find_one({"_id": ObjectId(trip["user_id"])}) or {}
-            pm = await self.db.payment_methods.find_one({
-                "user_id": trip["user_id"], "verified": True, "setup_status": "succeeded",
-                "stripe_payment_method_id": {"$type": "string"},
-            }, sort=[("is_default", -1), ("created_at", -1)])
+            pm = await selected_payment_method(self.db, trip["user_id"], user)
             if not pm or not user.get("stripe_customer_id"):
                 raise HTTPException(402, "Legg til og bekreft et betalingskort før du bestiller")
             amount = int(trip.get("reservation_limit_ore", int(trip["price"]) * 100))
