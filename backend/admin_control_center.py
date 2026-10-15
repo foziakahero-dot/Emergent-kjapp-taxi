@@ -10,6 +10,8 @@ Focused admin-only capabilities:
 
 All routes reuse the existing FastAPI/MongoDB/auth/audit infrastructure.
 """
+from email_delivery import email_configured, email_provider
+
 
 import asyncio
 import html
@@ -322,8 +324,8 @@ def install_admin_control_center(
                     "detail": "Native push til Customer/Driver", "configured": bool(os.getenv("FCM_SERVICE_ACCOUNT_JSON") or os.getenv("FCM_SERVICE_ACCOUNT_FILE")),
                 },
                 {
-                    "id": "sendgrid", "name": "SendGrid e-post", "status": "operational" if os.getenv("SENDGRID_API_KEY") else "warning",
-                    "detail": "E-post til sjåfører, løyvehavere og brukere", "configured": bool(os.getenv("SENDGRID_API_KEY")),
+                    "id": "resend" if email_provider() == "resend" else "sendgrid", "name": "Resend e-post" if email_provider() == "resend" else "SendGrid e-post", "status": "operational" if email_configured() else "warning",
+                    "detail": "E-post til sjåfører, løyvehavere og brukere", "configured": email_configured(),
                 },
                 {
                     "id": "maps_routing", "name": "Kart & routing", "status": "operational",

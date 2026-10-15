@@ -5,13 +5,15 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pymongo import ReturnDocument
+from email_delivery import email_configured
 
 
 async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
     if not recipient:
         return "not_requested"
     messages = {
-        "beta": ("SNAR: Interessen din er registrert", "Du er registrert for SNAR-betaen. Vi sender informasjon om tilgang når neste testgruppe åpner. Dette er en bekreftelse på registreringen, ikke en aktiv brukerkonto."),
+        "customer": ("Velkommen til SNAR", "Kundekontoen din er opprettet. Du kan nå logge inn i SNAR-appen med innloggingsmetoden du valgte. Tilgjengelige biler og tjenester avhenger av området du befinner deg i. Vi gleder oss til å ha deg med."),
+        "beta": ("Velkommen til SNAR-betaen", "Takk for at du vil teste SNAR! Interessen din er registrert. Vi sender informasjon om tilgang når neste testgruppe åpner. Dette er en bekreftelse på registreringen, ikke en aktiv brukerkonto."),
         "fleet": ("SNAR: Vi har mottatt partnersøknaden", "Virksomheten og dokumentene dine er sendt til SNAR for kontroll. Du får et eget svar når søknaden er behandlet. Flåtetilgang åpnes etter godkjenning."),
         "driver": ("SNAR: Sjåførregistreringen er mottatt", "Profilbilde, førerkort og kjøreseddel er sendt til kontroll. Registreringen er knyttet til flåten som inviterte deg. Du kan motta turer først når nødvendige godkjenninger er på plass."),
         "driver-approved": ("SNAR: Sjåførkontoen er godkjent", "SNAR har godkjent sjåførkontoen din. Åpne sjåførappen med e-postadressen du registrerte, velg en bil du har tilgang til og kontroller at bil- og dokumentstatus er klar før du går online."),
@@ -28,7 +30,7 @@ async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
         "entity_id": str(entity_id), "status": "pending", "attempts": 0,
         "created_at": now, "next_attempt_at": now,
     }}, upsert=True)
-    return "queued" if os.environ.get("SENDGRID_API_KEY", "").strip() else "not_configured"
+    return "queued" if email_configured() else "not_configured"
 
 
 async def deliver_one(db, send_email, prepare_email=None):
@@ -58,7 +60,8 @@ async def deliver_one(db, send_email, prepare_email=None):
 async def confirmation_loop(db, send_email, prepare_email=None, invite_sender=None):
     while True:
         try:
-            if os.environ.get("SENDGRID_API_KEY", "").strip():
+            await recover_customer_welcomes(db)
+            if email_configured():
                 for _ in range(20):
                     if not await deliver_one(db, send_email, prepare_email):
                         break
@@ -95,3 +98,13 @@ async def deliver_invite(db, invite_sender):
     await db.driver_invites.update_one({"_id": invite["_id"], "email_attempts": invite["email_attempts"]},
                                       {"$set": fields, "$unset": {"email_lease_until": ""}})
     return True
+
+
+async def recover_customer_welcomes(db):
+    """Queue only newly created customer accounts, once per account, after crashes too."""
+    async for user in db.users.find({"role": "user", "welcome_email_pending": True}).limit(20):
+        if user.get("disabled") or not user.get("email"):
+            await db.users.update_one({"_id": user["_id"]}, {"$unset": {"welcome_email_pending": ""}})
+            continue
+        await queue_confirmation(db, "customer", str(user["_id"]), user["email"], user.get("fullName", ""))
+        await db.users.update_one({"_id": user["_id"]}, {"$unset": {"welcome_email_pending": ""}})

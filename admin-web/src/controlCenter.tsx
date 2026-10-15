@@ -216,8 +216,8 @@ export function SystemIntegrations() {
   const state = useAsync(() => api.controlIntegrations(), []);
   const [selected, setSelected] = useState<any>(null);
   const [saved, setSaved] = useState('');
-  const editable = ['stripe', 'sendgrid', 'fcm', 'maps_routing', 'google', 'ai'];
-  const integrations = [...(state.data?.integrations || []), { id: 'google', name: 'Google innlogging', detail: 'Klient-ID og klienthemmelighet for kundekontoer', status: 'configuration', configured: null }];
+  const editable = ['stripe', 'sendgrid', 'resend', 'fcm', 'maps_routing', 'google', 'ai'];
+  const integrations = [...(state.data?.integrations || []), ...((state.data?.integrations || []).some((item: any) => item.id === 'resend') ? [] : [{ id: 'resend', name: 'Resend e-post', detail: 'Velkomstmail og registreringsbekreftelser', status: 'configuration', configured: null }]), { id: 'google', name: 'Google innlogging', detail: 'Klient-ID og klienthemmelighet for kundekontoer', status: 'configuration', configured: null }];
   return <>
     <PageHead title="System & integrasjoner" sub="Status, innstillinger og API-nøkler for SNAR-tjenestene" right={<Btn onClick={state.reload}>Oppdater</Btn>} /><ErrorBanner msg={state.err} />
     {saved && <div className="ok-banner" role="status">{saved}</div>}

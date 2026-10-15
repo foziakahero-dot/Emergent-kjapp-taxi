@@ -24,6 +24,7 @@ from ride_search import RideSearch
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
 from onboarding_emails import queue_confirmation, confirmation_loop
+from email_delivery import email_configured, send_transactional_email
 from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
@@ -1030,28 +1031,9 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
-    """Send email via SendGrid if configured, else log to console."""
     if APP_ENV == "qa":
-        print("[EMAIL/disabled-qa] external email delivery is disabled")
         return False
-    api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
-    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
-    if not api_key:
-        # Never print HTML bodies: password-reset/invite emails can contain bearer-style
-        # one-time tokens. Missing email configuration should be observable without
-        # leaking those links into application logs.
-        print(f"[EMAIL/no-key] to={to_email} subj={subject} body=redacted")
-        return False
-    try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-        msg = Mail(from_email=sender, to_emails=to_email, subject=subject, html_content=html)
-        sg = SendGridAPIClient(api_key)
-        res = sg.send(msg)
-        return 200 <= res.status_code < 300
-    except Exception as e:
-        print(f"[EMAIL/error] {e}")
-        return False
+    return send_transactional_email(to_email, subject, html)
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
@@ -1803,7 +1785,7 @@ async def readiness():
                 and os.environ.get("STRIPE_PUBLISHABLE_KEY", "").startswith("pk_test_")
             )
         ),
-        "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
+        "email_configured": email_configured(),
         "public_web_origin_configured": (
             is_safe_qa_web_origin(os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", ""))
             if APP_ENV == "qa"
@@ -2308,6 +2290,7 @@ async def register(body: RegisterRequest, request: Request, response: Response):
         "fullName": body.fullName,
         "phone": body.phone or "",
         "role": "user",
+        "welcome_email_pending": True,
         "accepted_terms_at": now_iso,
         "legal_version": CURRENT_LEGAL_VERSION,
         "created_at": now_iso,
@@ -5317,6 +5300,7 @@ async def google_session(body: GoogleSessionRequest, request: Request, response:
             "phone": "",
             "picture": data.get("picture"),
             "role": "user",
+            "welcome_email_pending": True,
             "google_linked": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -5470,6 +5454,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
             "phone": "",
             "picture": claims.get("picture"),
             "role": "user",
+            "welcome_email_pending": True,
             "google_sub": google_sub,
             "google_linked": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -7993,6 +7978,7 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
             "apple_sub": apple_sub,
             "apple_linked": True,
             "role": "user",
+            "welcome_email_pending": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         uid = str(result.inserted_id)
@@ -9983,7 +9969,7 @@ def _driver_invite_result(invite: dict) -> dict:
     result["invite_url"] = _driver_invite_url(invite["token"])
     result["email_status"] = ("sent" if invite.get("email_sent") else
                               "not_requested" if not invite.get("email") else
-                              "not_configured" if not os.environ.get("SENDGRID_API_KEY", "").strip() else "failed")
+                              "not_configured" if not email_configured() else "failed")
     return result
 
 
