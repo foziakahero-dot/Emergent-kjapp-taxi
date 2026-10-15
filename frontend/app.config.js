@@ -13,10 +13,9 @@ module.exports = ({ config: base }) => {
   // EAS may expose the iOS OAuth client either as a public build variable or as
   // a build-only variable. Support both names so the native URL scheme is baked
   // into the iOS binary whenever the project environment contains the client.
-  const iosClient = (
-    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
-    process.env.GOOGLE_IOS_CLIENT_ID ||
-    ''
+  const iosClient = (process.env.EAS_BUILD_PROFILE === 'qa'
+    ? process.env.QA_GOOGLE_IOS_CLIENT_ID || ''
+    : process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || process.env.GOOGLE_IOS_CLIENT_ID || ''
   ).trim();
   if (iosClient.endsWith('.apps.googleusercontent.com')) {
     plugins.push(['@react-native-google-signin/google-signin', {
