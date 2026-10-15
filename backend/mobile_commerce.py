@@ -62,7 +62,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             if not email or not verified:
                 raise HTTPException(401, "En verifisert e-postadresse er nødvendig")
             result = await db.users.insert_one({
-                "email": email, "password_hash": hash_password(secrets.token_urlsafe(32)),
+                "email": email, "password_hash": await asyncio.to_thread(hash_password, secrets.token_urlsafe(32)),
                 "fullName": claims.get("name") or email.split("@")[0], "phone": "",
                 "role": "user", field: sub, provider + "_linked": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),

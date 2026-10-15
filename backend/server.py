@@ -11,6 +11,7 @@ import json
 import base64
 import traceback
 import logging
+from time import perf_counter
 import re
 import bcrypt
 import jwt
@@ -365,8 +366,8 @@ async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_pro
     if existing.get("disabled") or existing.get("is_demo"):
         updates["disabled"] = False
         updates["is_demo"] = False
-    if is_production and not verify_password(admin_password, existing.get("password_hash", "")):
-        updates["password_hash"] = hash_password(admin_password)
+    if is_production and not await asyncio.to_thread(verify_password, admin_password, existing.get("password_hash", "")):
+        updates["password_hash"] = await asyncio.to_thread(hash_password, admin_password)
         result["password_rotated"] = True
     if updates:
         await db.users.update_one({"_id": existing["_id"]}, {"$set": updates})
@@ -1517,7 +1518,7 @@ async def lifespan(app: FastAPI):
         else:
             await db.users.insert_one({
                 "email": admin_email,
-                "password_hash": hash_password(admin_password),
+                "password_hash": await asyncio.to_thread(hash_password, admin_password),
                 "fullName": "Superadmin",
                 "phone": "+4700000000",
                 "role": "superadmin",
@@ -1557,7 +1558,7 @@ async def lifespan(app: FastAPI):
             existing_driver = await db.users.find_one({"email": email})
             driver_fields = {
                 "email": email,
-                "password_hash": hash_password(password),
+                "password_hash": await asyncio.to_thread(hash_password, password),
                 "fullName": full_name,
                 "phone": phone,
                 "role": "driver",
@@ -1614,7 +1615,7 @@ async def lifespan(app: FastAPI):
             # Never promote an existing ordinary account through test provisioning.
             if owner is None or (owner.get("internal_test_account") is True and owner.get("role") == "fleet_owner"):
                 owner_fields = {
-                    "email": owner_email, "password_hash": hash_password(owner_password),
+                    "email": owner_email, "password_hash": await asyncio.to_thread(hash_password, owner_password),
                     "fullName": "Beta Løyvehaver", "phone": "",
                     "role": "fleet_owner", "approved": True, "disabled": False,
                     "fleet_id": fleet_id, "fleet_active": True, "internal_test_account": True,
@@ -1642,7 +1643,7 @@ async def lifespan(app: FastAPI):
     if ENABLE_DEMO_DATA and not await db.users.find_one({"email": test_email}):
         uid = await db.users.insert_one({
             "email": test_email,
-            "password_hash": hash_password("test1234"),
+            "password_hash": await asyncio.to_thread(hash_password, "test1234"),
             "fullName": "Ola Nordmann",
             "phone": "+4791234567",
             "role": "user",
@@ -1662,7 +1663,7 @@ async def lifespan(app: FastAPI):
     if ENABLE_DEMO_DATA and not await db.users.find_one({"email": driver_email}):
         await db.users.insert_one({
             "email": driver_email,
-            "password_hash": hash_password("sjafor1234"),
+            "password_hash": await asyncio.to_thread(hash_password, "sjafor1234"),
             "fullName": "Ola Sjåfør",
             "phone": "+4790000001",
             "role": "driver",
@@ -1735,11 +1736,22 @@ app.add_middleware(
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Correlation ID for every request; safe logging on unhandled errors (never logs headers/credentials)."""
+    started = perf_counter()
     rid = uuid.uuid4().hex[:12]
     request.state.request_id = rid
     try:
         response = await call_next(request)
         response.headers["X-Request-ID"] = rid
+        elapsed_ms = (perf_counter() - started) * 1000
+        timing = response.headers.get("Server-Timing")
+        response.headers["Server-Timing"] = f"{timing}, app;dur={elapsed_ms:.1f}" if timing else f"app;dur={elapsed_ms:.1f}"
+        if elapsed_ms >= 1000:
+            route = request.scope.get("route")
+            # Route templates avoid recording IDs, addresses, queries or credentials.
+            logging.getLogger("snar.performance").warning(
+                "slow_request request_id=%s method=%s route=%s status=%s duration_ms=%.1f",
+                rid, request.method, getattr(route, "path", "unmatched"), response.status_code, elapsed_ms,
+            )
         return response
     except Exception:
         print(f"[unhandled-error] request_id={rid} {request.method} {request.url.path}")
@@ -2304,7 +2316,7 @@ async def register(body: RegisterRequest, request: Request, response: Response):
     now_iso = datetime.now(timezone.utc).isoformat()
     result = await db.users.insert_one({
         "email": email,
-        "password_hash": hash_password(body.password),
+        "password_hash": await asyncio.to_thread(hash_password, body.password),
         "fullName": body.fullName,
         "phone": body.phone or "",
         "role": "user",
@@ -2356,7 +2368,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         # Generic web login is retained for admin/fleet portals.
         user = await db.users.find_one({"email": identifier.lower()})
 
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or not await asyncio.to_thread(verify_password, body.password, user["password_hash"]):
         await _record_failed_login(login_key, ip)
         raise HTTPException(status_code=401, detail="Feil innlogging")
     if user.get("disabled"):
@@ -2435,7 +2447,7 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
     await db.users.update_one(
         {"_id": user["_id"]},
         {
-            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [hash_password(c) for c in backup]},
+            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [await asyncio.to_thread(hash_password, c) for c in backup]},
             "$unset": {"totp_secret_pending": ""},
         },
     )
@@ -2447,7 +2459,7 @@ async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_u
     if _twofa_required_role(current.get("role", "user")):
         raise HTTPException(status_code=403, detail="2FA er obligatorisk for administratorer")
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or not await asyncio.to_thread(verify_password, body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
     if not user.get("totp_enabled") or not _verify_totp(user.get("totp_secret", ""), body.code):
         raise HTTPException(status_code=400, detail="Feil 2FA-kode.")
@@ -2481,7 +2493,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
     used_idx = None
     if not ok:
         for i, h in enumerate(user.get("totp_backup_codes", [])):
-            if verify_password(code, h):
+            if await asyncio.to_thread(verify_password, code, h):
                 ok = True
                 used_idx = i
                 break
@@ -2604,7 +2616,7 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
         raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
     await db.users.update_one(
         {"_id": ObjectId(rec["user_id"])},
-        {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
+        {"$set": {"password_hash": await asyncio.to_thread(hash_password, body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
     )
     # Unlock the account: clear brute-force counters so the user can log in immediately
     await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
@@ -5312,7 +5324,7 @@ async def google_session(body: GoogleSessionRequest, request: Request, response:
     if not user:
         result = await db.users.insert_one({
             "email": email,
-            "password_hash": hash_password(secrets.token_hex(16)),  # random password, unused
+            "password_hash": await asyncio.to_thread(hash_password, secrets.token_hex(16)),  # random password, unused
             "fullName": name,
             "phone": "",
             "picture": data.get("picture"),
@@ -5465,7 +5477,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
         display_name = name
         result = await db.users.insert_one({
             "email": email,
-            "password_hash": hash_password(secrets.token_hex(16)),  # unused, login goes through Google
+            "password_hash": await asyncio.to_thread(hash_password, secrets.token_hex(16)),  # unused, login goes through Google
             "fullName": display_name,
             "phone": "",
             "picture": claims.get("picture"),
@@ -5568,7 +5580,7 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
         temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
             "email": owner_email,
-            "password_hash": hash_password(temp_pw),
+            "password_hash": await asyncio.to_thread(hash_password, temp_pw),
             "fullName": body.name,  # placeholder
             "phone": "",
             "role": "fleet_owner",
@@ -7800,7 +7812,7 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
     canonical_vehicle_type = vehicle.get("vehicle_type") or "ai-first"
     doc = {
         "email": email,
-        "password_hash": hash_password(body.password),
+        "password_hash": await asyncio.to_thread(hash_password, body.password),
         "fullName": body.fullName,
         "phone": body.phone,
         "role": "driver",
@@ -7987,7 +7999,7 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
         display_name = body.fullName or verified_email.split("@")[0]
         result = await db.users.insert_one({
             "email": verified_email,
-            "password_hash": hash_password(secrets.token_hex(16)),
+            "password_hash": await asyncio.to_thread(hash_password, secrets.token_hex(16)),
             "fullName": display_name,
             "phone": "",
             "apple_sub": apple_sub,
@@ -9850,7 +9862,7 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
             temp_pw = secrets.token_urlsafe(10)
             res = await db.users.insert_one({
                 "email": owner_email,
-                "password_hash": hash_password(temp_pw),
+                "password_hash": await asyncio.to_thread(hash_password, temp_pw),
                 "fullName": app_doc.get("contact_name") or app_doc.get("company_name"),
                 "phone": app_doc.get("contact_phone", ""),
                 "role": "fleet_owner",

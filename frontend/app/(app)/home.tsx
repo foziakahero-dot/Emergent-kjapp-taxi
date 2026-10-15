@@ -12,8 +12,9 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
@@ -31,9 +32,16 @@ export default function Home() {
   const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
   const insets = useSafeAreaInsets();
 
-  const [activeTrip, setActiveTrip] = useState<any>(null);
-  const [activeTripOffline, setActiveTripOffline] = useState(false);
-  const [activeTripChecked, setActiveTripChecked] = useState(false);
+  const queryClient = useQueryClient();
+  // GlobalCustomerShell owns polling. This observer only reads its shared state.
+  const activeTripQuery = useQuery<any>({
+    queryKey: ['customer-active-trip', user?.id],
+    queryFn: async () => { const trip = await tripsApi.active(); return trip?.trip_id ? trip : null; },
+    enabled: false,
+  });
+  const activeTrip = activeTripQuery.data?.trip_id ? activeTripQuery.data : null;
+  const activeTripOffline = activeTripQuery.isError;
+  const activeTripChecked = activeTripQuery.data !== undefined;
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
   const [selectedPickup, setSelectedPickup] = useState<{ name: string; lat: number; lng: number } | null>(null);
   const pickupPoint = selectedPickup || loc;
@@ -120,29 +128,10 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      setActiveTripChecked(false);
       loadMethods();
-      loadPlaces();
-      let fetching = false;
-      const recover = async () => {
-        if (fetching) return;
-        fetching = true;
-        try {
-          const t = await tripsApi.active();
-          if (active) {
-            setActiveTrip(t?.trip_id ? t : null);
-            setActiveTripOffline(false);
-            setActiveTripChecked(true);
-          }
-        } catch { if (active) setActiveTripOffline(true); }
-        finally { fetching = false; }
-      };
-      void recover();
-      const timer = setInterval(() => { if (AppState.currentState === 'active') void recover(); }, 2500);
-      const listener = AppState.addEventListener('change', state => { if (state === 'active') void recover(); });
-      return () => { active = false; clearInterval(timer); listener.remove(); };
-    }, [loadMethods, loadPlaces, router]),
+      void loadPlaces();
+      void queryClient.invalidateQueries({ queryKey: ['customer-active-trip', user?.id] });
+    }, [loadMethods, loadPlaces, queryClient, user?.id]),
   );
 
   const refreshLocation = useCallback(async (requestPermission = true) => {

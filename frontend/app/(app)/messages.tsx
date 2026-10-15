@@ -20,7 +20,8 @@ export default function CustomerMessages() {
   const { user } = useAuth();
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
-  const active = useQuery({ queryKey: ['customer-active-trip', user?.id], queryFn: tripsApi.active, enabled: focused && !!user?.id, refetchInterval: focused ? 2500 : false, retry: 1 });
+  // GlobalCustomerShell owns the active-trip poll for all customer tabs.
+  const active = useQuery({ queryKey: ['customer-active-trip', user?.id], queryFn: tripsApi.active, enabled: false });
   const trip = active.data;
   if (!active.isError && trip?.trip_id && trip?.driver_id && chatStatuses.has(trip.status)) return <Conversation key={trip.trip_id} trip={trip} focused={focused} />;
   return <V10Screen dock testID="customer-messages-screen"><V10Header title="Meldinger" />

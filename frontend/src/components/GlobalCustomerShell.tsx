@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppState, BackHandler, Pressable, View } from 'react-native';
 import { router, useSegments } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -82,6 +82,7 @@ export function GlobalCustomerShell({ children }: { children: React.ReactNode })
   const segments = useSegments();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const first = String(segments[0] || 'index');
   const customer = user && (!user.role || ['user', 'customer'].includes(user.role));
   const visible = !!customer && user?.legal_accepted === true && first !== '(app)' && !authScreens.has(first);
@@ -92,19 +93,17 @@ export function GlobalCustomerShell({ children }: { children: React.ReactNode })
       const trip = await tripsApi.active();
       return trip?.trip_id ? trip : null;
     },
-    enabled: canShowIsland,
+    enabled: canShowIsland && appActive,
     refetchInterval: 2500,
     refetchIntervalInBackground: false,
     retry: 1,
   });
 
   useEffect(() => {
-    if (!canShowIsland || !user?.id) return;
-    const subscription = AppState.addEventListener('change', state => {
-      if (state === 'active') void activeTripQuery.refetch();
-    });
+    setAppActive(AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', state => setAppActive(state === 'active'));
     return () => subscription.remove();
-  }, [activeTripQuery.refetch, canShowIsland, user?.id]);
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
