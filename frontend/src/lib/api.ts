@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { withDeadline } from './deadline';
 import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
@@ -18,7 +19,7 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await storage.getItem(TOKEN_KEY);
+  const token = await withDeadline(storage.getItem(TOKEN_KEY), 3000);
   if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
