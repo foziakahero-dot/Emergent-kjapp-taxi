@@ -1,5 +1,39 @@
 # QA repair checkpoint — 16 October 2026 (Oslo)
 
+## Hosting correction — current continuation
+The historical Netlify continuation instruction below is superseded. Verified
+through the Vercel connector: team SNAR `team_kmJvnYjv4bsVk1dJC8P9Vuwe`, existing
+projects `snar-admin` (`prj_8HcC2vmFXvh1fRpCeAyi2zOimrXp`) and `snar-fleet`
+(`prj_hvAWgduSHGulD23MdDaQe0t58gfF`) already have previews from this QA branch.
+Use Vercel QA previews; do not modify production domains or Netlify production sites.
+Two empty Netlify QA projects were mistakenly created during continuation
+(`snar-admin-qa`, `snar-fleet-qa`); nothing was deployed to either. Do not use them.
+
+The existing AI implementation imports `emergentintegrations`; this is legacy
+code, not backend hosting. The owner disputes any Emergent dependency. No new
+Emergent key was created, no provider was changed, and QA AI remains unavailable.
+Do not introduce or activate an Emergent dependency without resolving this choice.
+The backend remains the same paid Render QA service for both mobile apps.
+
+Render deployment `dep-db8m6q8473hc73amf5f0` is LIVE at `2bb10a1cfbefe450ac53536c371684f5e1f7f80d`
+(2026-10-15 23:37:20 UTC). Live /api/health and /api/ready returned 200, isolated QA DB,
+Stripe test mode, production_mode=false and auto_charge_enabled=false.
+Google and Apple are enabled in native public config; Google iOS client is absent.
+Native card setup is enabled; Google Pay is false and Apple merchant ID is empty.
+No claim of device wallet readiness is warranted.
+
+Resend is signed in and the QA domain still shows the DNS-record step. Authoritative
+NS lookup returned `ns01.no.brand.one.com` and `ns02.no.brand.one.com`.
+Uniweb and Emergent secure sign-in requests returned declined; do not retry those
+requests without a new user request. No DNS records, sender key or AI key were set.
+
+QA panel export is `npm run build:qa` in each web project. It forces
+`VITE_API_BASE=/api`, adds a runtime QA API guard, emits a Vercel-only artifact in
+`artifacts/phase5-qa/<panel>`, removes inherited Netlify redirects, proxies only to
+`https://api-qa.snarapp.no/api/:path*`, adds noindex and release metadata. Normal
+production build/deploy configuration is unchanged. `.netlify/` is ignored so
+accidental local project bindings cannot enter Git.
+
 ## Build hold
 Do not start APK, iOS, TestFlight or store builds. The owner must approve a new controlled build after the final report. Mobile fixes in this checkpoint are source changes, not changes to the already installed APK.
 

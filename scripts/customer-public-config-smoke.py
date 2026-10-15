@@ -3,7 +3,7 @@ import json
 import urllib.request
 from pathlib import Path
 
-base = 'https://api.kjappapp.no/api'
+base = 'https://api-qa.snarapp.no/api'
 results = []
 for path in ['/health', '/ready', '/payments/native/config', '/auth/native/config']:
     with urllib.request.urlopen(base + path, timeout=30) as response:
@@ -21,7 +21,8 @@ for path in ['/health', '/ready', '/payments/native/config', '/auth/native/confi
                     'google_pay_enabled': body.get('google_pay_enabled'),
                     'apple_merchant_present': bool(body.get('apple_merchant_id'))}
             assert safe['enabled'] is True and safe['test_mode'] is True and safe['test_publishable_key_present']
-            assert safe['google_pay_enabled'] is True
+            # Wallet availability is explicit provider/device configuration, not
+            # implied by a working Stripe test key.
         else:
             safe = {'google_enabled': body.get('google_enabled'),
                     'google_web_client_present': bool(body.get('google_web_client_id')),

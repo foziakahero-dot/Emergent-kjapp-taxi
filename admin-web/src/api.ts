@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const env = (import.meta as any).env || {};
 const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
+if (env.VITE_APP_ENV === 'qa' && configuredBase !== '/api') {
+  throw new Error('QA Admin requires the same-origin QA API proxy');
+}
 const productionBackend = 'https://api.kjappapp.no/api';
 const host = window.location.hostname;
 const isProductionAdminHost = host === 'admin.kjappapp.no';
