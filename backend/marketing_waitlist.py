@@ -1,3 +1,4 @@
+from email_delivery import email_configured
 import hashlib
 import os
 import re
@@ -176,7 +177,7 @@ def install_marketing_waitlist(api, db, confirmation=None, require_admin=None, a
         for record in entries:
             record["confirmation_email_status"] = deliveries.get(record["id"], "not_requested")
         return {"items": entries, "total": total, "limit": limit, "offset": offset,
-                "email_configured": bool(os.environ.get("SENDGRID_API_KEY", "").strip())}
+                "email_configured": email_configured()}
 
     class InterestStatusRequest(BaseModel):
         status: Literal["new", "contacted", "archived"]
