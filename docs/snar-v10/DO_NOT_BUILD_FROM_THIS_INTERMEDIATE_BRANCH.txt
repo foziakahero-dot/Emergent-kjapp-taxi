@@ -1,0 +1,1 @@
+This branch is only a temporary reconciliation base. Build only from the final reconciled merge SHA recorded in RELEASE_RECONCILIATION_20261015.md.
