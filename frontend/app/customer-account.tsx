@@ -9,7 +9,7 @@ import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { useAuth } from '@/src/context/AuthContext';
-import { googleIdentity } from '@/src/lib/socialSignIn';
+import { googleIdentity, appleIdentity } from '@/src/lib/socialSignIn';
 import { apiError } from '@/src/lib/format';
 import { authApi, gdprApi } from '@/src/lib/api';
 import { CustomerSupport } from '@/src/components/CustomerSupport';
@@ -31,6 +31,7 @@ export default function CustomerAccount() {
   const googleLock = useRef(false);
   const [googleError, setGoogleError] = useState('');
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [appleBusy, setAppleBusy] = useState(false);
   const linkGoogle = async () => {
     if (googleLock.current) return;
     googleLock.current = true; setGoogleBusy(true); setGoogleError('');
@@ -41,6 +42,18 @@ export default function CustomerAccount() {
       await authApi.linkGoogle(identity); await refresh();
     } catch (error) { setGoogleError(apiError(error)); }
     finally { googleLock.current = false; setGoogleBusy(false); }
+  };
+  const linkApple = async () => {
+    if (googleLock.current) return;
+    googleLock.current = true; setAppleBusy(true); setGoogleError('');
+    try {
+      const config = await authApi.nativeConfig();
+      if (!config.apple_enabled) throw new Error('Apple-innlogging er ikke konfigurert for dette miljøet.');
+      const identity = await appleIdentity();
+      if (!identity) return;
+      await authApi.linkApple(identity); await refresh();
+    } catch (error) { setGoogleError(apiError(error)); }
+    finally { googleLock.current = false; setAppleBusy(false); }
   };
   const initials = (user?.fullName || user?.email || 'K')
     .split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -87,7 +100,8 @@ export default function CustomerAccount() {
           </View>
         </View>
 
-        {Platform.OS !== 'web' ? <Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable> : null}
+        {Platform.OS !== 'web' ? <Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable> : null}
+        {Platform.OS === 'ios' ? <Pressable testID="profile-link-apple" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.apple_linked} onPress={() => void linkApple()} style={s.googleRow}><Text>{user?.apple_linked ? 'Apple-konto koblet' : appleBusy ? 'Kobler Apple…' : 'Koble Apple-konto'}</Text></Pressable> : null}
           {googleError ? <Text testID="profile-link-google-error" accessibilityRole="alert" style={{ color: colors.danger }}>{googleError}</Text> : null}
         {(['Steder', 'Konto'] as const).map((section) => (
           <View key={section} style={s.section}>

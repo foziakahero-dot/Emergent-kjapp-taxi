@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { GoogleSignin, isSuccessResponse, isCancelledResponse } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse, isCancelledResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }) {
@@ -23,7 +23,12 @@ export async function googleIdentity(config: { google_web_client_id: string; goo
   if (Platform.OS === 'android') {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   }
-  const result = await GoogleSignin.signIn();
+  let result;
+  try { result = await GoogleSignin.signIn(); }
+  catch (error) {
+    if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) return null;
+    throw error;
+  }
   if (isCancelledResponse(result)) return null;
   if (!isSuccessResponse(result) || !result.data.idToken) {
     throw new Error('Google returnerte ikke et gyldig innloggingstoken.');

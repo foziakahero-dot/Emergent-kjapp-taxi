@@ -29,6 +29,7 @@ export const authApi = {
     api.post('/auth/google/code', { code, code_verifier, redirect_uri }).then((r) => r.data),
   nativeConfig: () => api.get('/auth/native/config', { params: { client: 'customer' } }).then((r) => r.data),
   linkGoogle: (identity_token: string) => api.post('/auth/google/link', { identity_token, client: 'customer' }).then(r => r.data),
+  linkApple: (identity_token: string) => api.post('/auth/apple/link', { identity_token, client: 'customer' }).then(r => r.data),
   nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
     api.post(`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }).then((r) => r.data),
   register: (data: any) => api.post('/auth/register', data).then((r) => r.data),

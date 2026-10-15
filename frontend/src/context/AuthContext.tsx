@@ -15,6 +15,7 @@ export type User = {
   legal_accepted?: boolean;
   customer_photo_version?: string;
   google_linked?: boolean;
+  apple_linked?: boolean;
 } | null;
 
 type AuthCtx = {

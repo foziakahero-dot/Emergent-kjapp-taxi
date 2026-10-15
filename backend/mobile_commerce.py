@@ -8,6 +8,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from fastapi import Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
@@ -27,10 +28,26 @@ class NativePayment(BaseModel):
     trip_id: str = Field(min_length=1, max_length=128)
 
 
+
+def native_identity_config(client="customer"):
+    """QA never inherits shared/production OAuth settings."""
+    qa = os.getenv("APP_ENV", "").strip().lower() == "qa"
+    prefix = "QA_" if qa else ""
+    google = os.getenv(prefix + "GOOGLE_CLIENT_ID", "").strip()
+    apple = os.getenv(prefix + ("APPLE_DRIVER_BUNDLE_ID" if client == "driver" else "APPLE_BUNDLE_ID"),
+        "" if qa else ("no.nexorahub.kjapp.driver" if client == "driver" else "no.nexorahub.kjapp.customer")).strip()
+    google_enabled = bool(google) and (not qa or os.getenv("QA_GOOGLE_AUTH_ENABLED") == "true")
+    apple_enabled = bool(apple) and (not qa or os.getenv("QA_APPLE_AUTH_ENABLED") == "true")
+    return {"google_enabled": google_enabled,
+        "google_web_client_id": google if google_enabled else "",
+        "google_ios_client_id": os.getenv(prefix + ("GOOGLE_DRIVER_IOS_CLIENT_ID" if client == "driver" else "GOOGLE_IOS_CLIENT_ID"), "").strip() if google_enabled else "",
+        "apple_enabled": apple_enabled, "apple_bundle_id": apple if apple_enabled else ""}
+
 def install_mobile_commerce(api, db, *, stripe, get_current_user, require_customer,
         require_fleet_owner, rate_limit, verify_google, apple_keys, hash_password,
         create_access_token, create_twofa_token, set_auth_cookie, user_public,
-        apply_driver_risk, require_active_fleet, real_trip_filter, mark_paid, send_receipts):
+        apply_driver_risk, require_active_fleet, real_trip_filter, mark_paid, send_receipts,
+        on_customer_created=None):
 
     async def identity_session(provider, claims, body, response):
         brand = "SNAR" if body.client == "customer" else "KJAPP"
@@ -45,13 +62,9 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         if not user and verified and email:
             candidate = await db.users.find_one({"email": email})
             if candidate:
-                # Never overwrite an existing link. For third-party Google email,
-                # ownership must first be proved by the existing KJAPP login.
-                if candidate.get(field) and candidate[field] != sub:
-                    raise HTTPException(409, "Kontoen er koblet til en annen identitet")
-                if provider == "google" and not (email.endswith("@gmail.com") or claims.get("hd")):
-                    raise HTTPException(409, f"Logg inn med {brand}-passordet for denne e-postadressen")
-                user = candidate
+                # An authenticated account-link action must prove ownership of
+                # both identities, including Gmail/Workspace and Apple accounts.
+                raise HTTPException(409, f"Logg inn på den eksisterende {brand}-kontoen og koble identiteten under Konto.")
         if user and (user.get("disabled") or user.get("role", "user") != role):
             raise HTTPException(401, "Denne kontoen kan ikke brukes i appen")
         if role == "driver":
@@ -61,14 +74,24 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         elif not user:
             if not email or not verified:
                 raise HTTPException(401, "En verifisert e-postadresse er nødvendig")
-            result = await db.users.insert_one({
-                "email": email, "password_hash": await asyncio.to_thread(hash_password, secrets.token_urlsafe(32)),
-                "fullName": claims.get("name") or email.split("@")[0], "phone": "",
-                "role": "user", field: sub, provider + "_linked": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            user = await db.users.find_one({"_id": result.inserted_id})
+            try:
+                result = await db.users.insert_one({
+                    "email": email, "password_hash": await asyncio.to_thread(hash_password, secrets.token_urlsafe(32)),
+                    "fullName": claims.get("name") or email.split("@")[0], "phone": "",
+                    "role": "user", field: sub, provider + "_linked": True,
+                    "welcome_email_pending": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                user = await db.users.find_one({"_id": result.inserted_id})
+            except DuplicateKeyError:
+                # Concurrent retries may have created this identity already.
+                user = await db.users.find_one({field: sub})
+                if not user or user.get("disabled") or user.get("role", "user") != role:
+                    raise HTTPException(409, "Kontoen finnes allerede. Logg inn eller koble kontoen.")
+
         uid = str(user["_id"])
+        if on_customer_created and role == "user" and user.get("welcome_email_pending"):
+            await on_customer_created(user)
         # Do not persist a new social link before a required second factor.
         if user.get("totp_enabled"):
             raise HTTPException(409, f"Kontoen krever tofaktor. Bruk {brand}-innlogging.")
@@ -81,18 +104,15 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.get("/auth/native/config")
     async def identity_config(client: Literal["customer", "driver"] = "customer"):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            return {"google_enabled": False, "google_web_client_id": "", "google_ios_client_id": ""}
-        google_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
-        return {"google_enabled": bool(google_id), "google_web_client_id": google_id,
-            "google_ios_client_id": os.getenv("GOOGLE_DRIVER_IOS_CLIENT_ID" if client == "driver" else "GOOGLE_IOS_CLIENT_ID", "").strip()}
+        return native_identity_config(client)
 
     @api.post("/auth/google/native")
     async def google_native(body: NativeIdentity, request: Request, response: Response):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
+        config = native_identity_config(body.client)
+        if not config["google_enabled"]:
+            raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet.")
         await rate_limit(request, "google-native", 30, 900)
-        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        client_id = config["google_web_client_id"]
         if not client_id:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert")
         try:
@@ -105,12 +125,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/link")
     async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Google-kobling krever QA-spesifikk OAuth-konfigurasjon.")
+        config = native_identity_config(body.client)
+        if not config["google_enabled"]:
+            raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet.")
         await rate_limit(request, "google-link", 20, 900)
         if body.client != "customer":
             raise HTTPException(403, "Kun kundekonto kan kobles her")
-        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        client_id = config["google_web_client_id"]
         if not client_id:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert")
         try:
@@ -127,20 +148,21 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         existing = await db.users.find_one({"google_sub": sub})
         if existing and str(existing["_id"]) != current["id"]:
             raise HTTPException(409, "Google-kontoen er allerede koblet til en annen bruker")
-        result = await db.users.update_one({"_id": ObjectId(current["id"]),
-            "$or": [{"google_sub": {"$exists": False}}, {"google_sub": None}, {"google_sub": sub}]},
-            {"$set": {"google_sub": sub, "google_linked": True}})
+        try:
+            result = await db.users.update_one({"_id": ObjectId(current["id"]),
+                "$or": [{"google_sub": {"$exists": False}}, {"google_sub": None}, {"google_sub": sub}]},
+                {"$set": {"google_sub": sub, "google_linked": True}})
+        except DuplicateKeyError:
+            raise HTTPException(409, "Google-kontoen er allerede koblet til en annen bruker")
         if result.matched_count != 1:
             raise HTTPException(409, "Kontoen er koblet til en annen Google-identitet")
         return {"linked": True}
 
-    @api.post("/auth/apple/native")
-    async def apple_native(body: NativeIdentity, request: Request, response: Response):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Apple-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
-        await rate_limit(request, "apple-native", 30, 900)
-        audience = (os.getenv("APPLE_DRIVER_BUNDLE_ID", "no.nexorahub.kjapp.driver") if body.client == "driver"
-            else os.getenv("APPLE_BUNDLE_ID", "no.nexorahub.kjapp.customer"))
+    async def verify_apple(body):
+        config = native_identity_config(body.client)
+        if not config["apple_enabled"]:
+            raise HTTPException(503, "Apple-innlogging er ikke konfigurert for dette miljøet.")
+        audience = config["apple_bundle_id"]
         try:
             header = jwt.get_unverified_header(body.identity_token)
             keys = await apple_keys()
@@ -151,7 +173,37 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                 options={"require": ["exp", "sub", "aud", "iss"]})
         except Exception:
             raise HTTPException(401, "Ugyldig Apple-token")
+        return claims
+
+    @api.post("/auth/apple/native")
+    async def apple_native(body: NativeIdentity, request: Request, response: Response):
+        await rate_limit(request, "apple-native", 30, 900)
+        claims = await verify_apple(body)
         return await identity_session("apple", claims, body, response)
+
+    @api.post("/auth/apple/link")
+    async def link_apple(body: NativeIdentity, request: Request, current=Depends(require_customer)):
+        if body.client != "customer":
+            raise HTTPException(403, "Kun kundekonto kan kobles her")
+        await rate_limit(request, "apple-link", 20, 900)
+        claims = await verify_apple(body)
+        sub = claims.get("sub")
+        if not sub or str(claims.get("email_verified", "")).lower() not in ("true", "1"):
+            raise HTTPException(401, "En verifisert Apple-identitet er nødvendig")
+        # The authenticated SNAR session plus fresh Apple authorization proves
+        # both accounts. A private relay email need not match the account email.
+        existing = await db.users.find_one({"apple_sub": sub})
+        if existing and str(existing["_id"]) != current["id"]:
+            raise HTTPException(409, "Apple-kontoen er allerede koblet til en annen bruker")
+        try:
+            result = await db.users.update_one({"_id": ObjectId(current["id"]),
+                "$or": [{"apple_sub": {"$exists": False}}, {"apple_sub": None}, {"apple_sub": sub}]},
+                {"$set": {"apple_sub": sub, "apple_linked": True}})
+        except DuplicateKeyError:
+            raise HTTPException(409, "Apple-kontoen er allerede koblet til en annen bruker")
+        if result.matched_count != 1:
+            raise HTTPException(409, "Kontoen er koblet til en annen Apple-identitet")
+        return {"linked": True}
 
     async def own_fleet(current):
         # This self-service endpoint never accepts a caller-supplied fleet id.

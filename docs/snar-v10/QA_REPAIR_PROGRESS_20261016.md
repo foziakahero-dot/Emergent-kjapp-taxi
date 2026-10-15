@@ -40,3 +40,26 @@ New navigation appearance, GPS/wallet/Google/Apple OS dialogs, real online-drive
 3. Finish platform-specific Stripe wallet support and server-confirmed test settlement.
 4. Verify separate QA Admin/Fleet hosting, API routes and permissions. Do not repoint the production Netlify panels.
 5. Validate startup recovery and compare actual device screenshots to the source before requesting build approval.
+
+## Native identity and Resend checkpoint
+IMPLEMENTED / TESTED LOCALLY:
+- QA native OAuth now requires explicit `QA_GOOGLE_AUTH_ENABLED=true` + `QA_GOOGLE_CLIENT_ID`, or `QA_APPLE_AUTH_ENABLED=true` + `QA_APPLE_BUNDLE_ID` (Driver: `QA_APPLE_DRIVER_BUNDLE_ID`). QA never inherits production/shared provider settings. Google iOS also needs its QA iOS client ID and the matching URL scheme in the signed binary.
+- Verified provider subject is the identity key. New customers are created with customer role; existing same-email accounts require sign-in and explicit link. Added authenticated Apple linking, including private relay email support, and retained authenticated Google linking.
+- Unique partial provider indexes and duplicate-key recovery protect concurrent registration/link requests. Password registration also handles a raced duplicate email cleanly.
+- Native Google SDK cancellation is treated as cancellation. Both account-link actions share one lock; Apple linking appears only on iOS.
+- New password/social customer records enqueue one durable Resend welcome job by user ID. Repeated signup/login cannot enqueue duplicate jobs. Temporary queue failure leaves a marker for worker recovery. Welcome email does not claim email ownership verification.
+- Customer welcome jobs are isolated from the existing SendGrid outbox consumer. Resend uses stable idempotency keys and retries with leases/backoff. No message bodies or credentials are logged.
+- QA email delivery requires `QA_RESEND_ENABLED=true`, `QA_RESEND_API_KEY` and `QA_RESEND_FROM_EMAIL`, using a sender verified in the intended Resend account. Production/shared Resend credentials are never inherited in QA.
+
+CHECKS PASSED:
+- 69 backend tests for mobile identity, RS256 Apple signature/audience/issuer/expiry, repeat/concurrent account creation, safe linking, invalid/unverified tokens, QA isolation, signup welcome queue/provider retries, existing Fleet/partner email behavior and commerce guards.
+- 40 additional security, mobile-server-truth and concurrent login/health tests.
+- Customer TypeScript and diff whitespace checks passed.
+
+BLOCKED / NOT VERIFIED AGAINST QA OR ON DEVICE:
+- Render lacks dedicated Google/Apple QA configuration and Resend credentials/sender. No Google/Apple provider sign-in or real email delivery is certified.
+- Confirm Google Cloud Android OAuth registration for `no.kjapp.app` and `no.kjapp.driver` against each EAS signing SHA-1; verify Web client audience and iOS clients. Do not assume a client ID's type from its text.
+- Confirm Apple capability/merchant setup in the existing developer team. Customer bundle `no.nexorahub.kjapp.customer`, Driver `no.nexorahub.kjapp.driver`.
+- Unique provider indexes must be checked for duplicate legacy subjects before QA deployment. No production data will be repaired automatically.
+
+The navigation checkpoint was pushed as `bb6a992a5edc08ce632b26476b50f4f09a185126`. Auth/email checkpoint commit is recorded in the subsequent Git history.

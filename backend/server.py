@@ -24,7 +24,7 @@ from ride_reservations import RideReservations
 from ride_search import RideSearch
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
-from onboarding_emails import queue_confirmation, confirmation_loop
+from onboarding_emails import queue_confirmation, confirmation_loop, queue_customer_welcome
 from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
@@ -45,6 +45,7 @@ from pydantic import BaseModel, Field, EmailStr
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
 import pyotp
 import qrcode
 import uuid
@@ -1431,6 +1432,9 @@ async def lifespan(app: FastAPI):
     # Restore encrypted admin configuration before workers or onboarding start.
     await integration_settings.refresh()
     await db.users.create_index("email", unique=True)
+    for provider in ("google", "apple"):
+        await db.users.create_index(provider + "_sub", unique=True,
+            partialFilterExpression={provider + "_sub": {"$type": "string"}})
     await db.trips.create_index("user_id")
     await db.trips.create_index("trip_id", unique=True)
     await db.trips.create_index([("status", 1), ("driver_id", 1), ("dispatch_mode", 1), ("offer_expires_at", 1)])
@@ -2314,20 +2318,25 @@ async def register(body: RegisterRequest, request: Request, response: Response):
     if body.accepted_terms is not True:
         raise HTTPException(status_code=400, detail="Du må godta vilkår og personvern før kontoen opprettes")
     now_iso = datetime.now(timezone.utc).isoformat()
-    result = await db.users.insert_one({
-        "email": email,
-        "password_hash": await asyncio.to_thread(hash_password, body.password),
-        "fullName": body.fullName,
-        "phone": body.phone or "",
-        "role": "user",
-        "accepted_terms_at": now_iso,
-        "legal_version": CURRENT_LEGAL_VERSION,
-        "created_at": now_iso,
-    })
+    try:
+        result = await db.users.insert_one({
+            "email": email,
+            "password_hash": await asyncio.to_thread(hash_password, body.password),
+            "fullName": body.fullName,
+            "phone": body.phone or "",
+            "role": "user",
+            "welcome_email_pending": True,
+            "accepted_terms_at": now_iso,
+            "legal_version": CURRENT_LEGAL_VERSION,
+            "created_at": now_iso,
+        })
+    except DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="E-post er allerede registrert") from None
     uid = str(result.inserted_id)
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     created_user = await db.users.find_one({"_id": result.inserted_id})
+    await queue_customer_welcome(db, created_user)
     return {"token": token, "user": user_public(created_user or {"_id": result.inserted_id, "email": email, "fullName": body.fullName, "phone": body.phone or "", "role": "user", "accepted_terms_at": now_iso})}
 
 
@@ -11600,6 +11609,7 @@ handle_native_payment_webhook = install_mobile_commerce(
     set_auth_cookie=set_auth_cookie, user_public=user_public, apply_driver_risk=_apply_driver_identity_risk,
     require_active_fleet=_require_active_fleet, real_trip_filter=_real_trip_filter,
     mark_paid=_mark_trip_paid_and_complete, send_receipts=send_trip_receipts,
+    on_customer_created=lambda user: queue_customer_welcome(db, user),
 )
 
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
