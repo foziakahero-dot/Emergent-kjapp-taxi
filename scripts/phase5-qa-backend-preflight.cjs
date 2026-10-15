@@ -1,4 +1,4 @@
-const { APPROVED_QA_BACKEND, assertQaBackend } = require('./phase5-qa-build-guard.cjs');
+const { APPROVED_QA_BACKEND, QA_BUILD_PROFILES, assertQaBackend } = require('./phase5-qa-build-guard.cjs');
 
 const REQUIRED_QA_CHECKS = [
   'database', 'qa_mode', 'qa_database_isolated', 'demo_data_disabled',
@@ -7,29 +7,70 @@ const REQUIRED_QA_CHECKS = [
   'public_web_origin_configured', 'service_area_enforced', 'booking_enabled',
 ];
 
-async function verifyQaBackend({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
-  if (env.EAS_BUILD_PROFILE !== 'qa') {
-    throw new Error('QA preflight requires EAS_BUILD_PROFILE=qa.');
+const TRANSIENT_HTTP_STATUSES = new Set([502, 503, 504]);
+const RETRY_DELAYS_MS = [0, 3000, 5000, 8000, 12000];
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchQaJson(path, { fetchImpl, sleepImpl = sleep } = {}) {
+  const url = APPROVED_QA_BACKEND + path;
+  let lastError;
+
+  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt += 1) {
+    const delay = RETRY_DELAYS_MS[attempt];
+    if (delay > 0) await sleepImpl(delay);
+
+    try {
+      const response = await fetchImpl(url, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
+        headers: { Accept: 'application/json' },
+      });
+
+      // Native fetch validates DNS/TLS. A redirect must never count as QA success.
+      if (response.status === 200) {
+        if (response.url !== url || response.redirected) {
+          throw new Error(`QA ${path} did not return a direct HTTPS 200 response.`);
+        }
+        try {
+          return await response.json();
+        } catch {
+          throw new Error(`QA ${path} did not return valid JSON.`);
+        }
+      }
+
+      if (!TRANSIENT_HTTP_STATUSES.has(response.status)) {
+        throw new Error(`QA ${path} did not return a direct HTTPS 200 response.`);
+      }
+
+      lastError = new Error(`QA ${path} temporarily returned HTTP ${response.status}.`);
+    } catch (error) {
+      // Permanent semantic/redirect/JSON failures must never be retried away.
+      if (error?.message?.includes('direct HTTPS 200') || error?.message?.includes('valid JSON')) {
+        throw error;
+      }
+      lastError = error;
+    }
+
+    if (attempt < RETRY_DELAYS_MS.length - 1) {
+      console.warn(`[qa-preflight] ${path} unavailable; retrying canonical QA backend (${attempt + 1}/${RETRY_DELAYS_MS.length - 1}).`);
+    }
+  }
+
+  throw lastError || new Error(`QA ${path} is unavailable.`);
+}
+
+async function verifyQaBackend({ env = process.env, fetchImpl = globalThis.fetch, sleepImpl = sleep } = {}) {
+  if (!QA_BUILD_PROFILES.has(env.EAS_BUILD_PROFILE)) {
+    throw new Error('QA preflight requires EAS_BUILD_PROFILE=qa or testflight-qa.');
   }
   assertQaBackend(env.EAS_BUILD_PROFILE, env.EXPO_PUBLIC_BACKEND_URL);
+
   const results = {};
   for (const path of ['/api/health', '/api/ready']) {
-    const url = APPROVED_QA_BACKEND + path;
-    const response = await fetchImpl(url, {
-      redirect: 'manual',
-      signal: AbortSignal.timeout(20000),
-      headers: { Accept: 'application/json' },
-    });
-    // Native fetch validates DNS/TLS. A redirect must never count as QA success.
-    if (response.status !== 200 || response.url !== url || response.redirected) {
-      throw new Error(`QA ${path} did not return a direct HTTPS 200 response.`);
-    }
-    try {
-      results[path] = await response.json();
-    } catch {
-      throw new Error(`QA ${path} did not return valid JSON.`);
-    }
+    results[path] = await fetchQaJson(path, { fetchImpl, sleepImpl });
   }
+
   const health = results['/api/health'];
   const ready = results['/api/ready'];
   if (health?.db !== true || health?.status !== 'ok') {
@@ -45,7 +86,13 @@ async function verifyQaBackend({ env = process.env, fetchImpl = globalThis.fetch
   return { api: APPROVED_QA_BACKEND, qa: true, database: true, stripeTestMode: true };
 }
 
-module.exports = { verifyQaBackend, REQUIRED_QA_CHECKS };
+module.exports = {
+  verifyQaBackend,
+  fetchQaJson,
+  REQUIRED_QA_CHECKS,
+  TRANSIENT_HTTP_STATUSES,
+  RETRY_DELAYS_MS,
+};
 
 if (require.main === module) {
   verifyQaBackend().then(result => console.log(JSON.stringify(result))).catch(() => {
