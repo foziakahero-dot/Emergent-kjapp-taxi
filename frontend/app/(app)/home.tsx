@@ -5,6 +5,7 @@ import { V10Icon } from '@/src/components/V10Icon';
 import { v10 } from '@/src/components/V10UI';
 import { CustomerBookingView, confirmedPaymentMethod, confirmedWaitingPolicy, type BookingStage } from '@/src/components/CustomerBookingView';
 import { recentDestinations } from '@/src/lib/recentPlaces';
+import { withDeadline } from '@/src/lib/deadline';
 import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
@@ -12,7 +13,7 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -160,7 +161,10 @@ export default function Home() {
         setPickupLabel('Posisjon ikke tilgjengelig');
         return false;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      // A fresh cached fix starts the nearby lookup immediately. GPS acquisition
+      // has a deadline so indoor users can recover or select pickup manually.
+      const cached = await withDeadline(Location.getLastKnownPositionAsync({ maxAge: 30000, requiredAccuracy: 100 }), 1500).catch(() => null);
+      const pos = cached || await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), 10000);
       const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       if (sequence !== locationSequence.current) return false;
       if (!validPosition(p)) throw new Error('Ugyldig posisjon');
@@ -386,6 +390,10 @@ export default function Home() {
 
 export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
   useColorTheme();
+  useEffect(() => {
+    const listener = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
+    return () => listener.remove();
+  }, [onClose]);
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);
@@ -413,9 +421,8 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, targ
   const selectableItems = items.filter((place: any) => normalizeSearchPlace(place));
 
   const selectPlace = (place: any) => { const normalized = normalizeSearchPlace(place); if (normalized) onSelect(normalized); };
-  return <V10Entrance sheet style={{ position: 'absolute', top: Math.max(54, insets.top + 6), bottom: 0, left: 0, right: 0 }}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 20, paddingTop: 10 }} testID="search-sheet">
+  return <V10Entrance sheet style={{ position: 'absolute', top: Math.max(4, insets.top - 44), bottom: 0, left: 0, right: 0 }}><View style={{ height: 50 }}><Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Avbryt søk" style={{ marginLeft: 20, width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevL" size={20} /></Pressable></View><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 20, paddingTop: 10 }} testID="search-sheet">
     <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
-    <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Avbryt søk" style={{ position: 'absolute', top: -50, left: 20, width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevL" size={20} /></Pressable>
     <View style={{ gap: 8 }}>{['pickup', 'dropoff'].map(field => <View key={field} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: field === 'pickup' ? 5 : 3, backgroundColor: field === 'pickup' ? colors.accent : colors.text }} /></View>
       {target === field || (target === 'stop' && field === 'dropoff') ? <View style={{ flex: 1, height: 48, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: colors.text }}><TextInput testID="search-input" accessibilityLabel={target === 'pickup' ? 'Hentested' : 'Destinasjon'} autoFocus placeholder={target === 'pickup' ? 'Hvor skal du hentes?' : 'Hvor skal du?'} placeholderTextColor={colors.textMuted} underlineColorAndroid="transparent" style={[{ flex: 1, fontFamily: font.body, fontSize: 16, color: colors.text, minWidth: 0, paddingVertical: 0 }, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]} value={q} onChangeText={setQ} returnKeyType="search" />{loading ? <ActivityIndicator color={colors.accent} /> : <Pressable testID="search-clear" onPress={() => setQ('')} accessibilityLabel="Tøm søk" style={{ padding: 6 }}><V10Icon name="x" size={18} /></Pressable>}</View>
       : <Pressable testID={field === 'pickup' ? 'search-pickup' : 'search-destination'} onPress={field === 'pickup' ? onPickup : onDestination} accessibilityRole="button" style={{ flex: 1, minHeight: 48, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, justifyContent: 'center' }}><Text style={[v10.secondary, { color: colors.text }]} numberOfLines={1}>{field === 'pickup' ? pickupLabel || 'Velg hentested' : destinationLabel || 'Velg destinasjon'}</Text></Pressable>}
