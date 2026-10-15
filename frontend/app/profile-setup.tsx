@@ -12,10 +12,11 @@ import { Icon } from '@/src/components/Icon';
 import { Button } from '@/src/components/ui';
 import { useAuth } from '@/src/context/AuthContext';
 import { mePlacesApi, paymentApi } from '@/src/lib/api';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 
 const PAYMENTS = [['apple', 'Apple Pay'], ['gpay', 'Google Pay'], ['vipps', 'Vipps'], ['card', 'Kort']] as const;
 export default function ProfileSetup() {
+  useColorTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -52,15 +53,15 @@ export default function ProfileSetup() {
           </View>
         </View>
       </View>
-      <Button label="Fullfør" onPress={() => router.replace('/(app)/home')} testID="setup-finish" style={{ marginTop: 32 }} />
-      <Pressable onPress={() => router.replace('/(app)/home')} style={{ marginTop: 12, alignItems: 'center' }} testID="setup-skip"><Text style={{ color: colors.textSecondary, fontFamily: font.medium, fontSize: 12 }}>Hopp over for nå</Text></Pressable>
+      <Button label="Fullfør" onPress={() => router.replace('/permissions')} testID="setup-finish" style={{ marginTop: 32 }} />
+      <Pressable onPress={() => router.replace('/permissions')} style={{ marginTop: 12, alignItems: 'center' }} testID="setup-skip"><Text style={{ color: colors.textSecondary, fontFamily: font.medium, fontSize: 12 }}>Hopp over for nå</Text></Pressable>
     </ScrollView>
   </View>;
 }
-const s = StyleSheet.create({
+const s = themedStyles(() => StyleSheet.create({
   title: { marginTop: 24, fontFamily: font.semibold, fontSize: 24, letterSpacing: -0.48, color: colors.text },
   sub: { marginTop: 4, color: colors.textSecondary, fontSize: 14 },
   label: { marginBottom: 8, fontFamily: font.mono, fontSize: 10, letterSpacing: 2.4, color: colors.textMuted, textTransform: 'uppercase' },
   payment: { width: '48%', flexGrow: 1, borderRadius: 16, borderWidth: 1, paddingVertical: 12, alignItems: 'center' },
   address: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 12 },
-});
+}));

@@ -1,7 +1,9 @@
+import * as SplashScreen from 'expo-splash-screen';
+import { LaunchSplash } from '@/src/components/SplashArt';
 import { useReducedMotion } from '@/src/components/Motion';
 import { GlobalCustomerShell } from '@/src/components/GlobalCustomerShell';
 import { NativePaymentProvider } from '@/src/components/NativePaymentProvider';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,15 +13,19 @@ import { View, Pressable, Text } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
-import { colors, FONT_ASSETS } from '@/src/theme';
+import { colors, FONT_ASSETS, useColorTheme } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { normalizeCustomerNotificationUrl, registerNativePush } from '@/src/lib/nativeRuntime';
+
+// Keep the native SNAR mark visible until the bundled font is ready.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
 function SessionGate({ children }: { children: React.ReactNode }) {
+  useColorTheme();
   const { user, sessionError, refresh } = useAuth();
   if (user === undefined && sessionError) return <View style={{ flex: 1, justifyContent: 'center', padding: 28, gap: 16 }}>
     <Text accessibilityRole="alert" style={{ color: colors.text }}>{sessionError}</Text>
@@ -78,10 +84,18 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  const theme = useColorTheme();
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
-  const [fontsLoaded] = useFonts(FONT_ASSETS);
+  const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
+  const [launchFinished, setLaunchFinished] = useState(false);
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return;
+    void SplashScreen.hideAsync().catch(() => {});
+    const timer = setTimeout(() => setLaunchFinished(true), 1800);
+    return () => clearTimeout(timer);
+  }, [fontsLoaded, fontError]);
   useEffect(() => installClientErrorMonitor(), []);
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+  if (!launchFinished) return <><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontsLoaded || fontError) void SplashScreen.hideAsync().catch(() => {}); }} /></>;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -91,7 +105,7 @@ export default function RootLayout() {
             <NativePaymentProvider>
             <SessionGate>
             <NativeRuntimeBridge />
-            <StatusBar style="dark" />
+            <StatusBar style={theme.effective === 'dark' ? 'light' : 'dark'} />
             <GlobalCustomerShell>
             <Stack
               screenOptions={{
@@ -111,8 +125,14 @@ export default function RootLayout() {
               <Stack.Screen name="(app)" />
               <Stack.Screen name="booking/[tripId]" />
               <Stack.Screen name="receipt/[tripId]" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="scheduled-trip" options={{ animation: 'slide_from_bottom' }} />
               <Stack.Screen name="payment-methods" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="saved-places" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="customer-trip/[tripId]" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="customer-account" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="customer-accessibility" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="support" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="support-chat" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
             </Stack>
             </GlobalCustomerShell>

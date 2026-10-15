@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable } from 'react-native';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { useReducedMotion } from '@/src/components/Motion';
 
 /** Original 48 × 28 toggle; Tailwind's default 150 ms transition. */
 export function DesignToggle({ value, onChange, label, disabled, testID }: { value: boolean; onChange: (value: boolean) => void; label: string; disabled?: boolean; testID?: string }) {
+  useColorTheme();
   const progress = useRef(new Animated.Value(value ? 1 : 0)).current;
   const reduced = useReducedMotion();
   useEffect(() => {

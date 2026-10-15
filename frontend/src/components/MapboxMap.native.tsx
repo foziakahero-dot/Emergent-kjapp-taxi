@@ -10,15 +10,15 @@ import Mapbox, {
   ShapeSource,
   StyleImport,
 } from '@rnmapbox/maps';
-import Svg, { Circle, Rect } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Rect } from 'react-native-svg';
 import { Text } from './Typography';
-import { colors } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
 
 type LL = { lat: number; lng: number };
-type Car = { id?: string; lat: number; lng: number; heading?: number };
+type Car = { id?: string; lat: number; lng: number; heading?: number; eta_min?: number };
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -32,37 +32,42 @@ type Props = {
   pickup?: LL | null;
   dropoff?: LL | null;
   route?: number[][] | null;
+  focusRoute?: number[][] | null;
   cars?: Car[];
   activeCar?: Car | null;
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  showControls?: boolean;
   focusMode?: MapFocusMode;
+  focusRevision?: number;
   contentInsets?: Partial<MapContentInsets>;
 };
 
 function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+  useColorTheme();
   const smooth = useSmoothPosition(car);
   if (!smooth) return null;
   return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
+  useColorTheme();
   if (kind === 'dropoff') {
     return (
       <Svg width={32} height={32} viewBox="0 0 32 32">
-        <Rect x={8} y={8} width={16} height={16} rx={4} fill={colors.bg} stroke={colors.accent} strokeWidth={3} />
-        <Rect x={13} y={13} width={6} height={6} fill={colors.text} />
+        <Ellipse cx={16} cy={19} rx={10} ry={3.5} fill="#000" opacity={.16} /><Rect x={5.5} y={5.5} width={21} height={21} rx={6.5} fill={colors.surfaceInverse} />
+        <Rect x={12.4} y={12.4} width={7.2} height={7.2} rx={1.6} fill={colors.surface} />
       </Svg>
     );
   }
   if (kind === 'user') return <PositionDot />;
   return (
     <Svg width={32} height={32} viewBox="0 0 32 32">
-      <Circle cx={16} cy={16} r={12} fill={colors.accentSoft} />
-      <Circle cx={16} cy={16} r={7} fill={colors.accent} />
-      <Circle cx={16} cy={16} r={2.5} fill={colors.accentOn} />
+      <Ellipse cx={16} cy={19} rx={10} ry={3.5} fill="#000" opacity={.16} /><Circle cx={16} cy={16} r={11} fill={colors.surface} stroke={colors.surfaceInverse} strokeWidth={1.2} strokeOpacity={.15} />
+      <Circle cx={16} cy={16} r={6.4} fill={colors.accent} />
+      <Circle cx={16} cy={16} r={2.4} fill="#fff" />
     </Svg>
   );
 }
@@ -71,25 +76,30 @@ export function MapboxInteractiveMap({
   pickup,
   dropoff,
   route,
+  focusRoute,
   cars = [],
   activeCar,
   user,
   style,
   testID,
   interactive = true,
+  showControls = true,
   focusMode = 'route',
+  focusRevision = 0,
   contentInsets,
 }: Props) {
+  useColorTheme();
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
+  useEffect(() => { setManual(false); }, [focusRevision]);
   const [mapError, setMapError] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const smoothCar = useSmoothPosition(activeCar);
+  const smoothCar = useSmoothPosition(activeCar, 900);
 
-  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode }),
-    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode]);
+  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode, focusRoute }),
+    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode, focusRoute]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
   const padding = mapContentInsets(size.width, size.height, contentInsets);
@@ -150,13 +160,16 @@ export function MapboxInteractiveMap({
         pickup={pickup}
         dropoff={dropoff}
         route={route}
+        focusRoute={focusRoute}
         cars={cars}
         activeCar={activeCar}
         user={user}
         style={{ flex: 1 }}
         testID={testID}
         interactive={interactive}
+        showControls={showControls}
         focusMode={focusMode}
+        focusRevision={focusRevision}
         contentInsets={contentInsets}
       />
       <View testID="map-error" style={{ position: 'absolute', left: 16, right: 16, top: 62, backgroundColor: colors.surface, padding: 10, borderRadius: 16 }}>
@@ -235,9 +248,9 @@ export function MapboxInteractiveMap({
               id="kjapp-route-glow"
               slot="top"
               style={{
-                lineColor: colors.accent,
-                lineWidth: 12,
-                lineOpacity: 0.22,
+                lineColor: colors.surface,
+                lineWidth: 7,
+                lineOpacity: 0.9,
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
@@ -246,9 +259,9 @@ export function MapboxInteractiveMap({
               id="kjapp-route-line"
               slot="top"
               style={{
-                lineColor: colors.accent,
-                lineWidth: 5,
-                lineOpacity: 0.98,
+                lineColor: colors.route,
+                lineWidth: 4,
+                lineOpacity: 1,
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
@@ -259,10 +272,6 @@ export function MapboxInteractiveMap({
         {cars.map((car, index) => (
           <MarkerCar key={car.id || `car-${index}`} car={car} />
         ))}
-
-        {smoothCar ? (
-          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap><MapCar heading={smoothCar.heading} active /></MarkerView>
-        ) : null}
 
         {pickup ? (
           <MarkerView coordinate={[pickup.lng, pickup.lat]} allowOverlap>
@@ -276,15 +285,21 @@ export function MapboxInteractiveMap({
           </MarkerView>
         ) : null}
 
-        {user ? (
+        {user && (!pickup || Math.abs(user.lat - pickup.lat) > 1e-6 || Math.abs(user.lng - pickup.lng) > 1e-6) ? (
           <MarkerView coordinate={[user.lng, user.lat]} allowOverlap>
             <PointMarker kind="user" />
           </MarkerView>
         ) : null}
+        {smoothCar ? (
+          <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap anchor={{ x: .5, y: activeCar?.eta_min != null ? 52 / 77 : .5 }}>
+            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active /></View></View> : <MapCar heading={smoothCar.heading} active />}
+          </MarkerView>
+        ) : null}
+
       </MapView>
 
       {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
-      {interactive ? (
+      {interactive && showControls ? (
         <View style={{ position: 'absolute', right: 14, top: 116, gap: 8 }} pointerEvents="box-none">
           <Ctrl name="plus" onPress={() => void zoomBy(1)} testID="map-zoom-in" />
           <Ctrl name="minus" onPress={() => void zoomBy(-1)} testID="map-zoom-out" />
@@ -296,6 +311,7 @@ export function MapboxInteractiveMap({
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
+  useColorTheme();
   return (
     <Pressable
       onPress={onPress}

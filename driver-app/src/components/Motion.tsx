@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Animated, Easing, type ViewProps } from 'react-native';
 
+import { useAccessibilityPreferences } from '@/src/lib/accessibilityPreferences';
+
 export const figmaEase = Easing.bezier(0.22, 1, 0.36, 1);
 export const cssEase = Easing.bezier(0.25, 0.1, 0.25, 1);
 export const cssEaseOut = Easing.bezier(0, 0, 0.58, 1);
@@ -24,7 +26,9 @@ function subscribeReducedMotion(listener: () => void) {
   return () => { listeners.delete(listener); if (listeners.size === 0) { revision++; subscription?.remove(); subscription = undefined; } };
 }
 export function useReducedMotion() {
-  return useSyncExternalStore(subscribeReducedMotion, () => reducedMotion, () => true);
+  const preference = useAccessibilityPreferences();
+  const system = useSyncExternalStore(subscribeReducedMotion, () => reducedMotion, () => true);
+  return system || preference.reduceMotion;
 }
 
 export function Rise({ delay = 0, style, ...props }: ViewProps & { delay?: number }) {

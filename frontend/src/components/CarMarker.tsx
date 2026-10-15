@@ -1,6 +1,6 @@
 import React from 'react';
 import Svg, { Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 /**
  * Top-down SNAR vehicle marker.
@@ -17,6 +17,7 @@ export function CarShape({
   glass?: string;
   shadow?: string;
 }) {
+  useColorTheme();
   return (
     <>
       <Ellipse cx={12} cy={12.8} rx={8.3} ry={10.8} fill={shadow} opacity={0.38} />
@@ -54,6 +55,7 @@ export function CarSvg({
   glass?: string;
   shadow?: string;
 }) {
+  useColorTheme();
   const gradientId = 'snar-car-body';
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

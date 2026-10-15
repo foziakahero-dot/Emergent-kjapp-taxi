@@ -2,9 +2,10 @@ import React, { useRef } from 'react';
 import { Animated, Easing, View, type TextInputProps } from 'react-native';
 import { Text, TextInput } from '@/src/components/Typography';
 import { useReducedMotion } from '@/src/components/Motion';
-import { colors, font } from '@/src/theme';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 export function DesignField({ label, action, style, onFocus, onBlur, ...props }: TextInputProps & { label: string; action?: React.ReactNode }) {
+  useColorTheme();
   const focus = useRef(new Animated.Value(0)).current;
   const reduced = useReducedMotion();
   const animate = (toValue: number) => Animated.timing(focus, { toValue, duration: reduced ? 0 : 300, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false }).start();

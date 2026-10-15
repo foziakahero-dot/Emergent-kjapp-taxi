@@ -16,6 +16,8 @@ let clock = 0, timerId = 0, nativeListeners = 0;
 const timers = new Map(), accessibility = new Set(), cache = new Map();
 const timingCalls = [];
 const stubs = new Map();
+const spoken=[];let speechStops=0;stubs.set('expo-speech',{speak(text,options){spoken.push({text,options})},stop:async()=>{speechStops++}});
+stubs.set('@/src/utils/storage', { storage: { getItem: async () => null, setItem: async () => {} } });
 class Value {
   constructor(value) { this.value = value; }
   setValue(value) { this.value = value; }
@@ -23,7 +25,11 @@ class Value {
   stopAnimation() {}
 }
 const animation = () => ({ start() {}, stop() {} });
+const themeListeners = new Set(); let systemColorScheme = 'light';
 const native = {
+  PanResponder: { create: config => ({ panHandlers: config }) },
+  Appearance: { getColorScheme: () => systemColorScheme, addChangeListener: listener => { themeListeners.add(listener); return { remove: () => themeListeners.delete(listener) }; } },
+  Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   Text: 'NativeText', TextInput: 'NativeTextInput', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' },
   StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', inset: 0 }, flatten: value => Array.isArray(value) ? Object.assign({}, ...value.filter(Boolean).map(native.StyleSheet.flatten)) : value },
   AccessibilityInfo: {
@@ -44,11 +50,15 @@ function load(app, file) {
     if (app === 'frontend' && name === './api' && absolute.endsWith(path.join('frontend', 'src', 'lib', 'useAvailableCars.ts'))) {
       return { carsApi: { nearby: async () => ({ cars: [] }) } };
     }
+    if (name === '@/src/components/VehicleAsset') return { VehicleAsset: 'VehicleAsset' };
     if (name === 'react') return React;
     if (name.startsWith('./')) { const target = path.relative(path.join(root, app), path.resolve(path.dirname(absolute), name)); return load(app, fs.existsSync(path.join(root, app, target + '.tsx')) ? target + '.tsx' : target + '.ts'); }
     if (name === 'react/jsx-runtime') return customerRequire(name);
     if (name === 'react-native') return native;
     if (name === 'expo-linear-gradient') return { LinearGradient: 'Gradient' };
+    if (name === 'expo-image') return { Image: 'CategoryImage' };
+    if (name === 'expo-blur') return { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView:'BlurView' };
+    if (name === 'expo-haptics') return { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async () => {} };
     if (name === 'react-native-svg') return new Proxy({ __esModule: true, default: 'Svg' }, { get: (target, key) => target[key] ?? String(key) });
     if (name === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
     if (name.startsWith('@expo-google-fonts/')) return new Proxy({}, { get: (_target, key) => key === '__esModule' ? true : `asset:${String(key)}` });
@@ -116,6 +126,90 @@ const act = renderer.act;
       assert.ok(Math.abs(dx * -Math.cos(angle * Math.PI / 180) - dy * Math.sin(angle * Math.PI / 180)) < 1e-9, 'CSS gradient angle must survive non-square layouts');
     }
   }
+  // Actual accessibility screen changes typography/motion across mounted components after persistence.
+  stubs.set('expo-router', { useRouter: () => ({ back() {} }) });
+  const AccessibleScreen = load('frontend', 'app/customer-accessibility.tsx').default;
+  const AccessibleText = load('frontend', 'src/components/Typography.tsx').Text;
+  const useAccessibleMotion = load('frontend', 'src/components/Motion.tsx').useReducedMotion;
+  let observedMotion, preferencesWrites = 0, resolvePreferenceWrite;
+  const preferenceStorage = stubs.get('@/src/utils/storage').storage;
+  const originalPreferenceWrite = preferenceStorage.setItem;
+  function MotionProbe() { observedMotion = useAccessibleMotion(); return null; }
+  let accessible;
+  await act(async () => { accessible = renderer.create(React.createElement(React.Fragment, null, React.createElement(AccessibleScreen), React.createElement(AccessibleText, { testID: 'scale-parent', style: { fontSize: 14 } }, React.createElement(AccessibleText, { testID: 'scale-child' }, 'Nested')), React.createElement(MotionProbe))); });
+  const accessibleSwitch = id => accessible.root.findAll(node => node.type === 'Pressable' && node.props.testID === id)[0];
+  preferenceStorage.setItem = async () => { preferencesWrites++; return new Promise(resolve => { resolvePreferenceWrite = resolve; }); };
+  await act(async () => { accessibleSwitch('accessibility-large-text').props.onPress(); accessibleSwitch('accessibility-large-text').props.onPress(); });
+  assert.equal(preferencesWrites, 1);
+  assert.equal(accessibleSwitch('accessibility-large-text').props.accessibilityState.checked, false, 'Text setting waits for persisted acknowledgement');
+  await act(async () => resolvePreferenceWrite());
+  for (const id of ['scale-parent', 'scale-child']) assert.equal(native.StyleSheet.flatten(accessible.root.findAll(node => node.type === 'NativeText' && node.props.testID === id)[0].props.style).fontSize, 14 * 1.15, 'Nested text scales once, not twice');
+  preferenceStorage.setItem = async () => { throw new Error('Disk unavailable'); };
+  await act(async () => accessibleSwitch('accessibility-reduced-motion').props.onPress());
+  assert.equal(observedMotion, false); assert.equal(accessibleSwitch('accessibility-reduced-motion').props.accessibilityState.checked, false);
+  assert.equal(accessible.root.findAllByProps({ testID: 'accessibility-save-error' }).length > 0, true);
+  preferenceStorage.setItem = originalPreferenceWrite;
+  await act(async () => accessibleSwitch('accessibility-reduced-motion').props.onPress()); assert.equal(observedMotion, true);
+  const preferenceModule = load('frontend', 'src/lib/accessibilityPreferences.ts');
+  await act(async () => { for (const listener of accessibility) listener(true); await preferenceModule.saveAccessibilityPreference('reduceMotion', false); });
+  assert.equal(observedMotion, true, 'Local preference cannot override OS reduced motion');
+  await act(async () => { for (const listener of accessibility) listener(false); await preferenceModule.saveAccessibilityPreference('largeText', false); });
+  assert.equal(observedMotion, false);
+
+  const accessibilityTheme=load('frontend','src/theme.ts');const originalContrastLine=accessibilityTheme.colors.lineStrong;
+  await act(async()=>accessibleSwitch('accessibility-high-contrast').props.onPress());assert.equal(accessibleSwitch('accessibility-high-contrast').props.accessibilityState.checked,true);assert.notEqual(accessibilityTheme.colors.lineStrong,originalContrastLine,'High contrast updates the actual shared palette');
+  await act(async()=>accessibleSwitch('accessibility-voice-support').props.onPress());assert.ok(spoken.at(-1).text.includes('Stemmestøtte er aktivert'));
+  const {useTripSpeech}=load('frontend','src/lib/useTripSpeech.ts');let spokenTrip={trip_id:'spoken-trip',status:'driver_on_way',driver_id:'actual-driver',driver:{plate:'ACTUAL42'},driver_lat:59.91,driver_lng:10.75,driver_location_at:new Date().toISOString(),eta_min:3},spokenOffline=false;
+  function SpeechProbe(){useTripSpeech(spokenTrip,spokenOffline);return null;}
+  let speechTree;await act(async()=>{speechTree=renderer.create(React.createElement(SpeechProbe))});assert.match(spoken.at(-1).text,/3 minutter/);assert.match(spoken.at(-1).text,/ACTUAL42/);const spokenCount=spoken.length;
+  await act(async()=>speechTree.update(React.createElement(SpeechProbe)));assert.equal(spoken.length,spokenCount,'Unchanged polling cannot repeat speech');
+  spokenOffline=true;await act(async()=>speechTree.update(React.createElement(SpeechProbe)));assert.equal(spoken.length,spokenCount,'Offline data does not speak an ETA');
+  await act(async()=>{speechTree.unmount();});assert.ok(speechStops>0);
+  await act(async()=>{await preferenceModule.saveAccessibilityPreference('voiceSupport',false);await preferenceModule.saveAccessibilityPreference('highContrast',false)});assert.equal(accessibilityTheme.colors.lineStrong,originalContrastLine);
+  await act(async () => accessible.unmount());
+  const DriverText = load('driver-app', 'src/components/Typography.tsx').Text;
+  const DriverPreferences = load('driver-app', 'src/lib/accessibilityPreferences.ts');
+  const useDriverMotion = load('driver-app', 'src/components/Motion.tsx').useReducedMotion;
+  let driverMotion;
+  function DriverMotionProbe() { driverMotion = useDriverMotion(); return null; }
+  await act(async () => { accessible = renderer.create(React.createElement(React.Fragment, null, React.createElement(DriverText, { testID: 'driver-scale-parent', style: { fontSize: 20 } }, React.createElement(DriverText, { testID: 'driver-scale-child' }, 'Driver nested')), React.createElement(DriverMotionProbe))); });
+  await act(async () => DriverPreferences.saveAccessibilityPreference('largeText', true));
+  for (const id of ['driver-scale-parent', 'driver-scale-child']) assert.equal(native.StyleSheet.flatten(accessible.root.findAll(node => node.type === 'NativeText' && node.props.testID === id)[0].props.style).fontSize, 23);
+  await act(async () => DriverPreferences.saveAccessibilityPreference('reduceMotion', true)); assert.equal(driverMotion, true);
+  await act(async () => { await DriverPreferences.saveAccessibilityPreference('largeText', false); await DriverPreferences.saveAccessibilityPreference('reduceMotion', false); accessible.unmount(); });
+  console.log('PASS: Actual accessibility persistence/duplicates/failure, global text scaling with nested inheritance, local reduced motion and OS preference priority.');
+  // Actual theme picker, component/style reactivity, failure and system changes without remount.
+  const ThemeRow = load('frontend', 'src/components/ThemeModeRow.tsx').ThemeModeRow;
+  const themeModule = load('frontend', 'src/theme.ts');
+  const ThemeInput = load('frontend', 'src/components/Typography.tsx').TextInput;
+  const ThemeAction = load('frontend', 'src/components/V10UI.tsx').V10Action;
+  let retainedDraft, probeMounts = 0;
+  function ThemeProbe() { const selected = themeModule.useColorTheme(); const [draft, setDraft] = React.useState('Active booking draft'); retainedDraft = draft; React.useEffect(() => { probeMounts++; }, []); return React.createElement(React.Fragment, null, React.createElement(ThemeRow), React.createElement(ThemeInput, { testID: 'theme-draft', value: draft, onChangeText: setDraft }), React.createElement(ThemeAction, {kind:'ink',label:'Theme action',onPress() {}}), React.createElement(AccessibleText, { testID: 'theme-text' }, selected.effective)); }
+  let themed;
+  await act(async () => { themed = renderer.create(React.createElement(ThemeProbe)); });
+  const themeButton = id => themed.root.findAll(node => node.type === 'Pressable' && node.props.testID === id)[0];
+  const themeTextColor = () => native.StyleSheet.flatten(themed.root.findAll(node => node.type === 'NativeText' && node.props.testID === 'theme-text')[0].props.style).color;
+  await act(async () => themeButton('theme-open').props.onPress());
+  let resolveThemeWrite, themeWriteCount = 0;
+  preferenceStorage.setItem = async () => { themeWriteCount++; return new Promise(resolve => { resolveThemeWrite = resolve; }); };
+  await act(async () => { themeButton('theme-choice-dark').props.onPress(); themeButton('theme-choice-dark').props.onPress(); });
+  assert.equal(themeWriteCount, 1); assert.equal(themeTextColor(), '#0B1A2C', 'Theme cannot flip before persistence succeeds');
+  await act(async () => resolveThemeWrite()); assert.equal(themeTextColor(), '#EEF2F7');
+  assert.equal(native.StyleSheet.flatten(themed.root.findAll(node => node.type === 'NativeText' && node.props.children === 'Theme action')[0].props.style).color, '#0B1A2C', 'Inverse action remains readable in dark mode');
+  assert.equal(retainedDraft, 'Active booking draft'); assert.equal(probeMounts, 1, 'Theme changes preserve screen state and do not remount the app');
+  await act(async () => themeButton('theme-open').props.onPress());
+  preferenceStorage.setItem = async () => { throw new Error('Disk unavailable'); };
+  await act(async () => themeButton('theme-choice-light').props.onPress()); assert.equal(themeTextColor(), '#EEF2F7'); assert.equal(themed.root.findAllByProps({ testID: 'theme-error' }).length > 0, true);
+  preferenceStorage.setItem = originalPreferenceWrite;
+  await act(async () => themeButton('theme-choice-system').props.onPress()); assert.equal(themeTextColor(), '#0B1A2C');
+  await act(async () => { systemColorScheme = 'dark'; for (const listener of themeListeners) listener({ colorScheme: 'dark' }); }); assert.equal(themeTextColor(), '#EEF2F7');
+  await act(async () => { systemColorScheme = 'light'; for (const listener of themeListeners) listener({ colorScheme: 'light' }); await themeModule.saveColorThemeMode('light'); themed.unmount(); });
+  const driverThemeModule = load('driver-app', 'src/theme.ts');
+  function DriverThemeProbe() { const selected = driverThemeModule.useColorTheme(); return React.createElement('DriverTheme', { effective: selected.effective }); }
+  await act(async () => { themed = renderer.create(React.createElement(DriverThemeProbe)); }); assert.equal(themed.root.findByType('DriverTheme').props.effective, 'dark', 'Driver defaults to original dark cockpit');
+  await act(async () => driverThemeModule.saveColorThemeMode('light')); assert.equal(themed.root.findByType('DriverTheme').props.effective, 'light');
+  await act(async () => { await driverThemeModule.saveColorThemeMode('dark'); themed.unmount(); });
+  console.log('PASS: Actual persistent light/dark/system theme, Driver dark default, storage failure/duplicates, dynamic colors and retained input/screen state.');
   stubs.set('expo-blur', { BlurTargetView: 'BlurTargetView', BlurView: 'BlurView' });
   const { FloatingTabBar, TabBarVisibilityProvider, useHideTabBar } = load('frontend', 'src/components/FloatingTabBar.tsx');
   const tabRoutes = ['home', 'history', 'assist', 'messages', 'profile', 'wallet'].map(name => ({ name, key: `route-${name}` }));
@@ -156,6 +250,8 @@ const act = renderer.act;
   stubs.set('expo-router', { useRouter: () => ({ push: route => profileRoutes.push(route), replace: () => {}, back: () => {} }) });
   stubs.set('@/src/lib/socialSignIn', { googleIdentity: async () => null });
   stubs.set('@/src/lib/api', { authApi: { nativeConfig: async () => ({}), linkGoogle: async () => {} }, gdprApi: { delete: async () => {} } });
+  stubs.set('@tanstack/react-query', { useQuery: () => ({ data: null, isPending: true }) });
+  stubs.set('@/src/lib/api', { mePlacesApi: { list() {} }, paymentApi: { list() {} } });
   const CustomerProfile = load('frontend', 'app/(app)/profile.tsx').default;
   let customerProfile;
   await act(async () => { customerProfile = renderer.create(React.createElement(CustomerProfile)); });
@@ -167,6 +263,7 @@ const act = renderer.act;
   stubs.set('@/src/components/KjappMark', { KjappMark: 'KjappMark' });
   stubs.set('@/src/components/Icon', { Icon: 'Icon' });
   stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: null, logout: async () => {} }) });
+  stubs.set('@/src/components/V10Entrance', { V10Entrance: ({children}) => React.createElement('V10Entrance',null,children) });
   stubs.set('expo-router', { useRouter: () => ({ push: route => onboardingRoutes.push(route), replace: () => {}, back: () => {} }) });
   const CustomerIndex = load('frontend', 'app/index.tsx').default;
   let onboarding;
@@ -199,7 +296,7 @@ const act = renderer.act;
     assert.equal(toggle.root.findByType('Pressable').props.accessibilityState.checked, true);
     assert.equal(timingCalls.length, count, 'Reduced motion must apply toggle state without a duration-zero animation');
     await act(async () => accessibility.forEach(callback => callback(false)));
-    assert.equal(timingCalls.at(-1).duration, 150);
+    assert.equal(timingCalls.at(-1).duration, app === 'driver-app' ? 210 : 150);
     await act(async () => toggle.unmount());
   }
   const { SlideConfirm } = load('driver-app', 'src/components/SlideConfirm.tsx');
@@ -250,6 +347,9 @@ const act = renderer.act;
   await act(async () => resolveTicket({ data: { ok: true, ticket_id: 'server-ticket-007' } }));
   assert.ok(support.root.findAllByType('NativeText').some(node => String(node.props.children).includes('server-ticket-007')));
   await act(async () => support.root.findByProps({ testID: 'support-escalate' }).props.onPress());
+  assert.equal(tickets, 1, 'A confirmed identical ticket is not submitted again');
+  await act(async () => support.root.findByProps({ testID: 'support-message-input' }).props.onChangeText('En annen sak som må bekreftes'));
+  await act(async () => support.root.findByProps({ testID: 'support-escalate' }).props.onPress());
   await act(async () => resolveTicket({ data: {} }));
   assert.ok(support.root.findAllByType('NativeText').some(node => node.props.accessibilityRole === 'alert'));
   assert.equal(support.root.findAllByType('NativeText').filter(node => String(node.props.children).includes('Saksnummer:')).length, 1, 'An unconfirmed ticket must not produce a success message');
@@ -295,7 +395,7 @@ const act = renderer.act;
     useQuery: ({ queryKey }) => ({ data: queryKey[0] === 'driver-notification-settings' ? settingsData : undefined }),
     useQueryClient: () => ({ setQueryData: (key, data) => { confirmedSettings.push({ key, data }); settingsData = data; } }),
   });
-  const DriverProfile = load('driver-app', 'app/(driver)/profile.tsx').default;
+  const DriverProfile = load('driver-app', 'app/driver-account.tsx').default;
   let profile;
   await act(async () => { profile = renderer.create(React.createElement(DriverProfile)); });
   await act(async () => { const press = profile.root.findByProps({ testID: 'profile-push-toggle' }).findByType('Pressable').props.onPress; press(); press(); });
@@ -348,16 +448,18 @@ const act = renderer.act;
   native.Share = { share: async () => ({}) }; native.Alert = { alert: (...args) => dialogs.push(args) };
   native.Linking = { openURL: async url => { callsToDialer.push(url); } };
   let serverTrip = { trip_id: 'unit-trip', status: 'driver_on_way', pickup_lat: 59.9, pickup_lng: 10.7, dropoff_lat: 59.91, dropoff_lng: 10.71, dropoff_address: 'Fixture destination', driver: { name: 'Fixture', car: 'Fixture vehicle', plate: 'FIXTURE' } };
-  const navigations = [];
-  const bookingRouter = { replace: url => navigations.push(url) };
+  const navigations = [];let bookingRouteId='unit-trip';
+  const bookingRouter = { replace: url => navigations.push(url), push: url => navigations.push(url) };
   stubs.set('expo-router', {
-    useLocalSearchParams: () => ({ tripId: 'unit-trip' }),
+    useLocalSearchParams: () => ({ tripId: bookingRouteId }),
     useRouter: () => bookingRouter,
     useFocusEffect: effect => React.useEffect(effect, [effect]),
   });
+  let preferenceCalls = 0, preferenceResult, readyCalls = 0, readyResult, authorizationCalls = 0;
   let cancelRequests = 0, previews = 0, cancellationMode = 'reject', shareRequests = 0, safetyMode = 'reject';
   stubs.set('@/src/lib/api', {
-    tripsApi: { get: async () => serverTrip, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
+    messagesApi: { send: async () => { readyCalls++; return readyResult(); } },
+    tripsApi: { get: async () => serverTrip, pickupPreference: async () => { preferenceCalls++; return preferenceResult(); }, authorize: async () => { authorizationCalls++; return serverTrip; }, cancelPreview: async () => { previews++; return { cancellation_fee: 0 }; },
       cancel: async () => { cancelRequests++; if (cancellationMode === 'lost-response') serverTrip = { ...serverTrip, status: 'cancelled' }; throw new Error('Network failed'); } },
     safetyApi: { shareLink: async () => { shareRequests++; throw new Error('Network failed'); },
       log: () => safetyMode === 'never-resolve' ? new Promise(() => {}) : Promise.reject(new Error('Network failed')) },
@@ -376,6 +478,46 @@ const act = renderer.act;
   await act(async () => booking.root.findByProps({ testID: 'active-trip-reopen' }).props.onPress());
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 1);
   await act(async () => booking.unmount());
+  // Actual Customer trip wiring: preferences are confirmed, serialized and never start a ride.
+  let resolvePreference;
+  preferenceResult = () => new Promise(resolve => { resolvePreference = resolve; });
+  serverTrip = { ...serverTrip, pickup_waiting_inside: false, driver_lat: 59.9, driver_lng: 10.7, driver_location_at: new Date().toISOString(), driver_pickup_geometry: { coordinates: [[10.7, 59.9], [10.71, 59.91]] } };
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  assert.deepEqual(booking.root.findByType('Map').props.route, serverTrip.driver_pickup_geometry.coordinates);
+  assert.equal(booking.root.findByType('Map').props.dropoff, null);
+  await act(async () => { const change = booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.onPress; change(); change(); });
+  assert.equal(preferenceCalls, 1, 'Inside instructions must serialize rapid taps');
+  assert.equal(booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.accessibilityState.checked, false, 'Preference cannot be shown as saved before server confirmation');
+  await act(async () => resolvePreference({ ok: true, waiting_inside: true }));
+  assert.equal(booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.accessibilityState.checked, true);
+  preferenceResult = async () => ({ ok: false });
+  await act(async () => booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.onPress());
+  assert.equal(booking.root.findAll(node => node.type === 'Pressable' && node.props.testID === 'customer-waiting-inside')[0].props.accessibilityState.checked, true, 'Unconfirmed write preserves last confirmed preference');
+  await act(async () => booking.root.findByProps({ testID: 'customer-pickup-guide' }).props.onPress());
+  assert.equal(booking.root.findByType('Map').props.focusRoute,null,'Walking guidance frames the current pickup instead of the full approach road');
+  await act(async () => booking.root.findByProps({ testID: 'pickup-walking-directions' }).props.onPress());
+  assert.ok(callsToDialer.at(-1).includes('travelmode=walking'));
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'at_pickup' };
+  let resolveReady;
+  readyResult = () => new Promise(resolve => { resolveReady = resolve; });
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => { const ready = booking.root.findByProps({ testID: 'customer-in-car' }).props.onPress; ready(); ready(); });
+  assert.equal(readyCalls, 1);
+  await act(async () => resolveReady({ id: 'confirmed-message' }));
+  assert.equal(serverTrip.status, 'at_pickup', 'Customer readiness does not manufacture driver start');
+  assert.ok(JSON.stringify(booking.toJSON()).includes('Sjåføren er varslet'));
+  assert.equal(booking.root.findByProps({testID:'customer-in-car'}).props.disabled,true,'Confirmed readiness cannot be sent twice');
+  await act(async()=>booking.root.findByProps({testID:'customer-in-car'}).props.onPress());assert.equal(readyCalls,1);
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'payment_authorizing' };
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  await act(async () => { const authorize = booking.root.findByProps({ testID: 'booking-authorize' }).props.onPress; authorize(); authorize(); });
+  assert.equal(authorizationCalls, 1);
+  assert.equal(serverTrip.status, 'payment_authorizing', 'Unchanged bank status cannot be displayed as successful authorization');
+  await act(async () => booking.unmount());
+  serverTrip = { ...serverTrip, status: 'driver_on_way' };
+  console.log('PASS: Actual Customer pickup geometry, confirmed/failed inside instructions, walking link, serialized readiness message and bank-state authorization.');
   // Failed cancellation cannot exit; duplicate confirmation must not submit twice.
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => { const cancel = booking.root.findByProps({ testID: 'assigned-trip-cancel' }).props.onPress; cancel(); cancel(); });
@@ -397,10 +539,16 @@ const act = renderer.act;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Fixture destination'), 'Active trip banner must use the server destination');
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0, 'Active trip destination banner must replace pickup-arrival status');
-  await act(async () => { const share = booking.root.findByProps({ testID: 'ontrip-share' }).props.onPress; share(); share(); });
+  assert.equal(booking.root.findAllByProps({testID:'trip-dock'}).length,1);
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-trip'}).props.onPress());assert.equal(navigations.pop(),'/customer-trip/unit-trip');
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-message'}).props.onPress());assert.equal(navigations.pop(),'/(app)/messages','Active trip dock opens the current Customer messaging screen');
+  await act(async()=>booking.root.findByProps({testID:'active-trip-minimize'}).props.onPress());assert.equal(booking.root.findAllByProps({testID:'active-trip-reopen'}).length,1);
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-driver'}).props.onPress());assert.equal(booking.root.findAll(node=>node.type==='AnimatedView'&&node.props.testID==='customer-trip-sheet').length,1);
+  await act(async()=>booking.root.findByProps({testID:'trip-dock-safety'}).props.onPress());
+  await act(async () => { const share = booking.root.findByProps({ testID: 'safety-share-trip' }).props.onPress; share(); share(); });
   assert.equal(shareRequests, 1);
   assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'booking-action-error').length, 1);
-  await act(async () => booking.root.findByProps({ testID: 'ontrip-safety' }).props.onPress());
+  await act(async () => booking.root.findByProps({ testID: 'trip-dock-safety' }).props.onPress());
   await act(async () => booking.root.findByProps({ testID: 'safety-report' }).props.onPress());
   assert.equal(booking.root.findAllByType('NativeText').filter(node => node.props.testID === 'safety-action-error').length, 1);
   assert.equal(booking.root.findByType('Modal').props.visible, true);
@@ -408,6 +556,18 @@ const act = renderer.act;
   await act(async () => booking.root.findByProps({ testID: 'safety-call-112' }).props.onPress());
   assert.ok(callsToDialer.includes('tel:112'), 'Emergency dialer must not wait for backend logging');
   await act(async () => booking.unmount());
+  // Changing trip reference hides previous private details before a new request resolves.
+  serverTrip={...serverTrip,status:'driver_on_way',driver_id:'old-driver'};
+  await act(async()=>{booking=renderer.create(React.createElement(Booking))});
+  assert.ok(booking.root.findAllByType('NativeText').some(node=>node.props.children==='FIXTURE'));
+  const bookingApi=stubs.get('@/src/lib/api');const originalGetTrip=bookingApi.tripsApi.get;let resolveNewTrip;
+  bookingApi.tripsApi.get=()=>new Promise(resolve=>{resolveNewTrip=resolve});bookingRouteId='new-unit-trip';
+  await act(async()=>booking.update(React.createElement(Booking)));
+  assert.equal(booking.root.findAllByProps({testID:'booking-map'}).length,0,'The previous trip map cannot leak onto a new trip route');
+  assert.equal(booking.root.findAllByType('NativeText').some(node=>node.props.children==='FIXTURE'),false);
+  await act(async()=>resolveNewTrip(serverTrip));
+  assert.equal(booking.root.findAllByProps({testID:'booking-load-error'}).length,1,'A mismatched server trip reference is rejected');
+  await act(async()=>booking.unmount());bookingRouteId='unit-trip';bookingApi.tripsApi.get=originalGetTrip;
   // Missing/invalid/old/future GPS never produces a current ETA.
   const { driverPresence } = load('frontend', 'src/lib/tripPresence.ts');
   const now = Date.now(), position = { driver_lat: 59.9, driver_lng: 10.7 };
@@ -418,6 +578,18 @@ const act = renderer.act;
   }
   assert.equal(driverPresence({ driver_lat: null, driver_lng: null }, now).hasPosition, false);
   assert.equal(driverPresence({ driver_lat: 91, driver_lng: 10.7 }, now).hasPosition, false);
+  const { destinationProximity } = load('frontend', 'src/lib/tripPresence.ts');
+  const nearDestination = { ...position, trip_id: 'unit-trip', status: 'in_trip', driver_location_at: new Date(now).toISOString(), dropoff_lat: 59.9001, dropoff_lng: 10.7001, dropoff_address: 'Actual destination' };
+  assert.equal(destinationProximity(nearDestination, now).near, true);
+  assert.equal(destinationProximity({ ...nearDestination, status: 'driver_on_way' }, now), null);
+  assert.equal(destinationProximity({ ...nearDestination, driver_location_at: new Date(now - 31000).toISOString() }, now), null);
+  assert.equal(destinationProximity({ ...nearDestination, dropoff_lat: null }, now), null);
+  serverTrip = nearDestination;
+  await act(async () => { booking = renderer.create(React.createElement(Booking)); });
+  assert.equal(booking.root.findAllByProps({ testID: 'customer-arriving-view' }).length, 1);
+  assert.equal(booking.root.findByProps({ testID: 'customer-arrival-driver-authority' }).props.disabled, true);
+  assert.equal(serverTrip.status, 'in_trip', 'Customer proximity cannot end a ride');
+  await act(async () => booking.unmount());
   serverTrip = { ...serverTrip, status: 'completed' };
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   assert.ok(navigations.includes('/receipt/unit-trip'));

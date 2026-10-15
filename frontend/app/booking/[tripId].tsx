@@ -1,4 +1,7 @@
-import { driverPresence } from '@/src/lib/tripPresence';
+import { destinationProximity, driverPresence } from '@/src/lib/tripPresence';
+import { BlurTargetView } from 'expo-blur';
+import { V10TripDock } from '@/src/components/V10TripDock';
+import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { apiError, kr } from '@/src/lib/format';
@@ -6,17 +9,18 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useReducedMotion } from '@/src/components/Motion';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
+import { CustomerSafetyView } from '@/src/components/CustomerSafetyView';
+import { CustomerTripView } from '@/src/components/CustomerTripView';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { KjappMark } from '@/src/components/KjappMark';
-import { ChatSheet } from '@/src/components/ChatSheet';
 import { Loader } from '@/src/components/ui';
-import { safetyApi, tripDriverPhotoSource, tripsApi } from '@/src/lib/api';
+import { safetyApi, tripDriverPhotoSource, tripsApi, messagesApi } from '@/src/lib/api';
 
 const META: Record<string, { title: string; sub: string }> = {
   payment_authorizing: { title: 'Godkjenn kortreservasjonen', sub: 'Ingen sjåfør bestilles før banken har godkjent turbeløpet' },
@@ -31,15 +35,18 @@ const META: Record<string, { title: string; sub: string }> = {
 };
 
 export default function BookingFlow() {
+  useColorTheme();
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
   const [minimized, setMinimized] = useState(false);
+  const [pickupGuide, setPickupGuide] = useState(false);
+  const mapBlurTarget = useRef<View>(null);
+  const sceneBlurTarget = useRef<View>(null);
   const [matchingHeight, setMatchingHeight] = useState(300);
   const [minimizedHeight, setMinimizedHeight] = useState(160);
   const [trip, setTrip] = useState<any>(null);
-  const [chatOpen, setChatOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [safetyBusy, setSafetyBusy] = useState(false);
   const safetyLock = useRef(false);
@@ -48,42 +55,39 @@ export default function BookingFlow() {
   const [actionError, setActionError] = useState('');
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  const [driverPhotoSource, setDriverPhotoSource] = useState<any>(null);
+  const [driverPhoto, setDriverPhoto] = useState<{ key: string; source: any } | null>(null);
+  const photoKey = trip?.trip_id === tripId && trip?.driver_id ? `${tripId}:${trip.driver_id}:${trip.driver?.photo_version || ''}` : '';
+  const driverPhotoSource = driverPhoto?.key === photoKey ? driverPhoto.source : null;
+  const insideLock = useRef(false), readyLock = useRef(false), authorizationLock = useRef(false);
+  const [insideBusy, setInsideBusy] = useState(false), [readyBusy, setReadyBusy] = useState(false), [authorizationBusy, setAuthorizationBusy] = useState(false);
+  const [readySent, setReadySent] = useState(false);
+  const readyAcknowledged = useRef('');
+  const [pickupNotice, setPickupNotice] = useState('');
+  const activeRoute = useRef(tripId), mounted = useRef(true);
+  activeRoute.current = tripId;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    setMinimized(false); setPickupGuide(false); setSafetyOpen(false); setReadySent(false);
+    setNetworkIssue(false); setActionError(''); setPickupNotice('');
+    cancelPhase.current = 'idle'; setCancelBusy(false);
+  }, [tripId]);
+  const routeIsCurrent = () => mounted.current && activeRoute.current === tripId;
   const nav = useRef(false);
-  const matchingSpin = useRef(new Animated.Value(0)).current;
-  const reducedMotion = useReducedMotion();
-  const searching = ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
+  const searching = trip?.trip_id === tripId && ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
   const available = useAvailableCars({ enabled: searching, lat: trip?.pickup_lat, lng: trip?.pickup_lng,
     vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [], continuous: true });
-
-  useEffect(() => {
-    if (reducedMotion || !['searching', 'booking'].includes(trip?.status)) {
-      matchingSpin.stopAnimation();
-      matchingSpin.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.timing(matchingSpin, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [matchingSpin, trip?.status, reducedMotion]);
 
   useEffect(() => {
     let mounted = true;
     let fetching = false;
     nav.current = false;
     const fetchTrip = async () => {
-      if (fetching) return;
+      if (fetching || AppState.currentState === 'background' || AppState.currentState === 'inactive') return;
       fetching = true;
       try {
         const t = await tripsApi.get(tripId!);
         if (!mounted) return;
+        if (t?.trip_id !== tripId) throw new Error('Ugyldig turreferanse.');
         setTrip(t);
         setNetworkIssue(false);
         if (['arrived', 'completed', 'rated'].includes(t.status) && !nav.current) {
@@ -110,38 +114,41 @@ export default function BookingFlow() {
 
   useEffect(() => {
     let mounted = true;
-    const activeDriver = trip?.driver_id && ['driver_on_way', 'at_pickup', 'in_trip', 'arrived'].includes(trip?.status);
+    const activeDriver = photoKey && ['driver_on_way', 'at_pickup', 'in_trip', 'arrived'].includes(trip?.status);
     if (!activeDriver) {
-      setDriverPhotoSource(null);
+      setDriverPhoto(null);
       return () => { mounted = false; };
     }
     void tripDriverPhotoSource(tripId!).then((source) => {
-      if (mounted) setDriverPhotoSource(source);
+      if (mounted) setDriverPhoto({ key: photoKey, source });
     }).catch(() => {
-      if (mounted) setDriverPhotoSource(null);
+      if (mounted) setDriverPhoto(null);
     });
     return () => { mounted = false; };
-  }, [trip?.driver_id, trip?.status, tripId]);
+  }, [photoKey, trip?.status, tripId]);
 
-  const releaseCancel = () => { cancelPhase.current = 'idle'; setCancelBusy(false); };
+  const releaseCancel = () => { if (routeIsCurrent()) { cancelPhase.current = 'idle'; setCancelBusy(false); } };
   const cancel = async () => {
     if (cancelPhase.current !== 'idle') return;
     cancelPhase.current = 'preview'; setCancelBusy(true); setActionError('');
     try {
       const preview = await tripsApi.cancelPreview(tripId!);
+      if (!routeIsCurrent()) return;
       const fee = Number(preview?.cancellation_fee ?? 0);
       if (!Number.isFinite(fee) || fee < 0) throw new Error('Ugyldige avbestillingsvilkår.');
       cancelPhase.current = 'confirm';
       Alert.alert('Avbestille tur?', fee > 0 ? `Avbestillingsgebyr: ${fee} kr. Gebyret vises før du bekrefter.` : 'Ingen avbestillingsgebyr gjelder nå.', [
         { text: 'Behold tur', style: 'cancel', onPress: releaseCancel },
         { text: fee > 0 ? `Avbestill · ${fee} kr` : 'Avbestill', style: 'destructive', onPress: async () => {
-          if (cancelPhase.current !== 'confirm') return;
+          if (!routeIsCurrent() || cancelPhase.current !== 'confirm') return;
           cancelPhase.current = 'submitting';
           try {
             const result = await tripsApi.cancel(tripId!);
+            if (!routeIsCurrent()) return;
             if (result?.ok !== true) throw new Error('Avbestillingen ble ikke bekreftet av SNAR.');
             router.replace('/(app)/home');
           } catch (error) {
+            if (!routeIsCurrent()) return;
             // A response can be lost after the server commits cancellation.
             try {
               const canonical = await tripsApi.get(tripId!);
@@ -154,6 +161,7 @@ export default function BookingFlow() {
         } },
       ], { cancelable: true, onDismiss: () => { if (cancelPhase.current === 'confirm') releaseCancel(); } });
     } catch (error) {
+      if (!routeIsCurrent()) return;
       setActionError(`Kunne ikke hente avbestillingsvilkårene. ${apiError(error)}`);
       releaseCancel();
     }
@@ -173,7 +181,8 @@ export default function BookingFlow() {
     if (safetyLock.current) return;
     safetyLock.current = true; setActionError(''); setSafetyBusy(true);
     try {
-      await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
+      const confirmed = await safetyApi.log(tripId!, { kind: 'report', note: 'Rapportert fra sikkerhetsmenyen i kundeappen.' });
+      if (confirmed?.ok !== true || !confirmed?.event_id) throw new Error('Rapporten ble ikke bekreftet av SNAR.');
       setSafetyOpen(false);
     } catch (error) { setActionError(`Rapporten ble ikke sendt. ${apiError(error)}`); }
     finally { safetyLock.current = false; setSafetyBusy(false); }
@@ -196,7 +205,38 @@ export default function BookingFlow() {
     finally { safetyLock.current = false; setSafetyBusy(false); }
   };
 
-  if (!trip) {
+  const setWaitingInside = async (waitingInside: boolean) => {
+    if (!tripId || insideLock.current || !['driver_on_way', 'at_pickup'].includes(trip?.status) || networkIssue) return;
+    insideLock.current = true; setInsideBusy(true); setActionError(''); setPickupNotice('');
+    try {
+      const confirmed = await tripsApi.pickupPreference(tripId, waitingInside);
+      if (confirmed?.ok !== true || confirmed?.waiting_inside !== waitingInside) throw new Error('Henteinstruksen ble ikke bekreftet.');
+      if (routeIsCurrent()) setTrip((previous: any) => previous?.trip_id === tripId && ['driver_on_way', 'at_pickup'].includes(previous.status) ? { ...previous, pickup_waiting_inside: waitingInside } : previous);
+    } catch (error) { if (routeIsCurrent()) setActionError(`Kunne ikke lagre henteinstruksen. ${apiError(error)}`); }
+    finally { insideLock.current = false; if (routeIsCurrent()) setInsideBusy(false); }
+  };
+  const notifyReady = async () => {
+    const key = `${tripId}:${trip?.driver_id || ''}`;
+    if (!tripId || readyLock.current || readyAcknowledged.current === key || trip?.status !== 'at_pickup' || networkIssue) return;
+    readyLock.current = true; setReadyBusy(true); setActionError(''); setPickupNotice('');
+    try { const confirmed = await messagesApi.send(tripId, 'Jeg er i bilen og klar til turstart.'); if (!confirmed?.id) throw new Error('Meldingen mangler leveringsbekreftelse.'); if (routeIsCurrent()) { readyAcknowledged.current = key; setReadySent(true); setPickupNotice('Sjåføren er varslet. Vent på at sjåføren bekrefter turstart.'); } }
+    catch (error) { if (routeIsCurrent()) setActionError(`Meldingen ble ikke bekreftet sendt. ${apiError(error)}`); }
+    finally { readyLock.current = false; if (routeIsCurrent()) setReadyBusy(false); }
+  };
+  const authorize = async () => {
+    if (!tripId || authorizationLock.current || trip?.status !== 'payment_authorizing' || networkIssue) return;
+    authorizationLock.current = true; setAuthorizationBusy(true); setActionError('');
+    try { const confirmed = await tripsApi.authorize(tripId); if (confirmed?.trip_id === tripId && routeIsCurrent()) setTrip(confirmed); }
+    catch (error) { if (routeIsCurrent()) setActionError(`Kortreservasjonen ble ikke bekreftet. ${apiError(error)}`); }
+    finally { authorizationLock.current = false; if (routeIsCurrent()) setAuthorizationBusy(false); }
+  };
+  const openWalkingDirections = () => {
+    const lat = trip?.pickup_lat, lng = trip?.pickup_lng;
+    if (!validPosition({ lat, lng })) { setActionError('Hentestedets kartposisjon er ikke tilgjengelig. Ring sjåføren for hjelp.'); return; }
+    void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${lat},${lng}`)}&travelmode=walking`).catch(() => setActionError('Kunne ikke åpne gangveiledningen. Ring sjåføren for hjelp.'));
+  };
+
+  if (!trip || trip.trip_id !== tripId) {
     if (networkIssue) {
       return (
         <View style={s.loading} testID="booking-load-error">
@@ -213,7 +253,7 @@ export default function BookingFlow() {
   }
 
   const meta = META[trip.status] || META.searching;
-  const route = trip.geometry?.coordinates || null;
+  const route = trip.status === 'driver_on_way' ? (!networkIssue && driverPresence(trip).fresh ? trip.driver_pickup_geometry?.coordinates || null : null) : trip.status === 'in_trip' ? trip.geometry?.coordinates || null : null;
   const presence = driverPresence(trip);
   const driverGpsFresh = presence.fresh;
   const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
@@ -222,215 +262,63 @@ export default function BookingFlow() {
   const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
   const canCancel = ['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup'].includes(trip.status)
     || (trip.internal_beta_test === true && trip.status === 'in_trip');
-  const etaValue = Number(trip.eta_min);
+  const etaValue = trip.eta_min;
   const etaMinutes = !networkIssue && driverGpsFresh && Number.isFinite(etaValue) && etaValue > 0 ? Math.max(1, Math.round(etaValue)) : null;
-  const driverDistance = Number(trip.driver_distance_to_pickup_km);
+  const driverDistance = trip.driver_distance_to_pickup_km;
   const driverDistanceLabel = !networkIssue && driverGpsFresh && Number.isFinite(driverDistance) && driverDistance >= 0
-    ? `${driverDistance.toFixed(driverDistance < 10 ? 1 : 0)} km unna`
+    ? driverDistance < 1 ? `${Math.round(driverDistance * 1000)} m unna` : `${driverDistance.toLocaleString('nb-NO', { maximumFractionDigits: 1 })} km unna`
     : null;
-  const spinDeg = matchingSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
+  const nearingDestination = !networkIssue && driverGpsFresh && destinationProximity(trip)?.near === true;
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <BlurTargetView ref={sceneBlurTarget} style={{ flex: 1 }}>
       {actionError ? <View style={{ position: 'absolute', zIndex: 100, top: insets.top + 60, left: 16, right: 16, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text testID="booking-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text></View> : null}
-      <Map
+      <BlurTargetView ref={mapBlurTarget} style={StyleSheet.absoluteFill}><Map
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         pickup={{ lat: trip.pickup_lat, lng: trip.pickup_lng }}
-        dropoff={{ lat: trip.dropoff_lat, lng: trip.dropoff_lng }}
+        dropoff={trip.status === 'in_trip' ? { lat: trip.dropoff_lat, lng: trip.dropoff_lng } : null}
         route={route}
+        focusRoute={pickupGuide || nearingDestination ? null : route}
+        showControls={false}
         cars={searching ? available.cars : []}
-        focusMode={searching ? 'nearby' : 'route'}
-        contentInsets={searching ? { top: insets.top + 88, right: 48,
-          bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : 160 + matchingHeight + 32, left: 48 } : undefined}
-        activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading } : null}
+        focusMode={searching ? 'nearby' : nearingDestination ? 'destination' : 'route'}
+        focusRevision={nearingDestination ? 1 : 0}
+        contentInsets={{ top: insets.top + 88, right: 72,
+          bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
+        activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
         testID="booking-map"
-      />
+      /></BlurTargetView>
 
-      {LIVE_TRIP_STATUSES.includes(trip.status) ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
+      {trip.status === 'at_pickup' ? <View testID="pickup-map-dim" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: .25 }]} /> : null}
+      {LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
       {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View testID="booking-minimized-card" onLayout={e => setMinimizedHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
         <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
-      </View> : trip.status === 'searching' || trip.status === 'booking' ? (
-        <View style={s.matchingOverlay} testID="matching-overlay" pointerEvents="box-none">
-          <FigmaGradient pointerEvents="none" angle={180} colors={['rgba(244,246,250,0.2)', 'rgba(244,246,250,0.75)']} style={StyleSheet.absoluteFill} />
-          <View testID="booking-matching-card" onLayout={e => setMatchingHeight(e.nativeEvent.layout.height)} style={s.matchingCard}>
-            <View style={s.matchingMarkWrap}>
-              <Animated.View style={[s.matchingRing, { transform: [{ rotate: spinDeg }] }]} />
-              <KjappMark size={40} />
-            </View>
-            <Text style={s.matchingTitle}>Finner din sjåfør…</Text>
-            <AvailabilityStatus search={available} trip={trip} />
-            {networkIssue ? <Text testID="search-trip-offline" accessibilityRole="alert" style={s.matchingSub}>Mangler fersk turstatus. Søket fortsetter på serveren.</Text> : null}
-            <Pressable onPress={cancel} disabled={cancelBusy} testID="searching-cancel" style={s.matchingCancel}>
-              <Text style={s.matchingCancelText}>Avbryt søk</Text>
-            </Pressable>
-          </View>
+      </View> : <CustomerTripView
+        trip={trip} driverPhoto={driverPhotoSource} eta={etaMinutes} distance={driverDistanceLabel}
+        mapBlurTarget={mapBlurTarget}
+        offline={networkIssue} gpsFresh={driverGpsFresh} available={available}
+        insideBusy={insideBusy} readyBusy={readyBusy} readySent={readySent && readyAcknowledged.current === `${tripId}:${trip.driver_id || ''}`} authorizationBusy={authorizationBusy} cancelBusy={cancelBusy} canCancel={canCancel}
+        onGuideChange={setPickupGuide}
+        onInside={value => void setWaitingInside(value)} onCall={callDriver} onChat={() => router.push('/(app)/messages')}
+        onShare={() => void shareTrip()} onSafety={() => setSafetyOpen(true)} onCancel={() => void cancel()}
+        onMinimize={() => setMinimized(true)} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
+        onWalk={openWalkingDirections} onReady={() => void notifyReady()} onAuthorize={() => void authorize()}
+        onPhotoError={() => setDriverPhoto(current => current?.key === photoKey ? null : current)} onSheetLayout={setMatchingHeight}
+      />}
+      {pickupNotice ? <View style={{ position: 'absolute', top: insets.top + 60, left: 16, right: 16, zIndex: 60, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{pickupNotice}</Text></View> : null}
+      </BlurTargetView>
+      {trip.status === 'in_trip' ? <V10TripDock target={sceneBlurTarget} active={safetyOpen ? 'safety' : 'driver'} onDriver={() => setMinimized(false)} onMessage={() => router.push('/(app)/messages')} onSafety={() => setSafetyOpen(true)} onTrip={() => router.push(`/customer-trip/${tripId}`)} /> : null}
+
+      <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => !safetyBusy && setSafetyOpen(false)}>
+        <View style={[s.modalBackdrop, { padding: 0, backgroundColor: `${colors.bg}59` }]}>
+          <Pressable testID="customer-app-booking-tripId-337" style={StyleSheet.absoluteFill} onPress={() => !safetyBusy && setSafetyOpen(false)} accessibilityLabel="Lukk sikkerhetsmeny" />
+          <CustomerSafetyView trip={trip} busy={safetyBusy} error={actionError} onClose={() => setSafetyOpen(false)} onShare={() => void shareTrip()} onReport={() => void reportSafety()} onEmergency={() => void callEmergency()} />
         </View>
-      ) : isFinal ? (
-        <View style={[s.finalSheet, { paddingBottom: insets.bottom + 22 }]}>
-          <View style={[s.finalIcon, driverCancelled && s.finalIconDriver]}>
-            <Icon name={driverCancelled ? 'car' : 'x'} size={22} color={driverCancelled ? colors.accent : colors.danger} />
-          </View>
-          <Text style={s.finalTitle}>{noDriver ? 'Ingen ledig bil akkurat nå' : meta.title}</Text>
-          <Text style={s.finalSub}>{noDriver ? 'Vi fant ingen sjåfør etter tre forsøk. Vil du prøve igjen om litt?' : meta.sub}</Text>
-          {noDriver ? <Text style={s.recoveryCopy}>{trip.reservation_status === 'released' ? 'Kortreservasjonen er frigitt. Banken kan bruke litt tid på å oppdatere saldoen.' : 'Kortreservasjonen frigis automatisk.'}</Text> : null}
-          {driverCancelled ? <Text style={s.recoveryCopy}>Start en ny bestilling når du er klar.</Text> : null}
-          <Pressable onPress={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')} style={s.homeBtn} testID="booking-home">
-            <Text style={s.homeBtnText}>{noDriver ? 'Prøv igjen' : driverCancelled ? 'Bestill ny tur' : 'Tilbake til hjem'}</Text>
-          </Pressable>
-        </View>
-      ) : trip.status === 'in_trip' ? (
-        <>
-          <View style={[s.tripBanner, { top: insets.top + 16 }]} testID="inride-banner">
-            <View style={s.tripBannerRow}>
-              <View style={s.tripDestinationIcon}><Icon name="map-pin" size={18} color={colors.onInverse} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.tripEyebrow}>DESTINASJON</Text>
-                <Text style={s.tripDriverLine} numberOfLines={1}>{trip.dropoff_address || 'Mål for turen'}</Text>
-              </View>
-              <View style={s.tripEtaWrap}>
-                <Text style={s.tripEta}>{etaMinutes ?? '—'}</Text>
-                <Text style={s.tripEtaUnit}>{etaMinutes ? 'min' : 'ETA'}</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={[s.inRideSheet, { paddingBottom: insets.bottom + 32 }]}>
-            <View style={s.handle} />
-            <View style={s.driverCard}>
-              <View style={s.driverAvatar}>
-                {driverPhotoSource ? (
-                  <Image source={driverPhotoSource} style={s.driverAvatarImage} resizeMode="cover" onError={() => setDriverPhotoSource(null)} />
-                ) : <Text style={s.driverAvatarText}>{(trip.driver?.name || 'S').slice(0, 1).toUpperCase()}</Text>}
-              </View>
-              <View style={s.driverInfo}>
-                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
-                <Text style={s.driverCar} numberOfLines={1}>{trip.driver?.car || 'Bil'}</Text>
-              </View>
-              <View style={s.plateBox}>
-                <Text style={s.plateLabel}>SKILT</Text>
-                <Text style={s.plateText}>{trip.driver?.plate || '—'}</Text>
-              </View>
-            </View>
-            {trip.waiting_policy ? <Text style={{ color: colors.textSecondary, marginBottom: 10 }} testID="pickup-waiting-policy">
-              {trip.waiting_policy.free_minutes} min gratis ventetid fra sjåførens ankomst. Deretter {kr(trip.waiting_policy.per_minute)}/min, maks {kr(trip.waiting_policy.max_fee)}. Tillegget stopper når turen starter.
-            </Text> : null}
-            {networkIssue || !driverGpsFresh ? (
-              <View style={s.networkBanner}>
-                <View style={s.networkDot} />
-                <Text style={s.networkText}>{networkIssue ? 'Live-data oppdateres automatisk' : 'Viser siste kjente sjåførposisjon'}</Text>
-              </View>
-            ) : null}
-            <View style={s.inRideActions}>
-              <Pressable style={s.rideAction} onPress={shareTrip} disabled={safetyBusy} testID="ontrip-share">
-                <Icon name="shield" size={20} color={colors.accent} />
-                <Text style={s.rideActionText}>Del tur</Text>
-              </Pressable>
-              <Pressable style={s.rideAction} onPress={() => setChatOpen(true)} testID="ontrip-chat">
-                <Icon name="message" size={20} color={colors.accent} />
-                <Text style={s.rideActionText}>Melding</Text>
-              </Pressable>
-              <Pressable style={s.sosAction} onPress={() => setSafetyOpen(true)} testID="ontrip-safety">
-                <Icon name="shield" size={20} color={colors.accentOn} />
-                <Text style={s.sosText}>Sikkerhet</Text>
-              </Pressable>
-            </View>
-          </View>
-        </>
-      ) : (
-        <>
-          <View style={[s.arrivalTopCard, { top: insets.top + 16 }]} testID="driver-arrival-eta">
-            <Text style={s.arrivalEyebrow}>{trip.status === 'at_pickup' ? 'SJÅFØREN ER FREMME' : 'SJÅFØREN ER PÅ VEI'}</Text>
-            <Text style={s.arrivalEta}>
-              {trip.status === 'at_pickup' ? 'Klar for henting' : etaMinutes ? `Ankommer om ${etaMinutes} min` : 'På vei til deg'}
-            </Text>
-          </View>
-
-          <View style={[s.arrivalSheet, { paddingBottom: insets.bottom + 32 }]}>
-            <View style={s.handle} />
-            {networkIssue || !driverGpsFresh ? (
-              <View style={s.networkBanner}>
-                <View style={s.networkDot} />
-                <Text style={s.networkText}>{networkIssue ? 'Live-data oppdateres automatisk' : 'Viser siste kjente sjåførposisjon'}</Text>
-              </View>
-            ) : null}
-            <Text style={s.verifyLabel}>BEKREFT SJÅFØR OG BIL</Text>
-            <View style={s.driverCard}>
-              <View style={s.driverAvatar}>
-                {driverPhotoSource ? (
-                  <Image testID="customer-driver-photo" source={driverPhotoSource} style={s.driverAvatarImage} resizeMode="cover" onError={() => setDriverPhotoSource(null)} />
-                ) : (
-                  <Text style={s.driverAvatarText}>{(trip.driver?.name || 'S').slice(0, 1).toUpperCase()}</Text>
-                )}
-              </View>
-              <View style={s.driverInfo}>
-                <Text style={s.driverName} numberOfLines={1}>{trip.driver?.name || 'Din sjåfør'}</Text>
-                <Text style={s.driverCar} numberOfLines={1}>{trip.driver?.car || 'Bil'}</Text>
-                {trip.driver?.rating != null ? (
-                  <View style={s.ratingRow}>
-                    <Icon name="star" size={12} color={colors.accent} fill={colors.accent} />
-                    <Text style={s.ratingText}>{trip.driver.rating}</Text>
-                    {driverDistanceLabel ? <Text style={s.driverDistance}>· {driverDistanceLabel}</Text> : null}
-                  </View>
-                ) : null}
-              </View>
-              <View style={s.plateBox}>
-                <Text style={s.plateLabel}>SKILT</Text>
-                <Text style={s.plateText}>{trip.driver?.plate || '—'}</Text>
-              </View>
-            </View>
-            <View style={s.contactRow}>
-              <Pressable style={s.contactButton} onPress={callDriver} disabled={!trip.driver?.phone} accessibilityState={{ disabled: !trip.driver?.phone }} testID="action-call-driver">
-                <Icon name="phone" size={18} color={colors.text} />
-                <Text style={s.contactText}>Ring</Text>
-              </Pressable>
-              <Pressable style={s.contactButton} onPress={() => setChatOpen(true)} testID="action-message">
-                <Icon name="message" size={18} color={colors.text} />
-                <Text style={s.contactText}>Melding</Text>
-              </Pressable>
-            </View>
-            {canCancel ? <Pressable testID="assigned-trip-cancel" disabled={cancelBusy} onPress={cancel} style={{ padding: 12, alignItems: 'center' }}><Text style={{ color: colors.textSecondary }}>{cancelBusy ? 'Avventer avbestilling…' : 'Avbestill tur'}</Text></Pressable> : null}
-          </View>
-        </>
-      )}
-
-      <Modal visible={safetyOpen} transparent animationType="fade" onRequestClose={() => setSafetyOpen(false)}>
-        <Pressable testID="customer-app-booking-tripId-337" style={s.modalBackdrop} onPress={() => !safetyBusy && setSafetyOpen(false)}>
-          <View style={s.safetySheet} onStartShouldSetResponder={() => true}>
-            <View style={s.safetyHead}>
-              <View>
-                <Text style={s.safetyOverline}>SNAR SIKKERHET</Text>
-                <Text style={s.safetyTitle}>Hjelp på turen</Text>
-              </View>
-              <Pressable testID="customer-app-booking-tripId-344" onPress={() => setSafetyOpen(false)} disabled={safetyBusy} accessibilityLabel="Lukk sikkerhetsmeny">
-                <Icon name="x" size={20} color={colors.text} />
-              </Pressable>
-            </View>
-            {actionError ? <Text testID="safety-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text> : null}
-            <Text style={s.safetyCopy}>Ved akutt fare for liv eller helse: ring 112. SNAR-support erstatter ikke nødetatene.</Text>
-            <Pressable style={s.emergencyAction} onPress={callEmergency} disabled={safetyBusy} testID="safety-call-112">
-              <Icon name="phone" size={18} color={colors.text} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Ring 112</Text><Text style={s.safetyActionSub}>Åpne telefonappen og ring nødnummeret</Text></View>
-            </Pressable>
-            <Pressable style={s.safetyAction} onPress={shareTrip} disabled={safetyBusy} testID="safety-share-trip">
-              <Icon name="navigation" size={18} color={colors.accent} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Del live-turen</Text><Text style={s.safetyActionSub}>Lenken utløper automatisk etter 24 timer</Text></View>
-            </Pressable>
-            <Pressable style={s.safetyAction} onPress={reportSafety} disabled={safetyBusy} testID="safety-report">
-              <Icon name="flag" size={18} color={colors.accent} />
-              <View style={{ flex: 1 }}><Text style={s.safetyActionTitle}>Rapporter til SNAR</Text><Text style={s.safetyActionSub}>Oppretter en prioritert sak knyttet til turen</Text></View>
-            </Pressable>
-          </View>
-        </Pressable>
       </Modal>
 
-      <ChatSheet
-        tripId={tripId!}
-        role="passenger"
-        visible={chatOpen}
-        onClose={() => setChatOpen(false)}
-        peerName={trip.driver?.name || 'Din sjåfør'}
-      />
+
     </View>
   );
 }

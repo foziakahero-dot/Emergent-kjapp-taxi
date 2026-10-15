@@ -1,12 +1,16 @@
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Image, Linking, Pressable, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
-import { Icon } from '@/src/components/Icon';
-import { Button, Loader } from '@/src/components/ui';
+import { colors, useColorTheme } from '@/src/theme';
+import Svg, { Ellipse } from 'react-native-svg';
+import { V10Icon } from '@/src/components/V10Icon';
+import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10State, v10 } from '@/src/components/V10UI';
+import { Loader } from '@/src/components/ui';
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { apiError, driverApi } from '@/src/lib/api';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -51,10 +55,10 @@ const STATUS: Record<string, { title: string; body: string; tone: 'good' | 'warn
 };
 
 export default function DriverIdentity() {
+  useColorTheme();
   const router = useRouter();
-  const { refresh } = useAuth();
+  const { refresh, user } = useAuth();
   const insets = useSafeAreaInsets();
-  const s = useStyles();
   const camera = useRef<any>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [verification, setVerification] = useState<Verification | null>(null);
@@ -62,29 +66,34 @@ export default function DriverIdentity() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [cameraReady, setCameraReady] = useState(false);
+  const operation = useRef(false), alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const load = async () => {
-    try { setVerification(await driverApi.identityVerification()); }
-    catch (e) { setErr(apiError(e)); }
+    setErr('');
+    try { const result = await driverApi.identityVerification(); if (!result?.status) throw new Error('Identitetsstatus ble ikke bekreftet.'); if (alive.current) setVerification(result); }
+    catch (e) { if (alive.current) setErr(apiError(e)); }
   };
 
   useEffect(() => { void load(); }, []);
 
   const openCamera = async () => {
-    setErr('');
-    if (!permission?.granted) {
-      const result = await requestPermission();
-      if (!result.granted) {
-        setErr('Kameratilgang må være aktivert for å ta identitetsselfie.');
-        return;
+    if (operation.current) return;
+    operation.current = true; setErr(''); setBusy(true);
+    try {
+      if (!permission?.granted) {
+        const result = await requestPermission();
+        if (!result.granted) { if (alive.current) setErr('Kameratilgang må være aktivert for å ta identitetsselfie.'); return; }
       }
-    }
-    setPhoto('');
-    setCameraOpen(true);
+      if (alive.current) { setPhoto(''); setCameraReady(false); setCameraOpen(true); }
+    } catch (error) { if (alive.current) setErr(apiError(error)); }
+    finally { operation.current = false; if (alive.current) setBusy(false); }
   };
 
   const capture = async () => {
-    if (!camera.current || busy) return;
+    if (!camera.current || !cameraReady || operation.current) return;
+    operation.current = true;
     setBusy(true);
     setErr('');
     try {
@@ -94,148 +103,56 @@ export default function DriverIdentity() {
         exif: false,
       });
       if (!picture?.uri) throw new Error('Kameraet returnerte ikke et bilde');
-      setPhoto(picture.uri);
-      setCameraOpen(false);
+      if (alive.current) { setPhoto(picture.uri); setCameraOpen(false); }
     } catch (e) {
-      setErr(apiError(e));
+      if (alive.current) setErr(apiError(e));
     } finally {
-      setBusy(false);
+      operation.current = false; if (alive.current) setBusy(false);
     }
   };
 
   const submit = async () => {
-    if (!photo || busy) return;
+    if (!photo || operation.current) return;
+    operation.current = true;
     setBusy(true);
     setErr('');
     try {
       const result = await driverApi.submitIdentitySelfie(photo);
-      setVerification({
-        status: result?.status || 'pending_review',
-        submitted_at: result?.submitted_at || new Date().toISOString(),
-      });
+      if (result?.status !== 'pending_review' || !result?.id || !result?.submitted_at) throw new Error('Innsendingen ble ikke bekreftet.');
+      if (alive.current) { setVerification(result); setPhoto(''); }
       await refresh();
-      setPhoto('');
     } catch (e) {
-      setErr(apiError(e));
+      if (alive.current) setErr(apiError(e));
     } finally {
-      setBusy(false);
+      operation.current = false; if (alive.current) setBusy(false);
     }
   };
 
-  const status = verification?.status || 'not_submitted';
-  const meta = STATUS[status] || STATUS.not_submitted;
+  const status = verification?.status === 'verified' && user?.identity_recheck_required ? 'recheck_required' : verification?.status || 'not_submitted';
+  const meta = STATUS[status] || { title: 'Ukjent kontrollstatus', body: 'Oppdater kontrollstatus før du fortsetter.', tone: 'neutral' as const };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
-      <ScrollView
-        contentContainerStyle={{
-          paddingTop: insets.top + 12,
-          paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 20,
-        }}
-      >
-        <View style={s.header}>
-          <Pressable onPress={() => router.back()} style={s.back}>
-            <Icon name="arrow-left" size={20} color={colors.text} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text style={s.title}>Identitetskontroll</Text>
-            <Text style={s.subtitle}>Selfie ID · SNAR Driver</Text>
-          </View>
-        </View>
-
-        {!verification ? <View style={{ paddingVertical: 50 }}><Loader /></View> : (
-          <>
-            <View style={[s.statusCard, meta.tone === 'good' && s.statusGood, meta.tone === 'warn' && s.statusWarn]}>
-              <View style={s.statusIcon}>
-                <Icon name={meta.tone === 'good' ? 'check' : 'shield'} size={22} color={meta.tone === 'good' ? colors.online : colors.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.statusTitle}>{meta.title}</Text>
-                <Text style={s.statusBody}>{meta.body}</Text>
-                {verification.review_reason ? <Text style={s.reason}>SNAR: {verification.review_reason}</Text> : null}
-                {verification.recheck_reason ? <Text style={s.reason}>Kontrollårsak: {verification.recheck_reason}</Text> : null}
-                {verification.recheck_deferred_until_trip_end ? <Text style={s.reason}>Kontrollen aktiveres når den aktive turen er avsluttet.</Text> : null}
-                {verification.next_identity_check_at && status === 'verified' ? (
-                  <Text style={s.nextCheck}>Neste planlagte kontroll: {new Date(verification.next_identity_check_at).toLocaleDateString('no-NO')}</Text>
-                ) : null}
-              </View>
-            </View>
-
-            <View style={s.infoCard}>
-              <Text style={s.infoTitle}>Slik tar du selfien</Text>
-              <Text style={s.rule}>• Bruk frontkamera og godt lys.</Text>
-              <Text style={s.rule}>• Se rett i kameraet og ha hele ansiktet synlig.</Text>
-              <Text style={s.rule}>• Ikke bruk solbriller, maske eller filter.</Text>
-              <Text style={s.rule}>• Bildet brukes bare til identitetskontroll hos SNAR.</Text>
-            </View>
-
-            {cameraOpen ? (
-              <View style={s.cameraCard}>
-                <CameraView ref={camera} style={s.camera} facing="front">
-                  <View style={s.faceGuide} />
-                </CameraView>
-                <Button label={busy ? 'Tar bilde…' : 'Ta selfie'} onPress={() => void capture()} disabled={busy} />
-                <Pressable style={s.cancel} onPress={() => setCameraOpen(false)}>
-                  <Text style={s.cancelText}>Avbryt</Text>
-                </Pressable>
-              </View>
-            ) : photo ? (
-              <View style={s.previewCard}>
-                <Image source={{ uri: photo }} style={s.preview} resizeMode="cover" />
-                <Button label={busy ? 'Sender…' : 'Send til SNAR for kontroll'} onPress={() => void submit()} disabled={busy} />
-                <Pressable style={s.cancel} onPress={() => void openCamera()}>
-                  <Text style={s.cancelText}>Ta nytt bilde</Text>
-                </Pressable>
-              </View>
-            ) : status !== 'pending_review' ? (
-              <Button
-                label={status === 'verified' ? 'Ta ny identitetsselfie' : status === 'recheck_required' ? 'Ta Selfie ID nå' : 'Åpne frontkamera'}
-                onPress={() => void openCamera()}
-                testID="driver-identity-camera"
-              />
-            ) : null}
-
-            <View style={s.privacy}>
-              <Icon name="shield" size={18} color={colors.textMuted} />
-              <Text style={s.privacyText}>
-                Løyvehaver ser bare verifiseringsstatus. Selve selfie-bildet er privat og kan bare åpnes av deg og SNAR-administratorer.
-              </Text>
-            </View>
-          </>
-        )}
-
-        {err ? <Text style={s.error}>{err}</Text> : null}
-      </ScrollView>
-    </View>
-  );
+  if (cameraOpen || photo) return <V10Entrance fade testID="driver-identity-camera-screen" style={{ flex: 1, backgroundColor: '#0a141f', alignItems: 'center', paddingTop: Math.max(110, insets.top + 48), paddingHorizontal: 24 }}>
+    <StatusBar style="light" />
+    <View style={{ width: 240, height: 300 }}>
+      <View style={{ position: 'absolute', inset: 0, borderRadius: 120, overflow: 'hidden' }}>{photo ? <Image source={{ uri: photo }} style={{ width: 240, height: 300 }} resizeMode="cover" /> : <CameraView ref={camera} testID="driver-selfie-live-camera" style={{ width: 240, height: 300 }} facing="front" onCameraReady={() => setCameraReady(true)} onMountError={() => { setErr('Kameraet kunne ikke åpnes. Prøv igjen.'); setCameraOpen(false); }} />}</View>
+      <Svg width={240} height={300} viewBox="0 0 240 300" pointerEvents="none" style={{ position: 'absolute', inset: 0 }}><Ellipse cx={120} cy={150} rx={116} ry={146} fill="none" stroke="rgba(255,255,255,.6)" strokeWidth={3} strokeDasharray={[12, 6]} /></Svg>
+    </View><Text style={[v10.heading, { color: '#eef2f7', marginTop: 32, textAlign: 'center' }]}>{photo ? 'Kontroller bildet ditt' : 'Hold telefonen i øyehøyde'}</Text><Text style={[v10.secondary, { color: 'rgba(238,242,247,.65)', marginTop: 6, textAlign: 'center' }]}>{photo ? 'Send selfien til SNAR for manuell kontroll.' : 'Ha hele ansiktet synlig. Trykk for å ta selfien.'}</Text>
+    {err ? <Text testID="driver-identity-error" accessibilityRole="alert" style={[v10.secondary, { color: '#ffb4ba', marginTop: 16 }]}>{err}</Text> : null}
+    <View style={{ position: 'absolute', bottom: Math.max(40, insets.bottom + 6), left: 24, right: 24, gap: 4 }}><V10Action label={photo ? 'Send til kontroll' : 'Ta selfie'} onPress={() => void (photo ? submit() : capture())} busy={busy} disabled={!photo && !cameraReady} testID={photo ? 'driver-selfie-submit' : 'driver-selfie-capture'} /><V10Action kind="soft" label={photo ? 'Ta nytt bilde' : 'Avbryt'} disabled={busy} onPress={() => { if (photo) void openCamera(); else setCameraOpen(false); }} testID="driver-selfie-cancel" /></View>
+  </V10Entrance>;
+  return <V10Screen testID="driver-identity-screen"><V10Entrance fade><V10Header onBack={() => router.back()} />
+    {!verification ? err ? <V10State warning icon="wifiOff" title="Kunne ikke hente identitetsstatus" body={err} action="Prøv igjen" onAction={() => void load()} /> : <Loader /> : <>
+      <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="camera" size={26} /></View><Text style={[v10.title, { marginTop: 18 }]}>Bekreft at det er deg</Text><Text style={[v10.secondary, { marginTop: 8 }]}>Passasjerer stoler på at sjåføren i appen er den som kjører. Ta en fersk selfie. SNAR kontrollerer bildet manuelt.</Text>
+      <View style={{ marginTop: 16, gap: 6 }}><V10Badge tone={meta.tone === 'good' ? 'positive' : meta.tone === 'warn' ? 'warning' : 'neutral'}>{meta.title}</V10Badge><Text style={v10.secondary}>{meta.body}</Text>
+        {verification.review_reason ? <Text style={v10.caption}>SNAR: {verification.review_reason}</Text> : null}{verification.recheck_reason ? <Text style={v10.caption}>Kontrollårsak: {verification.recheck_reason}</Text> : null}
+        {verification.recheck_deferred_until_trip_end ? <Text style={v10.caption}>Kontrollen aktiveres når den aktive turen er avsluttet.</Text> : null}
+        {verification.next_identity_check_at && status === 'verified' && Number.isFinite(new Date(verification.next_identity_check_at).getTime()) ? <Text style={v10.caption}>Neste planlagte kontroll: {new Date(verification.next_identity_check_at).toLocaleDateString('nb-NO')}</Text> : null}
+      </View>
+      <V10Group style={{ marginTop: 20 }}><V10Row icon="sun" title="Godt lys foran deg" /><V10Row border icon="user" title="Ta av lue og solbriller" /><V10Row border icon="lock" title="Kun brukt til verifisering" /></V10Group>
+      <View style={{ marginTop: 24 }}>{status !== 'pending_review' ? <V10Action label={status === 'verified' ? 'Ta ny identitetsselfie' : 'Start kamera'} onPress={() => void openCamera()} busy={busy} testID="driver-identity-camera" /> : <V10Action kind="soft" label="Sjekk kontrollstatus" onPress={() => void load()} testID="driver-identity-refresh" />}</View>
+      {status === 'verified' && user?.approved === true && !user.identity_recheck_required ? <View style={{ marginTop: 8 }}><V10Action kind="ink" label="Fortsett" onPress={() => router.replace('/')} testID="driver-identity-continue" /></View> : null}
+      {!permission?.granted && permission?.canAskAgain === false ? <V10Action kind="ghost" label="Åpne kamerainnstillinger" onPress={() => void Linking.openSettings().catch(() => setErr('Kunne ikke åpne telefonens innstillinger.'))} /> : null}
+      {err ? <Text testID="driver-identity-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{err}</Text> : null}<Text style={[v10.caption, { marginTop: 16 }]}>Løyvehaver ser bare verifiseringsstatus. Selfien er privat og kan bare åpnes av deg og SNAR-administratorer.</Text>
+    </>}
+  </V10Entrance></V10Screen>;
 }
-
-const useStyles = makeStyles((c) => ({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 22 },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  title: { color: c.text, fontFamily: font.display, fontSize: 25 },
-  subtitle: { color: c.textMuted, fontSize: 12, marginTop: 3 },
-  statusCard: { flexDirection: 'row', gap: 14, padding: 18, borderRadius: 20, borderWidth: 1, borderColor: c.line, backgroundColor: c.driverCard, marginBottom: 16 },
-  statusGood: { borderColor: 'rgba(52,211,153,0.28)', backgroundColor: c.onlineSoft },
-  statusWarn: { borderColor: 'rgba(203,163,101,0.35)' },
-  statusIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },
-  statusTitle: { color: c.text, fontFamily: font.display, fontSize: 19 },
-  statusBody: { color: c.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 5 },
-  reason: { color: c.accent, fontSize: 12, lineHeight: 18, marginTop: 8 },
-  nextCheck: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 8 },
-  infoCard: { padding: 18, borderRadius: 18, borderWidth: 1, borderColor: c.line, backgroundColor: c.driverCard, marginBottom: 18 },
-  infoTitle: { color: c.text, fontSize: 15, fontWeight: '600', marginBottom: 10 },
-  rule: { color: c.textSecondary, fontSize: 13, lineHeight: 21 },
-  cameraCard: { gap: 12, marginBottom: 18 },
-  camera: { height: 440, borderRadius: 24, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
-  faceGuide: { width: 235, height: 305, borderRadius: 118, borderWidth: 2, borderColor: c.accentOn, backgroundColor: 'transparent' },
-  previewCard: { gap: 12, marginBottom: 18 },
-  preview: { width: '100%', height: 440, borderRadius: 24, backgroundColor: '#000' },
-  cancel: { alignItems: 'center', paddingVertical: 10 },
-  cancelText: { color: c.textMuted, fontSize: 14 },
-  privacy: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 18, padding: 15, borderRadius: 16, backgroundColor: c.cardSubtle },
-  privacyText: { flex: 1, color: c.textMuted, fontSize: 12, lineHeight: 18 },
-  error: { color: c.danger, fontSize: 13, lineHeight: 19, marginTop: 14, textAlign: 'center' },
-}));
-

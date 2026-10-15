@@ -3,10 +3,11 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 
 export default function PaymentCancel() {
+  useColorTheme();
   const { trip_id } = useLocalSearchParams<{ trip_id?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();

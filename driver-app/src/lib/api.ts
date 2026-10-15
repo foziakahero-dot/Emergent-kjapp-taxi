@@ -28,7 +28,7 @@ export const api = axios.create({
 
 api.interceptors.request.use(async (config) => {
   const token = await storage.getItem(TOKEN_KEY);
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -42,7 +42,7 @@ export const authApi = {
   resetPassword: (token: string, new_password: string) => api.post('/auth/reset-password', { token, new_password }).then((r) => r.data),
   acceptLegal: (legal_version = '2026-09') => api.post('/auth/accept-legal', { accepted_terms: true, legal_version }).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
-  logout: () => api.post('/auth/logout').then((r) => r.data),
+  logout: (token?: string) => api.post('/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined).then((r) => r.data),
 };
 
 export const tripsApi = {

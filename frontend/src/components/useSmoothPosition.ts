@@ -1,3 +1,4 @@
+import { useReducedMotion } from '@/src/components/Motion';
 import { useEffect, useRef, useState } from 'react';
 
 type LL = { lat: number; lng: number; heading?: number } | null | undefined;
@@ -19,7 +20,8 @@ function bearing(a: { lat: number; lng: number }, b: { lat: number; lng: number 
  * smoothly instead of teleporting on every poll. Also derives a heading from the
  * travel direction when the source doesn't provide one.
  */
-export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
+export function useSmoothPosition(target: LL, duration = 1800): Pos | null {
+  const reduced = useReducedMotion();
   const [pos, setPos] = useState<Pos | null>(
     target ? { lat: target.lat, lng: target.lng, heading: target.heading || 0 } : null,
   );
@@ -30,6 +32,10 @@ export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
   useEffect(() => {
     if (!target) {
       setPos(null);
+      return;
+    }
+    if (reduced || duration <= 0) {
+      setPos({ lat: target.lat, lng: target.lng, heading: target.heading ?? posRef.current?.heading ?? 0 });
       return;
     }
     const from = posRef.current;
@@ -49,7 +55,7 @@ export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
     const startPos = { ...from };
     const step = () => {
       const t = Math.min(1, (Date.now() - start) / duration);
-      const e = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // easeInOutQuad
+      const e = t; // Source: 1.8s linear interpolation between actual GPS fixes.
       setPos({
         lat: startPos.lat + (target.lat - startPos.lat) * e,
         lng: startPos.lng + (target.lng - startPos.lng) * e,
@@ -61,7 +67,7 @@ export function useSmoothPosition(target: LL, duration = 2200): Pos | null {
     raf.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target?.lat, target?.lng, target?.heading, duration]);
+  }, [target?.lat, target?.lng, target?.heading, duration, reduced]);
 
   return pos;
 }

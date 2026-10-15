@@ -2,7 +2,7 @@ import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
@@ -99,6 +99,7 @@ export function InteractiveMap({
   testID?: string;
   interactive?: boolean;
 }) {
+  useColorTheme();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [center, setCenter] = useState<LL>(user || OSLO);
   const [zoom, setZoom] = useState(15);
@@ -331,6 +332,7 @@ export function InteractiveMap({
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
+  useColorTheme();
   return (
     <Pressable
       onPress={onPress}

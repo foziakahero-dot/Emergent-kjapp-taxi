@@ -1,20 +1,17 @@
-import React from 'react';
-import { View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
-import { FigmaGradient } from '@/src/components/FigmaGradient';
+import React, { useId } from 'react';
+import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { Float } from '@/src/components/Motion';
 
+/** Original SNAR V10 mark, with unchanged paths and gradient geometry. */
 export function BrandBadge({ size = 64, float = false }: { size?: number; float?: boolean }) {
-  const mark = (
-    <View accessibilityLabel="SNAR" style={{ width: size, height: size, borderRadius: size * 0.28, boxShadow: '0 12px 30px rgba(255,0,0,0.35)' }}>
-      <FigmaGradient angle={145} colors={['#FF3B3B', '#FF0000', '#B30000']} locations={[0, 0.55, 1]}
-        style={{ flex: 1, borderRadius: size * 0.28, alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)' }}>
-        <Svg width={size * 0.52} height={size * 0.52} viewBox="0 0 24 24" fill="none">
-          <Path d="M4 5l7 7-7 7" stroke="rgba(255,255,255,0.55)" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
-          <Path d="M12 5l7 7-7 7" stroke="#FFFFFF" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
-        </Svg>
-      </FigmaGradient>
-    </View>
-  );
+  const id = `snar-mark-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const mark = <Svg accessibilityLabel="SNAR" width={size} height={size} viewBox="0 0 100 100">
+    <Defs><LinearGradient id={id} x1="10%" y1="-7%" x2="90%" y2="107%">
+      <Stop offset="0" stopColor="#ff3b3b" /><Stop offset=".55" stopColor="#ff0000" /><Stop offset="1" stopColor="#b30000" />
+    </LinearGradient></Defs>
+    <Rect width={100} height={100} rx={26} fill={`url(#${id})`} />
+    <Path d="M28 29l21 21-21 21" fill="none" stroke="rgba(255,255,255,.5)" strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M53 29l21 21-21 21" fill="none" stroke="white" strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>;
   return float ? <Float>{mark}</Float> : mark;
 }

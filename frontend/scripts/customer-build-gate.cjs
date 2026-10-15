@@ -1,9 +1,17 @@
-require('./apply-customer-beta-hotfix.cjs');
-
 const fs = require('fs');
 const path = require('path');
 const gate = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'customer-build-gate.json'), 'utf8'));
 const profile = process.env.EAS_BUILD_PROFILE;
+if (profile === 'qa') {
+  // V10 owns its source directly. Never run the legacy source rewriter here.
+  const { verifyCustomerQaBuild } = require('./customer-qa-build-gate.cjs');
+  verifyCustomerQaBuild({ gate }).then(() => {
+    console.log('Customer V10 QA build gate PASS: isolated backend and Stripe test mode.');
+  }).catch(() => {
+    console.error('Customer V10 QA build gate FAILED. Verify QA configuration and backend readiness. No credential values are logged.');
+    process.exitCode = 1;
+  });
+} else {
 if (gate.nativeTestBuildAuthorized === true && gate.nativeTestBuildProfiles?.includes(profile)) {
   const app = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8')).expo;
   const eas = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'eas.json'), 'utf8'));
@@ -24,3 +32,4 @@ if (gate.p0.length || gate.p1.length || incomplete.length || gate.customerBuildA
   process.exit(1);
 }
 console.log('SNAR Customer pre-build gate PASS.');
+}

@@ -4,13 +4,14 @@ import { Pressable, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { paymentApi } from '@/src/lib/api';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { Loader } from '@/src/components/ui';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function PaymentSuccess() {
+  useColorTheme();
   const { session_id } = useLocalSearchParams<{ session_id?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();

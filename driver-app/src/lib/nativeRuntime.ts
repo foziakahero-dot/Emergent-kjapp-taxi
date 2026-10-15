@@ -221,7 +221,7 @@ export async function registerNativePush() {
   }
 }
 
-export async function unregisterNativePush() {
+export async function unregisterNativePush(authToken?: string) {
   if (Platform.OS === 'web') return false;
   await storage.setItem(DRIVER_NATIVE_PUSH_REGISTERED_KEY, 'false').catch(() => {});
   try {
@@ -233,7 +233,7 @@ export async function unregisterNativePush() {
       platform: Platform.OS,
       provider: 'expo',
       token,
-    });
+    }, authToken ? { headers: { Authorization: `Bearer ${authToken}` } } : undefined);
     return true;
   } catch {
     return false;

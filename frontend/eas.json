@@ -15,7 +15,7 @@
     "qa": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no"
       },
       "android": {
         "buildType": "apk",

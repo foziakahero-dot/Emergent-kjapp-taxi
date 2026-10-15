@@ -1,15 +1,17 @@
+import * as SplashScreen from 'expo-splash-screen';
+import { LaunchSplash } from '@/src/components/SplashArt';
 import { useReducedMotion } from '@/src/components/Motion';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, router } from 'expo-router';
+import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
-import { colors, FONT_ASSETS } from '@/src/theme';
+import { colors, FONT_ASSETS, useColorTheme } from '@/src/theme';
 import { installClientErrorMonitor } from '@/src/lib/errorMonitoring';
 import { driverApi } from '@/src/lib/api';
 import {
@@ -19,11 +21,17 @@ import {
   stopDriverBackgroundLocation,
 } from '@/src/lib/nativeRuntime';
 
+// Keep the native SNAR mark visible until the bundled font is ready.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
 function NativeRuntimeBridge() {
+  const pathname = usePathname();
+  const path = useRef(pathname);
+  path.current = pathname;
   const { user, refresh } = useAuth();
 
   useEffect(() => {
@@ -75,7 +83,7 @@ function NativeRuntimeBridge() {
         if (['recheck_required', 'retry_required', 'pending_review'].includes(status)) {
           await stopDriverBackgroundLocation().catch(() => {});
           await refresh().catch(() => {});
-          if (alive) router.replace('/driver-identity');
+          if (alive && !['/driver-identity', '/driver-approval'].includes(path.current)) router.replace('/driver-approval');
         }
       } catch {
         // A transient network failure must never manufacture an identity decision.
@@ -109,10 +117,18 @@ function NativeRuntimeBridge() {
 }
 
 export default function RootLayout() {
+  const theme = useColorTheme();
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
-  const [fontsLoaded] = useFonts(FONT_ASSETS);
+  const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
+  const [launchFinished, setLaunchFinished] = useState(false);
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return;
+    void SplashScreen.hideAsync().catch(() => {});
+    const timer = setTimeout(() => setLaunchFinished(true), 1800);
+    return () => clearTimeout(timer);
+  }, [fontsLoaded, fontError]);
   useEffect(() => installClientErrorMonitor(), []);
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.driverBg }} />;
+  if (!launchFinished) return <><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontsLoaded || fontError) void SplashScreen.hideAsync().catch(() => {}); }} /></>;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.driverBg }}>
@@ -120,7 +136,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <NativeRuntimeBridge />
-            <StatusBar style="dark" />
+            <StatusBar style={theme.effective === 'dark' ? 'light' : 'dark'} />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -134,9 +150,17 @@ export default function RootLayout() {
               <Stack.Screen name="reset-password/[token]" />
               <Stack.Screen name="driver-legal-consent" />
               <Stack.Screen name="(driver)" />
+              <Stack.Screen name="driver-earnings-detail" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-earnings-report" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-account" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-settings" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-approval" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-identity" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-trip/[tripId]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="driver-trips" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-fleet" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-documents" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="driver-navigation" options={{ animation: 'slide_from_right' }} />
             </Stack>
           </AuthProvider>
         </QueryClientProvider>

@@ -1,14 +1,16 @@
 import { Text } from '@/src/components/Typography';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, font, makeStyles } from '@/src/theme';
+import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Button } from '@/src/components/ui';
+import DriverApproval from './driver-approval';
 import { SplashAction, SplashBackground, SplashBrand } from '@/src/components/SplashArt';
 
 export default function Index() {
+  useColorTheme();
   const { user, logout } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -18,7 +20,7 @@ export default function Index() {
     if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) {
       const identityStatus = user.identity_verification_status || 'not_submitted';
       const identityGate = Boolean(user.identity_recheck_required) || identityStatus !== 'verified';
-      router.replace(identityGate ? '/driver-identity' : '/(driver)/home');
+      router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
     } else if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted !== true) {
       router.replace('/driver-legal-consent');
     }
@@ -26,16 +28,16 @@ export default function Index() {
 
   if (user === undefined || (user?.role === 'driver' && user?.approved === true)) {
     return (
-      <View style={s.splash}>
-        <SplashBackground />
-        <SplashBrand />
-        <ActivityIndicator color={colors.online} style={{ marginTop: 28 }} />
+      <View style={[s.splash, { backgroundColor: '#08131F' }]}>
+        <SplashBackground inverse />
+        <SplashBrand inverse label="Driver" />
       </View>
     );
   }
 
   if (user && (user.role !== 'driver' || user.approved !== true)) {
     const pendingApproval = user.role === 'driver' && user.approved !== true;
+    if (pendingApproval) return <DriverApproval />;
     return (
       <View style={[s.splash, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 32 }]}>
         <View style={s.center}>
@@ -79,10 +81,12 @@ export default function Index() {
   }
 
   return (
-    <View style={[s.splash, { paddingTop: insets.top, paddingBottom: insets.bottom, alignItems: 'center' }]} testID="driver-onboarding">
-      <SplashBackground />
-      <SplashBrand />
-      <SplashAction label="Start vakt" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
+    <View style={[s.splash, { backgroundColor: '#08131F', alignItems: 'center' }]} testID="driver-onboarding">
+      <SplashBackground inverse />
+      <SplashBrand inverse label="Driver" />
+      <View style={{ position: 'absolute', bottom: Math.max(40, insets.bottom + 6), left: 24, right: 24, alignItems: 'center' }}>
+        <SplashAction label="Start vakt" onPress={() => router.push('/driver-login')} testID="driver-onboarding-login" />
+      </View>
     </View>
   );
 }

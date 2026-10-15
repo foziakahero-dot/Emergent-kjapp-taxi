@@ -6,11 +6,13 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Text } from '@/src/components/Typography';
 import { Icon } from '@/src/components/Icon';
-import { colors, font } from '@/src/theme';
+import { V10Icon } from '@/src/components/V10Icon';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 type Target = RefObject<View | null>;
 const Visibility = createContext({ hidden: false, setHidden: (_hidden: boolean) => {}, targets: {} as Record<string, Target>, registerTarget: (_key: string, _target?: Target) => {} });
 export function TabBarVisibilityProvider({ children }: { children: React.ReactNode }) {
+  useColorTheme();
   const [hidden, setHidden] = useState(false);
   const [targets, setTargets] = useState<Record<string, Target>>({});
   const registerTarget = useCallback((key: string, target?: Target) => setTargets(previous => {
@@ -21,6 +23,7 @@ export function TabBarVisibilityProvider({ children }: { children: React.ReactNo
   return <Visibility.Provider value={{ hidden, setHidden, targets, registerTarget }}>{children}</Visibility.Provider>;
 }
 export function TabScene({ routeKey, children }: { routeKey: string; children: React.ReactNode }) {
+  useColorTheme();
   const target = useRef<View>(null);
   const { registerTarget } = useContext(Visibility);
   useEffect(() => { registerTarget(routeKey, target); return () => registerTarget(routeKey); }, [registerTarget, routeKey]);
@@ -39,29 +42,31 @@ const customerGlyphs: Record<string, React.ReactNode> = {
 };
 
 export function FloatingTabBar({ state, descriptors, navigation, driver = false }: BottomTabBarProps & { driver?: boolean }) {
+  const theme = useColorTheme();
   const insets = useSafeAreaInsets();
   const { hidden, targets } = useContext(Visibility);
   const focused = state.routes[state.index];
   if (hidden && focused.name === 'home') return null;
-  const visible = state.routes.filter(route => (driver ? ['home', 'earnings', 'profile'] : ['home', 'history', 'wallet', 'profile']).includes(route.name));
-  return <View style={{ position: 'absolute', left: 16, right: 16, bottom: insets.bottom + 16, borderRadius: 26, boxShadow: '0 16px 40px rgba(11,14,20,0.14)' }}>
-    <View style={{ overflow: 'hidden', borderRadius: 26, borderWidth: 1, borderColor: colors.line, backgroundColor: driver ? 'rgba(255,255,255,0.94)' : 'rgba(255,255,255,0.92)', paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row' }}>
-      <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
+  const visible = state.routes.filter(route => (driver ? ['home', 'earnings', 'intel', 'messages', 'profile'] : ['home', 'history', 'wallet', 'profile']).includes(route.name));
+  return <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(22, insets.bottom - 12), borderRadius: 24, boxShadow: colors.elevation2 }}>
+    <View style={{ overflow: 'hidden', borderRadius: 24, borderWidth: 1, borderColor: colors.glassLine, backgroundColor: colors.glass, paddingHorizontal: 6, height: 66, alignItems: 'center', justifyContent: 'space-around', flexDirection: 'row' }}>
+      <BlurView blurTarget={targets[focused.key]} blurMethod="dimezisBlurViewSdk31Plus" intensity={44} tint={theme.effective === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} pointerEvents="none" />
       {visible.map(route => {
         const options = descriptors[route.key].options;
         const selected = focused.key === route.key;
-        const color = selected ? colors.accent : colors.textMuted;
+        const ai = driver && route.name === 'intel';
+        const color = ai ? colors.onInverse : selected ? colors.text : colors.textMuted;
         const label = typeof options.tabBarLabel === 'string' ? options.tabBarLabel : options.title || route.name;
         return <Pressable key={route.key} accessibilityRole="tab" accessibilityLabel={options.tabBarAccessibilityLabel || label} accessibilityState={{ selected }}
           testID={`tab-${route.name}`} onPress={() => {
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!selected && !event.defaultPrevented) navigation.navigate(route.name, route.params);
           }} onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
-          style={({ pressed }) => ({ flex: 1, alignItems: 'center', gap: 4, paddingVertical: 6, transform: [{ scale: pressed ? 0.95 : 1 }] })}>
-          {selected && !driver && <View style={{ position: 'absolute', top: -2, width: 24, height: 4, borderRadius: 2, backgroundColor: colors.accent }} />}
-          {driver ? <Icon name={route.name === 'home' ? 'home' : route.name === 'earnings' ? 'trending-up' : 'user'} size={20} color={color} /> :
+          style={({ pressed }) => ({ width: ai ? 52 : 58, height: ai ? 52 : 54, borderRadius: ai ? 17 : 16, backgroundColor: ai ? colors.surfaceInverse : 'transparent', alignItems: 'center', justifyContent: 'center', gap: 3, transform: [{ scale: pressed ? 0.9 : 1 }] })}>
+          {selected && <View style={{ position: 'absolute', bottom: 2, width: 4, height: 4, borderRadius: 2, backgroundColor: colors.accent }} />}
+          {driver ? <V10Icon name={{ home: 'navigation', earnings: 'earnings', intel: 'ai', messages: 'message', profile: 'profile' }[route.name] || 'profile'} size={ai ? 24 : 22} color={color} /> :
             <Svg width={20} height={20} viewBox="0 0 24 24" color={color} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">{customerGlyphs[route.name]}</Svg>}
-          <Text style={{ color, fontFamily: font.medium, fontSize: 10, lineHeight: 15, letterSpacing: driver ? 0 : 0.25 }}>{label}</Text>
+          {!ai && <Text style={{ color, fontFamily: font.medium, fontSize: 10.5, lineHeight: 15, letterSpacing: -.115 }}>{label}</Text>}
         </Pressable>;
       })}
     </View>

@@ -2,14 +2,14 @@ import { fitMapView, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/sr
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
-import Svg, { Circle, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
-import { colors } from '@/src/theme';
+import Svg, { Circle, Ellipse, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
-import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
+import { V10VehicleBody, V10RasterCar } from './V10VehicleMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number };
+type Car = { lat: number; lng: number; heading?: number; eta_min?: number };
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -62,32 +62,40 @@ export function InteractiveMap({
   pickup,
   dropoff,
   route,
+  focusRoute,
   cars = [],
   activeCar,
   user,
   style,
   testID,
   interactive = true,
+  showControls = true,
   focusMode = 'route',
+  focusRevision = 0,
   contentInsets,
 }: {
   pickup?: LL | null;
   dropoff?: LL | null;
   route?: number[][] | null;
+  focusRoute?: number[][] | null;
   cars?: Car[];
   activeCar?: Car | null;
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  showControls?: boolean;
   focusMode?: MapFocusMode;
+  focusRevision?: number;
   contentInsets?: Partial<MapContentInsets>;
 }) {
+  useColorTheme();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [center, setCenter] = useState<LL>(user || OSLO);
   const [zoom, setZoom] = useState(15);
   const [manual, setManual] = useState(false);
-  const smoothCar = useSmoothPosition(activeCar);
+  useEffect(() => { setManual(false); }, [focusRevision]);
+  const smoothCar = useSmoothPosition(activeCar, 900);
 
   const centerRef = useRef(center);
   const zoomRef = useRef(zoom);
@@ -97,8 +105,8 @@ export function InteractiveMap({
   centerRef.current = center;
   zoomRef.current = zoom;
 
-  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode }),
-    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode]);
+  const focus = useMemo(() => mapFocusPoints({ user, pickup, dropoff, activeCar, cars, focusMode, focusRoute }),
+    [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, cars, focusMode, focusRoute]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -229,57 +237,32 @@ export function InteractiveMap({
           {baseTiles}
           {labelTiles}
 
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 110,
-              backgroundColor: 'rgba(244,246,250,0.18)',
-              pointerEvents: 'none',
-            }}
-          />
-
           <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
             {routeLine ? (
               <>
-                <Polyline points={routeLine} fill="none" stroke={colors.accent} strokeOpacity={0.30} strokeWidth={11} strokeLinecap="round" strokeLinejoin="round" />
-                <Polyline points={routeLine} fill="none" stroke={colors.accent} strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" />
+                <Polyline points={routeLine} fill="none" stroke={colors.surface} strokeOpacity={.9} strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
+                <Polyline points={routeLine} fill="none" stroke={colors.route} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
               </>
             ) : null}
 
-            {cars.map((c, i) => (
-              <G key={`car-${i}`} transform={`translate(${sx(c.lng)}, ${sy(c.lat)}) rotate(${c.heading || 0}) scale(${20 / 24}) translate(-12, -12)`}>
-                <CarShape {...CAR_IDLE} />
-              </G>
-            ))}
-
-            {smoothCar ? (
-              <>
-                <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(${36 / 24}) translate(-12, -12)`}>
-                  <CarShape {...CAR_ACTIVE} />
-                </G>
-              </>
-            ) : null}
+            {cars.map((c, i) => <V10RasterCar key={(c as any).id || `car-${i}`} car={c} projectX={sx} projectY={sy} />)}
 
             {pickup ? (
               <G>
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={10} fill={colors.accentSoft} />
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={5.5} fill={colors.accent} />
-                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={2} fill={colors.accentOn} />
+                <Ellipse cx={sx(pickup.lng)} cy={sy(pickup.lat) + 3} rx={10} ry={3.5} fill="#000" opacity={.16} /><Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={11} fill={colors.surface} stroke={colors.surfaceInverse} strokeWidth={1.2} strokeOpacity={.15} />
+                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={6.4} fill={colors.accent} />
+                <Circle cx={sx(pickup.lng)} cy={sy(pickup.lat)} r={2.4} fill="#fff" />
               </G>
             ) : null}
 
             {dropoff ? (
               <G>
-                <Rect x={sx(dropoff.lng) - 7} y={sy(dropoff.lat) - 7} width={14} height={14} rx={3} fill={colors.bg} stroke={colors.accent} strokeWidth={2.5} />
-                <Rect x={sx(dropoff.lng) - 2.5} y={sy(dropoff.lat) - 2.5} width={5} height={5} fill={colors.text} />
+                <Ellipse cx={sx(dropoff.lng)} cy={sy(dropoff.lat) + 3} rx={10} ry={3.5} fill="#000" opacity={.16} /><Rect x={sx(dropoff.lng) - 10.5} y={sy(dropoff.lat) - 10.5} width={21} height={21} rx={6.5} fill={colors.surfaceInverse} />
+                <Rect x={sx(dropoff.lng) - 3.6} y={sy(dropoff.lat) - 3.6} width={7.2} height={7.2} rx={1.6} fill={colors.surface} />
               </G>
             ) : null}
 
-            {user ? (
+            {user && (!pickup || Math.abs(user.lat - pickup.lat) > 1e-6 || Math.abs(user.lng - pickup.lng) > 1e-6) ? (
               <G>
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(255,0,0,0.16)" />
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />
@@ -287,13 +270,27 @@ export function InteractiveMap({
                 <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill={colors.text} fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>
             ) : null}
+            {smoothCar ? (
+              <>
+                <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
+                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
+                  <V10VehicleBody />
+                </G>
+              </>
+            ) : null}
+
+            {smoothCar && activeCar?.eta_min != null ? <G transform={`translate(${sx(smoothCar.lng)},${sy(smoothCar.lat) - 52})`}>
+              <Rect x={-(String(activeCar.eta_min).length + 4) * 3.5 - 10} width={(String(activeCar.eta_min).length + 4) * 7 + 20} height={24} rx={9} fill={colors.surfaceInverse} />
+              <SvgText y={16} textAnchor="middle" fontFamily={font.semibold} fontSize={12.5} fill={colors.onInverse}>{activeCar.eta_min} min</SvgText>
+            </G> : null}
+
           </Svg>
 
           <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
             {ATTRIB}
           </Text>
 
-          {interactive ? (
+          {interactive && showControls ? (
             <View style={{ position: 'absolute', right: 14, top: Platform.OS === 'web' ? 108 : 116, gap: 8 }} pointerEvents="box-none">
               <Ctrl name="plus" onPress={() => { setManual(true); setZoom((z) => clampZoom(z + 1)); }} testID="map-zoom-in" />
               <Ctrl name="minus" onPress={() => { setManual(true); setZoom((z) => clampZoom(z - 1)); }} testID="map-zoom-out" />
@@ -307,6 +304,7 @@ export function InteractiveMap({
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
+  useColorTheme();
   return (
     <Pressable
       onPress={onPress}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Animated, Easing, type ViewProps } from 'react-native';
 
+import { useAccessibilityPreferences } from '@/src/lib/accessibilityPreferences';
+
 export const figmaEase = Easing.bezier(0.22, 1, 0.36, 1);
 export const cssEase = Easing.bezier(0.25, 0.1, 0.25, 1);
 export const cssEaseOut = Easing.bezier(0, 0, 0.58, 1);
@@ -24,7 +26,9 @@ function subscribeReducedMotion(listener: () => void) {
   return () => { listeners.delete(listener); if (listeners.size === 0) { revision++; subscription?.remove(); subscription = undefined; } };
 }
 export function useReducedMotion() {
-  return useSyncExternalStore(subscribeReducedMotion, () => reducedMotion, () => true);
+  const preference = useAccessibilityPreferences();
+  const system = useSyncExternalStore(subscribeReducedMotion, () => reducedMotion, () => true);
+  return system || preference.reduceMotion;
 }
 
 export function Rise({ delay = 0, style, ...props }: ViewProps & { delay?: number }) {
@@ -56,16 +60,16 @@ export function Float({ children }: { children: React.ReactNode }) {
   return <Animated.View style={{ transform: [{ translateY: progress }] }}>{children}</Animated.View>;
 }
 
-export function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+export function Collapse({ open, children, duration = 300 }: { open: boolean; children: React.ReactNode; duration?: number }) {
   const reduced = useReducedMotion();
   const [height, setHeight] = useState(0);
   const progress = useRef(new Animated.Value(open ? 1 : 0)).current;
   useEffect(() => {
     if (reduced) { progress.setValue(open ? 1 : 0); return; }
-    const animation = Animated.timing(progress, { toValue: open ? 1 : 0, duration: 300, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false });
+    const animation = Animated.timing(progress, { toValue: open ? 1 : 0, duration, easing: Easing.bezier(0.4, 0, 0.2, 1), useNativeDriver: false });
     animation.start();
     return () => animation.stop();
-  }, [open, progress, reduced]);
+  }, [open, progress, reduced, duration]);
   return <Animated.View pointerEvents={open ? 'auto' : 'none'} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
     style={{ height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, height] }), opacity: progress, overflow: 'hidden' }}>
     <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0 }} onLayout={event => setHeight(event.nativeEvent.layout.height)}>{children}</Animated.View>

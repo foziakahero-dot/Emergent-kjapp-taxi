@@ -2,7 +2,7 @@ import { Text } from '@/src/components/Typography';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
-import { colors, font, makeStyles, radius } from '@/src/theme';
+import { colors, font, makeStyles, radius, useColorTheme } from '@/src/theme';
 
 export function Button({
   label,
@@ -23,6 +23,7 @@ export function Button({
   style?: StyleProp<ViewStyle>;
   icon?: React.ReactNode;
 }) {
+  useColorTheme();
   const s = useStyles();
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
@@ -72,6 +73,7 @@ export function Card({
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
+  useColorTheme();
   const s = useStyles();
   return (
     <View testID={testID} style={[s.card, style]}>
@@ -81,6 +83,7 @@ export function Card({
 }
 
 export function Overline({ children, color }: { children: React.ReactNode; color?: string }) {
+  useColorTheme();
   return (
     <Text
       style={{
@@ -97,6 +100,7 @@ export function Overline({ children, color }: { children: React.ReactNode; color
 }
 
 export function Loader({ label }: { label?: string }) {
+  useColorTheme();
   return (
     <View style={{ alignItems: 'center', gap: 12 }}>
       <ActivityIndicator color={colors.accent} />

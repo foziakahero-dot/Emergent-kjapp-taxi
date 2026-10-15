@@ -21,9 +21,9 @@ Module._load = function (id, parent, isMain) {
   if (id === 'react' || id === 'react/jsx-runtime') return old.call(this, root + '/node_modules/' + id, parent, isMain);
   if (id === 'react-native') return { View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator' };
   if (id === '@rnmapbox/maps') return { __esModule: true, default: { setAccessToken() {} }, Camera, MapView: 'MapView', MarkerView: 'MarkerView', ShapeSource: 'ShapeSource', LineLayer: 'LineLayer', StyleImport: 'StyleImport' };
-  if (id === 'react-native-svg') return { __esModule: true, default: 'Svg', Circle: 'Circle', Rect: 'Rect' };
+  if (id === 'react-native-svg') return { __esModule: true, default: 'Svg', Circle: 'Circle', Ellipse: 'Ellipse', Rect: 'Rect' };
   if (id === '@/src/lib/mapFocus') return old.call(this, root + '/src/lib/mapFocus.ts', parent, isMain);
-  if (id === '@/src/theme') return { colors: {} };
+  if (id === '@/src/theme') return { colors: {}, font: {}, useColorTheme: () => ({ effective: 'light' }) };
   if (id === './useSmoothPosition') return { useSmoothPosition: p => p };
   if (id === './RasterMap') return { InteractiveMap: 'RasterMap' };
   if (id === './Typography') return { Text: 'Text' };
@@ -47,6 +47,15 @@ Module._load = function (id, parent, isMain) {
   const before = calls.length;
   await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap, { ...props, cars: [{ id: 'live', lat: 59.95, lng: 10.83 }] })));
   assert.equal(calls.length, before, 'Live location updates must respect manual panning');
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap, { ...props, cars: [{ id: 'live', lat: 59.95, lng: 10.83 }], focusRevision: 1 })));
+  assert.ok(calls.length > before, 'Explicit recenter must recover automatic framing after manual pan');
+  assert.deepEqual(calls.at(-1).bounds.slice(0, 2), [[10.83,59.95],[10.75,59.91]]);
+  const fullRoute = [[10.75,59.91],[10.9,59.99],[10.76,59.92]];
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap, { ...props, focusMode:'route', focusRoute:fullRoute, route:[], dropoff:{lat:59.92,lng:10.76}, focusRevision:2 })));
+  assert.deepEqual(calls.at(-1).bounds.slice(0,2),[[10.9,59.99],[10.75,59.91]],'Route camera includes road detours before its animated line starts');
+  const beforeDrawing = calls.length;
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap, { ...props, focusMode:'route', focusRoute:fullRoute, route:fullRoute.slice(0,2), dropoff:{lat:59.92,lng:10.76}, focusRevision:2 })));
+  assert.equal(calls.length,beforeDrawing,'Line drawing must not move the camera along its prefix');
   await renderer.act(async () => app.unmount());
   await renderer.act(async () => { app = renderer.create(React.createElement(MapboxInteractiveMap, { ...props, cars: [] })); });
   await renderer.act(async () => {
@@ -54,6 +63,11 @@ Module._load = function (id, parent, isMain) {
     app.root.findByType('MapView').props.onDidFinishLoadingMap();
   });
   assert.deepEqual(calls.at(-1).config.padding, { paddingTop: 160, paddingRight: 48, paddingBottom: 440, paddingLeft: 48 }, 'A lone pickup uses the same unobscured viewport');
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap,{...props,activeCar:{lat:59.913,lng:10.755,heading:30,eta_min:4}})));
+  assert.ok(app.root.findAllByType('Text').some(node=>JSON.stringify(node.props.children).includes('4')), 'Fresh assigned-car ETA stays attached to its actual map marker');
+  await renderer.act(async () => app.update(React.createElement(MapboxInteractiveMap,{...props,activeCar:{lat:59.913,lng:10.755,heading:30}})));
+  assert.equal(app.root.findAllByType('Text').some(node=>JSON.stringify(node.props.children).includes('min')),false,'Without a fresh ETA the marker tag disappears');
   await renderer.act(async () => app.unmount());
   console.log('PASS: native Mapbox bounds, panel resizing, manual panning and single-point camera padding');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+

@@ -1,0 +1,415 @@
+{
+  "figma_url": "https://www.figma.com/make/7947uNsMq8WNEq3eZSHmuz/SNAR-Fleet-v2-Design-System",
+  "archive_sha256": "5bb43ac60579f335ba72c562cde7b62bc8b74bf6ce6586c82a0f3837f9e2dabd",
+  "files": {
+    "src/main.tsx": "5f49dce6e6cc4b5d678cf529ef892af0ab7dfa6afb300b11ad559224019b8b05",
+    "src/App.tsx": "d44d5e57467b2aace484d1dac1b5e3d3a9b0d12854c7088c0089c8e1c6c754f0",
+    "src/CustomerApp.tsx": "dbf0da38cb3cceb5c2bcf5407bda0b83dff92dd5cbfa6cc0c04392ca5c6ee4c5",
+    "src/DriverApp.tsx": "ef76ee1c9c031833c7a8144fdd5e34f6c927b4b2159794862e94e9a96f46c6a0",
+    "src/VehicleAssets.tsx": "e762c6e2839a4335db238d3f09f77083b09550d65b26cf058991ed1749ff512d",
+    "src/index.css": "b7a105e034848a338dc5fec1372907e990c9b49ff265adfde3d4ec9964b06f1d",
+    "src/snar10/signature.css": "5697bf954c72f34dee1e9ee856993ad79629cbc79090610431e73a7392926651",
+    "src/snar10/kit.tsx": "877a1dffb7b700b3f199d72753b0fa0269925e80b0fe7327ce304d9254240a65",
+    "src/snar10/ExperienceStudio.tsx": "f692d26b1b0913844784f23de3db91ecff04793c5bad2586ff82689ce0f89eda"
+  },
+  "customer": [
+    {
+      "id": "splash",
+      "number": "01",
+      "title": "Splash",
+      "group": "Start"
+    },
+    {
+      "id": "returning",
+      "number": "02",
+      "title": "Hjem, kjent bruker",
+      "group": "Start"
+    },
+    {
+      "id": "onboarding",
+      "number": "03",
+      "title": "Introduksjon",
+      "group": "Start"
+    },
+    {
+      "id": "signin",
+      "number": "04",
+      "title": "Logg inn",
+      "group": "Start"
+    },
+    {
+      "id": "permission",
+      "number": "05",
+      "title": "Posisjon",
+      "group": "Start"
+    },
+    {
+      "id": "home",
+      "number": "06",
+      "title": "Hjem / kart",
+      "group": "Bestilling"
+    },
+    {
+      "id": "search",
+      "number": "07",
+      "title": "Søk destinasjon",
+      "group": "Bestilling"
+    },
+    {
+      "id": "route",
+      "number": "08",
+      "title": "Ruteforhåndsvisning",
+      "group": "Bestilling"
+    },
+    {
+      "id": "vehicles",
+      "number": "09",
+      "title": "Kjøretøyvalg",
+      "group": "Bestilling"
+    },
+    {
+      "id": "payment",
+      "number": "10",
+      "title": "Betaling",
+      "group": "Bestilling"
+    },
+    {
+      "id": "confirm",
+      "number": "11",
+      "title": "Bekreft",
+      "group": "Bestilling"
+    },
+    {
+      "id": "searching",
+      "number": "12",
+      "title": "Søker sjåfør",
+      "group": "Tur"
+    },
+    {
+      "id": "match",
+      "number": "13",
+      "title": "Sjåfør funnet",
+      "group": "Tur"
+    },
+    {
+      "id": "approaching",
+      "number": "14",
+      "title": "Sjåfør nærmer seg",
+      "group": "Tur"
+    },
+    {
+      "id": "pickupGuide",
+      "number": "15",
+      "title": "Henteveiledning",
+      "group": "Tur"
+    },
+    {
+      "id": "arrived",
+      "number": "16",
+      "title": "Sjåfør har ankommet",
+      "group": "Tur"
+    },
+    {
+      "id": "trip",
+      "number": "17",
+      "title": "Tur pågår",
+      "group": "Tur"
+    },
+    {
+      "id": "safety",
+      "number": "18",
+      "title": "Sikkerhet",
+      "group": "Tur"
+    },
+    {
+      "id": "arriving",
+      "number": "19",
+      "title": "Ankommer",
+      "group": "Tur"
+    },
+    {
+      "id": "complete",
+      "number": "20",
+      "title": "Tur fullført",
+      "group": "Etter tur"
+    },
+    {
+      "id": "paid",
+      "number": "21",
+      "title": "Betaling fullført",
+      "group": "Etter tur"
+    },
+    {
+      "id": "receipt",
+      "number": "22",
+      "title": "Kvittering",
+      "group": "Etter tur"
+    },
+    {
+      "id": "rating",
+      "number": "23",
+      "title": "Vurdering",
+      "group": "Etter tur"
+    },
+    {
+      "id": "activity",
+      "number": "24",
+      "title": "Aktivitet",
+      "group": "Konto"
+    },
+    {
+      "id": "tripDetail",
+      "number": "25",
+      "title": "Turdetalj",
+      "group": "Konto"
+    },
+    {
+      "id": "messages",
+      "number": "26",
+      "title": "Meldinger",
+      "group": "Konto"
+    },
+    {
+      "id": "notifications",
+      "number": "27",
+      "title": "Varsler",
+      "group": "Konto"
+    },
+    {
+      "id": "ai",
+      "number": "28",
+      "title": "SNAR AI",
+      "group": "Intelligens"
+    },
+    {
+      "id": "voice",
+      "number": "29",
+      "title": "Stemme",
+      "group": "Intelligens"
+    },
+    {
+      "id": "profile",
+      "number": "30",
+      "title": "Profil",
+      "group": "Konto"
+    },
+    {
+      "id": "paymethods",
+      "number": "31",
+      "title": "Betalingsmåter",
+      "group": "Konto"
+    },
+    {
+      "id": "support",
+      "number": "32",
+      "title": "Support",
+      "group": "Konto"
+    },
+    {
+      "id": "accessibility",
+      "number": "33",
+      "title": "Tilgjengelighet",
+      "group": "Konto"
+    },
+    {
+      "id": "settings",
+      "number": "34",
+      "title": "Innstillinger",
+      "group": "Konto"
+    },
+    {
+      "id": "scheduled",
+      "number": "35",
+      "title": "Planlagt tur",
+      "group": "Bestilling"
+    },
+    {
+      "id": "states",
+      "number": "36",
+      "title": "Tomme / feil / offline",
+      "group": "Tilstander"
+    }
+  ],
+  "driver": [
+    {
+      "id": "splash",
+      "number": "01",
+      "title": "Splash",
+      "group": "Start"
+    },
+    {
+      "id": "login",
+      "number": "02",
+      "title": "Logg inn",
+      "group": "Start"
+    },
+    {
+      "id": "approval",
+      "number": "03",
+      "title": "Godkjenning",
+      "group": "Start"
+    },
+    {
+      "id": "offline",
+      "number": "04",
+      "title": "Offline hjem",
+      "group": "Skift"
+    },
+    {
+      "id": "goingOnline",
+      "number": "05",
+      "title": "Går online",
+      "group": "Skift"
+    },
+    {
+      "id": "online",
+      "number": "06",
+      "title": "Online cockpit",
+      "group": "Skift"
+    },
+    {
+      "id": "offer",
+      "number": "07",
+      "title": "Ny tur",
+      "group": "Tur"
+    },
+    {
+      "id": "navPickup",
+      "number": "08–09",
+      "title": "Akseptert → kjør til henting",
+      "group": "Tur"
+    },
+    {
+      "id": "waitingInside",
+      "number": "10",
+      "title": "Kunden venter inne",
+      "group": "Tur"
+    },
+    {
+      "id": "arrivedAction",
+      "number": "11",
+      "title": "Ankommet",
+      "group": "Tur"
+    },
+    {
+      "id": "waiting",
+      "number": "12",
+      "title": "Venter på passasjer",
+      "group": "Tur"
+    },
+    {
+      "id": "startTrip",
+      "number": "13",
+      "title": "Start tur",
+      "group": "Tur"
+    },
+    {
+      "id": "active",
+      "number": "14",
+      "title": "Aktiv tur",
+      "group": "Tur"
+    },
+    {
+      "id": "arriving",
+      "number": "15",
+      "title": "Ankommer",
+      "group": "Tur"
+    },
+    {
+      "id": "complete",
+      "number": "16",
+      "title": "Fullfør tur",
+      "group": "Tur"
+    },
+    {
+      "id": "summary",
+      "number": "17",
+      "title": "Tursammendrag",
+      "group": "Tur"
+    },
+    {
+      "id": "earnings",
+      "number": "18",
+      "title": "Inntjening",
+      "group": "Økonomi"
+    },
+    {
+      "id": "intel",
+      "number": "19",
+      "title": "SNAR Drive Intelligence",
+      "group": "Økonomi"
+    },
+    {
+      "id": "earningsDetail",
+      "number": "20",
+      "title": "Inntjening detalj",
+      "group": "Økonomi"
+    },
+    {
+      "id": "activity",
+      "number": "21",
+      "title": "Aktivitet",
+      "group": "Konto"
+    },
+    {
+      "id": "tripDetail",
+      "number": "22",
+      "title": "Turdetalj",
+      "group": "Konto"
+    },
+    {
+      "id": "vehicle",
+      "number": "23",
+      "title": "Kjøretøy",
+      "group": "Konto"
+    },
+    {
+      "id": "fleet",
+      "number": "24",
+      "title": "Fleet",
+      "group": "Konto"
+    },
+    {
+      "id": "profile",
+      "number": "25",
+      "title": "Profil",
+      "group": "Konto"
+    },
+    {
+      "id": "documents",
+      "number": "26",
+      "title": "Dokumenter",
+      "group": "Konto"
+    },
+    {
+      "id": "verify",
+      "number": "27",
+      "title": "ID / selfie",
+      "group": "Konto"
+    },
+    {
+      "id": "messages",
+      "number": "28",
+      "title": "Meldinger",
+      "group": "Konto"
+    },
+    {
+      "id": "navSettings",
+      "number": "29",
+      "title": "Navigasjon",
+      "group": "Konto"
+    },
+    {
+      "id": "settings",
+      "number": "30",
+      "title": "Innstillinger",
+      "group": "Konto"
+    },
+    {
+      "id": "states",
+      "number": "31",
+      "title": "Globale tilstander",
+      "group": "Tilstander"
+    }
+  ]
+}

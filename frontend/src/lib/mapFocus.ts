@@ -1,6 +1,6 @@
 import { validPosition } from './carAvailability';
 type LL = { lat: number; lng: number };
-export type MapFocusMode = 'nearby' | 'route';
+export type MapFocusMode = 'nearby' | 'route' | 'destination';
 export type MapContentInsets = { top: number; right: number; bottom: number; left: number };
 const DEFAULT_INSETS: MapContentInsets = { top: 90, right: 58, bottom: 170, left: 58 };
 
@@ -48,13 +48,27 @@ export function fitMapView(points: LL[], width: number, height: number, requeste
   return { center: valid[0], zoom: 3 };
 }
 
-export function mapFocusPoints({ user, pickup, dropoff, activeCar, cars = [], focusMode = 'route' }: {
+export function mapFocusPoints({ user, pickup, dropoff, activeCar, cars = [], focusMode = 'route', focusRoute }: {
   user?: LL | null; pickup?: LL | null; dropoff?: LL | null; activeCar?: LL | null;
-  cars?: LL[]; focusMode?: MapFocusMode;
+  cars?: LL[]; focusMode?: MapFocusMode; focusRoute?: number[][] | null;
 }): LL[] {
   // Nearby supply is framed around pickup; a distant destination must not hide cars.
   const nearby = !activeCar && (focusMode === 'nearby' || (!dropoff && cars.length > 0));
-  const points = nearby ? [pickup || user, ...cars] : [user, pickup, dropoff, activeCar];
+  const extents: LL[] = [];
+  if (!nearby && focusRoute?.length) {
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+    for (const coordinate of focusRoute) {
+      const point = { lat: coordinate?.[1], lng: coordinate?.[0] };
+      if (!validPosition(point)) continue;
+      minLat = Math.min(minLat, point.lat); maxLat = Math.max(maxLat, point.lat);
+      minLng = Math.min(minLng, point.lng); maxLng = Math.max(maxLng, point.lng);
+    }
+    if (Number.isFinite(minLat)) extents.push({ lat: minLat, lng: minLng }, { lat: maxLat, lng: maxLng });
+  }
+  // Frame the complete road geometry once, independently of the animated line prefix.
+  // Arrival frames the actual destination and driver, without the departed pickup
+  // or complete road geometry forcing the camera back out to the whole journey.
+  const points = focusMode === 'destination' ? [dropoff, activeCar] : nearby ? [pickup || user, ...cars] : extents.length ? [pickup || user, dropoff, activeCar, ...extents] : [user, pickup, dropoff, activeCar];
   const seen = new Set<string>();
   return points.filter((p): p is LL => {
     if (!validPosition(p)) return false;

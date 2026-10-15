@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const epoch = ++sessionEpoch.current;
     const res = await authApi.register(data);
     if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');
-    if (res?.user?.role !== 'user') throw new Error('Kun kundekonto kan registreres i kundeappen.');
+    if (!res?.token || res?.user?.role !== 'user') throw new Error('Kun kundekonto kan registreres i kundeappen.');
     await storage.setItem(TOKEN_KEY, res.token);
     if (epoch !== sessionEpoch.current) throw new Error('Registreringen ble avbrutt.');
     setSessionError(''); setUser(res.user);

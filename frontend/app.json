@@ -73,15 +73,19 @@
         }
       ],
       "expo-web-browser",
-      "expo-sharing",
       "expo-apple-authentication",
       "expo-asset",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 104,
-          "backgroundColor": "#F4F6FA"
+          "image": "./assets/snar-splash-mark.png",
+          "imageWidth": 96,
+          "backgroundColor": "#0B1A2C",
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/snar-splash-mark.png",
+            "backgroundColor": "#0B1A2C"
+          }
         }
       ],
       [

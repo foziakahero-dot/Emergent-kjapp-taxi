@@ -1,12 +1,16 @@
+import { V10Entrance } from '@/src/components/V10Entrance';
 import { Text } from '@/src/components/Typography';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, View } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { colors, font, makeStyles } from '@/src/theme';
-import { Icon } from '@/src/components/Icon';
+import { colors, font, useColorTheme } from '@/src/theme';
+import { V10Icon } from '@/src/components/V10Icon';
+import { V10Action, V10Badge, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
+import { FigmaGradient } from '@/src/components/FigmaGradient';
+import { confirmedPaymentMethod } from '@/src/components/BookingPrimitives';
+import { useAuth } from '@/src/context/AuthContext';
 import { Loader } from '@/src/components/ui';
 import { paymentApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
@@ -15,16 +19,21 @@ const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjap
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function PaymentMethods() {
+  useColorTheme();
   const { setup, session_id } = useLocalSearchParams<{ setup?: string; session_id?: string }>();
-  const insets = useSafeAreaInsets();
-  const s = useStyles();
+  const { user } = useAuth();
   const router = useRouter();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const operation = useRef(false), handledSetup = useRef<string | null>(null), mounted = useRef(true), account = useRef(user?.id);
+  account.current = user?.id;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const current = () => mounted.current && account.current === user?.id;
+  const methodsKey = ['payment-methods', user?.id];
 
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['payment-methods'], queryFn: paymentApi.list });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: methodsKey, queryFn: paymentApi.list, enabled: !!user?.id });
   const { data: nativeConfig } = useQuery({ queryKey: ['native-payment-config'], queryFn: paymentApi.nativeConfig });
   const methods = data?.payment_methods || data?.methods || (Array.isArray(data) ? data : []);
 
@@ -32,9 +41,10 @@ export default function PaymentMethods() {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       try {
         const result = await paymentApi.cardSetupStatus(sessionId);
-        if (result?.ready) {
-          await qc.invalidateQueries({ queryKey: ['payment-methods'] });
-          if (result?.verified) {
+        if (result?.ready === true) {
+          await qc.invalidateQueries({ queryKey: methodsKey });
+          if (!current()) return;
+          if (result?.verified === true) {
             setNotice('Kortet er verifisert og klart for SNAR-bestillinger.');
             setError('');
           } else {
@@ -45,31 +55,32 @@ export default function PaymentMethods() {
       } catch {}
       await sleep(1200);
     }
-    setError('Stripe-bekreftelsen er ikke klar ennå. Åpne betalingsmåter igjen om noen sekunder.');
+    if (current()) setError('Stripe-bekreftelsen er ikke klar ennå. Åpne betalingsmåter igjen om noen sekunder.');
   };
 
   useEffect(() => {
-    if (setup === 'success' && session_id) {
-      setBusy(true);
-      verifySetup(session_id).finally(() => setBusy(false));
+    if (setup === 'success' && session_id && handledSetup.current !== session_id && !operation.current) {
+      handledSetup.current = session_id; operation.current = true; setBusy(true);
+      void verifySetup(session_id).finally(() => { operation.current = false; if (current()) setBusy(false); });
     } else if (setup === 'cancel') {
       setNotice('Kortverifiseringen ble avbrutt. Ingen kortdata ble lagret.');
     }
   }, [setup, session_id]);
 
   const remove = async (id: string) => {
-    setError('');
+    if (operation.current) return;
+    operation.current = true; setBusy(true); setError('');
     try {
-      await paymentApi.remove(id);
-      await qc.invalidateQueries({ queryKey: ['payment-methods'] });
-    } catch (e) {
-      setError(apiError(e));
-    }
+      const confirmed = await paymentApi.remove(id);
+      if (confirmed?.deleted !== true) throw new Error('Kortet ble ikke bekreftet fjernet.');
+      await qc.invalidateQueries({ queryKey: methodsKey });
+    } catch (error) { if (current()) setError(apiError(error)); }
+    finally { operation.current = false; if (current()) setBusy(false); }
   };
 
   const addStripeCard = async () => {
-    if (busy) return;
-    setBusy(true);
+    if (operation.current) return;
+    operation.current = true; setBusy(true);
     setNotice('');
     setError('');
     try {
@@ -84,119 +95,29 @@ export default function PaymentMethods() {
       await WebBrowser.openBrowserAsync(checkout_url);
       await verifySetup(stripeSessionId);
     } catch (e) {
-      setError(apiError(e));
+      if (current()) setError(apiError(e));
     } finally {
-      setBusy(false);
+      operation.current = false; if (current()) setBusy(false);
     }
   };
 
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-      <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} style={s.back} testID="pm-back" accessibilityRole="button" accessibilityLabel="Tilbake">
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </Pressable>
-        <Text style={s.title}>Betalingsmåter</Text>
-      </View>
-
-      <View style={{ paddingHorizontal: 20 }}>
-        {isLoading ? (
-          <View style={{ paddingTop: 60 }}><Loader /></View>
-        ) : isError ? (
-          <View style={s.loadError} testID="pm-load-error">
-            <View style={s.loadErrorIcon}><Icon name="card" size={22} color={colors.accent} /></View>
-            <Text style={s.loadErrorTitle}>Kunne ikke hente betalingsmåter</Text>
-            <Text style={s.loadErrorSub}>Dette betyr ikke at kortene dine er borte. Prøv å hente listen på nytt.</Text>
-            <Pressable style={s.retryBtn} onPress={() => refetch()} testID="pm-retry">
-              <Text style={s.retryBtnText}>Prøv igjen</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            {notice ? (
-              <View style={s.notice} testID="pm-notice">
-                <Icon name="check" size={17} color={colors.online} />
-                <Text style={s.noticeText}>{notice}</Text>
-              </View>
-            ) : null}
-
-            {error ? <Text style={s.error} testID="pm-error">{error}</Text> : null}
-
-            {methods.map((m: any) => {
-              const verified = m.verified !== false;
-              return (
-                <View key={m.id} style={s.card} testID={`pm-${m.id}`}>
-                  <View style={s.cardIcon}><Icon name={m.type === 'vipps' ? 'wallet' : 'card'} size={20} color={colors.accent} /></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.cardLabel}>{m.label || (m.type === 'vipps' ? 'Vipps' : 'Kort')}</Text>
-                    <Text style={s.cardSub}>{m.type === 'vipps' ? 'Vipps' : `•••• ${m.last4 || '—'}`}{m.is_default ? ' · Standard' : ''}</Text>
-                  </View>
-                  <View style={verified ? s.verified : s.unverified}>
-                    <Text style={verified ? s.verifiedText : s.unverifiedText}>{verified ? 'Verifisert' : 'Ikke verifisert'}</Text>
-                  </View>
-                  <Pressable onPress={() => remove(m.id)} testID={`pm-remove-${m.id}`} style={s.removeBtn} accessibilityRole="button" accessibilityLabel="Fjern betalingsmåte">
-                    <Icon name="x" size={18} color={colors.textMuted} />
-                  </Pressable>
-                </View>
-              );
-            })}
-
-            {!methods.length ? (
-              <View style={s.emptyCard}>
-                <Icon name="card" size={24} color={colors.accent} />
-                <Text style={s.emptyTitle}>Ingen verifisert betalingsmåte</Text>
-                <Text style={s.empty}>Legg til et kort via Stripe før du bestiller din første tur. Når automatisk betaling aktiveres for betaen, kan avtalt turbeløp belastes etter fullført tur.</Text>
-              </View>
-            ) : null}
-
-            <Pressable style={[s.stripeBtn, busy && { opacity: 0.65 }]} onPress={addStripeCard} disabled={busy} testID="pm-stripe">
-              {busy ? <ActivityIndicator color={colors.accentOn} /> : <Icon name="lock" size={16} color={colors.accentOn} />}
-              <Text style={s.stripeText}>{busy ? 'Bekrefter…' : 'Legg til og verifiser kort'}</Text>
-            </Pressable>
-
-            <View style={s.securityNote}>
-              <Icon name="shield" size={15} color={colors.online} />
-              <Text style={s.note}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Hvis automatisk betaling er aktivert, forsøker SNAR å belaste det avtalte turbeløpet når turen er ferdig; hvis banken krever ny godkjenning, får du beskjed og kan betale fra kvitteringen.</Text>
-            </View>
-            <Text style={s.vippsNote} testID="wallet-native-status">{nativeConfig?.enabled && nativeConfig?.test_mode
-              ? 'Native kortbetaling er konfigurert i testmodus. Lommebokbetaling krever støtte på enheten.'
-              : 'Google Pay og Apple Pay er ikke aktivert. Kort kan legges til via Stripe når testintegrasjonen er konfigurert.'}</Text>
-            <Text style={s.vippsNote}>Vipps aktiveres først når produksjonsintegrasjonen er konfigurert og verifisert.</Text>
-          </>
-        )}
-      </View>
-    </ScrollView>
-  );
+  const primary = !isError && confirmedPaymentMethod(methods);
+  const others = methods.filter((method: any) => method.id !== primary?.id);
+  const verified = (method: any) => confirmedPaymentMethod([method]) != null;
+  const expiry = primary && Number.isInteger(primary.exp_month) && primary.exp_month >= 1 && primary.exp_month <= 12 && Number.isInteger(primary.exp_year) ? `${String(primary.exp_month).padStart(2, '0')}/${String(primary.exp_year).slice(-2)}` : null;
+  const removeButton = (method: any) => <Pressable disabled={busy} onPress={() => void remove(method.id)} testID={`pm-remove-${method.id}`} accessibilityRole="button" accessibilityLabel={`Fjern ${method.label || 'betalingskort'} ${method.last4 || ''}`} accessibilityState={{ disabled: busy }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="x" size={18} color={colors.textMuted} /></Pressable>;
+  return <V10Screen testID="payment-methods-screen"><V10Header title="Betalingsmåter" onBack={() => router.back()} /><V10Entrance>
+    {isLoading ? <Loader /> : isError ? <V10State warning icon="wifiOff" title="Kunne ikke hente betalingsmåter" body="Dette betyr ikke at kortene dine er borte. Prøv å hente listen på nytt." action="Prøv igjen" onAction={() => void refetch()} /> : <>
+      {notice ? <Text accessibilityLiveRegion="polite" testID="pm-notice" style={[v10.secondary, { marginBottom: 12, color: colors.success }]}>{notice}</Text> : null}
+      {error ? <Text accessibilityRole="alert" testID="pm-error" style={[v10.secondary, { marginBottom: 12, color: colors.danger }]}>{error}</Text> : null}
+      {primary ? <FigmaGradient angle={135} colors={['#0b1a2c', '#1c3350']} style={{ height: 180, borderRadius: 24, padding: 20, justifyContent: 'space-between', overflow: 'hidden', boxShadow: colors.elevation2 }} testID="payment-primary-card">
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>Kort for bestilling</Text><Text style={{ color: '#fff', fontFamily: font.bold, fontStyle: 'italic', fontSize: 20 }}>{String(primary.label || primary.type || 'Kort').toUpperCase()}</Text></View>
+        <Text style={{ color: '#fff', fontFamily: font.medium, fontSize: 20, letterSpacing: 2.4, fontVariant: ['tabular-nums'] }}>•••• •••• •••• {primary.last4 || '—'}</Text><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{expiry ? `Utløper ${expiry}` : 'Verifisert av Stripe'}</Text>
+      </FigmaGradient> : <V10State icon="payment" title="Ingen verifisert betalingsmåte" body="Legg til og verifiser et kort før du bestiller en tur." />}
+      {primary ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}><V10Badge tone="positive">Verifisert</V10Badge>{removeButton(primary)}</View> : null}
+      {others.length ? <V10Section title="Andre kort"><V10Group>{others.map((method: any, index: number) => <V10Row key={method.id} border={index > 0} icon="payment" title={`${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}`} subtitle={verified(method) ? 'Verifisert av Stripe' : 'Ikke verifisert · kan ikke reservere tur'} right={removeButton(method)} testID={`pm-${method.id}`} />)}</V10Group></V10Section> : null}
+      <V10Section title="Betaling på enheten"><V10Group><V10Row icon="payment" title="Apple Pay og Google Pay" subtitle={nativeConfig?.enabled === true ? `Native betaling er konfigurert${nativeConfig.test_mode ? ' i testmodus' : ''}. Lommebok krever støtte på enheten.` : 'Ikke aktivert for denne appen.'} testID="wallet-native-status" /></V10Group></V10Section>
+      <View style={{ marginTop: 16 }}><V10Action kind="soft" icon="plus" label="Legg til kort" onPress={() => void addStripeCard()} busy={busy} testID="pm-stripe" /></View><Text style={[v10.caption, { marginTop: 12 }]}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Kort for neste tur bestemmes av det verifiserte standardkortet, eller det nyeste verifiserte kortet.</Text>
+    </>}
+  </V10Entrance></V10Screen>;
 }
-
-const useStyles = makeStyles((c) => ({
-  header: { paddingHorizontal: 20, paddingBottom: 16, gap: 16 },
-  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle, borderWidth: 1, borderColor: c.line },
-  title: { fontFamily: font.display, fontSize: 26, color: c.text },
-  loadError: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 22, marginTop: 12 },
-  loadErrorIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center' },
-  loadErrorTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15, marginTop: 12, textAlign: 'center' },
-  loadErrorSub: { color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: 6, textAlign: 'center' },
-  retryBtn: { minHeight: 46, borderRadius: 12, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, marginTop: 14 },
-  retryBtnText: { color: c.accentOn, fontFamily: font.bold, fontSize: 13 },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.card, borderRadius: 16, borderWidth: 1, borderColor: c.line, paddingLeft: 14, paddingRight: 6, paddingVertical: 10, marginBottom: 12 },
-  cardIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.cardSubtle, alignItems: 'center', justifyContent: 'center' },
-  cardLabel: { color: c.text, fontFamily: font.semibold, fontSize: 15 },
-  cardSub: { color: c.textMuted, fontSize: 13, marginTop: 2, fontFamily: font.mono },
-  removeBtn: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  verified: { backgroundColor: c.onlineSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
-  verifiedText: { color: c.online, fontFamily: font.bold, fontSize: 10 },
-  unverified: { backgroundColor: c.dangerSoft, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
-  unverifiedText: { color: c.danger, fontFamily: font.bold, fontSize: 10 },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.onlineSoft, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: c.line },
-  noticeText: { color: c.textSecondary, fontSize: 12, lineHeight: 18, flex: 1 },
-  error: { color: c.danger, fontSize: 12, lineHeight: 18, marginBottom: 12 },
-  emptyCard: { alignItems: 'center', backgroundColor: c.card, borderWidth: 1, borderColor: c.line, borderRadius: 18, padding: 20, marginBottom: 12 },
-  emptyTitle: { color: c.text, fontFamily: font.semibold, fontSize: 15, marginTop: 10 },
-  empty: { color: c.textMuted, fontSize: 13, marginTop: 5, lineHeight: 19, textAlign: 'center' },
-  stripeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 54, paddingVertical: 15, borderRadius: 16, backgroundColor: c.accent, marginTop: 4 },
-  stripeText: { color: c.accentOn, fontFamily: font.bold, fontSize: 15 },
-  securityNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 14, paddingHorizontal: 4 },
-  note: { color: c.textMuted, fontSize: 12, lineHeight: 18, flex: 1 },
-  vippsNote: { color: c.textMuted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 12, paddingHorizontal: 10 },
-}));

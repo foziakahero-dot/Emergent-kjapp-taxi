@@ -10,7 +10,7 @@ import Svg, {
   RadialGradient,
   Stop,
 } from 'react-native-svg';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 import { CarShape, CAR_ACTIVE, CAR_IDLE } from './CarMarker';
 import { useSmoothPosition } from './useSmoothPosition';
 
@@ -41,6 +41,7 @@ export function MapCanvas({
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
+  useColorTheme();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const smoothCar = useSmoothPosition(activeCar);
 

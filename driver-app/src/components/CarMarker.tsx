@@ -1,6 +1,6 @@
 import React from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { colors } from '@/src/theme';
+import { colors, useColorTheme } from '@/src/theme';
 
 /**
  * Figma map marker: forward-pointing red navigation/car glyph.
@@ -15,6 +15,7 @@ export function CarShape({
   glass?: string;
   shadow?: string;
 }) {
+  useColorTheme();
   return (
     <>
       <Circle cx={12} cy={12} r={11} fill={shadow} opacity={0.55} />
@@ -33,6 +34,7 @@ export function CarSvg({
   glass?: string;
   shadow?: string;
 }) {
+  useColorTheme();
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <CarShape {...props} />
