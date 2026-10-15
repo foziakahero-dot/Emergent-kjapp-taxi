@@ -61,6 +61,19 @@
         "resourceClass": "medium"
       }
     },
+    "testflight-qa": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
+      },
+      "ios": {
+        "image": "latest",
+        "resourceClass": "medium"
+      },
+      "environment": "preview"
+    },
     "ios-internal": {
       "distribution": "internal",
       "env": {
@@ -81,6 +94,12 @@
       }
     },
     "testflight-beta": {
+      "ios": {
+        "appleTeamId": "KUPTFG8BZ2",
+        "ascAppId": "6815872647"
+      }
+    },
+    "testflight-qa": {
       "ios": {
         "appleTeamId": "KUPTFG8BZ2",
         "ascAppId": "6815872647"
