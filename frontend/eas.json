@@ -15,7 +15,8 @@
     "qa": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
       },
       "android": {
         "buildType": "apk",
@@ -57,6 +58,19 @@
         "resourceClass": "medium"
       },
       "environment": "production"
+    },
+    "testflight-qa": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no",
+        "EXPO_PUBLIC_SOURCE_SHA": "{{ git_sha }}"
+      },
+      "ios": {
+        "image": "latest",
+        "resourceClass": "medium"
+      },
+      "environment": "preview"
     }
   },
   "cli": {
@@ -70,6 +84,11 @@
       }
     },
     "testflight-beta": {
+      "ios": {
+        "ascAppId": "6815866825"
+      }
+    },
+    "testflight-qa": {
       "ios": {
         "ascAppId": "6815866825"
       }
