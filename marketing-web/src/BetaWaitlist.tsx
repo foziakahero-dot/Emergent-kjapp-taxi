@@ -36,7 +36,6 @@ function validate(form: FormState) {
   )
     return "Skriv inn et gyldig telefonnummer.";
   if (
-    form.email.trim() &&
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
   )
     return "Skriv inn en gyldig e-postadresse.";
@@ -286,7 +285,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole
             </label>
             <label>
               <span>
-                E-post <small>valgfritt</small>
+                E-post <small>for bekreftelse og betatilgang</small>
               </span>
               <input
                 type="email"
@@ -297,6 +296,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole
                 }
                 disabled={status === "submitting"}
                 maxLength={254}
+                required
               />
             </label>
             <label>
