@@ -1,3 +1,15 @@
+# Current checkpoint — approved publication and Driver source review through 31 (2026-10-15)
+
+This entry supersedes all earlier blockers, source-access claims and next-pair instructions below. Read `FLEET_V2_DRIVER_REVIEW_RESULT_20261015.md`, `DRIVER_PAIR_30_31_20261015.md` and the current machine-readable screen index.
+
+The user approved publication to `foziakahero-dot/Emergent-kjapp-taxi`, branch `implementation/snar-v10-screens-20261013`. The prepared eight-commit candidate was published as `d080d5d`, followed by a checked/published checkpoint per Driver pair. All Driver source states 01–31 have been reviewed, with 08–09 combined in the supplied source. Driver 07 / 08–09 was published as `ab2e679`; the user's later screenshot shows the same 07 “Ny tur” source. Do not ask for this ZIP again or return to the older source.
+
+Both typechecks, component/controller, mobile, Assist, support and six QA guards pass. Source identity and browser component review are documented; native/provider/pixel acceptance and absent contracts remain open. See the result report for the exact distinctions. No APK, merge or hosting deployment was performed. PR #101 remains draft; existing APKs predate this code.
+
+Keep the source SHA-256 and actual API contracts. Do not fabricate forecasts, navigation instructions, income, document/fleet metadata or scheduling. Continue with the recorded contract/device acceptance work when appropriate; do not repeat the completed Driver pair audit or claim full native identity.
+
+---
+
 # Current checkpoint — Fleet v2 source reconciliation complete; publication blocked (2026-10-14)
 
 Read FLEET_V2_CONTINUATION_RESULT_20261014.md and CURRENT_FLEET_V2_SCREEN_INDEX_20261014.json. Current Customer/Driver studios, signature styling, real message routing and scheduled preview are saved in local commits. Source hash, both typechecks, component/controller, Assist, support and QA guards pass; web fixture evidence is separate from physical/native certification. Missing provider/contracts and native pixel acceptance remain open.

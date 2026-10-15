@@ -416,7 +416,8 @@
         "driver-app/src/components/SplashArt.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_01_02_20261015.md"
     },
     {
       "id": "login",
@@ -427,7 +428,8 @@
         "driver-app/app/driver-login.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Real auth and existing providers; BankID excluded."
+      "limitations": "Real auth and existing providers; BankID excluded.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_01_02_20261015.md"
     },
     {
       "id": "approval",
@@ -438,7 +440,8 @@
         "driver-app/app/driver-approval.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_03_04_20261015.md"
     },
     {
       "id": "offline",
@@ -450,7 +453,8 @@
         "driver-app/src/components/ExperienceStudio.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_03_04_20261015.md"
     },
     {
       "id": "goingOnline",
@@ -461,7 +465,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_05_06_20261015.md"
     },
     {
       "id": "online",
@@ -472,7 +477,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_05_06_20261015.md"
     },
     {
       "id": "offer",
@@ -483,7 +489,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_07_09_20261015.md"
     },
     {
       "id": "navPickup",
@@ -494,7 +501,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_07_09_20261015.md"
     },
     {
       "id": "waitingInside",
@@ -505,7 +513,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_10_11_20261015.md"
     },
     {
       "id": "arrivedAction",
@@ -516,7 +525,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_10_11_20261015.md"
     },
     {
       "id": "waiting",
@@ -527,7 +537,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_12_13_20261015.md"
     },
     {
       "id": "startTrip",
@@ -538,7 +549,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_12_13_20261015.md"
     },
     {
       "id": "active",
@@ -549,7 +561,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_14_15_20261015.md"
     },
     {
       "id": "arriving",
@@ -560,7 +573,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_14_15_20261015.md"
     },
     {
       "id": "complete",
@@ -571,7 +585,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_16_17_20261015.md"
     },
     {
       "id": "summary",
@@ -582,7 +597,8 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_16_17_20261015.md"
     },
     {
       "id": "earnings",
@@ -593,7 +609,8 @@
         "driver-app/app/(driver)/earnings.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_18_19_20261015.md"
     },
     {
       "id": "intel",
@@ -604,7 +621,8 @@
         "driver-app/app/(driver)/intel.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Source page structure present with truthful unavailable map/cards; forecast, income-estimate and charging contracts remain absent. Native acceptance open."
+      "limitations": "Source page structure present with truthful unavailable map/cards; forecast, income-estimate and charging contracts remain absent. Native acceptance open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_18_19_20261015.md"
     },
     {
       "id": "earningsDetail",
@@ -615,7 +633,8 @@
         "driver-app/app/driver-earnings-detail.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_20_21_20261015.md"
     },
     {
       "id": "activity",
@@ -626,7 +645,8 @@
         "driver-app/app/driver-trips.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_20_21_20261015.md"
     },
     {
       "id": "tripDetail",
@@ -637,7 +657,8 @@
         "driver-app/app/driver-trip/[tripId].tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_22_23_20261015.md"
     },
     {
       "id": "vehicle",
@@ -648,7 +669,8 @@
         "driver-app/app/driver-vehicles.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Assigned real vehicles; provider photo/battery/inspection metadata absent."
+      "limitations": "Assigned real vehicles; provider photo/battery/inspection metadata absent.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_22_23_20261015.md"
     },
     {
       "id": "fleet",
@@ -659,7 +681,8 @@
         "driver-app/app/driver-fleet.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Actual fleet affiliation/active flag; agreement, commission, contact and fleet-summary metadata absent. Native acceptance open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_24_25_20261015.md"
     },
     {
       "id": "profile",
@@ -670,7 +693,8 @@
         "driver-app/app/(driver)/profile.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_24_25_20261015.md"
     },
     {
       "id": "documents",
@@ -681,7 +705,8 @@
         "driver-app/app/driver-documents.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Real upload/identity status; independent expiry/approval contract absent."
+      "limitations": "Real upload/identity status; independent expiry/approval contract absent.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_26_27_20261015.md"
     },
     {
       "id": "verify",
@@ -692,7 +717,8 @@
         "driver-app/app/driver-identity.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Actual permission/camera/upload and manual review; no prototype auto-verification."
+      "limitations": "Actual permission/camera/upload and manual review; no prototype auto-verification.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_26_27_20261015.md"
     },
     {
       "id": "messages",
@@ -703,7 +729,8 @@
         "driver-app/app/(driver)/messages.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Physical native/provider pixel acceptance remains open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_28_29_20261015.md"
     },
     {
       "id": "navSettings",
@@ -714,7 +741,8 @@
         "driver-app/app/driver-navigation.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Confirmed external navigation provider preference; internal turn navigation and voice/night/toll switches lack supported contracts. Native/provider acceptance open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_28_29_20261015.md"
     },
     {
       "id": "settings",
@@ -725,7 +753,8 @@
         "driver-app/app/driver-settings.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Physical native/provider pixel acceptance remains open."
+      "limitations": "Real confirmed sound/vibration and persisted display/accessibility controls; prototype trip-type/named-sound selectors unsupported. Native acceptance open.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_30_31_20261015.md"
     },
     {
       "id": "states",
@@ -737,9 +766,11 @@
         "driver-app/src/components/DriverCockpitView.tsx"
       ],
       "status": "adapter_present_native_acceptance_open",
-      "limitations": "Contextual real states; prototype gallery/unsupported automatic success absent."
+      "limitations": "Contextual real states; prototype gallery/unsupported automatic success absent.",
+      "web_review_doc": "docs/snar-v10/DRIVER_PAIR_30_31_20261015.md"
     }
   ],
-  "driver_web_review_through": "19",
-  "driver_web_review_date": "2026-10-15"
+  "driver_web_review_through": "31",
+  "driver_web_review_date": "2026-10-15",
+  "driver_review_summary": "docs/snar-v10/FLEET_V2_DRIVER_REVIEW_RESULT_20261015.md"
 }

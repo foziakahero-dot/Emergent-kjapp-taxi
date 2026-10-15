@@ -1,3 +1,5 @@
+> Historical checkpoint: the publication blocker described below was resolved by the user's explicit approval. The reviewed candidate and subsequent Driver pairs are published. Current status: `FLEET_V2_DRIVER_REVIEW_RESULT_20261015.md` and the top entry of `SCREEN_IMPLEMENTATION_RESUME.md`. Native/provider/pixel acceptance remains open.
+
 # Fleet v2 continuation — actual source reconciled
 
 ## What was wrong

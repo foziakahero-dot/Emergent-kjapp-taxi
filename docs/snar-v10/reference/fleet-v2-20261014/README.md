@@ -10,7 +10,7 @@ The older archive and this archive have identical `kit.tsx` and identical screen
 `CustomerApp.tsx` changes only home/returning (02/06): ExperienceStudio and tool position.
 `DriverApp.tsx` changes only offline home (04): ExperienceStudio and local shift goal.
 `index.css` adds `signature.css`, which also changes shared sheet, dock, input and primary-action styling.
-The two new signature files are present here in full. Customer 19–34 source layouts are unchanged.
+The two new signature files are retained in the local reference and excluded from public Git publication. Customer 19–34 source layouts are unchanged.
 
 This reference is a design prototype, with demo prices, ETA, identities, income and simulated transitions.
 Production adapters use existing canonical APIs and require explicit booking/payment/shift confirmation.

@@ -11,6 +11,7 @@ import { DesignToggle } from '@/src/components/DesignToggle';
 import { Loader } from '@/src/components/ui';
 import { V10Action, V10Group, V10Header, V10Row, V10Screen, V10Section, V10State, v10 } from '@/src/components/V10UI';
 import { colors, saveColorThemeMode, useColorTheme } from '@/src/theme';
+import { V10Entrance } from '@/src/components/V10Entrance';
 
 export default function DriverSettings() {
   const theme = useColorTheme();
@@ -54,8 +55,8 @@ export default function DriverSettings() {
     catch { setError('Kunne ikke logge ut. Prøv igjen.'); }
     finally { lock.current = false; setBusy(false); }
   };
-  return <V10Screen testID="driver-settings-screen"><V10Header title="Innstillinger" onBack={() => router.back()} />
-    <V10Section title="Turer"><V10Group><V10Row icon="vehicle" title="Kjøretøy" subtitle={[user?.car, user?.plate].filter(Boolean).join(' · ') || 'Velg tildelt bil'} onPress={() => router.push('/driver-vehicles')} />
+  return <V10Screen testID="driver-settings-screen"><V10Entrance fade><V10Header title="Innstillinger" onBack={() => router.back()} />
+    <V10Section title="Turer" style={{ marginTop: 16 }}><V10Group><V10Row icon="vehicle" title="Kjøretøy" subtitle={[user?.car, user?.plate].filter(Boolean).join(' · ') || 'Velg tildelt bil'} onPress={() => router.push('/driver-vehicles')} />
       {query.isPending ? <Loader /> : query.isError ? <V10State warning icon="wifiOff" title="Kunne ikke hente innstillinger" body="Oppdater før du endrer kjørevalg." action="Prøv igjen" onAction={() => void query.refetch()} /> : <>{(['req_sound', ...(Platform.OS === 'android' ? ['req_vibrate'] : [])] as ('req_sound' | 'req_vibrate')[]).map(field => <V10Row key={field} border icon="bell" title={field === 'req_sound' ? 'Lyd for ny tur' : 'Vibrasjon for ny tur'} subtitle={field === 'req_sound' ? 'Standard varsellyd på enheten' : 'Vibrasjon ved nye turforespørsler'} right={<DesignToggle value={data?.[field] !== false} onChange={value => void save(field, value)} label={field === 'req_sound' ? 'Lyd for ny tur' : 'Vibrasjon for ny tur'} disabled={busy || !data} testID={`driver-setting-${field}`} />} />)}</>}
     </V10Group></V10Section>
     <V10Section title="Visning"><V10Group><V10Row icon="moon" title="Mørk cockpit" right={<DesignToggle value={theme.effective === 'dark'} onChange={value => void changeTheme(value)} label="Mørk cockpit" disabled={busy || !theme.ready} testID="driver-theme-dark" />} />
@@ -63,6 +64,6 @@ export default function DriverSettings() {
       <V10Row border icon="sliders" title="Redusert bevegelse" subtitle="Telefonens bevegelsesvalg beholdes alltid." right={<DesignToggle value={preferences.reduceMotion} onChange={value => void local('reduceMotion', value)} label="Redusert bevegelse" disabled={busy || !preferences.ready} testID="driver-setting-reduced-motion" />} />
     </V10Group></V10Section>
     <V10Section title="Konto"><V10Group><V10Row icon="user" title="Konto og profil" onPress={() => router.push('/driver-account')} testID="ds-account" /><V10Row border icon="lock" title="Personvern og data" onPress={() => router.push('/driver-account-settings')} testID="ds-privacy" /><V10Row border icon="help" title="Sjåførsupport" onPress={() => void Linking.openURL('https://snarapp.no/help').catch(() => setError('Kunne ikke åpne support.'))} testID="ds-support" /></V10Group></V10Section>
-    <View style={{ marginTop: 16 }}><V10Action kind="ghost" label="Logg ut" onPress={() => void signOut()} busy={busy} testID="ds-logout" /></View>{error ? <Text testID="driver-settings-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger }]}>{error}</Text> : null}
-  </V10Screen>;
+    <View style={{ marginTop: 16 }}><V10Action kind="ghost" textColor={colors.danger} label="Logg ut" onPress={() => void signOut()} busy={busy} testID="ds-logout" /></View>{error ? <Text testID="driver-settings-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger }]}>{error}</Text> : null}
+  </V10Entrance></V10Screen>;
 }

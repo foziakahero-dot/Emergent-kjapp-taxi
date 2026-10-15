@@ -296,7 +296,7 @@ const act = renderer.act;
     assert.equal(toggle.root.findByType('Pressable').props.accessibilityState.checked, true);
     assert.equal(timingCalls.length, count, 'Reduced motion must apply toggle state without a duration-zero animation');
     await act(async () => accessibility.forEach(callback => callback(false)));
-    assert.equal(timingCalls.at(-1).duration, 150);
+    assert.equal(timingCalls.at(-1).duration, app === 'driver-app' ? 210 : 150);
     await act(async () => toggle.unmount());
   }
   const { SlideConfirm } = load('driver-app', 'src/components/SlideConfirm.tsx');

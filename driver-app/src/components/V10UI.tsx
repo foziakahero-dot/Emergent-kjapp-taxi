@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
+import { V10Entrance } from '@/src/components/V10Entrance';
 
 export function V10Screen({ children, dock = false, style, testID }: { children: React.ReactNode; dock?: boolean; style?: StyleProp<ViewStyle>; testID?: string }) {
   useColorTheme();
@@ -22,9 +23,9 @@ export function V10Group({ children, style }: { children: React.ReactNode; style
   useColorTheme();
   return <View style={[{ backgroundColor: colors.surface, borderRadius: 22, overflow: 'hidden', boxShadow: colors.elevation1 }, style]}>{children}</View>;
 }
-export function V10Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function V10Section({ title, children, style }: { title: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   useColorTheme();
-  return <View style={{ marginTop: 24 }}><Text style={{ marginHorizontal: 4, marginBottom: 10, fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: .66, textTransform: 'uppercase', color: colors.textMuted }}>{title}</Text>{children}</View>;
+  return <View style={[{ marginTop: 24 }, style]}><Text style={{ marginHorizontal: 4, marginBottom: 10, fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: .66, textTransform: 'uppercase', color: colors.textMuted }}>{title}</Text>{children}</View>;
 }
 export function V10Row({ icon, title, subtitle, right, onPress, border = false, testID, disabled = false }: {
   icon?: string; title: string; subtitle?: string; right?: React.ReactNode; onPress?: () => void; border?: boolean; testID?: string; disabled?: boolean;
@@ -47,11 +48,11 @@ export function V10Badge({ children, tone = 'neutral', inline = false, icon }: {
     <Text style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: palette[0] }}>{children}</Text>
   </View>;
 }
-export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height, labelSize, iconSize }: {
-  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number; labelSize?: number; iconSize?: number;
+export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height, labelSize, iconSize, textColor }: {
+  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number; labelSize?: number; iconSize?: number; textColor?: string;
 }) {
   useColorTheme();
-  const color = kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text;
+  const color = textColor ?? (kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text);
   const backgroundColor = { primary: colors.accent, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
   return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
     style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: small ? 0 : 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, boxShadow: kind === 'primary' ? `0 6px 20px -10px ${colors.accent}` : undefined, transform: [{ scale: pressed ? .97 : 1 }] })}>
@@ -61,11 +62,11 @@ export function V10Action({ label, onPress, kind = 'primary', small = false, dis
 }
 export function V10State({ icon, title, body, action, onAction, warning = false }: { icon: string; title: string; body: string; action?: string; onAction?: () => void; warning?: boolean }) {
   useColorTheme();
-  return <View style={{ gap: 20 }}>
+  return <V10Entrance style={{ gap: 20 }}>
     <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: warning ? colors.warningSoft : colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name={icon} size={26} color={warning ? colors.warning : colors.text} /></View>
     <View><Text style={v10.heading}>{title}</Text><Text style={[v10.secondary, { marginTop: 6 }]}>{body}</Text></View>
     {action && onAction ? <V10Action label={action} onPress={onAction} kind="ink" small /> : null}
-  </View>;
+  </V10Entrance>;
 }
 export const v10 = themedStyles(() => StyleSheet.create({
   title: { color: colors.text, fontFamily: font.semibold, fontSize: 26, lineHeight: 32, letterSpacing: -.65 },
