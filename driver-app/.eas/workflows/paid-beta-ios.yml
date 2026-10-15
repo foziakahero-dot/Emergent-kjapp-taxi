@@ -1,0 +1,10 @@
+name: SNAR Driver Paid Beta iOS
+
+# Manual EAS workflow. No automatic GitHub push trigger.
+jobs:
+  build_driver_paid_beta_ios:
+    name: Build SNAR Driver Paid Beta iOS
+    type: build
+    params:
+      platform: ios
+      profile: testflight-qa
