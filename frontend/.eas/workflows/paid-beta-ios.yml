@@ -1,0 +1,10 @@
+name: SNAR Customer Paid Beta iOS
+
+# Manual EAS workflow. No automatic GitHub push trigger.
+jobs:
+  build_customer_paid_beta_ios:
+    name: Build SNAR Customer Paid Beta iOS
+    type: build
+    params:
+      platform: ios
+      profile: testflight-qa
