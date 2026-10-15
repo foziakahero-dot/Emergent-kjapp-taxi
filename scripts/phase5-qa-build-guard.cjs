@@ -1,18 +1,19 @@
 const APPROVED_QA_BACKEND = 'https://api-qa.snarapp.no';
+const QA_BUILD_PROFILES = new Set(['qa', 'testflight-qa']);
 
 function assertQaBackend(profile, backendUrl) {
-  if (profile !== 'qa') return;
+  if (!QA_BUILD_PROFILES.has(profile)) return;
   if (backendUrl !== APPROVED_QA_BACKEND) {
     throw new Error(`QA builds must target ${APPROVED_QA_BACKEND}.`);
   }
 }
 
-module.exports = { APPROVED_QA_BACKEND, assertQaBackend };
+module.exports = { APPROVED_QA_BACKEND, QA_BUILD_PROFILES, assertQaBackend };
 
 if (require.main === module) {
   try {
-    if (process.env.EAS_BUILD_PROFILE !== 'qa') {
-      throw new Error('QA build guard requires EAS_BUILD_PROFILE=qa.');
+    if (!QA_BUILD_PROFILES.has(process.env.EAS_BUILD_PROFILE)) {
+      throw new Error('QA build guard requires EAS_BUILD_PROFILE=qa or testflight-qa.');
     }
     assertQaBackend(process.env.EAS_BUILD_PROFILE, process.env.EXPO_PUBLIC_BACKEND_URL);
     console.log('QA backend URL guard: PASS');
@@ -21,4 +22,3 @@ if (require.main === module) {
     process.exitCode = 1;
   }
 }
-
