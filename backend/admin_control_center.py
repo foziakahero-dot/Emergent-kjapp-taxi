@@ -10,7 +10,6 @@ Focused admin-only capabilities:
 
 All routes reuse the existing FastAPI/MongoDB/auth/audit infrastructure.
 """
-from __future__ import annotations
 
 import asyncio
 import html
@@ -777,4 +776,3 @@ def install_admin_control_center(
         await db.users.update_one({"_id": target["_id"]}, {"$set": sets})
         await audit(current, "admin_user.update", "admin_user", user_id, before, sets)
         return {"ok": True}
-
