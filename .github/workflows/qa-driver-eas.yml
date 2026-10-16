@@ -7,7 +7,7 @@ on:
         description: "Exact reviewed QA commit SHA to build"
         required: true
         type: string
-  pull_request_target:
+  pull_request:
     branches:
       - qa/snar-v10-phase5-staging-e2e
     types: [opened]
@@ -19,13 +19,13 @@ jobs:
   driver:
     if: >-
       ${{ github.event_name == 'workflow_dispatch' ||
-          (github.event_name == 'pull_request_target' &&
+          (github.event_name == 'pull_request' &&
            github.event.pull_request.head.repo.full_name == github.repository &&
            startsWith(github.event.pull_request.head.ref, 'release-trigger/driver-') &&
            github.event.pull_request.title == 'BUILD_QA_DRIVER') }}
     uses: ./.github/workflows/qa-android-eas.yml
     with:
       app_directory: driver-app
-      expected_sha: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_sha || github.sha }}
+      expected_sha: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_sha || github.event.pull_request.base.sha }}
       authorization: BUILD_QA_APK
     secrets: inherit
