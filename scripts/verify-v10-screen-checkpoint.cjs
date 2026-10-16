@@ -704,8 +704,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.ok(button(tree,'booking-payment-done'),'Unavailable provider cannot pretend selection succeeded');
   await act(async () => button(tree, 'booking-payment-done').props.onPress());
   await act(async () => button(tree, 'booking-review').props.onPress());
-  assert.equal(button(tree, 'booking-confirm').props.disabled, true, 'Waiting consent is required before request');
-  await act(async () => button(tree, 'waiting-policy-consent').props.onPress());
+  assert.equal(button(tree, 'waiting-policy-consent'), undefined, 'No separate waiting checkbox');
+  assert.equal(button(tree, 'booking-confirm').props.disabled, false, 'Displayed quote can be booked directly');
   await act(async () => { button(tree, 'booking-confirm').props.onPress(); button(tree, 'booking-confirm').props.onPress(); });
   assert.equal(bookingRequests.length, 1, 'The actual CustomerHome serializes duplicate booking');
   assert.equal(bookingRequests[0].waiting_policy_token, 'waiting-policy');
@@ -824,7 +824,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.match(tree.root.findByType('CategoryImage').props.source.uri,/standard-3d.webp/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'contain');await unmount(tree);
   for(const [kind,asset] of [['premium','premium-3d.webp'],['suv','suv-category.png']]) { tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:false}));assert.ok(tree.root.findByType('CategoryImage').props.source.uri.endsWith(asset));await unmount(tree); }
   console.log('PASS: Customer 09/10 all-class home supply, three categories, immediate quoted prices, selected-category drivers, canonical card and distinct bundled illustrations.');
-  // Customer 11/12: canonical consent contract and server-owned matching lifecycle.
+  // Customer 11/12: canonical displayed quote contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);
   assert.equal(helpers.confirmedWaitingPolicy({token:'valid',free_minutes:5,per_minute:-1,max_fee:40}),false);
   assert.equal(helpers.confirmedPaymentMethod([null,{verified:true}]),undefined);
@@ -833,10 +833,10 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(button(tree,'waiting-policy-consent'),undefined);assert.equal(button(tree,'booking-confirm').props.disabled,true);
   const requestsBeforeInvalidPolicy=bookingRequests.length;await act(async()=>button(tree,'booking-confirm').props.onPress());assert.equal(bookingRequests.length,requestsBeforeInvalidPolicy,'Missing policy token must never reach reservation');
   stubs['@/src/lib/api'].tripsApi.estimate=async()=>quote;await act(async()=>button(tree,'booking-refresh-quote').props.onPress());
-  assert.match(text(tree),/Bekreft tur/);assert.equal(button(tree,'waiting-policy-consent').props.accessibilityState.checked,false,'Refreshing keeps review but requires new consent');await unmount(tree);
+  assert.match(text(tree),/Bekreft tur/);assert.equal(button(tree,'waiting-policy-consent'),undefined,'Refreshed terms stay informational');assert.equal(button(tree,'booking-confirm').props.disabled,false);await unmount(tree);
   const originalTripRequest=stubs['@/src/lib/api'].tripsApi.request;
   stubs['@/src/lib/api'].tripsApi.request=async body=>{bookingRequests.push(body);return{ok:true}};
-  tree=await mount(CustomerHome);await act(async()=>button(tree,'quick-Hjem').props.onPress());await act(async()=>button(tree,'route-choose-vehicle').props.onPress());await act(async()=>button(tree,'booking-review').props.onPress());await act(async()=>button(tree,'waiting-policy-consent').props.onPress());
+  tree=await mount(CustomerHome);await act(async()=>button(tree,'quick-Hjem').props.onPress());await act(async()=>button(tree,'route-choose-vehicle').props.onPress());await act(async()=>button(tree,'booking-review').props.onPress());
   const beforeUnconfirmedNavigation=navigation.length;await act(async()=>button(tree,'booking-confirm').props.onPress());
   assert.equal(navigation.length,beforeUnconfirmedNavigation,'An unconfirmed response cannot navigate to an invented trip');assert.match(text(tree),/Bestillingen ble ikke bekreftet/);await unmount(tree);stubs['@/src/lib/api'].tripsApi.request=originalTripRequest;
   stubs['@/src/components/AvailabilityStatus'].AvailabilityStatus=Status;
@@ -851,7 +851,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:{...matchingProps.trip,status:'cancelled',cancel_reason:'no_driver_available'}})));
   assert.equal(matchingStops,2,'Server terminal state stops both decorative loops');assert.ok(button(tree,'booking-home'));assert.equal(matchingCallbacks.length,0,'No-driver result waits for explicit retry');await unmount(tree);
   reduceMotion=true;tree=await mount(()=>React.createElement(TripPresentation,matchingProps));assert.equal(matchingAnimations.length,2,'Reduced motion does not schedule matching activity');await unmount(tree);reduceMotion=false;native.Animated.timing=oldMatchingTiming;
-  console.log('PASS: Customer 11/12 invalid policy blocks booking, refreshed offer retains review/requires consent, source activity durations/cleanup/reduced motion, real dispatch progress and explicit no-driver recovery.');
+  console.log('PASS: Customer 11/12 invalid policy blocks booking, refreshed offer retains review and refreshed terms, source activity durations/cleanup/reduced motion, real dispatch progress and explicit no-driver recovery.');
   // Customer 13/14: actual fresh road proximity, stable assignment and ETA safety.
   const {driverApproaching}=load('frontend','src/lib/tripPresence.ts');
   const freshDriverTrip={...matchingProps.trip,status:'driver_on_way',driver_id:'real-driver',driver:{name:'Actual Driver',car:'Actual car',plate:'ACTUAL1',rating:4.9,phone:'test'},driver_lat:59.91,driver_lng:10.75,driver_location_at:new Date().toISOString(),driver_distance_to_pickup_km:.2};
@@ -1101,7 +1101,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   native.Animated.timing = originalTiming;reduceMotion = false;
   console.log('PASS: V10 measured-sheet entry waits for layout, does not replay on errors, cancels on unmount and respects reduced motion.');
   console.log('PASS: Actual receipt reservation/no-double-charge, native/payment status gate, explicit rating submit/feedback/retry/serialization, truthful receipt fields, canonical cards, serialized setup/remove and failed-card refresh.');
-  console.log('PASS: Actual CustomerHome route/vehicle/payment/confirmation flow, route camera, real canonical card, waiting consent, duplicate booking lock, quoted-price token and active-trip exclusion.');
+  console.log('PASS: Actual CustomerHome route/vehicle/payment/confirmation flow, route camera, real canonical card, displayed waiting terms, duplicate booking lock, quoted-price token and active-trip exclusion.');
   console.log('PASS: Actual DriverHome minimize/reopen persistence, semantic versus network rejection, queued recovery and serialized offer acceptance/decline.');
   console.log('PASS: Actual DriverHome pickup-route map, arrival API, held start API, live-route switch, preserved final confirmation, completion API and pending-payment summary wiring.');
   console.log('PASS: Driver real 900ms hold/release/unmount/reduced-motion/duplicate guards, arrival/start/completion review states, missing waiting policy, hidden in-trip finances and pending-payment summary.');

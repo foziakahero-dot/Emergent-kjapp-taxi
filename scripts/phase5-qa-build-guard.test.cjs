@@ -86,3 +86,18 @@ test('QA app configs do not embed shared Firebase service files', () => {
   }
 });
 
+
+test('QA Android requires its own Firebase file when push is required', () => {
+  for (const appDirectory of ['frontend', 'driver-app']) {
+    const run = qaFile => spawnSync(process.execPath, ['-e',
+      "const base=require('./app.json').expo;console.log(JSON.stringify(require('./app.config')({config:base}).android.googleServicesFile));"], {
+      cwd: path.join(repositoryRoot, appDirectory), encoding: 'utf8', env: { ...process.env,
+        EAS_BUILD_PROFILE: 'qa', EAS_BUILD_PLATFORM: 'android', EXPO_PUBLIC_BACKEND_URL: APPROVED_QA_BACKEND,
+        GOOGLE_SERVICES_JSON: 'production.json', QA_GOOGLE_SERVICES_JSON: qaFile, KJAPP_REQUIRE_FIREBASE: 'true' },
+    });
+    assert.notEqual(run('').status, 0, 'Production Firebase must not satisfy required QA push configuration');
+    const configured = run('dedicated-qa.json');
+    assert.equal(configured.status, 0, configured.stderr);
+    assert.equal(JSON.parse(configured.stdout), 'dedicated-qa.json');
+  }
+});
