@@ -12,9 +12,13 @@ on:
       authorization:
         type: string
         required: true
+      diagnostic_only:
+        type: boolean
+        required: false
+        default: false
     secrets:
       EXPO_TOKEN:
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -41,39 +45,66 @@ jobs:
         with:
           ref: qa/snar-v10-phase5-staging-e2e
           fetch-depth: 1
+
+      - name: Report reusable secret availability safely
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN_PRESENT=true"
+          else
+            echo "EXPO_TOKEN_PRESENT=false"
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: ${{ inputs.app_directory }}/package-lock.json
+
       - name: Check release lock tests and deployed QA commit
         run: |
           node --test scripts/qa-release-lock.test.cjs
           node scripts/qa-release-lock.cjs
-      - name: Require existing Expo authentication
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: test -n "$EXPO_TOKEN"
+
       - name: Install locked app dependencies
         working-directory: ${{ inputs.app_directory }}
         run: npm ci --no-audit --no-fund
+
       - name: Check actual native app configuration and types
         working-directory: ${{ inputs.app_directory }}
         run: |
           npx tsc --noEmit
           KJAPP_REQUIRE_FIREBASE='' npx expo config --type public --json > /tmp/snar-expo-config.json
           node -e 'const c=require("/tmp/snar-expo-config.json"); const e=process.env.QA_APP_DIRECTORY === "frontend" ? "no.kjapp.app" : "no.kjapp.driver"; if(c.android.package !== e || !c.name.includes("QA")) process.exit(1)'
-      - name: Recheck deployed release immediately before EAS build
+
+      - name: Recheck deployed release before paid build boundary
         run: node scripts/qa-release-lock.cjs
+
+      - name: Diagnostic preflight complete - paid EAS build blocked
+        if: inputs.diagnostic_only
+        run: echo "Diagnostic preflight passed. No EAS command executed."
+
+      - name: Require existing Expo authentication
+        if: ${{ !inputs.diagnostic_only }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: test -n "$EXPO_TOKEN"
+
       - name: Build signed internal APK with existing EAS project credentials
+        if: ${{ !inputs.diagnostic_only }}
         working-directory: ${{ inputs.app_directory }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx --yes eas-cli@25.0.0 build --platform android --profile qa --non-interactive --wait --json > "$RUNNER_TEMP/snar-eas-result.json"
+
       - name: Verify EAS build identity and download APK
+        if: ${{ !inputs.diagnostic_only }}
         run: node scripts/qa-eas-artifact.cjs "$RUNNER_TEMP/snar-eas-result.json"
+
       - name: Verify Customer APK signing certificate matches registered Google OAuth
-        if: inputs.app_directory == 'frontend'
+        if: ${{ !inputs.diagnostic_only && inputs.app_directory == 'frontend' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -83,7 +114,9 @@ jobs:
           EXPECTED_CERT=$(echo "$QA_ANDROID_CERT_SHA1" | tr -d ':' | tr '[:upper:]' '[:lower:]')
           ACTUAL_CERT=$(sed -n 's/^Signer #1 certificate SHA-1 digest: //p' "$RUNNER_TEMP/snar-certificate.txt" | tr '[:upper:]' '[:lower:]')
           test "$ACTUAL_CERT" = "$EXPECTED_CERT"
+
       - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.diagnostic_only }}
         with:
           name: SNAR-QA-${{ inputs.app_directory }}-${{ inputs.expected_sha }}
           path: qa-artifacts/
