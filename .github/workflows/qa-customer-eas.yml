@@ -22,10 +22,12 @@ jobs:
           (github.event_name == 'pull_request' &&
            github.event.pull_request.head.repo.full_name == github.repository &&
            startsWith(github.event.pull_request.head.ref, 'release-trigger/customer-') &&
-           github.event.pull_request.title == 'BUILD_QA_CUSTOMER') }}
+           (github.event.pull_request.title == 'BUILD_QA_CUSTOMER' ||
+            github.event.pull_request.title == 'TEST_QA_CUSTOMER_PREFLIGHT')) }}
     uses: ./.github/workflows/qa-android-eas.yml
     with:
       app_directory: frontend
       expected_sha: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_sha || github.event.pull_request.base.sha }}
       authorization: BUILD_QA_APK
+      diagnostic_only: ${{ github.event_name == 'pull_request' && github.event.pull_request.title == 'TEST_QA_CUSTOMER_PREFLIGHT' }}
     secrets: inherit
