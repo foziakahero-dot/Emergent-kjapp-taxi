@@ -14,8 +14,8 @@ jobs:
     if: >-
       ${{ github.event.pull_request.head.repo.full_name == github.repository &&
           startsWith(github.event.pull_request.head.ref, 'diagnostic/runner-') &&
-          github.event.pull_request.title == 'TEST_QA_RUNNER_2404' }}
-    runs-on: ubuntu-24.04
+          github.event.pull_request.title == 'TEST_QA_RUNNER_MACOS' }}
+    runs-on: macos-latest
     timeout-minutes: 5
     steps:
       - name: Confirm GitHub-hosted runner started
