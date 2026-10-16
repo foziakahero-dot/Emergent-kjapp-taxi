@@ -72,7 +72,7 @@ def test_nearby_matches_pickup_class_equipment_and_live_gps():
     now=datetime.now(timezone.utc)
     def driver(**changes):
         d={'_id':ObjectId(),'role':'driver','approved':True,'accepted_terms_at':now.isoformat(),'online':True,
-           'last_location_at':now.isoformat(),'last_lat':59.91,'last_lng':10.76,'vehicle_type':'premium','capabilities':['child_seat']}
+           'last_location_at':now.isoformat(),'last_location_recorded_at':now.isoformat(),'last_location_session':{'exp':now.timestamp()+3600},'last_lat':59.91,'last_lng':10.76,'vehicle_type':'premium','capabilities':['child_seat']}
         d.update(changes);raw.users.insert_one(d);return d
     good=driver()
     for changes in ({'online':False},{'approved':False},{'demo':True},{'active_trip_id':'busy'},
@@ -82,15 +82,18 @@ def test_nearby_matches_pickup_class_equipment_and_live_gps():
     async def compliance(*args):return {'operational':True}
     async def suspended(*args):return False
     env={'NearbyCarsRequest':SimpleNamespace,'Request':SimpleNamespace,'db':db,'datetime':datetime,'timedelta':timedelta,
-         'timezone':timezone,'GPS_FRESH_SECONDS':60,'_auth_token_from_request':lambda req:None,
-         'ride_testing':SimpleNamespace(driver_supply_filter=lambda test:{}),
+         'timezone':timezone,'GPS_FRESH_SECONDS':2,'RADIUS_KM':5,'math':__import__('math'),
+         'media_versions':__import__('driver_media').media_versions,
+         'position_bounds':__import__('live_cars').position_bounds,'fresh_sample_time':__import__('live_cars').fresh_sample_time,
+         '_session_is_current':lambda session,user:True,'_session_is_revoked':suspended,
+         'ride_testing':SimpleNamespace(driver_supply_filter=lambda test:{},is_test_customer=lambda uid:False),
          '_real_trip_filter':lambda q:q,'_fleet_is_suspended':suspended,'_assigned_fleet_vehicle':assigned,
          '_driver_shift_compliance':compliance,'haversine_km':lambda a,b,c,d:abs(c-a)*111+abs(d-b)*55,
          '_driver_supports_special_needs':lambda d,needs:set(needs).issubset(d.get('capabilities',[]))}
-    nearby=function('cars_nearby',env)
-    result=asyncio.run(nearby(SimpleNamespace(lat=59.91,lng=10.75,vehicle_type='premium',special_needs=['child_seat']),None))
+    nearby=function('_nearby_cars_snapshot',env)
+    result=asyncio.run(nearby(SimpleNamespace(lat=59.91,lng=10.75,vehicle_type='premium',special_needs=['child_seat']),{'id':'customer'}))
     assert [c['id'] for c in result['cars']]==[str(good['_id'])]
-    assert result['gps_fresh_seconds']==60
+    assert result['gps_fresh_seconds']==2
 
 def test_persisted_search_survives_restart_and_background():
     raw, db, engine, offers, releases, _ = fixture()

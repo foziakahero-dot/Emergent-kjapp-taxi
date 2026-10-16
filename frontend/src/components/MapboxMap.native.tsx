@@ -1,4 +1,6 @@
 import { mapContentInsets, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/src/lib/mapFocus';
+import { DriverMarkerPopup } from './DriverMarkerPopup';
+import { MapCarData } from '@/src/lib/liveCars';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -18,7 +20,7 @@ import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
 
 type LL = { lat: number; lng: number };
-type Car = { id?: string; lat: number; lng: number; heading?: number; eta_min?: number };
+type Car = MapCarData;
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -45,11 +47,11 @@ type Props = {
   contentInsets?: Partial<MapContentInsets>;
 };
 
-function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+function MarkerCar({ car, active = false, onPress }: { car: Car; active?: boolean; onPress?: () => void }) {
   useColorTheme();
-  const smooth = useSmoothPosition(car);
+  const smooth = useSmoothPosition(car, 250);
   if (!smooth) return null;
-  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
+  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}`} onPress={onPress}><MapCar heading={smooth.heading} active={active} vehicleType={car.type} bodyType={car.body_type} /></Pressable></MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
@@ -89,6 +91,9 @@ export function MapboxInteractiveMap({
   contentInsets,
 }: Props) {
   useColorTheme();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = cars.find(car => car.id === selectedId);
+  useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
@@ -270,7 +275,7 @@ export function MapboxInteractiveMap({
         ) : null}
 
         {cars.map((car, index) => (
-          <MarkerCar key={car.id || `car-${index}`} car={car} />
+          <MarkerCar key={car.id || `car-${index}`} car={car} onPress={() => setSelectedId(car.id || null)} />
         ))}
 
         {pickup ? (
@@ -297,6 +302,7 @@ export function MapboxInteractiveMap({
         ) : null}
 
       </MapView>
+      {selected ? <DriverMarkerPopup car={selected} onClose={() => setSelectedId(null)} style={{ top: padding.top + 8 }} /> : null}
 
       {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
       {interactive && showControls ? (

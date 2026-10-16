@@ -153,3 +153,21 @@ def test_partial_capture_and_no_overcharging():
         raw.trips.update_one({'trip_id':'t'},{'$set':{'price':100}})
         assert (await s.capture(t))['paid'];assert next(iter(pi.objects.values()))['amount_received']==10000
     run(check())
+
+
+def test_saved_google_pay_reserves_and_captures_once_with_transaction_record():
+    async def check():
+        service, trip, raw, pi, events, receipts = fixture()
+        raw.payment_methods.update_one({}, {'$set': {'wallet': 'google_pay'}})
+        await service.authorize(trip)
+        record = raw.payment_transactions.find_one({'trip_id': trip['trip_id']})
+        assert record['wallet'] == 'google_pay' and record['user_id'] == trip['user_id']
+        assert record['amount'] == trip['price'] and record['stripe_payment_intent_id']
+        assert pi.captures == 0
+        raw.trips.update_one({'trip_id': trip['trip_id']}, {'$set': {'status': 'arrived'}})
+        assert (await service.capture(trip))['paid']
+        assert (await service.capture(trip))['paid'] and pi.captures == 1
+        settled = raw.payment_transactions.find_one({'trip_id': trip['trip_id']})
+        assert settled['status'] == 'completed' and settled['payment_status'] == 'paid'
+        assert raw.payment_transactions.count_documents({}) == 1
+    run(check())

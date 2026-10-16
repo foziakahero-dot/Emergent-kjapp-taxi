@@ -25,6 +25,11 @@ class NativeIdentity(BaseModel):
     device_id: Optional[str] = Field(default=None, max_length=128)
 
 
+class NativeSetupRequest(BaseModel):
+    wallet: Optional[Literal["google_pay", "apple_pay"]] = None
+    future_use_accepted: bool = False
+
+
 class NativePayment(BaseModel):
     trip_id: str = Field(min_length=1, max_length=128)
 
@@ -37,7 +42,7 @@ def native_identity_config(client="customer"):
     google = os.getenv(prefix + "GOOGLE_CLIENT_ID", "").strip()
     apple = os.getenv(prefix + ("APPLE_DRIVER_BUNDLE_ID" if client == "driver" else "APPLE_BUNDLE_ID"),
         "" if qa else ("no.nexorahub.kjapp.driver" if client == "driver" else "no.nexorahub.kjapp.customer")).strip()
-    google_enabled = bool(google) and (not qa or os.getenv("QA_GOOGLE_AUTH_ENABLED") == "true")
+    google_enabled = client == "customer" and bool(google) and (not qa or os.getenv("QA_GOOGLE_AUTH_ENABLED") == "true")
     apple_enabled = bool(apple) and (not qa or os.getenv("QA_APPLE_AUTH_ENABLED") == "true")
     return {"google_enabled": google_enabled,
         "google_web_client_id": google if google_enabled else "",
@@ -80,6 +85,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                     "email": email, "password_hash": await asyncio.to_thread(hash_password, secrets.token_urlsafe(32)),
                     "fullName": claims.get("name") or email.split("@")[0], "phone": "",
                     "role": "user", field: sub, provider + "_linked": True,
+                    "picture": claims.get("picture") if provider == "google" else None,
                     "welcome_email_pending": True,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
@@ -96,7 +102,11 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         # Do not persist a new social link before a required second factor.
         if user.get("totp_enabled"):
             raise HTTPException(409, f"Kontoen krever tofaktor. Bruk {brand}-innlogging.")
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {field: sub, provider + "_linked": True}})
+        updates = {field: sub, provider + "_linked": True}
+        picture = claims.get("picture")
+        if provider == "google" and isinstance(picture, str) and picture.startswith("https://") and len(picture) <= 2048:
+            updates["picture"] = picture
+        await db.users.update_one({"_id": user["_id"]}, {"$set": updates})
         user = await db.users.find_one({"_id": user["_id"]})
         user = await apply_driver_risk(user, body.device_id, body.client, on_login=True)
         token = create_access_token(uid, user["email"])
@@ -109,6 +119,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/native")
     async def google_native(body: NativeIdentity, request: Request, response: Response):
+        if body.client != "customer":
+            raise HTTPException(403, "Google-innlogging er bare tilgjengelig i SNAR-kundeappen.")
         config = native_identity_config(body.client)
         if not config["google_enabled"]:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet.")
@@ -126,6 +138,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/link")
     async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
+        if body.client != "customer":
+            raise HTTPException(403, "Google-innlogging er bare tilgjengelig i SNAR-kundeappen.")
         config = native_identity_config(body.client)
         if not config["google_enabled"]:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet.")
@@ -262,7 +276,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return {"enabled": bool(enabled), "publishable_key": key if enabled else "",
             "test_mode": key.startswith("pk_test_"),
             "apple_merchant_id": os.getenv("APPLE_PAY_MERCHANT_ID", "").strip(),
-            "google_pay_enabled": enabled and os.getenv("GOOGLE_PAY_ENABLED", "false").lower() == "true"}
+            "google_pay_enabled": enabled and os.getenv("QA_GOOGLE_PAY_ENABLED" if os.getenv("APP_ENV", "").lower() == "qa" else "GOOGLE_PAY_ENABLED", "false").lower() == "true"}
 
     @api.get("/payments/native/config")
     async def native_config():
@@ -283,6 +297,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"default_payment_method_id": pm_id}})
         return {"default_payment_method_id": pm_id}
 
+    def native_client():
+        # Recovery of an already-created SetupIntent must keep working if the
+        # UI flag is later disabled. Never accept a live key in this QA flow.
+        if not str(stripe.api_key).startswith(("sk_test_", "rk_test_")):
+            raise HTTPException(503, "Native Stripe testbetaling er ikke aktivert")
+        return stripe.StripeClient(stripe.api_key, max_network_retries=1)
+
     async def _stripe_customer_for_user(current):
         user = await db.users.find_one({"_id": ObjectId(current["id"])})
         if not user:
@@ -290,11 +311,10 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         customer_id = (user or {}).get("stripe_customer_id")
         if not customer_id:
             customer = await asyncio.to_thread(
-                stripe.Customer.create,
-                email=user.get("email"),
-                name=user.get("fullName") or user.get("email"),
-                metadata={"user_id": current["id"]},
-                idempotency_key=f"snar-customer-v1-{current['id']}",
+                native_client().v1.customers.create,
+                {"email": user.get("email"), "name": user.get("fullName") or user.get("email"),
+                 "metadata": {"user_id": current["id"]}},
+                {"idempotency_key": f"snar-customer-v1-{current['id']}"},
             )
             customer_id = customer.id
             await db.users.update_one(
@@ -304,19 +324,24 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return customer_id
 
     @api.post("/payments/native/setup-intent")
-    async def native_setup_intent(request: Request, current=Depends(require_customer)):
+    async def native_setup_intent(request: Request, body: NativeSetupRequest = NativeSetupRequest(), current=Depends(require_customer)):
         await rate_limit(request, "native-card-setup", 20, 900)
         config = payment_config()
         if not config["enabled"] or not config["test_mode"]:
             raise HTTPException(503, "Native Stripe testbetaling er ikke aktivert")
+        if body.wallet == "google_pay" and not config["google_pay_enabled"]:
+            raise HTTPException(503, "Google Pay er ikke aktivert i dette testmiljøet")
+        if body.wallet and not body.future_use_accepted:
+            raise HTTPException(422, "Godkjenn lagring og belastning for turene du bestiller")
         customer_id = await _stripe_customer_for_user(current)
-        setup = await asyncio.to_thread(
-            stripe.SetupIntent.create,
-            customer=customer_id,
-            automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
-            usage="off_session",
-            metadata={"user_id": current["id"], "source": "kjapp_native_setup"},
-        )
+        metadata = {"user_id": current["id"], "source": "kjapp_native_setup"}
+        if body.wallet:
+            metadata.update(wallet=body.wallet, future_use_accepted_at=datetime.now(timezone.utc).isoformat(),
+                            future_use_scope="customer_booked_snar_rides")
+        setup = await asyncio.to_thread(native_client().v1.setup_intents.create, {
+            "customer": customer_id, "automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
+            "usage": "off_session", "metadata": metadata,
+        })
         return {"client_secret": setup.client_secret, "setup_intent_id": setup.id}
 
     @api.get("/payments/native/setup-intent/{setup_intent_id}")
@@ -326,7 +351,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         if not customer_id:
             raise HTTPException(404, "Fant ikke kortverifiseringen")
         try:
-            setup = await asyncio.to_thread(stripe.SetupIntent.retrieve, setup_intent_id)
+            setup = await asyncio.to_thread(native_client().v1.setup_intents.retrieve, setup_intent_id)
         except Exception:
             raise HTTPException(404, "Fant ikke kortverifiseringen")
         if (setup.get("metadata") or {}).get("user_id") != current["id"] or str(setup.get("customer") or "") != customer_id:
@@ -334,10 +359,16 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         if setup.get("status") != "succeeded" or not setup.get("payment_method"):
             return {"ready": False, "status": setup.get("status")}
 
-        pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, setup["payment_method"])
+        pm = await asyncio.to_thread(native_client().v1.payment_methods.retrieve, setup["payment_method"])
         if pm.get("type") != "card" or str(pm.get("customer") or "") != customer_id:
             raise HTTPException(409, "Kortet er ikke bekreftet for denne kunden")
         card = pm.get("card") or {}
+        metadata = setup.get("metadata") or {}
+        expected_wallet = metadata.get("wallet")
+        if expected_wallet and (card.get("wallet") or {}).get("type") != expected_wallet:
+            raise HTTPException(409, "Betalingsmåten ble ikke bekreftet med den valgte lommeboken")
+        consent = {"future_use_accepted_at": metadata.get("future_use_accepted_at"),
+                   "future_use_scope": metadata.get("future_use_scope")}
         pm_id = pm.get("id")
         existing = await db.payment_methods.find_one({
             "user_id": current["id"],
@@ -350,13 +381,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                     "setup_status": "succeeded",
                     "verified": True,
                     "stripe_setup_intent_id": setup_intent_id,
-                    "wallet": (card.get("wallet") or {}).get("type"),
+                    "wallet": (card.get("wallet") or {}).get("type"), **consent,
                 }},
             )
             existing["id"] = str(existing["_id"])
             existing.pop("_id", None)
             existing.update({"setup_status": "succeeded", "verified": True, "stripe_setup_intent_id": setup_intent_id,
-                "wallet": (card.get("wallet") or {}).get("type")})
+                "wallet": (card.get("wallet") or {}).get("type"), **consent})
             return {"ready": True, "verified": True, "card": existing}
 
         has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
@@ -372,7 +403,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             "stripe_setup_intent_id": setup_intent_id,
             "setup_status": "succeeded",
             "verified": True,
-            "wallet": (card.get("wallet") or {}).get("type"),
+            "wallet": (card.get("wallet") or {}).get("type"), **consent,
             "is_default": not has_any,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }

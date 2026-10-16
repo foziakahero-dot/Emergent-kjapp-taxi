@@ -2,7 +2,8 @@ import { Text } from '@/src/components/Typography';
 import React, { useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
@@ -14,6 +15,9 @@ import { useAuth } from '@/src/context/AuthContext';
 export default function DriverProfilePhoto() {
   useColorTheme();
   const router = useRouter();
+  const { kind } = useLocalSearchParams<{ kind?: string }>();
+  const carIcon = kind === 'car';
+  const operation = useRef(false);
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const camera = useRef<any>(null);
@@ -54,12 +58,26 @@ export default function DriverProfilePhoto() {
     }
   };
 
+  const selectImage = async () => {
+    if (operation.current) return;
+    operation.current = true; setBusy(true); setErr('');
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) throw new Error('Gi tilgang til bilder for å velge et bilde.');
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: carIcon ? [3, 2] : [1, 1], quality: 0.8, exif: false });
+      if (!result.canceled && result.assets[0]?.uri) { setPhoto(result.assets[0].uri); setCameraOpen(false); }
+    } catch (error) { setErr(apiError(error)); }
+    finally { operation.current = false; setBusy(false); }
+  };
+
   const save = async () => {
-    if (!photo || busy) return;
+    if (!photo || operation.current) return;
+    operation.current = true;
     setBusy(true);
     setErr('');
     try {
-      await driverApi.updateProfilePhoto(photo);
+      if (carIcon) await driverApi.updateCarIcon(photo);
+      else await driverApi.updateProfilePhoto(photo);
       await refresh();
       await queryClient.invalidateQueries({ queryKey: ['me'] });
       await queryClient.invalidateQueries({ queryKey: ['driver-profile-photo-source'] });
@@ -67,6 +85,7 @@ export default function DriverProfilePhoto() {
     } catch (e) {
       setErr(apiError(e));
     } finally {
+      operation.current = false;
       setBusy(false);
     }
   };
@@ -79,19 +98,19 @@ export default function DriverProfilePhoto() {
             <Icon name="arrow-left" size={20} color={colors.text} />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Text style={s.title}>Profilbilde</Text>
-            <Text style={s.subtitle}>Bildet vises på din SNAR-sjåførprofil</Text>
+            <Text style={s.title}>{carIcon ? 'Bilikon' : 'Profilbilde'}</Text>
+            <Text style={s.subtitle}>{carIcon ? 'Vis bilen din i kundens bilvalg' : 'Bildet vises på din SNAR-sjåførprofil'}</Text>
           </View>
         </View>
 
         <View style={s.note}>
           <Icon name="user" size={20} color={colors.online} />
-          <Text style={s.noteText}>Bruk et tydelig bilde av ansiktet ditt. Profilbildet lagres privat og hentes kun når du er autentisert.</Text>
+          <Text style={s.noteText}>{carIcon ? 'Last opp et tydelig bilde av flåtebilen du har valgt. Bildet vises for kunder mens bilen er tilgjengelig.' : 'Bruk et tydelig bilde av ansiktet ditt. Bildet vises for kunder mens du er tilgjengelig eller er tildelt turen deres.'}</Text>
         </View>
 
         {cameraOpen ? (
           <View style={s.cameraCard}>
-            <CameraView ref={camera} style={s.camera} facing="front">
+            <CameraView ref={camera} style={s.camera} facing={carIcon ? 'back' : 'front'}>
               <View style={s.faceGuide} />
             </CameraView>
             <Button label={busy ? 'Tar bilde…' : 'Ta bilde'} onPress={() => void capture()} disabled={busy} />
@@ -100,11 +119,12 @@ export default function DriverProfilePhoto() {
         ) : photo ? (
           <View style={s.cameraCard}>
             <Image source={{ uri: photo }} style={s.preview} resizeMode="cover" />
-            <Button label={busy ? 'Lagrer…' : 'Bruk dette profilbildet'} onPress={() => void save()} disabled={busy} />
+            <Button label={busy ? 'Lagrer…' : carIcon ? 'Bruk dette bilikonet' : 'Bruk dette profilbildet'} onPress={() => void save()} disabled={busy} />
             <Pressable style={s.cancel} onPress={() => void openCamera()}><Text style={s.cancelText}>Ta nytt bilde</Text></Pressable>
           </View>
         ) : (
-          <Button label="Åpne frontkamera" onPress={() => void openCamera()} testID="driver-profile-photo-camera" />
+          <View style={{ gap: 12 }}><Button label={carIcon ? 'Ta bilde av bilen' : 'Åpne frontkamera'} onPress={() => void openCamera()} testID="driver-profile-photo-camera" />
+            <Button label="Velg fra bilder" onPress={() => void selectImage()} disabled={busy} testID="driver-select-image" /></View>
         )}
 
         {err ? <Text style={s.error}>{err}</Text> : null}

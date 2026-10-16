@@ -5,11 +5,13 @@ import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } 
 import Svg, { Circle, Ellipse, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
-import { V10VehicleBody, V10RasterCar } from './V10VehicleMarker';
+import { V10VehicleBody, V10VehicleMarker } from './V10VehicleMarker';
+import { DriverMarkerPopup } from './DriverMarkerPopup';
+import { MapCarData } from '@/src/lib/liveCars';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number; eta_min?: number };
+type Car = MapCarData;
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -90,6 +92,9 @@ export function InteractiveMap({
   contentInsets?: Partial<MapContentInsets>;
 }) {
   useColorTheme();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = cars.find(car => car.id === selectedId);
+  useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [center, setCenter] = useState<LL>(user || OSLO);
   const [zoom, setZoom] = useState(15);
@@ -130,7 +135,7 @@ export function InteractiveMap({
 
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => interactive,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_e, g) => interactive && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
       onPanResponderGrant: (e) => {
         setManual(true);
@@ -245,7 +250,7 @@ export function InteractiveMap({
               </>
             ) : null}
 
-            {cars.map((c, i) => <V10RasterCar key={(c as any).id || `car-${i}`} car={c} projectX={sx} projectY={sy} />)}
+
 
             {pickup ? (
               <G>
@@ -285,6 +290,8 @@ export function InteractiveMap({
             </G> : null}
 
           </Svg>
+          {cars.map((car, index) => <RasterDriverMarker key={car.id || `car-${index}`} car={car} projectX={sx} projectY={sy} onPress={() => setSelectedId(car.id || null)} />)}
+          {selected ? <DriverMarkerPopup car={selected} onClose={() => setSelectedId(null)} style={{ top: (contentInsets?.top || 88) + 8 }} /> : null}
 
           <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
             {ATTRIB}
@@ -301,6 +308,17 @@ export function InteractiveMap({
       ) : null}
     </View>
   );
+}
+
+function RasterDriverMarker({ car, projectX, projectY, onPress }: {
+  car: Car; projectX: (lng: number) => number; projectY: (lat: number) => number; onPress: () => void;
+}) {
+  const position = useSmoothPosition(car, 250);
+  if (!position) return null;
+  return <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}`} onPress={onPress}
+    style={{ position: 'absolute', left: projectX(position.lng) - 25, top: projectY(position.lat) - 25, width: 50, height: 50 }}>
+    <V10VehicleMarker heading={position.heading} vehicleType={car.type} bodyType={car.body_type} />
+  </Pressable>;
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
@@ -328,5 +346,4 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 
 export const Map = InteractiveMap;
 export default InteractiveMap;
-
 

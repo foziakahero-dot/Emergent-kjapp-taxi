@@ -1,33 +1,66 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { carsApi } from './api';
-import { Availability, CarAvailabilitySearch, visibleCars } from './carAvailability';
+import * as Location from 'expo-location';
+import { io } from 'socket.io-client';
+import { useAuth } from '@/src/context/AuthContext';
+import { storage } from '@/src/utils/storage';
+import { BACKEND, TOKEN_KEY } from './api';
+import { Availability, validPosition } from './carAvailability';
+import { LiveCarsFeed } from './liveCars';
+import { readPickupLocation } from './pickupLocation';
 
-export function useAvailableCars({ enabled, lat, lng, vehicleType, specialNeeds = [], continuous = false }: {
-  enabled: boolean; lat?: number; lng?: number; vehicleType?: string; specialNeeds?: string[]; continuous?: boolean;
+export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], locationRevision = 0 }: {
+  enabled: boolean; vehicleType?: string; specialNeeds?: string[]; locationRevision?: number;
 }) {
+  const { user } = useAuth();
   const [state, setState] = useState<Availability>({ cars: [], phase: 'loading', issue: null, attempt: 0, nextAt: null });
-  const [now, setNow] = useState(Date.now());
-  const search = useRef<CarAvailabilitySearch | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const feed = useRef<LiveCarsFeed | null>(null);
+  const point = useRef<{ lat: number; lng: number } | null>(null);
   const needsKey = [...specialNeeds].sort().join(',');
+  const filters = useRef({ vehicle_type: vehicleType, special_needs: specialNeeds });
+  filters.current = { vehicle_type: vehicleType, special_needs: needsKey ? needsKey.split(',') : [] };
   useFocusEffect(useCallback(() => {
-    if (!enabled || lat == null || lng == null) { setState({ cars: [], phase: 'loading', issue: null, attempt: 0, nextAt: null }); return; }
-    const next = new CarAvailabilitySearch(() => carsApi.nearby(lat, lng, vehicleType, needsKey ? needsKey.split(',') : []), state => { setNow(Date.now()); setState(state); }, continuous);
-    search.current = next;
-    setState(next.state);
-    next.setActive(AppState.currentState === 'active');
-    const listener = AppState.addEventListener('change', value => next.setActive(value === 'active'));
-    return () => { next.dispose(); listener.remove(); search.current = null; };
-  }, [enabled, lat, lng, vehicleType, needsKey, continuous]));
+    if (!enabled || !user?.id) return;
+    const next = new LiveCarsFeed(() => io(`${BACKEND}/customer-cars`, {
+      path: '/socket.io', transports: ['websocket'], autoConnect: false,
+      reconnectionDelay: 500, reconnectionDelayMax: 1500, timeout: 2000,
+      auth: callback => { void storage.getItem(TOKEN_KEY).then(token => callback({ token })).catch(() => callback({ token: null })); },
+    }), setState);
+    feed.current = next; point.current = null; setState(next.state);
+    let epoch = 0, disposed = false;
+    let watch: Location.LocationSubscription | undefined;
+    const setActive = async (active: boolean) => {
+      const generation = ++epoch;
+      watch?.remove(); watch = undefined; point.current = null;
+      next.setActive(false);
+      if (!active || disposed) return;
+      // Manual pickup is for booking. Supply is centred on actual customer GPS;
+      // this passive check never opens a new OS permission prompt.
+      const result = await readPickupLocation(Location, false);
+      if (disposed || generation !== epoch) return;
+      if (!result.point) { next.locationUnavailable(); return; }
+      point.current = result.point;
+      next.subscribe({ ...result.point, ...filters.current }); next.setActive(true);
+      try {
+        const subscription = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: 0, timeInterval: 1000 }, position => {
+          if (disposed || generation !== epoch) return;
+          const p = { lat: position.coords.latitude, lng: position.coords.longitude };
+          if (!validPosition(p)) { next.locationUnavailable(); return; }
+          point.current = p; next.subscribe({ ...p, ...filters.current }); next.setActive(true);
+        }, () => { if (!disposed && generation === epoch) { point.current = null; next.locationUnavailable(); } });
+        if (disposed || generation !== epoch) subscription.remove(); else watch = subscription;
+      } catch { if (!disposed && generation === epoch) next.locationUnavailable(); }
+    };
+    void setActive(AppState.currentState === 'active');
+    const listener = AppState.addEventListener('change', value => { void setActive(value === 'active'); });
+    const timer = setInterval(() => next.tick(), 200);
+    return () => { disposed = true; epoch++; watch?.remove(); listener.remove(); clearInterval(timer); next.dispose(); feed.current = null; point.current = null; };
+  }, [enabled, user?.id, retryVersion, locationRevision]));
   useEffect(() => {
-    if (!enabled) return;
-    const timer = setInterval(() => { if (AppState.currentState === 'active') setNow(Date.now()); }, 1000);
-    return () => clearInterval(timer);
-  }, [enabled]);
-  const cars = visibleCars(state, now);
-  return { ...state, cars, phase: state.phase === 'available' && !cars.length ? 'waiting' as const : state.phase,
-    issue: state.phase === 'available' && !cars.length ? 'empty' as const : state.issue,
-    now, seconds: state.nextAt ? Math.max(0, Math.ceil((state.nextAt - now) / 1000)) : null,
-    retry: useCallback(() => search.current?.retry(), []) };
+    if (point.current) feed.current?.subscribe({ ...point.current, ...filters.current });
+  }, [vehicleType, needsKey]);
+  return { ...state, cars: enabled && user?.id ? state.cars : [], center: point.current, now: Date.now(), seconds: null,
+    retry: useCallback(() => setRetryVersion(value => value + 1), []) };
 }

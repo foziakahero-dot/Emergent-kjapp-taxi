@@ -1,5 +1,9 @@
 """Provider signatures, safe linking, account uniqueness and QA isolation."""
 import asyncio
+import os
+os.environ.setdefault('MONGO_URL', 'mongodb://127.0.0.1:27017')
+os.environ.setdefault('DB_NAME', 'snar_identity_test')
+os.environ.setdefault('JWT_SECRET', 'unit-test-secret-that-is-long-enough-for-hs256')
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -34,12 +38,13 @@ def apple_request(env, token, route='native'):
 
 
 def test_new_google_customer_creates_one_database_account_and_one_welcome(env):
-    env.verify.return_value.update(sub='new-google', email='new@example.invalid')
+    env.verify.return_value.update(sub='new-google', email='new@example.invalid', picture='https://lh3.googleusercontent.com/qa-photo')
     sessions = [sign_in(env) for _ in range(2)]
     assert [r.status_code for r in sessions] == [200, 200]
     assert sessions[0].json()['user']['id'] == sessions[1].json()['user']['id']
     account = env.db.raw.users.find_one({'google_sub': 'new-google'})
     assert account['role'] == 'user'
+    assert account['picture'] == 'https://lh3.googleusercontent.com/qa-photo'
     assert not account.get('legal_accepted')
     assert env.db.raw.users.count_documents({'email': 'new@example.invalid'}) == 1
     assert env.db.raw.onboarding_email_outbox.count_documents({'entity_id': str(account['_id']), 'provider': 'resend'}) == 1
@@ -114,3 +119,33 @@ def test_qa_oauth_requires_qa_ids_and_explicit_enable(env, monkeypatch):
     assert sign_in(env).status_code == 200
     env.verify.assert_awaited_once_with('verified-token', 'dedicated-qa-web-client')
     assert env.client.get('/auth/native/config').json()['google_web_client_id'] == 'dedicated-qa-web-client'
+
+
+@pytest.mark.parametrize('changes', [{'aud': 'another-client'}, {'iss': 'https://fake.example'}, {'exp': 1}])
+def test_google_signature_audience_issuer_and_expiry(monkeypatch, changes):
+    import server
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(RSAAlgorithm.to_jwk(key.public_key())); jwk['kid'] = 'qa-google-key'
+    monkeypatch.setattr(server, '_get_google_keys', AsyncMock(return_value=[jwk]))
+    claims = {'sub': 'google-sub', 'aud': 'expected-client', 'iss': 'https://accounts.google.com', 'exp': int(time.time()) + 120}
+    claims.update(changes)
+    token = jwt.encode(claims, key, algorithm='RS256', headers={'kid': jwk['kid']})
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(server._verify_google_id_token(token, 'expected-client'))
+    assert error.value.status_code == 401
+
+
+def test_google_accepts_signed_identity_but_rejects_forged_or_malformed_token(monkeypatch):
+    import server
+    from fastapi import HTTPException
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(RSAAlgorithm.to_jwk(key.public_key())); jwk['kid'] = 'qa-google-key'
+    monkeypatch.setattr(server, '_get_google_keys', AsyncMock(return_value=[jwk]))
+    claims = {'sub': 'google-sub', 'aud': 'expected-client', 'iss': 'https://accounts.google.com', 'exp': int(time.time()) + 120}
+    token = jwt.encode(claims, key, algorithm='RS256', headers={'kid': jwk['kid']})
+    assert asyncio.run(server._verify_google_id_token(token, 'expected-client'))['sub'] == 'google-sub'
+    for invalid in ['not-a-jwt', jwt.encode(claims, 'attacker-secret', algorithm='HS256', headers={'kid': jwk['kid']}), token[:-20] + 'a' * 20]:
+        with pytest.raises(HTTPException) as error:
+            asyncio.run(server._verify_google_id_token(invalid, 'expected-client'))
+        assert error.value.status_code == 401

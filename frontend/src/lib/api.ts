@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
-const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
+export const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
 
 export const tripDriverPhotoSource = async (tripId: string) => {
@@ -83,6 +83,13 @@ export const tripsApi = {
   list: () => api.get('/trips').then((r) => r.data),
 };
 
+export async function nearbyDriverMediaSource(driverId: string, kind: 'profile' | 'car-icon', point: { lat: number; lng: number }, version: string) {
+  const token = await storage.getItem(TOKEN_KEY);
+  if (!token) throw new Error('Logg inn for å se sjåførbilder.');
+  return { uri: `${BACKEND}/api/cars/${encodeURIComponent(driverId)}/media/${kind}?lat=${point.lat}&lng=${point.lng}&v=${encodeURIComponent(version)}`,
+    headers: { Authorization: `Bearer ${token}` } };
+}
+
 export const carsApi = {
   nearby: (lat: number, lng: number, vehicle_type?: string, special_needs: string[] = []) =>
     api.post('/cars/nearby', { lat, lng, vehicle_type, special_needs }).then((r) => r.data),
@@ -98,7 +105,7 @@ export const placesApi = {
 
 export const paymentApi = {
   nativeConfig: () => api.get('/payments/native/config').then((r) => r.data),
-  nativeSetup: () => api.post('/payments/native/setup-intent').then(r => r.data),
+  nativeSetup: (wallet?: 'google_pay' | 'apple_pay') => api.post('/payments/native/setup-intent', wallet ? { wallet, future_use_accepted: true } : undefined).then(r => r.data),
   nativeSetupStatus: (id: string) => api.get(`/payments/native/setup-intent/${encodeURIComponent(id)}`).then(r => r.data),
   setDefault: (id: string) => api.post(`/payment-methods/${encodeURIComponent(id)}/default`).then(r => r.data),
   nativeIntent: (trip_id: string) => api.post('/payments/native/intent', { trip_id }).then((r) => r.data),
