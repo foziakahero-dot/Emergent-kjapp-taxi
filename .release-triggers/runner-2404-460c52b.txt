@@ -1,0 +1,7 @@
+SNAR QA GitHub-hosted runner smoke test
+Runner: ubuntu-24.04
+No reusable workflow
+No secrets
+No EAS
+No Expo
+Expected action: allocate runner and print RUNNER_STARTED=true
