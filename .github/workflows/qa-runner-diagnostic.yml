@@ -1,0 +1,22 @@
+name: SNAR QA runner diagnostic - no EAS
+
+on:
+  pull_request:
+    branches:
+      - qa/snar-v10-phase5-staging-e2e
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  runner-smoke:
+    if: >-
+      ${{ github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.event.pull_request.head.ref, 'diagnostic/runner-') &&
+          github.event.pull_request.title == 'TEST_QA_RUNNER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm GitHub-hosted runner started
+        run: echo "RUNNER_STARTED=true"
