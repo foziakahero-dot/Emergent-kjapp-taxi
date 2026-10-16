@@ -1,0 +1,4 @@
+SNAR QA Customer Android EAS build trigger
+Reviewed QA base SHA: c49e72057b19e3a318a8785739e4027463be3b91
+User authorization: JA
+Purpose: trigger Customer first through the locked QA release workflow. Driver must not start unless Customer succeeds.
