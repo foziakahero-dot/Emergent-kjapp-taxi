@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
-import { api } from '@/src/lib/api';
+import { api, publishDriverLocation } from '@/src/lib/api';
 import { storage } from '@/src/utils/storage';
 
 export const DRIVER_LOCATION_TASK = 'kjapp-driver-background-location';
@@ -162,13 +162,8 @@ if (!TaskManager.isTaskDefined(DRIVER_LOCATION_TASK)) {
     if (error || !data?.locations?.length) return;
     const pos = data.locations[data.locations.length - 1];
     try {
-      await api.post('/driver/location', {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        heading: pos.coords.heading || 0,
-        speed: Math.max(0, pos.coords.speed || 0),
-        recorded_at: new Date(pos.timestamp).toISOString(),
-      });
+      await publishDriverLocation(pos.coords.latitude, pos.coords.longitude,
+        pos.coords.heading || 0, Math.max(0, pos.coords.speed || 0), new Date(pos.timestamp).toISOString());
     } catch {
       // Foreground polling will recover on the next active session.
     }
@@ -271,10 +266,10 @@ export async function startDriverBackgroundLocation(mode: 'idle' | 'active' = 'i
     await Location.startLocationUpdatesAsync(DRIVER_LOCATION_TASK, {
       accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
       activityType: Location.ActivityType.AutomotiveNavigation,
-      distanceInterval: activeTrip ? 5 : 50,
-      timeInterval: activeTrip ? 3000 : 15000,
-      deferredUpdatesDistance: activeTrip ? 10 : 100,
-      deferredUpdatesInterval: activeTrip ? 5000 : 30000,
+      distanceInterval: 0,
+      timeInterval: 1000,
+      deferredUpdatesDistance: 0,
+      deferredUpdatesInterval: 0,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {

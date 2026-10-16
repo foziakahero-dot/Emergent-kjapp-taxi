@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { initStripe, initPaymentSheet, presentPaymentSheet, isPlatformPaySupported } from '@stripe/stripe-react-native';
+import { initStripe, initPaymentSheet, presentPaymentSheet, isPlatformPaySupported, confirmPlatformPaySetupIntent } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 
 export type NativeWallet = { kind: 'google' | 'apple'; label: string };
@@ -39,18 +39,29 @@ export async function setupNativePaymentMethod(walletRequired = false): Promise<
   await initialize(config);
   const wallet = await nativeWalletAvailability(config);
   if (walletRequired && !wallet) throw new Error('Lommeboken er ikke tilgjengelig på denne enheten. Legg til et kort i stedet.');
-  const setup = await paymentApi.nativeSetup();
+  const setup = await paymentApi.nativeSetup(walletRequired && wallet ? wallet.kind === 'google' ? 'google_pay' : 'apple_pay' : undefined);
   if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Stripe svarte uten kortverifisering.');
-  const initialized = await initPaymentSheet({ merchantDisplayName: 'SNAR',
-    setupIntentClientSecret: setup.client_secret, returnURL: 'kjapp://payment-methods',
-    allowsDelayedPaymentMethods: false, ...walletOptions(wallet) });
-  if (initialized.error) throw new Error(initialized.error.message);
-  const result = await presentPaymentSheet();
+  let result;
+  if (walletRequired && wallet?.kind === 'google') {
+    result = await confirmPlatformPaySetupIntent(setup.client_secret, { googlePay: {
+      testEnv: true, merchantName: 'SNAR', merchantCountryCode: 'NO', currencyCode: 'NOK', amount: 0,
+      label: 'Lagre betalingskort for turene du bestiller',
+    } });
+  } else {
+    const initialized = await initPaymentSheet({ merchantDisplayName: 'SNAR',
+      setupIntentClientSecret: setup.client_secret, returnURL: 'kjapp://payment-methods',
+      allowsDelayedPaymentMethods: false, ...walletOptions(wallet) });
+    if (initialized.error) throw new Error(initialized.error.message);
+    result = await presentPaymentSheet();
+  }
   if (result.error?.code === 'Canceled') return null;
   if (result.error) throw new Error(result.error.message);
   const status = await paymentApi.nativeSetupStatus(setup.setup_intent_id);
   if (status.ready !== true || status.verified !== true || !status.card?.id) {
     throw new Error('Stripe har ikke bekreftet kortet ennå. Oppdater betalingsmåter før du bestiller.');
+  }
+  if (walletRequired && wallet && status.card.wallet !== (wallet.kind === 'google' ? 'google_pay' : 'apple_pay')) {
+    throw new Error('Betalingsmåten ble ikke bekreftet med den valgte lommeboken.');
   }
   return status.card;
 }

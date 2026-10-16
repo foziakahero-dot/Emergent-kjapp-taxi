@@ -256,8 +256,8 @@ export default function DriverHome() {
         const subscription = await Location.watchPositionAsync(
           {
             accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
-            distanceInterval: activeTrip ? 5 : 40,
-            timeInterval: activeTrip ? 3000 : 12000,
+            distanceInterval: 0,
+            timeInterval: 1000,
           },
           (u) => {
             if (!active) return;

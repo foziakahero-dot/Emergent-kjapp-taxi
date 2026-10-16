@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { googleIdentity, appleIdentity } from '@/src/lib/socialSignIn';
+import { appleIdentity } from '@/src/lib/socialSignIn';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
 import { stopDriverBackgroundLocation, unregisterNativePush } from '@/src/lib/nativeRuntime';
@@ -35,7 +35,6 @@ type AuthCtx = {
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
-  signInWithGoogle: () => Promise<User>;
   signInWithApple: () => Promise<User>;
 };
 
@@ -152,20 +151,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return persistSession(res, epoch);
   };
 
-  const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
+  const signInWithApple = async (): Promise<User> => {
     const epoch = ++sessionEpoch.current;
-    const identity = provider === 'google'
-      ? await googleIdentity(await withBackendWakeRetry(() => authApi.nativeConfig()))
-      : await appleIdentity();
+    const identity = await appleIdentity();
     if (!identity || epoch !== sessionEpoch.current) return null;
     const device_id = await getDriverInstallationId();
     if (epoch !== sessionEpoch.current) return null;
-    const res = await withBackendWakeRetry(() => authApi.nativeSignIn(provider, identity, device_id));
+    const res = await withBackendWakeRetry(() => authApi.nativeSignIn('apple', identity, device_id));
     return persistSession(res, epoch);
   };
 
-  const signInWithGoogle = () => socialLogin('google');
-  const signInWithApple = () => socialLogin('apple');
 
   const acceptLegal = async (): Promise<User> => {
     const updated = await withBackendWakeRetry(() => authApi.acceptLegal('2026-09'));
@@ -188,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
+    <Ctx.Provider value={{ user, login, acceptLegal, logout, refresh, signInWithApple }}>
       {children}
     </Ctx.Provider>
   );

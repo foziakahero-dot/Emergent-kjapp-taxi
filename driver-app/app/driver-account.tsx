@@ -137,6 +137,7 @@ export default function DriverAccount() {
         {!vehicles.isLoading && !vehicles.isError && !vehicles.data?.vehicles?.length && <Outline label="Ingen biler tildelt" onPress={() => router.push('/driver-vehicles')} />}
       </View>
       {error ? <Text style={s.error} accessibilityRole="alert">{error}</Text> : null}
+      <Pressable style={s.row} onPress={() => router.push('/driver-profile-photo?kind=car')} testID="driver-car-icon-open" accessibilityRole="button" accessibilityLabel="Last opp bilikon"><Text style={s.label}>Bilikon til kundens bilvalg</Text><Icon name="chevron-right" size={18} color={colors.textSecondary} /></Pressable>
       <Section>Identitet</Section>
       <Pressable style={s.row} onPress={() => router.push('/driver-identity')} testID="profile-identity">
         <View style={[s.roundIcon, { backgroundColor: verified ? 'rgba(76,175,80,0.12)' : colors.cardSubtle }]}><Icon name="user" size={20} color={verified ? colors.success : colors.textSecondary} /></View>

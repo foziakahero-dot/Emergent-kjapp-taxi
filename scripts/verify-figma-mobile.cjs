@@ -47,11 +47,17 @@ function load(app, file) {
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
     if (stubs.has(name)) return stubs.get(name);
+    if (name === '@/src/lib/useAvailableCars') return { useAvailableCars: () => ({ cars: [], phase: 'waiting', issue: 'empty', now: 0, seconds: null, retry() {} }) };
     if (app === 'frontend' && name === './api' && absolute.endsWith(path.join('frontend', 'src', 'lib', 'useAvailableCars.ts'))) {
       return { carsApi: { nearby: async () => ({ cars: [] }) } };
     }
     if (name === '@/src/components/VehicleAsset') return { VehicleAsset: 'VehicleAsset' };
     if (name === 'react') return React;
+    if (/\.(png|webp|jpe?g)$/.test(name)) {
+      const asset = path.resolve(path.dirname(absolute), name);
+      assert.ok(fs.existsSync(asset), `Missing bundled image: ${name}`);
+      return asset;
+    }
     if (name.startsWith('./')) { const target = path.relative(path.join(root, app), path.resolve(path.dirname(absolute), name)); return load(app, fs.existsSync(path.join(root, app, target + '.tsx')) ? target + '.tsx' : target + '.ts'); }
     if (name === 'react/jsx-runtime') return customerRequire(name);
     if (name === 'react-native') return native;

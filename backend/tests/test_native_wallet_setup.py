@@ -19,13 +19,15 @@ def configure(env):
         card={'brand':'visa','last4':'4242','exp_month':12,'exp_year':2028,'wallet':{'type':'google_pay'}})
     env.stripe.SetupIntent=SimpleNamespace(create=Mock(return_value=setup),retrieve=Mock(return_value=setup))
     env.stripe.PaymentMethod=SimpleNamespace(retrieve=Mock(return_value=pm))
+    env.stripe.StripeClient=Mock(return_value=SimpleNamespace(v1=SimpleNamespace(
+        setup_intents=env.stripe.SetupIntent, payment_methods=env.stripe.PaymentMethod)))
     return setup,pm
 
 
 def test_native_setup_uses_existing_customer_and_dynamic_methods(env):
     configure(env)
     assert env.client.post('/payments/native/setup-intent').status_code==200
-    args=env.stripe.SetupIntent.create.call_args.kwargs
+    args=env.stripe.SetupIntent.create.call_args.args[0]
     assert args['customer']=='cus_unit' and args['usage']=='off_session'
     assert 'payment_method_types' not in args
     assert args['automatic_payment_methods']['enabled'] is True
@@ -75,3 +77,38 @@ def test_unverified_method_cannot_become_default(env):
     card={'_id':ObjectId(),'user_id':str(env.uid),'verified':False,'stripe_payment_method_id':'pm_unverified'}
     env.db.raw.payment_methods.insert_one(card)
     assert env.client.post('/payment-methods/'+str(card['_id'])+'/default').status_code==404
+
+
+def test_google_pay_setup_requires_explicit_qa_flag_and_future_usage(env, monkeypatch):
+    setup, pm = configure(env)
+    monkeypatch.setenv('APP_ENV', 'qa')
+    monkeypatch.setenv('GOOGLE_PAY_ENABLED', 'true')
+    request = {'wallet': 'google_pay', 'future_use_accepted': True}
+    assert env.client.post('/payments/native/setup-intent', json=request).status_code == 503
+    monkeypatch.setenv('QA_GOOGLE_PAY_ENABLED', 'true')
+    assert env.client.post('/payments/native/setup-intent', json={'wallet': 'google_pay'}).status_code == 422
+    assert env.client.post('/payments/native/setup-intent', json=request).status_code == 200
+    params = env.stripe.SetupIntent.create.call_args.args[0]
+    assert params['usage'] == 'off_session' and params['metadata']['wallet'] == 'google_pay'
+    assert params['metadata']['future_use_scope'] == 'customer_booked_snar_rides'
+    assert params['metadata']['future_use_accepted_at']
+    assert 'payment_method_types' not in params
+
+
+def test_google_pay_identity_and_consent_are_verified_before_saving(env):
+    setup, pm = configure(env)
+    setup['metadata'].update(wallet='google_pay', future_use_accepted_at='2026-10-16T20:00:00+00:00', future_use_scope='customer_booked_snar_rides')
+    pm['card']['wallet'] = None
+    assert env.client.get('/payments/native/setup-intent/seti_unit').status_code == 409
+    assert env.db.raw.payment_methods.count_documents({}) == 0
+    pm['card']['wallet'] = {'type': 'google_pay'}
+    saved = env.client.get('/payments/native/setup-intent/seti_unit').json()['card']
+    assert saved['wallet'] == 'google_pay' and saved['future_use_accepted_at']
+    assert env.db.raw.payment_methods.find_one()['future_use_scope'] == 'customer_booked_snar_rides'
+
+
+def test_setup_webhook_recovery_works_after_ui_is_disabled(env, monkeypatch):
+    setup, pm = configure(env)
+    monkeypatch.setenv('NATIVE_PAYMENTS_ENABLED', 'false')
+    assert asyncio.run(env.webhook({'type': 'setup_intent.succeeded', 'data': {'object': setup}})) is True
+    assert env.db.raw.payment_methods.count_documents({}) == 1

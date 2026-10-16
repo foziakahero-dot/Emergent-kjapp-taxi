@@ -82,8 +82,8 @@ export default function BookingFlow() {
   };
   const nav = useRef(false);
   const searching = trip?.trip_id === tripId && ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
-  const available = useAvailableCars({ enabled: searching, lat: trip?.pickup_lat, lng: trip?.pickup_lng,
-    vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [], continuous: true });
+  const available = useAvailableCars({ enabled: searching,
+    vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [] });
 
   useEffect(() => {
     let mounted = true;

@@ -92,7 +92,7 @@ def test_customer_session_uses_verified_identity(env):
 
 
 def test_customer_cannot_enter_driver_app(env):
-    assert sign_in(env, 'driver').status_code == 401
+    assert sign_in(env, 'driver').status_code == 403
     assert env.db.raw.users.count_documents({}) == 1
 
 
@@ -108,10 +108,13 @@ def test_unapproved_driver_is_blocked(env):
     assert sign_in(env, 'driver').status_code == 403
 
 
-def test_approved_driver_retains_device_identity_check(env):
+def test_google_is_removed_even_for_an_approved_driver(env):
     env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'role': 'driver', 'approved': True, 'fleet_id': str(env.fid)}})
-    assert sign_in(env, 'driver').status_code == 200
-    assert env.risk.await_args.args[1:] == ('device-1', 'driver')
+    assert sign_in(env, 'driver').status_code == 403
+    env.verify.assert_not_awaited()
+    env.risk.assert_not_awaited()
+    config = env.client.get('/auth/native/config?client=driver').json()
+    assert config['google_enabled'] is False and config['google_web_client_id'] == ''
 
 
 def test_existing_identity_is_not_overwritten(env):

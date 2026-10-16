@@ -76,7 +76,7 @@ class RideReservations:
                       "kind": "ride_reservation", "session_id": f"reservation:{trip['trip_id']}",
                       "amount": int(trip["price"]), "currency": "nok", "authorized_amount_ore": amount,
                       "stripe_customer_id": user["stripe_customer_id"],
-                      "stripe_payment_method_id": pm["stripe_payment_method_id"],
+                      "stripe_payment_method_id": pm["stripe_payment_method_id"], "wallet": pm.get("wallet"),
                       "status": "authorizing", "payment_status": "unpaid", "created_at": datetime.now(timezone.utc)}
             await self.db.payment_transactions.update_one(
                 {"trip_id": trip["trip_id"], "kind": "ride_reservation"},

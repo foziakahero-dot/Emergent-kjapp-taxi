@@ -11,6 +11,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, v10 } from '@/src/components/V10UI';
+import { GooglePaySetupButton } from './GooglePaySetupButton';
+import { AvailableDriverList } from './AvailableDriverList';
+import { MapCarData } from '@/src/lib/liveCars';
 import { V10CategoryImage } from './V10CategoryImage';
 import { useReducedMotion } from '@/src/components/Motion';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
@@ -19,6 +22,7 @@ import { kr } from '@/src/lib/format';
 export type BookingStage = 'route' | 'vehicles' | 'payment';
 type Props = {
   stage: BookingStage; reviewing: boolean; pickup: string; destination: any; estimate: any; quotedAt?: number | null;
+  availableDrivers?: MapCarData[]; driverPosition?: { lat: number; lng: number } | null;
   vehicleEtas?: Record<string, number>; vehicle: string; price: number | null; nearest: number | null; payment: any; methods: any[];
   waitingPolicy: any; waitingAccepted: boolean; busy: boolean; canReview: boolean; canBook: boolean;
   error: string; firstName: string; initials: string; places: any[]; placesIssue: boolean;
@@ -30,14 +34,14 @@ type Props = {
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
   wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
-const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', trygg: 'XL', premium: 'Premium' };
+const vehicleNames: Record<string, string> = { 'ai-first': 'Økonomi', suv: 'SUV', premium: 'Premium' };
 const studioEta = (name: string, eta?: number) => typeof eta === 'number' && Number.isFinite(eta) && eta > 0 ? `${name} · estimert henting ${Math.ceil(eta)} min` : `${name} · hentetid ikke tilgjengelig`;
 export function CustomerBookingView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const [homeHeight, setHomeHeight] = useState(500);
   const studioOptions: StudioOption[] = [
-    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta('Standard', p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
+    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta('Økonomi', p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
     { id: 'comfort', label: 'Pusterom', icon: 'moon', title: 'Et lite pusterom.', sub: 'Comfort · ikke tilgjengelig', body: 'Comfort er ikke tilgjengelig for bestilling ennå.', disabled: true },
     { id: 'premium', label: 'Signatur', icon: 'star', title: 'Gjør reisen til en del av dagen.', sub: studioEta('Premium', p.vehicleEtas?.premium), body: 'Velg Premium, og utforsk bilkategori, pris og sjåfør i den eksisterende bestillingsflyten.' },
   ];
@@ -76,13 +80,15 @@ export function CustomerBookingView(p: Props) {
     </> : p.stage === 'vehicles' ? <><View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 12 }}><Text style={[v10.heading, { flex: 1 }]}>Velg bil</Text><Text style={v10.caption} numberOfLines={1}>Til {p.destination.name} · {finiteMetric(p.estimate?.duration_min, 'min')}</Text></View>
       <View style={{ gap: 6 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type}
         option={p.estimate?.options?.find((option: any) => option.vehicle_type === choice.type)} eta={p.vehicleEtas?.[choice.type] ?? (p.vehicle === choice.type ? p.nearest : null)} onSelect={p.onVehicle} />)}</View>
+      <AvailableDriverList cars={(p.availableDrivers || []).filter(car => car.type === p.vehicle)} point={p.driverPosition} />
       <Pressable testID="booking-payment-row" onPress={() => p.onStage('payment')} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', minHeight: 48, paddingHorizontal: 4, paddingVertical: 12 }}><V10Icon name="payment" size={20} /><Text style={[v10.body, { flex: 1 }]}>{paymentLabel(p.payment)}</Text><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       {error}<V10Action testID="booking-review" label={`Bestill ${vehicleName} · ${kr(p.price)}`} disabled={!p.canReview} onPress={() => p.onReview(true)} />
     </> : <><Text style={[v10.heading, { marginBottom: 14 }]}>Betal med</Text>
       <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: colors.cardSubtle }}>
         {Platform.OS === 'ios' ? <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle={p.wallet?.kind === 'apple' ? 'Verifiser et kort med Apple Pay' : 'Ikke tilgjengelig på denne enheten'} disabled={p.busy || p.wallet?.kind !== 'apple' || !p.onWallet} onPress={() => p.wallet?.kind === 'apple' && p.onWallet?.()} /> : null}
         <PaymentChoice id="card" icon="payment" title={paymentLabel(p.payment)} subtitle={p.payment ? cardExpiryLabel(p.payment) || 'Verifisert betalingskort' : 'Verifiser et kort før bestilling'} selected={Boolean(p.payment)} onPress={() => p.payment ? p.onStage('vehicles') : p.onPayment()} />
-        {Platform.OS === 'android' ? <PaymentChoice id="google" icon="google" title="Google Pay" subtitle={p.wallet?.kind === 'google' ? 'Verifiser et kort med Google Pay' : 'Ikke tilgjengelig på denne enheten'} disabled={p.busy || p.wallet?.kind !== 'google' || !p.onWallet} onPress={() => p.wallet?.kind === 'google' && p.onWallet?.()} /> : null}
+        {Platform.OS === 'android' ? p.wallet?.kind === 'google' ? <View style={{ gap: 8, paddingVertical: 10 }}><Text style={v10.caption}>Lagre Google Pay for turene du bestiller. Avtalt beløp reserveres før turen og belastes når turen avsluttes.</Text><GooglePaySetupButton disabled={p.busy || !p.onWallet} onPress={() => p.onWallet?.()} testID="booking-pay-google" /></View>
+          : <PaymentChoice id="google" icon="google" title="Google Pay" subtitle="Ikke tilgjengelig på denne enheten" disabled onPress={() => {}} /> : null}
         <PaymentChoice id="business" icon="work" title="SNAR Bedrift" subtitle="Bedriftsbetaling er ikke tilgjengelig" disabled onPress={() => {}} />
         <PaymentChoice id="vipps" icon="payment" title="Vipps" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
       </View>
@@ -92,10 +98,9 @@ export function CustomerBookingView(p: Props) {
   </>;
 }
 const vehicleChoices = [
-  { type: 'ai-first', name: 'Standard', note: 'Rask og enkel' },
-  { type: 'comfort', name: 'Comfort', note: 'Ikke tilgjengelig' },
-  { type: 'trygg', name: 'XL', note: 'Mer plass' },
+  { type: 'ai-first', name: 'Økonomi', note: 'Rask og enkel' },
   { type: 'premium', name: 'Premium', note: 'Premium' },
+  { type: 'suv', name: 'SUV', note: 'Mer plass' },
 ] as const;
 function VehicleChoice({ choice, option, selected, eta, onSelect }: { choice: typeof vehicleChoices[number]; option: any; selected: boolean; eta?: number | null; onSelect: (type: string) => void }) {
   useColorTheme();
@@ -107,7 +112,7 @@ function VehicleChoice({ choice, option, selected, eta, onSelect }: { choice: ty
     animation.start(); return () => animation.stop();
   }, [selected, reduced, progress]);
   // Comfort is a distinct source class; legacy "enkelt" is not a Comfort contract.
-  const supported = choice.type !== 'comfort' && validVehiclePrice(option?.price);
+  const supported = validVehiclePrice(option?.price);
   const arrival = Number.isFinite(eta) && Number(eta) > 0 ? `${eta} min unna · ` : '';
   const seats = Number.isInteger(option?.passenger_seats) && option.passenger_seats > 0 ? option.passenger_seats : null;
   return <Pressable testID={`vehicle-${choice.type}`} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: !supported }} disabled={!supported}

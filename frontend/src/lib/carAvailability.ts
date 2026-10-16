@@ -1,7 +1,7 @@
 export type LiveCar = { id: string; lat: number; lng: number; [key: string]: any };
 export type Availability = {
   cars: LiveCar[]; phase: 'loading' | 'available' | 'waiting' | 'exhausted';
-  issue: 'empty' | 'offline' | null; attempt: number; nextAt: number | null;
+  issue: 'empty' | 'offline' | 'location' | null; attempt: number; nextAt: number | null;
   expiresAt?: Record<string, number>;
 };
 export const SEARCH_INTERVAL_MS = 30_000;

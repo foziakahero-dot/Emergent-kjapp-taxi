@@ -91,13 +91,10 @@ export default function Home() {
   const methodsSequence = useRef(0);
   const searchingTrip = activeTrip && ['searching', 'booking'].includes(activeTrip.status) && !activeTrip.driver_id;
   const available = useAvailableCars({
+    locationRevision: mapFocusRevision,
     enabled: Boolean(searchingTrip || (!activeTrip && (locationReady || selectedPickup))),
-    lat: searchingTrip ? activeTrip.pickup_lat : pickupPoint.lat,
-    lng: searchingTrip ? activeTrip.pickup_lng : pickupPoint.lng,
-    vehicleType: searchingTrip ? activeTrip.vehicle_type : undefined,
+    vehicleType: searchingTrip ? activeTrip.vehicle_type : dropoff ? selType : undefined,
     specialNeeds: searchingTrip ? activeTrip.special_needs : specialNeeds,
-    // Home quietly refreshes supply; only a real trip shows dispatch/search progress.
-    continuous: true,
   });
   const cars = available.cars;
 
@@ -341,7 +338,7 @@ export default function Home() {
       {!activeTrip ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
-        nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
+        nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}

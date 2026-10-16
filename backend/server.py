@@ -24,6 +24,8 @@ from payment_method_selection import selected_payment_method
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
+from driver_media import install_driver_media, media_versions
+from live_cars import LiveCarsStream, RADIUS_KM, GPS_FRESH_SECONDS, position_bounds, fresh_sample_time
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
 from onboarding_emails import queue_confirmation, confirmation_loop, queue_customer_welcome
@@ -865,7 +867,7 @@ class TripRequest(BaseModel):
     dropoff_address: str = Field(min_length=1, max_length=200)
     dropoff_lat: float = Field(ge=-90, le=90)
     dropoff_lng: float = Field(ge=-180, le=180)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
     stops: List[TripStop] = Field(default_factory=list, max_length=3)
     special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = Field(default=None, max_length=500)
@@ -897,7 +899,7 @@ class UserPlaceRequest(BaseModel):
 class NearbyCarsRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
-    vehicle_type: Optional[Literal["ai-first", "trygg", "premium"]] = None
+    vehicle_type: Optional[Literal["ai-first", "trygg", "premium", "suv"]] = None
     special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
 
 
@@ -1132,8 +1134,11 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
             "minimum_fare": cfg.get("minimum_fare", DEFAULT_PRICING["minimum_fare"]),
         }
     else:
-        r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
-             **(vehicle_rates.get(vehicle_type) or {})}
+        # A new SUV class uses the existing roomy-vehicle tariff unless the
+        # server's pricing document explicitly configures its own SUV tariff.
+        rate_type = "trygg" if vehicle_type == "suv" and not vehicle_rates.get("suv") else vehicle_type
+        r = {**DEFAULT_PRICING["vehicle_rates"].get(rate_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
+             **(vehicle_rates.get(rate_type) or {})}
     base = float(r["base_fare"]) + float(distance_km) * float(r["per_km"]) + float(duration_min) * float(r["per_minute"])
     minimum = float(r.get("minimum_fare", cfg.get("minimum_fare", 0)) or 0)
     surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
@@ -1721,6 +1726,7 @@ async def lifespan(app: FastAPI):
     reservation_task = asyncio.create_task(ride_reservations.reconcile_loop())
     confirmation_task = asyncio.create_task(confirmation_loop(db, send_email, prepare_email=_prepare_onboarding_email, invite_sender=_deliver_driver_invite))
     integration_settings_task = asyncio.create_task(integration_settings.sync_loop())
+    live_cars_task = asyncio.create_task(live_cars_stream.run())
 
     yield
 
@@ -1728,7 +1734,9 @@ async def lifespan(app: FastAPI):
     reservation_task.cancel()
     confirmation_task.cancel()
     integration_settings_task.cancel()
-    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, return_exceptions=True)
+    live_cars_task.cancel()
+    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, live_cars_task, return_exceptions=True)
+    await live_cars_stream.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1749,6 +1757,10 @@ async def request_id_middleware(request: Request, call_next):
     request.state.request_id = rid
     try:
         response = await call_next(request)
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+            # GPS, availability, logout, assignment and fleet moderation all wake
+            # per-customer subscriptions immediately after the canonical write.
+            live_cars_stream.changed()
         response.headers["X-Request-ID"] = rid
         elapsed_ms = (perf_counter() - started) * 1000
         timing = response.headers.get("Server-Timing")
@@ -1888,20 +1900,20 @@ async def readiness():
 # ---- Available cars nearby (real driver fleet from DB) ----
 
 
-GPS_FRESH_SECONDS = 60  # a driver marker disappears when the GPS heartbeat is older than this
-
-
 @api.post("/cars/nearby")
-async def cars_nearby(body: NearbyCarsRequest, request: Request):
-    """ONLY real, approved, on-duty drivers with a live GPS heartbeat (<60s) within ~10km.
-    Simulated/demo driver records are never returned — an empty list is an honest 'no cars' answer."""
-    test_customer = False
-    if _auth_token_from_request(request):
-        caller = await get_current_user(request)
-        test_customer = ride_testing.is_test_customer(caller.get("id"))
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
+async def cars_nearby(body: NearbyCarsRequest, current=Depends(require_customer)):
+    """Authenticated snapshot, identical policy to the Socket.IO subscription."""
+    return await _nearby_cars_snapshot(body, current)
+
+
+async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
+    """Only available drivers with a current login and fresh GPS inside 5 km."""
+    test_customer = ride_testing.is_test_customer(caller.get("id"))
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
     cars = []
     async for u in db.users.find({
+        **position_bounds(body.lat, body.lng),
         "role": "driver",
         "approved": True,
         **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
@@ -1913,14 +1925,30 @@ async def cars_nearby(body: NearbyCarsRequest, request: Request):
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
+        "last_location_session.exp": {"$gt": now.timestamp()},
     }):
+        session = u.get("last_location_session") or {}
+        sample_time = fresh_sample_time(u, datetime.now(timezone.utc))
+        if not sample_time:
+            continue
+        if not _session_is_current(session, u) or await _session_is_revoked(session):
+            continue
         if await db.trips.find_one(_real_trip_filter({"driver_id": str(u["_id"]), "status": {"$in": ["booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}), {"_id": 1}):
             continue
         lat = u.get("last_lat")
         lng = u.get("last_lng")
-        if lat is None or lng is None or await _fleet_is_suspended(u.get("fleet_id")):
+        if (not isinstance(lat, (int, float)) or isinstance(lat, bool) or not math.isfinite(lat)
+                or not isinstance(lng, (int, float)) or isinstance(lng, bool) or not math.isfinite(lng)
+                or abs(lat) > 90 or abs(lng) > 180):
             continue
-        assigned_vehicle = await _assigned_fleet_vehicle(u, required=False)
+        if await _fleet_is_suspended(u.get("fleet_id")):
+            continue
+        try:
+            assigned_vehicle = await _assigned_fleet_vehicle(u, required=False)
+        except HTTPException as exc:
+            if exc.status_code in (403, 404, 409):
+                continue
+            raise
         if not assigned_vehicle:
             continue
         if body.vehicle_type and (assigned_vehicle.get("vehicle_type") or "ai-first") != body.vehicle_type:
@@ -1931,33 +1959,60 @@ async def cars_nearby(body: NearbyCarsRequest, request: Request):
         if not compliance.get("operational"):
             await _block_driver_new_work(str(u["_id"]), compliance["message"])
             continue
+        # Fence availability after awaited fleet/compliance checks. Offline,
+        # assignment or a GPS move cannot revive a marker from an earlier read.
+        fresh = await db.users.find_one({"_id": u["_id"], "online": True, "approved": True,
+            "disabled": {"$ne": True}, "active_trip_id": {"$in": [None, ""]},
+            "last_lat": lat, "last_lng": lng})
+        if not fresh:
+            continue
+        sample_time = fresh_sample_time(fresh, datetime.now(timezone.utc))
+        if not sample_time:
+            continue
         d_km = haversine_km(body.lat, body.lng, lat, lng)
-        if d_km > 10:
+        if d_km > RADIUS_KM:
             continue
         # driver "speed": approx 30 km/h in city -> eta = d/30*60 min, min 1 min
         eta = max(1, int(round(d_km / 30 * 60)))
         cars.append({
             "id": str(u["_id"]),
+            **media_versions(u, assigned_vehicle),
             "name": u.get("fullName") or "Sjåfør",
             "car": assigned_vehicle.get("car") or "",
             "plate": assigned_vehicle.get("plate") or "",
             "rating": round(float(u["rating"]), 1) if isinstance(u.get("rating"), (int, float)) else None,
             "type": assigned_vehicle.get("vehicle_type") or "ai-first",
+            "body_type": assigned_vehicle.get("body_type") or ("suv" if assigned_vehicle.get("vehicle_type") == "suv" else "van" if assigned_vehicle.get("vehicle_type") == "trygg" else "executive" if assigned_vehicle.get("vehicle_type") == "premium" else "sedan"),
             "lat": lat,
             "lng": lng,
             "heading": u.get("last_heading") or 0,
             "eta_min": eta,
             "distance_km": round(d_km, 2),
-            "updated_at": u.get("last_location_at"),
+            # Device sample age matters too: a delayed background batch must not
+            # become a fresh marker merely because the server just received it.
+            "updated_at": sample_time,
         })
     cars.sort(key=lambda x: x["eta_min"])
     return {
         "cars": cars,
         "count": len(cars),
         "live": True,
+        "radius_km": RADIUS_KM,
         "gps_fresh_seconds": GPS_FRESH_SECONDS,
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
+
+
+async def _authenticate_car_stream(token: str):
+    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    return require_customer(await get_current_user(request))
+
+
+live_cars_stream = LiveCarsStream(
+    app, authenticate=_authenticate_car_stream, snapshot=_nearby_cars_snapshot,
+    parse=NearbyCarsRequest.model_validate,
+    origins=compute_cors_origins(APP_ENV, os.environ.get("FRONTEND_URL", "")),
+)
 
 
 @api.get("/places")
@@ -2163,7 +2218,7 @@ async def trip_estimate(body: EstimateRequest):
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
     options = []
-    for vt in ("ai-first", "enkelt", "trygg", "premium"):
+    for vt in ("ai-first", "enkelt", "trygg", "premium", "suv"):
         quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
@@ -2407,6 +2462,8 @@ async def logout(request: Request, response: Response):
     if token:
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            if payload.get("type") == "2fa":
+                raise jwt.InvalidTokenError()
             user_id = payload.get("sub")
             jti = payload.get("jti")
             if jti:
@@ -2422,6 +2479,18 @@ async def logout(request: Request, response: Response):
                     {"_id": ObjectId(user_id)},
                     {"$set": {"tokens_valid_after": datetime.now(timezone.utc).timestamp()}},
                 )
+            if user_id:
+                # Logout removes supply even if a device never toggled offline.
+                # An older device logout must not take a newer driver's session
+                # offline; its revoked JTI is still excluded from snapshots.
+                result = await db.users.update_one(
+                    {"_id": ObjectId(user_id), "role": "driver",
+                     "$or": [{"last_location_session.jti": jti}, {"last_location_session": {"$exists": False}}]},
+                    {"$set": {"online": False}, "$unset": {"last_location_session": ""}},
+                )
+                if result.modified_count:
+                    await db.driver_sessions.update_many({"driver_id": user_id, "ended_at": None},
+                        {"$set": {"ended_at": datetime.now(timezone.utc).isoformat()}})
         except (jwt.PyJWTError, InvalidId, TypeError, ValueError):
             pass
     response.delete_cookie("access_token", path="/")
@@ -5066,7 +5135,7 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
 
 
 @api.post("/driver/location")
-async def driver_location(body: DriverLocationRequest, current=Depends(require_driver)):
+async def driver_location(body: DriverLocationRequest, request: Request, current=Depends(require_driver)):
     """Accept a fresh, physically plausible GPS sample from the driver device."""
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
@@ -5104,8 +5173,14 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
 
     speed = max(0.0, float(body.speed or 0.0))
     heading = float(body.heading or 0.0) % 360
-    await db.users.update_one(
-        {"_id": ObjectId(current["id"])},
+    # Presence is tied to the authenticated session, never a client-supplied ID.
+    payload = jwt.decode(_auth_token_from_request(request), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    result = await db.users.update_one(
+        {"_id": ObjectId(current["id"]), "$or": [
+            {"last_location_recorded_at": {"$exists": False}},
+            {"last_location_recorded_at": None},
+            {"last_location_recorded_at": {"$lte": recorded.isoformat()}},
+        ]},
         {"$set": {
             "last_lat": body.lat,
             "last_lng": body.lng,
@@ -5113,8 +5188,11 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
             "last_speed": speed,
             "last_location_at": now_iso,
             "last_location_recorded_at": recorded.isoformat(),
+            "last_location_session": {key: payload.get(key) for key in ("jti", "iat", "exp")},
         }},
     )
+    if result.matched_count != 1:
+        raise HTTPException(409, "En nyere GPS-posisjon er allerede mottatt")
     # If driver has an active trip, update canonical trip coordinates for the passenger map.
     active_trip = await db.trips.find_one(
         _real_trip_filter({"driver_id": current["id"], "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
@@ -5422,7 +5500,12 @@ async def google_oauth_config():
 
 
 async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
-    header = jwt.get_unverified_header(id_token)
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Ugyldig Google-token")
+    if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
+        raise HTTPException(401, "Ugyldig Google-token")
     kid = header.get("kid")
     keys = await _get_google_keys()
     key_data = next((k for k in keys if k.get("kid") == kid), None)
@@ -5435,8 +5518,8 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
     try:
         claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id, options={"require": ["exp", "aud", "sub", "iss"]})
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Ugyldig Google-token: {e}")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Google-innloggingen kunne ikke bekreftes. Prøv igjen.")
     if claims.get("iss") not in GOOGLE_ISSUERS:
         raise HTTPException(status_code=401, detail="Ugyldig Google-utsteder")
     return claims
@@ -5909,13 +5992,13 @@ async def fleet_trip_history(
 class FleetVehicleCreateRequest(BaseModel):
     car: str = Field(min_length=2, max_length=120)
     plate: str = Field(min_length=2, max_length=24)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
 
 
 class FleetVehicleUpdateRequest(BaseModel):
     car: Optional[str] = Field(default=None, min_length=2, max_length=120)
     plate: Optional[str] = Field(default=None, min_length=2, max_length=24)
-    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium"]] = None
+    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium", "suv"]] = None
     active: Optional[bool] = None
 
 
@@ -7620,7 +7703,7 @@ class DriverInviteRequest(BaseModel):
     # Legacy display fields are accepted for old clients but are never canonical for fleet invites.
     car: Optional[str] = ""
     plate: Optional[str] = ""
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
     email: Optional[EmailStr] = None  # if set, send invite via SendGrid
@@ -11206,7 +11289,7 @@ def _validate_pricing(p: dict):
         if key in surge and not 1.0 <= float(surge[key]) <= 5.0:
             raise HTTPException(400, f"surge.{key} må være mellom 1.0 og 5.0")
     for vt, rates in (p.get("vehicle_rates") or {}).items():
-        if vt not in ("ai-first", "enkelt", "trygg", "premium"):
+        if vt not in ("ai-first", "enkelt", "trygg", "premium", "suv"):
             raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
         _validate_pricing(rates)
     for area_id, area in (p.get("areas") or {}).items():
@@ -11308,7 +11391,7 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
 class PricingTestRequest(BaseModel):
     distance_km: float = Field(ge=0, le=2000)
     duration_min: float = Field(ge=0, le=1440)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
     pickup_lat: Optional[float] = None
     pickup_lng: Optional[float] = None
     waiting_minutes: float = Field(default=0, ge=0, le=1440)
@@ -11317,7 +11400,7 @@ class PricingTestRequest(BaseModel):
 class PricingRouteTestRequest(BaseModel):
     pickup_address: str = Field(min_length=2, max_length=200)
     dropoff_address: str = Field(min_length=2, max_length=200)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
 
 
 class PricingRollbackRequest(BaseModel):
@@ -11612,6 +11695,10 @@ handle_native_payment_webhook = install_mobile_commerce(
     mark_paid=_mark_trip_paid_and_complete, send_receipts=send_trip_receipts,
     on_customer_created=lambda user: queue_customer_welcome(db, user),
 )
+
+install_driver_media(api, db, require_driver=require_driver, require_customer=require_customer,
+    assigned_vehicle=_assigned_fleet_vehicle, snapshot=_nearby_cars_snapshot,
+    parse_circle=NearbyCarsRequest.model_validate, read_document=get_stored_document)
 
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 

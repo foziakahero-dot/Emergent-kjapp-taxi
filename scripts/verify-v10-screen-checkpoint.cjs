@@ -83,6 +83,7 @@ function load(app, file) {
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
     if (stubs[name]) return stubs[name];
+    if (/\.(png|webp)$/.test(name)) { const asset = path.resolve(path.dirname(absolute), name); assert.ok(fs.statSync(asset).size > 0); return { uri: asset }; }
     if (name.startsWith('@/')) {
       const relative = name.slice(2);
       return load(app, relative + (fs.existsSync(path.join(root, app, relative + '.tsx')) ? '.tsx' : '.ts'));
@@ -311,12 +312,12 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   navigation = []; socialCalls = 0;
   tree = await mount(Login); const driverSocialRequest = deferred();
   socialLoginResult = () => driverSocialRequest.promise;
-  await act(async () => { button(tree, 'driver-login-google').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
+  await act(async () => { tree.root.findByType('AppleButton').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
   assert.equal(socialCalls, 1, 'Driver social providers share the password lock');
   await act(async () => driverSocialRequest.resolve({ id: 'driver', role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }));
   assert.equal(navigation.at(-1)[1], '/driver-approval'); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => null; navigation = [];
-  await act(async () => button(tree, 'driver-login-google').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
+  assert.equal(tree.root.findAll(node => node.props.testID === 'driver-login-google').length, 0); await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => { throw new Error('Provider unavailable'); };
   await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.match(text(tree), /Provider unavailable/); assert.equal(button(tree, 'driver-login-submit').props.disabled, false); await unmount(tree);
   const Register = load('frontend', 'app/register.tsx').default;
@@ -664,13 +665,13 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   console.log('PASS: Actual Driver shift duplicate lock, pending view, confirmed state, network failure, rejected acknowledgement and retry.');
   stubs['@/src/components/VehicleAsset'] = { VehicleAsset: 'VehicleAsset' };
   const supplyConfigs = [];
-  const supplyCars = [{ id:'standard-live',type:'ai-first',lat:59.915,lng:10.748,eta_min:4 },{ id:'xl-live',type:'trygg',lat:59.914,lng:10.747,eta_min:7 },{ id:'premium-live',type:'premium',lat:59.913,lng:10.746,eta_min:6 }];
+  const supplyCars = [{ id:'standard-live',type:'ai-first',lat:59.915,lng:10.748,eta_min:4 },{ id:'suv-live',type:'suv',lat:59.914,lng:10.747,eta_min:7 },{ id:'premium-live',type:'premium',lat:59.913,lng:10.746,eta_min:6 }];
   stubs['@/src/lib/useAvailableCars'] = { useAvailableCars: config => { supplyConfigs.push(config); return { cars:supplyCars,phase:'ready' }; } };
   stubs['@/src/components/AvailabilityStatus'] = { AvailabilityStatus: 'AvailabilityStatus' };
   stubs['@/src/components/ActiveTripCard'] = { ActiveTripCard: 'ActiveTripCard', LIVE_TRIP_STATUSES: ['searching', 'driver_on_way', 'at_pickup', 'in_trip'] };
   stubs['@/src/lib/recentPlaces'] = { recentDestinations: () => [] };
   const card = { id: 'verified-card', label: 'Visa', last4: '4321', verified: true, setup_status: 'succeeded', stripe_payment_method_id: 'pm_verified', created_at: '2026-10-13' };
-  const quote = { distance_km: 3.4, duration_min: 11, pricing_version: 7, geometry: { coordinates: [[10.74, 59.91], [10.75, 59.92]] }, options: [{ vehicle_type: 'ai-first', price: 184, waiting_policy: { token: 'waiting-policy', free_minutes: 5, per_minute: 4, max_fee: 40 } }, { vehicle_type: 'trygg', price: 240 }, { vehicle_type: 'premium', price: 300 }] };
+  const quote = { distance_km: 3.4, duration_min: 11, pricing_version: 7, geometry: { coordinates: [[10.74, 59.91], [10.75, 59.92]] }, options: [{ vehicle_type: 'ai-first', price: 184, waiting_policy: { token: 'waiting-policy', free_minutes: 5, per_minute: 4, max_fee: 40 } }, { vehicle_type: 'suv', price: 240 }, { vehicle_type: 'premium', price: 300 }] };
   let bookingRequests = [], customerActive = null; const requesting = deferred();
   user = { id: 'customer-home', role: 'user', fullName: 'Actual Customer' };
   Object.assign(stubs['expo-location'], { getForegroundPermissionsAsync: async () => ({ status: 'granted' }), hasServicesEnabledAsync: async () => true });
@@ -688,7 +689,12 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(tree.root.findAll(node => node.type === 'Map')[0].props.focusMode, 'route');
   await act(async () => button(tree, 'route-choose-vehicle').props.onPress());
   assert.match(text(tree),/4 min unna/);assert.match(text(tree),/7 min unna/);assert.match(text(tree),/6 min unna/);
-  assert.equal(button(tree,'vehicle-comfort').props.disabled,true,'A legacy enkelt quote cannot manufacture a Comfort class');
+  assert.equal(tree.root.findAll(node => node.type === 'Pressable' && node.props.accessibilityRole === 'radio' && String(node.props.testID).startsWith('vehicle-')).length,3);
+  assert.equal(button(tree,'vehicle-comfort'),undefined);
+  await act(async()=>button(tree,'vehicle-premium').props.onPress());assert.match(text(tree),/Bestill Premium · 300 kr/);assert.equal(supplyConfigs.at(-1).vehicleType,'premium');
+  assert.equal(tree.root.findAll(node=>node.props.testID==='available-driver-standard-live').length,0);
+  assert.ok(tree.root.findAll(node=>node.props.testID==='available-driver-premium-live').length);
+  await act(async()=>button(tree,'vehicle-ai-first').props.onPress());
   await act(async () => button(tree, 'booking-payment-row').props.onPress());
   assert.match(text(tree), /4321/);
   assert.doesNotMatch(text(tree), /Equinor|4821/);
@@ -815,9 +821,9 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['expo-image']={Image:'CategoryImage'};
   const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
   tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));
-  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/photo-1560958089-b8a1929cea89/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');
-  await act(async()=>tree.root.findByType('CategoryImage').props.onError());assert.equal(tree.root.findAllByType('CategoryImage').length,0);assert.equal(tree.root.findByType('VehicleAsset').props.kind,'ai-first');await unmount(tree);
-  console.log('PASS: Customer 09/10 all-class home supply, actual per-class ETA, unavailable Comfort/provider guards, canonical card, real expiry, original illustration URL and CDN fallback.');
+  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/standard-3d.webp/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'contain');await unmount(tree);
+  for(const [kind,asset] of [['premium','premium-3d.webp'],['suv','suv-category.png']]) { tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:false}));assert.ok(tree.root.findByType('CategoryImage').props.source.uri.endsWith(asset));await unmount(tree); }
+  console.log('PASS: Customer 09/10 all-class home supply, three categories, immediate quoted prices, selected-category drivers, canonical card and distinct bundled illustrations.');
   // Customer 11/12: canonical consent contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);
   assert.equal(helpers.confirmedWaitingPolicy({token:'valid',free_minutes:5,per_minute:-1,max_fee:40}),false);
