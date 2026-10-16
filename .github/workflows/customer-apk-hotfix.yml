@@ -1,153 +1,26 @@
-name: SNAR Customer APK - manual gated build
+name: SNAR Customer QA APK - locked EAS signing
 
 on:
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: "Customer branch/ref to build"
-        required: true
-        default: "fix/customer-search-mapbox-stripe-20261004"
-        type: string
       expected_sha:
-        description: "Exact Customer commit SHA that passed preflight"
-        required: true
-        default: "a7bd5261da2cf5d54d7a759e3c1da82028df5927"
+        description: Full reviewed QA commit already deployed on Render
         type: string
-      confirmation:
-        description: "Type BUILD_ONE_CUSTOMER_APK exactly"
         required: true
+      authorization:
+        description: Enter BUILD_QA_APK after approving this release
         type: string
+        required: true
 
 permissions:
   contents: read
-  statuses: read
-
-concurrency:
-  group: snar-customer-apk-manual
-  cancel-in-progress: true
-
-env:
-  CI: "1"
-  EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
 
 jobs:
-  guard:
-    name: Cost-control guard
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      sha: ${{ steps.source.outputs.sha }}
-    steps:
-      - name: Reject accidental invocation
-        if: ${{ inputs.confirmation != 'BUILD_ONE_CUSTOMER_APK' }}
-        shell: bash
-        run: |
-          echo "Native build blocked. Confirmation text was not exact."
-          exit 1
-
-      - name: Checkout exact Customer ref
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 1
-
-      - name: Verify exact source SHA
-        id: source
-        shell: bash
-        run: |
-          set -euo pipefail
-          ACTUAL_SHA="$(git rev-parse HEAD)"
-          echo "sha=$ACTUAL_SHA" >> "$GITHUB_OUTPUT"
-          echo "Customer source SHA: $ACTUAL_SHA"
-          if [ "$ACTUAL_SHA" != "${{ inputs.expected_sha }}" ]; then
-            echo "Build blocked: ref resolved to $ACTUAL_SHA, expected ${{ inputs.expected_sha }}"
-            exit 1
-          fi
-
-      - name: Require green preflight status for the exact SHA
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ steps.source.outputs.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          STATE="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/status" --jq '[.statuses[] | select(.context == "snar/customer-preflight")][0].state // "missing"')"
-          echo "snar/customer-preflight status: $STATE"
-          if [ "$STATE" != "success" ]; then
-            echo "Build blocked: exact SHA has not passed Customer preflight."
-            exit 1
-          fi
-
-  build:
-    name: Build one SNAR Customer APK
-    needs: guard
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - name: Checkout exact validated Customer ref
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 1
-
-      - name: Re-verify SHA before native work
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${{ needs.guard.outputs.sha }}"
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "cmake;3.22.1" \
-            "ndk;27.1.12297006"
-
-      - name: Install Customer dependencies
-        working-directory: frontend
-        run: npm ci --no-audit --no-fund
-
-      - name: Generate Android project
-        working-directory: frontend
-        run: npx expo prebuild --platform android --clean
-
-      - name: Build release APK locally on GitHub - no EAS build call
-        working-directory: frontend/android
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '\norg.gradle.workers.max=2\norg.gradle.parallel=false\norg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8\n' >> gradle.properties
-          chmod +x gradlew
-          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
-          test -s app/build/outputs/apk/release/app-release.apk
-          cp app/build/outputs/apk/release/app-release.apk ../../SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk
-          sha256sum ../../SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk > ../../SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk.sha256
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64
-          path: |
-            SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk
-            SNAR-Customer-${{ needs.guard.outputs.sha }}-arm64.apk.sha256
-          if-no-files-found: error
-          retention-days: 7
+  apk:
+    uses: ./.github/workflows/qa-android-eas.yml
+    with:
+      app_directory: frontend
+      expected_sha: ${{ inputs.expected_sha }}
+      authorization: ${{ inputs.authorization }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

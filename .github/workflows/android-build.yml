@@ -1,18 +1,26 @@
-name: Legacy Android native build - disabled
+name: SNAR Driver QA APK - locked EAS signing
 
 on:
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full reviewed QA commit already deployed on Render
+        type: string
+        required: true
+      authorization:
+        description: Enter BUILD_QA_APK after approving this release
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 jobs:
-  disabled:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Native auto-builds are disabled for cost control
-        run: |
-          echo "This legacy Customer + Driver Android builder is intentionally disabled."
-          echo "Use SNAR Customer Preflight first, then SNAR Customer APK manual gated build for Customer."
-          echo "No Gradle, Expo EAS, Customer APK, or Driver APK build is started by this workflow."
+  apk:
+    uses: ./.github/workflows/qa-android-eas.yml
+    with:
+      app_directory: driver-app
+      expected_sha: ${{ inputs.expected_sha }}
+      authorization: ${{ inputs.authorization }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

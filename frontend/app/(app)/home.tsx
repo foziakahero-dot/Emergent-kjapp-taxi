@@ -56,7 +56,6 @@ export default function Home() {
   const [quotedAt, setQuotedAt] = useState<number | null>(null);
   const [quoteRevision, setQuoteRevision] = useState(0);
   const setQuote = useCallback((result: any) => { setEstimate(result); setQuotedAt(result ? Date.now() : null); }, []);
-  const [waitingAccepted, setWaitingAccepted] = useState(false);
   const [selType, setSelType] = useState('ai-first');
   const bookingLock = useRef(false);
   const mapBlurTarget = useRef<View>(null);
@@ -106,7 +105,7 @@ export default function Home() {
       setSelectedPickup({ name: t.pickup_address, lat: t.pickup_lat, lng: t.pickup_lng });
       setDropoff({ name: t.dropoff_address, lat: t.dropoff_lat, lng: t.dropoff_lng });
       setSelType(t.vehicle_type || 'ai-first'); setSpecialNeeds(t.special_needs || []); setStops((t.stops || []).map((stop: any) => ({ ...stop, name: stop.address || stop.name })));
-      setWaitingAccepted(false); setReviewing(false);
+      setReviewing(false);
     }).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisemål. Velg hentested og reisemål på nytt.'); });
     return () => { mounted = false; };
   }, [retryTripId]);
@@ -213,7 +212,6 @@ export default function Home() {
   const nearest = vehicleEtas[selType] ?? null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
-  useEffect(() => setWaitingAccepted(false), [estimate, selType]);
   const payMethod = confirmedPaymentMethod(methods);
   const quickPlaces = [...myPlaces, ...recentPlaces].filter(place => normalizeSearchPlace(place)).filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
 
@@ -235,10 +233,6 @@ export default function Home() {
     }
     if (!confirmedWaitingPolicy(waitingPolicy)) {
       setError('Vilkårene for ventetid kunne ikke bekreftes. Oppdater tilbudet.');
-      return;
-    }
-    if (!waitingAccepted) {
-      setError('Bekreft ventetid og kortreservasjon før bestilling.');
       return;
     }
     if (!payMethod) {
@@ -278,7 +272,6 @@ export default function Home() {
         }
       } catch {}
       if (e?.response?.data?.detail?.code === 'quote_changed') {
-        setWaitingAccepted(false);
         setQuote(null);
         setError('Prisen er endret. Kontroller det nye tilbudet og bekreft på nytt.');
         const fresh = await tripsApi.estimate({
@@ -303,9 +296,9 @@ export default function Home() {
 
   const routeGeom = estimate?.geometry?.coordinates;
   const previewRoute = useRouteReveal(routeGeom, Boolean(!activeTrip && dropoff));
-  // Payment and waiting consent are completed on the review screen.
+  // The final booking action confirms the displayed quote and reservation terms.
   const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
-  const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy) && waitingAccepted);
+  const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy));
   const selectedPrice = priceFor(selType);
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
   const initials = (user?.fullName || 'SNAR').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
@@ -339,7 +332,7 @@ export default function Home() {
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
         nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
-        waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
+        busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
@@ -347,7 +340,7 @@ export default function Home() {
         onPlace={place => { const destination = normalizeSearchPlace(place); if (destination) { setQuote(null); setMapFocusRevision(value => value + 1); setDropoff(destination); } }}
         onLocate={() => { void refreshLocation().then(confirmed => { if (confirmed) { setSelectedPickup(null); setMapFocusRevision(value => value + 1); } }); }} onVoice={openVoice} onProfile={() => router.push('/(app)/profile')} onNotifications={() => router.push('/customer-notifications')} onSchedule={() => router.push('/scheduled-trip')}
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
-        onPayment={() => router.push('/payment-methods')} onConsent={() => setWaitingAccepted(value => !value)}
+        onPayment={() => router.push('/payment-methods')}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
         onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}

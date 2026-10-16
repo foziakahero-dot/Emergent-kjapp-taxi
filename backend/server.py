@@ -1796,8 +1796,16 @@ async def health():
         "app": "KJAPP",
         "status": "ok" if db_ok else "degraded",
         "db": db_ok,
+        "release": release_info(),
         "time": datetime.now(timezone.utc).isoformat(),
     })
+
+
+def release_info():
+    """Public deployment identity; never expose runtime configuration/secrets."""
+    commit = os.environ.get("RENDER_GIT_COMMIT", "")
+    return {"commit": commit if re.fullmatch(r"[0-9a-f]{40}", commit) else "",
+            "environment": APP_ENV}
 
 
 @api.get("/ready")
@@ -1893,6 +1901,7 @@ async def readiness():
         "status": "ready" if not blockers else "not_ready",
         "checks": checks,
         "blockers": blockers,
+        "release": release_info(),
         "time": datetime.now(timezone.utc).isoformat(),
     })
 
