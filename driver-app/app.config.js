@@ -7,6 +7,12 @@ module.exports = ({ config: base }) => {
   );
   const isQaBuild = ['qa', 'testflight-qa'].includes(process.env.EAS_BUILD_PROFILE);
   const plugins = [...base.plugins, 'expo-apple-authentication'];
+  const iosClient = ((isQaBuild ? process.env.EXPO_PUBLIC_QA_GOOGLE_DRIVER_IOS_CLIENT_ID : process.env.EXPO_PUBLIC_GOOGLE_DRIVER_IOS_CLIENT_ID) || '').trim();
+  if (iosClient.endsWith('.apps.googleusercontent.com')) {
+    plugins.push(['@react-native-google-signin/google-signin', {
+      iosUrlScheme: `com.googleusercontent.apps.${iosClient.replace('.apps.googleusercontent.com', '')}`,
+    }]);
+  }
   const googleServicesFile = isQaBuild ? process.env.QA_GOOGLE_SERVICES_JSON : process.env.GOOGLE_SERVICES_JSON;
   if (process.env.EAS_BUILD_PLATFORM === 'android' &&
       process.env.KJAPP_REQUIRE_FIREBASE === 'true' && !googleServicesFile) {

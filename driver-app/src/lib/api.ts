@@ -33,8 +33,12 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
+  googleWebConfig: () => api.get('/auth/google/web/config', { params: { client: 'driver' } }).then(r => r.data),
+  googleWebCode: (code: string, code_verifier: string, redirect_uri: string, action: 'signin' | 'link' = 'signin') =>
+    api.post(action === 'link' ? '/auth/google/web/link' : '/auth/google/web/code', { code, code_verifier, redirect_uri, client: 'driver' }).then(r => r.data),
+  linkGoogle: (identity_token: string) => api.post('/auth/google/link', { identity_token, client: 'driver' }).then(r => r.data),
   nativeConfig: () => api.get('/auth/native/config', { params: { client: 'driver' } }).then((r) => r.data),
-  nativeSignIn: (provider: 'apple', identity_token: string, device_id?: string) =>
+  nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
     api.post(`/auth/${provider}/native`, { identity_token, client: 'driver', device_id }).then((r) => r.data),
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'driver' }).then((r) => r.data),

@@ -108,13 +108,13 @@ def test_unapproved_driver_is_blocked(env):
     assert sign_in(env, 'driver').status_code == 403
 
 
-def test_google_is_removed_even_for_an_approved_driver(env):
+def test_google_accepts_only_linked_approved_driver(env):
     env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'role': 'driver', 'approved': True, 'fleet_id': str(env.fid)}})
-    assert sign_in(env, 'driver').status_code == 403
-    env.verify.assert_not_awaited()
-    env.risk.assert_not_awaited()
+    assert sign_in(env, 'driver').status_code == 200
+    env.verify.assert_awaited_once_with('verified-token', 'owned-web-client')
+    env.risk.assert_awaited_once()
     config = env.client.get('/auth/native/config?client=driver').json()
-    assert config['google_enabled'] is False and config['google_web_client_id'] == ''
+    assert config['google_enabled'] is True and config['google_web_client_id'] == 'owned-web-client'
 
 
 def test_existing_identity_is_not_overwritten(env):

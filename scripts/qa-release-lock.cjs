@@ -16,8 +16,8 @@ function assertSource(env, actualSha) {
   if (directQaRun && env.GITHUB_SHA !== actualSha) throw new Error('Workflow event SHA, checked-out source and reviewed SHA must match.');
 
   if (!['frontend', 'driver-app'].includes(env.QA_APP_DIRECTORY)) throw new Error('Unknown QA app.');
-  if (env.QA_APP_DIRECTORY === 'frontend' && !/^[a-f0-9]{40}$/i.test((env.QA_ANDROID_CERT_SHA1 || '').replace(/:/g, ''))) {
-    throw new Error('Configure the registered Customer Android signing SHA-1 before building Google sign-in.');
+  if (!/^[a-f0-9]{40}$/i.test((env.QA_ANDROID_CERT_SHA1 || '').replace(/:/g, ''))) {
+    throw new Error('Configure the registered app Android signing SHA-1 before building Google sign-in.');
   }
 }
 

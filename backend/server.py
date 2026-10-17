@@ -1737,6 +1737,7 @@ async def lifespan(app: FastAPI):
     live_cars_task.cancel()
     await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, live_cars_task, return_exceptions=True)
     await live_cars_stream.close()
+    await road_eta.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1906,6 +1907,9 @@ async def readiness():
     })
 
 
+from google_maps_eta import GoogleMapsEta
+road_eta = GoogleMapsEta()
+
 # ---- Available cars nearby (real driver fleet from DB) ----
 
 
@@ -1928,6 +1932,9 @@ async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
         **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
            {"accepted_terms_at": {"$exists": True, "$ne": None}}),
         "online": True,
+        "available": {"$ne": False}, "absent": {"$ne": True},
+        "away": {"$ne": True}, "on_break": {"$ne": True},
+        "availability_status": {"$in": [None, "available", "idle"]},
         **ride_testing.driver_supply_filter(test_customer),
         "active_trip_id": {"$in": [None, ""]},
         "disabled": {"$ne": True},
@@ -1971,7 +1978,9 @@ async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
         # Fence availability after awaited fleet/compliance checks. Offline,
         # assignment or a GPS move cannot revive a marker from an earlier read.
         fresh = await db.users.find_one({"_id": u["_id"], "online": True, "approved": True,
-            "disabled": {"$ne": True}, "active_trip_id": {"$in": [None, ""]},
+            "disabled": {"$ne": True}, "available": {"$ne": False}, "absent": {"$ne": True},
+            "away": {"$ne": True}, "on_break": {"$ne": True},
+            "availability_status": {"$in": [None, "available", "idle"]}, "active_trip_id": {"$in": [None, ""]},
             "last_lat": lat, "last_lng": lng})
         if not fresh:
             continue
@@ -1981,8 +1990,6 @@ async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
         d_km = haversine_km(body.lat, body.lng, lat, lng)
         if d_km > RADIUS_KM:
             continue
-        # driver "speed": approx 30 km/h in city -> eta = d/30*60 min, min 1 min
-        eta = max(1, int(round(d_km / 30 * 60)))
         cars.append({
             "id": str(u["_id"]),
             **media_versions(u, assigned_vehicle),
@@ -1995,13 +2002,16 @@ async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
             "lat": lat,
             "lng": lng,
             "heading": u.get("last_heading") or 0,
-            "eta_min": eta,
+            "online": True, "available": True,
             "distance_km": round(d_km, 2),
             # Device sample age matters too: a delayed background batch must not
             # become a fresh marker merely because the server just received it.
             "updated_at": sample_time,
         })
-    cars.sort(key=lambda x: x["eta_min"])
+    # Google requests run in the background. Never delay offline/busy removals
+    # or fresh GPS delivery while waiting for the ETA provider.
+    road_eta.enrich(cars, (body.lat, body.lng))
+    cars.sort(key=lambda car: (car["eta_min"] is None, car["eta_min"] or 0, car["distance_km"]))
     return {
         "cars": cars,
         "count": len(cars),
@@ -5480,6 +5490,7 @@ async def _get_google_keys(force: bool = False):
         return GOOGLE_KEYS_CACHE["keys"]
     async with httpx.AsyncClient(timeout=8.0) as client:
         r = await client.get(GOOGLE_JWKS_URL)
+        r.raise_for_status()
         keys = r.json().get("keys", [])
     GOOGLE_KEYS_CACHE.update({"keys": keys, "fetched_at": now})
     return keys
@@ -5516,10 +5527,16 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
     if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
         raise HTTPException(401, "Ugyldig Google-token")
     kid = header.get("kid")
-    keys = await _get_google_keys()
+    try:
+        keys = await _get_google_keys()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Google-nøkler er midlertidig utilgjengelige.")
     key_data = next((k for k in keys if k.get("kid") == kid), None)
     if not key_data:  # Google rotates keys — refresh once before failing
-        keys = await _get_google_keys(force=True)
+        try:
+            keys = await _get_google_keys(force=True)
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(503, "Google-nøkler er midlertidig utilgjengelige.")
         key_data = next((k for k in keys if k.get("kid") == kid), None)
     if not key_data:
         raise HTTPException(status_code=401, detail="Ukjent Google-nøkkel")
@@ -5531,6 +5548,8 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
         raise HTTPException(status_code=401, detail="Google-innloggingen kunne ikke bekreftes. Prøv igjen.")
     if claims.get("iss") not in GOOGLE_ISSUERS:
         raise HTTPException(status_code=401, detail="Ugyldig Google-utsteder")
+    if not isinstance(claims.get("sub"), str) or not claims["sub"].strip():
+        raise HTTPException(401, "Ugyldig Google-identitet")
     return claims
 
 
@@ -5540,75 +5559,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
     Identity is taken ONLY from the cryptographically verified id_token — never from the client."""
     if APP_ENV == "qa":
         raise HTTPException(status_code=503, detail="Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
-    await _enforce_rate_limit(request, "auth-google-code", 60, 900)
-    if not google_oauth_configured():
-        raise HTTPException(status_code=503, detail="Google-innlogging er ikke konfigurert ennå")
-    client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
-    client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
-    async with httpx.AsyncClient(timeout=12.0) as client:
-        r = await client.post(GOOGLE_TOKEN_URL, data={
-            "code": body.code,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code_verifier": body.code_verifier,
-            "redirect_uri": body.redirect_uri,
-            "grant_type": "authorization_code",
-        })
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Google avviste innloggingen")
-    id_token = r.json().get("id_token")
-    if not id_token:
-        raise HTTPException(status_code=401, detail="Ingen id_token fra Google")
-
-    claims = await _verify_google_id_token(id_token, client_id)
-    google_sub = claims.get("sub")
-    email = (claims.get("email") or "").strip().lower()
-    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
-    if not google_sub:
-        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
-    if not (email and email_verified):
-        raise HTTPException(status_code=400, detail="Google-kontoen mangler verifisert e-post")
-
-    name = claims.get("name") or email.split("@")[0]
-    user = await db.users.find_one({"google_sub": google_sub}) or await db.users.find_one({"email": email})
-    if user:
-        if user.get("disabled") or user.get("role", "user") != "user":
-            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
-        uid = str(user["_id"])
-        role = "user"
-        driver_id = None
-        display_name = user.get("fullName") or name
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {
-            "google_sub": google_sub, "google_linked": True, "picture": claims.get("picture"),
-        }})
-        phone = user.get("phone", "")
-        email = user["email"]
-    else:
-        display_name = name
-        result = await db.users.insert_one({
-            "email": email,
-            "password_hash": await asyncio.to_thread(hash_password, secrets.token_hex(16)),  # unused, login goes through Google
-            "fullName": display_name,
-            "phone": "",
-            "picture": claims.get("picture"),
-            "role": "user",
-            "google_sub": google_sub,
-            "google_linked": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        uid = str(result.inserted_id)
-        role = "user"
-        driver_id = None
-        phone = ""
-
-    if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
-    token = create_access_token(uid, email)
-    set_auth_cookie(response, token)
-    session_user = await db.users.find_one({"_id": ObjectId(uid)})
-    if not session_user:
-        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
-    return {"token": token, "user": user_public(session_user)}
+    raise HTTPException(410, "Bruk /auth/google/web/code for sikker Google-innlogging.")
 
 
 # ============================================================
