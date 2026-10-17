@@ -1,0 +1,33 @@
+{
+  "source": "Owner-provided SNAR Fleet v2 Design System (3)(1).zip",
+  "archive_sha256": "5bb43ac60579f335ba72c562cde7b62bc8b74bf6ce6586c82a0f3837f9e2dabd",
+  "figma_url": "https://www.figma.com/make/7947uNsMq8WNEq3eZSHmuz/SNAR-Fleet-v2-Design-System",
+  "latest_live_figma_contents_verified": false,
+  "files": {
+    "src/CustomerApp.tsx": "dbf0da38cb3cceb5c2bcf5407bda0b83dff92dd5cbfa6cc0c04392ca5c6ee4c5",
+    "src/DriverApp.tsx": "ef76ee1c9c031833c7a8144fdd5e34f6c927b4b2159794862e94e9a96f46c6a0",
+    "src/snar10/kit.tsx": "877a1dffb7b700b3f199d72753b0fa0269925e80b0fe7327ce304d9254240a65",
+    "src/snar10/ExperienceStudio.tsx": "f692d26b1b0913844784f23de3db91ecff04793c5bad2586ff82689ce0f89eda",
+    "src/VehicleAssets.tsx": "e762c6e2839a4335db238d3f09f77083b09550d65b26cf058991ed1749ff512d",
+    "src/index.css": "b7a105e034848a338dc5fec1372907e990c9b49ff265adfde3d4ec9964b06f1d",
+    "src/snar10/signature.css": "5697bf954c72f34dee1e9ee856993ad79629cbc79090610431e73a7392926651"
+  },
+  "bundled_category_assets": [
+    {
+      "slot": "standard",
+      "url": "https://images.unsplash.com/photo-1560958089-b8a1929cea89?q=80&w=900&auto=format&fit=crop",
+      "path": "frontend/assets/figma-v2/standard.jpg",
+      "sha256": "dd92fd8afc3f0d394f01e927cc675d902a30cfbfeb19d189c9acd556e32da270",
+      "width": 900,
+      "height": 600
+    },
+    {
+      "slot": "premium",
+      "url": "https://images.unsplash.com/photo-1563720223185-11003d516935?q=80&w=900&auto=format&fit=crop",
+      "path": "frontend/assets/figma-v2/premium.jpg",
+      "sha256": "b2fb43b558b12a50d24fded45f61f723502294ec6b967b3c08ae17771ada5c76",
+      "width": 900,
+      "height": 600
+    }
+  ]
+}

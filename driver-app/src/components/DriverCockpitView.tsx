@@ -1,3 +1,4 @@
+import { Sheet as SourceSheet } from './snar10/Sheet';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -52,14 +53,9 @@ function ShiftStatusRing() {
   </View>;
 }
 function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBottom?: number }) {
-  useColorTheme();
-  const insets = useSafeAreaInsets();
-  return <V10Entrance sheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3, overflow: 'hidden' }}>
-    <FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" />
-    <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
-    <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(padBottom, insets.bottom) }}>{children}</ScrollView>
-  </V10Entrance>;
+  return <SourceSheet paddingBottom={padBottom}>{children}</SourceSheet>;
 }
+
 function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
   useColorTheme(); return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text, fontVariant: ['tabular-nums'] }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
 export function DriverCockpitView(p: Props) {

@@ -1,3 +1,5 @@
+import { SheetFrame, SheetHandle } from '@/src/components/snar10/Sheet';
+import { Chip } from '@/src/components/snar10/Chip';
 import { BlurTargetView } from 'expo-blur';
 import { useRouteReveal } from '@/src/components/useRouteReveal';
 import { V10Entrance } from '@/src/components/V10Entrance';
@@ -13,7 +15,7 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Keyboard, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,8 +35,7 @@ export default function Home() {
   const { user } = useAuth();
   const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
-  const [mapOnly, setMapOnly] = useState(true);
+  const [mapOnly, setMapOnly] = useState(false);
 
   const queryClient = useQueryClient();
   // GlobalCustomerShell owns polling. This observer only reads its shared state.
@@ -320,7 +321,7 @@ export default function Home() {
         showControls={Boolean(activeTrip || mapOnly || searchOpen)}
         focusRevision={mapFocusRevision}
         focusMode={searchingTrip || (!activeTrip && (mapOnly || searchOpen || !dropoff)) ? 'nearby' : 'route'}
-        contentInsets={{ top: searchOpen ? insets.top + 8 + screenHeight * .3 : insets.top + (activeTrip ? 16 + activeCardHeight : 12 + headerHeight) + 16,
+        contentInsets={{ top: searchOpen ? Math.max(54, insets.top + 4) : insets.top + (activeTrip ? 16 + activeCardHeight : 12 + headerHeight) + 16,
           right: 48, bottom: mapOnly || searchOpen ? insets.bottom + 96 : Math.max(insets.bottom + 112, activeTrip ? 0 : dropoff ? rideHeight : browseHeight) + 32, left: 48 }}
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
@@ -352,10 +353,11 @@ export default function Home() {
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
         onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}
+        onMinimize={() => { Keyboard.dismiss(); setMapOnly(true); }}
         availability={(locationReady || selectedPickup) ? <AvailabilityStatus compact search={available} /> : null}
       /> : null}
 
-      {!activeTrip && !searchOpen ? <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, flexDirection: 'row', justifyContent: mapOnly ? 'space-between' : 'flex-end', alignItems: 'center' }} pointerEvents="box-none">
+      {!activeTrip && !searchOpen && mapOnly ? <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} pointerEvents="box-none">
         <Pressable testID="home-search-toggle" accessibilityRole="button" accessibilityLabel={mapOnly ? 'Åpne søk' : 'Minimer til kart'} accessibilityState={{ expanded: !mapOnly }} onPress={() => {
           Keyboard.dismiss();
           if (mapOnly) { setSearchTarget('dropoff'); setSearchOpen(true); }
@@ -406,9 +408,8 @@ export default function Home() {
 
 export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
   useColorTheme();
-  const { height: screenHeight } = useWindowDimensions();
   const input = useRef<any>(null);
-  useEffect(() => { if (visible) input.current?.focus(); }, [visible]);
+  useEffect(() => { if (visible) input.current?.focus(); }, [visible, target]);
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);
@@ -437,28 +438,56 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
 
   const selectPlace = (place: any) => { const normalized = normalizeSearchPlace(place); if (normalized) onSelect(normalized); };
   if (!visible) return null;
-  return <V10Entrance sheet style={{ position: 'absolute', top: insets.top + 8, height: screenHeight * .3, maxHeight: '30%', left: 12, right: 12 }}><View style={{ flex: 1, overflow: 'hidden', backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingTop: 8 }} testID="search-sheet">
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 36 }}>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <Pressable testID="search-pickup" accessibilityRole="button" onPress={onPickup}><Text style={[v10.caption, { color: target === 'pickup' ? colors.accent : colors.textSecondary }]}>Hentested</Text></Pressable>
-        <Pressable testID="search-destination" accessibilityRole="button" onPress={onDestination}><Text style={[v10.caption, { color: target !== 'pickup' ? colors.accent : colors.textSecondary }]}>Destinasjon</Text></Pressable>
-      </View>
-      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" style={{ minWidth: 44, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevDown" size={20} /></Pressable>
-    </View>
-    <View style={{ height: 42, borderRadius: 12, backgroundColor: colors.cardSubtle, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-      <V10Icon name="search" size={18} />
-      <TextInput ref={input} testID="search-input" accessibilityLabel={target === 'pickup' ? 'Hentested' : 'Destinasjon'} placeholder={target === 'pickup' ? 'Hvor skal du hentes?' : 'Hvor skal du?'} placeholderTextColor={colors.textMuted} underlineColorAndroid="transparent" style={[{ flex: 1, fontFamily: font.body, fontSize: 16, color: colors.text, minWidth: 0, paddingVertical: 0 }, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]} value={q} onChangeText={setQ} returnKeyType="search" />
-      {loading ? <ActivityIndicator color={colors.accent} /> : <Pressable testID="search-clear" onPress={() => setQ('')} accessibilityLabel="Tøm søk" style={{ padding: 6 }}><V10Icon name="x" size={18} /></Pressable>}
-    </View>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 8, paddingBottom: 12 }}>
-      {quickPlaces.some((place: any) => normalizeSearchPlace(place)) ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>{quickPlaces.filter((place: any) => normalizeSearchPlace(place)).slice(0, 3).map((place: any, i: number) => <Pressable key={place.id || i} testID={`search-quick-${i}`} accessibilityRole="button" onPress={() => selectPlace(place)} style={{ minHeight: 36, borderRadius: 12, backgroundColor: colors.cardSubtle, paddingHorizontal: 12, justifyContent: 'center' }}><Text style={v10.secondary}>{place.label || place.name}</Text></Pressable>)}</ScrollView> : null}
-      <Text style={[v10.overline, { marginBottom: 4 }]}>{q.trim().length >= 2 ? 'Resultater' : 'Faste og utvalgte steder'}</Text>
-      {selectableItems.map((r: any, i: number) => <V10Entrance key={`${r.name}-${r.lat}-${r.lng}`} delay={Math.min(i, 2) * 60}><Pressable key={`${r.name}-${i}`} testID={`search-result-${i}`} accessibilityRole="button" onPress={() => selectPlace(r)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 8 }}><View style={v10.icon}><V10Icon name={r.saved ? 'clock' : 'destination'} size={20} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{r.name}</Text>{r.address || r.label ? <Text style={v10.caption}>{r.address || r.label}</Text> : null}</View></Pressable></V10Entrance>)}
-      {searchError ? <View style={{ paddingVertical: 16 }}><Text testID="search-network-error" accessibilityRole="alert" style={{ color: colors.danger }}>{searchError}</Text><Pressable testID="search-retry" onPress={() => setRetrySearch(value => value + 1)}><Text style={{ color: colors.accent, paddingTop: 12 }}>Prøv igjen</Text></Pressable></View> : null}
-      {!searchError && !selectableItems.length && q.trim().length >= 2 && !loading ? <View style={{ paddingVertical: 24 }}><Text style={v10.heading}>Fant ingen steder</Text><Text style={v10.secondary}>Prøv et annet søk.</Text></View> : null}
-      <Pressable testID="search-voice" onPress={onVoice} accessibilityRole="button" style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minHeight: 48, marginTop: 16 }}><V10Icon name="voice" /><Text style={v10.secondary}>Snakk med SNAR</Text></Pressable>
-    </ScrollView>
-  </View></V10Entrance>;
+  const inputRow = <View style={{ height: 48, flex: 1, borderRadius: 16, backgroundColor: colors.cardSubtle,
+    borderWidth: 1.5, borderColor: colors.text, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <TextInput ref={input} testID="search-input" accessibilityLabel={target === 'pickup' ? 'Hentested' : 'Destinasjon'}
+      placeholder={target === 'pickup' ? 'Hvor skal du hentes?' : 'Hvor skal du?'} placeholderTextColor={colors.textMuted}
+      underlineColorAndroid="transparent" style={[{ flex: 1, fontFamily: font.body, fontSize: 16, color: colors.text, minWidth: 0, paddingVertical: 0 }, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]}
+      value={q} onChangeText={setQ} returnKeyType="search" />
+    {loading ? <ActivityIndicator color={colors.accent} /> : <Pressable testID="search-clear" onPress={() => setQ('')} accessibilityRole="button" accessibilityLabel="Tøm søk" hitSlop={8}><V10Icon name="x" size={18} /></Pressable>}
+  </View>;
+  return <KeyboardAvoidingView pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    style={{ position: 'absolute', inset: 0 }}>
+    <View testID="search-map-dim" pointerEvents="none" style={{ position: 'absolute', inset: 0, backgroundColor: colors.bg, opacity: .55 }} />
+    <SheetFrame testID="search-sheet" style={{ top: Math.max(54, insets.top + 4), maxHeight: undefined, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 10 }}>
+      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" hitSlop={8}><SheetHandle /></Pressable>
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(34, insets.bottom) }}>
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} /></View>
+            {target === 'pickup' ? inputRow : <Pressable testID="search-pickup" accessibilityRole="button" accessibilityLabel="Endre hentested" onPress={onPickup}
+              style={{ height: 48, flex: 1, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, justifyContent: 'center' }}>
+              <Text numberOfLines={1} style={[v10.secondary, { color: colors.text }]}>{pickupLabel || 'Velg hentested'}</Text>
+            </Pressable>}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: colors.surfaceInverse }} /></View>
+            {target !== 'pickup' ? inputRow : <Pressable testID="search-destination" accessibilityRole="button" accessibilityLabel="Endre destinasjon" onPress={onDestination}
+              style={{ height: 48, flex: 1, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, justifyContent: 'center' }}>
+              <Text numberOfLines={1} style={v10.secondary}>{destinationLabel || 'Hvor skal du?'}</Text>
+            </Pressable>}
+          </View>
+        </View>
+        {quickPlaces.some((place: any) => normalizeSearchPlace(place)) ? <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingTop: 16, paddingBottom: 8 }}>
+          {quickPlaces.filter((place: any) => normalizeSearchPlace(place)).slice(0, 3).map((place: any, i: number) =>
+            <Chip key={place.id || i} testID={`search-quick-${i}`} label={place.label || place.name} onPress={() => selectPlace(place)} />)}
+        </ScrollView> : null}
+        <Text style={[v10.overline, { marginTop: 16, marginBottom: 4 }]}>{q.trim().length >= 2 ? 'Resultater' : 'Faste og utvalgte steder'}</Text>
+        {selectableItems.map((r: any, i: number) => <V10Entrance key={`${r.name}-${r.lat}-${r.lng}`} delay={Math.min(i, 2) * 60}>
+          <Pressable testID={`search-result-${i}`} accessibilityRole="button" onPress={() => selectPlace(r)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 8 }}>
+            <View style={v10.icon}><V10Icon name={r.saved ? 'clock' : 'destination'} size={20} /></View>
+            <View style={{ flex: 1 }}><Text style={v10.body}>{r.name}</Text>{r.address || r.label ? <Text style={v10.caption}>{r.address || r.label}</Text> : null}</View>
+          </Pressable>
+        </V10Entrance>)}
+        {searchError ? <View style={{ paddingVertical: 16 }}><Text testID="search-network-error" accessibilityRole="alert" style={{ color: colors.danger }}>{searchError}</Text>
+          <Pressable testID="search-retry" onPress={() => setRetrySearch(value => value + 1)}><Text style={{ color: colors.accent, paddingTop: 12 }}>Prøv igjen</Text></Pressable></View> : null}
+        {!searchError && !selectableItems.length && q.trim().length >= 2 && !loading ? <View style={{ paddingVertical: 24 }}><Text style={v10.heading}>Fant ingen steder</Text><Text style={v10.secondary}>Prøv et annet søk.</Text></View> : null}
+        <Pressable testID="search-voice" onPress={onVoice} accessibilityRole="button" style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minHeight: 48, marginTop: 16 }}><V10Icon name="voice" /><Text style={v10.secondary}>Snakk med SNAR</Text></Pressable>
+      </ScrollView>
+    </SheetFrame>
+  </KeyboardAvoidingView>;
 }
 
 export function normalizeSearchPlace(place: any): { name: string; lat: number; lng: number; address?: string } | null {

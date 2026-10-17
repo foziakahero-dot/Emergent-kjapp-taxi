@@ -1,0 +1,55 @@
+/* A product-layer extension of the SNAR kit; all surfaces inherit its themes. */
+.s10 {
+  --signature-space: 16px;
+  --signature-space-sm: 8px;
+  --signature-space-lg: 24px;
+}
+.signature-studio { padding: var(--signature-space-sm) 0 var(--signature-space); }
+.signature-eyebrow { display: flex; align-items: center; gap: var(--signature-space-sm); font-size: 9px; font-weight: 600; letter-spacing: .15em; color: var(--text-secondary); }
+.signature-eyebrow > span:last-child { margin-left: auto; color: var(--text-tertiary); letter-spacing: .08em; }
+.signature-signal { width: var(--signature-space-sm); height: var(--signature-space-sm); border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
+.signature-title { font-size: 30px; font-weight: 600; line-height: 1.08; letter-spacing: -.055em; margin: var(--signature-space) 0; }
+.signature-title > span { color: var(--text-secondary); font-weight: 400; }
+.signature-disclaimer { margin-top: var(--signature-space-sm); font-size: 8px; letter-spacing: .12em; color: var(--text-secondary); }
+.signature-launch { background: linear-gradient(120deg, var(--surface-subtle), var(--surface)); border: 1px solid var(--divider-strong); border-radius: var(--r-md); padding: var(--signature-space); }
+.signature-launch .s10-in { display: grid !important; grid-template-columns: auto 1fr; gap: var(--signature-space-sm) var(--signature-space) !important; align-items: center; }
+.signature-launch .s10-in > span { width: 36px !important; height: 36px !important; border-radius: var(--r-sm) !important; background: var(--primary-soft) !important; color: var(--primary) !important; }
+.signature-launch .t-heading { font-size: 14px; line-height: 1.5; }
+.signature-launch .t-sec { font-size: 11px; line-height: 1.5; margin-top: 0 !important; }
+.signature-launch .s10-in > div:last-child { grid-column: 1 / -1; }
+.signature-launch .s10-btn { height: 34px; font-size: 12px; border-radius: var(--r-xs); background: var(--surface-inverse); }
+.signature-meter { margin-top: var(--signature-space-sm); height: 3px; overflow: hidden; border-radius: var(--r-xs); }
+.signature-meter svg { display: block; width: 100%; height: 100%; stroke-width: 2; }
+.signature-track { stroke: var(--divider-strong); }
+.signature-fill { stroke: var(--positive); }
+.signature-overlay { position: absolute; inset: 0; z-index: 55; background: var(--bg); padding: 56px var(--signature-space-lg) 32px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.signature-overlay:focus { outline: none; }
+.signature-orbit { display: grid; place-items: center; position: relative; height: 120px; margin: var(--signature-space-sm) 0; color: var(--primary); }
+.signature-orbit > div { position: absolute; width: 80px; aspect-ratio: 1; border: 1px solid var(--divider-strong); border-radius: 50%; }
+.signature-orbit > div:nth-child(2) { width: 110px; border-style: dashed; transform: rotate(-20deg); }
+.signature-orbit > div:nth-child(3) { width: 140px; border-color: var(--divider); }
+.signature-orbit > svg { padding: var(--signature-space-sm); box-sizing: content-box; background: var(--primary-soft); border-radius: var(--r-md); }
+.signature-choice { min-height: 136px; }
+.signature-choice .t-large { letter-spacing: -.045em; }
+.signature-choice .t-sec { margin-top: var(--signature-space); line-height: 1.6; }
+.signature-selector { margin: var(--signature-space) 0; }
+.signature-selector .s10-dock { position: relative; inset: auto; width: 100%; box-shadow: var(--elev-1); border-radius: var(--r-md); background: var(--surface); }
+.signature-selector .s10-dock button { width: 30%; }
+.signature-selector .s10-dock button[aria-current="true"] { background: var(--primary-soft); color: var(--primary); }
+.signature-summary { display: grid; gap: var(--signature-space-sm); padding: var(--signature-space); border: 1px solid var(--divider-strong); border-radius: var(--r-md); }
+.signature-apply { margin-top: var(--signature-space-lg); }
+.signature-apply .s10-in > span, .signature-apply .s10-in > div:first-of-type { display: none !important; }
+.signature-apply .s10-in { gap: 0 !important; }
+.signature-apply .s10-btn { background: var(--primary); color: var(--on-primary); }
+.signature-apply .s10-btn.ghost { background: transparent; color: var(--text-secondary); }
+.s10 .s10-dock { border: 1px solid var(--glass-line); box-shadow: var(--elev-2); }
+.s10 .s10-sheet { background: linear-gradient(165deg, var(--surface-raised), var(--surface)); }
+.s10 .s10-input { border: 1px solid var(--divider-strong); }
+.s10 .s10-btn.primary { box-shadow: 0 6px 20px -10px var(--primary); }
+.s10[data-motion="reduced"] *, .s10[data-motion="reduced"] *::before, .s10[data-motion="reduced"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+@media (prefers-reduced-motion: reduce) {
+  .s10 *, .s10 *::before, .s10 *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media (max-width: 480px) {
+  .s10-phone { width: min(390px, 100%); }
+}

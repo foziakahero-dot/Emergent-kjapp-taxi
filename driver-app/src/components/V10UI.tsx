@@ -1,5 +1,6 @@
+import { typography } from '@/src/theme/snar10';
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
@@ -48,18 +49,10 @@ export function V10Badge({ children, tone = 'neutral', inline = false, icon }: {
     <Text style={{ fontFamily: font.semibold, fontSize: 12, lineHeight: 16, color: palette[0] }}>{children}</Text>
   </View>;
 }
-export function V10Action({ label, onPress, kind = 'primary', small = false, disabled, busy, icon, testID, height, labelSize, iconSize, textColor }: {
-  label: string; onPress: () => void; kind?: 'primary' | 'ink' | 'soft' | 'ghost'; small?: boolean; disabled?: boolean; busy?: boolean; icon?: string; testID?: string; height?: number; labelSize?: number; iconSize?: number; textColor?: string;
-}) {
-  useColorTheme();
-  const color = textColor ?? (kind === 'primary' ? colors.accentOn : kind === 'ink' ? colors.onInverse : kind === 'ghost' ? colors.textSecondary : colors.text);
-  const backgroundColor = { primary: colors.accent, ink: colors.surfaceInverse, soft: colors.cardSubtle, ghost: 'transparent' }[kind];
-  return <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ disabled: !!disabled || !!busy, busy: !!busy }} disabled={disabled || busy} onPress={onPress}
-    style={({ pressed }) => ({ minHeight: height ?? (small ? 44 : kind === 'ghost' ? 48 : 56), borderRadius: small ? 12 : 16, paddingHorizontal: small ? 0 : 16, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: disabled ? .5 : 1, boxShadow: kind === 'primary' ? `0 6px 20px -10px ${colors.accent}` : undefined, transform: [{ scale: pressed ? .97 : 1 }] })}>
-    {busy ? <ActivityIndicator color={color} /> : icon ? <V10Icon name={icon} color={color} size={iconSize ?? (small ? 18 : 22)} /> : null}
-    <Text style={{ color, fontFamily: font.semibold, fontSize: labelSize ?? (small ? 14 : 16), lineHeight: labelSize ? labelSize * 1.375 : small ? 20 : 22, letterSpacing: -.16 }}>{label}</Text>
-  </Pressable>;
-}
+export { Button as V10Action } from './snar10/Button';
+
+import { Button as V10Action } from './snar10/Button';
+
 export function V10State({ icon, title, body, action, onAction, warning = false }: { icon: string; title: string; body: string; action?: string; onAction?: () => void; warning?: boolean }) {
   useColorTheme();
   return <V10Entrance style={{ gap: 20 }}>
@@ -69,12 +62,12 @@ export function V10State({ icon, title, body, action, onAction, warning = false 
   </V10Entrance>;
 }
 export const v10 = themedStyles(() => StyleSheet.create({
-  title: { color: colors.text, fontFamily: font.semibold, fontSize: 26, lineHeight: 32, letterSpacing: -.65 },
-  heading: { color: colors.text, fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.36 },
-  body: { color: colors.text, fontFamily: font.semibold, fontSize: 16, lineHeight: 22, letterSpacing: -.176 },
-  secondary: { color: colors.textSecondary, fontFamily: font.body, fontSize: 14, lineHeight: 20, letterSpacing: -.154 },
-  caption: { color: colors.textMuted, fontFamily: font.medium, fontSize: 12, lineHeight: 16 },
-  overline: { color: colors.textMuted, fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: .66, textTransform: 'uppercase' },
+  title: { ...typography.title, color: colors.text },
+  heading: { ...typography.heading, color: colors.text },
+  body: { ...typography.bodyM, color: colors.text },
+  secondary: { ...typography.sec, color: colors.textSecondary },
+  caption: { ...typography.cap, color: colors.textMuted },
+  overline: { ...typography.over, color: colors.textMuted },
   icon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10, paddingHorizontal: 16 },
 }));

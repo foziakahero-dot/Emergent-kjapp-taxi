@@ -1,3 +1,4 @@
+import { SheetFrame, SheetHandle } from './snar10/Sheet';
 import { WebWalletSetup } from '@/src/components/WebWalletSetup';
 import { ApplePaySetupButton } from '@/src/components/ApplePaySetupButton';
 import React, { useEffect, useRef, useState, type RefObject } from 'react';
@@ -32,27 +33,27 @@ type Props = {
   onVehicle: (type: string) => void; onSearch: (target: 'pickup' | 'dropoff') => void;
   onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void; onNotifications?: () => void; onSchedule?: () => void;
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void;
-  onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; stops: any[];
+  onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; onMinimize?: () => void; stops: any[];
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
   onWalletSaved?: (card: any) => void | Promise<void>;
   wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
-const vehicleNames: Record<string, string> = { 'ai-first': 'Økonomi', suv: 'SUV', premium: 'Premium' };
+const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', suv: 'SUV', premium: 'Premium' };
 const studioEta = (name: string, eta?: number) => typeof eta === 'number' && Number.isFinite(eta) && eta > 0 ? `${name} · estimert henting ${Math.ceil(eta)} min` : `${name} · hentetid ikke tilgjengelig`;
 export function CustomerBookingView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const [homeHeight, setHomeHeight] = useState(500);
   const studioOptions: StudioOption[] = [
-    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta('Økonomi', p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
+    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta('Standard', p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
     { id: 'comfort', label: 'Pusterom', icon: 'moon', title: 'Et lite pusterom.', sub: 'Comfort · ikke tilgjengelig', body: 'Comfort er ikke tilgjengelig for bestilling ennå.', disabled: true },
     { id: 'premium', label: 'Signatur', icon: 'star', title: 'Gjør reisen til en del av dagen.', sub: studioEta('Premium', p.vehicleEtas?.premium), body: 'Velg Premium, og utforsk bilkategori, pris og sjåfør i den eksisterende bestillingsflyten.' },
   ];
   const vehicleName = vehicleNames[p.vehicle] || 'SNAR';
-  const sheet = (children: React.ReactNode, home = false) => <V10Entrance key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} sheet style={[styles.sheet, { maxHeight: '78%', overflow: 'hidden' }]}><FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" /><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
+  const sheet = (children: React.ReactNode, home = false) => <SheetFrame key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} style={{ maxHeight: '78%' }}><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
     style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
     onLayout={event => { p.onHeight(event.nativeEvent.layout.height); if (home) setHomeHeight(event.nativeEvent.layout.height); }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: home ? Math.max(108, insets.bottom + 74) : Math.max(34, insets.bottom) }}>
-    <View style={styles.handle} />{children}</ScrollView></V10Entrance>;
+    <Pressable testID="home-search-toggle" accessibilityRole="button" accessibilityLabel="Minimer til kart" disabled={!p.onMinimize} onPress={p.onMinimize} hitSlop={8}><SheetHandle /></Pressable>{children}</ScrollView></SheetFrame>;
   const back = () => p.reviewing ? p.onReview(false) : p.stage === 'payment' ? p.onStage('vehicles') : p.stage === 'vehicles' ? p.onStage('route') : p.onBack();
   const error = p.error ? <Text accessibilityRole="alert" testID="home-error" style={[v10.secondary, { color: colors.danger, marginVertical: 12 }]}>{p.error}</Text> : null;
   if (!p.destination) return <>
@@ -102,7 +103,7 @@ export function CustomerBookingView(p: Props) {
   </>;
 }
 const vehicleChoices = [
-  { type: 'ai-first', name: 'Økonomi', note: 'Rask og enkel' },
+  { type: 'ai-first', name: 'Standard', note: 'Rask og enkel' },
   { type: 'premium', name: 'Premium', note: 'Premium' },
   { type: 'suv', name: 'SUV', note: 'Mer plass' },
 ] as const;
@@ -158,10 +159,8 @@ function Metric({ label, value }: { label: string; value: string }) {
 function Info({ title, value, onPress }: { title: string; value: string; onPress?: () => void }) {
   useColorTheme(); const content = <><Text style={v10.caption}>{title}</Text><Text style={v10.body}>{value}</Text></>; return onPress ? <Pressable onPress={onPress} testID="booking-payment-row" style={styles.info}>{content}</Pressable> : <View style={styles.info}>{content}</View>; }
 const styles = themedStyles(() => StyleSheet.create({
-  sheet: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, boxShadow: colors.elevation3 },
-  handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 },
-  tool: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glass, boxShadow: colors.elevation2, overflow: 'hidden' },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 6, paddingRight: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.glass, flexShrink: 1, overflow: 'hidden', boxShadow: colors.elevation2 },
+  tool: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', boxShadow: colors.elevation2, overflow: 'hidden' },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 6, paddingRight: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'transparent', flexShrink: 1, overflow: 'hidden', boxShadow: colors.elevation2 },
   avatar: { width: 32, height: 32, borderRadius: 11, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' },
   search: { height: 60, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   now: { height: 34, borderRadius: 12, backgroundColor: colors.surface, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },

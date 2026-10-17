@@ -1,8 +1,7 @@
+import { Avatar } from './snar10/Avatar';
 import React, { useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
 import { customerProfileApi } from '@/src/lib/api';
-import { colors, font, useColorTheme } from '@/src/theme';
-import { Text } from './Typography';
+import { useColorTheme } from '@/src/theme';
 
 export function V10CustomerAvatar({ initials, version }: { initials: string; version?: string }) {
   useColorTheme();
@@ -13,6 +12,7 @@ export function V10CustomerAvatar({ initials, version }: { initials: string; ver
     if (version) void customerProfileApi.photoSource(version).then(source => { if (current) setPhoto({ version, source }); }).catch(() => {});
     return () => { current = false; };
   }, [version]);
-  const style = { width: 32, height: 32, borderRadius: 10.88 };
-  return photo && photo.version === version ? <Image source={photo.source} style={style} onError={() => setPhoto(current => current?.version === version ? null : current)} /> : <View style={[style, { backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 11.52 }}>{initials}</Text></View>;
+  return <Avatar name={initials} initials={initials} size={32}
+    src={photo && photo.version === version ? photo.source : null}
+    onError={() => setPhoto(current => current?.version === version ? null : current)} />;
 }

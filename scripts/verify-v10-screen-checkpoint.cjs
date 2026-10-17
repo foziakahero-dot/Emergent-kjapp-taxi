@@ -27,10 +27,11 @@ const native = {
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
+  Keyboard: { dismiss() {} },
   AppState: { addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
   StyleSheet: { create: value => value, hairlineWidth: 1, absoluteFill: { position: 'absolute', inset: 0 } },
 };
-const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
+const queryClient = { getQueryData: key => queryData[key[0]]?.data, setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
   'expo-image': { Image: 'DriverImage' },
   'expo-speech': {speak(){},stop:async()=>{}},
@@ -83,7 +84,9 @@ function load(app, file) {
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
     if (stubs[name]) return stubs[name];
-    if (/\.(png|webp)$/.test(name)) { const asset = path.resolve(path.dirname(absolute), name); assert.ok(fs.statSync(asset).size > 0); return { uri: asset }; }
+    if (name === '@/src/lib/useTripUpdates') return { useTripUpdates() {} };
+    if (name === '@/src/lib/useDriverAcceptedAlert') return { useDriverAcceptedAlert() {} };
+    if (/\.(png|webp|jpe?g)$/.test(name)) { const asset = path.resolve(path.dirname(absolute), name); assert.ok(fs.statSync(asset).size > 0); return { uri: asset }; }
     if (name.startsWith('@/')) {
       const relative = name.slice(2);
       return load(app, relative + (fs.existsSync(path.join(root, app, relative + '.tsx')) ? '.tsx' : '.ts'));
@@ -317,7 +320,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async () => driverSocialRequest.resolve({ id: 'driver', role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }));
   assert.equal(navigation.at(-1)[1], '/driver-approval'); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => null; navigation = [];
-  assert.equal(tree.root.findAll(node => node.props.testID === 'driver-login-google').length, 0); await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
+  assert.ok(button(tree, 'driver-login-google'), 'Driver Google action remains available alongside Apple'); await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => { throw new Error('Provider unavailable'); };
   await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.match(text(tree), /Provider unavailable/); assert.equal(button(tree, 'driver-login-submit').props.disabled, false); await unmount(tree);
   const Register = load('frontend', 'app/register.tsx').default;
@@ -821,8 +824,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['expo-image']={Image:'CategoryImage'};
   const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
   tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));
-  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/standard-3d.webp/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'contain');await unmount(tree);
-  for(const [kind,asset] of [['premium','premium-3d.webp'],['suv','suv-category.png']]) { tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:false}));assert.ok(tree.root.findByType('CategoryImage').props.source.uri.endsWith(asset));await unmount(tree); }
+  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/figma-v2\/standard\.jpg/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');await unmount(tree);
+  for(const [kind,asset] of [['premium','premium.jpg'],['suv','suv-category.png']]) { tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:false}));assert.ok(tree.root.findByType('CategoryImage').props.source.uri.endsWith(asset));await unmount(tree); }
   console.log('PASS: Customer 09/10 all-class home supply, three categories, immediate quoted prices, selected-category drivers, canonical card and distinct bundled illustrations.');
   // Customer 11/12: canonical displayed quote contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);

@@ -139,3 +139,7 @@ The owner wants a new chat to reduce conversation weight. Preserve the build hol
 Repository: `/workspace/scratch/545895e80915/snar-review` (external Git-backed; no separate Library copy of the repo).
 Restored authoritative ZIP: `/workspace/scratch/545895e80915/design-reference/SNAR Fleet v2 Design System (3)(1).zip`; extracted `/workspace/scratch/545895e80915/design-reference/source`. Do not ask the owner to upload the same ZIP again. If scratch was reset, restore this named original file through Library.
 Backend test interpreter: `/workspace/scratch/545895e80915/snar-perf-venv/bin/python`. Frontend dependencies installed; run its local `node_modules/.bin/tsc --noEmit` from `frontend`, not root npx.
+
+## 18 October 2026 — owner requested design-document implementation
+
+See `DOCUMENT_IMPLEMENTATION_20261018.md` and preserved originals under `reference/snar10/`. The latest source checkpoint ports and wires the common snar10 kit in both apps, corrects the home/search structure, removes duplicate glass, registers global-detail blur targets and fixes the redirect that undid minimized searches. Original category art is bundled. Existing backend/provider/ride controllers remain; no app build, backend deploy or production change was made by this UI checkpoint. Native visual/provider acceptance remains open. Use the subsequent Git commit for the published SHA; do not resume from the older `2bb10a1` snapshot.
