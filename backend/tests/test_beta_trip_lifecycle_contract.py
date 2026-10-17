@@ -162,7 +162,7 @@ def test_refund_is_paid_only_locked_and_stripe_idempotent():
         'trip.get("payment_status") != "paid"',
         '"refund_lock": refund_lock',
         "lock_result.matched_count != 1",
-        'idempotency_key=f"kjapp-refund-{body.trip_id}-{already}-{amount}"',
+        '"idempotency_key": f"kjapp-refund-{body.trip_id}-{already}-{amount}"',
         '"refund_lock": refund_lock, "payment_status": "paid"',
     ]
     for marker in required:

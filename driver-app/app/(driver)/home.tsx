@@ -1,3 +1,4 @@
+import { useTripUpdates } from '@/src/lib/useTripUpdates';
 import { DriverCockpitView } from '@/src/components/DriverCockpitView';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text } from '@/src/components/Typography';
@@ -80,8 +81,10 @@ export default function DriverHome() {
   const completedSummaryVisible = !current && !(pending[0] && online);
   useHideTabBar(Boolean(busy || summaryActionBusy || (current && !tripMinimized) || (pending[0] && online) || (completedTrip && completedSummaryVisible)));
 
+  const polling = useRef(false);
   const poll = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id || polling.current) return;
+    polling.current = true;
     try {
       const cur = await driverApi.current();
       let normalized = cur?.trip || cur || null;
@@ -162,6 +165,7 @@ export default function DriverHome() {
       // Preserve the last pending state on a transient network error. Seen IDs stay
       // in memory so a reconnect cannot replay the same alert every four seconds.
     }
+    polling.current = false;
     driverApi.summary().then((r) => {
       setSummary(r);
       if (typeof r?.online === 'boolean') {
@@ -176,10 +180,12 @@ export default function DriverHome() {
     seenPendingTripIds.current = null;
   }, [user?.id]);
 
+  useTripUpdates(current?.trip_id, () => void poll());
+
   useFocusEffect(
     useCallback(() => {
       poll();
-      const i = setInterval(poll, 4000);
+      const i = setInterval(poll, 1000);
       return () => clearInterval(i);
     }, [poll]),
   );

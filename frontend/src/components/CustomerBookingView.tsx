@@ -1,3 +1,5 @@
+import { WebWalletSetup } from '@/src/components/WebWalletSetup';
+import { ApplePaySetupButton } from '@/src/components/ApplePaySetupButton';
 import React, { useEffect, useRef, useState, type RefObject } from 'react';
 import { ExperienceStudio, type StudioOption } from './ExperienceStudio';
 import { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
@@ -32,6 +34,7 @@ type Props = {
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void;
   onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; stops: any[];
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
+  onWalletSaved?: (card: any) => void | Promise<void>;
   wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
 const vehicleNames: Record<string, string> = { 'ai-first': 'Økonomi', suv: 'SUV', premium: 'Premium' };
@@ -85,7 +88,8 @@ export function CustomerBookingView(p: Props) {
       {error}<V10Action testID="booking-review" label={`Bestill ${vehicleName} · ${kr(p.price)}`} disabled={!p.canReview} onPress={() => p.onReview(true)} />
     </> : <><Text style={[v10.heading, { marginBottom: 14 }]}>Betal med</Text>
       <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: colors.cardSubtle }}>
-        {Platform.OS === 'ios' ? <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle={p.wallet?.kind === 'apple' ? 'Verifiser et kort med Apple Pay' : 'Ikke tilgjengelig på denne enheten'} disabled={p.busy || p.wallet?.kind !== 'apple' || !p.onWallet} onPress={() => p.wallet?.kind === 'apple' && p.onWallet?.()} /> : null}
+        {Platform.OS === 'ios' ? p.wallet?.kind === 'apple' ? <View style={{ padding: 12, gap: 8 }}><Text style={v10.caption}>SNAR reserverer avtalt beløp ved bestilling og trekker det endelige turbeløpet etter turen.</Text><ApplePaySetupButton onPress={() => p.onWallet?.()} disabled={p.busy || !p.onWallet} testID="booking-pay-apple" /></View> : <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle="Ikke tilgjengelig på denne enheten" disabled onPress={() => {}} /> : null}
+        {Platform.OS === 'web' ? <WebWalletSetup disabled={p.busy} onSaved={async card => { await p.onWalletSaved?.(card); }} /> : null}
         <PaymentChoice id="card" icon="payment" title={paymentLabel(p.payment)} subtitle={p.payment ? cardExpiryLabel(p.payment) || 'Verifisert betalingskort' : 'Verifiser et kort før bestilling'} selected={Boolean(p.payment)} onPress={() => p.payment ? p.onStage('vehicles') : p.onPayment()} />
         {Platform.OS === 'android' ? p.wallet?.kind === 'google' ? <View style={{ gap: 8, paddingVertical: 10 }}><Text style={v10.caption}>Lagre Google Pay for turene du bestiller. Avtalt beløp reserveres før turen og belastes når turen avsluttes.</Text><GooglePaySetupButton disabled={p.busy || !p.onWallet} onPress={() => p.onWallet?.()} testID="booking-pay-google" /></View>
           : <PaymentChoice id="google" icon="google" title="Google Pay" subtitle="Ikke tilgjengelig på denne enheten" disabled onPress={() => {}} /> : null}

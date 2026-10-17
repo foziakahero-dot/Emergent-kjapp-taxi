@@ -45,3 +45,56 @@ test('search is capped at 30%, minimizes and keeps the typed query when reopened
   assert.equal(panel.root.findByType('Input').props.value, 'Oslo');
   await renderer.act(async () => panel.unmount());
 });
+
+test('booking search stays modal on Back, counts to 60 and asks server to end search once', async () => {
+  const callbacks = new Map(); let timerId = 0, now = Date.parse('2026-10-17T00:00:00Z');
+  const FakeDate = class extends Date { static now() { return now; } };
+  native.Modal = host('Modal');
+  const module = { exports: {} };
+  const source = fs.readFileSync(path.resolve(__dirname, '../frontend/src/components/DriverSearchOverlay.tsx'), 'utf8');
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  vm.runInNewContext(compiled, { module, exports: module.exports, require: name => name === './Typography' ? stubs['@/src/components/Typography'] : stubs[name],
+    Date: FakeDate, setInterval: fn => { callbacks.set(++timerId,fn); return timerId; }, clearInterval: id => callbacks.delete(id) });
+  let overlay, stopped = 0, cancelled = 0;
+  await renderer.act(async () => { overlay = renderer.create(React.createElement(module.exports.DriverSearchOverlay, {
+    trip: { trip_id:'ride', search_started_at:'2026-10-17T00:00:00Z', server_time:'2026-10-17T00:00:00Z' },
+    onCancel: () => cancelled++, onDeadline: () => stopped++,
+  })); });
+  await renderer.act(async () => overlay.root.findByType('Modal').props.onRequestClose());
+  assert.equal(cancelled,0);
+  now += 60000;
+  await renderer.act(async () => { for(const fn of callbacks.values()) fn(); });
+  await renderer.act(async () => { for(const fn of callbacks.values()) fn(); });
+  assert.equal(stopped,1);
+  assert.equal(overlay.root.findByType('Modal').props.visible,true,'Only canonical server state may remove the search modal');
+  const seconds=overlay.root.findAllByType('Text').find(x=>x.props.testID==='driver-search-seconds');
+  assert.equal(seconds.props.children[0],60);
+  await renderer.act(async () => overlay.root.findAllByType('Pressable').find(x=>x.props.testID==='driver-search-cancel').props.onPress());
+  assert.equal(cancelled,1);
+  await renderer.act(async () => overlay.unmount());
+  assert.equal(callbacks.size,0);
+});
+
+test('accepted driver notice shows full identity, contact actions and leaves half the map visible', async () => {
+  native.ScrollView = host('ScrollView');
+  stubs['react-native-safe-area-context'] = { useSafeAreaInsets: () => ({ top: 24, bottom: 0 }) };
+  const module = { exports: {} };
+  const source = fs.readFileSync(path.resolve(__dirname, '../frontend/src/components/DriverAcceptedNotice.tsx'),'utf8');
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  vm.runInNewContext(compiled, { module, exports: module.exports, require: name => name === './Typography' ? stubs['@/src/components/Typography'] : stubs[name] });
+  let notice, called = 0, messaged = 0, closed = 0;
+  await renderer.act(async () => { notice = renderer.create(React.createElement(module.exports.DriverAcceptedNotice, {
+    driver: { name: 'Kari Nordmann Hansen', brand: 'Volvo', model: 'XC60', color: 'Blå', plate: 'AB12345', rating: 4.87, phone: '+4712345678' }, eta: 7,
+    onCall: () => called++, onChat: () => messaged++, onClose: () => closed++, onLayout: noop,
+  })); });
+  const json = JSON.stringify(notice.toJSON());
+  for (const expected of ['Kari Nordmann Hansen', 'Volvo XC60', 'Blå', 'AB12345', '4,87']) assert.ok(json.includes(expected));
+  assert.equal(notice.root.findAllByType('View').find(x => x.props.testID === 'driver-accepted-notice').props.style.maxHeight, dimensions.height * .5);
+  const find = id => notice.root.findAllByType('Pressable').find(x => x.props.testID === id);
+  await renderer.act(async () => { find('accepted-driver-call').props.onPress(); find('accepted-driver-message').props.onPress(); find('accepted-driver-close').props.onPress(); });
+  assert.deepEqual([called, messaged, closed], [1,1,1]);
+  await renderer.act(async () => notice.update(React.createElement(module.exports.DriverAcceptedNotice, { driver: {}, eta: null, onCall: noop, onChat: noop, onClose: noop, onLayout: noop })));
+  assert.equal(find('accepted-driver-call').props.disabled, true);
+  assert.ok(JSON.stringify(notice.toJSON()).includes('Farge ikke registrert'));
+  await renderer.act(async () => notice.unmount());
+});
