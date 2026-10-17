@@ -112,3 +112,36 @@ def test_setup_webhook_recovery_works_after_ui_is_disabled(env, monkeypatch):
     monkeypatch.setenv('NATIVE_PAYMENTS_ENABLED', 'false')
     assert asyncio.run(env.webhook({'type': 'setup_intent.succeeded', 'data': {'object': setup}})) is True
     assert env.db.raw.payment_methods.count_documents({}) == 1
+
+
+def test_live_wallets_require_matching_keys_and_explicit_production_switch(env, monkeypatch):
+    configure(env)
+    env.stripe.api_key = 'sk_live_private'
+    monkeypatch.setenv('STRIPE_PUBLISHABLE_KEY', 'pk_live_public')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('APP_ENV', 'production')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('NATIVE_PAYMENTS_LIVE_ENABLED', 'true')
+    assert env.client.get('/payments/native/config').json()['enabled'] is True
+    monkeypatch.setenv('APP_ENV', 'qa')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    assert env.client.post('/payments/native/setup-intent').status_code == 503
+
+
+def test_web_wallet_setup_requires_explicit_activation_and_consent(env, monkeypatch):
+    configure(env)
+    body = {'wallet': 'google_pay', 'platform': 'web', 'future_use_accepted': True}
+    monkeypatch.setenv('GOOGLE_PAY_ENABLED', 'true')
+    assert env.client.post('/payments/native/setup-intent', json=body).status_code == 503
+    monkeypatch.setenv('WEB_WALLETS_ENABLED', 'true')
+    assert env.client.post('/payments/native/setup-intent', json={**body, 'future_use_accepted':False}).status_code == 422
+    assert env.client.post('/payments/native/setup-intent', json=body).status_code == 200
+
+
+def test_apple_native_needs_merchant_and_explicit_flag(env, monkeypatch):
+    configure(env)
+    body = {'wallet': 'apple_pay', 'future_use_accepted': True}
+    assert env.client.post('/payments/native/setup-intent', json=body).status_code == 503
+    monkeypatch.setenv('APPLE_PAY_MERCHANT_ID', 'merchant.no.snar')
+    monkeypatch.setenv('APPLE_PAY_ENABLED', 'true')
+    assert env.client.post('/payments/native/setup-intent', json=body).status_code == 200

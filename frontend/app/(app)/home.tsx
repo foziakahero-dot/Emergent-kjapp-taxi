@@ -264,6 +264,7 @@ export default function Home() {
       });
       if (typeof trip?.trip_id !== 'string' || !trip.trip_id.trim()) throw new Error('Bestillingen ble ikke bekreftet av SNAR.');
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      queryClient.setQueryData(['customer-trip', trip.trip_id], trip);
       router.push(`/booking/${trip.trip_id}`);
     } catch (e: any) {
       try {
@@ -334,6 +335,11 @@ export default function Home() {
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
         nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
+        onWalletSaved={async card => {
+          const selected = await paymentApi.setDefault(card.id);
+          if (selected.default_payment_method_id !== card.id) throw new Error('Lommeboken ble ikke valgt.');
+          loadMethods(); setBookingStage('vehicles');
+        }}
         busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}

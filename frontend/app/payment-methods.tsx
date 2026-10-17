@@ -1,3 +1,5 @@
+import { WebWalletSetup } from '@/src/components/WebWalletSetup';
+import { ApplePaySetupButton } from '@/src/components/ApplePaySetupButton';
 import { GooglePaySetupButton } from '@/src/components/GooglePaySetupButton';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { Text } from '@/src/components/Typography';
@@ -16,7 +18,7 @@ import { paymentApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 
-const CHECKOUT_ORIGIN = process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://kjappapp.no';
+const CHECKOUT_ORIGIN = typeof window !== 'undefined' ? window.location.origin : (process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://snarapp.no');
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function PaymentMethods() {
@@ -132,14 +134,19 @@ export default function PaymentMethods() {
       {notice ? <Text accessibilityLiveRegion="polite" testID="pm-notice" style={[v10.secondary, { marginBottom: 12, color: colors.success }]}>{notice}</Text> : null}
       {error ? <Text accessibilityRole="alert" testID="pm-error" style={[v10.secondary, { marginBottom: 12, color: colors.danger }]}>{error}</Text> : null}
       {primary ? <FigmaGradient angle={135} colors={['#0b1a2c', '#1c3350']} style={{ height: 180, borderRadius: 24, padding: 20, justifyContent: 'space-between', overflow: 'hidden', boxShadow: colors.elevation2 }} testID="payment-primary-card">
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{primary.wallet === 'google_pay' ? 'Google Pay for bestilling' : 'Kort for bestilling'}</Text><Text style={{ color: '#fff', fontFamily: font.bold, fontStyle: 'italic', fontSize: 20 }}>{String(primary.label || primary.type || 'Kort').toUpperCase()}</Text></View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{primary.wallet === 'google_pay' ? 'Google Pay for bestilling' : primary.wallet === 'apple_pay' ? 'Apple Pay for bestilling' : 'Kort for bestilling'}</Text><Text style={{ color: '#fff', fontFamily: font.bold, fontStyle: 'italic', fontSize: 20 }}>{String(primary.label || primary.type || 'Kort').toUpperCase()}</Text></View>
         <Text style={{ color: '#fff', fontFamily: font.medium, fontSize: 20, letterSpacing: 2.4, fontVariant: ['tabular-nums'] }}>•••• •••• •••• {primary.last4 || '—'}</Text><Text style={{ color: '#fff', opacity: .7, fontSize: 13 }}>{expiry ? `Utløper ${expiry}` : 'Verifisert av Stripe'}</Text>
       </FigmaGradient> : <V10State icon="payment" title="Ingen verifisert betalingsmåte" body="Legg til og verifiser et kort før du bestiller en tur." />}
       {primary ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}><V10Badge tone="positive">Verifisert</V10Badge>{removeButton(primary)}</View> : null}
       {others.length ? <V10Section title="Andre kort"><V10Group>{others.map((method: any, index: number) => <V10Row key={method.id} border={index > 0} icon="payment" title={`${method.label || method.type || 'Kort'}${method.last4 ? ` ·· ${method.last4}` : ''}`} subtitle={verified(method) ? 'Trykk for å bruke til neste tur' : 'Ikke verifisert · kan ikke reservere tur'} onPress={verified(method) ? () => void selectDefault(method.id) : undefined} disabled={busy} right={removeButton(method)} testID={`pm-${method.id}`} />)}</V10Group></V10Section> : null}
       {wallet ? <V10Section title="Betaling på enheten"><Text style={[v10.caption, { marginBottom: 10 }]}>Ved å lagre betalingsmåten godkjenner du at SNAR reserverer avtalt beløp for turer du bestiller, og belaster det endelige turbeløpet når turen er avsluttet.</Text>
         {wallet.kind === 'google' ? <GooglePaySetupButton onPress={() => void addStripeCard(true)} disabled={busy} testID="wallet-native-setup" />
-          : <V10Group><V10Row icon={wallet.kind} title={wallet.label} subtitle={`Verifiser betalingsmåten med ${wallet.label}.`} onPress={() => void addStripeCard(true)} disabled={busy} testID="wallet-native-setup" /></V10Group>}</V10Section> : null}
+          : <ApplePaySetupButton onPress={() => void addStripeCard(true)} disabled={busy} testID="wallet-native-setup" />}</V10Section> : null}
+      {Platform.OS === 'web' ? <WebWalletSetup disabled={busy} onSaved={async card => {
+        const selected = await paymentApi.setDefault(card.id);
+        if (selected.default_payment_method_id !== card.id) throw new Error('Lommeboken ble ikke valgt.');
+        await qc.invalidateQueries({ queryKey: methodsKey });
+      }} /> : null}
       <View style={{ marginTop: 16 }}><V10Action kind="soft" icon="plus" label="Legg til kort" onPress={() => void addStripeCard()} busy={busy} testID="pm-stripe" /></View><Text style={[v10.caption, { marginTop: 12 }]}>Kortopplysninger håndteres av Stripe. SNAR lagrer ikke kortnummer eller CVC. Kort for neste tur bestemmes av det verifiserte standardkortet, eller det nyeste verifiserte kortet.</Text>
     </>}
   </V10Entrance></V10Screen>;

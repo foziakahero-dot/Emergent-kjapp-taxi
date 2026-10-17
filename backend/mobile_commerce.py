@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 import jwt
 import httpx
+from stripe import StripeError
 from urllib.parse import urlparse
 from stripe_fleet import ensure_fleet_account
 from admin_control_center import _stripe_snapshot, stripe_destination_for_trip
@@ -38,6 +39,7 @@ class GoogleWebCode(BaseModel):
 class NativeSetupRequest(BaseModel):
     wallet: Optional[Literal["google_pay", "apple_pay"]] = None
     future_use_accepted: bool = False
+    platform: Literal["native", "web"] = "native"
 
 
 class NativePayment(BaseModel):
@@ -327,12 +329,20 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     def payment_config():
         key = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
-        mode_matches = key.startswith("pk_test_") and str(stripe.api_key).startswith(("sk_test_", "rk_test_"))
-        enabled = os.getenv("NATIVE_PAYMENTS_ENABLED", "false").lower() == "true" and mode_matches
+        secret = str(stripe.api_key or "")
+        qa = os.getenv("APP_ENV", "").strip().lower() == "qa"
+        prefix = "QA_" if qa else ""
+        test = key.startswith("pk_test_") and secret.startswith(("sk_test_", "rk_test_"))
+        live = (os.getenv("APP_ENV", "").strip().lower() == "production"
+                and os.getenv("NATIVE_PAYMENTS_LIVE_ENABLED", "false").lower() == "true"
+                and key.startswith("pk_live_") and secret.startswith(("sk_live_", "rk_live_")))
+        enabled = os.getenv("NATIVE_PAYMENTS_ENABLED", "false").lower() == "true" and (test or live)
+        merchant = os.getenv(prefix + "APPLE_PAY_MERCHANT_ID", "").strip()
         return {"enabled": bool(enabled), "publishable_key": key if enabled else "",
-            "test_mode": key.startswith("pk_test_"),
-            "apple_merchant_id": os.getenv("APPLE_PAY_MERCHANT_ID", "").strip(),
-            "google_pay_enabled": enabled and os.getenv("QA_GOOGLE_PAY_ENABLED" if os.getenv("APP_ENV", "").lower() == "qa" else "GOOGLE_PAY_ENABLED", "false").lower() == "true"}
+            "test_mode": test, "apple_merchant_id": merchant,
+            "google_pay_enabled": bool(enabled and os.getenv(prefix + "GOOGLE_PAY_ENABLED", "false").lower() == "true"),
+            "apple_pay_enabled": bool(enabled and merchant and os.getenv(prefix + "APPLE_PAY_ENABLED", "false").lower() == "true"),
+            "web_wallets_enabled": bool(enabled and os.getenv(prefix + "WEB_WALLETS_ENABLED", "false").lower() == "true")}
 
     @api.get("/payments/native/config")
     async def native_config():
@@ -354,11 +364,16 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return {"default_payment_method_id": pm_id}
 
     def native_client():
-        # Recovery of an already-created SetupIntent must keep working if the
-        # UI flag is later disabled. Never accept a live key in this QA flow.
-        if not str(stripe.api_key).startswith(("sk_test_", "rk_test_")):
-            raise HTTPException(503, "Native Stripe testbetaling er ikke aktivert")
-        return stripe.StripeClient(stripe.api_key, max_network_retries=1)
+        # Recovery remains possible if the UI switch is disabled. Live processing
+        # additionally needs explicit production activation; QA rejects live keys.
+        key = str(stripe.api_key or "")
+        test = key.startswith(("sk_test_", "rk_test_"))
+        live = (os.getenv("APP_ENV", "").strip().lower() == "production"
+                and os.getenv("NATIVE_PAYMENTS_LIVE_ENABLED", "false").lower() == "true"
+                and key.startswith(("sk_live_", "rk_live_")))
+        if not (test or live):
+            raise HTTPException(503, "Stripe-betaling er ikke aktivert for dette miljøet")
+        return stripe.StripeClient(key, max_network_retries=1)
 
     async def _stripe_customer_for_user(current):
         user = await db.users.find_one({"_id": ObjectId(current["id"])})
@@ -383,8 +398,12 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     async def native_setup_intent(request: Request, body: NativeSetupRequest = NativeSetupRequest(), current=Depends(require_customer)):
         await rate_limit(request, "native-card-setup", 20, 900)
         config = payment_config()
-        if not config["enabled"] or not config["test_mode"]:
-            raise HTTPException(503, "Native Stripe testbetaling er ikke aktivert")
+        if not config["enabled"]:
+            raise HTTPException(503, "Stripe-betaling er ikke aktivert for dette miljøet")
+        if body.platform == "web" and not config["web_wallets_enabled"]:
+            raise HTTPException(503, "Web-lommebøker er ikke aktivert")
+        if body.platform == "native" and body.wallet == "apple_pay" and not config["apple_pay_enabled"]:
+            raise HTTPException(503, "Apple Pay er ikke aktivert")
         if body.wallet == "google_pay" and not config["google_pay_enabled"]:
             raise HTTPException(503, "Google Pay er ikke aktivert i dette testmiljøet")
         if body.wallet and not body.future_use_accepted:
@@ -394,10 +413,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         if body.wallet:
             metadata.update(wallet=body.wallet, future_use_accepted_at=datetime.now(timezone.utc).isoformat(),
                             future_use_scope="customer_booked_snar_rides")
-        setup = await asyncio.to_thread(native_client().v1.setup_intents.create, {
-            "customer": customer_id, "automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
-            "usage": "off_session", "metadata": metadata,
-        })
+        try:
+            setup = await asyncio.to_thread(native_client().v1.setup_intents.create, {
+                "customer": customer_id, "automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
+                "usage": "off_session", "metadata": metadata,
+            })
+        except StripeError:
+            raise HTTPException(502, "Kunne ikke starte sikker kortverifisering. Prøv igjen.") from None
         return {"client_secret": setup.client_secret, "setup_intent_id": setup.id}
 
     @api.get("/payments/native/setup-intent/{setup_intent_id}")

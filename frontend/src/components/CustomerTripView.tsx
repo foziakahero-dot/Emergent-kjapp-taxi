@@ -82,7 +82,7 @@ export function CustomerTripView(p: Props) {
         {p.offline ? <Text testID="search-trip-offline" accessibilityRole="alert" style={v10.caption}>Mangler fersk turstatus. Søket fortsetter på serveren.</Text> : null}
         <V10Action kind="ghost" label="Avbryt søk" onPress={p.onCancel} disabled={!p.canCancel} busy={p.cancelBusy} testID="searching-cancel" />
       </> : cancelled ? <>
-        <V10State icon={noDriver ? 'vehicle' : 'x'} title={noDriver ? 'Ingen ledig bil akkurat nå' : status === 'cancelled_by_driver' ? 'Sjåføren måtte avbryte' : 'Turen ble avbrutt'} body={noDriver ? 'Vi fant ingen sjåfør etter tre forsøk. Vil du prøve igjen om litt?' : 'Ingen aktiv tur pågår. Du kan starte en ny bestilling.'} />
+        <V10State icon={noDriver ? 'vehicle' : 'x'} title={noDriver ? 'Ingen sjåfører tilgjengelig akkurat, prøv igjen senere' : status === 'cancelled_by_driver' ? 'Sjåføren måtte avbryte' : 'Turen ble avbrutt'} body={noDriver ? 'Søket ble avsluttet etter 60 sekunder.' : 'Ingen aktiv tur pågår. Du kan starte en ny bestilling.'} />
         {noDriver ? <Text style={[v10.secondary, { marginTop: 12 }]}>{p.trip.reservation_status === 'released' ? 'Kortreservasjonen er frigitt. Banken kan bruke litt tid på å oppdatere saldoen.' : 'Kortreservasjonen frigis automatisk.'}</Text> : null}
         <View style={{ marginTop: 20 }}><V10Action label={noDriver ? 'Prøv igjen' : 'Tilbake til hjem'} onPress={p.onHome} testID="booking-home" /></View>
       </> : status === 'driver_on_way' ? guide ? <>

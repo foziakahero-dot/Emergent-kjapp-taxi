@@ -94,7 +94,7 @@ export function GlobalCustomerShell({ children }: { children: React.ReactNode })
       return trip?.trip_id ? trip : null;
     },
     enabled: canShowIsland && appActive,
-    refetchInterval: 2500,
+    refetchInterval: 1000,
     refetchIntervalInBackground: false,
     retry: 1,
   });
@@ -123,6 +123,11 @@ export function GlobalCustomerShell({ children }: { children: React.ReactNode })
   };
   const trip = activeTripQuery.data;
   const islandTrip = trip && islandTripStatuses.has(trip.status) ? trip : null;
+  useEffect(() => {
+    if (canShowIsland && trip && ['searching', 'booking'].includes(trip.status) && !(trip as any).driver_id) {
+      router.replace(`/booking/${trip.trip_id}`);
+    }
+  }, [canShowIsland, trip?.trip_id, trip?.status]);
   return <View style={{ flex: 1, paddingBottom: visible ? 112 : 0 }}>
     {children}
     {visible ? <FloatingTabBar {...(props as any)} /> : null}

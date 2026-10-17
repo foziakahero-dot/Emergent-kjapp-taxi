@@ -1,35 +1,35 @@
 import { Platform } from 'react-native';
-import { initStripe, initPaymentSheet, presentPaymentSheet, isPlatformPaySupported, confirmPlatformPaySetupIntent } from '@stripe/stripe-react-native';
+import { initStripe, initPaymentSheet, presentPaymentSheet, isPlatformPaySupported, confirmPlatformPaySetupIntent, PlatformPay } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 
 export type NativeWallet = { kind: 'google' | 'apple'; label: string };
-function assertTestConfig(config: any) {
-  if (!config.enabled) throw new Error('Testbetaling er midlertidig utilgjengelig. Prøv igjen senere.');
-  if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');
+function assertPaymentConfig(config: any) {
+  const prefix = config.test_mode ? 'pk_test_' : 'pk_live_';
+  if (!config.enabled || !config.publishable_key?.startsWith(prefix)) throw new Error('Betaling er ikke aktivert i dette miljøet.');
 }
 async function initialize(config: any) {
-  assertTestConfig(config);
+  assertPaymentConfig(config);
   await initStripe({ publishableKey: config.publishable_key, urlScheme: 'kjapp',
     merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || undefined });
 }
 export async function nativeWalletAvailability(config?: any): Promise<NativeWallet | null> {
   config = config || await paymentApi.nativeConfig();
-  if (!config.enabled || !config.test_mode || !config.publishable_key?.startsWith('pk_test_')) return null;
+  try { assertPaymentConfig(config); } catch { return null; }
   const merchant = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || '';
   const eligible = Platform.OS === 'android' ? config.google_pay_enabled === true
-    : Platform.OS === 'ios' && merchant && merchant === config.apple_merchant_id;
+    : Platform.OS === 'ios' && config.apple_pay_enabled === true && merchant && merchant === config.apple_merchant_id;
   if (!eligible) return null;
   try {
     await initialize(config);
     const supported = await isPlatformPaySupported(Platform.OS === 'android'
-      ? { googlePay: { testEnv: true, existingPaymentMethodRequired: true } } : {});
+      ? { googlePay: { testEnv: config.test_mode === true, existingPaymentMethodRequired: true } } : {});
     return supported ? { kind: Platform.OS === 'android' ? 'google' : 'apple', label: Platform.OS === 'android' ? 'Google Pay' : 'Apple Pay' } : null;
   } catch { return null; }
 }
-function walletOptions(wallet: NativeWallet | null) {
+function walletOptions(wallet: NativeWallet | null, config: any) {
   return {
     applePay: wallet?.kind === 'apple' ? { merchantCountryCode: 'NO' } : undefined,
-    googlePay: wallet?.kind === 'google' ? { merchantCountryCode: 'NO', currencyCode: 'NOK', testEnv: true } : undefined,
+    googlePay: wallet?.kind === 'google' ? { merchantCountryCode: 'NO', currencyCode: 'NOK', testEnv: config.test_mode === true } : undefined,
   };
 }
 
@@ -44,13 +44,18 @@ export async function setupNativePaymentMethod(walletRequired = false): Promise<
   let result;
   if (walletRequired && wallet?.kind === 'google') {
     result = await confirmPlatformPaySetupIntent(setup.client_secret, { googlePay: {
-      testEnv: true, merchantName: 'SNAR', merchantCountryCode: 'NO', currencyCode: 'NOK', amount: 0,
+      testEnv: config.test_mode === true, merchantName: 'SNAR', merchantCountryCode: 'NO', currencyCode: 'NOK', amount: 0,
       label: 'Lagre betalingskort for turene du bestiller',
+    } });
+  } else if (walletRequired && wallet?.kind === 'apple') {
+    result = await confirmPlatformPaySetupIntent(setup.client_secret, { applePay: {
+      merchantCountryCode: 'NO', currencyCode: 'NOK',
+      cartItems: [{ label: 'SNAR – lagre for turer du bestiller', amount: '0.00', paymentType: PlatformPay.PaymentType.Immediate }],
     } });
   } else {
     const initialized = await initPaymentSheet({ merchantDisplayName: 'SNAR',
       setupIntentClientSecret: setup.client_secret, returnURL: 'kjapp://payment-methods',
-      allowsDelayedPaymentMethods: false, ...walletOptions(wallet) });
+      allowsDelayedPaymentMethods: false, ...walletOptions(wallet, config) });
     if (initialized.error) throw new Error(initialized.error.message);
     result = await presentPaymentSheet();
   }
@@ -77,7 +82,7 @@ export async function payNative(tripId: string): Promise<boolean | null> {
   const initialized = await initPaymentSheet({
     merchantDisplayName: 'SNAR', paymentIntentClientSecret: intent.client_secret,
     returnURL: `kjapp://receipt/${encodeURIComponent(tripId)}`, allowsDelayedPaymentMethods: false,
-    ...walletOptions(wallet),
+    ...walletOptions(wallet, config),
   });
   if (initialized.error) throw new Error(initialized.error.message);
   const result = await presentPaymentSheet();

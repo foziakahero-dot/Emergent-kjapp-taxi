@@ -68,6 +68,7 @@ async function withReservation(request: () => Promise<any>) {
 }
 
 export const tripsApi = {
+  cancelSearch: (id: string) => api.post(`/trips/${encodeURIComponent(id)}/search/cancel`).then(r => r.data),
   estimate: (data: any) => api.post('/trips/estimate', data).then((r) => r.data),
   request: (data: any) => withReservation(() => api.post('/trips/request', data)),
   authorize: (id: string) => withReservation(() => api.post(`/trips/${id}/authorization/retry`)),
@@ -105,7 +106,7 @@ export const placesApi = {
 
 export const paymentApi = {
   nativeConfig: () => api.get('/payments/native/config').then((r) => r.data),
-  nativeSetup: (wallet?: 'google_pay' | 'apple_pay') => api.post('/payments/native/setup-intent', wallet ? { wallet, future_use_accepted: true } : undefined).then(r => r.data),
+  nativeSetup: (wallet?: 'google_pay' | 'apple_pay', platform: 'native' | 'web' = 'native') => api.post('/payments/native/setup-intent', wallet ? { wallet, platform, future_use_accepted: true } : { platform }).then(r => r.data),
   nativeSetupStatus: (id: string) => api.get(`/payments/native/setup-intent/${encodeURIComponent(id)}`).then(r => r.data),
   setDefault: (id: string) => api.post(`/payment-methods/${encodeURIComponent(id)}/default`).then(r => r.data),
   nativeIntent: (trip_id: string) => api.post('/payments/native/intent', { trip_id }).then((r) => r.data),
