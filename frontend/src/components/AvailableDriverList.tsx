@@ -1,3 +1,4 @@
+import { carEtaLabel } from './CarEtaBadge';
 import React, { useEffect, useState } from 'react';
 import { Image, View } from 'react-native';
 import { Text } from '@/src/components/Typography';
@@ -28,7 +29,7 @@ export function AvailableDriverList({ cars, point }: { cars: MapCarData[]; point
     <Text style={{ color: colors.textSecondary, fontFamily: font.medium, fontSize: 12 }}>Tilgjengelige sjåfører innen 5 km</Text>
     {!cars.length ? <Text testID="selected-category-empty" style={{ color: colors.textMuted, fontSize: 12 }}>Ingen ledige sjåfører i denne kategorien akkurat nå.</Text> : cars.map(car => <View key={car.id} testID={`available-driver-${car.id}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 14, backgroundColor: colors.cardSubtle }}>
       {point ? <DriverImage car={car} point={point} kind="profile" /> : null}
-      <View style={{ flex: 1, gap: 3 }}><Text style={{ color: colors.text, fontFamily: font.medium, fontSize: 13 }}>{car.name || 'Sjåfør'}</Text><Text style={{ color: colors.textSecondary, fontSize: 12 }}>{car.car || 'Bilmodell ikke oppgitt'}</Text>
+      <View style={{ flex: 1, gap: 3 }}><Text style={{ color: colors.text, fontFamily: font.medium, fontSize: 13 }}>{car.name || 'Sjåfør'}</Text><Text style={{ color: colors.textSecondary, fontSize: 12 }}>{car.car || 'Bilmodell ikke oppgitt'} · {carEtaLabel(car)}</Text>
         {typeof car.rating === 'number' && Number.isFinite(car.rating) ? <Text style={{ color: colors.textMuted, fontSize: 11 }}>{car.rating.toFixed(1)} av 5</Text> : null}
       </View>
       {point && car.car_icon_version ? <DriverImage car={car} point={point} kind="car-icon" /> : null}

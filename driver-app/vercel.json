@@ -1,13 +1,24 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "installCommand": "npm --prefix ../admin-web install",
-  "buildCommand": "npm --prefix ../admin-web run build && rm -rf dist && cp -R ../admin-web/dist dist",
+  "framework": null,
+  "installCommand": "npm ci",
+  "buildCommand": "node -e \"const u=new URL(process.env.EXPO_PUBLIC_BACKEND_URL || '');if(u.protocol!=='https:')throw Error('Set EXPO_PUBLIC_BACKEND_URL to the intended Render API')\" && npx expo export --platform web",
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://github-app-builder-28.emergent.host/api/:path*"
+      "source": "/((?!assets/|_expo/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin-allow-popups"
+        }
+      ]
     }
   ]
 }

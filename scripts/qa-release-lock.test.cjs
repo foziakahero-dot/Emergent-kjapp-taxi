@@ -36,7 +36,7 @@ for (const [name, change, actual] of [
 ]) test(name + ' blocks builds', () => assert.throws(() => assertSource({ ...good, ...change }, actual || sha)));
 
 test('PR event targeting a non-QA base blocks builds', () => assert.throws(() => assertSource({ ...goodQaPr, GITHUB_BASE_REF: 'main' }, sha)));
-test('Driver uses its existing EAS signing without a Google login requirement', () => assert.doesNotThrow(() => assertSource({ ...good, QA_APP_DIRECTORY: 'driver-app', QA_ANDROID_CERT_SHA1: '' }, sha)));
+test('Driver Google sign-in also requires a registered signing fingerprint', () => assert.throws(() => assertSource({ ...good, QA_APP_DIRECTORY: 'driver-app', QA_ANDROID_CERT_SHA1: '' }, sha)));
 test('backend must report the exact reviewed QA commit', () => {
   assert.doesNotThrow(() => assertBackendRelease({ release: { commit: sha, environment: 'qa' } }, sha));
   for (const release of [undefined, { commit: 'c'.repeat(40), environment: 'qa' }, { commit: sha, environment: 'production' }]) {

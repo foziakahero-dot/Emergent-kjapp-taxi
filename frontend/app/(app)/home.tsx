@@ -13,7 +13,7 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, AppState, Keyboard, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +33,8 @@ export default function Home() {
   const { user } = useAuth();
   const { retryTripId } = useLocalSearchParams<{ retryTripId?: string }>();
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
+  const [mapOnly, setMapOnly] = useState(true);
 
   const queryClient = useQueryClient();
   // GlobalCustomerShell owns polling. This observer only reads its shared state.
@@ -314,11 +316,11 @@ export default function Home() {
         route={activeTrip ? activeTrip.geometry?.coordinates : previewRoute}
         focusRoute={!activeTrip && dropoff ? routeGeom : undefined}
         cars={activeTrip && !searchingTrip ? [] : cars}
-        showControls={Boolean(activeTrip)}
+        showControls={Boolean(activeTrip || mapOnly || searchOpen)}
         focusRevision={mapFocusRevision}
-        focusMode={searchingTrip || (!activeTrip && !dropoff) ? 'nearby' : 'route'}
-        contentInsets={{ top: insets.top + (activeTrip ? 16 + activeCardHeight : 12 + headerHeight) + 32,
-          right: 48, bottom: Math.max(insets.bottom + 112, activeTrip ? 0 : dropoff ? rideHeight : browseHeight) + 32, left: 48 }}
+        focusMode={searchingTrip || (!activeTrip && (mapOnly || searchOpen || !dropoff)) ? 'nearby' : 'route'}
+        contentInsets={{ top: searchOpen ? insets.top + 8 + screenHeight * .3 : insets.top + (activeTrip ? 16 + activeCardHeight : 12 + headerHeight) + 16,
+          right: 48, bottom: mapOnly || searchOpen ? insets.bottom + 96 : Math.max(insets.bottom + 112, activeTrip ? 0 : dropoff ? rideHeight : browseHeight) + 32, left: 48 }}
         activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
         testID="home-map"
       />
@@ -328,7 +330,7 @@ export default function Home() {
         <ActiveTripCard trip={activeTrip} offline={activeTripOffline} onOpen={() => router.push(activeTrip.status === 'arrived' ? `/receipt/${activeTrip.trip_id}` : `/booking/${activeTrip.trip_id}`)} />
         {searchingTrip ? <AvailabilityStatus search={available} trip={activeTrip} /> : null}
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
-      {!activeTrip ? <CustomerBookingView
+      {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
         nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
@@ -342,15 +344,29 @@ export default function Home() {
         onPlaces={() => router.push('/saved-places')} onRetryPlaces={() => void loadPlaces()}
         onPayment={() => router.push('/payment-methods')}
         onRetryQuote={() => { setQuote(null); setQuoteRevision(previous => previous + 1); }}
-        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); }}
+        onBook={() => void book()} onBack={() => { setDropoff(null); setQuote(null); setReviewing(false); setMapOnly(true); }}
         onHeight={dropoff ? setRideHeight : setBrowseHeight}
         availability={(locationReady || selectedPickup) ? <AvailabilityStatus compact search={available} /> : null}
       /> : null}
 
-      {searchOpen ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000', opacity: .55 }} /> : null}
-      {searchOpen ? (
-        <SearchSheet
-          onClose={() => setSearchOpen(false)}
+      {!activeTrip && !searchOpen ? <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, flexDirection: 'row', justifyContent: mapOnly ? 'space-between' : 'flex-end', alignItems: 'center' }} pointerEvents="box-none">
+        <Pressable testID="home-search-toggle" accessibilityRole="button" accessibilityLabel={mapOnly ? 'Åpne søk' : 'Minimer til kart'} accessibilityState={{ expanded: !mapOnly }} onPress={() => {
+          Keyboard.dismiss();
+          if (mapOnly) { setSearchTarget('dropoff'); setSearchOpen(true); }
+          else setMapOnly(true);
+        }} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', minHeight: 44, paddingHorizontal: 14, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line }}>
+          <V10Icon name={mapOnly ? 'search' : 'chevDown'} size={18} /><Text style={v10.secondary}>{mapOnly ? 'Søk' : 'Vis kart'}</Text>
+        </Pressable>
+        {mapOnly ? <Pressable testID="map-profile" accessibilityRole="button" accessibilityLabel="Åpne profilen" onPress={() => router.push('/(app)/profile')} style={{ minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={v10.secondary}>{initials}</Text></Pressable> : null}
+      </View> : null}
+      {!activeTrip && mapOnly && !searchOpen ? <View pointerEvents="box-none" style={{ position: 'absolute', bottom: insets.bottom + 100, left: 16, right: 64 }}>
+        {dropoff ? <Pressable testID="map-resume-booking" accessibilityRole="button" onPress={() => setMapOnly(false)} style={{ padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text style={v10.body}>Fortsett tur til {dropoff.name}</Text></Pressable> : null}
+        {!locationReady ? <Pressable testID="map-enable-location" accessibilityRole="button" onPress={() => void refreshLocation(true).then(confirmed => { if (confirmed) setMapFocusRevision(value => value + 1); })} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={v10.body}>Aktiver min posisjon</Text></Pressable> : null}
+        <AvailabilityStatus compact search={available} />
+      </View> : null}
+      {!activeTrip ? <SearchSheet
+          visible={searchOpen}
+          onClose={() => { Keyboard.dismiss(); setSearchOpen(false); setMapOnly(true); }}
           onVoice={openVoice}
           target={searchTarget}
           pickupLabel={selectedPickup?.name || pickupLabel}
@@ -373,18 +389,20 @@ export default function Home() {
               setReviewing(false);
             }
             setSearchTarget('dropoff');
-            setSearchOpen(false);
+            Keyboard.dismiss(); setSearchOpen(false); setMapOnly(false);
           }}
           featured={featured}
           insets={insets}
-        />
-      ) : null}
+        /> : null}
     </View>
   );
 }
 
-export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
+export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
   useColorTheme();
+  const { height: screenHeight } = useWindowDimensions();
+  const input = useRef<any>(null);
+  useEffect(() => { if (visible) input.current?.focus(); }, [visible]);
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);
@@ -412,14 +430,21 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, targ
   const selectableItems = items.filter((place: any) => normalizeSearchPlace(place));
 
   const selectPlace = (place: any) => { const normalized = normalizeSearchPlace(place); if (normalized) onSelect(normalized); };
-  return <V10Entrance sheet style={{ position: 'absolute', top: Math.max(54, insets.top + 6), bottom: 0, left: 0, right: 0 }}><KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.surface, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 20, paddingTop: 10 }} testID="search-sheet">
-    <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
-    <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Avbryt søk" style={{ position: 'absolute', top: -50, left: 20, width: 44, height: 44, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevL" size={20} /></Pressable>
-    <View style={{ gap: 8 }}>{['pickup', 'dropoff'].map(field => <View key={field} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><View style={{ width: 20, alignItems: 'center' }}><View style={{ width: 10, height: 10, borderRadius: field === 'pickup' ? 5 : 3, backgroundColor: field === 'pickup' ? colors.accent : colors.text }} /></View>
-      {target === field || (target === 'stop' && field === 'dropoff') ? <View style={{ flex: 1, height: 48, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: colors.text }}><TextInput testID="search-input" accessibilityLabel={target === 'pickup' ? 'Hentested' : 'Destinasjon'} autoFocus placeholder={target === 'pickup' ? 'Hvor skal du hentes?' : 'Hvor skal du?'} placeholderTextColor={colors.textMuted} underlineColorAndroid="transparent" style={[{ flex: 1, fontFamily: font.body, fontSize: 16, color: colors.text, minWidth: 0, paddingVertical: 0 }, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]} value={q} onChangeText={setQ} returnKeyType="search" />{loading ? <ActivityIndicator color={colors.accent} /> : <Pressable testID="search-clear" onPress={() => setQ('')} accessibilityLabel="Tøm søk" style={{ padding: 6 }}><V10Icon name="x" size={18} /></Pressable>}</View>
-      : <Pressable testID={field === 'pickup' ? 'search-pickup' : 'search-destination'} onPress={field === 'pickup' ? onPickup : onDestination} accessibilityRole="button" style={{ flex: 1, minHeight: 48, borderRadius: 16, backgroundColor: colors.cardSubtle, paddingHorizontal: 16, justifyContent: 'center' }}><Text style={[v10.secondary, { color: colors.text }]} numberOfLines={1}>{field === 'pickup' ? pickupLabel || 'Velg hentested' : destinationLabel || 'Velg destinasjon'}</Text></Pressable>}
-    </View>)}</View>
-    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 24 }}>
+  if (!visible) return null;
+  return <V10Entrance sheet style={{ position: 'absolute', top: insets.top + 8, height: screenHeight * .3, maxHeight: '30%', left: 12, right: 12 }}><View style={{ flex: 1, overflow: 'hidden', backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingTop: 8 }} testID="search-sheet">
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 36 }}>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable testID="search-pickup" accessibilityRole="button" onPress={onPickup}><Text style={[v10.caption, { color: target === 'pickup' ? colors.accent : colors.textSecondary }]}>Hentested</Text></Pressable>
+        <Pressable testID="search-destination" accessibilityRole="button" onPress={onDestination}><Text style={[v10.caption, { color: target !== 'pickup' ? colors.accent : colors.textSecondary }]}>Destinasjon</Text></Pressable>
+      </View>
+      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" style={{ minWidth: 44, minHeight: 36, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevDown" size={20} /></Pressable>
+    </View>
+    <View style={{ height: 42, borderRadius: 12, backgroundColor: colors.cardSubtle, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <V10Icon name="search" size={18} />
+      <TextInput ref={input} testID="search-input" accessibilityLabel={target === 'pickup' ? 'Hentested' : 'Destinasjon'} placeholder={target === 'pickup' ? 'Hvor skal du hentes?' : 'Hvor skal du?'} placeholderTextColor={colors.textMuted} underlineColorAndroid="transparent" style={[{ flex: 1, fontFamily: font.body, fontSize: 16, color: colors.text, minWidth: 0, paddingVertical: 0 }, Platform.OS === 'web' ? { outlineStyle: 'none' } as any : null]} value={q} onChangeText={setQ} returnKeyType="search" />
+      {loading ? <ActivityIndicator color={colors.accent} /> : <Pressable testID="search-clear" onPress={() => setQ('')} accessibilityLabel="Tøm søk" style={{ padding: 6 }}><V10Icon name="x" size={18} /></Pressable>}
+    </View>
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 8, paddingBottom: 12 }}>
       {quickPlaces.some((place: any) => normalizeSearchPlace(place)) ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>{quickPlaces.filter((place: any) => normalizeSearchPlace(place)).slice(0, 3).map((place: any, i: number) => <Pressable key={place.id || i} testID={`search-quick-${i}`} accessibilityRole="button" onPress={() => selectPlace(place)} style={{ minHeight: 36, borderRadius: 12, backgroundColor: colors.cardSubtle, paddingHorizontal: 12, justifyContent: 'center' }}><Text style={v10.secondary}>{place.label || place.name}</Text></Pressable>)}</ScrollView> : null}
       <Text style={[v10.overline, { marginBottom: 4 }]}>{q.trim().length >= 2 ? 'Resultater' : 'Faste og utvalgte steder'}</Text>
       {selectableItems.map((r: any, i: number) => <V10Entrance key={`${r.name}-${r.lat}-${r.lng}`} delay={Math.min(i, 2) * 60}><Pressable key={`${r.name}-${i}`} testID={`search-result-${i}`} accessibilityRole="button" onPress={() => selectPlace(r)} style={{ minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 8 }}><View style={v10.icon}><V10Icon name={r.saved ? 'clock' : 'destination'} size={20} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{r.name}</Text>{r.address || r.label ? <Text style={v10.caption}>{r.address || r.label}</Text> : null}</View></Pressable></V10Entrance>)}
@@ -427,7 +452,7 @@ export function SearchSheet({ onClose, onSelect, onVoice, featured, insets, targ
       {!searchError && !selectableItems.length && q.trim().length >= 2 && !loading ? <View style={{ paddingVertical: 24 }}><Text style={v10.heading}>Fant ingen steder</Text><Text style={v10.secondary}>Prøv et annet søk.</Text></View> : null}
       <Pressable testID="search-voice" onPress={onVoice} accessibilityRole="button" style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minHeight: 48, marginTop: 16 }}><V10Icon name="voice" /><Text style={v10.secondary}>Snakk med SNAR</Text></Pressable>
     </ScrollView>
-  </KeyboardAvoidingView></V10Entrance>;
+  </View></V10Entrance>;
 }
 
 export function normalizeSearchPlace(place: any): { name: string; lat: number; lng: number; address?: string } | null {

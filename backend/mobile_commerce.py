@@ -14,6 +14,8 @@ from fastapi import Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 import jwt
+import httpx
+from urllib.parse import urlparse
 from stripe_fleet import ensure_fleet_account
 from admin_control_center import _stripe_snapshot, stripe_destination_for_trip
 from qa_safety import is_safe_qa_web_origin
@@ -21,6 +23,14 @@ from qa_safety import is_safe_qa_web_origin
 
 class NativeIdentity(BaseModel):
     identity_token: str = Field(min_length=10, max_length=20000)
+    client: Literal["customer", "driver"] = "customer"
+    device_id: Optional[str] = Field(default=None, max_length=128)
+
+
+class GoogleWebCode(BaseModel):
+    code: str = Field(min_length=1, max_length=4096)
+    code_verifier: str = Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9._~-]+$")
+    redirect_uri: str = Field(min_length=1, max_length=2048)
     client: Literal["customer", "driver"] = "customer"
     device_id: Optional[str] = Field(default=None, max_length=128)
 
@@ -42,7 +52,7 @@ def native_identity_config(client="customer"):
     google = os.getenv(prefix + "GOOGLE_CLIENT_ID", "").strip()
     apple = os.getenv(prefix + ("APPLE_DRIVER_BUNDLE_ID" if client == "driver" else "APPLE_BUNDLE_ID"),
         "" if qa else ("no.nexorahub.kjapp.driver" if client == "driver" else "no.nexorahub.kjapp.customer")).strip()
-    google_enabled = client == "customer" and bool(google) and (not qa or os.getenv("QA_GOOGLE_AUTH_ENABLED") == "true")
+    google_enabled = bool(google) and (not qa or os.getenv("QA_GOOGLE_AUTH_ENABLED") == "true")
     apple_enabled = bool(apple) and (not qa or os.getenv("QA_APPLE_AUTH_ENABLED") == "true")
     return {"google_enabled": google_enabled,
         "google_web_client_id": google if google_enabled else "",
@@ -72,7 +82,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
                 # both identities, including Gmail/Workspace and Apple accounts.
                 raise HTTPException(409, f"Logg inn på den eksisterende {brand}-kontoen og koble identiteten under Konto.")
         if user and (user.get("disabled") or user.get("role", "user") != role):
-            raise HTTPException(401, "Denne kontoen kan ikke brukes i appen")
+            raise HTTPException(403, "Denne kontoen kan ikke brukes i appen")
         if role == "driver":
             if not user or user.get("approved") is not True:
                 raise HTTPException(403, "Sjåførkontoen må være invitert og godkjent av KJAPP")
@@ -119,8 +129,6 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/native")
     async def google_native(body: NativeIdentity, request: Request, response: Response):
-        if body.client != "customer":
-            raise HTTPException(403, "Google-innlogging er bare tilgjengelig i SNAR-kundeappen.")
         config = native_identity_config(body.client)
         if not config["google_enabled"]:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet.")
@@ -137,15 +145,18 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return await identity_session("google", claims, body, response)
 
     @api.post("/auth/google/link")
-    async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
-        if body.client != "customer":
-            raise HTTPException(403, "Google-innlogging er bare tilgjengelig i SNAR-kundeappen.")
+    async def link_google(body: NativeIdentity, request: Request, current=Depends(get_current_user)):
+        expected_role = "driver" if body.client == "driver" else "user"
+        if current.get("role", "user") != expected_role:
+            raise HTTPException(403, "Denne kontoen kan ikke kobles i appen")
+        if expected_role == "driver":
+            if current.get("approved") is not True:
+                raise HTTPException(403, "Sjåførkontoen må være godkjent")
+            await require_active_fleet(current.get("fleet_id"))
         config = native_identity_config(body.client)
         if not config["google_enabled"]:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet.")
         await rate_limit(request, "google-link", 20, 900)
-        if body.client != "customer":
-            raise HTTPException(403, "Kun kundekonto kan kobles her")
         client_id = config["google_web_client_id"]
         if not client_id:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert")
@@ -172,6 +183,51 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         if result.matched_count != 1:
             raise HTTPException(409, "Kontoen er koblet til en annen Google-identitet")
         return {"linked": True}
+
+    @api.get("/auth/google/web/config")
+    async def google_web_config(client: Literal["customer", "driver"] = "customer"):
+        config = native_identity_config(client)
+        prefix = "QA_" if os.getenv("APP_ENV", "").strip().lower() == "qa" else ""
+        enabled = config["google_enabled"] and bool(os.getenv(prefix + "GOOGLE_CLIENT_SECRET", "").strip())
+        return {"enabled": enabled, "client_id": config["google_web_client_id"] if enabled else ""}
+
+    async def exchange_google_code(body):
+        config = await google_web_config(body.client)
+        if not config["enabled"]:
+            raise HTTPException(503, "Google web-innlogging er ikke konfigurert for dette miljøet.")
+        prefix = "QA_" if os.getenv("APP_ENV", "").strip().lower() == "qa" else ""
+        allowed = {uri.strip() for uri in os.getenv(prefix + "GOOGLE_REDIRECT_URIS", "").split(",") if uri.strip()}
+        parsed = urlparse(body.redirect_uri)
+        local = parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1")
+        if body.redirect_uri not in allowed or (parsed.scheme != "https" and not local):
+            raise HTTPException(400, "Google redirect URI er ikke godkjent på serveren.")
+        try:
+            async with httpx.AsyncClient(timeout=12.0) as http:
+                result = await http.post("https://oauth2.googleapis.com/token", data={
+                    "code": body.code, "code_verifier": body.code_verifier,
+                    "redirect_uri": body.redirect_uri, "client_id": config["client_id"],
+                    "client_secret": os.environ[prefix + "GOOGLE_CLIENT_SECRET"].strip(),
+                    "grant_type": "authorization_code"})
+            if result.status_code != 200:
+                raise HTTPException(401, "Google avviste innloggingen. Prøv igjen.")
+            identity = result.json().get("id_token")
+            if not isinstance(identity, str) or not identity:
+                raise HTTPException(401, "Google returnerte ikke et ID-token.")
+            return identity
+        except httpx.HTTPError:
+            raise HTTPException(503, "Google er midlertidig utilgjengelig. Prøv igjen.")
+
+    @api.post("/auth/google/web/code")
+    async def google_web_code(body: GoogleWebCode, request: Request, response: Response):
+        await rate_limit(request, "google-web-code", 30, 900)
+        identity = await exchange_google_code(body)
+        return await google_native(NativeIdentity(identity_token=identity, client=body.client, device_id=body.device_id), request, response)
+
+    @api.post("/auth/google/web/link")
+    async def google_web_link(body: GoogleWebCode, request: Request, current=Depends(get_current_user)):
+        await rate_limit(request, "google-web-link", 20, 900)
+        identity = await exchange_google_code(body)
+        return await link_google(NativeIdentity(identity_token=identity, client=body.client), request, current)
 
     async def verify_apple(body):
         config = native_identity_config(body.client)

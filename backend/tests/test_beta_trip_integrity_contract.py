@@ -229,19 +229,18 @@ def test_customer_login_and_social_auth_cannot_cross_into_driver_or_admin_roles(
     assert 'user.get("role", "user") != "user"' in google_legacy
 
     google_pkce = _block(SERVER, "google_oauth_code")
-    assert 'user.get("role", "user") != "user"' in google_pkce
+    assert 'HTTPException(410' in google_pkce
 
     apple = _block(SERVER, "apple_signin")
     assert 'existing.get("role", "user") != "user"' in apple
 
 
-def test_driver_bundle_contains_no_google_or_self_registration_auth_path():
+def test_driver_google_still_has_no_self_registration_or_legacy_auth_path():
     driver_auth = (ROOT / "driver-app" / "src" / "context" / "AuthContext.tsx").read_text(encoding="utf-8")
     driver_api = (ROOT / "driver-app" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
     driver_login = (ROOT / "driver-app" / "app" / "driver-login.tsx").read_text(encoding="utf-8")
 
     for forbidden in (
-        "signInWithGoogle",
         "googleSession",
         "authApi.register",
         "WebBrowser.openAuthSessionAsync",
@@ -250,7 +249,7 @@ def test_driver_bundle_contains_no_google_or_self_registration_auth_path():
         assert forbidden not in driver_auth
     assert "register:" not in driver_api
     assert "googleSession:" not in driver_api
-    assert 'label="E-post eller telefon"' in driver_login
+    assert 'accessibilityLabel="E-post eller telefon"' in driver_login
 
 
 def test_customer_and_driver_apps_fail_closed_on_wrong_restored_role():

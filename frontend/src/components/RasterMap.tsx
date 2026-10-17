@@ -6,6 +6,7 @@ import Svg, { Circle, Ellipse, G, Polyline, Rect, Text as SvgText } from 'react-
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
 import { V10VehicleBody, V10VehicleMarker } from './V10VehicleMarker';
+import { CarEtaBadge, carEtaLabel } from './CarEtaBadge';
 import { DriverMarkerPopup } from './DriverMarkerPopup';
 import { MapCarData } from '@/src/lib/liveCars';
 import { useSmoothPosition } from './useSmoothPosition';
@@ -315,9 +316,9 @@ function RasterDriverMarker({ car, projectX, projectY, onPress }: {
 }) {
   const position = useSmoothPosition(car, 250);
   if (!position) return null;
-  return <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}`} onPress={onPress}
-    style={{ position: 'absolute', left: projectX(position.lng) - 25, top: projectY(position.lat) - 25, width: 50, height: 50 }}>
-    <V10VehicleMarker heading={position.heading} vehicleType={car.type} bodyType={car.body_type} />
+  return <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress}
+    style={{ position: 'absolute', left: projectX(position.lng) - 40, top: projectY(position.lat) - 49, width: 80, height: 74, alignItems: 'center' }}>
+    <CarEtaBadge car={car} /><V10VehicleMarker heading={position.heading} vehicleType={car.type} bodyType={car.body_type} />
   </Pressable>;
 }
 

@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { GoogleSignin, isSuccessResponse, isCancelledResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
-export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }) {
+export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }, _action: 'signin' | 'link' = 'signin') {
   const webClientId = String(config?.google_web_client_id || '').trim();
   const iosClientId = String(config?.google_ios_client_id || '').trim();
   if (!webClientId) throw new Error('Google-innlogging er ikke konfigurert på SNAR-serveren ennå.');

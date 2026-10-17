@@ -24,9 +24,9 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
-  googleWebConfig: () => api.get('/auth/google/config').then((r) => r.data),
-  googleWebCode: (code: string, code_verifier: string, redirect_uri: string) =>
-    api.post('/auth/google/code', { code, code_verifier, redirect_uri }).then((r) => r.data),
+  googleWebConfig: () => api.get('/auth/google/web/config', { params: { client: 'customer' } }).then(r => r.data),
+  googleWebCode: (code: string, code_verifier: string, redirect_uri: string, action: 'signin' | 'link' = 'signin') =>
+    api.post(action === 'link' ? '/auth/google/web/link' : '/auth/google/web/code', { code, code_verifier, redirect_uri, client: 'customer' }).then(r => r.data),
   nativeConfig: () => api.get('/auth/native/config', { params: { client: 'customer' } }).then((r) => r.data),
   linkGoogle: (identity_token: string) => api.post('/auth/google/link', { identity_token, client: 'customer' }).then(r => r.data),
   linkApple: (identity_token: string) => api.post('/auth/apple/link', { identity_token, client: 'customer' }).then(r => r.data),

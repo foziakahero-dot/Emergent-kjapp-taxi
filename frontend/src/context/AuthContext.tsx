@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
@@ -101,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
     const epoch = ++sessionEpoch.current;
     const identity = provider === 'google'
-      ? await googleIdentity(await authApi.nativeConfig()) : await appleIdentity();
+      ? await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig()) : await appleIdentity();
     if (!identity || epoch !== sessionEpoch.current) return null;
     const res = typeof identity === 'string' ? await authApi.nativeSignIn(provider, identity) : identity.session;
     if (epoch !== sessionEpoch.current) return null;

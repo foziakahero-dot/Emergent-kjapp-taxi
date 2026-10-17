@@ -1,7 +1,8 @@
 import { Availability, carExpiry, LiveCar, validPosition, visibleCars } from './carAvailability';
 
 export type MapCarData = {
-  id?: string; lat: number; lng: number; heading?: number; eta_min?: number;
+  id?: string; lat: number; lng: number; heading?: number; eta_min?: number | null;
+  eta_source?: string | null; eta_status?: string; online?: boolean; available?: boolean;
   photo_version?: string | null; car_icon_version?: string | null;
   name?: string; car?: string; rating?: number | null; type?: string; body_type?: string;
 };
@@ -81,7 +82,7 @@ export class LiveCarsFeed {
       if (result.error) { this.clear('offline'); return; }
       const expiresAt: Record<string, number> = {}, cars: LiveCar[] = [];
       for (const car of result.cars) {
-        if (typeof car?.id !== 'string' || !validPosition(car) || !this.circle || distanceKm(this.circle, car) > RADIUS_KM) continue;
+        if (car?.online === false || car?.available === false || typeof car?.id !== 'string' || !validPosition(car) || !this.circle || distanceKm(this.circle, car) > RADIUS_KM) continue;
         const expiry = carExpiry(car, { ...result, gps_fresh_seconds: Math.min(2, Number(result.gps_fresh_seconds)) }, this.now());
         if (expiry <= this.now() || expiresAt[car.id]) continue;
         expiresAt[car.id] = expiry; cars.push(car);

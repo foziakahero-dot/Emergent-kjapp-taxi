@@ -39,7 +39,7 @@ jobs:
       EXPECTED_SOURCE_SHA: ${{ inputs.expected_sha }}
       QA_APK_AUTHORIZATION: ${{ inputs.authorization }}
       QA_APP_DIRECTORY: ${{ inputs.app_directory }}
-      QA_ANDROID_CERT_SHA1: ${{ vars.SNAR_CUSTOMER_QA_ANDROID_SHA1 }}
+      QA_ANDROID_CERT_SHA1: ${{ inputs.app_directory == 'frontend' && vars.SNAR_CUSTOMER_QA_ANDROID_SHA1 || vars.SNAR_DRIVER_QA_ANDROID_SHA1 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -103,8 +103,8 @@ jobs:
         if: ${{ !inputs.diagnostic_only }}
         run: node scripts/qa-eas-artifact.cjs "$RUNNER_TEMP/snar-eas-result.json"
 
-      - name: Verify Customer APK signing certificate matches registered Google OAuth
-        if: ${{ !inputs.diagnostic_only && inputs.app_directory == 'frontend' }}
+      - name: Verify APK signing certificate matches registered Google OAuth
+        if: ${{ !inputs.diagnostic_only }}
         shell: bash
         run: |
           set -euo pipefail

@@ -36,10 +36,11 @@ export default function CustomerAccount() {
     if (googleLock.current) return;
     googleLock.current = true; setGoogleBusy(true); setGoogleError('');
     try {
-      const identity = await googleIdentity(await authApi.nativeConfig());
+      const identity = await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig(), 'link');
       if (!identity) return;
-      if (typeof identity !== 'string') throw new Error('Kontokobling må gjøres i mobilappen.');
-      await authApi.linkGoogle(identity); await refresh();
+      if (typeof identity === 'string') await authApi.linkGoogle(identity);
+      else if (!identity.session?.linked) throw new Error('Google-koblingen kunne ikke bekreftes.');
+      await refresh();
     } catch (error) { setGoogleError(apiError(error)); }
     finally { googleLock.current = false; setGoogleBusy(false); }
   };
@@ -100,7 +101,7 @@ export default function CustomerAccount() {
           </View>
         </View>
 
-        {Platform.OS !== 'web' ? <Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable> : null}
+        {<Pressable testID="profile-link-google" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.google_linked} onPress={() => void linkGoogle()} style={s.googleRow}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable>}
         {Platform.OS === 'ios' ? <Pressable testID="profile-link-apple" accessibilityRole="button" disabled={googleBusy || appleBusy || user?.apple_linked} onPress={() => void linkApple()} style={s.googleRow}><Text>{user?.apple_linked ? 'Apple-konto koblet' : appleBusy ? 'Kobler Apple…' : 'Koble Apple-konto'}</Text></Pressable> : null}
           {googleError ? <Text testID="profile-link-google-error" accessibilityRole="alert" style={{ color: colors.danger }}>{googleError}</Text> : null}
         {(['Steder', 'Konto'] as const).map((section) => (
