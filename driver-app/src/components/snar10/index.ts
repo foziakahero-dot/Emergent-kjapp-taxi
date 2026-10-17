@@ -12,3 +12,6 @@ export { ExperienceStudio } from '../ExperienceStudio';
 export { Avatar } from './Avatar';
 export { Chip } from './Chip';
 export { Island } from './Island';
+export { Ring } from './Ring';
+export { GlassView } from './GlassView';
+export { VehicleMarker } from './VehicleMarker';

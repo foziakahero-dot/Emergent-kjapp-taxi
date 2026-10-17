@@ -1,8 +1,10 @@
+import type { DemandCell } from '@/src/lib/demand';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox, {
   Camera,
+  CircleLayer,
   LineLayer,
   MapView,
   MarkerView,
@@ -31,6 +33,7 @@ type Props = {
   dropoff?: LL | null;
   route?: number[][] | null;
   cars?: Car[];
+  demand?: DemandCell[];
   activeCar?: Car | null;
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
@@ -68,13 +71,14 @@ export function MapboxInteractiveMap({
   dropoff,
   route,
   cars = [],
+  demand = [],
   activeCar,
   user,
   style,
   testID,
   interactive = true,
 }: Props) {
-  useColorTheme();
+  const theme = useColorTheme();
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
@@ -87,8 +91,9 @@ export function MapboxInteractiveMap({
     if (pickup) points.push(pickup);
     if (dropoff) points.push(dropoff);
     if (activeCar) points.push({ lat: activeCar.lat, lng: activeCar.lng });
+    points.push(...demand);
     return points;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, demand]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -149,6 +154,7 @@ export function MapboxInteractiveMap({
         dropoff={dropoff}
         route={route}
         cars={cars}
+        demand={demand}
         activeCar={activeCar}
         user={user}
         style={style}
@@ -205,7 +211,7 @@ export function MapboxInteractiveMap({
           id="basemap"
           existing
           config={{
-            lightPreset: 'day',
+            lightPreset: theme.effective === 'dark' ? 'night' : 'day',
             theme: 'monochrome',
             show3dObjects: false,
             show3dBuildings: false,
@@ -218,6 +224,10 @@ export function MapboxInteractiveMap({
             showHdRoads: true,
           } as any}
         />
+
+        {demand.length ? <ShapeSource id="snar-demand" shape={{ type: 'FeatureCollection', features: demand.map((cell, index) => ({ type: 'Feature', id: index, properties: { weight: cell.weight }, geometry: { type: 'Point', coordinates: [cell.lng, cell.lat] } })) }}>
+          <CircleLayer id="snar-demand-cells" slot="top" style={{ circleColor: colors.accent, circleRadius: ['interpolate', ['linear'], ['get', 'weight'], 0, 12, 1, 42], circleOpacity: .35, circleBlur: .7 }} />
+        </ShapeSource> : null}
 
         {routeShape ? (
           <ShapeSource id="kjapp-route-source" shape={routeShape}>

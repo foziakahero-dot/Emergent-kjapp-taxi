@@ -157,6 +157,7 @@ export const driverApi = {
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
   location: publishDriverLocation,
+  demand: () => api.get('/driver/demand').then(r => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),

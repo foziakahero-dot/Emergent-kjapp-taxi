@@ -1,3 +1,4 @@
+import type { DemandCell } from '@/src/lib/demand';
 import { Text } from '@/src/components/Typography';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -83,6 +84,7 @@ export function InteractiveMap({
   dropoff,
   route,
   cars = [],
+  demand = [],
   activeCar,
   user,
   style,
@@ -93,6 +95,7 @@ export function InteractiveMap({
   dropoff?: LL | null;
   route?: number[][] | null;
   cars?: Car[];
+  demand?: DemandCell[];
   activeCar?: Car | null;
   user?: LL | null;
   style?: StyleProp<ViewStyle>;
@@ -120,8 +123,9 @@ export function InteractiveMap({
     if (pickup) pts.push(pickup);
     if (dropoff) pts.push(dropoff);
     if (activeCar) pts.push({ lat: activeCar.lat, lng: activeCar.lng });
+    pts.push(...demand);
     return pts;
-  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng]);
+  }, [user?.lat, user?.lng, pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, activeCar?.lat, activeCar?.lng, demand]);
 
   const focusKey = focus.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
 
@@ -267,6 +271,7 @@ export function InteractiveMap({
           />
 
           <Svg width={w} height={h} style={{ position: 'absolute', top: 0, left: 0 }} pointerEvents="none">
+            {demand.map((cell, index) => <Circle key={`demand-${index}`} cx={sx(cell.lng)} cy={sy(cell.lat)} r={12 + cell.weight * 30} fill={colors.accent} opacity={.12 + cell.weight * .18} />)}
             {routeLine ? (
               <>
                 <Polyline points={routeLine} fill="none" stroke={colors.route} strokeOpacity={0.24} strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />

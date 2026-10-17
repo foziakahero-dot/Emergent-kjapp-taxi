@@ -13,3 +13,5 @@ export { Avatar } from './Avatar';
 export { Chip } from './Chip';
 export { Island } from './Island';
 export { VehicleMarker } from './VehicleMarker';
+export { Ring } from './Ring';
+export { GlassView } from './GlassView';

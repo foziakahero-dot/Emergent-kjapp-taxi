@@ -1,3 +1,4 @@
+import { BlurTargetView } from 'expo-blur';
 import { useTripUpdates } from '@/src/lib/useTripUpdates';
 import { DriverCockpitView } from '@/src/components/DriverCockpitView';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
@@ -529,6 +530,7 @@ export default function DriverHome() {
     return bits.join(' · ');
   };
 
+  const mapTarget = useRef<View | null>(null);
   const firstOffer = pending[0];
   const offerExpiresMs = firstOffer?.offer_expires_at ? Date.parse(firstOffer.offer_expires_at) : NaN;
   const offerRemaining = Number.isFinite(offerExpiresMs)
@@ -567,7 +569,7 @@ export default function DriverHome() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
-      <Map
+      <BlurTargetView ref={mapTarget} style={StyleSheet.absoluteFill}><Map
         style={StyleSheet.absoluteFill}
         user={!current ? loc : null}
         pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
@@ -575,11 +577,11 @@ export default function DriverHome() {
         route={current ? mapRoute : firstOffer?.geometry?.coordinates}
         activeCar={current && loc ? loc : null}
         testID="driver-map"
-      />
+      /></BlurTargetView>
       {!online && !current && !firstOffer ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.offlineMapWash]} /> : null}
 
       <DriverCockpitView
-        user={user} online={online} busy={busy || summaryActionBusy} error={error}
+        mapTarget={mapTarget} user={user} online={online} busy={busy || summaryActionBusy} error={error}
         summary={summary} current={current} completed={completedTrip} offer={firstOffer}
         offerRemaining={offerRemaining} offerExpired={offerExpired} offerDistance={offerDistance} offerDuration={offerDuration}
         gpsReady={Boolean(loc) && !gpsBlocked.current} minimized={tripMinimized}
@@ -619,7 +621,7 @@ export default function DriverHome() {
 
 const useStyles = makeStyles((c) => ({
     driverHeaderWrap: { position: 'absolute', left: 16, right: 16, zIndex: 50 },
-    offlineMapWash: { backgroundColor: 'rgba(247,245,241,0.42)' },
+    offlineMapWash: { backgroundColor: c.bg, opacity: .42 },
     driverHeader: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, paddingHorizontal: 14, backgroundColor: 'rgba(255,255,255,0.96)', borderWidth: 1, borderColor: c.line, shadowColor: '#0B0E14', shadowOpacity: 0.10, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
     driverIdentity: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
     headerName: { color: c.text, fontFamily: font.semibold, fontSize: 14, maxWidth: 180 },
