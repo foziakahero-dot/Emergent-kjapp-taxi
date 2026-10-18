@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { initStripe, initPaymentSheet, presentPaymentSheet, isPlatformPaySupported, confirmPlatformPaySetupIntent, PlatformPay } from '@stripe/stripe-react-native';
+import { initPaymentSheet, presentPaymentSheet, isPlatformPaySupported, confirmPlatformPaySetupIntent, PlatformPay } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 
 export type NativeWallet = { kind: 'google' | 'apple'; label: string };
@@ -7,11 +7,13 @@ function assertPaymentConfig(config: any) {
   const prefix = config.test_mode ? 'pk_test_' : 'pk_live_';
   if (!config.enabled || !config.publishable_key?.startsWith(prefix)) throw new Error('Betaling er ikke aktivert i dette miljøet.');
 }
-async function initialize(config: any) {
-  assertPaymentConfig(config);
-  await initStripe({ publishableKey: config.publishable_key, urlScheme: 'kjapp',
-    merchantIdentifier: process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || undefined });
-}
+
+/**
+ * Stripe is initialized exactly once by NativePaymentProvider at app root.
+ * Do not call initStripe here as well: mixing StripeProvider + imperative
+ * initStripe can re-initialize the Android native SDK while an Activity is
+ * active and has caused process-level crashes before PaymentSheet opens.
+ */
 export async function nativeWalletAvailability(config?: any): Promise<NativeWallet | null> {
   config = config || await paymentApi.nativeConfig();
   try { assertPaymentConfig(config); } catch { return null; }
@@ -20,7 +22,6 @@ export async function nativeWalletAvailability(config?: any): Promise<NativeWall
     : Platform.OS === 'ios' && config.apple_pay_enabled === true && merchant && merchant === config.apple_merchant_id;
   if (!eligible) return null;
   try {
-    await initialize(config);
     const supported = await isPlatformPaySupported(Platform.OS === 'android'
       ? { googlePay: { testEnv: config.test_mode === true, existingPaymentMethodRequired: true } } : {});
     return supported ? { kind: Platform.OS === 'android' ? 'google' : 'apple', label: Platform.OS === 'android' ? 'Google Pay' : 'Apple Pay' } : null;
@@ -36,9 +37,13 @@ function walletOptions(wallet: NativeWallet | null, config: any) {
 /** Save through Stripe's native sheet, then accept only server-verified setup. */
 export async function setupNativePaymentMethod(walletRequired = false): Promise<any | null> {
   const config = await paymentApi.nativeConfig();
-  await initialize(config);
-  const wallet = await nativeWalletAvailability(config);
+  assertPaymentConfig(config);
+
+  // A normal card setup must not probe Platform Pay first. This keeps the
+  // ordinary card path independent from Google/Apple wallet availability.
+  const wallet = walletRequired ? await nativeWalletAvailability(config) : null;
   if (walletRequired && !wallet) throw new Error('Lommeboken er ikke tilgjengelig på denne enheten. Legg til et kort i stedet.');
+
   const setup = await paymentApi.nativeSetup(walletRequired && wallet ? wallet.kind === 'google' ? 'google_pay' : 'apple_pay' : undefined);
   if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Stripe svarte uten kortverifisering.');
   let result;
@@ -55,7 +60,7 @@ export async function setupNativePaymentMethod(walletRequired = false): Promise<
   } else {
     const initialized = await initPaymentSheet({ merchantDisplayName: 'SNAR',
       setupIntentClientSecret: setup.client_secret, returnURL: 'kjapp://payment-methods',
-      allowsDelayedPaymentMethods: false, ...walletOptions(wallet, config) });
+      allowsDelayedPaymentMethods: false });
     if (initialized.error) throw new Error(initialized.error.message);
     result = await presentPaymentSheet();
   }
@@ -75,7 +80,7 @@ export async function setupNativePaymentMethod(walletRequired = false): Promise<
 // never open a second payment flow automatically, even after a network error.
 export async function payNative(tripId: string): Promise<boolean | null> {
   const config = await paymentApi.nativeConfig();
-  await initialize(config);
+  assertPaymentConfig(config);
   const wallet = await nativeWalletAvailability(config);
   const intent = await paymentApi.nativeIntent(tripId);
   if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');
@@ -94,4 +99,3 @@ export async function payNative(tripId: string): Promise<boolean | null> {
   const status = await paymentApi.nativeStatus(intent.payment_intent_id);
   return status.payment_status === 'paid';
 }
-
