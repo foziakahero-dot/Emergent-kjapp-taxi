@@ -29,7 +29,11 @@ export default function DriverLogin() {
     try {
       const res = await login(identifier.trim(), password);
       await finishLogin(res);
-    } catch (e) { setError(apiError(e)); }
+    } catch (e: any) {
+      setError(e?.response?.status === 401
+        ? 'E-post, telefonnummer eller passord stemmer ikke med en aktiv sjåførkonto. Bruk sjåførkontoen for dette miljøet.'
+        : apiError(e));
+    }
     finally { busy.current = false; setLoading(false); }
   };
   const finishLogin = async (res: any) => {
