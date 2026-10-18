@@ -10,6 +10,8 @@ import { Availability, carExpiry, validPosition } from './carAvailability';
 import { LiveCarsFeed } from './liveCars';
 import { readPickupLocation } from './pickupLocation';
 
+const REST_RECOVERY_MS = 1500;
+
 export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], locationRevision = 0 }: {
   enabled: boolean; vehicleType?: string; specialNeeds?: string[]; locationRevision?: number;
 }) {
@@ -24,9 +26,16 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
 
   useFocusEffect(useCallback(() => {
     if (!enabled || !user?.id) return;
-    let epoch = 0, disposed = false, restInFlight = false, lastRestAt = 0;
+    let epoch = 0, disposed = false, restInFlight = false, lastRestAt = 0, restRecovery = false;
     let watch: Location.LocationSubscription | undefined;
-    let restTimer: ReturnType<typeof setTimeout> | undefined;
+    let initialRestTimer: ReturnType<typeof setTimeout> | undefined;
+    let restRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const stopRestRecovery = () => {
+      restRecovery = false;
+      clearTimeout(restRecoveryTimer);
+      restRecoveryTimer = undefined;
+    };
 
     const publishRestSnapshot = (result: any, receivedAt: number) => {
       if (!Array.isArray(result?.cars)) throw new Error('Invalid availability response');
@@ -45,7 +54,7 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
       const p = point.current;
       if (!p || restInFlight || disposed) return;
       const now = Date.now();
-      if (!force && now - lastRestAt < 1500) return;
+      if (!force && now - lastRestAt < REST_RECOVERY_MS) return;
       restInFlight = true; lastRestAt = now;
       const generation = epoch;
       try {
@@ -53,11 +62,25 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
         if (disposed || generation !== epoch || !point.current) return;
         publishRestSnapshot(result, Date.now());
       } catch {
-        // The socket owns the offline state. A failed fallback must not replace
-        // a newer healthy socket snapshot or manufacture availability.
+        // Keep the last authoritative state. The next recovery tick retries;
+        // no local/demo car is ever manufactured here.
       } finally {
         restInFlight = false;
       }
+    };
+
+    const scheduleRestRecovery = () => {
+      clearTimeout(restRecoveryTimer);
+      if (!restRecovery || disposed) return;
+      restRecoveryTimer = setTimeout(() => {
+        void recoverViaRest(true).finally(() => scheduleRestRecovery());
+      }, REST_RECOVERY_MS);
+    };
+
+    const startRestRecovery = () => {
+      if (restRecovery || disposed || !point.current) return;
+      restRecovery = true;
+      void recoverViaRest(true).finally(() => scheduleRestRecovery());
     };
 
     const next = new LiveCarsFeed(() => io(`${BACKEND}/customer-cars`, {
@@ -66,15 +89,22 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
       auth: callback => { void storage.getItem(TOKEN_KEY).then(token => callback({ token })).catch(() => callback({ token: null })); },
     }), snapshot => {
       if (disposed) return;
+      if (snapshot.issue === 'offline') {
+        setState(snapshot);
+        startRestRecovery();
+        return;
+      }
+      // Any authoritative socket snapshot takes back ownership immediately.
+      stopRestRecovery();
       setState(snapshot);
-      if (snapshot.issue === 'offline') void recoverViaRest();
     });
     feed.current = next; point.current = null; setState(next.state);
 
     const setActive = async (active: boolean) => {
       const generation = ++epoch;
       watch?.remove(); watch = undefined; point.current = null;
-      clearTimeout(restTimer); restTimer = undefined;
+      clearTimeout(initialRestTimer); initialRestTimer = undefined;
+      stopRestRecovery();
       next.setActive(false);
       if (!active || disposed) return;
       // Manual pickup is for booking. Supply is centred on actual customer GPS;
@@ -85,25 +115,32 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
       point.current = result.point;
       next.subscribe({ ...result.point, ...filters.current }); next.setActive(true);
       // Socket.IO remains primary. REST uses the same authoritative backend
-      // snapshot and covers devices/networks where the socket handshake stalls.
-      restTimer = setTimeout(() => {
-        if (!disposed && generation === epoch && next.state.phase === 'loading') void recoverViaRest(true);
+      // snapshot if the socket handshake stalls on this device/network.
+      initialRestTimer = setTimeout(() => {
+        if (!disposed && generation === epoch && next.state.phase === 'loading') startRestRecovery();
       }, 1200);
       try {
         const subscription = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: 0, timeInterval: 1000 }, position => {
           if (disposed || generation !== epoch) return;
           const p = { lat: position.coords.latitude, lng: position.coords.longitude };
-          if (!validPosition(p)) { next.locationUnavailable(); return; }
+          if (!validPosition(p)) { stopRestRecovery(); next.locationUnavailable(); return; }
           point.current = p; next.subscribe({ ...p, ...filters.current }); next.setActive(true);
-        }, () => { if (!disposed && generation === epoch) { point.current = null; next.locationUnavailable(); } });
+        }, () => {
+          if (!disposed && generation === epoch) {
+            point.current = null; stopRestRecovery(); next.locationUnavailable();
+          }
+        });
         if (disposed || generation !== epoch) subscription.remove(); else watch = subscription;
-      } catch { if (!disposed && generation === epoch) next.locationUnavailable(); }
+      } catch {
+        if (!disposed && generation === epoch) { stopRestRecovery(); next.locationUnavailable(); }
+      }
     };
     void setActive(AppState.currentState === 'active');
     const listener = AppState.addEventListener('change', value => { void setActive(value === 'active'); });
     const timer = setInterval(() => next.tick(), 200);
     return () => {
-      disposed = true; epoch++; watch?.remove(); listener.remove(); clearInterval(timer); clearTimeout(restTimer);
+      disposed = true; epoch++; watch?.remove(); listener.remove(); clearInterval(timer);
+      clearTimeout(initialRestTimer); stopRestRecovery();
       next.dispose(); feed.current = null; point.current = null;
     };
   }, [enabled, user?.id, retryVersion, locationRevision]));
