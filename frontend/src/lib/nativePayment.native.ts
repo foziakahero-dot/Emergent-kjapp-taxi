@@ -23,7 +23,7 @@ export async function nativeWalletAvailability(config?: any): Promise<NativeWall
   if (!eligible) return null;
   try {
     const supported = await isPlatformPaySupported(Platform.OS === 'android'
-      ? { googlePay: { testEnv: config.test_mode === true, existingPaymentMethodRequired: true } } : {});
+      ? { googlePay: { testEnv: config.test_mode === true, existingPaymentMethodRequired: false } } : {});
     return supported ? { kind: Platform.OS === 'android' ? 'google' : 'apple', label: Platform.OS === 'android' ? 'Google Pay' : 'Apple Pay' } : null;
   } catch { return null; }
 }
