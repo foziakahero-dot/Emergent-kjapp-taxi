@@ -5,8 +5,8 @@ import * as Location from 'expo-location';
 import { io } from 'socket.io-client';
 import { useAuth } from '@/src/context/AuthContext';
 import { storage } from '@/src/utils/storage';
-import { BACKEND, TOKEN_KEY } from './api';
-import { Availability, validPosition } from './carAvailability';
+import { BACKEND, TOKEN_KEY, carsApi } from './api';
+import { Availability, carExpiry, validPosition } from './carAvailability';
 import { LiveCarsFeed } from './liveCars';
 import { readPickupLocation } from './pickupLocation';
 
@@ -21,19 +21,60 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
   const needsKey = [...specialNeeds].sort().join(',');
   const filters = useRef({ vehicle_type: vehicleType, special_needs: specialNeeds });
   filters.current = { vehicle_type: vehicleType, special_needs: needsKey ? needsKey.split(',') : [] };
+
   useFocusEffect(useCallback(() => {
     if (!enabled || !user?.id) return;
+    let epoch = 0, disposed = false, restInFlight = false, lastRestAt = 0;
+    let watch: Location.LocationSubscription | undefined;
+    let restTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const publishRestSnapshot = (result: any, receivedAt: number) => {
+      if (!Array.isArray(result?.cars)) throw new Error('Invalid availability response');
+      const expiresAt: Record<string, number> = {};
+      const cars = result.cars.filter((car: any) => {
+        if (car?.online === false || car?.available === false || typeof car?.id !== 'string' || !validPosition(car)) return false;
+        const expiry = carExpiry(car, result, receivedAt);
+        if (expiry <= receivedAt || expiresAt[car.id]) return false;
+        expiresAt[car.id] = expiry;
+        return true;
+      });
+      setState({ cars, expiresAt, phase: cars.length ? 'available' : 'waiting', issue: cars.length ? null : 'empty', attempt: 0, nextAt: null });
+    };
+
+    const recoverViaRest = async (force = false) => {
+      const p = point.current;
+      if (!p || restInFlight || disposed) return;
+      const now = Date.now();
+      if (!force && now - lastRestAt < 1500) return;
+      restInFlight = true; lastRestAt = now;
+      const generation = epoch;
+      try {
+        const result = await carsApi.nearby(p.lat, p.lng, filters.current.vehicle_type, filters.current.special_needs || []);
+        if (disposed || generation !== epoch || !point.current) return;
+        publishRestSnapshot(result, Date.now());
+      } catch {
+        // The socket owns the offline state. A failed fallback must not replace
+        // a newer healthy socket snapshot or manufacture availability.
+      } finally {
+        restInFlight = false;
+      }
+    };
+
     const next = new LiveCarsFeed(() => io(`${BACKEND}/customer-cars`, {
       path: '/socket.io', transports: ['websocket'], autoConnect: false,
       reconnectionDelay: 500, reconnectionDelayMax: 1500, timeout: 2000,
       auth: callback => { void storage.getItem(TOKEN_KEY).then(token => callback({ token })).catch(() => callback({ token: null })); },
-    }), setState);
+    }), snapshot => {
+      if (disposed) return;
+      setState(snapshot);
+      if (snapshot.issue === 'offline') void recoverViaRest();
+    });
     feed.current = next; point.current = null; setState(next.state);
-    let epoch = 0, disposed = false;
-    let watch: Location.LocationSubscription | undefined;
+
     const setActive = async (active: boolean) => {
       const generation = ++epoch;
       watch?.remove(); watch = undefined; point.current = null;
+      clearTimeout(restTimer); restTimer = undefined;
       next.setActive(false);
       if (!active || disposed) return;
       // Manual pickup is for booking. Supply is centred on actual customer GPS;
@@ -43,6 +84,11 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
       if (!result.point) { next.locationUnavailable(); return; }
       point.current = result.point;
       next.subscribe({ ...result.point, ...filters.current }); next.setActive(true);
+      // Socket.IO remains primary. REST uses the same authoritative backend
+      // snapshot and covers devices/networks where the socket handshake stalls.
+      restTimer = setTimeout(() => {
+        if (!disposed && generation === epoch && next.state.phase === 'loading') void recoverViaRest(true);
+      }, 1200);
       try {
         const subscription = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: 0, timeInterval: 1000 }, position => {
           if (disposed || generation !== epoch) return;
@@ -56,11 +102,16 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
     void setActive(AppState.currentState === 'active');
     const listener = AppState.addEventListener('change', value => { void setActive(value === 'active'); });
     const timer = setInterval(() => next.tick(), 200);
-    return () => { disposed = true; epoch++; watch?.remove(); listener.remove(); clearInterval(timer); next.dispose(); feed.current = null; point.current = null; };
+    return () => {
+      disposed = true; epoch++; watch?.remove(); listener.remove(); clearInterval(timer); clearTimeout(restTimer);
+      next.dispose(); feed.current = null; point.current = null;
+    };
   }, [enabled, user?.id, retryVersion, locationRevision]));
+
   useEffect(() => {
     if (point.current) feed.current?.subscribe({ ...point.current, ...filters.current });
   }, [vehicleType, needsKey]);
+
   return { ...state, cars: enabled && user?.id ? state.cars : [], center: point.current, now: Date.now(), seconds: null,
     retry: useCallback(() => setRetryVersion(value => value + 1), []) };
 }
