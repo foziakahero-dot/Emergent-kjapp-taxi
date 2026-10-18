@@ -1,0 +1,5 @@
+SNAR QA Customer diagnostic preflight trigger
+Base QA SHA: da8e2de8f866833fec30fd08fd25edb344f59c92
+Mode: diagnostic_only
+Paid EAS build: BLOCKED
+Purpose: validate reusable workflow startup, release lock, dependencies, TypeScript and Expo config only.
