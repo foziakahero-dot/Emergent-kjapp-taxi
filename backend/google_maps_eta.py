@@ -2,7 +2,9 @@
 
 Origins are drivers; the sole destination is the customer's current GPS. Live
 positions never come from this cache. Only road durations are cached for 30s
-and within ~100m coordinate cells. Missing/denied routes have no invented ETA.
+and within ~100m coordinate cells. When Google is pending or unavailable, the
+API returns a conservative distance-based ETA explicitly labelled approximate;
+an exact Google duration always replaces it as soon as it is available.
 """
 import asyncio
 import math
@@ -36,6 +38,30 @@ class GoogleMapsEta:
     def cell(lat, lng):
         return round(lat, 3), round(lng, 3)
 
+    @staticmethod
+    def approximate(distance_km, provider_status='pending'):
+        """Conservative Oslo pickup ETA used only until a road ETA is available.
+
+        Straight-line distance is inflated 25% for urban road geometry and
+        converted using 25 km/h. The source/status make this explicitly
+        approximate so clients never present it as a Google road duration.
+        """
+        try:
+            distance = float(distance_km)
+        except (TypeError, ValueError):
+            distance = float('nan')
+        if not math.isfinite(distance) or distance < 0:
+            return {'eta_min': None, 'eta_source': None, 'eta_status': provider_status}
+        road_km = distance * 1.25
+        minutes = max(2, math.ceil((road_km / 25.0) * 60))
+        return {
+            'eta_min': minutes,
+            'eta_source': 'distance_fallback',
+            'eta_status': 'approximate',
+            'eta_provider_status': provider_status,
+            'eta_updated_at': datetime.now(timezone.utc).isoformat(),
+        }
+
     def enrich(self, cars, destination):
         key, provider = self.settings()
         now = time.monotonic()
@@ -44,10 +70,11 @@ class GoogleMapsEta:
             cache_key = (provider, self.cell(car['lat'], car['lng']), self.cell(*destination))
             entry = self.cache.get(cache_key)
             if entry and entry['expires'] > now and key:
-                car.update(entry['data'])
+                data = entry['data']
+                car.update(data if data.get('eta_min') is not None else self.approximate(car.get('distance_km'), data.get('eta_status') or 'unavailable'))
                 self.cache.move_to_end(cache_key)
             else:
-                car.update(eta_min=None, eta_source=None, eta_status='loading' if key else 'not_configured')
+                car.update(self.approximate(car.get('distance_km'), 'loading' if key else 'not_configured'))
                 if key and now >= self.backoff_until and cache_key not in self.pending:
                     missing.append((cache_key, car['lat'], car['lng']))
         # Each request has <=25 origins and 1 destination, with traffic enabled.
