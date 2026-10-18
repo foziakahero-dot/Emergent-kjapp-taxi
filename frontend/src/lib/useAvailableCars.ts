@@ -11,6 +11,7 @@ import { LiveCarsFeed } from './liveCars';
 import { readPickupLocation } from './pickupLocation';
 
 const REST_RECOVERY_MS = 1500;
+const REST_STALE_MS = 2000;
 
 export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], locationRevision = 0 }: {
   enabled: boolean; vehicleType?: string; specialNeeds?: string[]; locationRevision?: number;
@@ -26,13 +27,14 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
 
   useFocusEffect(useCallback(() => {
     if (!enabled || !user?.id) return;
-    let epoch = 0, disposed = false, restInFlight = false, lastRestAt = 0, restRecovery = false;
+    let epoch = 0, disposed = false, restInFlight = false, lastRestAt = 0, lastRestSuccessAt = 0, restRecovery = false;
     let watch: Location.LocationSubscription | undefined;
     let initialRestTimer: ReturnType<typeof setTimeout> | undefined;
     let restRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 
     const stopRestRecovery = () => {
       restRecovery = false;
+      lastRestSuccessAt = 0;
       clearTimeout(restRecoveryTimer);
       restRecoveryTimer = undefined;
     };
@@ -47,6 +49,7 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
         expiresAt[car.id] = expiry;
         return true;
       });
+      lastRestSuccessAt = receivedAt;
       setState({ cars, expiresAt, phase: cars.length ? 'available' : 'waiting', issue: cars.length ? null : 'empty', attempt: 0, nextAt: null });
     };
 
@@ -62,8 +65,12 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
         if (disposed || generation !== epoch || !point.current) return;
         publishRestSnapshot(result, Date.now());
       } catch {
-        // Keep the last authoritative state. The next recovery tick retries;
-        // no local/demo car is ever manufactured here.
+        // Never keep a recovered car marker beyond the backend's realtime
+        // freshness window if both socket and REST are unavailable.
+        if (!disposed && generation === epoch && lastRestSuccessAt && Date.now() - lastRestSuccessAt >= REST_STALE_MS) {
+          setState({ cars: [], expiresAt: {}, phase: 'waiting', issue: 'offline', attempt: 1, nextAt: null });
+          lastRestSuccessAt = 0;
+        }
       } finally {
         restInFlight = false;
       }
