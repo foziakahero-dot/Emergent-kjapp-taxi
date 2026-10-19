@@ -5,12 +5,15 @@ import { colors, font, useColorTheme } from '@/src/theme';
 import { MapCarData } from '@/src/lib/liveCars';
 
 export function carEtaLabel(car: MapCarData): string {
-  if (typeof car.eta_min !== 'number' || !Number.isFinite(car.eta_min) || car.eta_min <= 0) return 'ETA —';
   const approximate = car.eta_status === 'approximate' || car.eta_source === 'distance_fallback';
-  return `${approximate ? 'ca ' : ''}${Math.ceil(car.eta_min)} min`;
+  const eta = typeof car.eta_min === 'number' && Number.isFinite(car.eta_min) && car.eta_min > 0
+    ? `${approximate ? 'ca ' : ''}${Math.ceil(car.eta_min)} min` : '';
+  const distance = typeof car.distance_km === 'number' && Number.isFinite(car.distance_km)
+    ? `ca. ${car.distance_km.toFixed(1).replace('.', ',')} km` : '';
+  return [eta, distance].filter(Boolean).join(' · ') || 'ETA —';
 }
 
-/** Road ETA kept upright independently of the car's heading. */
+/** A Google road duration, kept upright independently of the car's heading. */
 export function CarEtaBadge({ car }: { car: MapCarData }) {
   useColorTheme();
   return <View testID={`driver-eta-${car.id}`} style={{ height: 22, minWidth: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: colors.surfaceInverse, paddingHorizontal: 6 }}>

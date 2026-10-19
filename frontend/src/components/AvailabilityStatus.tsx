@@ -27,7 +27,7 @@ export function AvailabilityStatus({ search, trip, compact = false }: {
       : search.issue === 'empty' ? 'Ingen ledige biler i nærheten akkurat nå.' : 'Ledige biler vises på kartet.';
     return <View testID="availability-status" style={{ paddingTop: 12, gap: 4 }}>
       <Text testID="availability-caption" style={{ color: colors.textSecondary, fontSize: 12 }}>{title}</Text>
-      {search.issue === 'offline' || search.issue === 'location' || search.phase === 'exhausted' ? <Pressable testID="availability-retry" accessibilityRole="button" accessibilityLabel="Oppdater ledige biler" onPress={search.retry} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent, fontFamily: font.medium, fontSize: 12 }}>Oppdater</Text></Pressable> : null}
+      {!search.cars.length && (search.issue === 'offline' || search.issue === 'location' || search.phase === 'exhausted') ? <Pressable testID="availability-retry" accessibilityRole="button" accessibilityLabel="Søk etter ledige biler igjen" onPress={search.retry} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.accent, fontFamily: font.medium, fontSize: 12 }}>Prøv igjen</Text></Pressable> : null}
     </View>;
   }
   const progress = trip ? rideSearchProgress(trip, search.now) : null;
