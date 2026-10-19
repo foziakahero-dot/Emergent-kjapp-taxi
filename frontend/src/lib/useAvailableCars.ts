@@ -6,8 +6,8 @@ import { io } from 'socket.io-client';
 import { useAuth } from '@/src/context/AuthContext';
 import { storage } from '@/src/utils/storage';
 import { BACKEND, TOKEN_KEY, carsApi } from './api';
-import { Availability, carExpiry, validPosition } from './carAvailability';
-import { LiveCarsFeed } from './liveCars';
+import { Availability, carExpiry, validPosition, visibleCars } from './carAvailability';
+import { LiveCarsFeed, distanceKm, RADIUS_KM } from './liveCars';
 import { readPickupLocation } from './pickupLocation';
 
 const REST_RECOVERY_MS = 1500;
@@ -27,13 +27,14 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
 
   useFocusEffect(useCallback(() => {
     if (!enabled || !user?.id) return;
-    let epoch = 0, disposed = false, restInFlight = false, lastRestAt = 0, lastRestSuccessAt = 0, restRecovery = false;
+    let epoch = 0, restEpoch = 0, disposed = false, restInFlight = false, lastRestAt = 0, lastRestSuccessAt = 0, restRecovery = false;
     let watch: Location.LocationSubscription | undefined;
     let initialRestTimer: ReturnType<typeof setTimeout> | undefined;
     let restRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 
     const stopRestRecovery = () => {
       restRecovery = false;
+      restEpoch++;
       lastRestSuccessAt = 0;
       clearTimeout(restRecoveryTimer);
       restRecoveryTimer = undefined;
@@ -43,8 +44,10 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
       if (!Array.isArray(result?.cars)) throw new Error('Invalid availability response');
       const expiresAt: Record<string, number> = {};
       const cars = result.cars.filter((car: any) => {
-        if (car?.online === false || car?.available === false || typeof car?.id !== 'string' || !validPosition(car)) return false;
-        const expiry = carExpiry(car, result, receivedAt);
+        if (car?.online === false || car?.available === false || typeof car?.id !== 'string' || car.id === user.id || !validPosition(car)) return false;
+        if (!point.current || distanceKm(point.current, car) > RADIUS_KM
+          || (filters.current.vehicle_type && car.type !== filters.current.vehicle_type)) return false;
+        const expiry = carExpiry(car, { ...result, gps_fresh_seconds: Math.min(2, Number(result.gps_fresh_seconds)) }, receivedAt);
         if (expiry <= receivedAt || expiresAt[car.id]) return false;
         expiresAt[car.id] = expiry;
         return true;
@@ -60,14 +63,15 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
       if (!force && now - lastRestAt < REST_RECOVERY_MS) return;
       restInFlight = true; lastRestAt = now;
       const generation = epoch;
+      const recoveryGeneration = restEpoch;
       try {
         const result = await carsApi.nearby(p.lat, p.lng, filters.current.vehicle_type, filters.current.special_needs || []);
-        if (disposed || generation !== epoch || !point.current) return;
+        if (disposed || generation !== epoch || recoveryGeneration !== restEpoch || !restRecovery || !point.current) return;
         publishRestSnapshot(result, Date.now());
       } catch {
         // Never keep a recovered car marker beyond the backend's realtime
         // freshness window if both socket and REST are unavailable.
-        if (!disposed && generation === epoch && lastRestSuccessAt && Date.now() - lastRestSuccessAt >= REST_STALE_MS) {
+        if (!disposed && generation === epoch && recoveryGeneration === restEpoch && restRecovery && lastRestSuccessAt && Date.now() - lastRestSuccessAt >= REST_STALE_MS) {
           setState({ cars: [], expiresAt: {}, phase: 'waiting', issue: 'offline', attempt: 1, nextAt: null });
           lastRestSuccessAt = 0;
         }
@@ -87,6 +91,7 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
     const startRestRecovery = () => {
       if (restRecovery || disposed || !point.current) return;
       restRecovery = true;
+      restEpoch++;
       void recoverViaRest(true).finally(() => scheduleRestRecovery());
     };
 
@@ -144,7 +149,20 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
     };
     void setActive(AppState.currentState === 'active');
     const listener = AppState.addEventListener('change', value => { void setActive(value === 'active'); });
-    const timer = setInterval(() => next.tick(), 200);
+    const timer = setInterval(() => {
+      next.tick();
+      // REST recovery owns separate state from LiveCarsFeed. Expire it even
+      // while the next HTTP request is stalled; a request is not proof of life.
+      setState(previous => {
+        const cars = visibleCars(previous, Date.now()).filter(car => car.id !== user.id
+          && point.current && distanceKm(point.current, car) <= RADIUS_KM
+          && (!filters.current.vehicle_type || car.type === filters.current.vehicle_type));
+        return cars.length === previous.cars.length ? previous : {
+          ...previous, cars, phase: cars.length ? 'available' : 'waiting',
+          issue: cars.length ? null : previous.issue || 'empty',
+        };
+      });
+    }, 200);
     return () => {
       disposed = true; epoch++; watch?.remove(); listener.remove(); clearInterval(timer);
       clearTimeout(initialRestTimer); stopRestRecovery();

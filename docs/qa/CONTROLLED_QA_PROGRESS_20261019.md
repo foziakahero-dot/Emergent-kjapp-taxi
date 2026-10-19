@@ -28,6 +28,16 @@ The existing Figma-derived SVG car is already 50 dp, separate from the customer 
 
 Customer TypeScript and whitespace checks pass. Native Mapbox rendering, camera-relative rotation and real-device smoothness remain unverified. The supplied fourth map PNG is missing: phase 3 cannot be certified against that source. Existing SVG remains until the actual marker asset is supplied.
 
-Phases 4–12 remain open. No APK/IPA/Expo/EAS build was started.
+Phase 3 checkpoint: `51cce9d`.
+
+## Phase 4 — real supply path checked locally, recovery bugs fixed
+
+Audited Driver authenticated location upload (1 s requested GPS interval with original device timestamp), backend freshness/session/approval/fleet/vehicle/busy/radius checks, authenticated customer Socket.IO and REST fallback. Backend queries actual users/vehicles and excludes demo accounts. Existing backend live-car tests use isolated Mongo and real ASGI HTTP/WebSocket transport: 33 passed. This does not prove the entire deployed phone-to-phone path.
+
+Fixed Customer REST fallback: expire markers every 200 ms while HTTP hangs; cap freshness at the same 2 s live window; remove cars beyond the current customer radius/category and exclude own ID. A late REST response cannot overwrite the resumed socket snapshot. No dummy cars added, no backend eligibility rules changed.
+
+Regression test loads the real availability hook and feed with isolated adapters. It fails on baseline code (stale marker remains after expiry), passes after correction, and covers stalled HTTP, customer movement, own/offline/busy cars, category and late REST/socket ownership. Customer TypeScript passes. Real-device background GPS continuity and deployed end-to-end location verification remain open.
+
+Phases 5–12 remain open. No APK/IPA/Expo/EAS build was started.
 
 Recommendation: **NOT READY FOR BUILD**. This is a progress checkpoint, not the final phase 12 report.
