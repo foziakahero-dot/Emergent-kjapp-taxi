@@ -48,14 +48,14 @@ type Props = {
   contentInsets?: Partial<MapContentInsets>;
 };
 
-function MarkerCar({ car, active = false, onPress }: { car: Car; active?: boolean; onPress?: () => void }) {
+function MarkerCar({ car, selected = false, onPress }: { car: Car; selected?: boolean; onPress?: () => void }) {
   useColorTheme();
   const smooth = useSmoothPosition(car, 250);
   if (!smooth) return null;
   // The geographical point is the car centre, below the 22 dp ETA badge.
   return <MarkerView coordinate={[smooth.lng, smooth.lat]} anchor={{ x: .5, y: (22 + 50 / 2) / 74 }} allowOverlap>
-    <Pressable collapsable={false} testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress} style={{ width: 130, height: 74, alignItems: 'center' }}>
-      <CarEtaBadge car={car} /><MapCar heading={smooth.heading} active={active} vehicleType={car.type} bodyType={car.body_type} />
+    <Pressable collapsable={false} testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress} style={{ width: 130, height: 74, alignItems: 'center' }}>
+      <CarEtaBadge car={car} /><MapCar heading={smooth.heading} selected={selected} vehicleType={car.type} bodyType={car.body_type} />
     </Pressable>
   </MarkerView>;
 }
@@ -290,7 +290,7 @@ export function MapboxInteractiveMap({
         ) : null}
 
         {cars.map((car, index) => (
-          <MarkerCar key={car.id || `car-${index}`} car={withDistance(car)} onPress={() => setSelectedId(car.id || null)} />
+          <MarkerCar key={car.id || `car-${index}`} car={withDistance(car)} selected={car.id === selectedId} onPress={() => setSelectedId(car.id || null)} />
         ))}
 
         {pickup ? (
@@ -312,7 +312,7 @@ export function MapboxInteractiveMap({
         ) : null}
         {smoothCar ? (
           <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap anchor={{ x: .5, y: activeCar?.eta_min != null ? 52 / 77 : .5 }}>
-            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active /></View></View> : <MapCar heading={smoothCar.heading} active />}
+            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active vehicleType={activeCar?.type} bodyType={activeCar?.body_type} /></View></View> : <MapCar heading={smoothCar.heading} active vehicleType={activeCar?.type} bodyType={activeCar?.body_type} />}
           </MarkerView>
         ) : null}
 

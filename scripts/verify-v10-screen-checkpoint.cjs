@@ -831,6 +831,11 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
     assert.equal(image.accessibilityState.selected,true);await unmount(tree);
   }
   tree=await mount(()=>React.createElement(CategoryImage,{kind:'comfort',selected:false}));assert.equal(tree.toJSON(),null);await unmount(tree);
+  const VehicleMarker=load('frontend','src/components/V10VehicleMarker.tsx').V10VehicleMarker;
+  tree=await mount(()=>React.createElement(VehicleMarker,{selected:true,heading:90}));
+  assert.equal(tree.root.findByType('Svg').props.width,50);assert.equal(tree.root.findAllByType('Circle').filter(c=>c.props.r===21).length,1);await unmount(tree);
+  tree=await mount(()=>React.createElement(VehicleMarker,{active:true,selected:true,heading:90}));
+  assert.equal(tree.root.findAllByType('Circle').filter(c=>c.props.r===21).length,0,'Assigned emphasis takes precedence over selection');assert.equal(tree.root.findAllByType('Circle').filter(c=>c.props.r===20).length,2);await unmount(tree);
   console.log('PASS: Customer 09/10 all-class home supply, three categories, immediate quoted prices, selected-category drivers, canonical card and distinct bundled illustrations.');
   // Customer 11/12: canonical displayed quote contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);

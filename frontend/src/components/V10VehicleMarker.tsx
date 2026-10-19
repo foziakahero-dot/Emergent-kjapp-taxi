@@ -22,10 +22,11 @@ export function V10VehicleBody({ color, vehicleType, bodyType }: { color?: strin
     <Rect x={-5.6} y={10.4} width={2.4} height={1} rx={.5} fill="#ff2b2b" opacity={.8} /><Rect x={3.2} y={10.4} width={2.4} height={1} rx={.5} fill="#ff2b2b" opacity={.8} />
   </G>;
 }
-export function V10VehicleMarker({ heading = 0, active = false, vehicleType, bodyType }: { heading?: number; active?: boolean; vehicleType?: string; bodyType?: string }) {
+export function V10VehicleMarker({ heading = 0, active = false, selected = false, vehicleType, bodyType }: { heading?: number; active?: boolean; selected?: boolean; vehicleType?: string; bodyType?: string }) {
   useColorTheme();
   return <Svg width={50} height={50} viewBox="-25 -25 50 50"><G>
     {active ? <><Circle r={20} fill={colors.accent} opacity={.1} /><Circle r={20} fill="none" stroke={colors.accent} strokeOpacity={.35} strokeWidth={1} /></> : null}
+    {selected && !active ? <Circle r={21} fill={colors.surface} fillOpacity={.5} stroke={colors.text} strokeOpacity={.45} strokeWidth={1.5} /> : null}
     <G rotation={heading} scale={1.45}><V10VehicleBody vehicleType={vehicleType} bodyType={bodyType} /></G>
   </G></Svg>;
 }

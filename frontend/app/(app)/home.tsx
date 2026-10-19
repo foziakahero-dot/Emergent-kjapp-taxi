@@ -10,6 +10,7 @@ import { recentDestinations } from '@/src/lib/recentPlaces';
 import { validPosition } from '@/src/lib/carAvailability';
 import { readPickupLocation, locationIssueText } from '@/src/lib/pickupLocation';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
+import { useAssignedVehicle } from '@/src/lib/useAssignedVehicle';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
@@ -45,6 +46,7 @@ export default function Home() {
     enabled: false,
   });
   const activeTrip = activeTripQuery.data?.trip_id ? activeTripQuery.data : null;
+  const assignedVehicle = useAssignedVehicle(activeTrip);
   const activeTripOffline = activeTripQuery.isError;
   const activeTripChecked = activeTripQuery.data !== undefined;
   const [loc, setLoc] = useState<{ lat: number; lng: number }>(OSLO);
@@ -323,7 +325,7 @@ export default function Home() {
         focusMode={searchingTrip || (!activeTrip && (mapOnly || searchOpen || !dropoff)) ? 'nearby' : 'route'}
         contentInsets={{ top: searchOpen ? Math.max(54, insets.top + 4) : insets.top + (activeTrip ? 16 + activeCardHeight : 12 + headerHeight) + 16,
           right: 48, bottom: mapOnly || searchOpen ? insets.bottom + 96 : Math.max(insets.bottom + 112, activeTrip ? 0 : dropoff ? rideHeight : browseHeight) + 32, left: 48 }}
-        activeCar={activeTrip && LIVE_TRIP_STATUSES.includes(activeTrip.status) && activeTrip.driver_lat != null ? { lat: activeTrip.driver_lat, lng: activeTrip.driver_lng, heading: activeTrip.driver_heading } : null}
+        activeCar={assignedVehicle}
         testID="home-map"
       />
       </BlurTargetView>

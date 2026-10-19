@@ -1995,12 +1995,14 @@ async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
         d_km = haversine_km(body.lat, body.lng, lat, lng)
         if d_km > RADIUS_KM:
             continue
+        first_name = str(u.get("fullName") or "").split()
         cars.append({
             "id": str(u["_id"]),
             **media_versions(u, assigned_vehicle),
-            "name": u.get("fullName") or "Sjåfør",
+            # Nearby supply is visible before a trip is assigned. First name is
+            # sufficient here; full identity belongs to the authenticated trip.
+            "name": first_name[0] if first_name else "Sjåfør",
             "car": assigned_vehicle.get("car") or "",
-            "plate": assigned_vehicle.get("plate") or "",
             "rating": round(float(u["rating"]), 1) if isinstance(u.get("rating"), (int, float)) else None,
             "type": assigned_vehicle.get("vehicle_type") or "ai-first",
             "body_type": assigned_vehicle.get("body_type") or ("suv" if assigned_vehicle.get("vehicle_type") == "suv" else "van" if assigned_vehicle.get("vehicle_type") == "trygg" else "executive" if assigned_vehicle.get("vehicle_type") == "premium" else "sedan"),

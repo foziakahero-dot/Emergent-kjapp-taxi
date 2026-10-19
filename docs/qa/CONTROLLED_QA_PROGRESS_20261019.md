@@ -38,6 +38,16 @@ Fixed Customer REST fallback: expire markers every 200 ms while HTTP hangs; cap 
 
 Regression test loads the real availability hook and feed with isolated adapters. It fails on baseline code (stale marker remains after expiry), passes after correction, and covers stalled HTTP, customer movement, own/offline/busy cars, category and late REST/socket ownership. Customer TypeScript passes. Real-device background GPS continuity and deployed end-to-end location verification remain open.
 
-Phases 5–12 remain open. No APK/IPA/Expo/EAS build was started.
+Phase 4 checkpoint: `0503a80`.
+
+## Phase 5 — marker states implemented, local tests pass
+
+Available marker retains original SVG; selected marker now has a subtle navy outline with accessible selection state on native and both raster maps. Assigned marker keeps its distinct red halo and its canonical API vehicle type. Corrected the same 2 dp centre offset in raster overlays. No second red location dot is added to cars.
+
+Home and booking now share an assigned-vehicle hook that hides GPS older than the existing 30 s assigned-trip freshness window even when HTTP stalls. New GPS restores the same assigned identity; cancelled/completed trips do not produce live cars. This does not cancel the trip or change ownership. Nearby supply now returns first name and omits pre-assignment number plate; trip-specific driver details remain unchanged.
+
+Tests: actual hook autonomous expiry/recovery/terminal-state removal; SVG 50 dp and selection/assignment precedence; Customer screen and Figma behaviour suites; Customer TypeScript; 33 backend nearby eligibility/privacy/HTTP/WebSocket tests. Device rendering, new fourth-marker source and deployed QA verification remain open. Camera-relative native rotation is not yet verified.
+
+Phases 6–12 remain open. No APK/IPA/Expo/EAS build was started.
 
 Recommendation: **NOT READY FOR BUILD**. This is a progress checkpoint, not the final phase 12 report.

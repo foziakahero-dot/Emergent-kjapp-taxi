@@ -8,6 +8,7 @@ import { BlurTargetView } from 'expo-blur';
 import { V10TripDock } from '@/src/components/V10TripDock';
 import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
+import { useAssignedVehicle } from '@/src/lib/useAssignedVehicle';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { apiError, kr } from '@/src/lib/format';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
@@ -57,6 +58,7 @@ export default function BookingFlow() {
   const [matchingHeight, setMatchingHeight] = useState(300);
   const [minimizedHeight, setMinimizedHeight] = useState(160);
   const [trip, setTrip] = useState<any>(() => queryClient.getQueryData(['customer-trip', tripId]) || null);
+  const assignedVehicle = useAssignedVehicle(trip);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [safetyBusy, setSafetyBusy] = useState(false);
   const safetyLock = useRef(false);
@@ -309,7 +311,6 @@ export default function BookingFlow() {
   const route = trip.status === 'driver_on_way' ? (!networkIssue && driverPresence(trip).fresh ? trip.driver_pickup_geometry?.coordinates || null : null) : trip.status === 'in_trip' ? trip.geometry?.coordinates || null : null;
   const presence = driverPresence(trip);
   const driverGpsFresh = presence.fresh;
-  const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
   const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
@@ -340,7 +341,7 @@ export default function BookingFlow() {
         focusRevision={nearingDestination ? 1 : 0}
         contentInsets={{ top: noticeVisible ? insets.top + acceptedHeight + 24 : insets.top + 88, right: 72,
           bottom: noticeVisible ? insets.bottom + 24 : minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
-        activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
+        activeCar={assignedVehicle ? { ...assignedVehicle, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
         testID="booking-map"
       /></BlurTargetView>
 

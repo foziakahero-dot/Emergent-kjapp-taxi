@@ -96,5 +96,19 @@ function Harness({ vehicleType }) { current = useAvailableCars({ enabled: true, 
   await act(async () => resolveRest(snapshot([car('rest-old')])));
   assert.equal(current.cars[0].id, 'socket-current', 'Late recovery response cannot overwrite the resumed authoritative socket');
   await act(async () => tree.unmount()); assert.equal(timers.size, 0);
+  const { useAssignedVehicle } = load('useAssignedVehicle.ts');
+  let assigned;
+  function Assigned({ trip }) { assigned = useAssignedVehicle(trip); return null; }
+  const trip = { driver_id: 'assigned-driver', status: 'driver_on_way', driver_lat: point.lat, driver_lng: point.lng, driver_heading: 80, vehicle_type: 'premium', driver_location_at: new Date(now).toISOString() };
+  await act(async () => { tree = renderer.create(React.createElement(Assigned, { trip })); });
+  assert.equal(assigned.id, 'assigned-driver');assert.equal(assigned.type, 'premium');assert.equal(assigned.heading, 80);
+  await advance(30_001);
+  assert.equal(assigned, null, 'Assigned car expires without another HTTP/socket response');
+  await act(async () => tree.update(React.createElement(Assigned, { trip: { ...trip, driver_location_at: new Date(now).toISOString(), status: 'in_trip' } })));
+  assert.equal(assigned.id, 'assigned-driver', 'New authoritative GPS restores assigned marker');
+  await act(async () => tree.update(React.createElement(Assigned, { trip: { ...trip, driver_location_at: new Date(now).toISOString(), status: 'cancelled' } })));
+  assert.equal(assigned, null);
+  await act(async () => tree.unmount());assert.equal(timers.size, 0);
   console.log('PASS: actual hook REST expiry during stalled HTTP, radius on movement, own/offline/busy exclusion, category filtering, socket ownership race and timer cleanup.');
+  console.log('PASS: assigned identity/class/heading, autonomous stale expiry, fresh GPS recovery and terminal-state removal.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

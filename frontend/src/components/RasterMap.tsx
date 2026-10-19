@@ -280,7 +280,7 @@ export function InteractiveMap({
               <>
                 <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
                 <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
-                  <V10VehicleBody />
+                  <V10VehicleBody vehicleType={activeCar?.type} bodyType={activeCar?.body_type} />
                 </G>
               </>
             ) : null}
@@ -291,7 +291,7 @@ export function InteractiveMap({
             </G> : null}
 
           </Svg>
-          {cars.map((car, index) => <RasterDriverMarker key={car.id || `car-${index}`} car={car} projectX={sx} projectY={sy} onPress={() => setSelectedId(car.id || null)} />)}
+          {cars.map((car, index) => <RasterDriverMarker key={car.id || `car-${index}`} car={car} selected={car.id === selectedId} projectX={sx} projectY={sy} onPress={() => setSelectedId(car.id || null)} />)}
           {selected ? <DriverMarkerPopup car={selected} onClose={() => setSelectedId(null)} style={{ top: (contentInsets?.top || 88) + 8 }} /> : null}
 
           <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
@@ -311,14 +311,14 @@ export function InteractiveMap({
   );
 }
 
-function RasterDriverMarker({ car, projectX, projectY, onPress }: {
-  car: Car; projectX: (lng: number) => number; projectY: (lat: number) => number; onPress: () => void;
+function RasterDriverMarker({ car, selected, projectX, projectY, onPress }: {
+  car: Car; selected: boolean; projectX: (lng: number) => number; projectY: (lat: number) => number; onPress: () => void;
 }) {
   const position = useSmoothPosition(car, 250);
   if (!position) return null;
-  return <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress}
-    style={{ position: 'absolute', left: projectX(position.lng) - 40, top: projectY(position.lat) - 49, width: 80, height: 74, alignItems: 'center' }}>
-    <CarEtaBadge car={car} /><V10VehicleMarker heading={position.heading} vehicleType={car.type} bodyType={car.body_type} />
+  return <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress}
+    style={{ position: 'absolute', left: projectX(position.lng) - 40, top: projectY(position.lat) - 47, width: 80, height: 74, alignItems: 'center' }}>
+    <CarEtaBadge car={car} /><V10VehicleMarker heading={position.heading} selected={selected} vehicleType={car.type} bodyType={car.body_type} />
   </Pressable>;
 }
 

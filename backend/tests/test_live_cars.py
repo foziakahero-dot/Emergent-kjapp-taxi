@@ -104,8 +104,8 @@ def test_only_logged_in_available_live_drivers(fleet, changes):
     body = response.json()
     assert [car['id'] for car in body['cars']] == [str(good['_id'])]
     assert body['radius_km'] == 5 and body['gps_fresh_seconds'] == 2
-    assert body['cars'][0]['name'] == 'QA Driver' and body['cars'][0]['rating'] == 4.8
-    assert not {'email', 'phone', 'last_location_session'} & body['cars'][0].keys()
+    assert body['cars'][0]['name'] == 'QA' and body['cars'][0]['rating'] == 4.8
+    assert not {'email', 'phone', 'plate', 'last_location_session'} & body['cars'][0].keys()
 
 
 def test_exact_circle_rejects_box_corner_and_driver_with_active_trip(fleet):
