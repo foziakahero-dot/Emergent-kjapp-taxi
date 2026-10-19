@@ -21,6 +21,7 @@ import { V10CategoryImage } from './V10CategoryImage';
 import { useReducedMotion } from '@/src/components/Motion';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { kr } from '@/src/lib/format';
+import { CUSTOMER_VEHICLE_ART } from '@/src/lib/vehicleAssets';
 
 export type BookingStage = 'route' | 'vehicles' | 'payment';
 type Props = {
@@ -38,14 +39,14 @@ type Props = {
   onWalletSaved?: (card: any) => void | Promise<void>;
   wallet?: { kind: 'apple' | 'google'; label: string } | null; onWallet?: () => void;
 };
-const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', suv: 'SUV', premium: 'Premium' };
+const vehicleNames: Record<string, string> = Object.fromEntries(Object.entries(CUSTOMER_VEHICLE_ART).map(([id, art]) => [id, art.label]));
 const studioEta = (name: string, eta?: number) => typeof eta === 'number' && Number.isFinite(eta) && eta > 0 ? `${name} · estimert henting ${Math.ceil(eta)} min` : `${name} · hentetid ikke tilgjengelig`;
 export function CustomerBookingView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const [homeHeight, setHomeHeight] = useState(500);
   const studioOptions: StudioOption[] = [
-    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta('Standard', p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
+    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta(vehicleNames['ai-first'], p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
     { id: 'comfort', label: 'Pusterom', icon: 'moon', title: 'Et lite pusterom.', sub: 'Comfort · ikke tilgjengelig', body: 'Comfort er ikke tilgjengelig for bestilling ennå.', disabled: true },
     { id: 'premium', label: 'Signatur', icon: 'star', title: 'Gjør reisen til en del av dagen.', sub: studioEta('Premium', p.vehicleEtas?.premium), body: 'Velg Premium, og utforsk bilkategori, pris og sjåfør i den eksisterende bestillingsflyten.' },
   ];
@@ -103,7 +104,7 @@ export function CustomerBookingView(p: Props) {
   </>;
 }
 const vehicleChoices = [
-  { type: 'ai-first', name: 'Standard', note: 'Rask og enkel' },
+  { type: 'ai-first', name: CUSTOMER_VEHICLE_ART['ai-first'].label, note: 'Rask og enkel' },
   { type: 'premium', name: 'Premium', note: 'Premium' },
   { type: 'suv', name: 'SUV', note: 'Mer plass' },
 ] as const;

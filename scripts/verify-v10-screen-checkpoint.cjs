@@ -823,9 +823,14 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   customerActive={trip_id:'real-search',status:'searching',vehicle_type:'premium',pickup_lat:59.91,pickup_lng:10.74};queryData['customer-active-trip']={data:customerActive};tree=await mount(CustomerHome);assert.equal(supplyConfigs.at(-1).vehicleType,'premium','A real booked search retains its canonical class');await unmount(tree);customerActive=null;queryData['customer-active-trip']={data:null};
   stubs['expo-image']={Image:'CategoryImage'};
   const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
-  tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));
-  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/figma-v2\/standard\.jpg/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');await unmount(tree);
-  for(const [kind,asset] of [['premium','premium.jpg'],['suv','suv-category.png']]) { tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:false}));assert.ok(tree.root.findByType('CategoryImage').props.source.uri.endsWith(asset));await unmount(tree); }
+  for(const [kind,asset] of [['ai-first','snar/economy.png'],['enkelt','snar/economy.png'],['premium','snar/premium.png'],['suv','snar/suv.png'],['trygg','xl-3d.webp']]) {
+    tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:true}));
+    const image=tree.root.findByType('CategoryImage').props;
+    assert.ok(image.source.uri.endsWith(asset));assert.equal(image.contentFit,'contain');
+    assert.equal(image.style.width,84);assert.equal(image.style.height,56);assert.equal(image.allowDownscaling,true);
+    assert.equal(image.accessibilityState.selected,true);await unmount(tree);
+  }
+  tree=await mount(()=>React.createElement(CategoryImage,{kind:'comfort',selected:false}));assert.equal(tree.toJSON(),null);await unmount(tree);
   console.log('PASS: Customer 09/10 all-class home supply, three categories, immediate quoted prices, selected-category drivers, canonical card and distinct bundled illustrations.');
   // Customer 11/12: canonical displayed quote contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);

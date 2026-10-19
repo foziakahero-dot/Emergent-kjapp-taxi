@@ -10,6 +10,16 @@ Imported the three original 1254×1254 transparent PNGs without changing any pix
 
 Validation: `node scripts/vehicle-assets.test.cjs`, Customer TypeScript, `git diff --check`. Three source PNGs are available. The fourth PNG containing the red live-status indicator is not attached. `map-live.png` is therefore not fabricated or falsely marked imported.
 
-Phases 2–12 have not been certified. The existing selector and map are not yet switched to these imported graphics. Continue in order after resolving the missing phase 1 source. No APK/IPA/Expo/EAS build was started.
+Phase 1 checkpoint: `3824c55`. The missing fourth asset does not prevent category-selector implementation; it remains an explicit gate for the supplied live-map artwork.
+
+## Phase 2 — implemented and checked locally
+
+The main booking selector, assistant and legacy vehicle glyph now resolve images through the central asset registry. Economy (`ai-first`/`enkelt`) uses the hatchback, Premium the sedan, SUV the SUV; seven-seat `trygg` retains its distinct XL image. Main booking labels Economy as Økonomi. No API IDs, prices, seats, ETA calculation or booking requests changed.
+
+Category images use a clipped transparent 84×56 dp container, `contentFit="contain"` and Expo Image downscaling. Existing subtle navy selection and accessibility selection state are retained. Unknown glyph types no longer silently display an Economy car. No map visuals changed in phase 2.
+
+Checks: supplied asset integrity test, Customer TypeScript, existing component-behaviour screen suite (extended to assert original image paths, contain scaling, bounded dimensions, selection state and distinct XL), diff whitespace check. React review: static asset imports, shared renderer, no new effects/network calls. These are local checks, not physical-device visual verification or native compilation.
+
+Phases 3–12 remain open. No APK/IPA/Expo/EAS build was started.
 
 Recommendation: **NOT READY FOR BUILD**. This is a progress checkpoint, not the final phase 12 report.
