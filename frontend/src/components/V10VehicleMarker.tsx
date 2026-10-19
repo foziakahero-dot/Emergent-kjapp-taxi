@@ -24,9 +24,9 @@ export function V10VehicleBody({ color, vehicleType, bodyType }: { color?: strin
 }
 export function V10VehicleMarker({ heading = 0, active = false, vehicleType, bodyType }: { heading?: number; active?: boolean; vehicleType?: string; bodyType?: string }) {
   useColorTheme();
-  return <Svg width={50} height={50} viewBox="-25 -25 50 50"><G scale={active ? 1.25 : 1}>
+  return <Svg width={50} height={50} viewBox="-25 -25 50 50"><G>
     {active ? <><Circle r={20} fill={colors.accent} opacity={.1} /><Circle r={20} fill="none" stroke={colors.accent} strokeOpacity={.35} strokeWidth={1} /></> : null}
-    <G rotation={heading}><V10VehicleBody vehicleType={vehicleType} bodyType={bodyType} /></G>
+    <G rotation={heading} scale={1.45}><V10VehicleBody vehicleType={vehicleType} bodyType={bodyType} /></G>
   </G></Svg>;
 }
 

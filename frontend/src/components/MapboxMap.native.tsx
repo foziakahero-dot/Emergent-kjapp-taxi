@@ -1,7 +1,7 @@
 import { mapContentInsets, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/src/lib/mapFocus';
 import { CarEtaBadge, carEtaLabel } from './CarEtaBadge';
 import { DriverMarkerPopup } from './DriverMarkerPopup';
-import { MapCarData } from '@/src/lib/liveCars';
+import { MapCarData, distanceKm } from '@/src/lib/liveCars';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -53,7 +53,7 @@ function MarkerCar({ car, active = false, onPress }: { car: Car; active?: boolea
   const smooth = useSmoothPosition(car, 250);
   if (!smooth) return null;
   return <MarkerView coordinate={[smooth.lng, smooth.lat]} anchor={{ x: .5, y: 49 / 74 }} allowOverlap>
-    <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress} style={{ width: 80, height: 74, alignItems: 'center' }}>
+    <Pressable collapsable={false} testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress} style={{ width: 130, height: 74, alignItems: 'center' }}>
       <CarEtaBadge car={car} /><MapCar heading={smooth.heading} active={active} vehicleType={car.type} bodyType={car.body_type} />
     </Pressable>
   </MarkerView>;
@@ -99,6 +99,8 @@ export function MapboxInteractiveMap({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = cars.find(car => car.id === selectedId);
   useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
+  const lastAutoFrame = useRef('');
+  const withDistance = (car: Car): Car => ({ ...car, distance_km: pickup || user ? distanceKm((pickup || user)!, car) : undefined });
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
@@ -150,8 +152,15 @@ export function MapboxInteractiveMap({
 
   useEffect(() => {
     if (!mapReady || manual) return;
+    const nearby = !activeCar && (focusMode === 'nearby' || !dropoff);
+    const origin = pickup || user;
+    const frame = nearby
+      ? `${focusRevision}|${paddingKey}|${size.width},${size.height}|${origin?.lat.toFixed(3)},${origin?.lng.toFixed(3)}|${cars.map(car => car.id).sort().join(',')}`
+      : `${focusRevision}|${paddingKey}|${focusKey}`;
+    if (lastAutoFrame.current === frame) return;
+    lastAutoFrame.current = frame;
     fitFocus(350);
-  }, [mapReady, manual, fitFocus]);
+  }, [mapReady, manual, fitFocus, focusRevision]);
 
   const routeShape = useMemo(() => {
     const coordinates = route?.filter(p => p.length >= 2 && p.every(Number.isFinite)) || [];
@@ -280,7 +289,7 @@ export function MapboxInteractiveMap({
         ) : null}
 
         {cars.map((car, index) => (
-          <MarkerCar key={car.id || `car-${index}`} car={car} onPress={() => setSelectedId(car.id || null)} />
+          <MarkerCar key={car.id || `car-${index}`} car={withDistance(car)} onPress={() => setSelectedId(car.id || null)} />
         ))}
 
         {pickup ? (
@@ -307,7 +316,7 @@ export function MapboxInteractiveMap({
         ) : null}
 
       </MapView>
-      {selected ? <DriverMarkerPopup car={selected} onClose={() => setSelectedId(null)} style={{ top: padding.top + 8 }} /> : null}
+      {selected ? <DriverMarkerPopup car={withDistance(selected)} onClose={() => setSelectedId(null)} style={{ top: padding.top + 8 }} /> : null}
 
       {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
       {interactive && showControls ? (

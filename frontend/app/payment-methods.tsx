@@ -18,7 +18,7 @@ import { paymentApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { nativeWalletAvailability, setupNativePaymentMethod } from '@/src/lib/nativePayment';
 
-const CHECKOUT_ORIGIN = typeof window !== 'undefined' ? window.location.origin : (process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://snarapp.no');
+const CHECKOUT_ORIGIN = Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin ? window.location.origin : (process.env.EXPO_PUBLIC_CHECKOUT_ORIGIN || 'https://snarapp.no');
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function PaymentMethods() {

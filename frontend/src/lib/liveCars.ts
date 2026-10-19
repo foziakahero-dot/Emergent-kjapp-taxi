@@ -1,7 +1,7 @@
 import { Availability, carExpiry, LiveCar, validPosition, visibleCars } from './carAvailability';
 
 export type MapCarData = {
-  id?: string; lat: number; lng: number; heading?: number; eta_min?: number | null;
+  id?: string; lat: number; lng: number; heading?: number; distance_km?: number; eta_min?: number | null;
   eta_source?: string | null; eta_status?: string; online?: boolean; available?: boolean;
   photo_version?: string | null; car_icon_version?: string | null;
   name?: string; car?: string; rating?: number | null; type?: string; body_type?: string;
