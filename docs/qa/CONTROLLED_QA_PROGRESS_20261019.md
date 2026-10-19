@@ -20,6 +20,14 @@ Category images use a clipped transparent 84×56 dp container, `contentFit="cont
 
 Checks: supplied asset integrity test, Customer TypeScript, existing component-behaviour screen suite (extended to assert original image paths, contain scaling, bounded dimensions, selection state and distinct XL), diff whitespace check. React review: static asset imports, shared renderer, no new effects/network calls. These are local checks, not physical-device visual verification or native compilation.
 
-Phases 3–12 remain open. No APK/IPA/Expo/EAS build was started.
+Phase 2 checkpoint: `281a690`.
+
+## Phase 3 — marker audit, new PNG artwork blocked
+
+The existing Figma-derived SVG car is already 50 dp, separate from the customer position dot, with centre rotation and interpolated GPS movement. No full-resolution PNG is loaded as a map texture. Corrected the native available-marker anchor to the actual car centre (22 dp ETA badge + 25 dp half car), instead of two dp below it. Assigned-driver anchor is already at its actual car centre. Category PNGs are not reused as an invented marker.
+
+Customer TypeScript and whitespace checks pass. Native Mapbox rendering, camera-relative rotation and real-device smoothness remain unverified. The supplied fourth map PNG is missing: phase 3 cannot be certified against that source. Existing SVG remains until the actual marker asset is supplied.
+
+Phases 4–12 remain open. No APK/IPA/Expo/EAS build was started.
 
 Recommendation: **NOT READY FOR BUILD**. This is a progress checkpoint, not the final phase 12 report.

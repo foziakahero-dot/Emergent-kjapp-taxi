@@ -52,7 +52,8 @@ function MarkerCar({ car, active = false, onPress }: { car: Car; active?: boolea
   useColorTheme();
   const smooth = useSmoothPosition(car, 250);
   if (!smooth) return null;
-  return <MarkerView coordinate={[smooth.lng, smooth.lat]} anchor={{ x: .5, y: 49 / 74 }} allowOverlap>
+  // The geographical point is the car centre, below the 22 dp ETA badge.
+  return <MarkerView coordinate={[smooth.lng, smooth.lat]} anchor={{ x: .5, y: (22 + 50 / 2) / 74 }} allowOverlap>
     <Pressable collapsable={false} testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress} style={{ width: 130, height: 74, alignItems: 'center' }}>
       <CarEtaBadge car={car} /><MapCar heading={smooth.heading} active={active} vehicleType={car.type} bodyType={car.body_type} />
     </Pressable>
