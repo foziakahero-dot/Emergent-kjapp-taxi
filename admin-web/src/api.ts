@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const env = (import.meta as any).env || {};
-const configuredBase = String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
+const isQaPreview = (import.meta as any).env.VITE_SNAR_QA_PANEL === 'true';
+const configuredBase = isQaPreview ? '/api' : String(env.VITE_API_BASE || '').trim().replace(/\/$/, '');
 if (env.VITE_APP_ENV === 'qa' && configuredBase !== '/api') {
   throw new Error('QA Admin requires the same-origin QA API proxy');
 }
