@@ -24,6 +24,7 @@ from ride_search import RideSearch
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
 from onboarding_emails import queue_confirmation, confirmation_loop
+from email_delivery import email_configured, send_transactional_email
 from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
@@ -1030,28 +1031,7 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
-    """Send email via SendGrid if configured, else log to console."""
-    if APP_ENV == "qa":
-        print("[EMAIL/disabled-qa] external email delivery is disabled")
-        return False
-    api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
-    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
-    if not api_key:
-        # Never print HTML bodies: password-reset/invite emails can contain bearer-style
-        # one-time tokens. Missing email configuration should be observable without
-        # leaking those links into application logs.
-        print(f"[EMAIL/no-key] to={to_email} subj={subject} body=redacted")
-        return False
-    try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-        msg = Mail(from_email=sender, to_emails=to_email, subject=subject, html_content=html)
-        sg = SendGridAPIClient(api_key)
-        res = sg.send(msg)
-        return 200 <= res.status_code < 300
-    except Exception as e:
-        print(f"[EMAIL/error] {e}")
-        return False
+    return send_transactional_email(to_email, subject, html)
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
@@ -1803,7 +1783,7 @@ async def readiness():
                 and os.environ.get("STRIPE_PUBLISHABLE_KEY", "").startswith("pk_test_")
             )
         ),
-        "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
+        "email_configured": email_configured(),
         "public_web_origin_configured": (
             is_safe_qa_web_origin(os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", ""))
             if APP_ENV == "qa"
@@ -9983,7 +9963,7 @@ def _driver_invite_result(invite: dict) -> dict:
     result["invite_url"] = _driver_invite_url(invite["token"])
     result["email_status"] = ("sent" if invite.get("email_sent") else
                               "not_requested" if not invite.get("email") else
-                              "not_configured" if not os.environ.get("SENDGRID_API_KEY", "").strip() else "failed")
+                              "not_configured" if not email_configured() else "failed")
     return result
 
 
@@ -11507,6 +11487,13 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 async def _prepare_onboarding_email(job: dict) -> str:
+    if job.get("kind") == "driver-approved":
+        user = await db.users.find_one({"email": job["recipient"], "role": "driver", "approved": True,
+                                       "disabled": {"$ne": True}})
+        if not user:
+            raise ValueError("Approved driver account is unavailable")
+        username = html_escape.escape(job["recipient"])
+        return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p>Passord: Bruk passordet du valgte under registreringen. Velg «Glemt passord» i sjåførappen hvis du trenger et nytt.</p>'
     if job.get("kind") != "fleet-approved":
         return job["html"]
     user = await db.users.find_one({"email": job["recipient"], "role": "fleet_owner", "approved": True,
@@ -11515,12 +11502,15 @@ async def _prepare_onboarding_email(job: dict) -> str:
         raise ValueError("Approved fleet account is unavailable")
     # Create the expiring setup link only when sending, so queued messages do not
     # expire while the mail provider is missing. Persist only the token hash.
+    fleet_url = os.environ.get("FLEET_PUBLIC_URL", "https://fleet.snarapp.no").rstrip("/")
+    if APP_ENV == "qa" and not is_safe_qa_web_origin(fleet_url):
+        raise ValueError("QA fleet setup requires a configured isolated Fleet origin")
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     await db.password_reset_tokens.insert_one({"token_hash": _password_reset_token_hash(token),
         "user_id": str(user["_id"]), "email": job["recipient"], "created_at": now,
         "expires_at": now + timedelta(hours=1), "used": False})
-    reset_url = f"https://fleet.snarapp.no/reset-password/{token}"
+    reset_url = f"{fleet_url}/reset-password/{token}"
     username = html_escape.escape(job["recipient"])
     return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p><a href="{reset_url}">Velg passord for SNAR Fleet</a> (engangslenken er gyldig i én time). Har du allerede et passord, kan du bruke det.</p>'
 
