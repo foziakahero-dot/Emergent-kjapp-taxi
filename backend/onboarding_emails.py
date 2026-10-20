@@ -5,6 +5,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pymongo import ReturnDocument
+from email_delivery import email_configured
 
 
 async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
@@ -28,7 +29,7 @@ async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
         "entity_id": str(entity_id), "status": "pending", "attempts": 0,
         "created_at": now, "next_attempt_at": now,
     }}, upsert=True)
-    return "queued" if os.environ.get("SENDGRID_API_KEY", "").strip() else "not_configured"
+    return "queued" if email_configured() else "not_configured"
 
 
 async def deliver_one(db, send_email, prepare_email=None):
@@ -58,7 +59,7 @@ async def deliver_one(db, send_email, prepare_email=None):
 async def confirmation_loop(db, send_email, prepare_email=None, invite_sender=None):
     while True:
         try:
-            if os.environ.get("SENDGRID_API_KEY", "").strip():
+            if email_configured():
                 for _ in range(20):
                     if not await deliver_one(db, send_email, prepare_email):
                         break
