@@ -36,7 +36,6 @@ function validate(form: FormState) {
   )
     return "Skriv inn et gyldig telefonnummer.";
   if (
-    form.email.trim() &&
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
   )
     return "Skriv inn en gyldig e-postadresse.";
@@ -286,11 +285,12 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole
             </label>
             <label>
               <span>
-                E-post <small>valgfritt</small>
+                E-post
               </span>
               <input
                 type="email"
                 autoComplete="email"
+                required
                 value={form.email}
                 onChange={(event) =>
                   setForm({ ...form, email: event.target.value })
