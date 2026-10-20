@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     city.length < 2 || city.length > 100 ||
     !ALLOWED_ROLES.has(role) ||
     website.length > 200 ||
-    (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))
+    (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
   ) {
     return send(res, 400, { error: 'Kontroller feltene og prøv igjen.' });
   }
