@@ -4,6 +4,7 @@ import { useAuth } from './auth';
 import { api } from './api';
 import { Loader } from './ui';
 import Login from './Login';
+import TwoFactorGate from './TwoFactorGate';
 import { Icon, SnarMark } from './snar-ui';
 import FleetApplications from './FleetApplications';
 import BetaWaitlist from './BetaWaitlist';
@@ -193,6 +194,6 @@ export default function App() {
   const { user } = useAuth();
   if (user === undefined) return <div className="auth-wrap"><Loader /></div>;
   if (!user) return <Login />;
-  return <Shell />;
+  return <TwoFactorGate key={user.id}><Shell /></TwoFactorGate>;
 }
 

@@ -75,3 +75,23 @@ RBAC, rejection of fleet-owner sessions, and login/2FA token sequencing. The Rea
 checks use synthetic data and a stub map, and do not replace signed-in live acceptance
 testing or a visual review of each screen. No financial, broadcast or approval action
 was executed against production during these checks.
+
+### Mandatory 2FA enrollment
+
+After staff login, `TwoFactorGate` checks `/auth/2fa/status` before mounting the
+control center. Accounts without 2FA see the account-security setup instead of
+admin pages. This uses the existing authenticated setup/enable endpoints and
+preserves the backend's mandatory admin 2FA requirement. Status failures offer a
+retry and sign-out; they never open operational pages.
+
+Scan the QR with an authenticator (or enter the setup key), confirm a six-digit
+code, save the one-time reserve codes, then sign out and sign in again. Login
+supports both authenticator codes and the backend's `abcd-1234` reserve-code
+format. Secrets and reserve codes stay in component memory, not browser storage.
+
+Regression check (requires Playwright and Chromium installed in the test environment):
+`node admin-web/tests/2fa-enrollment.cjs` from the repository root. The script
+starts a local Vite server and mocks all APIs; it never modifies real accounts.
+`ADMIN_TEST_URL` can select a running local server; `CHROMIUM_EXECUTABLE_PATH`
+can select an existing Chromium executable. Also run `npx tsc --noEmit` and
+`npm run build` from `admin-web`.

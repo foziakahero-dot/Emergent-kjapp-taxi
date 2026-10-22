@@ -9,6 +9,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [useBackup, setUseBackup] = useState(false);
   const [twofaToken, setTwofaToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -38,7 +39,7 @@ export default function Login() {
         <div className="login-head">
           {twofaToken && <div className="twofa-icon"><Icon name="shield" size={24}/></div>}
           <h1 className="login-title">{twofaToken ? 'Tofaktorkontroll' : 'Logg inn'}</h1>
-          <p className="login-sub">{twofaToken ? 'Skriv inn koden fra autentiseringsappen din.' : 'SNAR administrasjonsportal · Kun autoriserte brukere'}</p>
+          <p className="login-sub">{twofaToken ? useBackup ? 'Skriv inn en ubrukt reservekode.' : 'Skriv inn koden fra autentiseringsappen din.' : 'SNAR administrasjonsportal · Kun autoriserte brukere'}</p>
         </div>
         {err && <div className="error-banner" role="alert">{err}</div>}
         {!twofaToken ? (
@@ -50,9 +51,10 @@ export default function Login() {
           </form>
         ) : (
           <form className="login-form" onSubmit={submit2fa}>
-            <label className="login-field"><span>6-sifret kode</span><input className="code-input" inputMode="numeric" autoComplete="one-time-code" autoFocus required pattern="[0-9]{6}" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} placeholder="000000"/></label>
-            <Btn variant="primary full" type="submit" disabled={loading || !/^[0-9]{6}$/.test(code)}>{loading ? 'Verifiserer…' : 'Logg inn'}</Btn>
-            <button className="login-forgot" type="button" onClick={() => { setTwofaToken(''); setCode(''); setErr(''); }}>← Tilbake til innlogging</button>
+            <label className="login-field"><span>{useBackup ? 'Reservekode' : '6-sifret kode'}</span><input key={String(useBackup)} className="code-input" inputMode={useBackup ? 'text' : 'numeric'} autoComplete="one-time-code" autoFocus required pattern={useBackup ? '[0-9a-fA-F]{4}-[0-9a-fA-F]{4}' : '[0-9]{6}'} maxLength={useBackup ? 9 : 6} value={code} onChange={e => setCode(useBackup ? e.target.value.toLowerCase() : e.target.value.replace(/\D/g, ''))} placeholder={useBackup ? 'abcd-1234' : '000000'}/></label>
+            <Btn variant="primary full" type="submit" disabled={loading || !(useBackup ? /^[0-9a-f]{4}-[0-9a-f]{4}$/.test(code) : /^[0-9]{6}$/.test(code))}>{loading ? 'Verifiserer…' : 'Logg inn'}</Btn>
+            <button className="login-forgot" type="button" onClick={() => { setUseBackup(!useBackup); setCode(''); setErr(''); }}>{useBackup ? 'Bruk autentiseringsappen' : 'Bruk en reservekode'}</button>
+            <button className="login-forgot" type="button" onClick={() => { setTwofaToken(''); setUseBackup(false); setCode(''); setErr(''); }}>← Tilbake til innlogging</button>
           </form>
         )}
         <div className="login-security"><Icon name="lock" size={13}/><span>Sikker innlogging · Kun autoriserte administratorer</span></div>
