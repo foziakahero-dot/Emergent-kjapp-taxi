@@ -32,6 +32,7 @@ export type User = {
 type AuthCtx = {
   user: User | undefined;
   login: (identifier: string, password: string) => Promise<any>;
+  loginWithOtp: (phone: string, code: string) => Promise<any>;
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -152,6 +153,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return persistSession(res, epoch);
   };
 
+  const loginWithOtp = async (phone: string, code: string) => {
+    const epoch = ++sessionEpoch.current;
+    const device_id = await getDriverInstallationId();
+    if (epoch !== sessionEpoch.current) return null;
+    const res = await withBackendWakeRetry(() => authApi.otpVerify(phone, code, device_id));
+    if (epoch !== sessionEpoch.current) return null;
+    if (res?.twofa_required) return res;
+    return persistSession(res, epoch);
+  };
+
   const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
     const epoch = ++sessionEpoch.current;
     const identity = provider === 'google'
@@ -188,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
+    <Ctx.Provider value={{ user, login, loginWithOtp, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
       {children}
     </Ctx.Provider>
   );

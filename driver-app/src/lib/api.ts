@@ -38,6 +38,11 @@ export const authApi = {
   nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
     api.post(`/auth/${provider}/native`, { identity_token, client: 'driver', device_id }).then((r) => r.data),
   login: (data: any) => api.post('/auth/login', data).then((r) => r.data),
+  otpConfig: () => api.get('/auth/driver/otp/config').then((r) => r.data as { enabled: boolean }),
+  otpStart: (phone: string) =>
+    api.post('/auth/driver/otp/start', { phone }).then((r) => r.data as { ok: boolean; sent_to: string }),
+  otpVerify: (phone: string, code: string, device_id: string) =>
+    api.post('/auth/driver/otp/verify', { phone, code, device_id }).then((r) => r.data),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email, client: 'driver' }).then((r) => r.data),
   checkResetToken: (token: string) => api.get(`/auth/reset-password/${token}`).then((r) => r.data),
   resetPassword: (token: string, new_password: string) => api.post('/auth/reset-password', { token, new_password }).then((r) => r.data),

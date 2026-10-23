@@ -11,6 +11,7 @@ import json
 import base64
 import traceback
 import logging
+import hashlib
 import re
 import bcrypt
 import jwt
@@ -41,6 +42,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
+
+logger = logging.getLogger("snar.server")
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -2404,23 +2407,9 @@ async def login(body: LoginRequest, request: Request, response: Response):
         # Restrict the lookup to role=driver so a passenger credential can never authenticate
         # into the driver client, even before the client-side role gate runs.
         if "@" in identifier:
-            lookup = {"role": "driver", "email": identifier.lower()}
+            user = await db.users.find_one({"role": "driver", "email": identifier.lower()})
         else:
-            digits = re.sub(r"\D", "", identifier)
-            local = digits[-8:] if len(digits) >= 8 else digits
-            if len(local) != 8:
-                user = None
-            else:
-                sep = r"[\s().-]*"
-                local_pattern = sep.join(re.escape(ch) for ch in local)
-                phone_pattern = rf"^(?:(?:\+|00)?47{sep})?{local_pattern}$"
-                user = await db.users.find_one({
-                    "role": "driver",
-                    "phone": {"$regex": phone_pattern},
-                })
-            lookup = None
-        if lookup is not None:
-            user = await db.users.find_one(lookup)
+            user = await _find_driver_by_phone(identifier)
     elif body.client == "customer":
         # Customer app may authenticate passenger/customer accounts only.
         user = await db.users.find_one({"role": "user", "email": identifier.lower()})
@@ -2446,6 +2435,153 @@ async def login(body: LoginRequest, request: Request, response: Response):
     token = create_access_token(uid, account_email)
     set_auth_cookie(response, token)
     return {"token": token, "user": user_public(user)}
+
+
+def _norwegian_local_phone(raw: str) -> Optional[str]:
+    """Return the 8-digit Norwegian subscriber number, or None if the input isn't one."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if digits.startswith("0047"):
+        digits = digits[4:]
+    elif digits.startswith("47") and len(digits) == 10:
+        digits = digits[2:]
+    return digits if re.fullmatch(r"[2-9]\d{7}", digits) else None
+
+
+async def _find_driver_by_phone(raw: str):
+    local = _norwegian_local_phone(raw)
+    if not local:
+        return None
+    sep = r"[\s().-]*"
+    local_pattern = sep.join(re.escape(ch) for ch in local)
+    phone_pattern = rf"^(?:(?:\+|00)?47{sep})?{local_pattern}$"
+    return await db.users.find_one({"role": "driver", "phone": {"$regex": phone_pattern}})
+
+
+TWILIO_VERIFY_BASE = "https://verify.twilio.com/v2/Services"
+
+
+def _twilio_verify_config() -> Optional[tuple]:
+    sid = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+    token = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+    service = os.environ.get("TWILIO_VERIFY_SERVICE_SID", "").strip()
+    return (sid, token, service) if sid and token and service else None
+
+
+async def _enforce_key_rate_limit(scope: str, key: str, limit: int, window_seconds: int):
+    """Same fixed-window limiter as _enforce_rate_limit, keyed by an identifier instead of IP."""
+    now = datetime.now(timezone.utc)
+    bucket = int(now.timestamp()) // int(window_seconds)
+    bucket_id = f"{scope}:{hashlib.sha256(key.encode()).hexdigest()[:24]}:{bucket}"
+    await db.rate_limit_buckets.update_one(
+        {"_id": bucket_id},
+        {"$inc": {"count": 1}, "$setOnInsert": {
+            "scope": scope, "bucket": bucket, "created_at": now,
+            "expires_at": now + timedelta(seconds=max(window_seconds * 2, 120)),
+        }},
+        upsert=True,
+    )
+    rec = await db.rate_limit_buckets.find_one({"_id": bucket_id}, {"count": 1})
+    if int((rec or {}).get("count") or 0) > int(limit):
+        raise HTTPException(
+            status_code=429,
+            detail="For mange forsøk med dette nummeret. Prøv igjen litt senere.",
+            headers={"Retry-After": str(window_seconds)},
+        )
+
+
+class DriverOtpStartRequest(BaseModel):
+    phone: str = Field(min_length=8, max_length=24)
+
+
+class DriverOtpVerifyRequest(BaseModel):
+    phone: str = Field(min_length=8, max_length=24)
+    code: str = Field(min_length=4, max_length=10)
+    device_id: Optional[str] = Field(default=None, max_length=128)
+
+
+@api.post("/auth/driver/otp/start")
+async def driver_otp_start(body: DriverOtpStartRequest, request: Request):
+    """Send a one-time SMS code to an invited driver's phone via Twilio Verify.
+
+    The response is identical whether or not the number belongs to a driver, so this
+    endpoint cannot be used to discover which phone numbers are registered.
+    """
+    await _enforce_rate_limit(request, "auth-driver-otp-start", 10, 900)
+    config = _twilio_verify_config()
+    if not config:
+        raise HTTPException(status_code=503, detail="SMS-innlogging er ikke aktivert ennå. Bruk passord.")
+    local = _norwegian_local_phone(body.phone)
+    if not local:
+        raise HTTPException(status_code=400, detail="Skriv inn et gyldig norsk mobilnummer.")
+    await _enforce_key_rate_limit("auth-driver-otp-start-phone", local, 5, 3600)
+    generic = {"ok": True, "sent_to": f"+47 ••• •• {local[-3:]}"}
+
+    user = await _find_driver_by_phone(local)
+    if not user or user.get("disabled"):
+        return generic
+
+    sid, token, service = config
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                f"{TWILIO_VERIFY_BASE}/{service}/Verifications",
+                data={"To": f"+47{local}", "Channel": "sms", "Locale": "nb"},
+                auth=(sid, token),
+            )
+        if res.status_code >= 400:
+            logger.warning("Twilio Verify start failed: status=%s", res.status_code)
+            raise HTTPException(status_code=502, detail="Kunne ikke sende SMS akkurat nå. Prøv igjen eller bruk passord.")
+    except httpx.HTTPError:
+        logger.warning("Twilio Verify start network error")
+        raise HTTPException(status_code=502, detail="Kunne ikke sende SMS akkurat nå. Prøv igjen eller bruk passord.")
+    return generic
+
+
+@api.post("/auth/driver/otp/verify")
+async def driver_otp_verify(body: DriverOtpVerifyRequest, request: Request, response: Response):
+    await _enforce_rate_limit(request, "auth-driver-otp-verify", 30, 900)
+    config = _twilio_verify_config()
+    if not config:
+        raise HTTPException(status_code=503, detail="SMS-innlogging er ikke aktivert ennå. Bruk passord.")
+    local = _norwegian_local_phone(body.phone)
+    code = re.sub(r"\D", "", body.code)
+    if not local or not (4 <= len(code) <= 10):
+        raise HTTPException(status_code=400, detail="Ugyldig kode.")
+    login_key = f"otp:{local}"
+    ip = _client_ip(request)
+    if await _login_blocked(login_key, ip):
+        raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
+
+    sid, token, service = config
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                f"{TWILIO_VERIFY_BASE}/{service}/VerificationCheck",
+                data={"To": f"+47{local}", "Code": code},
+                auth=(sid, token),
+            )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Kunne ikke kontrollere koden akkurat nå. Prøv igjen.")
+    # Twilio answers 404 once a verification has expired, been used or hit its attempt cap.
+    approved = res.status_code == 200 and (res.json() or {}).get("status") == "approved"
+    user = await _find_driver_by_phone(local) if approved else None
+    if not user or user.get("disabled"):
+        await _record_failed_login(login_key, ip)
+        raise HTTPException(status_code=401, detail="Feil eller utløpt kode.")
+
+    await _clear_failed_logins(login_key, ip)
+    user = await _apply_driver_identity_risk(user, body.device_id, "driver", on_login=True)
+    uid = str(user["_id"])
+    if user.get("totp_enabled"):
+        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
+    token_value = create_access_token(uid, str(user.get("email") or "").strip().lower())
+    set_auth_cookie(response, token_value)
+    return {"token": token_value, "user": user_public(user)}
+
+
+@api.get("/auth/driver/otp/config")
+async def driver_otp_config():
+    return {"enabled": _twilio_verify_config() is not None}
 
 
 @api.post("/auth/logout")
