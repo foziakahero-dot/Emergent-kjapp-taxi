@@ -8,7 +8,7 @@ import { Driver360Page, InvitationsPage, OperationsDashboardPage } from './Fleet
 import FigmaDocumentsPage from './FigmaDocumentsPage';
 import FigmaSettingsPage from './FigmaSettingsPage';
 import { FigmaFinancePage, FigmaLiveOpsPage, FigmaTripsPage, FigmaVehiclesPage } from './FigmaOperationsPages';
-import { SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
+import { SnarForcePasswordChangePage, SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
 import SupportAiPage from './SupportAiPage';
 
 const NAV = [
@@ -135,5 +135,6 @@ export default function App() {
       </Routes>
     );
   }
+  if (user.must_reset_password) return <SnarForcePasswordChangePage />;
   return <PortalShell />;
 }

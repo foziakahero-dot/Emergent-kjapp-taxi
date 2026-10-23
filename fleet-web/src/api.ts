@@ -270,6 +270,8 @@ export const api = {
   checkResetToken: (token: string) => http.get(`/auth/reset-password/${token}`).then((r) => r.data),
   resetPassword: (token: string, new_password: string) =>
     http.post('/auth/reset-password', { token, new_password }).then((r) => r.data),
+  changePassword: (current_password: string, new_password: string): Promise<{ ok: boolean; token: string }> =>
+    http.post('/auth/change-password', { current_password, new_password }).then((r) => r.data),
 
   fleetMe: (): Promise<FleetMe> => http.get('/fleet/me').then((r) => r.data),
   overview: (): Promise<FleetOverview> => http.get('/fleet/overview').then((r) => r.data),

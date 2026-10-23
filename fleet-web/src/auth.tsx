@@ -8,12 +8,14 @@ export type FleetUser = {
   role?: string;
   approved?: boolean;
   fleet_id?: string;
+  must_reset_password?: boolean;
 };
 
 type AuthContextValue = {
   user: FleetUser | null | undefined;
   login: (email: string, password: string) => Promise<FleetUser>;
   logout: () => void;
+  completePasswordChange: (token: string) => void;
 };
 
 const AuthContext = createContext<AuthContextValue>(null as any);
@@ -71,7 +73,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  const completePasswordChange = (token: string) => {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    setUser((prev) => (prev ? { ...prev, must_reset_password: false } : prev));
+  };
+
+  return <AuthContext.Provider value={{ user, login, logout, completePasswordChange }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

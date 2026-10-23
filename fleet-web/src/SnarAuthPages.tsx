@@ -149,3 +149,47 @@ export function SnarResetPasswordPage() {
     </div>
   );
 }
+
+export function SnarForcePasswordChangePage() {
+  const { completePasswordChange, logout } = useAuth();
+  const [current, setCurrent] = useState('');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setErr('');
+    if (pw.length < 8) return setErr('Passord må ha minst 8 tegn');
+    if (pw !== pw2) return setErr('Passordene er ikke like');
+    setBusy(true);
+    try {
+      const res = await api.changePassword(current, pw);
+      completePasswordChange(res.token);
+    } catch (error) {
+      setErr(apiError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="auth-simple">
+      <Brand />
+      <div className="auth-simple-card">
+        <div className="login-card-kicker">SNAR FLEET</div>
+        <form onSubmit={submit}>
+          <h1>Bytt midlertidig passord</h1>
+          <p>Kontoen ble opprettet med et midlertidig passord. Velg et eget passord før du går videre.</p>
+          <input type="password" autoComplete="current-password" placeholder="Midlertidig passord" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+          <input type="password" autoComplete="new-password" placeholder="Nytt passord (minst 8 tegn)" value={pw} onChange={(e) => setPw(e.target.value)} required />
+          <input type="password" autoComplete="new-password" placeholder="Gjenta nytt passord" value={pw2} onChange={(e) => setPw2(e.target.value)} required />
+          <ErrorBox message={err} />
+          <button className="primary-button" disabled={busy}>{busy ? 'Lagrer…' : 'Lagre og fortsett'}</button>
+          <button type="button" className="link-button" onClick={logout}>Logg ut</button>
+        </form>
+      </div>
+    </div>
+  );
+}

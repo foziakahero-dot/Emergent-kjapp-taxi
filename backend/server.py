@@ -2680,6 +2680,31 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     return {"ok": True}
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordRequest, request: Request, current=Depends(get_current_user)):
+    """Authenticated password change. Used to replace the temporary password
+    issued when a fleet application is approved (must_reset_password)."""
+    await _enforce_rate_limit(request, "auth-change-password", 10, 900)
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user or not verify_password(body.current_password, user.get("password_hash") or ""):
+        raise HTTPException(status_code=400, detail="Nåværende passord er feil")
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="Det nye passordet må være forskjellig fra det gamle")
+    # Revoke every other session, then mint a fresh token for this one.
+    cutoff = datetime.now(timezone.utc).timestamp()
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": cutoff},
+         "$unset": {"must_reset_password": ""}},
+    )
+    return {"ok": True, "token": create_access_token(str(user["_id"]), user.get("email") or "")}
+
+
 @api.get("/auth/legal-config")
 async def legal_config():
     return {
@@ -9764,6 +9789,30 @@ class FleetApplicationDecisionRequest(BaseModel):
     commission_rate: Optional[float] = Field(default=None, ge=0, le=0.50)
 
 
+def normalize_org_number(value: str) -> str:
+    """Norwegian organisasjonsnummer: 9 digits with a MOD11 check digit."""
+    digits = re.sub(r"[\s.\-]", "", str(value or ""))
+    if not re.fullmatch(r"\d{9}", digits):
+        raise ValueError("Organisasjonsnummer må ha 9 siffer")
+    weights = (3, 2, 7, 6, 5, 4, 3, 2)
+    remainder = sum(int(d) * w for d, w in zip(digits[:8], weights)) % 11
+    check = 0 if remainder == 0 else 11 - remainder
+    if check == 10 or check != int(digits[8]):
+        raise ValueError("Organisasjonsnummeret er ikke gyldig")
+    return digits
+
+
+FLEET_APPLICATION_OPEN_STATUSES = ["pending", "submitted", "under_review", "documents_required"]
+
+
+async def _ensure_no_duplicate_fleet_application(org_number: str, exclude_token: Optional[str] = None):
+    query = {"org_number": org_number, "status": {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved"]}}
+    if exclude_token:
+        query["upload_token"] = {"$ne": exclude_token}
+    if await db.fleet_applications.find_one(query, {"_id": 1}) or await db.fleets.find_one({"org_number": org_number}, {"_id": 1}):
+        raise HTTPException(409, "Det finnes allerede en søknad eller flåte for dette organisasjonsnummeret. Kontakt SNAR hvis dette er feil.")
+
+
 async def _validate_fleet_application_uploads(upload_token: str, documents: dict):
     for doc_type in ("firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"):
         path = str((documents.get(doc_type) or {}).get("path") or "")
@@ -9783,14 +9832,16 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest, req
         raise HTTPException(status_code=400, detail="Du må godta partner-/plattformvilkår og personvern før søknaden opprettes")
     try:
         bank_account = normalize_bank_account(body.bank_account)
+        org_number = normalize_org_number(body.org_number)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
+    await _ensure_no_duplicate_fleet_application(org_number)
     upload_token = secrets.token_urlsafe(24)
     accepted_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "upload_token": upload_token,
         "company_name": body.company_name.strip(),
-        "org_number": body.org_number.strip(),
+        "org_number": org_number,
         "contact_name": body.contact_name.strip(),
         "contact_email": body.contact_email.strip().lower(),
         "contact_phone": body.contact_phone.strip(),
@@ -9829,6 +9880,8 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     if int(app_doc.get("license_count") or 0) < 1 or int(app_doc.get("vehicle_count") or 0) < 1:
         raise HTTPException(status_code=400, detail="Antall løyver og biler må være registrert før innsending")
     await _validate_fleet_application_uploads(body.upload_token, body.documents)
+    # Two drafts for the same company can be started in parallel; only the first may be submitted.
+    await _ensure_no_duplicate_fleet_application(app_doc.get("org_number") or "", exclude_token=body.upload_token)
     await db.fleet_applications.update_one(
         {"upload_token": body.upload_token},
         {"$set": {
@@ -9864,7 +9917,7 @@ async def superadmin_list_applications(status: Optional[str] = None, current=Dep
     if status:
         q["status"] = status
     else:
-        q["status"] = {"$in": ["pending", "approved", "rejected"]}
+        q["status"] = {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved", "rejected"]}
     out = []
     async for a in db.fleet_applications.find(q).sort("submitted_at", -1).limit(200):
         a["id"] = str(a["_id"]); a.pop("_id", None)
