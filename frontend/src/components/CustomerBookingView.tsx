@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState, type RefObject } from 'react';
-import { ExperienceStudio, type StudioOption } from './ExperienceStudio';
 import { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 export { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 import { FigmaGradient } from './FigmaGradient';
 import { V10Glass } from './V10Glass';
 import { V10CustomerAvatar } from './V10CustomerAvatar';
 import { V10Entrance } from './V10Entrance';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
@@ -30,18 +29,16 @@ type Props = {
   availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
 };
 const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', trygg: 'XL', premium: 'Premium' };
-const studioEta = (name: string, eta?: number) => typeof eta === 'number' && Number.isFinite(eta) && eta > 0 ? `${name} · estimert henting ${Math.ceil(eta)} min` : `${name} · hentetid ikke tilgjengelig`;
 export function CustomerBookingView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
-  const [homeHeight, setHomeHeight] = useState(500);
-  const studioOptions: StudioOption[] = [
-    { id: 'ai-first', label: 'Effektiv', icon: 'navigation', title: 'Mer dag. Mindre venting.', sub: studioEta('Standard', p.vehicleEtas?.['ai-first']), body: 'Et enkelt valg for hverdagsturene. Se rute og pris før du bestiller.' },
-    { id: 'comfort', label: 'Pusterom', icon: 'moon', title: 'Et lite pusterom.', sub: 'Comfort · ikke tilgjengelig', body: 'Comfort er ikke tilgjengelig for bestilling ennå.', disabled: true },
-    { id: 'premium', label: 'Signatur', icon: 'star', title: 'Gjør reisen til en del av dagen.', sub: studioEta('Premium', p.vehicleEtas?.premium), body: 'Velg Premium, og utforsk bilkategori, pris og sjåfør i den eksisterende bestillingsflyten.' },
-  ];
+  const { height: windowHeight } = useWindowDimensions();
+  const [homeHeight, setHomeHeight] = useState(300);
+  // Keep the voice/locate column below the header row (avatar + bell) however tall the sheet gets.
+  const toolsMaxBottom = windowHeight - (Math.max(58, insets.top + 10) + 48 + 16) - 104;
   const vehicleName = vehicleNames[p.vehicle] || 'SNAR';
-  const sheet = (children: React.ReactNode, home = false) => <V10Entrance key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} sheet style={[styles.sheet, { maxHeight: '78%', overflow: 'hidden' }]}><FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" /><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
+  const pickupEta = typeof p.nearest === 'number' && Number.isFinite(p.nearest) && p.nearest > 0 ? Math.ceil(p.nearest) : null;
+  const sheet = (children: React.ReactNode, home = false) => <V10Entrance key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} sheet style={[styles.sheet, { maxHeight: home ? '46%' : '78%', overflow: 'hidden' }]}><FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" /><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
     style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
     onLayout={event => { p.onHeight(event.nativeEvent.layout.height); if (home) setHomeHeight(event.nativeEvent.layout.height); }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: home ? Math.max(108, insets.bottom + 74) : Math.max(34, insets.bottom) }}>
     <View style={styles.handle} />{children}</ScrollView></V10Entrance>;
@@ -52,13 +49,14 @@ export function CustomerBookingView(p: Props) {
       <Pressable onPress={p.onProfile} accessibilityRole="button" accessibilityLabel="Åpne profilen" style={styles.identity}><V10Glass target={p.mapBlurTarget} /><V10CustomerAvatar initials={p.initials} version={p.avatarVersion} /><Text style={[v10.secondary, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>Hei, {p.firstName}</Text></Pressable>
       <Tool id="home-notifications" icon="bell" label="Varsler" onPress={p.onNotifications || p.onProfile} target={p.mapBlurTarget} />
     </V10Entrance>
-    <View style={{ position: 'absolute', right: 20, bottom: homeHeight + 20, gap: 8 }}><Tool id="home-voice" icon="voice" label="Snakk med SNAR" onPress={p.onVoice} target={p.mapBlurTarget} /><Tool id="home-recenter" icon="locate" label="Min posisjon" onPress={p.onLocate} target={p.mapBlurTarget} /></View>
-    {sheet(<><ExperienceStudio product="customer" value={p.vehicle} options={studioOptions} onApply={value => { p.onVehicle(value); return true; }} onContinue={() => p.onSearch('dropoff')} />
+    <View style={{ position: 'absolute', right: 20, bottom: Math.min(homeHeight + 20, toolsMaxBottom), gap: 8 }}><Tool id="home-voice" icon="voice" label="Snakk med SNAR" onPress={p.onVoice} target={p.mapBlurTarget} /><Tool id="home-recenter" icon="locate" label="Min posisjon" onPress={p.onLocate} target={p.mapBlurTarget} /></View>
+    {sheet(<>
       <Pressable testID="home-where-to" accessibilityRole="button" accessibilityLabel="Søk etter destinasjon" onPress={() => p.onSearch('dropoff')} style={styles.search}><V10Icon name="search" /><Text style={[v10.body, { flex: 1, fontSize: 18 }]}>Hvor skal du?</Text><Pressable testID="home-schedule" accessibilityRole="button" accessibilityLabel="Velg hentetid" disabled={!p.onSchedule} onPress={event => { event.stopPropagation(); p.onSchedule?.(); }} style={styles.now}><V10Icon name="clock" size={16} /><Text style={v10.caption}>Nå</Text></Pressable></Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 12 }}>
         {p.places.slice(0, 3).map((place, i) => <Pressable key={place.id || `${place.name}-${i}`} testID={`quick-${place.label || i}`} onPress={() => p.onPlace(place)} accessibilityRole="button" style={styles.chip}><V10Icon name={place.label === 'Hjem' ? 'home' : place.label === 'Jobb' ? 'work' : 'clock'} size={18} /><Text style={v10.secondary} numberOfLines={1}>{place.label || place.name}</Text></Pressable>)}
         {!p.places.length && <Pressable testID="home-add-place" onPress={p.onPlaces} style={styles.chip}><V10Icon name="plus" size={18} /><Text style={v10.secondary}>Legg til fast sted</Text></Pressable>}
       </ScrollView>
+      {p.locationReady && pickupEta ? <View testID="home-pickup-eta" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 14 }}><V10Icon name="clock" size={16} /><Text style={[v10.body, { fontFamily: font.semibold }]}>{vehicleName} · bil om {pickupEta} min</Text></View> : null}
       {!p.locationReady ? <Pressable testID="home-location-required" onPress={() => p.onSearch('pickup')} style={{ paddingTop: 12 }}><Text style={v10.secondary}>Velg hentested eller del posisjonen din.</Text></Pressable> : p.availability}
       {p.placesIssue ? <Pressable testID="home-places-retry" onPress={p.onRetryPlaces}><Text testID="home-places-error" style={[v10.caption, { marginTop: 8 }]}>Kunne ikke oppdatere faste steder. Prøv igjen.</Text></Pressable> : null}{error}</>, true)}
   </>;
