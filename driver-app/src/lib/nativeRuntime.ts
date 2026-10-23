@@ -271,10 +271,12 @@ export async function startDriverBackgroundLocation(mode: 'idle' | 'active' = 'i
     await Location.startLocationUpdatesAsync(DRIVER_LOCATION_TASK, {
       accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
       activityType: Location.ActivityType.AutomotiveNavigation,
-      distanceInterval: activeTrip ? 5 : 50,
+      // Time-driven delivery (distanceInterval 0) keeps a parked driver's heartbeat alive;
+      // the backend drops the car marker when the last fix is older than 60 s.
+      distanceInterval: 0,
       timeInterval: activeTrip ? 3000 : 15000,
-      deferredUpdatesDistance: activeTrip ? 10 : 100,
-      deferredUpdatesInterval: activeTrip ? 5000 : 30000,
+      deferredUpdatesDistance: 0,
+      deferredUpdatesInterval: activeTrip ? 5000 : 20000,
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       foregroundService: {

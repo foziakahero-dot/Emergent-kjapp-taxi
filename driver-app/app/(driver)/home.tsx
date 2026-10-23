@@ -33,6 +33,9 @@ const QUEUED_TRIP_ACTION_KEY = 'kjapp_driver_queued_trip_action_v1';
 const MINIMIZED_TRIP_KEY = 'kjapp_driver_minimized_active_trip_v1';
 const ACTIVE_STATUSES = new Set(['driver_on_way', 'at_pickup', 'in_trip']);
 const FINISHED_STATUSES = new Set(['arrived', 'completed', 'rated']);
+// Backend hides a driver from /cars/nearby when last_location_at is older than 60 s,
+// so the heartbeat must fire well inside that window even if the device never moves.
+const GPS_HEARTBEAT_MS = 20_000;
 
 async function applyCriticalTripAction(action: CriticalTripAction, tripId: string) {
   if (action === 'at_pickup') return driverApi.atPickup(tripId);
@@ -73,6 +76,8 @@ export default function DriverHome() {
   const [declineReasonsOpen, setDeclineReasonsOpen] = useState(false);
   const [offerClock, setOfferClock] = useState(Date.now());
   const watch = useRef<Location.LocationSubscription | null>(null);
+  const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastFix = useRef<(Loc & { speed: number; sentAt: number }) | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
   const offerActionLock = useRef(false);
@@ -204,6 +209,10 @@ export default function DriverHome() {
         watch.current.remove();
         watch.current = null;
       }
+      if (heartbeat.current) {
+        clearInterval(heartbeat.current);
+        heartbeat.current = null;
+      }
     };
 
     const forceOffline = async (message: string) => {
@@ -252,24 +261,25 @@ export default function DriverHome() {
           new Date(pos.timestamp).toISOString(),
         ).catch(() => {});
 
+        lastFix.current = { ...p, speed: Math.max(0, pos.coords.speed || 0), sentAt: Date.now() };
+
         const activeTrip = ['driver_on_way', 'at_pickup', 'in_trip'].includes(current?.status || '');
         const subscription = await Location.watchPositionAsync(
           {
             accuracy: activeTrip ? Location.Accuracy.BestForNavigation : Location.Accuracy.High,
-            distanceInterval: activeTrip ? 5 : 40,
+            // distanceInterval 0 lets timeInterval drive delivery; Android fused location otherwise
+            // withholds updates for a parked driver, who then expires from /cars/nearby after 60 s.
+            distanceInterval: 0,
             timeInterval: activeTrip ? 3000 : 12000,
           },
           (u) => {
             if (!active) return;
             const np: Loc = { lat: u.coords.latitude, lng: u.coords.longitude, heading: u.coords.heading || 0 };
+            const speed = Math.max(0, u.coords.speed || 0);
             setLoc(np);
-            driverApi.location(
-              np.lat,
-              np.lng,
-              np.heading || 0,
-              Math.max(0, u.coords.speed || 0),
-              new Date(u.timestamp).toISOString(),
-            ).catch(() => {});
+            lastFix.current = { ...np, speed, sentAt: Date.now() };
+            driverApi.location(np.lat, np.lng, np.heading || 0, speed, new Date(u.timestamp).toISOString())
+              .catch(() => {});
           },
         );
         if (!active) subscription.remove();
@@ -277,6 +287,17 @@ export default function DriverHome() {
           stopWatching();
           watch.current = subscription;
         }
+
+        // Heartbeat: re-send the last known fix when the OS has not delivered a new sample,
+        // so a stationary driver stays visible to customers and keeps receiving offers.
+        heartbeat.current = setInterval(() => {
+          const fix = lastFix.current;
+          if (!active || !fix) return;
+          if (Date.now() - fix.sentAt < GPS_HEARTBEAT_MS - 1000) return;
+          fix.sentAt = Date.now();
+          driverApi.location(fix.lat, fix.lng, fix.heading || 0, fix.speed, new Date().toISOString())
+            .catch(() => {});
+        }, GPS_HEARTBEAT_MS);
       } catch {
         await forceOffline('Kunne ikke sikre en gyldig GPS-posisjon. Kontroller posisjonstilgang og prøv igjen.');
       }

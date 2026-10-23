@@ -3,9 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { APPROVED_QA_BACKEND, assertQaBackend } = require('./phase5-qa-build-guard.cjs');
+const { APPROVED_QA_BACKEND, assertQaBackend, assertMapboxToken } = require('./phase5-qa-build-guard.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
+const FAKE_PUBLIC_MAPBOX_TOKEN = 'pk.test-only-public-token';
 
 test('command-line guard rejects unsafe targets and requires the QA profile', () => {
   for (const [profile, url, expectedStatus] of [
@@ -13,10 +14,37 @@ test('command-line guard rejects unsafe targets and requires the QA profile', ()
     ['apk', APPROVED_QA_BACKEND, 1], ['', APPROVED_QA_BACKEND, 1],
   ]) {
     const result = spawnSync(process.execPath, [path.join(__dirname, 'phase5-qa-build-guard.cjs')], {
-      encoding: 'utf8', env: { ...process.env, EAS_BUILD_PROFILE: profile, EXPO_PUBLIC_BACKEND_URL: url },
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        EAS_BUILD_PROFILE: profile,
+        EXPO_PUBLIC_BACKEND_URL: url,
+        EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: FAKE_PUBLIC_MAPBOX_TOKEN,
+      },
     });
     assert.equal(result.status, expectedStatus, result.stderr);
   }
+});
+
+test('command-line guard fails a QA build that would ship the fallback map', () => {
+  const result = spawnSync(process.execPath, [path.join(__dirname, 'phase5-qa-build-guard.cjs')], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      EAS_BUILD_PROFILE: 'qa',
+      EXPO_PUBLIC_BACKEND_URL: APPROVED_QA_BACKEND,
+      EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: '',
+    },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN is missing/);
+});
+
+test('Mapbox guard accepts only public tokens', () => {
+  assert.doesNotThrow(() => assertMapboxToken(FAKE_PUBLIC_MAPBOX_TOKEN));
+  assert.throws(() => assertMapboxToken(''), /missing/);
+  assert.throws(() => assertMapboxToken('   '), /missing/);
+  assert.throws(() => assertMapboxToken('sk.secret-token'), /public Mapbox token/);
 });
 
 test('QA profile accepts only the approved HTTPS backend target', () => {

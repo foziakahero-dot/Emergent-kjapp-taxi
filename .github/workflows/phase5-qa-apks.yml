@@ -21,6 +21,9 @@ env:
   EAS_BUILD_PROFILE: qa
   EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
   EXPO_PUBLIC_SOURCE_SHA: ${{ github.sha }}
+  # Public Mapbox token (pk.*). Without it both apps ship the raster fallback map
+  # with the "Mapbox mangler konfigurasjon" banner. Set it as a repository secret.
+  EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN }}
 
 jobs:
   preflight:
