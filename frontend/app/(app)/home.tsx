@@ -19,7 +19,7 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Map } from '@/src/components/Map';
-import { mePlacesApi, paymentApi, placesApi, tripsApi } from '@/src/lib/api';
+import { mePlacesApi, paymentApi, placesApi, promoApi, tripsApi } from '@/src/lib/api';
 import { apiError } from '@/src/lib/format';
 import { useAuth } from '@/src/context/AuthContext';
 
@@ -72,6 +72,7 @@ export default function Home() {
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
+  const [promoBalance, setPromoBalance] = useState(0);
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   const [quickPlacesIssue, setQuickPlacesIssue] = useState(false);
@@ -124,6 +125,7 @@ export default function Home() {
       setActiveTripChecked(false);
       loadMethods();
       loadPlaces();
+      promoApi.wallet().then(r => { if (active) setPromoBalance(Number(r?.balance_kr || 0)); }).catch(() => {});
       let fetching = false;
       const recover = async () => {
         if (fetching) return;
@@ -332,7 +334,7 @@ export default function Home() {
       </View> : activeTripOffline ? <View style={{ position: 'absolute', top: insets.top + 78, left: 16, right: 16, padding: 12, backgroundColor: colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert">Kan ikke bekrefte aktiv tur. Bestilling er midlertidig utilgjengelig.</Text></View> : null}
       {!activeTrip ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
-        destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
+        destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice} promoBalance={promoBalance}
         nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
         mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}

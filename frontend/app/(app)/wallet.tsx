@@ -1,10 +1,11 @@
 import { FigmaGradient } from '@/src/components/FigmaGradient';
 import { Text } from '@/src/components/Typography';
 import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { paymentApi } from '@/src/lib/api';
+import { paymentApi, promoApi } from '@/src/lib/api';
+import { kr } from '@/src/lib/format';
 import { Icon } from '@/src/components/Icon';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 
@@ -14,14 +15,37 @@ export default function Wallet() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const [methods, setMethods] = useState<any[]>([]);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [code, setCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   useFocusEffect(useCallback(() => {
     let active = true;
     paymentApi.list().then((r) => {
       if (active) setMethods(Array.isArray(r) ? r : (r?.payment_methods || []));
     }).catch(() => {});
+    promoApi.wallet().then((r) => { if (active) setBalance(Number(r?.balance_kr || 0)); }).catch(() => {});
     return () => { active = false; };
   }, []));
+
+  const redeem = async () => {
+    const value = code.trim();
+    if (value.length < 3 || redeeming) return;
+    setRedeeming(true);
+    setMessage(null);
+    try {
+      const r = await promoApi.redeem(value);
+      setBalance(Number(r?.balance_kr || 0));
+      setCode('');
+      setMessage({ ok: true, text: `${kr(r.credit_kr)} er lagt til. Trekkes automatisk på neste tur.` });
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setMessage({ ok: false, text: typeof detail === 'string' ? detail : 'Kunne ikke bruke koden. Prøv igjen.' });
+    } finally {
+      setRedeeming(false);
+    }
+  };
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={{ paddingTop: insets.top + 56, paddingHorizontal: 28, paddingBottom: insets.bottom + 112 }}>
@@ -29,9 +53,35 @@ export default function Wallet() {
 
       <FigmaGradient angle={135} colors={['#FF3B3B', '#B30000']} style={s.creditCard}>
         <Text style={s.creditEyebrow}>SNAR-KREDITT</Text>
-        <Text style={s.creditTitle}>Kommer snart</Text>
-        <Text style={s.creditSub}>Kreditt og verving er ikke aktivert i beta.</Text>
+        <Text style={s.creditTitle} testID="wallet-credit-balance">{balance == null ? '—' : kr(balance)}</Text>
+        <Text style={s.creditSub}>Trekkes automatisk fra turprisen når du bestiller.</Text>
       </FigmaGradient>
+
+      <View style={s.codeBox}>
+        <Text style={s.methodTitle}>Kampanjekode</Text>
+        <View style={s.codeRow}>
+          <TextInput
+            testID="wallet-promo-input"
+            value={code}
+            onChangeText={(t) => { setCode(t.toUpperCase()); setMessage(null); }}
+            placeholder="F.eks. SNAR100"
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={24}
+            returnKeyType="done"
+            onSubmitEditing={redeem}
+            accessibilityLabel="Kampanjekode"
+            style={s.codeInput}
+          />
+          <Pressable testID="wallet-promo-redeem" accessibilityRole="button" onPress={redeem}
+            disabled={redeeming || code.trim().length < 3}
+            style={[s.codeButton, (redeeming || code.trim().length < 3) && { opacity: 0.5 }]}>
+            {redeeming ? <ActivityIndicator color={colors.accentOn} /> : <Text style={s.codeButtonText}>Bruk</Text>}
+          </Pressable>
+        </View>
+        {message ? <Text accessibilityRole="alert" style={[s.methodSub, { marginTop: 8, color: message.ok ? colors.online : colors.accent }]}>{message.text}</Text> : null}
+      </View>
 
       <View style={s.list}>
         {methods.map((m, i) => (
@@ -62,6 +112,11 @@ const useStyles = makeStyles(c => ({
   creditEyebrow: { color: 'rgba(255,255,255,0.78)', fontFamily: font.mono, fontSize: 10, letterSpacing: 1.7 },
   creditTitle: { color: c.accentOn, fontFamily: font.semibold, fontSize: 27, marginTop: 8 },
   creditSub: { color: 'rgba(255,255,255,0.82)', fontSize: 12, marginTop: 4 },
+  codeBox: { marginTop: 12, borderRadius: 16, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
+  codeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  codeInput: { flex: 1, minHeight: 44, borderRadius: 12, paddingHorizontal: 14, backgroundColor: c.cardSubtle, color: c.text, fontFamily: font.mono, fontSize: 15, letterSpacing: 1 },
+  codeButton: { minHeight: 44, minWidth: 72, borderRadius: 12, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
+  codeButtonText: { color: c.accentOn, fontFamily: font.semibold, fontSize: 14 },
   list: { gap: 12, marginTop: 12 },
   methodRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.line },
   methodIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: c.cardSubtle },

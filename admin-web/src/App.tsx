@@ -13,6 +13,7 @@ import {
 import {
   FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
 } from './controlCenter';
+import { PromoCodes } from './PromoCodes';
 
 const NAV = [
   { group: 'Oversikt', items: [
@@ -173,6 +174,7 @@ function Shell() {
             <Route path="/documents" element={gate('operations', <Documents />)} />
             <Route path="/finance" element={gate('finance', <Finance />)} />
             <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
+            <Route path="/promo-codes" element={gate('finance', <PromoCodes />)} />
             <Route path="/pricing" element={gate('system', <Settings />)} />
             <Route path="/communications" element={gate('communications', <Communications />)} />
             <Route path="/actions" element={gate('operations', <ActionCenter />)} />

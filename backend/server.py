@@ -23,6 +23,7 @@ import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
+from promo_credits import normalize_code, is_valid_code, discount_for_trip, max_discount_for_trip, platform_fee_ore
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
 from onboarding_emails import queue_confirmation, confirmation_loop
 from norwegian_bank import normalize_bank_account
@@ -874,6 +875,21 @@ class TripRequest(BaseModel):
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
+    use_promo_credit: bool = True
+
+
+class PromoRedeemIn(BaseModel):
+    code: str = Field(min_length=3, max_length=40)
+
+
+class PromoCodeIn(BaseModel):
+    code: str = Field(min_length=3, max_length=24)
+    label: str = Field(default="", max_length=80)
+    credit_kr: int = Field(ge=10, le=1000)
+    max_redemptions: Optional[int] = Field(default=None, ge=1, le=100000)
+    expires_at: Optional[str] = Field(default=None, max_length=40)
+    new_customers_only: bool = True
+    active: bool = True
 
 
 class RateTripRequest(BaseModel):
@@ -1509,6 +1525,8 @@ async def lifespan(app: FastAPI):
     await db.trips.create_index([("driver_id", 1), ("status", 1), ("created_at", -1)])
     await db.trips.create_index([("user_id", 1), ("status", 1), ("created_at", -1)])
     await db.places.create_index("slug", unique=True)
+    await db.promo_codes.create_index("code", unique=True)
+    await db.promo_redemptions.create_index([("code_id", 1), ("user_id", 1)], unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.receipt_ledger.create_index("trip_id", unique=True)
@@ -2995,11 +3013,17 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
             raise HTTPException(409, {"code": "quote_changed", "message": "Prisen er endret. Beregn på nytt og bekreft pris og ventetid."})
         accepted_waiting = policy
     commission_rate = await _platform_commission()
-    price = quote["price"]
+    gross_price = quote["price"]
+    promo_discount = 0
+    if body.use_promo_credit:
+        promo_discount = await _reserve_promo_credit(user_oid, gross_price, commission_rate)
+    price = gross_price - promo_discount
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
         "internal_beta_test": test_customer,
+        "gross_price": gross_price,
+        "promo_discount": promo_discount,
         "pickup_address": body.pickup_address,
         "pickup_lat": body.pickup_lat,
         "pickup_lng": body.pickup_lng,
@@ -3037,6 +3061,8 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     try:
         await db.trips.insert_one(trip)
     except Exception:
+        if promo_discount:
+            await db.users.update_one({"_id": user_oid}, {"$inc": {"promo_credit_kr": promo_discount}})
         await db.users.update_one(
             {"_id": user_oid, "booking_request_lock": trip_id},
             {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
@@ -3056,6 +3082,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
                 "cancelled_at": datetime.now(timezone.utc).isoformat(),
             }})
             await ride_reservations.release(trip)
+            await _restore_promo_credit(trip_id)
         raise
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
@@ -3161,7 +3188,10 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
     pricing = trip.get("pricing_snapshot") or await active_pricing()
     quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops),
                             demand_multiplier=float(trip.get("demand_multiplier") or 1.0))
-    updated_price = quote["price"] + int(trip.get("waiting_fee_total") or 0)
+    updated_gross = quote["price"] + int(trip.get("waiting_fee_total") or 0)
+    previous_discount = int(trip.get("promo_discount") or 0)
+    promo_discount = min(previous_discount, max_discount_for_trip(updated_gross, await _commission_for_trip(trip)))
+    updated_price = updated_gross - promo_discount
     if trip.get("waiting_policy") and updated_price * 100 > int(trip.get("authorized_amount_ore", 0)):
         raise HTTPException(409, "Ny destinasjon overstiger kortreservasjonen. Kontakt SNAR for å endre turen.")
     previous = {
@@ -3180,10 +3210,14 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         {"$set": {
             "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
             "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
-            "geometry": geometry, "price": updated_price, "quoted_ride_price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
+            "geometry": geometry, "price": updated_price, "quoted_ride_price": quote["price"] - promo_discount,
+            "gross_price": updated_gross, "promo_discount": promo_discount, "surge_multiplier": quote["surge_multiplier"],
             "extra_stop_fee_total": quote["extra_stop_fee_total"], "updated_at": now_iso,
         }, "$push": {"destination_revisions": revision}},
     )
+    if promo_discount < previous_discount:
+        await db.users.update_one({"_id": ObjectId(current["id"])},
+                                  {"$inc": {"promo_credit_kr": previous_discount - promo_discount}})
     if trip.get("driver_id"):
         await send_push_to_user(
             trip["driver_id"],
@@ -3583,6 +3617,7 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
         raise HTTPException(status_code=409, detail="Turen har endret status og kan ikke avbestilles nå")
 
     await ride_reservations.release(trip)
+    await _restore_promo_credit(trip_id)
     # Re-read after the atomic transition. A driver may have been assigned between the
     # initial read and cancellation; cleanup must use canonical post-update ownership.
     cancelled_trip = await db.trips.find_one(
@@ -4409,7 +4444,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
-    earnings = int(round((trip.get("price") or 0) * (1 - commission)))
+    earnings = int(round(_driver_gross(trip) * (1 - commission)))
     title = f"Ny tur · {earnings} kr til deg"
     body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
 
@@ -4551,7 +4586,7 @@ async def driver_pending(current=Depends(require_driver)):
         trip_commission = await _commission_for_trip(t)
         if t.get("commission_source") == "platform_default":
             trip_commission = float((own_fleet or {}).get("commission_rate", trip_commission))
-        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - trip_commission)))
+        t["driver_earnings"] = int(round(_driver_gross(t) * (1 - trip_commission)))
         t["commission_rate"] = trip_commission
         t["pickup_route"] = None
         u = None
@@ -4791,7 +4826,7 @@ async def driver_current(current=Depends(require_driver)):
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
     commission = await _commission_for_trip(t)
-    estimated_net = int(round((t.get("price") or 0) * (1 - commission)))
+    estimated_net = int(round(_driver_gross(t) * (1 - commission)))
     t["estimated_driver_earnings"] = estimated_net
     t["driver_earnings"] = estimated_net if t.get("payment_status") == "paid" else None
     t["commission_rate"] = commission
@@ -4949,6 +4984,7 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
+    await _restore_promo_credit(trip_id)
     await db.users.update_one(
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
@@ -5170,7 +5206,7 @@ async def driver_summary(current=Depends(require_driver)):
         "payment_status": "paid",
     })):
         trips += 1
-        gross = int(t.get("price", 0) or 0)
+        gross = _driver_gross(t)
         rate = await _commission_for_trip(t)
         gross_total += gross
         total += int(round(gross * (1 - rate)))
@@ -5969,7 +6005,7 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
             "payment_status": "paid",
             "created_at": {"$gte": week_start},
         })):
-            price = int(t.get("price", 0) or 0)
+            price = _driver_gross(t)
             rate = await _commission_for_trip(t)
             trip_net = int(round(price * (1 - rate)))
             week_gross += price; week_net += trip_net; week_trips += 1
@@ -6006,7 +6042,7 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
             "status": {"$in": ["arrived","completed","rated"]},
             "payment_status": "paid",
         })):
-            gross = int(t.get("price", 0) or 0)
+            gross = _driver_gross(t)
             rate = await _commission_for_trip(t)
             gross_income += gross
             income += int(round(gross * (1 - rate)))
@@ -7111,17 +7147,17 @@ async def fleet_export_monthly(
             trips.append(t)
             did = t.get("driver_id")
             if did in drivers_map:
-                gross = int(t.get("price", 0) or 0)
+                gross = _driver_gross(t)
                 rate = float(t.get("commission_rate", commission) or commission)
-                fee = int(round(gross * rate))
+                fee = _snar_fee(t, rate)
                 drivers_map[did]["trips"] += 1
                 drivers_map[did]["gross"] += gross
                 drivers_map[did]["commission"] += fee
                 drivers_map[did]["net"] += gross - fee
 
-    total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
+    total_gross = sum(_driver_gross(t) for t in trips)
     total_trips = len(trips)
-    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
+    total_commission = sum(_snar_fee(t, float(t.get("commission_rate", commission) or commission)) for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -7332,6 +7368,172 @@ async def driver_bonus(current=Depends(require_driver)):
     return {"campaigns": out, "earned_today": await _bonus_earned_today(current["id"])}
 
 
+# ============================================================
+# Customer promo codes. A code grants credit; credit is spent per trip but never
+# beyond SNAR's own fee on that trip, so the fleet net is untouched.
+# ============================================================
+def _active_promo(t: dict) -> int:
+    return 0 if t.get("promo_credit_restored") else int(t.get("promo_discount", 0) or 0)
+
+
+def _driver_gross(t: dict) -> int:
+    """Fare before the customer's promo credit — the basis for driver/fleet earnings."""
+    return int(t.get("price", 0) or 0) + _active_promo(t)
+
+
+def _snar_fee(t: dict, rate: float) -> int:
+    """SNAR's fee after funding the customer's promo credit (never negative)."""
+    return int(round(platform_fee_ore(int(t.get("price", 0) or 0) * 100, _active_promo(t) * 100, rate) / 100))
+
+
+def _promo_expiry(value) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    try:
+        if len(text) == 10:
+            return datetime.fromisoformat(text).replace(tzinfo=OSLO_TZ) + timedelta(days=1)
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(400, "Ugyldig utløpsdato. Bruk ÅÅÅÅ-MM-DD.")
+
+
+async def _reserve_promo_credit(user_oid, gross_price: int, commission_rate: float) -> int:
+    user = await db.users.find_one({"_id": user_oid}, {"promo_credit_kr": 1}) or {}
+    amount = discount_for_trip(gross_price, commission_rate, int(user.get("promo_credit_kr") or 0))
+    if amount <= 0:
+        return 0
+    res = await db.users.update_one({"_id": user_oid, "promo_credit_kr": {"$gte": amount}},
+                                    {"$inc": {"promo_credit_kr": -amount}})
+    return amount if res.modified_count == 1 else 0
+
+
+async def _restore_promo_credit(trip_id: str):
+    trip = await db.trips.find_one_and_update(
+        {"trip_id": trip_id, "promo_discount": {"$gt": 0}, "promo_credit_restored": {"$ne": True}},
+        {"$set": {"promo_credit_restored": True}},
+        projection={"user_id": 1, "promo_discount": 1},
+    )
+    if trip and trip.get("user_id"):
+        try:
+            await db.users.update_one({"_id": ObjectId(trip["user_id"])},
+                                      {"$inc": {"promo_credit_kr": int(trip["promo_discount"])}})
+        except (InvalidId, TypeError):
+            pass
+
+
+@api.get("/promo/wallet")
+async def promo_wallet(current=Depends(require_customer)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])}, {"promo_credit_kr": 1}) or {}
+    redemptions = []
+    async for r in db.promo_redemptions.find({"user_id": current["id"]}).sort("created_at", -1).limit(10):
+        redemptions.append({"code": r.get("code"), "credit_kr": int(r.get("credit_kr") or 0), "created_at": r.get("created_at")})
+    return {"balance_kr": int(user.get("promo_credit_kr") or 0),
+            "commission_rate": await _platform_commission(),
+            "redemptions": redemptions}
+
+
+@api.post("/promo/redeem")
+async def redeem_promo_code(body: PromoRedeemIn, current=Depends(require_customer)):
+    from pymongo.errors import DuplicateKeyError
+    code = normalize_code(body.code)
+    if not is_valid_code(code):
+        raise HTTPException(400, "Ugyldig kode")
+    pc = await db.promo_codes.find_one({"code": code, "active": True})
+    if not pc:
+        raise HTTPException(404, "Koden finnes ikke eller er ikke aktiv")
+    expires = _promo_expiry(pc.get("expires_at"))
+    if expires and expires < datetime.now(timezone.utc):
+        raise HTTPException(410, "Koden har utløpt")
+    code_id = str(pc["_id"])
+    if await db.promo_redemptions.find_one({"code_id": code_id, "user_id": current["id"]}):
+        raise HTTPException(409, "Du har allerede brukt denne koden")
+    phone = (current.get("phone") or "").strip()
+    if phone and await db.promo_redemptions.find_one({"code_id": code_id, "phone": phone}):
+        raise HTTPException(409, "Koden er allerede brukt med dette telefonnummeret")
+    if pc.get("new_customers_only"):
+        finished = await db.trips.count_documents(_real_trip_filter({
+            "user_id": current["id"], "status": {"$in": FINISHED_TRIP_STATUSES}}))
+        if finished:
+            raise HTTPException(403, "Koden gjelder bare nye kunder")
+    slot_filter = {"_id": pc["_id"], "active": True}
+    if pc.get("max_redemptions"):
+        slot_filter["redemptions_count"] = {"$lt": int(pc["max_redemptions"])}
+    slot = await db.promo_codes.update_one(slot_filter, {"$inc": {"redemptions_count": 1}})
+    if slot.modified_count != 1:
+        raise HTTPException(410, "Kampanjen er brukt opp")
+    credit = int(pc["credit_kr"])
+    try:
+        await db.promo_redemptions.insert_one({
+            "code_id": code_id, "code": code, "user_id": current["id"], "phone": phone or None,
+            "credit_kr": credit, "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except DuplicateKeyError:
+        await db.promo_codes.update_one({"_id": pc["_id"]}, {"$inc": {"redemptions_count": -1}})
+        raise HTTPException(409, "Du har allerede brukt denne koden")
+    await db.users.update_one({"_id": ObjectId(current["id"])}, {"$inc": {"promo_credit_kr": credit}})
+    user = await db.users.find_one({"_id": ObjectId(current["id"])}, {"promo_credit_kr": 1}) or {}
+    return {"ok": True, "credit_kr": credit, "balance_kr": int(user.get("promo_credit_kr") or 0)}
+
+
+@api.get("/admin/promo-codes")
+async def admin_list_promo_codes(current=Depends(require_admin)):
+    codes = []
+    granted = 0
+    async for c in db.promo_codes.find().sort("created_at", -1):
+        c["id"] = str(c.pop("_id"))
+        c["redemptions_count"] = int(c.get("redemptions_count") or 0)
+        c["granted_kr"] = c["redemptions_count"] * int(c.get("credit_kr") or 0)
+        granted += c["granted_kr"]
+        codes.append(c)
+    spent = 0
+    async for t in db.trips.find(_real_trip_filter({
+        "promo_discount": {"$gt": 0}, "promo_credit_restored": {"$ne": True},
+        "status": {"$in": FINISHED_TRIP_STATUSES}}), {"promo_discount": 1}):
+        spent += int(t.get("promo_discount") or 0)
+    outstanding = 0
+    async for u in db.users.find({"promo_credit_kr": {"$gt": 0}}, {"promo_credit_kr": 1}):
+        outstanding += int(u.get("promo_credit_kr") or 0)
+    return {"codes": codes, "totals": {"granted_kr": granted, "spent_kr": spent, "outstanding_kr": outstanding}}
+
+
+@api.post("/admin/promo-codes")
+async def admin_create_promo_code(body: PromoCodeIn, current=Depends(require_admin)):
+    from pymongo.errors import DuplicateKeyError
+    code = normalize_code(body.code)
+    if not is_valid_code(code):
+        raise HTTPException(400, "Koden kan bare inneholde A–Z, 0–9 og bindestrek (3–24 tegn)")
+    _promo_expiry(body.expires_at)
+    doc = {**body.model_dump(), "code": code, "redemptions_count": 0,
+           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": current["id"]}
+    try:
+        res = await db.promo_codes.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(409, "Koden finnes allerede")
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.patch("/admin/promo-codes/{code_id}")
+async def admin_update_promo_code(code_id: str, body: dict, current=Depends(require_admin)):
+    allowed = {k: v for k, v in body.items() if k in {"label", "active", "max_redemptions", "expires_at", "new_customers_only"}}
+    if not allowed:
+        raise HTTPException(400, "Ingen gyldige felter")
+    if "expires_at" in allowed:
+        _promo_expiry(allowed["expires_at"])
+    if allowed.get("max_redemptions") is not None:
+        allowed["max_redemptions"] = max(1, int(allowed["max_redemptions"]))
+    try:
+        res = await db.promo_codes.update_one({"_id": ObjectId(code_id)}, {"$set": allowed})
+    except InvalidId:
+        raise HTTPException(404, "Fant ikke koden")
+    if res.matched_count == 0:
+        raise HTTPException(404, "Fant ikke koden")
+    return {"ok": True}
+
+
 @api.get("/admin/bonus-campaigns")
 async def admin_list_bonus_campaigns(current=Depends(require_admin)):
     out = []
@@ -7457,12 +7659,12 @@ async def admin_overview(current=Depends(require_admin)):
             "payment_status": "paid",
             "created_at": {"$gte": today},
         }),
-        {"price": 1, "commission_rate": 1},
+        {"price": 1, "commission_rate": 1, "promo_discount": 1, "promo_credit_restored": 1},
     ):
         price = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
         gmv_today += price
-        kjapp_revenue_today += int(round(price * rate))
+        kjapp_revenue_today += _snar_fee(t, rate)
 
     pending_payouts = await count(db.fleet_payouts, {"status": {"$in": ["pending", "processing", "on_hold"]}})
     open_support = await count(db.support_tickets, {"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
@@ -8352,7 +8554,8 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
 
     price = int(trip.get("price") or 0)
     commission = await _commission_for_trip(trip)
-    platform_fee = int(round(price * commission))
+    promo_discount = 0 if trip.get("promo_credit_restored") else int(trip.get("promo_discount") or 0)
+    platform_fee = int(round(platform_fee_ore(price * 100, promo_discount * 100, commission) / 100))
     paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
     paid_day = str(paid_at)[:10].replace("-", "")
     clean_trip = re.sub(r"[^A-Za-z0-9]", "", str(trip_id)).upper()
@@ -8386,6 +8589,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "duration_min": trip.get("duration_min"),
         "vehicle_type": trip.get("vehicle_type"),
         "gross_amount": price,
+        "promo_discount": promo_discount,
         "quoted_ride_price": int(trip.get("quoted_ride_price", price)),
         "waiting_fee_total": int(trip.get("waiting_fee_total") or 0),
         "waiting_seconds": int(trip.get("waiting_seconds") or 0),
@@ -9241,7 +9445,7 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
             "payment_status": t.get("payment_status"),
             "receipt_id": t.get("receipt_id"),
             "driver_earnings": (
-                int(round(int(t.get("price", 0) or 0) * (1 - float(t["commission_rate"] if t.get("commission_rate") is not None else 0.10))))
+                int(round(_driver_gross(t) * (1 - float(t["commission_rate"] if t.get("commission_rate") is not None else 0.10))))
                 if t.get("payment_status") == "paid" else None
             ),
             "pickup_address": _driver_history_area(t.get("pickup_address")),
@@ -9267,7 +9471,7 @@ async def driver_history_weekly(current=Depends(require_driver)):
             "payment_status": "paid",
         })):
             trips += 1
-            gross = int(t.get("price", 0) or 0)
+            gross = _driver_gross(t)
             rate = await _commission_for_trip(t)
             gross_total += gross
             total += int(round(gross * (1 - rate)))
@@ -9322,7 +9526,7 @@ async def driver_payouts(current=Depends(require_driver)):
         "payment_status": "paid",
         "created_at": {"$gte": week_start},
     })):
-        gross = int(t.get("price", 0) or 0)
+        gross = _driver_gross(t)
         rate = await _commission_for_trip(t)
         pending += gross
         pending_net += int(round(gross * (1 - rate)))
@@ -10605,7 +10809,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
             "driver_earnings": (
-                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
+                int(round(_driver_gross(t) * (1 - float(t.get("commission_rate", commission) or commission))))
                 if finished and t.get("payment_status") == "paid" else None
             ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
@@ -10740,6 +10944,8 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         )
         if result.modified_count != 1:
             raise HTTPException(409, "Turen endret status før operatøravbruddet kunne utføres")
+        if trip.get("status") != "in_trip":
+            await _restore_promo_credit(trip_id)
         if trip.get("driver_id"):
             try:
                 await db.users.update_one(
@@ -10882,11 +11088,11 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
             "payment_status": "paid",
             "created_at": {"$gte": since},
         }),
-        {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
+        {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1, "promo_discount": 1, "promo_credit_restored": 1},
     ):
         price = int(t.get("price", 0) or 0)
         rate = float(t.get("commission_rate", default_rate) or default_rate)
-        fee = int(round(price * rate))
+        fee = _snar_fee(t, rate)
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
         d["gmv"] += price; d["trips"] += 1
@@ -10939,7 +11145,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            _snar_fee(t, float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -11291,8 +11497,9 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price,
-                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
-                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
+                "commission": _snar_fee(t, float(t.get("commission_rate", commission) or commission)),
+                "driver_net": round(_driver_gross(t) * (1 - float(t.get("commission_rate", commission) or commission))),
+                "promo_discount": int(t.get("promo_discount") or 0),
                 "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })

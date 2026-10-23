@@ -109,6 +109,11 @@ export const paymentApi = {
   vippsConfig: () => api.get('/payments/vipps/config').then((r) => r.data),
 };
 
+export const promoApi = {
+  wallet: () => api.get('/promo/wallet').then((r) => r.data),
+  redeem: (code: string) => api.post('/promo/redeem', { code }).then((r) => r.data),
+};
+
 export const aiApi = {
   chat: (message: string, session_id?: string) =>
     api.post('/ai/chat', { message, session_id }).then((r) => r.data),

@@ -5,6 +5,7 @@ import os
 from datetime import datetime, timezone, timedelta
 
 from bson import ObjectId
+from promo_credits import platform_fee_ore
 from fastapi import HTTPException
 
 
@@ -211,7 +212,7 @@ class RideReservations:
                   "stripe_payment_intent_id": stripe_id(pi), "updated_at": datetime.now(timezone.utc)}
         destination = await self.destination(trip)
         if destination:
-            fee = int(round(amount * destination["commission_rate"]))
+            fee = platform_fee_ore(amount, int(trip.get("promo_discount") or 0) * 100, destination["commission_rate"])
             try:
                 transfer = await asyncio.to_thread(self.client().v1.transfers.create, {
                     "amount": amount - fee, "currency": "nok", "destination": destination["stripe_account_id"],
