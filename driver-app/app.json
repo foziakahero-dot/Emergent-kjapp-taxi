@@ -40,7 +40,8 @@
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "RECORD_AUDIO"
       ]
     },
     "web": {
@@ -57,6 +58,12 @@
       "./plugins/withNavigationQueries",
       "expo-router",
       "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "SNAR Driver bruker mikrofonen for talekommandoer, slik at du kan godta turer og ringe kunden uten å røre telefonen."
+        }
+      ],
       [
         "expo-location",
         {

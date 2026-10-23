@@ -10,9 +10,11 @@ type IconName =
   | 'plane' | 'card' | 'sparkles' | 'power' | 'wallet' | 'log-out' | 'history'
   | 'trending-up' | 'lock' | 'mail' | 'eye' | 'eye-off' | 'circle-dot' | 'flag'
   | 'help' | 'bell' | 'chevron-up' | 'minus' | 'crosshair' | 'file-text'
-  | 'globe' | 'chevron-down';
+  | 'globe' | 'chevron-down' | 'mic' | 'square';
 
 const P: Record<IconName, React.ReactNode> = {
+  mic: (<><Rect x="9" y="2" width="6" height="12" rx="3" /><Path d="M5 10v1a7 7 0 0014 0v-1" /><Line x1="12" y1="18" x2="12" y2="22" /></>),
+  square: (<Rect x="6" y="6" width="12" height="12" rx="2" />),
   menu: (<><Line x1="3" y1="6" x2="21" y2="6" /><Line x1="3" y1="12" x2="21" y2="12" /><Line x1="3" y1="18" x2="21" y2="18" /></>),
   search: (<><Circle cx="11" cy="11" r="8" /><Line x1="21" y1="21" x2="16.65" y2="16.65" /></>),
   x: (<><Line x1="18" y1="6" x2="6" y2="18" /><Line x1="6" y1="6" x2="18" y2="18" /></>),

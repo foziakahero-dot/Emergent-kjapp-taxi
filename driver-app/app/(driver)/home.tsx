@@ -19,6 +19,8 @@ import { storage } from '@/src/utils/storage';
 import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
 import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripReceipt } from '@/src/lib/tripSummary';
 import { notifyPendingTripFromForeground } from '@/src/lib/nativeRuntime';
+import { VoiceCommandButton } from '@/src/components/VoiceCommandButton';
+import { parseVoiceIntent } from '@/src/lib/voiceIntent';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -636,6 +638,41 @@ export default function DriverHome() {
     finally { summaryActionLock.current = false; setSummaryActionBusy(false); }
   };
 
+  const runVoiceCommand = (heard: string): string => {
+    const intent = parseVoiceIntent(heard);
+    const quoted = `«${heard}»`;
+    switch (intent) {
+      case 'accept':
+        if (!firstOffer || !online || offerExpired) return `${quoted} – ingen aktive tilbud å godta.`;
+        void accept(firstOffer.trip_id);
+        return 'Godtar turen …';
+      case 'decline':
+        if (!firstOffer) return `${quoted} – ingen tilbud å avslå.`;
+        void decline(firstOffer.trip_id);
+        return 'Turen er avslått.';
+      case 'call':
+        if (!current?.customer?.phone) return `${quoted} – ingen kunde å ringe nå.`;
+        void Linking.openURL(`tel:${current.customer.phone}`).catch(() => setError('Kunne ikke ringe kunden.'));
+        return 'Ringer kunden …';
+      case 'navigate':
+        if (!current) return `${quoted} – ingen aktiv tur å navigere til.`;
+        void openNavigation();
+        return 'Åpner navigasjon …';
+      case 'online':
+        if (online) return 'Du er allerede online.';
+        if (current) return 'Fullfør turen først.';
+        void toggleOnline();
+        return 'Går online …';
+      case 'offline':
+        if (!online) return 'Du er allerede offline.';
+        if (current) return 'Du kan ikke gå offline under en tur.';
+        void toggleOnline();
+        return 'Går offline …';
+      default:
+        return `${quoted} – forstod ikke. Si «godta», «avslå», «ring kunden» eller «naviger».`;
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.driverBg }}>
       <Map
@@ -668,6 +705,8 @@ export default function DriverHome() {
         onContinue={() => void finishSummary(true)} onPause={() => void finishSummary(false)}
         onError={error => setError(apiError(error))}
       />
+
+      <VoiceCommandButton top={insets.top + 88} onCommand={runVoiceCommand} />
 
       {declineReasonsOpen && firstOffer ? (
         <View style={s.declineOverlay}>

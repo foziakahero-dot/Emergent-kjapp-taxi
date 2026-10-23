@@ -86,6 +86,11 @@ export const messagesApi = {
     api.post('/ai/translate', { text, target_lang }).then((r) => r.data),
 };
 
+export const aiApi = {
+  transcribe: (audio_base64: string, mime_type: string, language = 'no'): Promise<{ text: string }> =>
+    api.post('/ai/transcribe', { audio_base64, mime_type, language }).then((r) => r.data),
+};
+
 export const safetyApi = {
   log: (tripId: string, data: { kind: 'emergency' | 'report' | 'share'; note?: string; lat?: number; lng?: number }) =>
     api.post(`/trips/${tripId}/safety`, data).then((r) => r.data),
