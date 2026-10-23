@@ -50,7 +50,9 @@ export async function registerNativePush() {
       token,
     });
     return true;
-  } catch {
+  } catch (error) {
+    // Most common cause on Android: APK built without google-services.json (FCM not initialised).
+    console.warn('[push] registration failed', error instanceof Error ? error.message : error);
     return false;
   }
 }

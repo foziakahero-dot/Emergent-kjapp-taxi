@@ -3,6 +3,8 @@
 *.env
 !.env.example
 credentials.json
+google-services.json
+GoogleService-Info.plist
 *.pem
 *.key
 .credentials
