@@ -51,12 +51,13 @@ function ShiftStatusRing() {
     <V10Icon name="power" size={28} color={colors.success} />
   </View>;
 }
-function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBottom?: number }) {
+function Sheet({ children, padBottom = 34, expanded, onToggle }: { children: React.ReactNode; padBottom?: number; expanded?: boolean; onToggle?: () => void }) {
   useColorTheme();
   const insets = useSafeAreaInsets();
-  return <V10Entrance sheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3, overflow: 'hidden' }}>
+  const handle = <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center' }} />;
+  return <V10Entrance sheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: onToggle ? 0 : 10, boxShadow: colors.elevation3, overflow: 'hidden' }}>
     <FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" />
-    <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
+    {onToggle ? <Pressable testID="driver-sheet-toggle" accessibilityRole="button" accessibilityLabel={expanded ? 'Skjul detaljer' : 'Vis detaljer'} accessibilityState={{ expanded: !!expanded }} hitSlop={8} onPress={onToggle} style={{ paddingTop: 10, paddingBottom: 14, alignItems: 'center' }}>{handle}</Pressable> : <View style={{ marginBottom: 14 }}>{handle}</View>}
     <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(padBottom, insets.bottom) }}>{children}</ScrollView>
   </V10Entrance>;
 }
@@ -74,6 +75,7 @@ export function DriverCockpitView(p: Props) {
   ];
   const [phase, setPhase] = useState<'base' | 'arrival' | 'start' | 'arriving' | 'complete'>('base');
   const [clock, setClock] = useState(Date.now());
+  const [offlineExpanded, setOfflineExpanded] = useState(false);
   useEffect(() => { setPhase('base'); }, [p.current?.trip_id, p.current?.status]);
   useEffect(() => { if (p.current?.status !== 'at_pickup') return; const timer = setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, [p.current?.status]);
   const offerStart = useRef<{ id?: string; remaining: number | null }>({ remaining: null });
@@ -160,8 +162,8 @@ export function DriverCockpitView(p: Props) {
     </Sheet> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}>
       <V10Entrance><Pressable testID="driver-online-intelligence" accessibilityRole="button" onPress={() => router.push('/(driver)/intel')} style={{ borderRadius: 20, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'flex-start', backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="ai" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={[v10.body, { fontSize: 15 }]}>Drive Intelligence</Text><Text style={v10.caption}>Ingen etterspørselsprognose tilgjengelig ennå</Text></View></Pressable></V10Entrance>
       <V10Entrance delay={60} style={{ borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><Text style={[v10.secondary, { color: colors.text }]}>Venter på tur · {p.user?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={v10.caption}>{p.gpsReady ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text></V10Entrance>
-    </View> : <Sheet padBottom={108}>
-      <ExperienceStudio key={p.user?.id} product="driver" value={goal} options={studioOptions} earnings={p.summary?.income} onApply={save} onContinue={() => router.push('/(driver)/intel')} />
+    </View> : <Sheet padBottom={108} expanded={offlineExpanded} onToggle={() => setOfflineExpanded((value) => !value)}>
+      {offlineExpanded ? <ExperienceStudio key={p.user?.id} product="driver" value={goal} options={studioOptions} earnings={p.summary?.income} onApply={save} onContinue={() => router.push('/(driver)/intel')} /> : null}
       <Pressable accessibilityRole="button" onPress={() => router.push('/driver-vehicles')} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingBottom: 14 }}><View style={{ width: 72, height: 44, borderRadius: 12, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="vehicle" size={32} /></View><View style={{ flex: 1 }}><Text style={v10.body}>{p.user?.car || 'Velg kjøretøy'}</Text><Text style={v10.caption}>{p.user?.plate || 'Ingen aktiv bil valgt'}</Text></View><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       <View style={{ flexDirection: 'row', gap: 12, paddingTop: 14, paddingBottom: 18, borderTopWidth: 1, borderTopColor: colors.line }}><Kpi label="I dag" value={kr(p.summary?.income).replace(/\s+kr$/, '')} unit="kr" /><Kpi label="Turer" value={known(p.summary?.trips) ? String(p.summary.trips) : '—'} /><Kpi label="Online" value={known(p.summary?.online_minutes) ? `${Math.floor(p.summary.online_minutes / 60)}:${String(p.summary.online_minutes % 60).padStart(2, '0')}` : '—'} unit="t" /></View><V10Action height={58} icon="power" label="Gå online" onPress={p.onOnline} busy={p.busy} testID="driver-go-online" />
     </Sheet>}
