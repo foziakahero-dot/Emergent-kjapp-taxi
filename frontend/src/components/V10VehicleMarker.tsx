@@ -9,15 +9,29 @@ export function V10VehicleBody({ color }: { color?: string }) {
   const body = color || (theme.effective === 'dark' ? '#e9ecef' : '#1b1f24');
   const light = body === '#e9ecef' || body === '#ffffff';
   const id = `v10-car-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const glass = light ? '#27313d' : '#0b1118';
+  const roof = light ? '#f6f8fa' : '#2a3038';
+  const edge = light ? 'rgba(0,0,0,.22)' : 'rgba(255,255,255,.16)';
   return <>
-    <Defs><LinearGradient id={id} x1="0" x2="1"><Stop offset="0" stopColor={body} stopOpacity={light ? .82 : .9} /><Stop offset=".5" stopColor={light ? '#ffffff' : body} /><Stop offset="1" stopColor={body} stopOpacity={light ? .8 : .85} /></LinearGradient></Defs>
-    <Ellipse cx={1.4} cy={2.2} rx={7.6} ry={12.6} fill="#000" opacity={.22} />
-    <Rect x={-6.6} y={-11.8} width={13.2} height={23.6} rx={4.4} fill={`url(#${id})`} stroke={light ? 'rgba(0,0,0,.18)' : 'rgba(255,255,255,.12)'} strokeWidth={.6} />
-    <Path d="M-5.2 -5.4 Q0 -7.6 5.2 -5.4 L4.4 -1.8 L-4.4 -1.8Z" fill="#0c1520" opacity={.86} />
-    <Rect x={-4.4} y={-1.6} width={8.8} height={6.6} rx={1.6} fill={light ? '#dfe3e8' : body} opacity={.95} />
-    <Path d="M-4.4 5.2 L4.4 5.2 L5 8.4 Q0 9.8 -5 8.4Z" fill="#0c1520" opacity={.75} />
-    <Rect x={-5.6} y={-11.4} width={2.4} height={1.2} rx={.6} fill="#fff8e0" opacity={.9} /><Rect x={3.2} y={-11.4} width={2.4} height={1.2} rx={.6} fill="#fff8e0" opacity={.9} />
-    <Rect x={-5.6} y={10.4} width={2.4} height={1} rx={.5} fill="#ff2b2b" opacity={.8} /><Rect x={3.2} y={10.4} width={2.4} height={1} rx={.5} fill="#ff2b2b" opacity={.8} />
+    <Defs>
+      <LinearGradient id={id} x1="0" x2="1"><Stop offset="0" stopColor={body} stopOpacity={light ? .78 : .92} /><Stop offset=".5" stopColor={light ? '#ffffff' : body} /><Stop offset="1" stopColor={body} stopOpacity={light ? .78 : .88} /></LinearGradient>
+      <LinearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1"><Stop offset="0" stopColor={glass} stopOpacity={.95} /><Stop offset="1" stopColor={glass} stopOpacity={.75} /></LinearGradient>
+    </Defs>
+    <Ellipse cx={1.2} cy={2} rx={9} ry={16.8} fill="#000" opacity={.26} />
+    <Rect x={-9.1} y={-6.6} width={2.4} height={1.8} rx={.8} fill={body} stroke={edge} strokeWidth={.4} />
+    <Rect x={6.7} y={-6.6} width={2.4} height={1.8} rx={.8} fill={body} stroke={edge} strokeWidth={.4} />
+    <Path d="M-6.4 -12.4 Q-6.8 -15.4 -3.6 -15.9 Q0 -16.4 3.6 -15.9 Q6.8 -15.4 6.4 -12.4 L7.3 -6 L7.3 11.2 Q7.3 15.4 3.8 15.8 Q0 16.2 -3.8 15.8 Q-7.3 15.4 -7.3 11.2 L-7.3 -6Z"
+      fill={`url(#${id})`} stroke={edge} strokeWidth={.5} />
+    <Path d="M-3.2 -14.6 Q0 -15.2 3.2 -14.6" stroke={light ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.14)'} strokeWidth={.5} fill="none" />
+    <Path d="M-5.6 -6.2 Q0 -8.8 5.6 -6.2 L4.9 -1.6 Q0 -2.6 -4.9 -1.6Z" fill={`url(#${id}g)`} />
+    <Path d="M-6.3 -1 L-5.4 -0.6 L-5.4 7.2 L-6.3 8Z" fill={glass} opacity={.82} />
+    <Path d="M6.3 -1 L5.4 -0.6 L5.4 7.2 L6.3 8Z" fill={glass} opacity={.82} />
+    <Rect x={-4.9} y={-1.4} width={9.8} height={8.4} rx={1.8} fill={roof} opacity={.96} />
+    <Path d="M-4.9 7.6 Q0 8.4 4.9 7.6 L5.5 10.8 Q0 12.2 -5.5 10.8Z" fill={`url(#${id}g)`} opacity={.9} />
+    <Path d="M-5.9 -14.4 Q-5 -15.4 -3.2 -15.5 L-3.6 -14.2Z" fill="#fff6d6" />
+    <Path d="M5.9 -14.4 Q5 -15.4 3.2 -15.5 L3.6 -14.2Z" fill="#fff6d6" />
+    <Rect x={-6} y={14.2} width={3} height={1} rx={.5} fill="#ff2b2b" opacity={.9} />
+    <Rect x={3} y={14.2} width={3} height={1} rx={.5} fill="#ff2b2b" opacity={.9} />
   </>;
 }
 export function V10VehicleMarker({ heading = 0, active = false }: { heading?: number; active?: boolean }) {

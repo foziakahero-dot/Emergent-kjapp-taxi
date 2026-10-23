@@ -1099,6 +1099,34 @@ export function Settings() {
               value={pricing?.surge?.max_multiplier ?? 2}
               onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),max_multiplier:Number(e.target.value)})}/></div>
         </div>
+        <p className="dim" style={{ marginTop: 12 }}>Etterspørselsbasert toppris: når åpne bestillinger innenfor radiusen er flere enn ledige sjåfører, øker prisen i steg på 0,1× opp til taket. Låses ved bestilling og holdes i 2 minutter per område.</p>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 8 }}>
+          <div className="field"><label className="label">Etterspørsel aktiv</label>
+            <select className="input" disabled={!isSuper} value={(pricing?.surge?.demand_enabled ?? true) ? 'on':'off'}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),demand_enabled:e.target.value==='on'})}>
+              <option value="on">På</option><option value="off">Av</option>
+            </select></div>
+          <div className="field"><label className="label">Maks etterspørsel ×</label>
+            <input className="input" type="number" min="1" max="5" step="0.1" disabled={!isSuper}
+              value={pricing?.surge?.demand_max_multiplier ?? 1.8}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),demand_max_multiplier:Number(e.target.value)})}/></div>
+          <div className="field"><label className="label">Radius (km)</label>
+            <input className="input" type="number" min="0.5" max="20" step="0.5" disabled={!isSuper}
+              value={pricing?.surge?.demand_radius_km ?? 3}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),demand_radius_km:Number(e.target.value)})}/></div>
+          <div className="field"><label className="label">Tidsvindu (min)</label>
+            <input className="input" type="number" min="1" max="60" step="1" disabled={!isSuper}
+              value={pricing?.surge?.demand_window_minutes ?? 10}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),demand_window_minutes:Number(e.target.value)})}/></div>
+          <div className="field"><label className="label">Min. åpne bestillinger</label>
+            <input className="input" type="number" min="1" max="100" step="1" disabled={!isSuper}
+              value={pricing?.surge?.demand_min_requests ?? 3}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),demand_min_requests:Number(e.target.value)})}/></div>
+          <div className="field"><label className="label">Følsomhet</label>
+            <input className="input" type="number" min="0.05" max="2" step="0.05" disabled={!isSuper}
+              value={pricing?.surge?.demand_sensitivity ?? 0.25}
+              onChange={(e) => setPrice('surge',{...(pricing?.surge||{}),demand_sensitivity:Number(e.target.value)})}/></div>
+        </div>
       </Card>
 
       <div className="section-title">Pris per kjøretøyklasse</div>

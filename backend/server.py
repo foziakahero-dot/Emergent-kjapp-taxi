@@ -1094,7 +1094,11 @@ DEFAULT_PRICING = {
     "late_driver_cancellation_fee": 0.0,
     "free_cancel_minutes": 2,
     "dispatch_timeout_seconds": 180,
-    "surge": {"enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0},
+    "surge": {
+        "enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0,
+        "demand_enabled": True, "demand_radius_km": 3.0, "demand_window_minutes": 10,
+        "demand_min_requests": 3, "demand_sensitivity": 0.25, "demand_max_multiplier": 1.8,
+    },
     "vehicle_rates": {
         "ai-first": {"base_fare": 70.0, "per_km": 16.0, "per_minute": 4.0, "minimum_fare": 0.0},
         "enkelt": {"base_fare": 55.0, "per_km": 14.0, "per_minute": 3.5, "minimum_fare": 0.0},
@@ -1116,7 +1120,7 @@ def _legacy_surge_multiplier(when: datetime = None) -> float:
     return surge
 
 
-def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0) -> dict:
+def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0, demand_multiplier: float = 1.0) -> dict:
     """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
     cfg = {**DEFAULT_PRICING, **(pricing or {})}
     vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
@@ -1135,13 +1139,18 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
     surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
     surge = 1.0
     if surge_cfg.get("enabled"):
-        surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
+        surge = max(
+            _legacy_surge_multiplier(when),
+            float(surge_cfg.get("manual_multiplier", 1.0) or 1.0),
+            float(demand_multiplier or 1.0) if surge_cfg.get("demand_enabled") else 1.0,
+        )
         surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
     stop_fee = max(0, int(stops_count)) * float(cfg.get("extra_stop_fee", 0) or 0)
     total = max(minimum, base * surge + stop_fee)
     return {
         "price": int(round(total)),
         "surge_multiplier": round(surge, 2),
+        "demand_multiplier": round(float(demand_multiplier or 1.0), 2),
         "pricing_version": int(cfg.get("version", 1)),
         "extra_stop_fee_total": int(round(stop_fee)),
     }
@@ -1194,6 +1203,64 @@ def current_surge_info(when: datetime = None) -> dict:
     if local_hour >= 22 or local_hour < 6:
         surge = max(surge, 1.15); reasons.append("Natt-tillegg")
     return {"multiplier": surge, "reasons": reasons, "active": surge > 1.0}
+
+
+DEMAND_OPEN_TRIP_STATUSES = ("payment_authorizing", "searching")
+DEMAND_CACHE_SECONDS = 120
+
+
+def demand_multiplier_from_counts(open_requests: int, free_drivers: int, surge_cfg: dict) -> float:
+    """Pure supply/demand curve: 1.0 until requests outnumber free drivers, then rises in 0.1 steps."""
+    cfg = {**DEFAULT_PRICING["surge"], **(surge_cfg or {})}
+    if not cfg.get("demand_enabled") or open_requests < int(cfg.get("demand_min_requests", 3) or 0):
+        return 1.0
+    ratio = open_requests / max(free_drivers, 1)
+    if ratio <= 1.0:
+        return 1.0
+    raw = 1.0 + (ratio - 1.0) * float(cfg.get("demand_sensitivity", 0.25) or 0)
+    stepped = math.floor(raw * 10 + 1e-9) / 10
+    return round(max(1.0, min(stepped, float(cfg.get("demand_max_multiplier", 1.8) or 1.0))), 2)
+
+
+async def demand_surge_info(lat: float, lng: float, surge_cfg: dict) -> dict:
+    """Live demand around a pickup. Cached per ~1 km cell so a quote and the booking that
+    follows it within DEMAND_CACHE_SECONDS see the same multiplier (no spurious quote_changed)."""
+    cfg = {**DEFAULT_PRICING["surge"], **(surge_cfg or {})}
+    if not cfg.get("enabled") or not cfg.get("demand_enabled"):
+        return {"multiplier": 1.0, "open_requests": 0, "free_drivers": 0, "active": False}
+    radius = float(cfg.get("demand_radius_km", 3.0) or 3.0)
+    cell = f"{round(lat, 2)}:{round(lng, 2)}:{radius}"
+    now = datetime.now(timezone.utc)
+    cached = await db.demand_surge_cache.find_one({"_id": cell, "expires_at": {"$gt": now.isoformat()}})
+    if cached:
+        return {k: cached[k] for k in ("multiplier", "open_requests", "free_drivers", "active")}
+    window = now - timedelta(minutes=int(cfg.get("demand_window_minutes", 10) or 10))
+    open_requests = 0
+    async for t in db.trips.find(
+        _real_trip_filter({"status": {"$in": list(DEMAND_OPEN_TRIP_STATUSES)},
+                           "created_at": {"$gte": window.isoformat()}, "pickup_lat": {"$ne": None}}),
+        {"pickup_lat": 1, "pickup_lng": 1},
+    ).limit(2000):
+        if haversine_km(lat, lng, t["pickup_lat"], t["pickup_lng"]) <= radius:
+            open_requests += 1
+    fresh = (now - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
+    free_drivers = 0
+    async for d in db.users.find(
+        {"role": "driver", "approved": True, "online": True, "last_location_at": {"$gte": fresh},
+         "active_trip_id": {"$in": [None, ""]}, "disabled": {"$ne": True},
+         "demo": {"$ne": True}, "is_demo": {"$ne": True}},
+        {"last_lat": 1, "last_lng": 1},
+    ).limit(2000):
+        if d.get("last_lat") is not None and haversine_km(lat, lng, d["last_lat"], d["last_lng"]) <= radius:
+            free_drivers += 1
+    multiplier = demand_multiplier_from_counts(open_requests, free_drivers, cfg)
+    info = {"multiplier": multiplier, "open_requests": open_requests, "free_drivers": free_drivers, "active": multiplier > 1.0}
+    await db.demand_surge_cache.update_one(
+        {"_id": cell},
+        {"$set": {**info, "expires_at": (now + timedelta(seconds=DEMAND_CACHE_SECONDS)).isoformat()}},
+        upsert=True,
+    )
+    return info
 
 
 FCM_APP = None
@@ -2142,9 +2209,10 @@ async def trip_estimate(body: EstimateRequest):
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
+    demand = await demand_surge_info(body.pickup_lat, body.pickup_lng, effective_pricing.get("surge") or {})
     options = []
     for vt in ("ai-first", "enkelt", "trygg", "premium"):
-        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
+        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops), demand_multiplier=demand["multiplier"])
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"],
@@ -2153,7 +2221,8 @@ async def trip_estimate(body: EstimateRequest):
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
-            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
+            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area,
+            "demand": {"active": demand["active"], "multiplier": demand["multiplier"]}}
 
 
 
@@ -2748,7 +2817,8 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
-    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
+    demand = await demand_surge_info(body.pickup_lat, body.pickup_lng, effective_pricing.get("surge") or {})
+    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops), demand_multiplier=demand["multiplier"])
     accepted_waiting = None
     if body.waiting_policy_token is not None:
         policy = waiting_policy(effective_pricing, body.vehicle_type)
@@ -2790,6 +2860,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "commission_rate": commission_rate,
         "commission_source": "platform_default",
         "surge_multiplier": quote["surge_multiplier"],
+        "demand_multiplier": quote["demand_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "payment_authorizing",
@@ -2924,7 +2995,8 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         distance_km, duration_min = fallback_route_points(points)
         geometry = None
     pricing = trip.get("pricing_snapshot") or await active_pricing()
-    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
+    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops),
+                            demand_multiplier=float(trip.get("demand_multiplier") or 1.0))
     updated_price = quote["price"] + int(trip.get("waiting_fee_total") or 0)
     if trip.get("waiting_policy") and updated_price * 100 > int(trip.get("authorized_amount_ore", 0)):
         raise HTTPException(409, "Ny destinasjon overstiger kortreservasjonen. Kontakt SNAR for å endre turen.")
@@ -8882,9 +8954,17 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
 
 
 @api.get("/pricing/surge")
-async def pricing_surge():
-    """Current surge multiplier + reason (weekend/night)."""
-    return current_surge_info()
+async def pricing_surge(lat: Optional[float] = None, lng: Optional[float] = None):
+    """Current surge multiplier + reasons (weekend/night, and live demand when a location is given)."""
+    info = current_surge_info()
+    if lat is None or lng is None:
+        return info
+    effective_pricing, _ = pricing_for_pickup(await active_pricing(), lat, lng)
+    surge_cfg = {**DEFAULT_PRICING["surge"], **(effective_pricing.get("surge") or {})}
+    demand = await demand_surge_info(lat, lng, surge_cfg)
+    reasons = list(info["reasons"]) + (["Høy etterspørsel"] if demand["active"] else [])
+    multiplier = min(max(info["multiplier"], demand["multiplier"]), float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
+    return {"multiplier": multiplier, "reasons": reasons, "active": multiplier > 1.0}
 
 
 @api.post("/driver/trip/{trip_id}/cancel")
@@ -11180,9 +11260,16 @@ def _validate_pricing(p: dict):
         if key in p and not lo <= float(p[key]) <= hi:
             raise HTTPException(400, f"{key} må være mellom {lo} og {hi}")
     surge = p.get("surge") or {}
-    for key in ("manual_multiplier", "max_multiplier"):
+    for key in ("manual_multiplier", "max_multiplier", "demand_max_multiplier"):
         if key in surge and not 1.0 <= float(surge[key]) <= 5.0:
             raise HTTPException(400, f"surge.{key} må være mellom 1.0 og 5.0")
+    demand_limits = {"demand_radius_km": (0.5, 20), "demand_window_minutes": (1, 60),
+                     "demand_min_requests": (1, 100), "demand_sensitivity": (0.05, 2.0)}
+    for key, (lo, hi) in demand_limits.items():
+        if key in surge and not lo <= float(surge[key]) <= hi:
+            raise HTTPException(400, f"surge.{key} må være mellom {lo} og {hi}")
+    if "demand_enabled" in surge and not isinstance(surge["demand_enabled"], bool):
+        raise HTTPException(400, "surge.demand_enabled må være true/false")
     for vt, rates in (p.get("vehicle_rates") or {}).items():
         if vt not in ("ai-first", "enkelt", "trygg", "premium"):
             raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
