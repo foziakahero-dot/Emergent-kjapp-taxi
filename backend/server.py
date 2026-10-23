@@ -3176,7 +3176,7 @@ async def require_driver(current=Depends(get_current_user)):
     if current.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra SNAR admin")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
     if current.get("legal_accepted") is not True:

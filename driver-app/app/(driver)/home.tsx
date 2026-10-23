@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, Scrol
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -197,6 +198,15 @@ export default function DriverHome() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') void poll();
+    });
+    return () => sub.remove();
+  }, [poll]);
+
+  useEffect(() => {
+    // A push that arrives while the app is open should surface the offer immediately
+    // instead of waiting for the next polling tick.
+    const sub = Notifications.addNotificationReceivedListener(() => {
+      void poll();
     });
     return () => sub.remove();
   }, [poll]);
