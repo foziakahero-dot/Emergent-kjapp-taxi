@@ -13,7 +13,7 @@ import { Icon } from '@/src/components/Icon';
 import { Map } from '@/src/components/Map';
 import { BrandBadge } from '@/src/components/BrandBadge';
 import { useAuth } from '@/src/context/AuthContext';
-import { driverApi, safetyApi, settingsApi } from '@/src/lib/api';
+import { DRIVER_OFFER_SOCKET_URL, TOKEN_KEY, driverApi, safetyApi, settingsApi } from '@/src/lib/api';
 import { apiError, kr } from '@/src/lib/format';
 import { storage } from '@/src/utils/storage';
 import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
@@ -188,6 +188,52 @@ export default function DriverHome() {
       const i = setInterval(poll, 4000);
       return () => clearInterval(i);
     }, [poll]),
+  );
+
+  // Real-time offer signal. The 4 s poll above stays as the fallback if the socket is down.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) return undefined;
+      let ws: WebSocket | null = null;
+      let retry: ReturnType<typeof setTimeout> | null = null;
+      let ping: ReturnType<typeof setInterval> | null = null;
+      let attempt = 0;
+      let closed = false;
+
+      const connect = async () => {
+        const token = await storage.getItem(TOKEN_KEY);
+        if (closed || !token) return;
+        ws = new WebSocket(DRIVER_OFFER_SOCKET_URL);
+        ws.onopen = () => ws?.send(JSON.stringify({ token }));
+        ws.onmessage = (event) => {
+          if (event.data === 'pong') return;
+          try {
+            const msg = JSON.parse(String(event.data));
+            if (msg?.type === 'ready') attempt = 0;
+            if (msg?.type === 'offer') void poll();
+          } catch {}
+        };
+        ws.onclose = (event) => {
+          if (ping) clearInterval(ping);
+          ping = null;
+          // 4401/4403: the session is not a valid driver session, so retrying cannot help.
+          if (closed || event.code === 4401 || event.code === 4403) return;
+          const delay = Math.min(30000, 1000 * 2 ** attempt++);
+          retry = setTimeout(() => void connect(), delay);
+        };
+        ping = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) ws.send('ping');
+        }, 25000);
+      };
+
+      void connect();
+      return () => {
+        closed = true;
+        if (retry) clearTimeout(retry);
+        if (ping) clearInterval(ping);
+        ws?.close();
+      };
+    }, [user?.id, poll]),
   );
 
   useEffect(() => {

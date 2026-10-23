@@ -3,6 +3,7 @@ import { storage } from '@/src/utils/storage';
 
 const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
+export const DRIVER_OFFER_SOCKET_URL = `${BACKEND.replace(/^http/, 'ws')}/api/driver/ws`;
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
 export const authenticatedFileSource = async (path?: string | null) => {

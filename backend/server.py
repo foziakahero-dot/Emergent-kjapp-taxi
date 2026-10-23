@@ -36,7 +36,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
@@ -734,7 +734,10 @@ async def _apply_driver_identity_risk(
 
 
 async def get_current_user(request: Request) -> dict:
-    token = _auth_token_from_request(request)
+    return await _user_from_token(_auth_token_from_request(request))
+
+
+async def _user_from_token(token: Optional[str]) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Ikke innlogget")
     try:
@@ -4207,6 +4210,22 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
     return out
 
 
+_driver_sockets: dict = {}
+
+
+async def notify_driver_offer_signal(driver_id: Optional[str]) -> None:
+    """Wake a connected driver app so it re-fetches /driver/pending immediately.
+
+    The socket only carries a content-free signal; the offer itself is always read through the
+    authorised REST endpoint, so dispatch rules stay server-side. Polling remains the fallback.
+    """
+    for ws in list(_driver_sockets.get(str(driver_id or ""), ())):
+        try:
+            await asyncio.wait_for(ws.send_json({"type": "offer"}), timeout=2)
+        except Exception:
+            _driver_sockets.get(str(driver_id), set()).discard(ws)
+
+
 async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """Nearest-driver-first dispatch: offer the trip to the closest driver who has not seen it yet.
 
@@ -4243,6 +4262,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
         if res.modified_count == 0:
             return None
         for c in cands:  # everyone gets a last chance
+            await notify_driver_offer_signal(c["id"])
             await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
         return None
 
@@ -4256,6 +4276,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     )
     if res.modified_count == 0:
         return None
+    await notify_driver_offer_signal(nxt["id"])
     await send_push_to_user(
         nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
         "/driver", tag="kjapp-new-trip", require_interaction=True,
@@ -11733,6 +11754,39 @@ handle_native_payment_webhook = install_mobile_commerce(
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 
 app.include_router(api)
+
+
+@app.websocket("/api/driver/ws")
+async def driver_offer_socket(websocket: WebSocket):
+    # The token arrives as the first message instead of the URL so it never lands in access logs.
+    await websocket.accept()
+    driver_id = None
+    try:
+        first = await asyncio.wait_for(websocket.receive_json(), timeout=10)
+        try:
+            user = await _user_from_token((first or {}).get("token"))
+        except HTTPException:
+            await websocket.close(code=4401)
+            return
+        if user.get("role") != "driver":
+            await websocket.close(code=4403)
+            return
+        driver_id = str(user["id"])
+        _driver_sockets.setdefault(driver_id, set()).add(websocket)
+        await websocket.send_json({"type": "ready"})
+        while True:
+            msg = await websocket.receive_text()
+            if msg == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, asyncio.TimeoutError):
+        pass
+    except Exception:
+        logger.exception("driver offer socket failed")
+    finally:
+        if driver_id:
+            _driver_sockets.get(driver_id, set()).discard(websocket)
+            if not _driver_sockets.get(driver_id):
+                _driver_sockets.pop(driver_id, None)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
 # under /api/ops so it is reachable through the preview ingress (which only routes
