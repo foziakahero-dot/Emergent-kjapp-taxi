@@ -70,7 +70,7 @@ IS_PRODUCTION = APP_ENV == "production"
 DEFAULT_PUBLIC_WEB_ORIGIN = "" if APP_ENV == "qa" else "https://snarapp.no"
 validate_qa_configuration(os.environ)
 EMERGENT_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("EMERGENT_LLM_KEY", "")
-AI_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("SNAR_AI_KEY", "") or EMERGENT_LLM_KEY
+AI_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("SNAR_AI_KEY", "") or os.environ.get("AI_GATEWAY_API_KEY", "")
 CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").strip()[:32] or "2026-09"
 APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"
 
@@ -3502,23 +3502,68 @@ async def _load_trip_or_403(trip_id: str, current: dict):
     return trip, is_passenger, is_driver
 
 
+AI_GATEWAY_CHAT_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
+AI_GATEWAY_TRANSCRIPTION_URL = "https://ai-gateway.vercel.sh/v4/ai/transcription-model"
+AI_CHAT_MODEL = os.environ.get("SNAR_AI_CHAT_MODEL", "openai/gpt-5-mini")
+AI_TRANSLATE_MODEL = os.environ.get("SNAR_AI_TRANSLATE_MODEL", "openai/gpt-5-nano")
+AI_TRANSCRIBE_MODEL = os.environ.get("SNAR_AI_TRANSCRIBE_MODEL", "openai/gpt-4o-mini-transcribe")
+
+
+async def _gateway_chat(messages: list, model: str, timeout: float = 25.0) -> str:
+    """Vercel AI Gateway, OpenAI-compatible chat completions."""
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(
+            AI_GATEWAY_CHAT_URL,
+            headers={"Authorization": f"Bearer {AI_LLM_KEY}"},
+            json={"model": model, "messages": messages},
+        )
+    if r.status_code == 429:
+        raise RuntimeError("rate limit")
+    r.raise_for_status()
+    content = ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+    if not content.strip():
+        raise ValueError("Empty AI reply")
+    return content.strip()
+
+
+async def _gateway_transcribe(audio: bytes, media_type: str, timeout: float = 30.0) -> str:
+    """Vercel AI Gateway transcription (same protocol as the AI SDK gateway provider)."""
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        r = await client.post(
+            AI_GATEWAY_TRANSCRIPTION_URL,
+            headers={
+                "Authorization": f"Bearer {AI_LLM_KEY}",
+                "ai-gateway-protocol-version": "0.0.1",
+                "ai-gateway-auth-method": "api-key",
+                "ai-transcription-model-specification-version": "4",
+                "ai-model-id": AI_TRANSCRIBE_MODEL,
+            },
+            json={"audio": base64.b64encode(audio).decode(), "mediaType": media_type},
+        )
+    if r.status_code == 429:
+        raise RuntimeError("rate limit")
+    if r.status_code == 400:
+        raise RuntimeError(f"unsupported format: {r.text[:200]}")
+    r.raise_for_status()
+    return (r.json().get("text") or "").strip()
+
+
 async def _translate_via_llm(text: str, target_lang: str) -> Optional[str]:
-    """Best-effort translation using Emergent LLM key (Claude Sonnet). Returns None on failure."""
+    """Best-effort translation via Vercel AI Gateway. Returns None on failure."""
     if not AI_LLM_KEY or not text.strip():
         return None
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=AI_LLM_KEY,
-            session_id=f"translate_{uuid.uuid4().hex[:8]}",
-            system_message=(
-                "You are a professional translator. Translate the user's message to the requested language. "
-                "Output ONLY the translated text — no preface, no quotes, no notes. Preserve slang and tone."
-            ),
-        ).with_model("openai", "gpt-5.6-luna")
-        prompt = f"Translate to {target_lang}: {text}"
-        out = await chat.send_message(UserMessage(text=prompt))
-        return (out or "").strip()
+        return await _gateway_chat(
+            [
+                {"role": "system", "content": (
+                    "You are a professional translator. Translate the user's message to the requested language. "
+                    "Output ONLY the translated text — no preface, no quotes, no notes. Preserve slang and tone."
+                )},
+                {"role": "user", "content": f"Translate to {target_lang}: {text}"},
+            ],
+            AI_TRANSLATE_MODEL,
+            timeout=15.0,
+        )
     except Exception as e:
         print(f"[translate] failed: {e}")
         return None
@@ -3752,29 +3797,10 @@ async def ai_transcribe(body: TranscribeRequest, request: Request, current=Depen
         raise HTTPException(400, "Lydklipp for stort (maks 25 MB)")
 
     try:
-        from emergentintegrations.llm.openai import OpenAISpeechToText
-        import io as _io
-
-        # Best-guess extension from mime type; whisper-1 supports: mp3, mp4, mpeg, mpga, m4a, wav, webm
         mime = (body.mime_type or "audio/webm").lower()
-        ext = "webm"
-        if "mp3" in mime: ext = "mp3"
-        elif "wav" in mime: ext = "wav"
-        elif "m4a" in mime: ext = "m4a"
-        elif "mp4" in mime: ext = "mp4"
-        elif "mpeg" in mime: ext = "mpeg"
-        elif "ogg" in mime:
+        if "ogg" in mime:
             raise HTTPException(400, "Lydformat ogg støttes ikke — bruk webm eller mp3")
-
-        buf = _io.BytesIO(raw)
-        buf.name = f"audio.{ext}"
-
-        stt = OpenAISpeechToText(api_key=AI_LLM_KEY)
-        kwargs = {"file": buf, "model": "whisper-1", "response_format": "json"}
-        if body.language:
-            kwargs["language"] = body.language
-        response = await stt.transcribe(**kwargs)
-        text = getattr(response, "text", None) or (response.get("text") if isinstance(response, dict) else str(response))
+        text = await _gateway_transcribe(raw, mime)
     except HTTPException:
         raise
     except Exception as e:
@@ -4063,6 +4089,14 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
 
     session_id = body.session_id or f"user_{current['id']}"
 
+    history = []
+    async for m in db.chat_messages.find(
+        {"user_id": current["id"], "session_id": session_id}
+    ).sort("created_at", -1).limit(12):
+        if m.get("role") in ("user", "assistant") and m.get("content"):
+            history.append({"role": m["role"], "content": m["content"]})
+    history.reverse()
+
     # store user message
     await db.chat_messages.insert_one({
         "user_id": current["id"],
@@ -4073,20 +4107,14 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
     })
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=AI_LLM_KEY,
-            session_id=session_id,
-            system_message=AI_SYSTEM,
-        ).with_model("openai", "gpt-5.6-sol")
-        # session_id gjør at emergentintegrations selv beholder samtalehistorikk mellom kall
         reply = await asyncio.wait_for(
-            chat.send_message(UserMessage(text=message)),
+            _gateway_chat(
+                [{"role": "system", "content": AI_SYSTEM}, *history, {"role": "user", "content": message}],
+                AI_CHAT_MODEL,
+            ),
             timeout=25.0,
         )
-        if not isinstance(reply, str) or not reply.strip():
-            raise ValueError("Empty AI reply")
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, httpx.TimeoutException):
         raise HTTPException(status_code=504, detail="SNAR AI bruker lenger tid enn vanlig. Prøv igjen om et øyeblikk.")
     except Exception as e:
         print(f"[ai/chat] error: {e}")
@@ -11703,7 +11731,7 @@ def _apply_integration_settings(values):
     if "MAPTILER_API_KEY" in values:
         MAPTILER_API_KEY = values["MAPTILER_API_KEY"]
     if "SNAR_AI_KEY" in values:
-        AI_LLM_KEY = values["SNAR_AI_KEY"] or EMERGENT_LLM_KEY
+        AI_LLM_KEY = values["SNAR_AI_KEY"] or os.environ.get("AI_GATEWAY_API_KEY", "")
     if "FCM_SERVICE_ACCOUNT_JSON" in values and previous_fcm != values["FCM_SERVICE_ACCOUNT_JSON"]:
         if FCM_APP is not None:
             import firebase_admin
