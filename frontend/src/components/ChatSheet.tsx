@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
 import { messagesApi } from '@/src/lib/api';
+import { TranslatableMessage } from '@/src/components/TranslatableMessage';
 
 export function ChatSheet({
   tripId,
@@ -100,7 +101,11 @@ export function ChatSheet({
                 return (
                   <View style={[s.bubbleRow, mine ? s.bubbleRowMine : s.bubbleRowTheirs]}>
                     <View style={[s.bubble, mine ? s.bubbleMine : s.bubbleTheirs]}>
-                      <Text style={[s.bubbleText, mine && { color: colors.accentOn }]}>{item.text}</Text>
+                      {mine ? (
+                        <Text style={[s.bubbleText, { color: colors.accentOn }]}>{item.text}</Text>
+                      ) : (
+                        <TranslatableMessage text={item.text} textStyle={s.bubbleText} />
+                      )}
                     </View>
                   </View>
                 );

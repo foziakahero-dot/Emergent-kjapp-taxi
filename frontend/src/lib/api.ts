@@ -119,6 +119,8 @@ export const aiApi = {
 export const messagesApi = {
   list: (tripId: string) => api.get(`/trips/${tripId}/messages`).then((r) => r.data),
   send: (tripId: string, text: string) => api.post(`/trips/${tripId}/messages`, { text }).then((r) => r.data),
+  translate: (text: string, target_lang: string): Promise<{ translation: string }> =>
+    api.post('/ai/translate', { text, target_lang }).then((r) => r.data),
 };
 
 export const safetyApi = {
