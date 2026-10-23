@@ -28,7 +28,7 @@ export default function DriverProfile() {
       </Pressable>
       <View style={{ flex: 1 }}><Text style={v10.title}>{name}</Text>
         <Text style={[v10.secondary, { fontVariant: ['tabular-nums'] }]}>{ratings.isError ? 'Vurderinger utilgjengelige' : ratings.isPending ? 'Henter vurderinger…' : rating ? `★ ${rating}${typeof data.trip_count === 'number' ? ` · ${data.trip_count.toLocaleString('nb-NO')} turer` : ` · ${ratings.data.count} vurderinger`}` : 'Ingen vurderinger ennå'}</Text>
-        {verified ? <View style={{ marginTop: 6 }}><V10Badge tone="positive">Verifisert</V10Badge></View> : null}
+        {!me.isPending && !me.isError ? <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>{verified && !missing ? <V10Badge tone="positive">Verifisert</V10Badge> : <V10Badge tone="warning">{missing ? 'Dokumenter mangler' : 'Ikke verifisert'}</V10Badge>}</View> : null}
       </View>
     </View>
     {me.isError ? <Text accessibilityRole="alert" style={[v10.secondary, { marginBottom: 12, color: colors.danger }]}>Kunne ikke oppdatere profilen. Viser sist kjente kontodata.</Text> : null}
