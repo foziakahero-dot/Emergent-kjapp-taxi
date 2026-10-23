@@ -35,7 +35,7 @@ from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
@@ -709,7 +709,10 @@ async def _apply_driver_identity_risk(
 
 
 async def get_current_user(request: Request) -> dict:
-    token = _auth_token_from_request(request)
+    return await _user_from_token(_auth_token_from_request(request))
+
+
+async def _user_from_token(token: Optional[str]) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Ikke innlogget")
     try:
@@ -1061,7 +1064,11 @@ DEFAULT_PRICING = {
     "late_driver_cancellation_fee": 0.0,
     "free_cancel_minutes": 2,
     "dispatch_timeout_seconds": 180,
-    "surge": {"enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0},
+    "surge": {
+        "enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0,
+        "demand_enabled": True, "demand_radius_km": 3.0, "demand_window_minutes": 10,
+        "demand_min_requests": 3, "demand_sensitivity": 0.25, "demand_max_multiplier": 1.8,
+    },
     "vehicle_rates": {
         "ai-first": {"base_fare": 70.0, "per_km": 16.0, "per_minute": 4.0, "minimum_fare": 0.0},
         "enkelt": {"base_fare": 55.0, "per_km": 14.0, "per_minute": 3.5, "minimum_fare": 0.0},
@@ -1083,7 +1090,7 @@ def _legacy_surge_multiplier(when: datetime = None) -> float:
     return surge
 
 
-def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0) -> dict:
+def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0, demand_multiplier: float = 1.0) -> dict:
     """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
     cfg = {**DEFAULT_PRICING, **(pricing or {})}
     vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
@@ -1102,13 +1109,18 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
     surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
     surge = 1.0
     if surge_cfg.get("enabled"):
-        surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
+        surge = max(
+            _legacy_surge_multiplier(when),
+            float(surge_cfg.get("manual_multiplier", 1.0) or 1.0),
+            float(demand_multiplier or 1.0) if surge_cfg.get("demand_enabled") else 1.0,
+        )
         surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
     stop_fee = max(0, int(stops_count)) * float(cfg.get("extra_stop_fee", 0) or 0)
     total = max(minimum, base * surge + stop_fee)
     return {
         "price": int(round(total)),
         "surge_multiplier": round(surge, 2),
+        "demand_multiplier": round(float(demand_multiplier or 1.0), 2),
         "pricing_version": int(cfg.get("version", 1)),
         "extra_stop_fee_total": int(round(stop_fee)),
     }
@@ -1161,6 +1173,64 @@ def current_surge_info(when: datetime = None) -> dict:
     if local_hour >= 22 or local_hour < 6:
         surge = max(surge, 1.15); reasons.append("Natt-tillegg")
     return {"multiplier": surge, "reasons": reasons, "active": surge > 1.0}
+
+
+DEMAND_OPEN_TRIP_STATUSES = ("payment_authorizing", "searching")
+DEMAND_CACHE_SECONDS = 120
+
+
+def demand_multiplier_from_counts(open_requests: int, free_drivers: int, surge_cfg: dict) -> float:
+    """Pure supply/demand curve: 1.0 until requests outnumber free drivers, then rises in 0.1 steps."""
+    cfg = {**DEFAULT_PRICING["surge"], **(surge_cfg or {})}
+    if not cfg.get("demand_enabled") or open_requests < int(cfg.get("demand_min_requests", 3) or 0):
+        return 1.0
+    ratio = open_requests / max(free_drivers, 1)
+    if ratio <= 1.0:
+        return 1.0
+    raw = 1.0 + (ratio - 1.0) * float(cfg.get("demand_sensitivity", 0.25) or 0)
+    stepped = math.floor(raw * 10 + 1e-9) / 10
+    return round(max(1.0, min(stepped, float(cfg.get("demand_max_multiplier", 1.8) or 1.0))), 2)
+
+
+async def demand_surge_info(lat: float, lng: float, surge_cfg: dict) -> dict:
+    """Live demand around a pickup. Cached per ~1 km cell so a quote and the booking that
+    follows it within DEMAND_CACHE_SECONDS see the same multiplier (no spurious quote_changed)."""
+    cfg = {**DEFAULT_PRICING["surge"], **(surge_cfg or {})}
+    if not cfg.get("enabled") or not cfg.get("demand_enabled"):
+        return {"multiplier": 1.0, "open_requests": 0, "free_drivers": 0, "active": False}
+    radius = float(cfg.get("demand_radius_km", 3.0) or 3.0)
+    cell = f"{round(lat, 2)}:{round(lng, 2)}:{radius}"
+    now = datetime.now(timezone.utc)
+    cached = await db.demand_surge_cache.find_one({"_id": cell, "expires_at": {"$gt": now.isoformat()}})
+    if cached:
+        return {k: cached[k] for k in ("multiplier", "open_requests", "free_drivers", "active")}
+    window = now - timedelta(minutes=int(cfg.get("demand_window_minutes", 10) or 10))
+    open_requests = 0
+    async for t in db.trips.find(
+        _real_trip_filter({"status": {"$in": list(DEMAND_OPEN_TRIP_STATUSES)},
+                           "created_at": {"$gte": window.isoformat()}, "pickup_lat": {"$ne": None}}),
+        {"pickup_lat": 1, "pickup_lng": 1},
+    ).limit(2000):
+        if haversine_km(lat, lng, t["pickup_lat"], t["pickup_lng"]) <= radius:
+            open_requests += 1
+    fresh = (now - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
+    free_drivers = 0
+    async for d in db.users.find(
+        {"role": "driver", "approved": True, "online": True, "last_location_at": {"$gte": fresh},
+         "active_trip_id": {"$in": [None, ""]}, "disabled": {"$ne": True},
+         "demo": {"$ne": True}, "is_demo": {"$ne": True}},
+        {"last_lat": 1, "last_lng": 1},
+    ).limit(2000):
+        if d.get("last_lat") is not None and haversine_km(lat, lng, d["last_lat"], d["last_lng"]) <= radius:
+            free_drivers += 1
+    multiplier = demand_multiplier_from_counts(open_requests, free_drivers, cfg)
+    info = {"multiplier": multiplier, "open_requests": open_requests, "free_drivers": free_drivers, "active": multiplier > 1.0}
+    await db.demand_surge_cache.update_one(
+        {"_id": cell},
+        {"$set": {**info, "expires_at": (now + timedelta(seconds=DEMAND_CACHE_SECONDS)).isoformat()}},
+        upsert=True,
+    )
+    return info
 
 
 FCM_APP = None
@@ -2033,9 +2103,10 @@ async def trip_estimate(body: EstimateRequest):
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
+    demand = await demand_surge_info(body.pickup_lat, body.pickup_lng, effective_pricing.get("surge") or {})
     options = []
     for vt in ("ai-first", "enkelt", "trygg", "premium"):
-        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
+        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops), demand_multiplier=demand["multiplier"])
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"],
@@ -2044,7 +2115,8 @@ async def trip_estimate(body: EstimateRequest):
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
-            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
+            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area,
+            "demand": {"active": demand["active"], "multiplier": demand["multiplier"]}}
 
 
 
@@ -2500,6 +2572,31 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     return {"ok": True}
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordRequest, request: Request, current=Depends(get_current_user)):
+    """Authenticated password change. Used to replace the temporary password
+    issued when a fleet application is approved (must_reset_password)."""
+    await _enforce_rate_limit(request, "auth-change-password", 10, 900)
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if not user or not verify_password(body.current_password, user.get("password_hash") or ""):
+        raise HTTPException(status_code=400, detail="Nåværende passord er feil")
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="Det nye passordet må være forskjellig fra det gamle")
+    # Revoke every other session, then mint a fresh token for this one.
+    cutoff = datetime.now(timezone.utc).timestamp()
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": cutoff},
+         "$unset": {"must_reset_password": ""}},
+    )
+    return {"ok": True, "token": create_access_token(str(user["_id"]), user.get("email") or "")}
+
+
 @api.get("/auth/legal-config")
 async def legal_config():
     return {
@@ -2637,7 +2734,8 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
-    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
+    demand = await demand_surge_info(body.pickup_lat, body.pickup_lng, effective_pricing.get("surge") or {})
+    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops), demand_multiplier=demand["multiplier"])
     accepted_waiting = None
     if body.waiting_policy_token is not None:
         policy = waiting_policy(effective_pricing, body.vehicle_type)
@@ -2679,6 +2777,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "commission_rate": commission_rate,
         "commission_source": "platform_default",
         "surge_multiplier": quote["surge_multiplier"],
+        "demand_multiplier": quote["demand_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "payment_authorizing",
@@ -2792,7 +2891,8 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         distance_km, duration_min = fallback_route_points(points)
         geometry = None
     pricing = trip.get("pricing_snapshot") or await active_pricing()
-    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
+    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops),
+                            demand_multiplier=float(trip.get("demand_multiplier") or 1.0))
     updated_price = quote["price"] + int(trip.get("waiting_fee_total") or 0)
     if trip.get("waiting_policy") and updated_price * 100 > int(trip.get("authorized_amount_ore", 0)):
         raise HTTPException(409, "Ny destinasjon overstiger kortreservasjonen. Kontakt SNAR for å endre turen.")
@@ -2972,7 +3072,7 @@ async def require_driver(current=Depends(get_current_user)):
     if current.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra SNAR admin")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
     if current.get("legal_accepted") is not True:
@@ -3959,6 +4059,22 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
     return out
 
 
+_driver_sockets: dict = {}
+
+
+async def notify_driver_offer_signal(driver_id: Optional[str]) -> None:
+    """Wake a connected driver app so it re-fetches /driver/pending immediately.
+
+    The socket only carries a content-free signal; the offer itself is always read through the
+    authorised REST endpoint, so dispatch rules stay server-side. Polling remains the fallback.
+    """
+    for ws in list(_driver_sockets.get(str(driver_id or ""), ())):
+        try:
+            await asyncio.wait_for(ws.send_json({"type": "offer"}), timeout=2)
+        except Exception:
+            _driver_sockets.get(str(driver_id), set()).discard(ws)
+
+
 async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """Nearest-driver-first dispatch: offer the trip to the closest driver who has not seen it yet.
 
@@ -3995,6 +4111,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
         if res.modified_count == 0:
             return None
         for c in cands:  # everyone gets a last chance
+            await notify_driver_offer_signal(c["id"])
             await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
         return None
 
@@ -4008,6 +4125,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     )
     if res.modified_count == 0:
         return None
+    await notify_driver_offer_signal(nxt["id"])
     await send_push_to_user(
         nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
         "/driver", tag="kjapp-new-trip", require_interaction=True,
@@ -8695,9 +8813,17 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
 
 
 @api.get("/pricing/surge")
-async def pricing_surge():
-    """Current surge multiplier + reason (weekend/night)."""
-    return current_surge_info()
+async def pricing_surge(lat: Optional[float] = None, lng: Optional[float] = None):
+    """Current surge multiplier + reasons (weekend/night, and live demand when a location is given)."""
+    info = current_surge_info()
+    if lat is None or lng is None:
+        return info
+    effective_pricing, _ = pricing_for_pickup(await active_pricing(), lat, lng)
+    surge_cfg = {**DEFAULT_PRICING["surge"], **(effective_pricing.get("surge") or {})}
+    demand = await demand_surge_info(lat, lng, surge_cfg)
+    reasons = list(info["reasons"]) + (["Høy etterspørsel"] if demand["active"] else [])
+    multiplier = min(max(info["multiplier"], demand["multiplier"]), float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
+    return {"multiplier": multiplier, "reasons": reasons, "active": multiplier > 1.0}
 
 
 @api.post("/driver/trip/{trip_id}/cancel")
@@ -9496,6 +9622,30 @@ class FleetApplicationDecisionRequest(BaseModel):
     commission_rate: Optional[float] = Field(default=None, ge=0, le=0.50)
 
 
+def normalize_org_number(value: str) -> str:
+    """Norwegian organisasjonsnummer: 9 digits with a MOD11 check digit."""
+    digits = re.sub(r"[\s.\-]", "", str(value or ""))
+    if not re.fullmatch(r"\d{9}", digits):
+        raise ValueError("Organisasjonsnummer må ha 9 siffer")
+    weights = (3, 2, 7, 6, 5, 4, 3, 2)
+    remainder = sum(int(d) * w for d, w in zip(digits[:8], weights)) % 11
+    check = 0 if remainder == 0 else 11 - remainder
+    if check == 10 or check != int(digits[8]):
+        raise ValueError("Organisasjonsnummeret er ikke gyldig")
+    return digits
+
+
+FLEET_APPLICATION_OPEN_STATUSES = ["pending", "submitted", "under_review", "documents_required"]
+
+
+async def _ensure_no_duplicate_fleet_application(org_number: str, exclude_token: Optional[str] = None):
+    query = {"org_number": org_number, "status": {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved"]}}
+    if exclude_token:
+        query["upload_token"] = {"$ne": exclude_token}
+    if await db.fleet_applications.find_one(query, {"_id": 1}) or await db.fleets.find_one({"org_number": org_number}, {"_id": 1}):
+        raise HTTPException(409, "Det finnes allerede en søknad eller flåte for dette organisasjonsnummeret. Kontakt SNAR hvis dette er feil.")
+
+
 async def _validate_fleet_application_uploads(upload_token: str, documents: dict):
     for doc_type in ("firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"):
         path = str((documents.get(doc_type) or {}).get("path") or "")
@@ -9515,14 +9665,16 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest, req
         raise HTTPException(status_code=400, detail="Du må godta partner-/plattformvilkår og personvern før søknaden opprettes")
     try:
         bank_account = normalize_bank_account(body.bank_account)
+        org_number = normalize_org_number(body.org_number)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
+    await _ensure_no_duplicate_fleet_application(org_number)
     upload_token = secrets.token_urlsafe(24)
     accepted_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "upload_token": upload_token,
         "company_name": body.company_name.strip(),
-        "org_number": body.org_number.strip(),
+        "org_number": org_number,
         "contact_name": body.contact_name.strip(),
         "contact_email": body.contact_email.strip().lower(),
         "contact_phone": body.contact_phone.strip(),
@@ -9561,6 +9713,8 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     if int(app_doc.get("license_count") or 0) < 1 or int(app_doc.get("vehicle_count") or 0) < 1:
         raise HTTPException(status_code=400, detail="Antall løyver og biler må være registrert før innsending")
     await _validate_fleet_application_uploads(body.upload_token, body.documents)
+    # Two drafts for the same company can be started in parallel; only the first may be submitted.
+    await _ensure_no_duplicate_fleet_application(app_doc.get("org_number") or "", exclude_token=body.upload_token)
     await db.fleet_applications.update_one(
         {"upload_token": body.upload_token},
         {"$set": {
@@ -9596,7 +9750,7 @@ async def superadmin_list_applications(status: Optional[str] = None, current=Dep
     if status:
         q["status"] = status
     else:
-        q["status"] = {"$in": ["pending", "approved", "rejected"]}
+        q["status"] = {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved", "rejected"]}
     out = []
     async for a in db.fleet_applications.find(q).sort("submitted_at", -1).limit(200):
         a["id"] = str(a["_id"]); a.pop("_id", None)
@@ -10988,9 +11142,16 @@ def _validate_pricing(p: dict):
         if key in p and not lo <= float(p[key]) <= hi:
             raise HTTPException(400, f"{key} må være mellom {lo} og {hi}")
     surge = p.get("surge") or {}
-    for key in ("manual_multiplier", "max_multiplier"):
+    for key in ("manual_multiplier", "max_multiplier", "demand_max_multiplier"):
         if key in surge and not 1.0 <= float(surge[key]) <= 5.0:
             raise HTTPException(400, f"surge.{key} må være mellom 1.0 og 5.0")
+    demand_limits = {"demand_radius_km": (0.5, 20), "demand_window_minutes": (1, 60),
+                     "demand_min_requests": (1, 100), "demand_sensitivity": (0.05, 2.0)}
+    for key, (lo, hi) in demand_limits.items():
+        if key in surge and not lo <= float(surge[key]) <= hi:
+            raise HTTPException(400, f"surge.{key} må være mellom {lo} og {hi}")
+    if "demand_enabled" in surge and not isinstance(surge["demand_enabled"], bool):
+        raise HTTPException(400, "surge.demand_enabled må være true/false")
     for vt, rates in (p.get("vehicle_rates") or {}).items():
         if vt not in ("ai-first", "enkelt", "trygg", "premium"):
             raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
@@ -11401,6 +11562,39 @@ handle_native_payment_webhook = install_mobile_commerce(
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 
 app.include_router(api)
+
+
+@app.websocket("/api/driver/ws")
+async def driver_offer_socket(websocket: WebSocket):
+    # The token arrives as the first message instead of the URL so it never lands in access logs.
+    await websocket.accept()
+    driver_id = None
+    try:
+        first = await asyncio.wait_for(websocket.receive_json(), timeout=10)
+        try:
+            user = await _user_from_token((first or {}).get("token"))
+        except HTTPException:
+            await websocket.close(code=4401)
+            return
+        if user.get("role") != "driver":
+            await websocket.close(code=4403)
+            return
+        driver_id = str(user["id"])
+        _driver_sockets.setdefault(driver_id, set()).add(websocket)
+        await websocket.send_json({"type": "ready"})
+        while True:
+            msg = await websocket.receive_text()
+            if msg == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, asyncio.TimeoutError):
+        pass
+    except Exception:
+        logger.exception("driver offer socket failed")
+    finally:
+        if driver_id:
+            _driver_sockets.get(driver_id, set()).discard(websocket)
+            if not _driver_sockets.get(driver_id):
+                _driver_sockets.pop(driver_id, None)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
 # under /api/ops so it is reachable through the preview ingress (which only routes
