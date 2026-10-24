@@ -12,7 +12,7 @@ import { apiError } from '@/src/lib/format';
 
 export default function DriverLogin() {
   useColorTheme();
-  const { login, logout, signInWithApple, signInWithGoogle } = useAuth();
+  const { login, logout, signInWithApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const busy = useRef(false);
@@ -21,7 +21,7 @@ export default function DriverLogin() {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [provider, setProvider] = useState<'google' | 'apple' | null>(null);
+  const [provider, setProvider] = useState<'apple' | null>(null);
   const submit = async () => {
     if (busy.current) return;
     if (!identifier.trim() || !password) { setError('Skriv inn e-post eller telefonnummer og passord.'); return; }
@@ -48,10 +48,10 @@ export default function DriverLogin() {
       const identityGate = Boolean(res?.identity_recheck_required) || identityStatus !== 'verified';
       router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
   };
-  const socialSignIn = async (selected: 'google' | 'apple') => {
+  const appleSignIn = async () => {
     if (busy.current) return;
-    busy.current = true; setLoading(true); setProvider(selected); setError('');
-    try { await finishLogin(await (selected === 'google' ? signInWithGoogle() : signInWithApple())); }
+    busy.current = true; setLoading(true); setProvider('apple'); setError('');
+    try { await finishLogin(await signInWithApple()); }
     catch (e) { setError(apiError(e)); }
     finally { busy.current = false; setLoading(false); setProvider(null); }
   };
@@ -72,10 +72,9 @@ export default function DriverLogin() {
       </View>
       <Pressable accessibilityRole="button" disabled={loading} onPress={() => router.push('/forgot-password')} style={s.forgot} testID="driver-login-forgot-password"><Text style={s.forgotText}>Glemt passord?</Text></Pressable>
       {Platform.OS === 'ios' ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 }}><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /><Text style={v10.caption}>eller</Text><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /></View> : null}
-      <View style={{ gap: 8 }}>
-        <V10Action label="Fortsett med Google" onPress={() => void socialSignIn('google')} busy={provider === 'google'} disabled={loading} testID="driver-login-google" />
-        <AppleSignInButton loading={provider === 'apple'} disabled={loading && provider !== 'apple'} onPress={() => socialSignIn('apple')} />
-      </View>
+      {Platform.OS === 'ios' ? <View style={{ gap: 8 }}>
+        <AppleSignInButton loading={provider === 'apple'} disabled={loading && provider !== 'apple'} onPress={() => void appleSignIn()} />
+      </View> : null}
       <View style={s.footer}>
         <Text style={s.note}>Ny sjåfør? Registrer deg via invitasjonen fra løyvehaveren.</Text>
         <Text style={[s.note, { marginTop: 4 }]}>Første innlogging og nye telefoner kan kreve selfie-kontroll.</Text>
