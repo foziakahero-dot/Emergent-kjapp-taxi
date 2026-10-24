@@ -34,6 +34,7 @@ const NAV = [
     { to: '/finance', label: 'Økonomi', ic: 'wallet', perm: 'finance' },
     { to: '/payments', label: 'Betaling & oppgjør', ic: 'creditcard', perm: 'finance' },
     { to: '/pricing', label: 'Prissetting', ic: 'tag', perm: 'system' },
+    { to: '/promo-codes', label: 'Kampanjekoder', ic: 'tag', perm: 'finance' },
   ]},
   { group: 'Kommunikasjon & support', items: [
     { to: '/communications', label: 'Kommunikasjon', ic: 'send', perm: 'communications' },
