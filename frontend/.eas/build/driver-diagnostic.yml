@@ -1,0 +1,23 @@
+build:
+  name: Build and test KJAPP Driver from monorepo
+  steps:
+    - eas/checkout
+    - run:
+        name: Install Driver dependencies
+        working_directory: ../driver-app
+        command: npm install --no-audit --no-fund
+    - run:
+        name: Generate Driver Android project
+        working_directory: ../driver-app
+        command: npx expo prebuild --platform android --clean
+    - run:
+        name: Build fresh Driver release APK
+        working_directory: ../driver-app/android
+        command: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+    - eas/maestro_test:
+        app_path: ../driver-app/android/app/build/outputs/apk/release/app-release.apk
+        inputs:
+          flow_path: ../driver-app/.maestro/fresh-driver-startup-smoke.yml
+    - eas/find_and_upload_build_artifacts

@@ -1,0 +1,14 @@
+name: KJAPP Driver Fresh APK + Runtime Smoke
+
+on:
+  push:
+    branches: ['diagnostic/fresh-customer-driver-builds']
+
+jobs:
+  build_and_test_driver:
+    name: Fresh KJAPP Driver Android APK + cold launch
+    type: build
+    runs_on: linux-large-nested-virtualization
+    params:
+      platform: android
+      profile: driver-diagnostic
