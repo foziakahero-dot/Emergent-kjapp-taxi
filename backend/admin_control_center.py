@@ -10,6 +10,7 @@ Focused admin-only capabilities:
 
 All routes reuse the existing FastAPI/MongoDB/auth/audit infrastructure.
 """
+from __future__ import annotations
 
 import asyncio
 import html
@@ -331,9 +332,9 @@ def install_admin_control_center(
                     "configured": True,
                 },
                 {
-                    "id": "ai", "name": "SNAR Assist / AI", "status": "operational" if (os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")) else "warning",
-                    "detail": "LLM-integrasjon konfigurert" if (os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")) else "AI-nøkkel mangler",
-                    "configured": bool(os.getenv("SNAR_AI_KEY") or os.getenv("EMERGENT_LLM_KEY")),
+                    "id": "ai", "name": "SNAR Assist / AI", "status": "operational" if (os.getenv("SNAR_AI_KEY") or os.getenv("AI_GATEWAY_API_KEY")) else "warning",
+                    "detail": "LLM-integrasjon konfigurert" if (os.getenv("SNAR_AI_KEY") or os.getenv("AI_GATEWAY_API_KEY")) else "AI-nøkkel mangler",
+                    "configured": bool(os.getenv("SNAR_AI_KEY") or os.getenv("AI_GATEWAY_API_KEY")),
                 },
             ],
         }
