@@ -87,7 +87,11 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
     import datetime
     import re
     import typing
+    import sys
     import uuid
+
+    sys.path.insert(0, str(SERVER.parent))
+    from promo_credits import platform_fee_ore
 
     source = _source()
     tree = ast.parse(source)
@@ -105,6 +109,7 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
         "timezone": datetime.timezone,
         "re": re,
         "uuid": uuid,
+        "platform_fee_ore": platform_fee_ore,
     }
 
     async def platform_commission():
