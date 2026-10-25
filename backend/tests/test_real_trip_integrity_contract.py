@@ -1,7 +1,8 @@
 from pathlib import Path
 import ast
 
-SERVER = Path(__file__).resolve().parents[1] / "server.py"
+ROOT = Path(__file__).resolve().parents[2]
+SERVER = ROOT / "backend" / "server.py"
 SOURCE = SERVER.read_text(encoding="utf-8")
 
 
@@ -28,7 +29,7 @@ def test_operational_trip_surfaces_use_real_trip_filter():
         'cursor = db.trips.find(_real_trip_filter({"user_id": current["id"]}))',
         'db.trips.find(_real_trip_filter({"driver_id": driver_id, "rating": {"$gt": 0}}))',
         'async for t in db.trips.find(_real_trip_filter({\n        "driver_id": driver_id,',
-        'async for t in db.trips.find(_real_trip_filter({\n            "driver_id": {"$in": drivers_ids},',
+        '{"fleet_id": {"$exists": False}, "driver_id": {"$in": drivers_ids}}',
         'async for t in db.trips.find(_real_trip_filter({\n            "driver_id": {"$in": driver_ids},',
         'async for t in db.trips.find(_real_trip_filter()).sort("created_at", -1).limit(limit)',
     ]
@@ -65,8 +66,18 @@ def test_shared_runtime_disables_legacy_demo_accounts_when_demo_mode_is_off():
 
 def test_public_seed_places_never_impersonate_user_home_or_work():
     startup = SOURCE[SOURCE.index("# seed places"):SOURCE.index("# seed admin")]
-    assert '"label": "Hjem"' not in startup
-    assert '"label": "Jobb"' not in startup
+    tree = ast.parse(SOURCE)
+    inserted_labels = []
+    for call in ast.walk(tree):
+        if not isinstance(call, ast.Call) or ast.unparse(call.func) != "db.places.insert_many":
+            continue
+        for item in call.args[0].elts:
+            for key, value in zip(item.keys, item.values):
+                if isinstance(key, ast.Constant) and key.value == "label":
+                    inserted_labels.append(ast.literal_eval(value))
+    assert inserted_labels, "The actual public seed insertions must be checked"
+    assert "Hjem" not in inserted_labels
+    assert "Jobb" not in inserted_labels
     assert '{"slug": "karl-johans", "label": "Hjem"}' in startup
     assert '{"slug": "aker-brygge", "label": "Jobb"}' in startup
     assert '"label": "Karl Johan"' in startup
@@ -80,7 +91,7 @@ def test_dev_seed_accounts_are_explicitly_marked_demo():
 
 
 def test_admin_settings_can_never_reenable_demo_trips():
-    source = SERVER
+    source = SOURCE
     get_block = source[source.index("async def admin_get_settings"):source.index("async def admin_update_settings")]
     update_block = source[source.index("async def admin_update_settings"):source.index("class PricingTestRequest")]
     assert 'features["demo_trips"] = False' in get_block

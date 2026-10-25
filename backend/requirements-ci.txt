@@ -1,6 +1,7 @@
 # Minimal dependency set for importing backend/server.py and running focused beta regressions.
 # Keep this free of Emergent/private wheels so GitHub Actions can validate the core backend.
 bcrypt==4.2.1
+cryptography==49.0.0
 email-validator==2.3.0
 fastapi==0.115.6
 httpx==0.28.1
