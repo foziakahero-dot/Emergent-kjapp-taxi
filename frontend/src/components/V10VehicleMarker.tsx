@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { useSmoothPosition } from './useSmoothPosition';
 import { colors, useColorTheme } from '@/src/theme';
 
@@ -42,8 +42,14 @@ export function V10VehicleMarker({ heading = 0, active = false }: { heading?: nu
   </G></Svg>;
 }
 
-export function V10RasterCar({ car, projectX, projectY }: { car: { lat: number; lng: number; heading?: number }; projectX: (lng: number) => number; projectY: (lat: number) => number }) {
+export function V10RasterCar({ car, projectX, projectY }: { car: { lat: number; lng: number; heading?: number; eta_min?: number }; projectX: (lng: number) => number; projectY: (lat: number) => number }) {
+  useColorTheme();
   const position = useSmoothPosition(car);
   if (!position) return null;
-  return <G transform={`translate(${projectX(position.lng)}, ${projectY(position.lat)}) rotate(${position.heading})`}><V10VehicleBody /></G>;
+  const minutes = Number.isFinite(car.eta_min) && Number(car.eta_min) > 0 ? Math.ceil(Number(car.eta_min)) : null;
+  return <G transform={`translate(${projectX(position.lng)}, ${projectY(position.lat)})`}>
+    <G rotation={position.heading}><V10VehicleBody /></G>
+    <Rect x={-40} y={-42} width={80} height={20} rx={10} fill={colors.online} />
+    <SvgText y={-28} textAnchor="middle" fontSize={10} fontWeight="600" fill="#FFFFFF">LEDIG{minutes ? ` · ${minutes} min` : ''}</SvgText>
+  </G>;
 }

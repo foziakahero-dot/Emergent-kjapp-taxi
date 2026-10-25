@@ -264,8 +264,8 @@ export function InteractiveMap({
 
             {user && (!pickup || Math.abs(user.lat - pickup.lat) > 1e-6 || Math.abs(user.lng - pickup.lng) > 1e-6) ? (
               <G>
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(255,0,0,0.16)" />
-                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill={colors.accent} stroke="#FFFFFF" strokeWidth={2.5} />
+                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={22} fill="rgba(38,116,217,0.12)" />
+                <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={9} fill="#2674D9" stroke="#FFFFFF" strokeWidth={2.5} />
                 <Circle cx={sx(user.lng)} cy={sy(user.lat)} r={3} fill="#FFFFFF" />
                 <SvgText x={sx(user.lng)} y={sy(user.lat) - 18} fill={colors.text} fontSize="11" fontWeight="700" textAnchor="middle">Du er her</SvgText>
               </G>

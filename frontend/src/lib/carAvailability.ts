@@ -5,13 +5,16 @@ export type Availability = {
 };
 export const SEARCH_INTERVAL_MS = 30_000;
 export const SEARCH_ATTEMPTS = 3;
+export const LIVE_REFRESH_MS = 2_000;
 export function validPosition(p: any): boolean {
   return typeof p?.lat === 'number' && typeof p?.lng === 'number'
     && Number.isFinite(p.lat) && Number.isFinite(p.lng)
     && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
 }
 type Clock = { now(): number; set(fn: () => void, ms: number): any; clear(timer: any): void };
-const clock: Clock = { now: Date.now, set: setTimeout, clear: clearTimeout };
+// Invoke host timers as globals. Calling stored Window timer functions as object
+// methods uses the wrong receiver and can crash the web availability effect.
+const clock: Clock = { now: () => Date.now(), set: (fn, ms) => setTimeout(fn, ms), clear: timer => clearTimeout(timer) };
 
 /** One in-flight lookup, bounded empty/offline retries, and no booking/payment side effects. */
 export class CarAvailabilitySearch {
@@ -57,7 +60,7 @@ export class CarAvailabilitySearch {
     if (this.disposed) return;
     const attempt = issue ? Math.min(SEARCH_ATTEMPTS, this.state.attempt + 1) : 0;
     this.publish({ cars, issue, attempt, phase: issue ? 'waiting' : 'available',
-      nextAt: this.time.now() + (this.continuous || !issue ? 8_000 : SEARCH_INTERVAL_MS) });
+      nextAt: this.time.now() + (this.continuous ? LIVE_REFRESH_MS : !issue ? 8_000 : SEARCH_INTERVAL_MS) });
     this.schedule();
   }
   retry() {
