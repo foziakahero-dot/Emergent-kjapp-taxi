@@ -6,6 +6,7 @@ import App from './App';
 import './styles.css';
 import './snar-control-center-v2.css';
 import './snar-production.css';
+import './operations-hub.css';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

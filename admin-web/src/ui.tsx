@@ -64,7 +64,7 @@ export const Btn: React.FC<any> = ({ children, variant = '', className = '', typ
 };
 
 export const PageHead = ({ title, sub, right }: any) => (
-  <div className="page-hdr"><div><div className="eyebrow">SNAR CONTROL CENTER</div><h1 className="page-title">{title}</h1>{sub && <p className="page-sub">{sub}</p>}</div>{right && <div className="hdr-actions">{right}</div>}</div>
+  <div className="page-hdr"><div><div className="eyebrow">SNAR OPERATIONS HUB</div><h1 className="page-title">{title}</h1>{sub && <p className="page-sub">{sub}</p>}</div>{right && <div className="hdr-actions">{right}</div>}</div>
 );
 
 export function Drawer({ title, onClose, children }: any) {

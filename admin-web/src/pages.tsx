@@ -1,4 +1,5 @@
 import TwoFactorCard from './TwoFactorCard';
+import HubOverview from './HubOverview';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, apiError } from './api';
@@ -48,6 +49,7 @@ export function Dashboard() {
   return (
     <>
       <PageHead title="Operasjonell oversikt" sub={`Oppdatert ${fmtDate(d.as_of)}`} />
+      <HubOverview />
       {twofa.data?.required && !twofa.data?.enabled && <div className="error-banner" role="alert">
         Administratorkontoen mangler totrinnsbekreftelse. <a href="#/settings" style={{ textDecoration: 'underline' }}>Aktiver 2FA i Innstillinger.</a>
       </div>}

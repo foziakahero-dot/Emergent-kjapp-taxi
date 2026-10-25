@@ -27,7 +27,7 @@ export default function TwoFactorGate({ children }: { children: React.ReactNode 
   if (!status && !error) return <div className="auth-wrap"><Loader /></div>;
   if (status?.enabled) return <>{children}</>;
   return <div className="login-page">
-    <div className="login-brand"><SnarMark size={48} /><strong>SNAR CONTROL CENTER</strong></div>
+    <div className="login-brand"><SnarMark size={48} /><strong>SNAR OPERATIONS HUB</strong></div>
     <main className="login-card" style={{ width: 'min(100%, 620px)' }}>
       <h1 className="login-title">Aktiver totrinnsbekreftelse</h1>
       <p className="login-sub">Beskytt administratorkontoen før du får tilgang til kontrollsenteret.</p>
