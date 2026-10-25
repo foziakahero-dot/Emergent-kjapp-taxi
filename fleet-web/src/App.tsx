@@ -98,7 +98,7 @@ function PortalShell() {
           <span className="portal-topbar-status"><i /> System online</span>
         </div>
         <Routes>
-          <Route path="/" element={<OperationsDashboardPage />} />
+          <Route path="/" element={<><FleetHubOverview /><OperationsDashboardPage /></>} />
           <Route path="/live" element={<FigmaLiveOpsPage />} />
           <Route path="/sjaforer" element={<DriversV2Page />} />
           <Route path="/sjaforer/:driverId" element={<Driver360Page />} />
