@@ -87,10 +87,20 @@ def test_customer_cannot_complete_unpaid_arrived_trip():
     assert 'detail="Betalingen må være bekreftet før turen kan fullføres"' in block
 
 
-def test_new_booking_starts_explicitly_unpaid():
+def test_new_booking_stays_authorizing_until_card_reservation_succeeds():
     block = _block("request_trip", "active_trip")
-    assert '"status": "searching"' in block
-    assert '"payment_status": "unpaid"' in block
+    assert '"status": "payment_authorizing"' in block
+    assert '"payment_status": "authorizing"' in block
+    assert "await ride_reservations.authorize(trip)" in block
+
+    reservations = SERVER.with_name("ride_reservations.py").read_text(encoding="utf-8")
+    activation_start = reservations.index("    async def activate(")
+    activation_end = reservations.index("\n    async def confirm(", activation_start)
+    activation = reservations[activation_start:activation_end]
+    assert '"status": "payment_authorizing"' in activation
+    assert '"status": "searching"' in activation
+    assert '"payment_status": "reserved"' in activation
+    assert "value(pi, \"status\") != \"requires_capture\"" in reservations
 
 
 def test_paid_receipt_is_persisted_idempotently():
@@ -178,7 +188,7 @@ def test_receipt_email_delivery_is_atomically_serialized_per_recipient():
     assert 'lock_field = f"{kind}_email_delivery_lock"' in block
     assert 'lock_at_field = f"{kind}_email_delivery_locked_at"' in block
     assert "claim.modified_count != 1" in block
-    assert '{"$set": {sent_field: now_iso}' in block
+    assert "sent_field: now_iso" in block
     assert '"$unset": {lock_field: "", lock_at_field: ""}' in block
     assert 'await deliver_once(\n        "customer"' in block
     assert 'await deliver_once(\n        "driver"' in block

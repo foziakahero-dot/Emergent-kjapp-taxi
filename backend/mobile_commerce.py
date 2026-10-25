@@ -14,6 +14,7 @@ from typing import Literal, Optional
 import jwt
 from stripe_fleet import ensure_fleet_account
 from admin_control_center import _stripe_snapshot, stripe_destination_for_trip
+from qa_safety import is_safe_qa_web_origin
 
 
 class NativeIdentity(BaseModel):
@@ -80,12 +81,16 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.get("/auth/native/config")
     async def identity_config(client: Literal["customer", "driver"] = "customer"):
+        if os.getenv("APP_ENV", "").strip().lower() == "qa":
+            return {"google_enabled": False, "google_web_client_id": "", "google_ios_client_id": ""}
         google_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
         return {"google_enabled": bool(google_id), "google_web_client_id": google_id,
             "google_ios_client_id": os.getenv("GOOGLE_DRIVER_IOS_CLIENT_ID" if client == "driver" else "GOOGLE_IOS_CLIENT_ID", "").strip()}
 
     @api.post("/auth/google/native")
     async def google_native(body: NativeIdentity, request: Request, response: Response):
+        if os.getenv("APP_ENV", "").strip().lower() == "qa":
+            raise HTTPException(503, "Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
         await rate_limit(request, "google-native", 30, 900)
         client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
         if not client_id:
@@ -100,6 +105,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/link")
     async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
+        if os.getenv("APP_ENV", "").strip().lower() == "qa":
+            raise HTTPException(503, "Google-kobling krever QA-spesifikk OAuth-konfigurasjon.")
         await rate_limit(request, "google-link", 20, 900)
         if body.client != "customer":
             raise HTTPException(403, "Kun kundekonto kan kobles her")
@@ -129,6 +136,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/apple/native")
     async def apple_native(body: NativeIdentity, request: Request, response: Response):
+        if os.getenv("APP_ENV", "").strip().lower() == "qa":
+            raise HTTPException(503, "Apple-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
         await rate_limit(request, "apple-native", 30, 900)
         audience = (os.getenv("APPLE_DRIVER_BUNDLE_ID", "no.nexorahub.kjapp.driver") if body.client == "driver"
             else os.getenv("APPLE_BUNDLE_ID", "no.nexorahub.kjapp.customer"))
@@ -157,8 +166,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     @api.post("/fleet/stripe/onboarding")
     async def fleet_onboarding(current=Depends(require_fleet_owner)):
         fleet = await own_fleet(current)
+        public = os.getenv(
+            "FLEET_PUBLIC_URL",
+            "" if os.getenv("APP_ENV", "").strip().lower() == "qa" else "https://fleet.snarapp.no",
+        ).rstrip("/")
+        if os.getenv("APP_ENV", "").strip().lower() == "qa" and not is_safe_qa_web_origin(public):
+            raise HTTPException(503, "QA Fleet web origin is not configured.")
         account_id = await ensure_fleet_account(db, stripe, fleet, current.get("email"))
-        public = os.getenv("FLEET_PUBLIC_URL", "https://fleet.snarapp.no").rstrip("/")
         try:
             link = await asyncio.to_thread(stripe.AccountLink.create, account=account_id,
                 refresh_url=f"{public}/okonomi?stripe=refresh",
@@ -393,5 +407,3 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return True
 
     return handle_native_webhook
-
-

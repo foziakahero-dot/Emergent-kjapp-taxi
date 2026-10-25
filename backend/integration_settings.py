@@ -15,6 +15,7 @@ import httpx
 from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException, Request
 from pymongo.errors import DuplicateKeyError
+from qa_safety import validate_qa_stripe_configuration
 
 
 GROUPS = {
@@ -27,7 +28,7 @@ GROUPS = {
     "fcm": [("FCM_SERVICE_ACCOUNT_JSON", "Firebase tjenestekonto (JSON)", True)],
     "google": [("GOOGLE_CLIENT_ID", "Google klient-ID", False),
                ("GOOGLE_CLIENT_SECRET", "Google klienthemmelighet", True)],
-    "ai": [("SNAR_AI_KEY", "Emergent AI-nøkkel", True)],
+    "ai": [("SNAR_AI_KEY", "Vercel AI Gateway API-nøkkel", True)],
 }
 
 
@@ -39,7 +40,7 @@ class IntegrationSettings:
         self.lock = asyncio.Lock()
         self.revisions = {}
         self.baseline = {key: os.getenv(key, "") for fields in GROUPS.values() for key, _, _ in fields}
-        self.baseline["SNAR_AI_KEY"] = self.baseline["SNAR_AI_KEY"] or os.getenv("EMERGENT_LLM_KEY", "")
+        self.baseline["SNAR_AI_KEY"] = self.baseline["SNAR_AI_KEY"] or os.getenv("AI_GATEWAY_API_KEY", "")
 
     def cipher(self):
         key = os.getenv("SNAR_INTEGRATION_ENCRYPTION_KEY", "")
@@ -66,6 +67,8 @@ class IntegrationSettings:
                 group = doc.get("_id")
                 if group in GROUPS and self.revisions.get(group) != doc["revision"]:
                     values = self.decode(doc)
+                    if group == "stripe" and os.getenv("APP_ENV", "").strip().lower() == "qa":
+                        validate_qa_stripe_configuration(values)
                     self.apply(values)
                     self.revisions[group] = doc["revision"]
 
