@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, type RefObject } from 'react';
 import { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
 export { CustomerJourney, confirmedPaymentMethod, finiteMetric, paymentLabel } from '@/src/components/BookingPrimitives';
-import { FigmaGradient } from './FigmaGradient';
 import { V10Glass } from './V10Glass';
 import { V10CustomerAvatar } from './V10CustomerAvatar';
 import { V10Entrance } from './V10Entrance';
@@ -14,6 +13,9 @@ import { V10CategoryImage } from './V10CategoryImage';
 import { useReducedMotion } from '@/src/components/Motion';
 import { colors, font, useColorTheme, themedStyles } from '@/src/theme';
 import { kr } from '@/src/lib/format';
+import { CollapsibleMapPanel } from './CollapsibleMapPanel';
+import { DriverAvailabilityBadge } from './DriverAvailabilityBadge';
+import type { Availability } from '@/src/lib/carAvailability';
 
 export type BookingStage = 'route' | 'vehicles' | 'payment';
 type Props = {
@@ -22,26 +24,28 @@ type Props = {
   waitingPolicy: any; waitingAccepted: boolean; busy: boolean; canReview: boolean; canBook: boolean;
   error: string; firstName: string; initials: string; places: any[]; placesIssue: boolean;
   locationReady: boolean; onStage: (stage: BookingStage) => void; onReview: (value: boolean) => void;
-  onVehicle: (type: string) => void; onSearch: (target: 'pickup' | 'dropoff') => void;
+  onVehicle: (type: string) => void; onSearch: (target: 'pickup' | 'dropoff') => void; onNearby?: () => void;
   onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void; onNotifications?: () => void; onSchedule?: () => void;
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void; onConsent: () => void;
   onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; stops: any[];
-  availability?: React.ReactNode; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
+  availability?: React.ReactNode; driverAvailability?: Availability; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
 };
-const vehicleNames: Record<string, string> = { 'ai-first': 'Standard', trygg: 'XL', premium: 'Premium' };
+const vehicleNames: Record<string, string> = { 'ai-first': 'SNAR Standard', enkelt: 'SNAR Enkelt', trygg: 'SNAR XL', premium: 'SNAR Premium' };
 export function CustomerBookingView(p: Props) {
   useColorTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const [homeHeight, setHomeHeight] = useState(300);
   // Keep the voice/locate column below the header row (avatar + bell) however tall the sheet gets.
-  const toolsMaxBottom = windowHeight - (Math.max(58, insets.top + 10) + 48 + 16) - 104;
+  const toolsMaxBottom = Math.max(16, windowHeight - (Math.max(58, insets.top + 10) + 112 + 16) - 160);
   const vehicleName = vehicleNames[p.vehicle] || 'SNAR';
   const pickupEta = typeof p.nearest === 'number' && Number.isFinite(p.nearest) && p.nearest > 0 ? Math.ceil(p.nearest) : null;
-  const sheet = (children: React.ReactNode, home = false) => <V10Entrance key={home ? 'home' : p.reviewing ? 'confirm' : p.stage} sheet style={[styles.sheet, { maxHeight: home ? '46%' : '78%', overflow: 'hidden' }]}><FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" /><ScrollView testID={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'}
-    style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
-    onLayout={event => { p.onHeight(event.nativeEvent.layout.height); if (home) setHomeHeight(event.nativeEvent.layout.height); }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: home ? Math.max(108, insets.bottom + 74) : Math.max(34, insets.bottom) }}>
-    <View style={styles.handle} />{children}</ScrollView></V10Entrance>;
+  const panelTitle = !p.destination ? 'Planlegg reisen' : p.reviewing ? 'Bekreft tur' : p.stage === 'vehicles' ? 'Velg bil' : p.stage === 'payment' ? 'Betaling' : 'Reiserute';
+  const sheet = (children: React.ReactNode, home = false) => <CollapsibleMapPanel key={home ? 'home' : p.reviewing ? 'confirm' : p.stage}
+    id={p.reviewing ? 'booking-review-screen' : p.destination ? 'home-ride-sheet' : 'home-browse-sheet'} title={panelTitle}
+    summary={p.destination ? `${vehicleName} · ${kr(p.price)} · ${p.destination.name}` : 'Hvor skal du?'}
+    heightFraction={home ? .3 : .7} bottomOffset={home ? insets.bottom + 82 : 0} bottomInset={home ? 0 : insets.bottom}
+    onHeight={height => { p.onHeight(height); if (home) setHomeHeight(height); }}>{children}</CollapsibleMapPanel>;
   const back = () => p.reviewing ? p.onReview(false) : p.stage === 'payment' ? p.onStage('vehicles') : p.stage === 'vehicles' ? p.onStage('route') : p.onBack();
   const error = p.error ? <Text accessibilityRole="alert" testID="home-error" style={[v10.secondary, { color: colors.danger, marginVertical: 12 }]}>{p.error}</Text> : null;
   if (!p.destination) return <>
@@ -49,7 +53,13 @@ export function CustomerBookingView(p: Props) {
       <Pressable onPress={p.onProfile} accessibilityRole="button" accessibilityLabel="Åpne profilen" style={styles.identity}><V10Glass target={p.mapBlurTarget} /><V10CustomerAvatar initials={p.initials} version={p.avatarVersion} /><Text style={[v10.secondary, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>Hei, {p.firstName}</Text></Pressable>
       <Tool id="home-notifications" icon="bell" label="Varsler" onPress={p.onNotifications || p.onProfile} target={p.mapBlurTarget} />
     </V10Entrance>
-    <View style={{ position: 'absolute', right: 20, bottom: Math.min(homeHeight + 20, toolsMaxBottom), gap: 8 }}><Tool id="home-voice" icon="voice" label="Snakk med SNAR" onPress={p.onVoice} target={p.mapBlurTarget} /><Tool id="home-recenter" icon="locate" label="Min posisjon" onPress={p.onLocate} target={p.mapBlurTarget} /></View>
+    {p.driverAvailability ? <View style={{ position: 'absolute', top: Math.max(58, insets.top + 10) + 58, left: 20, right: 20 }}>
+      <DriverAvailabilityBadge search={p.driverAvailability} ready={p.locationReady} />
+    </View> : null}
+    <View style={windowHeight < 500 ? { position: 'absolute', right: 20, top: Math.max(58, insets.top + 10) + 58, flexDirection: 'row', gap: 8 }
+      : { position: 'absolute', right: 20, bottom: Math.min(homeHeight + 20, toolsMaxBottom), gap: 8 }}>
+      {p.onNearby ? <Tool id="home-nearby-drivers" icon="vehicle" label="Vis ledige sjåfører" onPress={p.onNearby} target={p.mapBlurTarget} /> : null}
+      <Tool id="home-voice" icon="voice" label="Snakk med SNAR" onPress={p.onVoice} target={p.mapBlurTarget} /><Tool id="home-recenter" icon="locate" label="Min posisjon" onPress={p.onLocate} target={p.mapBlurTarget} /></View>
     {sheet(<>
       <Pressable testID="home-where-to" accessibilityRole="button" accessibilityLabel="Søk etter destinasjon" onPress={() => p.onSearch('dropoff')} style={styles.search}><V10Icon name="search" /><Text style={[v10.body, { flex: 1, fontSize: 18 }]}>Hvor skal du?</Text><Pressable testID="home-schedule" accessibilityRole="button" accessibilityLabel="Velg hentetid" disabled={!p.onSchedule} onPress={event => { event.stopPropagation(); p.onSchedule?.(); }} style={styles.now}><V10Icon name="clock" size={16} /><Text style={v10.caption}>Nå</Text></Pressable></Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 12 }}>
@@ -71,7 +81,7 @@ export function CustomerBookingView(p: Props) {
       <View style={styles.metrics}><Metric label="Kjøretid" value={finiteMetric(p.estimate?.duration_min, 'min')} /><Metric label="Distanse" value={finiteMetric(p.estimate?.distance_km, 'km')} /><Metric label="Ankomst" value={arrivalTime(p.estimate?.duration_min, p.quotedAt)} /></View>
       {error}<View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 56 }}><Pressable testID="route-adjust-pickup" accessibilityRole="button" accessibilityLabel="Juster hentested" onPress={() => p.onSearch('pickup')} style={{ height: 56, borderRadius: 16, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="pickup" /></Pressable></View><View style={{ flex: 1 }}><V10Action testID="route-choose-vehicle" label="Velg bil" disabled={!p.canReview} onPress={() => p.onStage('vehicles')} /></View></View>
     </> : p.stage === 'vehicles' ? <><View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 12 }}><Text style={[v10.heading, { flex: 1 }]}>Velg bil</Text><Text style={v10.caption} numberOfLines={1}>Til {p.destination.name} · {finiteMetric(p.estimate?.duration_min, 'min')}</Text></View>
-      <View style={{ gap: 6 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type}
+      <View accessibilityRole="radiogroup" accessibilityLabel="Kjøretøykategori" style={{ gap: 8 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type}
         option={p.estimate?.options?.find((option: any) => option.vehicle_type === choice.type)} eta={p.vehicleEtas?.[choice.type] ?? (p.vehicle === choice.type ? p.nearest : null)} onSelect={p.onVehicle} />)}</View>
       <Pressable testID="booking-payment-row" onPress={() => p.onStage('payment')} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', minHeight: 48, paddingHorizontal: 4, paddingVertical: 12 }}><V10Icon name="payment" size={20} /><Text style={[v10.body, { flex: 1 }]}>{paymentLabel(p.payment)}</Text><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       {error}<V10Action testID="booking-review" label={`Bestill ${vehicleName} · ${kr(p.price)}`} disabled={!p.canReview} onPress={() => p.onReview(true)} />
@@ -89,10 +99,10 @@ export function CustomerBookingView(p: Props) {
   </>;
 }
 const vehicleChoices = [
-  { type: 'ai-first', name: 'Standard', note: 'Rask og enkel' },
-  { type: 'comfort', name: 'Comfort', note: 'Ikke tilgjengelig' },
-  { type: 'trygg', name: 'XL', note: 'Mer plass' },
-  { type: 'premium', name: 'Premium', note: 'Premium' },
+  { type: 'ai-first', name: 'SNAR Standard', note: 'Hverdagsreisen' },
+  { type: 'enkelt', name: 'SNAR Enkelt', note: 'En enkel reise' },
+  { type: 'trygg', name: 'SNAR XL', note: 'Mer plass' },
+  { type: 'premium', name: 'SNAR Premium', note: 'En oppgradert reise' },
 ] as const;
 function VehicleChoice({ choice, option, selected, eta, onSelect }: { choice: typeof vehicleChoices[number]; option: any; selected: boolean; eta?: number | null; onSelect: (type: string) => void }) {
   useColorTheme();
@@ -103,17 +113,18 @@ function VehicleChoice({ choice, option, selected, eta, onSelect }: { choice: ty
     const animation = Animated.timing(progress, { toValue: selected ? 1 : 0, duration: 210, easing: Easing.bezier(.2, .8, .2, 1), useNativeDriver: false });
     animation.start(); return () => animation.stop();
   }, [selected, reduced, progress]);
-  // Comfort is a distinct source class; legacy "enkelt" is not a Comfort contract.
-  const supported = choice.type !== 'comfort' && validVehiclePrice(option?.price);
+  // Every displayed category uses its own canonical quote; never substitute another class's fare.
+  const supported = validVehiclePrice(option?.price);
   const arrival = Number.isFinite(eta) && Number(eta) > 0 ? `${eta} min unna · ` : '';
   const seats = Number.isInteger(option?.passenger_seats) && option.passenger_seats > 0 ? option.passenger_seats : null;
-  return <Pressable testID={`vehicle-${choice.type}`} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: !supported }} disabled={!supported}
+  return <Pressable testID={`vehicle-${choice.type}`} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: !supported }} aria-checked={selected} aria-disabled={!supported} disabled={!supported}
     onPress={() => { if (supported) onSelect(choice.type); }} style={[styles.vehicle, !supported && { opacity: .5 }]}>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 1.5,
       borderColor: progress.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.text] }), backgroundColor: progress.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.cardSubtle] }) }]} />
     <V10CategoryImage kind={choice.type} selected={selected} />
     <View style={{ flex: 1 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Text style={v10.body}>{choice.name}</Text>{seats ? <><Text style={v10.caption}>· {seats}</Text><V10Icon name="user" size={12} color={colors.textMuted} /></> : null}</View><Text style={v10.caption}>{supported ? arrival + choice.note : 'Ikke tilgjengelig'}</Text></View>
-    <Text style={{ fontFamily: font.semibold, fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] }}>{supported ? kr(option.price) : '—'}</Text>
+    <View style={{ alignItems: 'flex-end', gap: 6 }}><Text style={{ fontFamily: font.semibold, fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] }}>{supported ? kr(option.price) : '—'}</Text>
+      <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: selected ? 5 : 1.5, borderColor: selected ? colors.accent : colors.lineStrong }} /></View>
   </Pressable>;
 }
 export function validVehiclePrice(price: any) { return typeof price === 'number' && Number.isFinite(price) && price > 0; }
@@ -146,8 +157,6 @@ function Metric({ label, value }: { label: string; value: string }) {
 function Info({ title, value, onPress }: { title: string; value: string; onPress?: () => void }) {
   useColorTheme(); const content = <><Text style={v10.caption}>{title}</Text><Text style={v10.body}>{value}</Text></>; return onPress ? <Pressable onPress={onPress} testID="booking-payment-row" style={styles.info}>{content}</Pressable> : <View style={styles.info}>{content}</View>; }
 const styles = themedStyles(() => StyleSheet.create({
-  sheet: { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, boxShadow: colors.elevation3 },
-  handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 },
   tool: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glass, boxShadow: colors.elevation2, overflow: 'hidden' },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 6, paddingRight: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.glass, flexShrink: 1, overflow: 'hidden', boxShadow: colors.elevation2 },
   avatar: { width: 32, height: 32, borderRadius: 11, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' },
@@ -156,5 +165,5 @@ const styles = themedStyles(() => StyleSheet.create({
   chip: { minHeight: 44, borderRadius: 12, backgroundColor: colors.cardSubtle, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: 190 },
   metrics: { flexDirection: 'row', gap: 24, marginVertical: 20, paddingVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line },
   info: { flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.cardSubtle, gap: 2 },
-  vehicle: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, paddingLeft: 6, paddingRight: 14, borderRadius: 18, overflow: 'hidden' },
+  vehicle: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 88, paddingVertical: 6, paddingLeft: 6, paddingRight: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
 }));

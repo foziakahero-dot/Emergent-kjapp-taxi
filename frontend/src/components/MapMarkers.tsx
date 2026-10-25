@@ -1,25 +1,25 @@
-import React, { useEffect, useId, useRef } from 'react';
-import { Animated, View } from 'react-native';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
-import { cssEaseOut, useReducedMotion } from '@/src/components/Motion';
+import React from 'react';
+import { View } from 'react-native';
+import { Text } from './Typography';
+import { V10VehicleMarker } from './V10VehicleMarker';
+import { colors, font, useColorTheme } from '@/src/theme';
 
 export { V10VehicleMarker as MapCar } from './V10VehicleMarker';
 
 export function PositionDot() {
-  const id = `position-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  const reduced = useReducedMotion();
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    pulse.setValue(0);
-    if (reduced) return;
-    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 2400, easing: cssEaseOut, useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [pulse, reduced]);
-  return <View style={{ width: 22, height: 22 }}>
-    <Animated.View style={{ position: 'absolute', inset: 0, opacity: reduced ? 1 : pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }), transform: [{ scale: reduced ? 1 : pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.9] }) }] }}>
-      <Svg width={22} height={22}><Defs><RadialGradient id={id}><Stop offset="0" stopColor="#FF0000" stopOpacity={0.35} /><Stop offset="0.7" stopColor="#FF0000" stopOpacity={0} /></RadialGradient></Defs><Circle cx={11} cy={11} r={11} fill={`url(#${id})`} /></Svg>
-    </Animated.View>
-    <View style={{ position: 'absolute', inset: 6, borderRadius: 99, backgroundColor: '#FF0000', borderWidth: 2, borderColor: '#FFFFFF', boxShadow: '0 0 8px rgba(255,0,0,0.6)' }} />
+  return <View testID="customer-position-marker" accessible accessibilityLabel="Din posisjon" style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#2674D9', borderWidth: 3, borderColor: '#FFFFFF' }} />
+  </View>;
+}
+
+export function AvailableDriverMarker({ heading = 0, eta }: { heading?: number; eta?: number }) {
+  useColorTheme();
+  const minutes = Number.isFinite(eta) && Number(eta) > 0 ? Math.ceil(Number(eta)) : null;
+  return <View testID="available-driver-marker" accessible accessibilityLabel={`Ledig sjåfør${minutes ? `, ${minutes} minutter unna` : ''}`}
+    style={{ width: 86, height: 76, alignItems: 'center' }}>
+    <View style={{ height: 22, borderRadius: 11, paddingHorizontal: 8, justifyContent: 'center', backgroundColor: colors.online }}>
+      <Text style={{ fontFamily: font.semibold, fontSize: 10, color: '#FFFFFF' }}>LEDIG{minutes ? ` · ${minutes} min` : ''}</Text>
+    </View>
+    <V10VehicleMarker heading={heading} />
   </View>;
 }

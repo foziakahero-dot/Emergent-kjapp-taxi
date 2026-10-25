@@ -1,5 +1,5 @@
 import { mapContentInsets, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/src/lib/mapFocus';
-import { MapCar, PositionDot } from '@/src/components/MapMarkers';
+import { AvailableDriverMarker, MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox, {
@@ -45,11 +45,13 @@ type Props = {
   contentInsets?: Partial<MapContentInsets>;
 };
 
-function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+function MarkerCar({ car }: { car: Car }) {
   useColorTheme();
   const smooth = useSmoothPosition(car);
   if (!smooth) return null;
-  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
+  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap anchor={{ x: .5, y: .66 }}>
+    <AvailableDriverMarker heading={smooth.heading} eta={car.eta_min} />
+  </MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {

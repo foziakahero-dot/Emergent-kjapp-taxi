@@ -23,6 +23,7 @@ const router = Object.fromEntries(['push', 'replace', 'navigate', 'back'].map(me
 class Value { constructor(value) { this.value = value; this.listeners = new Map(); } setValue(value) { this.value = value; this.listeners.forEach(listener => listener({ value })); } addListener(listener) { const id = String(this.listeners.size + 1); this.listeners.set(id, listener); return id; } removeListener(id) { this.listeners.delete(id); } stopAnimation() {} interpolate(config) { return config; } }
 const native = {
   PanResponder: { create: config => ({ panHandlers: config }) },
+  useWindowDimensions: () => ({ width: 390, height: 844 }), Keyboard: { dismiss() {} },
   Animated: { Value, View: 'AnimatedView', timing: () => ({ start() {}, stop() {} }), loop: animation => animation }, Easing: { linear: value => value, bezier: (...values) => values },
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
@@ -680,7 +681,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(tree.root.findAll(node => node.type === 'Map')[0].props.focusMode, 'route');
   await act(async () => button(tree, 'route-choose-vehicle').props.onPress());
   assert.match(text(tree),/4 min unna/);assert.match(text(tree),/7 min unna/);assert.match(text(tree),/6 min unna/);
-  assert.equal(button(tree,'vehicle-comfort').props.disabled,true,'A legacy enkelt quote cannot manufacture a Comfort class');
+  assert.equal(button(tree,'vehicle-comfort'),undefined,'Do not offer an unsupported Comfort class');
+  assert.equal(button(tree,'vehicle-enkelt').props.disabled,true,'A category without its own quote stays unavailable');
   await act(async () => button(tree, 'booking-payment-row').props.onPress());
   assert.match(text(tree), /4321/);
   assert.doesNotMatch(text(tree), /Equinor|4821/);
@@ -802,9 +804,9 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['expo-image']={Image:'CategoryImage'};
   const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
   tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));
-  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/photo-1560958089-b8a1929cea89/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');
-  await act(async()=>tree.root.findByType('CategoryImage').props.onError());assert.equal(tree.root.findAllByType('CategoryImage').length,0);assert.equal(tree.root.findByType('VehicleAsset').props.kind,'ai-first');await unmount(tree);
-  console.log('PASS: Customer 09/10 all-class home supply, actual per-class ETA, unavailable Comfort/provider guards, canonical card, real expiry, original illustration URL and CDN fallback.');
+  assert.equal(tree.root.findAllByType('CategoryImage').length,0,'Category artwork never requires a remote image');
+  assert.equal(tree.root.findByType('VehicleAsset').props.kind,'ai-first');await unmount(tree);
+  console.log('PASS: Customer 09/10 all-class home supply, actual per-class ETA, canonical quote/provider guards, canonical card, real expiry and bundled artwork.');
   // Customer 11/12: canonical consent contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);
   assert.equal(helpers.confirmedWaitingPolicy({token:'valid',free_minutes:5,per_minute:-1,max_fee:40}),false);

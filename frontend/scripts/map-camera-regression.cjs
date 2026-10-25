@@ -28,7 +28,7 @@ Module._load = function (id, parent, isMain) {
   if (id === './RasterMap') return { InteractiveMap: 'RasterMap' };
   if (id === './Typography') return { Text: 'Text' };
   if (id === './Icon') return { Icon: 'Icon' };
-  if (id === '@/src/components/MapMarkers') return { MapCar: 'MapCar', PositionDot: 'PositionDot' };
+  if (id === '@/src/components/MapMarkers') return { MapCar: 'MapCar', PositionDot: 'PositionDot', AvailableDriverMarker: 'AvailableDriverMarker' };
   return old.call(this, id, parent, isMain);
 };
 (async () => {

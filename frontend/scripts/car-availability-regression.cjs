@@ -39,9 +39,19 @@ function clock(){ let now=0,id=0;const jobs=new Map();return {now:()=>now,set(fn
  }
  {
   const time=clock();let calls=0;const s=new CarAvailabilitySearch(async()=>{calls++;return {cars:[]}},()=>{},true,time);
-  s.setActive(true);await flush();await time.advance(96_000);assert.equal(calls,13);assert.notEqual(s.state.phase,'exhausted');s.dispose();
+  s.setActive(true);await flush();await time.advance(96_000);assert.equal(calls,49);assert.notEqual(s.state.phase,'exhausted');s.dispose();
  }
  console.log('PASS: newly online car shown, invalid GPS hidden, live supply refresh continues while server searches');
+ {
+  const time=clock();let calls=0;
+  const car={id:'online',lat:59.92,lng:10.75};
+  const s=new CarAvailabilitySearch(async()=>{calls++;if(calls===3)throw Error('offline');return {cars:calls===1?[car]:[]}},()=>{},true,time);
+  s.setActive(true);await flush();assert.equal(s.state.cars.length,1);
+  await time.advance(1999);assert.equal(calls,1);
+  await time.advance(1);assert.equal(s.state.cars.length,0);assert.equal(s.state.issue,'empty');
+  await time.advance(2000);assert.equal(s.state.cars.length,0);assert.equal(s.state.issue,'offline');s.dispose();
+ }
+ console.log('PASS: continuous map refreshes every two seconds and removes unavailable/offline supply');
  const pickup={lat:59.91,lng:10.75},car={lat:59.94,lng:10.82},far={lat:60.8,lng:11.1};
  assert.deepEqual(mapFocusPoints({pickup,user:pickup,dropoff:far,cars:[car],focusMode:'nearby'}),[pickup,car]);
  assert.deepEqual(mapFocusPoints({pickup,dropoff:far,activeCar:car,cars:[{lat:20,lng:20}],focusMode:'route'}),[pickup,far,car]);

@@ -1,13 +1,14 @@
 import React from 'react';
 import { Image } from 'expo-image';
 
-type VehicleKind = 'ai-first' | 'trygg' | 'premium';
+type VehicleKind = 'ai-first' | 'enkelt' | 'trygg' | 'premium';
 
-// Original approved SNAR renders, recovered unchanged from the landing artwork.
+// User's four transparent SNAR 3D renders from 25 October, bundled for offline use.
 const VEHICLES = {
-  'ai-first': { source: require('../../assets/vehicles/standard-3d.webp'), label: 'SNAR' },
-  trygg: { source: require('../../assets/vehicles/xl-3d.webp'), label: 'SNAR XL' },
-  premium: { source: require('../../assets/vehicles/premium-3d.webp'), label: 'Premium' },
+  'ai-first': { source: require('../../assets/vehicles/standard-3d.png'), label: 'SNAR Standard' },
+  enkelt: { source: require('../../assets/vehicles/enkelt-3d.png'), label: 'SNAR Enkelt' },
+  trygg: { source: require('../../assets/vehicles/xl-3d.png'), label: 'SNAR XL' },
+  premium: { source: require('../../assets/vehicles/premium-3d.png'), label: 'SNAR Premium' },
 } as const;
 
 export function VehicleAsset({
@@ -26,7 +27,7 @@ export function VehicleAsset({
     <Image
       source={spec.source}
       style={{ width, height }}
-      contentFit="contain"
+      contentFit="cover"
       accessibilityRole="image"
       accessibilityLabel={spec.label}
       accessibilityState={{ selected }}
