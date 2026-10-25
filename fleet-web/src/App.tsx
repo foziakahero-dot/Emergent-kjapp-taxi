@@ -10,6 +10,7 @@ import FigmaSettingsPage from './FigmaSettingsPage';
 import { FigmaFinancePage, FigmaLiveOpsPage, FigmaTripsPage, FigmaVehiclesPage } from './FigmaOperationsPages';
 import { SnarForcePasswordChangePage, SnarForgotPasswordPage, SnarLoginPage, SnarResetPasswordPage } from './SnarAuthPages';
 import SupportAiPage from './SupportAiPage';
+import FleetHubOverview from './FleetHubOverview';
 
 const NAV = [
   { to: '/', label: 'Oversikt', end: true, icon: '⌂' },

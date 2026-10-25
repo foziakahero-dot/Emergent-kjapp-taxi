@@ -14,6 +14,7 @@ import {
   FleetManagement, PaymentsPayouts, Communications, ActionCenter, SystemIntegrations, AdminRoles,
 } from './controlCenter';
 import { PromoCodes } from './PromoCodes';
+import HubOverview from './HubOverview';
 
 const NAV = [
   { group: 'Oversikt', items: [
@@ -163,7 +164,7 @@ function Shell() {
         </div>
         <main className="main-content">
           <Routes>
-            <Route path="/" element={gate('operations', <Dashboard />)} />
+            <Route path="/" element={gate('operations', <><HubOverview /><Dashboard /></>)} />
             <Route path="/live" element={gate('operations', <Live />)} />
             <Route path="/trips" element={gate('operations', <Trips />)} />
             <Route path="/drivers" element={gate('operations', <Drivers />)} />
@@ -184,7 +185,7 @@ function Shell() {
             <Route path="/support" element={gate('support', <Support />)} />
             <Route path="/audit" element={gate('system', <Audit />)} />
             <Route path="/settings" element={gate('system', <Settings />)} />
-            <Route path="*" element={gate('operations', <Dashboard />)} />
+            <Route path="*" element={gate('operations', <><HubOverview /><Dashboard /></>)} />
           </Routes>
         </main><footer className="app-footer"><span>SNAR Control Center v2.0</span><span>{user?.role}</span></footer>
       </div>
