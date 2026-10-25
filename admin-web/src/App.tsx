@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { NavLink, Route, Routes, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import { api } from './api';
 import { Loader } from './ui';
@@ -17,7 +17,7 @@ import {
 
 const NAV = [
   { group: 'Oversikt', items: [
-    { to: '/', label: 'Dashbord', ic: 'grid', end: true, perm: 'operations' },
+    { to: '/', label: 'Oversikt', ic: 'grid', end: true, perm: 'operations' },
     { to: '/live', label: 'Live drift', ic: 'map', perm: 'operations' },
     { to: '/actions', label: 'Krever handling', ic: 'alert', perm: 'operations' },
   ]},
@@ -117,15 +117,30 @@ function Shell() {
     return allowed ? node : <div className="error-banner" role="alert">Du har ikke tilgang til denne delen av administrasjonspanelet.</div>;
   };
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const menuButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileOpen(false);
+        menuButton.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileOpen]);
   const [counts, setCounts] = useState<any>({});
   useEffect(() => { api.overview().then(setCounts).catch(() => {}); }, []);
   const initials = (user?.fullName || user?.email || 'A').slice(0, 2).toUpperCase();
 
   return (
     <div className="app-shell">
+      <button className="hub-skip" onClick={() => document.getElementById('hub-main')?.focus({ preventScroll: true })}>Hopp til innhold</button>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Lukk meny" onClick={() => setMobileOpen(false)}/>}
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
-        <div className="brand-row"><div className="brand-lockup"><SnarMark/><div className="brand-text"><strong>SNAR</strong><span>CONTROL CENTER</span></div></div><button className="icon-btn sidebar-close" aria-label="Lukk meny" onClick={() => setMobileOpen(false)}><Icon name="close"/></button></div>
+      <aside id="hub-navigation" className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+        <div className="brand-row"><div className="brand-lockup"><SnarMark/><div className="brand-text"><strong>SNAR</strong><span>OPERATIONS HUB</span></div></div><button className="icon-btn sidebar-close" aria-label="Lukk meny" onClick={() => setMobileOpen(false)}><Icon name="close"/></button></div>
         <nav className="sidebar-nav" aria-label="Hovedmeny">
         {NAV.map((g) => (
           <div className="nav-group" key={g.group}>
@@ -153,14 +168,14 @@ function Shell() {
 
       <div className="app-main">
         <div className="topbar">
-          <div className="topbar-left"><button className="icon-btn mobile-menu" aria-label="Åpne meny" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}><Icon name="menu"/></button>{can('operations') ? <GlobalSearch /> : <span>SNAR Control Center</span>}</div>
+          <div className="topbar-left"><button ref={menuButton} className="icon-btn mobile-menu" aria-label="Åpne meny" aria-controls="hub-navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}><Icon name="menu"/></button>{can('operations') ? <GlobalSearch /> : <span>SNAR Operations Hub</span>}</div>
           <div className="topbar-right">
             <span className="who-email">{user?.email}</span>
             <div className="avatar av-sm">{initials}</div>
             <button className="btn btn-ghost btn-sm" onClick={logout}>Logg ut</button>
           </div>
         </div>
-        <main className="main-content">
+        <main id="hub-main" className="main-content" tabIndex={-1}>
           <Routes>
             <Route path="/" element={gate('operations', <Dashboard />)} />
             <Route path="/live" element={gate('operations', <Live />)} />
@@ -184,7 +199,7 @@ function Shell() {
             <Route path="/settings" element={gate('system', <Settings />)} />
             <Route path="*" element={gate('operations', <Dashboard />)} />
           </Routes>
-        </main><footer className="app-footer"><span>SNAR Control Center v2.0</span><span>{user?.role}</span></footer>
+        </main><footer className="app-footer"><span>SNAR Operations Hub</span><span>{user?.role}</span></footer>
       </div>
     </div>
   );

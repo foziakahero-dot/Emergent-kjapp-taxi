@@ -34,7 +34,7 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div className="login-brand"><SnarMark size={48}/><div className="login-brand-text"><strong>SNAR</strong><span>CONTROL CENTER</span></div></div>
+      <div className="login-brand"><SnarMark size={48}/><div className="login-brand-text"><strong>SNAR</strong><span>OPERATIONS HUB</span></div></div>
       <div className="login-card">
         <div className="login-head">
           {twofaToken && <div className="twofa-icon"><Icon name="shield" size={24}/></div>}
@@ -59,7 +59,7 @@ export default function Login() {
         )}
         <div className="login-security"><Icon name="lock" size={13}/><span>Sikker innlogging · Kun autoriserte administratorer</span></div>
       </div>
-      <p className="login-footer">© {new Date().getFullYear()} SNAR · Control Center</p>
+      <p className="login-footer">© {new Date().getFullYear()} SNAR · Operations Hub</p>
     </div>
   );
 }
