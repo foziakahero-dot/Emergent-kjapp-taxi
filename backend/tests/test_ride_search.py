@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import mongomock
 import pytest
@@ -179,8 +180,9 @@ def test_broadcast_retry_requeries_and_offers_newly_online_driver():
     from typing import Optional
     env={'Optional':Optional,'db':db,'ride_search':engine,'_dispatch_candidates':candidates,
          '_required_driver_capabilities':lambda needs:[],'_commission_for_trip':commission,
-         '_real_trip_filter':lambda q:q,'send_push_to_user':push,'datetime':datetime,'timezone':timezone,
+         '_real_trip_filter':lambda q:q,'send_push_to_user':push,'notify_driver_offer_signal':AsyncMock(),'datetime':datetime,'timezone':timezone,
          'timedelta':timedelta,'DISPATCH_OFFER_SECONDS':20}
+    function('_active_promo', env); function('_driver_gross', env)
     engine.offer=function('offer_trip_to_next_driver',env)
     async def run():
         await tick(raw,engine,0); assert raw.trips.find_one()['dispatch_mode']=='broadcast'
@@ -199,8 +201,9 @@ def test_initial_dispatch_and_retry_cannot_duplicate_driver_offer():
     from typing import Optional
     env={'Optional':Optional,'db':db,'ride_search':engine,'_dispatch_candidates':candidates,
          '_required_driver_capabilities':lambda needs:[],'_commission_for_trip':commission,
-         '_real_trip_filter':lambda q:{'$and':[{'demo':{'$ne':True}},q]},'send_push_to_user':push,
+         '_real_trip_filter':lambda q:{'$and':[{'demo':{'$ne':True}},q]},'send_push_to_user':push,'notify_driver_offer_signal':AsyncMock(),
          'datetime':datetime,'timezone':timezone,'timedelta':timedelta,'DISPATCH_OFFER_SECONDS':20}
+    function('_active_promo', env); function('_driver_gross', env)
     offer=function('offer_trip_to_next_driver',env)
     async def run():
         trip=await engine.ensure_started(raw.trips.find_one(),START)

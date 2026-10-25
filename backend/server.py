@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+from service_fee_policy import configured_service_fee, commission_source
+
 import os
 import asyncio
 import html as html_escape
@@ -3028,7 +3030,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "pricing_area": pricing_area,
         "pricing_snapshot": effective_pricing,
         "commission_rate": commission_rate,
-        "commission_source": "platform_default",
+        "commission_source": commission_source(),
         "surge_multiplier": quote["surge_multiplier"],
         "demand_multiplier": quote["demand_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
@@ -7227,7 +7229,7 @@ async def fleet_export_monthly(
 
 async def _platform_commission() -> float:
     s = await db.platform_settings.find_one({"_id": "singleton"})
-    return float((s or {}).get("default_commission", 0.10))
+    return configured_service_fee((s or {}).get("default_commission", 0.12))
 
 
 async def _commission_for_trip(trip: dict) -> float:
@@ -11643,7 +11645,7 @@ async def admin_analytics(days: int = 14, current=Depends(require_admin)):
 
 # ---- Platform settings ----
 DEFAULT_PLATFORM_SETTINGS = {
-    "default_commission": 0.10,
+    "default_commission": 0.12,
     "pricing": DEFAULT_PRICING,
     "ride_classes": {
         "ai-first": {"label": "Standard", "multiplier": 1.0, "enabled": True},
@@ -11718,9 +11720,11 @@ def _validate_pricing(p: dict):
 async def admin_get_settings(current=Depends(require_admin)):
     s = await db.platform_settings.find_one({"_id": "singleton"})
     if not s:
-        return {**DEFAULT_PLATFORM_SETTINGS, "updated_at": None}
+        return {**DEFAULT_PLATFORM_SETTINGS, "default_commission": configured_service_fee(), "service_fee_locked": commission_source() == "service_fee_policy", "updated_at": None}
     s.pop("_id", None)
     merged = {**DEFAULT_PLATFORM_SETTINGS, **s}
+    merged["default_commission"] = configured_service_fee(merged["default_commission"])
+    merged["service_fee_locked"] = commission_source() == "service_fee_policy"
     features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(s.get("features") or {})}
     # Runtime demo trips are permanently disabled for beta/production control surfaces,
     # even if an old database snapshot still contains demo_trips=true.
@@ -11741,6 +11745,8 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
     prev = await db.platform_settings.find_one({"_id": "singleton"}) or {}
     sets = {}
     if body.default_commission is not None:
+        if commission_source() == "service_fee_policy" and body.default_commission != configured_service_fee():
+            raise HTTPException(409, "Serviceavgiften er låst av driftskonfigurasjonen.")
         if not 0.0 <= body.default_commission <= 0.5:
             raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
         sets["default_commission"] = body.default_commission

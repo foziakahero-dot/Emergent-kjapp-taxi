@@ -204,7 +204,12 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     def payment_config():
         key = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
-        mode_matches = key.startswith("pk_test_") and str(stripe.api_key).startswith(("sk_test_", "rk_test_"))
+        test_mode = key.startswith("pk_test_") and str(stripe.api_key).startswith(("sk_test_", "rk_test_"))
+        live_mode = (key.startswith("pk_live_") and str(stripe.api_key).startswith(("sk_live_", "rk_live_"))
+            and os.getenv("NATIVE_PAYMENTS_LIVE_ENABLED", "false").lower() == "true"
+            and os.getenv("APP_ENV", "").lower() == "production"
+            and os.getenv("QA_MODE", "false").lower() != "true")
+        mode_matches = test_mode or live_mode
         enabled = os.getenv("NATIVE_PAYMENTS_ENABLED", "false").lower() == "true" and mode_matches
         return {"enabled": bool(enabled), "publishable_key": key if enabled else "",
             "test_mode": key.startswith("pk_test_"),
@@ -238,13 +243,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     async def native_setup_intent(request: Request, current=Depends(require_customer)):
         await rate_limit(request, "native-card-setup", 20, 900)
         config = payment_config()
-        if not config["enabled"] or not config["test_mode"]:
-            raise HTTPException(503, "Native Stripe testbetaling er ikke aktivert")
+        if not config["enabled"]:
+            raise HTTPException(503, "Native Stripe-betaling er ikke aktivert")
         customer_id = await _stripe_customer_for_user(current)
         setup = await asyncio.to_thread(
             stripe.SetupIntent.create,
             customer=customer_id,
-            payment_method_types=["card"],
+            automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
             usage="off_session",
             metadata={"user_id": current["id"], "source": "kjapp_native_setup"},
         )
@@ -287,7 +292,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         doc = {
             "user_id": current["id"],
             "type": card.get("brand") or "card",
-            "label": str(card.get("brand") or "Kort").capitalize(),
+            "label": {"apple_pay": "Apple Pay", "google_pay": "Google Pay"}.get((card.get("wallet") or {}).get("type"), str(card.get("brand") or "Kort").capitalize()),
+            "wallet_type": (card.get("wallet") or {}).get("type"),
             "last4": card.get("last4") or "",
             "exp_month": card.get("exp_month"),
             "exp_year": card.get("exp_year"),
@@ -303,6 +309,25 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         doc["id"] = str(result.inserted_id)
         doc.pop("_id", None)
         return {"ready": True, "verified": True, "card": doc}
+
+    @api.post("/payment-methods/{payment_method_id}/default")
+    async def select_default_payment_method(payment_method_id: str, current=Depends(require_customer)):
+        if not ObjectId.is_valid(payment_method_id):
+            raise HTTPException(404, "Fant ikke betalingskortet")
+        method = await db.payment_methods.find_one({"_id": ObjectId(payment_method_id), "user_id": current["id"],
+            "verified": True, "setup_status": "succeeded"})
+        if not method or not method.get("stripe_payment_method_id"):
+            raise HTTPException(404, "Fant ikke et verifisert betalingskort")
+        customer_id = await _stripe_customer_for_user(current)
+        try:
+            pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, method["stripe_payment_method_id"])
+        except Exception:
+            raise HTTPException(502, "Stripe kunne ikke bekrefte betalingskortet")
+        if str(pm.get("customer") or "") != customer_id:
+            raise HTTPException(409, "Kortet tilhører ikke Stripe-kunden")
+        await db.payment_methods.update_many({"user_id": current["id"]}, {"$set": {"is_default": False}})
+        await db.payment_methods.update_one({"_id": method["_id"], "user_id": current["id"]}, {"$set": {"is_default": True}})
+        return {"selected": True, "payment_method_id": payment_method_id}
 
     async def reconcile_native(pi, record):
         if (pi.get("amount") != record["amount_ore"] or pi.get("currency") != "nok"
