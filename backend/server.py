@@ -6023,6 +6023,71 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
     }
 
 
+def _oslo_day_bounds_utc(day: Optional[str]) -> tuple[str, str, str]:
+    oslo = ZoneInfo("Europe/Oslo")
+    try:
+        local_day = datetime.strptime(day, "%Y-%m-%d").date() if day else datetime.now(oslo).date()
+    except ValueError:
+        raise HTTPException(400, "Dato må ha formatet ÅÅÅÅ-MM-DD")
+    start = datetime(local_day.year, local_day.month, local_day.day, tzinfo=oslo)
+    end = start + timedelta(days=1)
+    return local_day.isoformat(), start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
+
+
+@api.get("/fleet/shift-report")
+async def fleet_shift_report(date: Optional[str] = None, current=Depends(require_fleet_owner)):
+    """Z-report: one Oslo calendar day of the fleet's trips, summarised per driver."""
+    fid = await get_fleet_id_for(current)
+    if not fid:
+        raise HTTPException(404, "Ingen flåte")
+    day, start, end = _oslo_day_bounds_utc(date)
+    names = {}
+    async for d in db.users.find({"role": "driver", "fleet_id": fid}, {"name": 1}):
+        names[str(d["_id"])] = d.get("name") or "Sjåfør"
+    scope = {
+        "$or": [
+            {"fleet_id": fid},
+            {"fleet_id": {"$exists": False}, "driver_id": {"$in": list(names)}},
+        ],
+        "created_at": {"$gte": start, "$lt": end},
+    }
+    rows: dict = {}
+    totals = {"trips": 0, "cancelled": 0, "unpaid": 0, "gross": 0, "commission": 0, "net": 0}
+    async for t in db.trips.find(_real_trip_filter(scope)):
+        did = t.get("driver_id")
+        if not did:
+            continue
+        row = rows.setdefault(did, {
+            "driver_id": did, "driver_name": names.get(did) or t.get("driver_name") or "Sjåfør",
+            "trips": 0, "cancelled": 0, "unpaid": 0, "gross": 0, "commission": 0, "net": 0,
+            "first_trip_at": None, "last_trip_at": None, "payment_methods": {},
+        })
+        created = t.get("created_at")
+        if created:
+            row["first_trip_at"] = min(filter(None, [row["first_trip_at"], created]))
+            row["last_trip_at"] = max(filter(None, [row["last_trip_at"], created]))
+        status = t.get("status")
+        if status in ("cancelled", "cancelled_by_driver"):
+            row["cancelled"] += 1; totals["cancelled"] += 1
+            continue
+        if status not in ("arrived", "completed", "rated"):
+            continue
+        if t.get("payment_status") != "paid":
+            row["unpaid"] += 1; totals["unpaid"] += 1
+            continue
+        gross = _driver_gross(t)
+        rate = await _commission_for_trip(t)
+        net = int(round(gross * (1 - rate)))
+        method = str(t.get("payment_method") or "card")
+        row["payment_methods"][method] = row["payment_methods"].get(method, 0) + gross
+        for target in (row, totals):
+            target["trips"] += 1; target["gross"] += gross
+            target["commission"] += gross - net; target["net"] += net
+    drivers = sorted(rows.values(), key=lambda r: r["gross"], reverse=True)
+    return {"date": day, "timezone": "Europe/Oslo", "drivers": drivers, "totals": totals,
+            "generated_at": datetime.now(timezone.utc).isoformat()}
+
+
 @api.get("/fleet/drivers")
 async def fleet_drivers(current=Depends(require_fleet_owner)):
     fid = await get_fleet_id_for(current)

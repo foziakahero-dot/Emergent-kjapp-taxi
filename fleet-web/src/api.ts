@@ -70,6 +70,24 @@ export type FleetOverview = {
   commission_pct: number;
 };
 
+export type ShiftTotals = { trips: number; cancelled: number; unpaid: number; gross: number; commission: number; net: number };
+
+export type ShiftDriverRow = ShiftTotals & {
+  driver_id: string;
+  driver_name: string;
+  first_trip_at: string | null;
+  last_trip_at: string | null;
+  payment_methods: Record<string, number>;
+};
+
+export type FleetShiftReport = {
+  date: string;
+  timezone: string;
+  drivers: ShiftDriverRow[];
+  totals: ShiftTotals;
+  generated_at: string;
+};
+
 export type FleetDriver = {
   documents_verified?: boolean;
   missing_document_types?: string[];
@@ -275,6 +293,7 @@ export const api = {
 
   fleetMe: (): Promise<FleetMe> => http.get('/fleet/me').then((r) => r.data),
   overview: (): Promise<FleetOverview> => http.get('/fleet/overview').then((r) => r.data),
+  shiftReport: (date: string): Promise<FleetShiftReport> => http.get('/fleet/shift-report', { params: { date } }).then((r) => r.data),
   drivers: (): Promise<{ drivers: FleetDriver[] }> => http.get('/fleet/drivers').then((r) => r.data),
   driverDetail: (id: string): Promise<FleetDriverDetail> => http.get(`/fleet/drivers/${id}`).then((r) => r.data),
   live: (): Promise<FleetLive> => http.get('/fleet/live').then((r) => r.data),
