@@ -145,8 +145,9 @@ def test_driver_login_is_role_scoped_and_supports_email_or_phone():
     login = _block(SERVER, "login")
     assert 'body.client == "driver"' in login
     assert '"role": "driver"' in login
-    assert '"phone": {"$regex": phone_pattern}' in login
-    assert 'lookup = {"role": "driver", "email": identifier.lower()}' in login
+    assert "await _find_driver_by_phone(identifier)" in login
+    assert '{"role": "driver", "phone": {"$regex": phone_pattern}}' in _block(SERVER, "_find_driver_by_phone")
+    assert 'db.users.find_one({"role": "driver", "email": identifier.lower()})' in login
 
 
 def test_driver_profile_truth_comes_from_fleet_vehicle_assignment():
