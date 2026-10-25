@@ -1,0 +1,92 @@
+name: KJAPP Customer Android Runtime Smoke
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  get_customer_android:
+    name: Get latest successful KJAPP Customer APK
+    type: get-build
+    params:
+      platform: android
+      profile: apk
+      distribution: internal
+      git_commit_hash: 66d85b847b4054c3eb9d118f92f6bd750fbfbc91
+      wait_for_in_progress: false
+
+  customer_runtime_smoke:
+    name: Cold-launch KJAPP Customer on Android
+    needs: [get_customer_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    params:
+      build_id: ${{ needs.get_customer_android.outputs.build_id }}
+      flow_path: ['.maestro/customer-startup-smoke.yml']
+      record_screen: true
+      retries: 0
+      device_identifier: 'pixel_6'
+      android_system_image_package: 'system-images;android-35-ext15;google_apis_playstore;x86_64'
+    hooks:
+      after_maestro_tests:
+        - name: Capture KJAPP runtime diagnostics
+          if: ${{ always() }}
+          run: |
+            PID="$(adb shell pidof no.kjapp.app 2>/dev/null | tr -d '\r' || true)"
+            TOP="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -n 2 | tr -d '\r' || true)"
+            adb logcat -d -v threadtime > /tmp/kjapp-customer-logcat.txt 2>/dev/null || true
+            {
+              echo "APP_PID=$PID"
+              echo "TOP_ACTIVITY=$TOP"
+              echo "---- FOCUSED LOGCAT ----"
+              grep -Ei 'FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|JavascriptException|UnsatisfiedLinkError|dlopen failed|worklet|reanimated|SoLoader|Unable to load|Caused by|no.kjapp.app' /tmp/kjapp-customer-logcat.txt | tail -n 80 || true
+            } > /tmp/kjapp-customer-runtime-diagnostics.txt
+        - uses: eas/upload_artifact
+          if: ${{ always() }}
+          with:
+            type: other
+            name: kjapp-customer-runtime-diagnostics
+            path: /tmp/kjapp-customer-runtime-diagnostics.txt
+            ignore_error: true
+
+  collect_runtime:
+    name: Collect Customer runtime diagnostics
+    after: [customer_runtime_smoke]
+    outputs:
+      summary: ${{ steps.collect.outputs.summary }}
+    steps:
+      - uses: eas/download_artifact
+        id: download_diag
+        with:
+          name: kjapp-customer-runtime-diagnostics
+      - id: collect
+        name: Summarize runtime diagnostics
+        run: |
+          P="${{ steps.download_diag.outputs.artifact_path }}"
+          if [ -d "$P" ]; then
+            F="$(find "$P" -type f | head -n 1)"
+          else
+            F="$P"
+          fi
+          if [ -f "$F" ]; then
+            SUMMARY="$(cat "$F" | tr '\n' '|' | tr -d '\r' | cut -c1-7000)"
+          else
+            SUMMARY="DIAGNOSTIC_ARTIFACT_NOT_FOUND"
+          fi
+          set-output summary "$SUMMARY"
+
+  report_runtime:
+    name: Report Customer runtime diagnostics
+    after: [customer_runtime_smoke, collect_runtime]
+    type: github-comment
+    params:
+      payload: |
+        ## KJAPP Customer Android runtime smoke
+
+        **Maestro status:** ${{ after.customer_runtime_smoke.status }}
+
+        **Runtime diagnostics**
+        ```
+        ${{ after.collect_runtime.outputs.summary }}
+        ```
+
+        Tested APK: successful Customer build from main commit `66d85b8`.
