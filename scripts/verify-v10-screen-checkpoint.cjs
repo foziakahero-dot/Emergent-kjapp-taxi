@@ -29,15 +29,18 @@ const native = {
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
   AppState: { addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
-  StyleSheet: { create: value => value, hairlineWidth: 1, absoluteFill: { position: 'absolute', inset: 0 } },
+  StyleSheet: { flatten: value => Object.assign({}, ...(Array.isArray(value) ? value : [value])), create: value => value, hairlineWidth: 1, absoluteFill: { position: 'absolute', inset: 0 } },
 };
 const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
   'expo-image': { Image: 'DriverImage' },
+  '@/src/components/VoiceCommandButton': { VoiceCommandButton: 'VoiceCommandButton' },
+  'expo-notifications': { addNotificationReceivedListener: () => ({ remove() {} }) },
   'expo-speech': {speak(){},stop:async()=>{}},
   'expo-haptics': { ImpactFeedbackStyle: { Light: 'light', Medium: 'medium' }, impactAsync: async style => { hapticCalls.push(style); } },
   'expo-blur': { BlurTargetView: ({children,...props}) => React.createElement('BlurTargetView',props,children), BlurView: 'BlurView' },
   'expo-linear-gradient': { LinearGradient: 'LinearGradient' },
+  './Typography': { Text: 'Text', TextInput: 'TextInput' },
   './V10CategoryImage': { V10CategoryImage: 'V10CategoryImage' },
   './V10MinimizeHandle': { V10MinimizeHandle: 'V10MinimizeHandle' },
   './V10Glass': { V10Glass: 'V10Glass' },
@@ -68,7 +71,7 @@ const stubs = {
   '@/src/lib/api': {
     tripDriverPhotoSource: async () => null,
     tripsApi: { active: async () => ({}), list: async () => ({}), get: async () => ({}) },
-    mePlacesApi: { list: async () => ({}) }, paymentApi: { list: async () => ({}) },
+    mePlacesApi: { list: async () => ({}) }, promoApi: { wallet: async () => ({ balance_kr: 0 }) }, paymentApi: { list: async () => ({}) },
     authApi: { me: async () => ({}) }, authenticatedFileSource: async () => null,
     apiError: error => error.message,
     driverApi: { summary: async () => ({}), weekly: async () => ({}), payouts: async () => ({}), vehicles: async () => ({}), history: async () => ({}), selectVehicle: async id => { vehicleCalls++; return vehicleResult(id); }, ratings: async () => ({}), current: async () => ({}), identityVerification: async () => ({}) },
@@ -269,12 +272,14 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   stubs['@/src/components/AppleSignInButton'] = { AppleSignInButton: 'AppleButton' };
   const Login = load('driver-app', 'app/driver-login.tsx').default;
   async function fillLogin(tree) {
+    if (tree.root.findAllByProps({ testID: 'driver-login-use-password' }).length) await act(async () => button(tree, 'driver-login-use-password').props.onPress());
     await act(async () => {
       tree.root.findByProps({ testID: 'driver-login-identifier' }).props.onChangeText('  driver@example.test  ');
       tree.root.findByProps({ testID: 'driver-login-password' }).props.onChangeText('test-only-password');
     });
   }
   tree = await mount(Login); navigation = [];
+  await act(async () => button(tree, 'driver-login-use-password').props.onPress());
   await act(async () => button(tree, 'driver-login-submit').props.onPress());
   assert.equal(loginCalls, 0, 'Blank credentials must not invoke authentication');
   await fillLogin(tree);
@@ -310,7 +315,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
 
   stubs['@/src/components/AppleSignInButton'] = { AppleSignInButton: 'AppleButton' };
   navigation = []; socialCalls = 0;
-  tree = await mount(Login); const driverSocialRequest = deferred();
+  tree = await mount(Login); await act(async () => button(tree, 'driver-login-use-password').props.onPress()); const driverSocialRequest = deferred();
   socialLoginResult = () => driverSocialRequest.promise;
   await act(async () => { button(tree, 'driver-login-google').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
   assert.equal(socialCalls, 1, 'Driver social providers share the password lock');
@@ -318,7 +323,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(navigation.at(-1)[1], '/driver-approval'); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => null; navigation = [];
   await act(async () => button(tree, 'driver-login-google').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
-  tree = await mount(Login); socialLoginResult = async () => { throw new Error('Provider unavailable'); };
+  tree = await mount(Login); await act(async () => button(tree, 'driver-login-use-password').props.onPress()); socialLoginResult = async () => { throw new Error('Provider unavailable'); };
   await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.match(text(tree), /Provider unavailable/); assert.equal(button(tree, 'driver-login-submit').props.disabled, false); await unmount(tree);
   const Register = load('frontend', 'app/register.tsx').default;
   tree = await mount(Register); registerCalls = 0; navigation = [];

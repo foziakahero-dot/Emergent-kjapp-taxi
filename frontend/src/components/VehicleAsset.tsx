@@ -3,12 +3,12 @@ import { Image } from 'expo-image';
 
 type VehicleKind = 'ai-first' | 'enkelt' | 'trygg' | 'premium';
 
-// User's four transparent SNAR 3D renders from 25 October, bundled for offline use.
+// Four original illustrated SNAR clay icons, generated here on 25 October, bundled for offline use.
 const VEHICLES = {
-  'ai-first': { source: require('../../assets/vehicles/standard-3d.png'), label: 'SNAR Standard' },
-  enkelt: { source: require('../../assets/vehicles/enkelt-3d.png'), label: 'SNAR Enkelt' },
-  trygg: { source: require('../../assets/vehicles/xl-3d.png'), label: 'SNAR XL' },
-  premium: { source: require('../../assets/vehicles/premium-3d.png'), label: 'SNAR Premium' },
+  'ai-first': { source: require('../../assets/vehicles/standard-illustrated.png'), label: 'SNAR Standard' },
+  enkelt: { source: require('../../assets/vehicles/enkelt-illustrated.png'), label: 'SNAR Enkelt' },
+  trygg: { source: require('../../assets/vehicles/xl-illustrated.png'), label: 'SNAR XL' },
+  premium: { source: require('../../assets/vehicles/premium-illustrated.png'), label: 'SNAR Premium' },
 } as const;
 
 export function VehicleAsset({
@@ -27,7 +27,7 @@ export function VehicleAsset({
     <Image
       source={spec.source}
       style={{ width, height }}
-      contentFit="cover"
+      contentFit="contain"
       accessibilityRole="image"
       accessibilityLabel={spec.label}
       accessibilityState={{ selected }}

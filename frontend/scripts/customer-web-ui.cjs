@@ -20,10 +20,12 @@ const screenshot = (page,name) => runtime ? page.screenshot({path:path.join(runt
  try {
   const context = await browser.newContext({ viewport:{width:390,height:844},permissions:['geolocation'],geolocation:{latitude:59.9139,longitude:10.7522},reducedMotion:'reduce' });
   await context.addInitScript(() => localStorage.setItem('kjapp_token','local-fixture-only'));
-  const errors=[];const page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack));
+  let fareIncrement=0, noCars=false, offlineCars=false;
+  const errors=[];const page=await context.newPage();await page.clock.install();page.on('pageerror',error=>errors.push(error.stack));
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.pathname.startsWith('/api/')){
+    if(url.pathname==='/api/cars/nearby'&&offlineCars)return route.fulfill({status:503,body:'unavailable'});
     const now=new Date().toISOString();
     let data={};
     if(url.pathname==='/api/auth/me')data={id:'local-customer',email:'fixture@example.invalid',role:'user',fullName:'SNAR Test',legal_accepted:true};
@@ -34,10 +36,10 @@ const screenshot = (page,name) => runtime ? page.screenshot({path:path.join(runt
     else if(url.pathname==='/api/payment-methods')data=[];
     else if(url.pathname==='/api/places/reverse')data={label:'Testhentested'};
     else if(url.pathname==='/api/places/search')data={results:[{name:'Oslo S',lat:59.9108,lng:10.7535}]};
-    else if(url.pathname==='/api/cars/nearby')data={server_time:now,gps_fresh_seconds:60,cars:[
+    else if(url.pathname==='/api/cars/nearby')data={server_time:now,gps_fresh_seconds:60,cars:noCars?[]:[
      {id:'fixture-driver-1',type:'ai-first',lat:59.917,lng:10.760,eta_min:3,updated_at:now},
      {id:'fixture-driver-2',type:'premium',lat:59.91,lng:10.749,eta_min:4,updated_at:now}]};
-    else if(url.pathname==='/api/trips/estimate')data={duration_min:11,distance_km:3,pricing_version:1,geometry:{coordinates:[[10.7522,59.9139],[10.7535,59.9108]]},options:['ai-first','enkelt','trygg','premium'].map((vehicle_type,i)=>({vehicle_type,price:150+i*50,waiting_policy:{token:'fixture',free_minutes:2,per_minute:4,max_fee:50}}))};
+    else if(url.pathname==='/api/trips/estimate')data={duration_min:11,distance_km:3,pricing_version:1,geometry:{coordinates:[[10.7522,59.9139],[10.7535,59.9108]]},options:['ai-first','enkelt','trygg','premium'].map((vehicle_type,i)=>({vehicle_type,price:150+i*50+fareIncrement,waiting_policy:{token:'fixture',free_minutes:2,per_minute:4,max_fee:50}}))};
     return route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(data)});
    }
    return url.origin==='http://127.0.0.1:8765'?route.continue():route.abort();
@@ -61,6 +63,15 @@ const screenshot = (page,name) => runtime ? page.screenshot({path:path.join(runt
   await page.getByTestId('route-choose-vehicle').click();
   await page.getByTestId('vehicle-enkelt').waitFor();
   await page.locator('[data-testid^="vehicle-"] img').evaluateAll(images=>Promise.all(images.map(image=>image.decode())));
+  fareIncrement=25;
+  await page.clock.fastForward(31000);
+  await page.getByTestId('vehicle-ai-first').getByText('175 kr',{exact:true}).waitFor();
+  await page.getByTestId('vehicle-ai-first').getByTestId('price-updated').waitFor();
+  noCars=true;await page.clock.fastForward(2500);
+  await page.getByTestId('vehicle-availability').getByText('Ingen biler tilgjengelig nær hentestedet akkurat nå.').waitFor();
+  offlineCars=true;await page.clock.fastForward(2500);
+  await page.getByTestId('vehicle-availability').getByText('Kan ikke oppdatere ledige biler. Sjekk forbindelsen.').waitFor();
+  offlineCars=false;noCars=false;await page.clock.fastForward(2500);
   await screenshot(page,'customer-vehicles-after.png');
   await page.getByTestId('vehicle-enkelt').click();
   await page.getByTestId('home-ride-sheet-toggle').click();

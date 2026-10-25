@@ -28,6 +28,7 @@ type Props = {
   onPlace: (place: any) => void; onLocate: () => void; onVoice: () => void; onProfile: () => void; onNotifications?: () => void; onSchedule?: () => void;
   onPlaces: () => void; onRetryPlaces: () => void; onPayment: () => void; onConsent: () => void;
   onBook: () => void; onBack: () => void; onRetryQuote?: () => void; onHeight: (height: number) => void; stops: any[];
+  wallet?: { kind: 'apple' | 'google' | null; ready: boolean; busy: boolean; addWallet: () => Promise<boolean> };
   availability?: React.ReactNode; driverAvailability?: Availability; mapBlurTarget?: RefObject<View | null>; avatarVersion?: string;
 };
 const vehicleNames: Record<string, string> = { 'ai-first': 'SNAR Standard', enkelt: 'SNAR Enkelt', trygg: 'SNAR XL', premium: 'SNAR Premium' };
@@ -73,7 +74,7 @@ export function CustomerBookingView(p: Props) {
   return <><View style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: 20 }}><Tool id="booking-back" icon="chevL" label="Tilbake" onPress={back} target={p.mapBlurTarget} /></View>
     {sheet(p.reviewing ? <><Text style={[v10.heading, { marginBottom: 16 }]}>Bekreft tur</Text><CustomerJourney pickup={p.pickup} destination={p.destination.name} destinationDetail={arrivalTime(p.estimate?.duration_min, p.quotedAt) !== '—' ? `Ankomst ca. ${arrivalTime(p.estimate.duration_min, p.quotedAt)}` : p.destination.address} stops={p.stops} onPickup={() => p.onSearch('pickup')} onDestination={() => p.onSearch('dropoff')} />
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}><Info title="Kjøretøy" value={vehicleName} /><Info title="Betaling" value={paymentLabel(p.payment)} onPress={() => { p.onReview(false); p.onStage('payment'); }} /></View>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}><Text style={v10.secondary}>Fast pris, inkl. mva</Text><Text style={v10.title}>{kr(p.price)}</Text></View>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}><Text style={v10.secondary}>Fast pris, inkl. mva</Text><Price amount={p.price} large /></View>
       {p.promoBalance && p.promoBalance > 0 ? <Text testID="booking-promo-credit" style={[v10.caption, { marginTop: -10, marginBottom: 16, color: colors.online }]}>Du har {kr(p.promoBalance)} SNAR-kreditt. Rabatten trekkes automatisk og vises på kvitteringen.</Text> : null}
       {confirmedWaitingPolicy(p.waitingPolicy) ? <View style={{ marginBottom: 16 }}><Pressable testID="waiting-policy-consent" accessibilityRole="checkbox" accessibilityState={{ checked: p.waitingAccepted, disabled: p.busy }} disabled={p.busy} onPress={p.onConsent} style={{ flexDirection: 'row', gap: 10, minHeight: 44 }}><View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: p.waitingAccepted ? colors.accent : colors.lineStrong, backgroundColor: p.waitingAccepted ? colors.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>{p.waitingAccepted ? <V10Icon name="check" size={15} color={colors.accentOn} /> : null}</View><Text style={[v10.secondary, { flex: 1 }]}>Jeg godtar ventetid: {p.waitingPolicy.free_minutes} min gratis, så {kr(p.waitingPolicy.per_minute)}/min (maks {kr(p.waitingPolicy.max_fee)}).</Text></Pressable><Text style={[v10.caption, { marginTop: 6 }]}>Reserverer opptil {kr(Number(p.price || 0) + p.waitingPolicy.max_fee)} på kortet. Bare turpris og faktisk ventetid trekkes; resten frigjøres.</Text></View> : <View style={{ marginBottom: 16 }}><Text accessibilityRole="alert" style={v10.secondary}>Vilkårene for ventetid kunne ikke bekreftes.</Text>{p.onRetryQuote ? <V10Action testID="booking-refresh-quote" label="Oppdater tilbud" kind="soft" small onPress={p.onRetryQuote} disabled={p.busy} /> : null}</View>}
       {error}<V10Action testID="booking-confirm" label="Bekreft og bestill" disabled={!p.canBook} busy={p.busy} onPress={p.onBook} />
@@ -81,20 +82,21 @@ export function CustomerBookingView(p: Props) {
       <View style={styles.metrics}><Metric label="Kjøretid" value={finiteMetric(p.estimate?.duration_min, 'min')} /><Metric label="Distanse" value={finiteMetric(p.estimate?.distance_km, 'km')} /><Metric label="Ankomst" value={arrivalTime(p.estimate?.duration_min, p.quotedAt)} /></View>
       {error}<View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 56 }}><Pressable testID="route-adjust-pickup" accessibilityRole="button" accessibilityLabel="Juster hentested" onPress={() => p.onSearch('pickup')} style={{ height: 56, borderRadius: 16, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="pickup" /></Pressable></View><View style={{ flex: 1 }}><V10Action testID="route-choose-vehicle" label="Velg bil" disabled={!p.canReview} onPress={() => p.onStage('vehicles')} /></View></View>
     </> : p.stage === 'vehicles' ? <><View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 12 }}><Text style={[v10.heading, { flex: 1 }]}>Velg bil</Text><Text style={v10.caption} numberOfLines={1}>Til {p.destination.name} · {finiteMetric(p.estimate?.duration_min, 'min')}</Text></View>
+      <View accessibilityLiveRegion="polite" testID="vehicle-availability" style={{ marginBottom: 10 }}><Text style={v10.caption}>{p.driverAvailability?.issue === 'offline' ? 'Kan ikke oppdatere ledige biler. Sjekk forbindelsen.' : p.driverAvailability?.issue === 'empty' ? 'Ingen biler tilgjengelig nær hentestedet akkurat nå.' : 'Prisen oppdateres automatisk før bestilling.'}</Text>{Number(p.estimate?.options?.find((o: any) => o.vehicle_type === p.vehicle)?.surge_multiplier) > 1 ? <Text testID="surge-status" style={[v10.caption, { color: colors.accent }]}>Høy etterspørsel · pris med etterspørselstillegg</Text> : null}</View>
       <View accessibilityRole="radiogroup" accessibilityLabel="Kjøretøykategori" style={{ gap: 8 }}>{vehicleChoices.map(choice => <VehicleChoice key={choice.type} choice={choice} selected={p.vehicle === choice.type}
         option={p.estimate?.options?.find((option: any) => option.vehicle_type === choice.type)} eta={p.vehicleEtas?.[choice.type] ?? (p.vehicle === choice.type ? p.nearest : null)} onSelect={p.onVehicle} />)}</View>
       <Pressable testID="booking-payment-row" onPress={() => p.onStage('payment')} style={{ flexDirection: 'row', gap: 14, alignItems: 'center', minHeight: 48, paddingHorizontal: 4, paddingVertical: 12 }}><V10Icon name="payment" size={20} /><Text style={[v10.body, { flex: 1 }]}>{paymentLabel(p.payment)}</Text><V10Icon name="chevR" size={18} color={colors.textMuted} /></Pressable>
       {error}<V10Action testID="booking-review" label={`Bestill ${vehicleName} · ${kr(p.price)}`} disabled={!p.canReview} onPress={() => p.onReview(true)} />
     </> : <><Text style={[v10.heading, { marginBottom: 14 }]}>Betal med</Text>
       <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: colors.cardSubtle }}>
-        <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
+        <PaymentChoice id="apple" icon="apple" title="Apple Pay" subtitle={p.wallet?.busy ? 'Verifiserer betalingskort…' : 'Velg og verifiser kort fra Apple Pay'} disabled={!p.wallet?.ready || p.wallet.kind !== 'apple' || p.wallet.busy} onPress={() => { void p.wallet?.addWallet().then(saved => { if (saved) p.onStage('vehicles'); }); }} />
         <PaymentChoice id="card" icon="payment" title={paymentLabel(p.payment)} subtitle={p.payment ? cardExpiryLabel(p.payment) || 'Verifisert betalingskort' : 'Verifiser et kort før bestilling'} selected={Boolean(p.payment)} onPress={() => p.payment ? p.onStage('vehicles') : p.onPayment()} />
-        <PaymentChoice id="google" icon="google" title="Google Pay" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
+        <PaymentChoice id="google" icon="google" title="Google Pay" subtitle={p.wallet?.busy ? 'Verifiserer betalingskort…' : 'Velg og verifiser kort fra Google Pay'} disabled={!p.wallet?.ready || p.wallet.kind !== 'google' || p.wallet.busy} onPress={() => { void p.wallet?.addWallet().then(saved => { if (saved) p.onStage('vehicles'); }); }} />
         <PaymentChoice id="business" icon="work" title="SNAR Bedrift" subtitle="Bedriftsbetaling er ikke tilgjengelig" disabled onPress={() => {}} />
         <PaymentChoice id="vipps" icon="payment" title="Vipps" subtitle="Bruk betalingskort til denne turen" disabled onPress={() => {}} />
       </View>
       <View style={{ marginTop: 12 }}><V10Action testID="booking-add-payment" kind="soft" small icon="plus" label="Legg til betalingsmåte" onPress={p.onPayment} /></View>
-      <Text style={[v10.caption, { marginTop: 12 }]}>Turen reserveres på ditt verifiserte standardkort. Endre kort under Betalingsmåter.</Text>
+      <Text style={[v10.caption, { marginTop: 12 }]}>Apple Pay og Google Pay verifiserer og lagrer valgt kort som standardkort. Turbeløpet reserveres først når du bekrefter bestillingen. Endre kort under Betalingsmåter.</Text>
       <V10Action testID="booking-payment-done" kind="ghost" label="Tilbake til bilvalg" onPress={() => p.onStage('vehicles')} />{error}</>)}
   </>;
 }
@@ -123,9 +125,24 @@ function VehicleChoice({ choice, option, selected, eta, onSelect }: { choice: ty
       borderColor: progress.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.text] }), backgroundColor: progress.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.cardSubtle] }) }]} />
     <V10CategoryImage kind={choice.type} selected={selected} />
     <View style={{ flex: 1 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Text style={v10.body}>{choice.name}</Text>{seats ? <><Text style={v10.caption}>· {seats}</Text><V10Icon name="user" size={12} color={colors.textMuted} /></> : null}</View><Text style={v10.caption}>{supported ? arrival + choice.note : 'Ikke tilgjengelig'}</Text></View>
-    <View style={{ alignItems: 'flex-end', gap: 6 }}><Text style={{ fontFamily: font.semibold, fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] }}>{supported ? kr(option.price) : '—'}</Text>
+    <View style={{ alignItems: 'flex-end', gap: 6 }}><Price amount={supported ? option.price : null} />
       <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: selected ? 5 : 1.5, borderColor: selected ? colors.accent : colors.lineStrong }} /></View>
   </Pressable>;
+}
+function Price({ amount, large = false }: { amount: number | null; large?: boolean }) {
+  const reduced = useReducedMotion(), previous = useRef(amount);
+  const [changed, setChanged] = useState(false);
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const didChange = validVehiclePrice(previous.current) && validVehiclePrice(amount) && previous.current !== amount;
+    previous.current = amount;
+    if (!didChange) return;
+    setChanged(true);
+    if (!reduced) { opacity.setValue(.4); Animated.timing(opacity, { toValue: 1, duration: 450, useNativeDriver: true }).start(); }
+    const timer = setTimeout(() => setChanged(false), 5000);
+    return () => { clearTimeout(timer); opacity.stopAnimation(); };
+  }, [amount, reduced, opacity]);
+  return <View accessibilityLiveRegion="polite" style={{ alignItems: 'flex-end' }}><Animated.View style={{ opacity }}><Text style={large ? v10.title : { fontFamily: font.semibold, fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] }}>{validVehiclePrice(amount) ? kr(amount) : '—'}</Text></Animated.View>{changed ? <Text testID="price-updated" style={[v10.caption, { color: colors.accent }]}>Pris oppdatert</Text> : null}</View>;
 }
 export function validVehiclePrice(price: any) { return typeof price === 'number' && Number.isFinite(price) && price > 0; }
 export function confirmedWaitingPolicy(policy: any): boolean {

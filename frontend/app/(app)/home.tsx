@@ -4,6 +4,8 @@ import { V10Entrance } from '@/src/components/V10Entrance';
 import { V10Icon } from '@/src/components/V10Icon';
 import { v10 } from '@/src/components/V10UI';
 import { CustomerBookingView, confirmedPaymentMethod, confirmedWaitingPolicy, type BookingStage } from '@/src/components/CustomerBookingView';
+import { usePlatformWallet } from '@/src/lib/usePlatformWallet';
+import { createQuotePoller } from '@/src/lib/liveQuote';
 import { recentDestinations } from '@/src/lib/recentPlaces';
 import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
@@ -48,6 +50,8 @@ export default function Home() {
   const [quoteRevision, setQuoteRevision] = useState(0);
   const setQuote = useCallback((result: any) => { setEstimate(result); setQuotedAt(result ? Date.now() : null); }, []);
   const [waitingAccepted, setWaitingAccepted] = useState(false);
+  const [quoteFresh, setQuoteFresh] = useState(false);
+  const quoteActive = useRef({ focused: false, booking: false });
   const [selType, setSelType] = useState('ai-first');
   const bookingLock = useRef(false);
   const mapBlurTarget = useRef<View>(null);
@@ -107,9 +111,11 @@ export default function Home() {
   const loadMethods = useCallback(() => {
     const sequence = ++methodsSequence.current;
     setMethods([]);
-    paymentApi.list().then(r => { if (sequence === methodsSequence.current) setMethods(Array.isArray(r) ? r : (r?.payment_methods || r?.methods || [])); })
+    return paymentApi.list().then(r => { if (sequence === methodsSequence.current) setMethods(Array.isArray(r) ? r : (r?.payment_methods || r?.methods || [])); })
       .catch(() => { if (sequence === methodsSequence.current) setMethods([]); });
   }, [user?.id]);
+
+  const wallet = usePlatformWallet(user?.id, loadMethods);
 
   const loadPlaces = useCallback(async () => {
     const sequence = ++placesSequence.current;
@@ -123,6 +129,7 @@ export default function Home() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      quoteActive.current.focused = true;
       setActiveTripChecked(false);
       loadMethods();
       loadPlaces();
@@ -144,7 +151,7 @@ export default function Home() {
       void recover();
       const timer = setInterval(() => { if (AppState.currentState === 'active') void recover(); }, 2500);
       const listener = AppState.addEventListener('change', state => { if (state === 'active') void recover(); });
-      return () => { active = false; clearInterval(timer); listener.remove(); };
+      return () => { active = false; quoteActive.current.focused = false; clearInterval(timer); listener.remove(); };
     }, [loadMethods, loadPlaces, router]),
   );
 
@@ -190,18 +197,23 @@ export default function Home() {
     return () => { current = false; locationSequence.current++; };
   }, [refreshLocation]);
 
+  quoteActive.current.booking = booking;
   useEffect(() => {
-    let current = true;
-    setQuote(null);
-    if (!dropoff || (!locationReady && !selectedPickup)) return;
-    tripsApi.estimate({
-      pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
-      dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
-      stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
-    }).then(result => { if (current) { setQuote(result); setError(''); } })
-      .catch(error => { if (current) setError(apiError(error)); });
-    return () => { current = false; };
-  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops, quoteRevision]);
+    setQuote(null); setQuoteFresh(false);
+    if (!dropoff || (!locationReady && !selectedPickup) || activeTrip) return;
+    const poller = createQuotePoller({
+      active: () => quoteActive.current.focused && !quoteActive.current.booking && (AppState.currentState == null || AppState.currentState === 'active'),
+      fetchQuote: () => tripsApi.estimate({
+        pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
+        dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+        stops: stops.map(x => ({ address: x.name, lat: x.lat, lng: x.lng })),
+      }),
+      onQuote: result => { setQuote(result); setQuoteFresh(true); setError(''); },
+      onError: () => { setQuoteFresh(false); setError('Prisen kunne ikke oppdateres. Oppdater tilbudet før bestilling.'); },
+    });
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void poller.refresh(); });
+    return () => { poller.stop(); listener.remove(); };
+  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops, quoteRevision, activeTrip?.trip_id, user?.id]);
 
   const vehicleEtas: Record<string, number> = {};
   for (const car of cars) {
@@ -211,7 +223,7 @@ export default function Home() {
   const nearest = vehicleEtas[selType] ?? null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
-  useEffect(() => setWaitingAccepted(false), [estimate, selType]);
+  useEffect(() => setWaitingAccepted(false), [selType, waitingPolicy?.free_minutes, waitingPolicy?.per_minute, waitingPolicy?.max_fee]);
   const payMethod = confirmedPaymentMethod(methods);
   const quickPlaces = [...myPlaces, ...recentPlaces].filter(place => normalizeSearchPlace(place)).filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
 
@@ -227,7 +239,7 @@ export default function Home() {
       setError('SNAR trenger en fersk posisjon før du kan bestille tur.');
       return;
     }
-    if (!estimate || priceFor(selType) == null) {
+    if (!quoteFresh || quotedAt == null || Date.now() - quotedAt > 60000 || !estimate || priceFor(selType) == null) {
       setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
       return;
     }
@@ -284,7 +296,7 @@ export default function Home() {
           dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
           stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
         }).catch(() => null);
-        setQuote(fresh);
+        setQuote(fresh); setQuoteFresh(Boolean(fresh));
       } else if (e?.response?.status === 402) {
         setError('Legg til et betalingskort før du bestiller.');
         setTimeout(() => router.push('/payment-methods'), 700);
@@ -302,7 +314,7 @@ export default function Home() {
   const routeGeom = estimate?.geometry?.coordinates;
   const previewRoute = useRouteReveal(routeGeom, Boolean(!activeTrip && dropoff));
   // Payment and waiting consent are completed on the review screen.
-  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
+  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && quoteFresh && quotedAt != null && Date.now() - quotedAt <= 60000 && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
   const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy) && waitingAccepted);
   const selectedPrice = priceFor(selType);
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
@@ -338,7 +350,7 @@ export default function Home() {
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice} promoBalance={promoBalance}
         nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
-        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || wallet.error} wallet={wallet} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} stops={stops} driverAvailability={available}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}

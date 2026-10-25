@@ -77,16 +77,50 @@ Internal test drivers and ordinary test customers can belong to separate supply
 allowlists. These changes preserve those controls. Real map visibility still
 requires an eligible online driver, fresh GPS and the correct account pairing.
 
-Business target remains 12% service fee plus surge; no payment settings changed.
+Business target remains 12% service fee plus surge. A separate backend release makes that rate explicit for new trip snapshots; historical trips retain their recorded rate.
 ChatGPT usage is enabled in v0; the zero v0 balance still blocks its platform fee.
 
-## Original image provenance
+## Illustrated icon replacement and payments (25 October)
 
-Copied unchanged from the user's four 25 October 3D images:
+The category selector now uses four new, original illustrated clay icons generated
+here with the imagegen tool, rather than realistic car renders or remote images.
+Bundled files: `frontend/assets/vehicles/{standard,enkelt,xl,premium}-illustrated.png`.
+Prompt: one obviously illustrated, rounded premium toy/clay car, front three-quarter
+view facing left, full car centred on transparent alpha; simplified wheels and navy
+windows, matte white/navy #0B1A2C/red #FF0000; no real brand, photo, scene, text,
+logo, plate, watermark or chrome. Variants: white standard hatchback/red accent,
+red small city car/white roof, white XL SUV/navy roof, navy premium sedan/red trim.
+The older `*-3d.png` files are retained in repository history but no longer imported
+by the selector. `contentFit="contain"` preserves the whole illustrated silhouette.
 
-| Asset | Original file | SHA-256 |
-|---|---|---|
-| standard-3d.png | image-gen-1(20261025-170406).png | 9ebead79acc294faaba1e37614373046466de8ef43abf8f3ae1bb7d90e9992bd |
-| enkelt-3d.png | image-gen-2(20261025-170408).png | 46d442448d7e58e709b8e3657cab39101a0e9baaf3886baf4c3f935ffd8a9e1d |
-| premium-3d.png | image-gen-3(20261025-170411).png | 1f0cb158d01c04fe63642eee56e5c47ee53a21ce962a36c22740aba24fc43639 |
-| xl-3d.png | image-gen-4(20261025-170414).png | 0cf61ae4cd68d9ea0119fe8e8b508bc4fd48d39672452ebba9bc52611ce4a8fc |
+Quotes refresh sequentially every 30 seconds while the app and screen are active;
+active bookings are excluded. Failed refresh preserves the displayed price but
+blocks confirmation. Quotes older than 60 seconds cannot be booked. Route/account
+changes invalidate pending replies. Only actual price changes show "Pris oppdatert"
+and a short opacity transition; reduced motion keeps the textual announcement.
+The server still validates the quote/policy/version at booking and may require
+confirmation of a changed quote. Empty supply and network failures have distinct
+messages in the vehicle selector, including "Ingen biler tilgjengelig".
+
+Native Apple Pay/Google Pay use Stripe confirmPlatformPaySetupIntent; no new
+parallel trip-charge flow. SDK success must be independently verified by the
+server before selecting the verified wallet card as the standard reservation
+instrument. Cancellation is neutral, duplicate actions share a lock, stale account
+operations do not update the UI, and wallet support/configuration are checked.
+Web keeps the hosted card flow. The new default-card endpoint is released in the
+separate backend candidate based on the deployed 18fc05c source.
+
+Validation: frontend TypeScript; nearby-driver/panel/camera/scheduler tests; actual
+React screen suite (stale SMS-first Driver test adapter corrected); native wallet
+adapter tests for support, duplicates, cancellation, verification and mode/merchant
+gates; exported web at 390x844, 360x640 and 844x390 including actual automatic price
+change, empty/offline supply, restored panels and decoded bundled icons. All web
+API data are local fixtures; native SDK acceptance on physical devices is pending.
+
+Observed backend native config: Google Pay enabled in Stripe test mode; Apple
+merchant ID absent. Apple password accepted via secure browser authentication,
+but two-factor verification remains incomplete. No merchant identifier was invented,
+no certificate/entitlement was claimed ready, and Stripe live mode remains disabled.
+Beta approval still requires real two-device customer/driver and wallet acceptance,
+paired test accounts, and resolved release blockers. Earlier APK links do not
+contain these changes; use only the build linked to the final candidate commit.
