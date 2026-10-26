@@ -25,9 +25,9 @@ export default function CustomerTabsLayout() {
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen name="home" options={{ title: 'Hjem' }} />
-      <Tabs.Screen name="history" options={{ title: 'Aktivitet' }} />
+      <Tabs.Screen name="history" options={{ title: 'Turer' }} />
       <Tabs.Screen name="assist" options={{ title: 'SNAR AI' }} />
-      <Tabs.Screen name="messages" options={{ title: 'Meldinger' }} />
+      <Tabs.Screen name="messages" options={{ title: 'Meldinger', href: null }} />
       <Tabs.Screen name="profile" options={{ title: 'Profil' }} />
       <Tabs.Screen name="wallet" options={{ href: null }} />
     </Tabs>
