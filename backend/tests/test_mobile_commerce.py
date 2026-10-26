@@ -87,7 +87,7 @@ def test_customer_session_uses_verified_identity(env):
 
 
 def test_customer_cannot_enter_driver_app(env):
-    assert sign_in(env, 'driver').status_code == 401
+    assert sign_in(env, 'driver').status_code == 403
     assert env.db.raw.users.count_documents({}) == 1
 
 
@@ -104,8 +104,8 @@ def test_unapproved_driver_is_blocked(env):
 
 def test_approved_driver_retains_device_identity_check(env):
     env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'role': 'driver', 'approved': True, 'fleet_id': str(env.fid)}})
-    assert sign_in(env, 'driver').status_code == 200
-    assert env.risk.await_args.args[1:] == ('device-1', 'driver')
+    assert sign_in(env, 'driver').status_code == 403
+    env.verify.assert_not_awaited()
 
 
 def test_existing_identity_is_not_overwritten(env):
@@ -254,6 +254,9 @@ def test_native_config_live_requires_explicit_production_gate(env, monkeypatch):
     monkeypatch.setenv('QA_MODE', 'true')
     assert env.client.get('/payments/native/config').json()['enabled'] is False
     monkeypatch.setenv('QA_MODE', 'false')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('STRIPE_WEBHOOK_SECRET', 'whsec_fixture')
+    monkeypatch.setenv('DB_NAME', 'snar_production')
     assert env.client.get('/payments/native/config').json()['enabled'] is True
     env.stripe.api_key = 'sk_test_example'
     assert env.client.get('/payments/native/config').json()['enabled'] is False
@@ -289,3 +292,30 @@ def test_default_card_rejects_foreign_unverified_and_detached_methods(env):
     env.db.raw.payment_methods.update_one({'_id': ObjectId(mid)}, {'$set': {'verified': True, 'user_id': str(ObjectId())}})
     assert env.client.post('/payment-methods/' + mid + '/default').status_code == 404
     assert env.client.post('/payment-methods/not-an-id/default').status_code == 404
+
+
+def test_qa_google_requires_dedicated_audience(env, monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'qa')
+    monkeypatch.delenv('QA_GOOGLE_CLIENT_ID', raising=False)
+    assert env.client.get('/auth/native/config').json()['google_enabled'] is False
+    assert sign_in(env).status_code == 503
+    env.verify.assert_not_awaited()
+    monkeypatch.setenv('QA_GOOGLE_CLIENT_ID', 'qa-only-google-client')
+    assert env.client.get('/auth/native/config').json()['google_web_client_id'] == 'qa-only-google-client'
+    assert sign_in(env).status_code == 200
+    env.verify.assert_awaited_once_with('verified-token', 'qa-only-google-client')
+
+
+def test_driver_native_google_configuration_is_disabled(env):
+    assert env.client.get('/auth/native/config?client=driver').json()['google_enabled'] is False
+    assert sign_in(env, 'driver').status_code == 403
+    env.verify.assert_not_awaited()
+
+
+def test_live_config_rejects_qa_database_even_with_production_flag(env, monkeypatch):
+    env.stripe.api_key = 'sk_live_example'
+    for key, value in {'STRIPE_PUBLISHABLE_KEY': 'pk_live_example', 'APP_ENV': 'production',
+                       'NATIVE_PAYMENTS_LIVE_ENABLED': 'true', 'STRIPE_WEBHOOK_SECRET': 'whsec_fixture',
+                       'DB_NAME': 'snar_qa', 'QA_MODE': 'false'}.items():
+        monkeypatch.setenv(key, value)
+    assert env.client.get('/payments/native/config').json()['enabled'] is False

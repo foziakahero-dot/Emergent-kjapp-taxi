@@ -1,3 +1,4 @@
+from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -878,6 +879,7 @@ class TripRequest(BaseModel):
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
+    payment_provider: Literal["card", "google_pay"] = "card"
     use_promo_credit: bool = True
 
 
@@ -2926,13 +2928,14 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     if existing_active:
         raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
 
-    # Payment gate: user must have at least one VERIFIED payment method to book
-    pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
-    if pm_count == 0:
-        raise HTTPException(status_code=402, detail="Legg til et betalingskort før du bestiller tur")
-    verified_count = await db.payment_methods.count_documents({"user_id": current["id"], "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
-    if verified_count == 0:
-        raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
+    if body.payment_provider == "google_pay":
+        if not configured_payments(stripe)["google_pay_enabled"]:
+            raise HTTPException(503, "Google Pay er ikke aktivert for dette betalingsmiljøet")
+    else:
+        verified_count = await db.payment_methods.count_documents({"user_id": current["id"], **method_scope(stripe),
+            "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
+        if verified_count == 0:
+            raise HTTPException(402, "Legg til og verifiser et betalingskort før du bestiller tur")
 
     # Close the concurrent double-tap race between the active-trip check and insert.
     # This is a short creation lock only; canonical active-trip truth remains in db.trips.
@@ -3038,6 +3041,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "status": "payment_authorizing",
         "payment_status": "authorizing",
         "payment_flow": "reservation",
+        "payment_provider": body.payment_provider,
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -3984,7 +3988,7 @@ async def list_trip_messages(trip_id: str, current=Depends(get_current_user)):
 # ---- Payment methods ----
 @api.get("/payment-methods")
 async def list_payment_methods(current=Depends(require_customer)):
-    cursor = db.payment_methods.find({"user_id": current["id"]})
+    cursor = db.payment_methods.find({"user_id": current["id"], **method_scope(stripe)})
     methods = []
     async for m in cursor:
         m["id"] = str(m["_id"])
@@ -4095,23 +4099,15 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
     """Start a Stripe Checkout Session in 'setup' mode to save a card for future use."""
     if not stripe.api_key:
         raise HTTPException(500, "Stripe er ikke konfigurert")
-    # Reuse or create Stripe customer
-    user = await db.users.find_one({"_id": ObjectId(current["id"])})
-    customer_id = (user or {}).get("stripe_customer_id")
-    if not customer_id:
-        cust = stripe.Customer.create(email=user["email"], name=user.get("fullName") or user["email"], metadata={"user_id": current["id"]})
-        customer_id = cust.id
-        await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"stripe_customer_id": customer_id}})
+    if is_live(stripe) and not configured_payments(stripe)["enabled"]:
+        raise HTTPException(503, "Ekte Stripe-betaling er ikke aktivert")
+    customer_id = await customer_for_user(db, stripe, current["id"])
     origin = _trusted_checkout_origin(body.origin_url)
-    session = stripe.checkout.Session.create(
-        mode="setup",
-        customer=customer_id,
-        payment_method_types=["card"],
-        setup_intent_data={"usage": "off_session"},
-        success_url=f"{origin}/payment/setup-success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{origin}/payment/setup-cancel",
-        metadata={"user_id": current["id"]},
-    )
+    session = await asyncio.to_thread(stripe_client(stripe).v1.checkout.sessions.create, {
+        "mode": "setup", "customer": customer_id, "setup_intent_data": {"usage": "off_session"},
+        "success_url": f"{origin}/payment/setup-success?session_id={{CHECKOUT_SESSION_ID}}",
+        "cancel_url": f"{origin}/payment/setup-cancel", "metadata": {"user_id": current["id"]},
+    })
     return {"checkout_url": session.url, "session_id": session.id}
 
 
@@ -4142,12 +4138,14 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
     setup_status = getattr(si_obj, "status", None) or "unknown"
     verified = setup_status == "succeeded"
     pm = stripe.PaymentMethod.retrieve(pm_id)
+    if bool(pm.get("livemode", False)) != is_live(stripe) or _stripe_id(pm.get("customer")) != customer_id:
+        raise HTTPException(409, "Kortet tilhører et annet betalingsmiljø eller en annen kunde")
     card = pm.card
     # Upsert into payment_methods collection
     existing = await db.payment_methods.find_one({"user_id": current["id"], "stripe_payment_method_id": pm_id})
     if not existing:
         # If this is the first real card, make it default
-        has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
+        has_any = await db.payment_methods.count_documents({"user_id": current["id"], **method_scope(stripe)}) > 0
         if not has_any:
             is_default = True
         else:
@@ -4162,6 +4160,7 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
             "exp_year": card.exp_year,
             "stripe_payment_method_id": pm_id,
             "stripe_customer_id": s.customer,
+            "stripe_livemode": is_live(stripe),
             "stripe_setup_intent_id": getattr(si_obj, "id", None),
             "setup_status": setup_status,
             "verified": verified,
