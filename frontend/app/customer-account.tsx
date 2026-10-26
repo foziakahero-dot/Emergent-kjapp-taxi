@@ -36,7 +36,10 @@ export default function CustomerAccount() {
     if (googleLock.current) return;
     googleLock.current = true; setGoogleBusy(true); setGoogleError('');
     try {
-      const identity = await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig(), 'link');
+      // The backend provides the verified Google client configuration for all
+      // platforms. Do not use an empty web config here: the web flow now
+      // returns an OIDC ID token that is verified by the customer-only API.
+      const identity = await googleIdentity(await authApi.nativeConfig(), 'link');
       if (!identity) return;
       if (typeof identity === 'string') await authApi.linkGoogle(identity);
       else if (!identity.session?.linked) throw new Error('Google-koblingen kunne ikke bekreftes.');

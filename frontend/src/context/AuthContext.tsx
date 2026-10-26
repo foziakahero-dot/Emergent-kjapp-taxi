@@ -102,7 +102,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
     const epoch = ++sessionEpoch.current;
     const identity = provider === 'google'
-      ? await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig()) : await appleIdentity();
+      // The backend is the source of truth for both native and web Google
+      // client configuration. Web uses the same verified ID-token audience as
+      // native, so it must not silently fall back to an empty config.
+      ? await googleIdentity(await authApi.nativeConfig()) : await appleIdentity();
     if (!identity || epoch !== sessionEpoch.current) return null;
     const res = typeof identity === 'string' ? await authApi.nativeSignIn(provider, identity) : identity.session;
     if (epoch !== sessionEpoch.current) return null;
