@@ -1,4 +1,4 @@
-import { initStripe, initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
+import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 
 // null means not activated: use existing Checkout. Once an intent is created,
@@ -6,10 +6,8 @@ import { paymentApi } from './api';
 export async function payNative(tripId: string): Promise<boolean | null> {
   const config = await paymentApi.nativeConfig();
   if (!config.enabled) throw new Error('Testbetaling er midlertidig utilgjengelig. Prøv igjen senere.');
-  if (!config.test_mode || !config.publishable_key?.startsWith('pk_test_')) throw new Error('SNAR beta tillater bare testbetaling.');
+  if (!config.publishable_key?.startsWith(config.test_mode ? 'pk_test_' : 'pk_live_')) throw new Error('Betalingsoppsettet har ulike Stripe-miljøer.');
   const compiledMerchant = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || '';
-  await initStripe({ publishableKey: config.publishable_key, urlScheme: 'kjapp',
-    merchantIdentifier: compiledMerchant || undefined });
   const intent = await paymentApi.nativeIntent(tripId);
   if (!intent.client_secret || !intent.payment_intent_id) throw new Error('Stripe svarte uten betalingsinformasjon.');
   const initialized = await initPaymentSheet({

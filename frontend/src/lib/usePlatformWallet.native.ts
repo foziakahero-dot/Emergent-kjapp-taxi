@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
-import { confirmPlatformPaySetupIntent, initStripe, isPlatformPaySupported, PlatformPay } from '@stripe/stripe-react-native';
+import { confirmPlatformPaySetupIntent, isPlatformPaySupported, PlatformPay } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 import { apiError } from './format';
 type WalletKind = 'apple' | 'google';
@@ -11,7 +11,7 @@ export function usePlatformWallet(accountId?: string, onSaved?: () => Promise<vo
   useEffect(() => {
     const id = ++generation.current;
     setReady(false); setError(''); setBusy(false);
-    if (accountId && kind) void walletConfig(kind).then(config => { if (generation.current === id) setReady(Boolean(config)); }).catch(() => {});
+    if (accountId && kind) void walletConfig(kind).then(config => { if (generation.current === id) setReady(Boolean(config)); }).catch(() => { if (generation.current === id) setError('Kunne ikke kontrollere lommeboken. Kontroller forbindelsen og åpne betalingsvalget på nytt.'); });
     return () => { generation.current++; };
   }, [accountId, kind]);
   const addWallet = async () => {
@@ -21,7 +21,6 @@ export function usePlatformWallet(accountId?: string, onSaved?: () => Promise<vo
     try {
       const config = await walletConfig(kind);
       if (!config || !current()) throw new Error('Lommeboken er ikke tilgjengelig på denne enheten.');
-      await initStripe({ publishableKey: config.publishable_key, merchantIdentifier: config.apple_merchant_id || undefined, urlScheme: 'kjapp' });
       const setup = await paymentApi.nativeSetup();
       if (!current()) return false;
       if (!setup.client_secret || !setup.setup_intent_id) throw new Error('Stripe svarte uten kortverifisering.');
@@ -52,6 +51,6 @@ async function walletConfig(kind: WalletKind) {
   if (config.enabled !== true || !config.publishable_key?.startsWith(prefix)) return null;
   if (kind === 'google' && config.google_pay_enabled !== true) return null;
   if (kind === 'apple' && (!config.apple_merchant_id || config.apple_merchant_id !== process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID)) return null;
-  const supported = await isPlatformPaySupported(kind === 'google' ? { googlePay: { testEnv: config.test_mode === true, existingPaymentMethodRequired: true } } : undefined);
+  const supported = await isPlatformPaySupported(kind === 'google' ? { googlePay: { testEnv: config.test_mode === true, existingPaymentMethodRequired: false } } : undefined);
   return supported ? config : null;
 }

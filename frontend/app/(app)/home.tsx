@@ -115,6 +115,7 @@ export default function Home() {
       .catch(() => { if (sequence === methodsSequence.current) setMethods([]); });
   }, [user?.id]);
 
+  const [paymentProvider, setPaymentProvider] = useState<'card' | 'google_pay'>('card');
   const wallet = usePlatformWallet(user?.id, loadMethods);
 
   const loadPlaces = useCallback(async () => {
@@ -251,7 +252,8 @@ export default function Home() {
       setError('Bekreft ventetid og kortreservasjon før bestilling.');
       return;
     }
-    if (!payMethod) {
+    if (paymentProvider === 'google_pay' && !wallet.ready) { setError('Google Pay er ikke tilgjengelig. Velg betalingskort.'); return; }
+    if (paymentProvider === 'card' && !payMethod) {
       setError('Legg til et betalingskort før du bestiller.');
       router.push('/payment-methods');
       return;
@@ -261,6 +263,7 @@ export default function Home() {
     setBooking(true);
     try {
       const trip = await tripsApi.request({
+        payment_provider: paymentProvider,
         pickup_address: selectedPickup?.name || pickupLabel,
         pickup_lat: pickupPoint.lat,
         pickup_lng: pickupPoint.lng,
@@ -315,7 +318,7 @@ export default function Home() {
   const previewRoute = useRouteReveal(routeGeom, Boolean(!activeTrip && dropoff));
   // Payment and waiting consent are completed on the review screen.
   const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && quoteFresh && quotedAt != null && Date.now() - quotedAt <= 60000 && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
-  const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy) && waitingAccepted);
+  const canBook = canReview && Boolean((paymentProvider === 'google_pay' ? wallet.ready : payMethod) && confirmedWaitingPolicy(waitingPolicy) && waitingAccepted);
   const selectedPrice = priceFor(selType);
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
   const initials = (user?.fullName || 'SNAR').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
@@ -350,7 +353,7 @@ export default function Home() {
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice} promoBalance={promoBalance}
         nearest={nearest} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy}
         waitingAccepted={waitingAccepted} busy={booking} canReview={canReview} canBook={canBook}
-        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || wallet.error} wallet={wallet} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || wallet.error} wallet={wallet} paymentProvider={paymentProvider} onPaymentProvider={setPaymentProvider} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} stops={stops} driverAvailability={available}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
