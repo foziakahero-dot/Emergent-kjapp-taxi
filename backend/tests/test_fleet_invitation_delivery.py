@@ -16,6 +16,7 @@ from typing import Optional, List, Literal
 from unittest.mock import Mock, patch
 
 import mongomock
+from email_delivery import email_configured
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException, Request, Response
@@ -57,7 +58,7 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
                        Field=Field, EmailStr=EmailStr, Optional=Optional, List=List, Literal=Literal,
                        SpecialNeed=str, CURRENT_LEGAL_VERSION='2026-09',
                        Depends=lambda _: None, require_fleet_owner=None, require_admin=None,
-                       db=self.db, send_email=self.mail, _enforce_rate_limit=rate, queue_confirmation=confirmation,
+                       db=self.db, send_email=self.mail, email_configured=email_configured, _enforce_rate_limit=rate, queue_confirmation=confirmation,
                        hash_password=lambda _: 'test-hash', create_access_token=lambda *a:'test-token',
                        set_auth_cookie=lambda *a: None)
         names = {'DriverInviteRequest','DriverSignupRequest','_invite_expired','email_driver_invite_html',

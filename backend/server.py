@@ -41,6 +41,7 @@ from typing import Optional, List, Literal
 from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
+from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -875,6 +876,7 @@ class TripRequest(BaseModel):
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
+    payment_provider: Literal["card", "google_pay"] = "card"
 
 
 class RateTripRequest(BaseModel):
@@ -2829,13 +2831,16 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     if existing_active:
         raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
 
-    # Payment gate: user must have at least one VERIFIED payment method to book
-    pm_count = await db.payment_methods.count_documents({"user_id": current["id"]})
-    if pm_count == 0:
-        raise HTTPException(status_code=402, detail="Legg til et betalingskort før du bestiller tur")
-    verified_count = await db.payment_methods.count_documents({"user_id": current["id"], "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
-    if verified_count == 0:
-        raise HTTPException(status_code=402, detail="Kortet ditt må verifiseres før du kan bestille tur")
+    # A Google Pay booking supplies its wallet payment method at confirmation time;
+    # cards still require a verified saved method in the matching Stripe mode.
+    if body.payment_provider == "google_pay":
+        if not configured_payments(stripe)["google_pay_enabled"]:
+            raise HTTPException(status_code=503, detail="Google Pay er ikke aktivert for dette betalingsmiljøet")
+    else:
+        verified_count = await db.payment_methods.count_documents({"user_id": current["id"], **method_scope(stripe),
+            "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
+        if verified_count == 0:
+            raise HTTPException(status_code=402, detail="Legg til og verifiser et betalingskort før du bestiller tur")
 
     # Close the concurrent double-tap race between the active-trip check and insert.
     # This is a short creation lock only; canonical active-trip truth remains in db.trips.
@@ -2933,6 +2938,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "status": "payment_authorizing",
         "payment_status": "authorizing",
         "payment_flow": "reservation",
+        "payment_provider": body.payment_provider,
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -3864,7 +3870,7 @@ async def list_payment_methods(current=Depends(require_customer)):
     user = await db.users.find_one({"_id": ObjectId(current["id"])}) or {}
     default_id = user.get("default_payment_method_id")
     selected = await selected_payment_method(db, current["id"], user) if default_id else None
-    cursor = db.payment_methods.find({"user_id": current["id"]})
+    cursor = db.payment_methods.find({"user_id": current["id"], **method_scope(stripe)})
     methods = []
     async for m in cursor:
         m["id"] = str(m["_id"])
@@ -3896,7 +3902,7 @@ async def delete_payment_method(pm_id: str, current=Depends(require_customer)):
         oid = ObjectId(pm_id)
     except InvalidId:
         raise HTTPException(400, "Ugyldig ID")
-    r = await db.payment_methods.delete_one({"_id": oid, "user_id": current["id"]})
+    r = await db.payment_methods.delete_one({"_id": oid, "user_id": current["id"], **method_scope(stripe)})
     if r.deleted_count == 0:
         raise HTTPException(404, "Ikke funnet")
     return {"deleted": True}
@@ -3975,9 +3981,9 @@ class CardSetupRequest(BaseModel):
 async def stripe_card_setup(body: CardSetupRequest, request: Request, current=Depends(require_customer)):
     await _enforce_rate_limit(request, "payment-setup", 20, 900)
     """Start a Stripe Checkout Session in 'setup' mode to save a card for future use."""
-    if not stripe.api_key:
-        raise HTTPException(500, "Stripe er ikke konfigurert")
-    client = stripe.StripeClient(stripe.api_key, max_network_retries=1)
+    if not configured_payments(stripe)["enabled"]:
+        raise HTTPException(503, "Stripe-betaling er ikke aktivert for dette miljøet")
+    client = stripe_client(stripe)
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     if not user:
         raise HTTPException(404, "Bruker ikke funnet")
@@ -3987,13 +3993,7 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
     if origin != body.origin_url.strip().rstrip("/"):
         raise HTTPException(400, "Appens returadresse må godkjennes i Render-oppsettet.")
     try:
-        customer_id = user.get("stripe_customer_id")
-        if not customer_id:
-            customer = await asyncio.to_thread(client.v1.customers.create,
-                {"email": user["email"], "name": user.get("fullName") or user["email"], "metadata": {"user_id": current["id"]}},
-                {"idempotency_key": f"snar-customer-v1-{current['id']}"})
-            customer_id = customer.id
-            await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"stripe_customer_id": customer_id}})
+        customer_id = await customer_for_user(db, stripe, current["id"])
         session = await asyncio.to_thread(client.v1.checkout.sessions.create, {
             "mode": "setup", "currency": "nok", "customer": customer_id,
             "integration_identifier": "snar_card_setup_" + "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(8)),
@@ -4010,13 +4010,17 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
 @api.get("/payments/card/setup/{session_id}")
 async def stripe_card_setup_status(session_id: str, current=Depends(require_customer)):
     """After Stripe redirects back, fetch the saved payment method and store it in Mongo."""
-    client = stripe.StripeClient(stripe.api_key, max_network_retries=1)
+    if not configured_payments(stripe)["enabled"]:
+        raise HTTPException(503, "Stripe-betaling er ikke aktivert for dette miljøet")
+    client = stripe_client(stripe)
     try:
         s = await asyncio.to_thread(client.v1.checkout.sessions.retrieve, session_id, {"expand": ["setup_intent"]})
     except stripe.StripeError:
         raise HTTPException(400, "Kunne ikke hente kortregistreringen. Prøv igjen.") from None
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
-    customer_id = (user or {}).get("stripe_customer_id")
+    customer_id = (user or {}).get("stripe_customer_id_live" if is_live(stripe) else "stripe_customer_id_test")
+    if not customer_id and bool((user or {}).get("stripe_customer_livemode", False)) == is_live(stripe):
+        customer_id = (user or {}).get("stripe_customer_id")
     if not customer_id or (s.get("metadata") or {}).get("user_id") != current["id"] or _stripe_id(s.get("customer")) != customer_id:
         raise HTTPException(404, "Betalingsoppsett ikke funnet")
     if s.mode != "setup" or s.status != "complete":
@@ -4035,14 +4039,15 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
     setup_status = getattr(si_obj, "status", None) or "unknown"
     verified = setup_status == "succeeded"
     pm = await asyncio.to_thread(client.v1.payment_methods.retrieve, pm_id)
-    if pm.get("type") != "card" or _stripe_id(pm.get("customer")) != customer_id:
-        raise HTTPException(409, "Betalingsmåten er ikke et verifisert kort for denne kunden")
+    if (pm.get("type") != "card" or _stripe_id(pm.get("customer")) != customer_id
+            or bool(pm.get("livemode", False)) != is_live(stripe)):
+        raise HTTPException(409, "Betalingsmåten er ikke et verifisert kort for denne kunden eller betalingsmiljøet")
     card = pm.card
     # Upsert into payment_methods collection
-    existing = await db.payment_methods.find_one({"user_id": current["id"], "stripe_payment_method_id": pm_id})
+    existing = await db.payment_methods.find_one({"user_id": current["id"], **method_scope(stripe), "stripe_payment_method_id": pm_id})
     if not existing:
         # If this is the first real card, make it default
-        has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
+        has_any = await db.payment_methods.count_documents({"user_id": current["id"], **method_scope(stripe)}) > 0
         if not has_any:
             is_default = True
         else:
@@ -4057,6 +4062,7 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
             "exp_year": card.exp_year,
             "stripe_payment_method_id": pm_id,
             "stripe_customer_id": s.customer,
+            "stripe_livemode": is_live(stripe),
             "stripe_setup_intent_id": getattr(si_obj, "id", None),
             "setup_status": setup_status,
             "verified": verified,
@@ -4068,8 +4074,8 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
         return {"ready": True, "card": doc, "verified": verified}
     # Update existing record's verification state
     await db.payment_methods.update_one(
-        {"_id": existing["_id"]},
-        {"$set": {"setup_status": setup_status, "verified": verified}},
+        {"_id": existing["_id"], **method_scope(stripe)},
+        {"$set": {"setup_status": setup_status, "verified": verified, "stripe_livemode": is_live(stripe)}},
     )
     existing["id"] = str(existing["_id"]); existing.pop("_id", None)
     existing["setup_status"] = setup_status
@@ -5309,6 +5315,15 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
     now_iso = datetime.now(timezone.utc).isoformat()
     driver_oid = ObjectId(current["id"])
     if body.online:
+        # A green switch without a fresh device position is not a usable online
+        # state: dispatch filters on this same GPS freshness guarantee. The app
+        # therefore uploads a real position before calling this endpoint.
+        if (
+            current.get("last_lat") is None
+            or current.get("last_lng") is None
+            or not _fresh_driver_location(current.get("last_location_at"))
+        ):
+            raise HTTPException(status_code=409, detail="Hent en fersk GPS-posisjon før du går online")
         assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
         compliance = await _driver_shift_compliance(current, assigned_vehicle)
         if not compliance.get("operational"):
@@ -5368,7 +5383,28 @@ async def driver_online(body: DriverOnlineRequest, current=Depends(require_drive
             {"driver_id": current["id"], "ended_at": None},
             {"$set": {"ended_at": now_iso}},
         )
-    return {"online": body.online}
+    return {"online": body.online, "vehicle_id": current.get("vehicle_id")}
+
+
+@api.get("/driver/compliance")
+async def driver_compliance(current=Depends(require_driver)):
+    """Return the canonical shift gate before the Driver attempts to go online.
+
+    This is deliberately read-only. It exposes the same document, vehicle and
+    profile-photo checks enforced by ``/driver/online`` so the app can explain a
+    real blocker instead of showing a generic network error or a false green
+    switch.
+    """
+    assigned_vehicle = await _assigned_fleet_vehicle(current, required=False)
+    result = await _driver_shift_compliance(current, assigned_vehicle)
+    result["online"] = bool(current.get("online"))
+    result["location_ready"] = bool(
+        current.get("last_lat") is not None
+        and current.get("last_lng") is not None
+        and _fresh_driver_location(current.get("last_location_at"))
+    )
+    result["last_location_at"] = current.get("last_location_at")
+    return result
 
 
 # ---- Push endpoints ----
@@ -8481,7 +8517,7 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     """
     if not AUTO_CHARGE_ENABLED:
         return {"attempted": False, "reason": "disabled"}
-    if not stripe.api_key:
+    if not stripe.api_key or not configured_payments(stripe)["enabled"]:
         return {"attempted": False, "reason": "stripe_not_configured"}
     if not trip or trip.get("payment_status") == "paid":
         return {"attempted": False, "reason": "already_paid_or_missing"}
@@ -8501,11 +8537,15 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
         return {"attempted": False, "reason": "already_captured"}
 
     user = await db.users.find_one({"_id": ObjectId(user_id)})
-    customer_id = (user or {}).get("stripe_customer_id")
+    customer_id = (user or {}).get("stripe_customer_id_live" if is_live(stripe) else "stripe_customer_id_test")
+    if not customer_id and bool((user or {}).get("stripe_customer_livemode", False)) == is_live(stripe):
+        customer_id = (user or {}).get("stripe_customer_id")
     if not customer_id:
         return {"attempted": False, "reason": "no_stripe_customer"}
 
-    pm = await selected_payment_method(db, user_id, user)
+    pm = await db.payment_methods.find_one({"user_id": user_id, **method_scope(stripe),
+        "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}},
+        sort=[("is_default", -1), ("created_at", -1)])
     if not pm:
         return {"attempted": False, "reason": "no_verified_payment_method"}
 
@@ -8542,16 +8582,15 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     payment_intent = None
     try:
         payment_intent = await asyncio.to_thread(
-            stripe.PaymentIntent.create,
-            **kwargs,
-            idempotency_key=f"kjapp-trip-auto-charge-{trip_id}",
+            stripe_client(stripe).v1.payment_intents.create,
+            {**kwargs}, {"idempotency_key": f"kjapp-trip-auto-charge-{trip_id}"},
         )
         pi_id = _stripe_id(payment_intent)
         status = getattr(payment_intent, "status", None) or payment_intent.get("status")
         if status != "succeeded":
             if pi_id:
                 try:
-                    await asyncio.to_thread(stripe.PaymentIntent.cancel, pi_id)
+                    await asyncio.to_thread(stripe_client(stripe).v1.payment_intents.cancel, pi_id)
                 except Exception:
                     pass
             await db.payment_transactions.update_one(
@@ -8624,7 +8663,7 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
         pi_id = _stripe_id(pi) or _stripe_id(payment_intent)
         if pi_id:
             try:
-                await asyncio.to_thread(stripe.PaymentIntent.cancel, pi_id)
+                await asyncio.to_thread(stripe_client(stripe).v1.payment_intents.cancel, pi_id)
             except Exception:
                 pass
         await db.payment_transactions.update_one(
@@ -8700,8 +8739,9 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
     amount_nok = int(trip.get("price") or 0)
     if amount_nok <= 0:
         raise HTTPException(status_code=400, detail="Ugyldig beløp")
-    if not stripe.api_key:
-        raise HTTPException(status_code=500, detail="Stripe er ikke konfigurert")
+    if not configured_payments(stripe)["enabled"]:
+        raise HTTPException(status_code=503, detail="Stripe-betaling er ikke aktivert for dette miljøet")
+    checkout_client = stripe_client(stripe)
     # Reuse an existing open Checkout session for this ride so repeated taps/network retries
     # cannot create multiple simultaneous payment intents for the same fare.
     existing_payment = await db.payment_transactions.find_one(
@@ -8715,7 +8755,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
     )
     if existing_payment and existing_payment.get("session_id"):
         try:
-            existing_session = stripe.checkout.Session.retrieve(existing_payment["session_id"])
+            existing_session = await asyncio.to_thread(checkout_client.v1.checkout.sessions.retrieve, existing_payment["session_id"])
             if existing_session.get("status") == "open" and existing_session.get("url"):
                 return {"checkout_url": existing_session.url, "session_id": existing_session.id, "reused": True}
         except stripe.error.StripeError:
@@ -8794,7 +8834,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         latest = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
         if latest and latest.get("payment_status") == "paid":
             raise HTTPException(409, "Turen er allerede betalt")
-        session = stripe.checkout.Session.create(**checkout_kwargs)
+        session = await asyncio.to_thread(checkout_client.v1.checkout.sessions.create, checkout_kwargs)
         await db.payment_transactions.insert_one({
             "session_id": session.id,
             "trip_id": body.trip_id,
@@ -8803,6 +8843,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
             "currency": "nok",
             "status": "initiated",
             "payment_status": "pending",
+            "stripe_livemode": is_live(stripe),
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
             **connect_fields,
@@ -8810,7 +8851,7 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
     except Exception:
         if session is not None and getattr(session, "id", None):
             try:
-                stripe.checkout.Session.expire(session.id)
+                await asyncio.to_thread(checkout_client.v1.checkout.sessions.expire, session.id)
             except Exception:
                 pass
         raise
@@ -8830,7 +8871,9 @@ async def get_payment_status(session_id: str, current=Depends(require_customer))
     # Webhook-fallback: poll Stripe directly if still pending
     if record.get("payment_status") != "paid":
         try:
-            s = stripe.checkout.Session.retrieve(session_id)
+            s = await asyncio.to_thread(stripe_client(stripe).v1.checkout.sessions.retrieve, session_id)
+            if bool(s.get("livemode", False)) != is_live(stripe):
+                raise HTTPException(409, "Betalingen tilhører et annet betalingsmiljø")
             metadata = s.get("metadata") or {}
             amount_matches = s.get("amount_total") == int(record.get("amount") or 0) * 100
             identity_matches = metadata.get("trip_id") == record.get("trip_id") and metadata.get("user_id") == current["id"]
@@ -8887,6 +8930,8 @@ async def stripe_webhook(request: Request):
         raise HTTPException(400, "Webhook error")
     if reject_live_qa_stripe_event(APP_ENV, event):
         raise HTTPException(400, "Live-mode Stripe events are disabled in QA.")
+    if bool(event.get("livemode", False)) != is_live(stripe):
+        return {"status": "ignored"}
     if await ride_reservations.webhook(event):
         return {"status": "ok"}
     if await handle_native_payment_webhook(event):
@@ -11014,7 +11059,9 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
                 if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
                     kwargs["reverse_transfer"] = True
                     kwargs["refund_application_fee"] = True
-                refund_client = stripe.StripeClient(stripe.api_key, max_network_retries=1)
+                if is_live(stripe) and not configured_payments(stripe)["enabled"]:
+                    raise HTTPException(503, "Stripe-refusjon er ikke aktivert for dette miljøet")
+                refund_client = stripe_client(stripe)
                 sr = await asyncio.to_thread(refund_client.v1.refunds.create, kwargs,
                     {"idempotency_key": f"kjapp-refund-{body.trip_id}-{already}-{amount}"})
                 if sr.get("status") in ("failed", "canceled"):

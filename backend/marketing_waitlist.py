@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+from email_delivery import email_configured
 
 
 WAITLIST_ROLES = ("passenger", "driver", "fleet_owner")
@@ -19,7 +20,7 @@ _PHONE_RE = re.compile(r"^[+\d ()-]{8,30}$")
 class MarketingWaitlistRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     phone: str = Field(min_length=8, max_length=30)
-    email: Optional[str] = Field(default="", max_length=254)
+    email: str = Field(min_length=3, max_length=254)
     city: str = Field(min_length=2, max_length=100)
     role: Literal["passenger", "driver", "fleet_owner"]
     # Honeypot. Real UI leaves this blank.
@@ -39,7 +40,7 @@ def normalize_phone(value: str) -> str:
 
 def normalize_email(value: Optional[str]) -> str:
     email = (value or "").strip().lower()
-    if email and not _EMAIL_RE.fullmatch(email):
+    if not _EMAIL_RE.fullmatch(email):
         raise ValueError("invalid email")
     return email
 
@@ -176,7 +177,7 @@ def install_marketing_waitlist(api, db, confirmation=None, require_admin=None, a
         for record in entries:
             record["confirmation_email_status"] = deliveries.get(record["id"], "not_requested")
         return {"items": entries, "total": total, "limit": limit, "offset": offset,
-                "email_configured": bool(os.environ.get("SENDGRID_API_KEY", "").strip())}
+                "email_configured": email_configured()}
 
     class InterestStatusRequest(BaseModel):
         status: Literal["new", "contacted", "archived"]

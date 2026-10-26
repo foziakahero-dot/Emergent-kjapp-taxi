@@ -25,6 +25,8 @@ class Collection:
     def __init__(self, collection): self.raw = collection
     async def find_one(self, query, **kwargs): return self.raw.find_one(query, **kwargs)
     async def update_one(self, query, update, **kwargs): return self.raw.update_one(query, update, **kwargs)
+    async def update_many(self, query, update): return self.raw.update_many(query, update)
+    async def count_documents(self, query): return self.raw.count_documents(query)
     async def insert_one(self, data): return self.raw.insert_one(data)
     async def count_documents(self, query): return self.raw.count_documents(query)
     def find(self, query): return Cursor(self.raw.find(query))
@@ -253,3 +255,49 @@ def test_native_beta_payment_rejects_live_keys(env, monkeypatch):
 def test_native_beta_supports_restricted_test_key(env):
     env.stripe.api_key = 'rk_test_fixture'
     assert env.client.get('/payments/native/config').json()['enabled'] is True
+
+
+def test_native_config_live_requires_explicit_production_gate(env, monkeypatch):
+    env.stripe.api_key = 'sk_live_example'
+    monkeypatch.setenv('STRIPE_PUBLISHABLE_KEY', 'pk_live_example')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('NATIVE_PAYMENTS_LIVE_ENABLED', 'true')
+    monkeypatch.setenv('APP_ENV', 'production')
+    monkeypatch.setenv('QA_MODE', 'true')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('QA_MODE', 'false')
+    assert env.client.get('/payments/native/config').json()['enabled'] is True
+    env.stripe.api_key = 'sk_test_example'
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+
+
+def test_wallet_setup_verifies_ownership_and_records_wallet(env):
+    env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'stripe_customer_id': 'cus_wallet'}})
+    setup = {'status': 'succeeded', 'customer': 'cus_wallet', 'metadata': {'user_id': str(env.uid)}, 'payment_method': 'pm_wallet'}
+    env.stripe.SetupIntent = SimpleNamespace(retrieve=Mock(return_value=setup))
+    env.stripe.PaymentMethod = SimpleNamespace(retrieve=Mock(return_value={'id': 'pm_wallet', 'customer': 'cus_wallet', 'card': {'brand': 'visa', 'last4': '4242', 'wallet': {'type': 'google_pay'}}}))
+    result = env.client.get('/payments/native/setup-intent/seti_wallet')
+    assert result.status_code == 200
+    card = result.json()['card']
+    assert result.json()['verified'] is True
+    assert card['label'] == 'Google Pay' and card['wallet_type'] == 'google_pay'
+    other = env.db.raw.payment_methods.insert_one({'user_id': str(env.uid), 'is_default': True}).inserted_id
+    selected = env.client.post('/payment-methods/' + card['id'] + '/default')
+    assert selected.status_code == 200 and selected.json()['selected'] is True
+    assert env.db.raw.payment_methods.find_one({'_id': other})['is_default'] is False
+    assert env.db.raw.payment_methods.find_one({'_id': ObjectId(card['id'])})['is_default'] is True
+    setup['metadata']['user_id'] = str(ObjectId())
+    assert env.client.get('/payments/native/setup-intent/seti_wallet').status_code == 404
+
+
+def test_default_card_rejects_foreign_unverified_and_detached_methods(env):
+    env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'stripe_customer_id': 'cus_wallet'}})
+    method = {'user_id': str(env.uid), 'verified': True, 'setup_status': 'succeeded', 'stripe_payment_method_id': 'pm_bad'}
+    mid = str(env.db.raw.payment_methods.insert_one(method).inserted_id)
+    env.stripe.PaymentMethod = SimpleNamespace(retrieve=Mock(return_value={'customer': 'cus_other'}))
+    assert env.client.post('/payment-methods/' + mid + '/default').status_code == 409
+    env.db.raw.payment_methods.update_one({'_id': ObjectId(mid)}, {'$set': {'verified': False}})
+    assert env.client.post('/payment-methods/' + mid + '/default').status_code == 404
+    env.db.raw.payment_methods.update_one({'_id': ObjectId(mid)}, {'$set': {'verified': True, 'user_id': str(ObjectId())}})
+    assert env.client.post('/payment-methods/' + mid + '/default').status_code == 404
+    assert env.client.post('/payment-methods/not-an-id/default').status_code == 404

@@ -242,6 +242,7 @@ export default function Assist() {
         dropoff_lat: dropoff.lat,
         dropoff_lng: dropoff.lng,
         vehicle_type: vehicle,
+        payment_provider: payMethod?.wallet === 'google_pay' ? 'google_pay' : 'card',
         ...(selectedOption.waiting_policy ? { waiting_policy_token: selectedOption.waiting_policy.token, quoted_price: selectedOption.price, quoted_pricing_version: estimate.pricing_version } : {}),
       });
       router.push(`/booking/${trip.trip_id}`);
