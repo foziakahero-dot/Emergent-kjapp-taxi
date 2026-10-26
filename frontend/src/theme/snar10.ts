@@ -97,10 +97,39 @@ export const typography = {
 } satisfies Record<string, TextStyle>;
 export const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 };
 export const radius = { xs: 8, sm: 12, md: 18, lg: 24, xl: 30 };
-export const animation = { micro: 150, component: 210, sheet: 280, pop: 320, fade: 240,
-  easeOut: [.2, .8, .2, 1] as const, easeSpring: [.34, 1.32, .52, 1] as const, easeIO: [.65, 0, .35, 1] as const };
-export const dock = { inset: 16, bottom: 22, height: 66, radius: 24, padding: 6,
-  itemWidth: 58, itemHeight: 54, itemRadius: 16, aiSize: 52, aiRadius: 17 };
+export const animation = {
+  micro: 150,
+  component: 210,
+  sheet: 280,
+  pop: 320,
+  fade: 240,
+  pressIn: 100,
+  pressScale: .96,
+  aiPulse: 1500,
+  aiStagger: 280,
+  easeOut: [.2, .8, .2, 1] as const,
+  easeSpring: [.34, 1.32, .52, 1] as const,
+  easeIO: [.65, 0, .35, 1] as const,
+};
+
+/** Locked SNAR customer dock specification. */
+export const dock = {
+  inset: 16,
+  bottom: 22,
+  height: 74,
+  radius: 28,
+  padding: 6,
+  itemWidth: 64,
+  itemHeight: 56,
+  itemRadius: 18,
+  aiSize: 62,
+  aiRadius: 31,
+  aiLift: 12,
+  aiHaloSize: 72,
+  labelSize: 11,
+  labelLineHeight: 14,
+  aiLabelGap: 4,
+};
 export const sheet = { radius: 30, top: 10, horizontal: 20, bottom: 34,
   handleWidth: 36, handleHeight: 5, handleGap: 14 };
 export const toggle = { width: 50, height: 30, thumb: 24, inset: 3, travel: 20 };
