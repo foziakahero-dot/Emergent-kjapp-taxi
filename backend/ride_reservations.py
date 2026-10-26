@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from promo_credits import platform_fee_ore
 from fastapi import HTTPException
+from payment_modes import customer_for_user, method_scope, is_live, payment_config, stripe_client
 
 
 def value(obj, key, default=None):
@@ -24,10 +25,11 @@ class RideReservations:
         self.dispatch, self.destination = dispatch, destination
 
     def client(self):
-        key = os.environ.get("STRIPE_SECRET_KEY") or self.stripe.api_key
-        if not key:
+        if not self.stripe.api_key:
             raise HTTPException(503, "Kortreservasjon er midlertidig utilgjengelig")
-        return self.stripe.StripeClient(key, max_network_retries=1, http_client=self.stripe.RequestsClient(timeout=15))
+        if is_live(self.stripe) and not payment_config(self.stripe)["enabled"]:
+            raise HTTPException(503, "Ekte Stripe-betaling er ikke aktivert")
+        return stripe_client(self.stripe)
 
     async def notify(self, trip, title, body):
         for uid, url in ((trip.get("user_id"), f"/receipt/{trip['trip_id']}"),
@@ -44,7 +46,8 @@ class RideReservations:
     def validate(self, pi, record):
         metadata = value(pi, "metadata", {}) or {}
         return bool(
-            stripe_id(pi) == record.get("stripe_payment_intent_id")
+            bool(value(pi, "livemode", False)) == bool(record.get("stripe_livemode", False))
+            and stripe_id(pi) == record.get("stripe_payment_intent_id")
             and value(pi, "currency") == "nok"
             and int(value(pi, "amount", 0)) == record["authorized_amount_ore"]
             and stripe_id(value(pi, "customer")) == record["stripe_customer_id"]
@@ -58,13 +61,21 @@ class RideReservations:
         client = self.client()
         record = await self.record(trip)
         if not record:
-            user = await self.db.users.find_one({"_id": ObjectId(trip["user_id"])}) or {}
-            pm = await self.db.payment_methods.find_one({
-                "user_id": trip["user_id"], "verified": True, "setup_status": "succeeded",
-                "stripe_payment_method_id": {"$type": "string"},
-            }, sort=[("is_default", -1), ("created_at", -1)])
-            if not pm or not user.get("stripe_customer_id"):
-                raise HTTPException(402, "Legg til og bekreft et betalingskort før du bestiller")
+            wallet = trip.get("payment_provider") == "google_pay"
+            if wallet and not payment_config(self.stripe)["google_pay_enabled"]:
+                raise HTTPException(503, "Google Pay er ikke aktivert")
+            if wallet:
+                customer_id = await customer_for_user(self.db, self.stripe, trip["user_id"])
+                pm = None
+            else:
+                user = await self.db.users.find_one({"_id": ObjectId(trip["user_id"])}) or {}
+                pm = await self.db.payment_methods.find_one({
+                    "user_id": trip["user_id"], **method_scope(self.stripe),
+                    "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"},
+                }, sort=[("is_default", -1), ("created_at", -1)])
+                customer_id = user.get("stripe_customer_id")
+                if not pm or not customer_id or bool(user.get("stripe_customer_livemode", False)) != is_live(self.stripe):
+                    raise HTTPException(402, "Legg til og bekreft et betalingskort i riktig betalingsmiljø før du bestiller")
             amount = int(trip.get("reservation_limit_ore", int(trip["price"]) * 100))
             # A larger hold is permitted only when the rider accepted the disclosed
             # pickup policy. Unused waiting funds are released by partial capture.
@@ -78,13 +89,17 @@ class RideReservations:
             record = {"trip_id": trip["trip_id"], "user_id": trip["user_id"],
                       "kind": "ride_reservation", "session_id": f"reservation:{trip['trip_id']}",
                       "amount": int(trip["price"]), "currency": "nok", "authorized_amount_ore": amount,
-                      "stripe_customer_id": user["stripe_customer_id"],
-                      "stripe_payment_method_id": pm["stripe_payment_method_id"],
+                      "stripe_customer_id": customer_id, "stripe_livemode": is_live(self.stripe),
+                      "payment_provider": "google_pay" if wallet else "card",
+                      "stripe_payment_method_id": pm["stripe_payment_method_id"] if pm else None,
                       "status": "authorizing", "payment_status": "unpaid", "created_at": datetime.now(timezone.utc)}
             await self.db.payment_transactions.update_one(
                 {"trip_id": trip["trip_id"], "kind": "ride_reservation"},
                 {"$setOnInsert": record}, upsert=True)
             record = await self.record(trip)
+        if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
+            raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
+        wallet = record.get("payment_provider") == "google_pay"
         pi = None
         try:
             if record.get("stripe_payment_intent_id"):
@@ -92,8 +107,8 @@ class RideReservations:
             else:
                 pi = await asyncio.to_thread(client.v1.payment_intents.create, {
                     "amount": record["authorized_amount_ore"], "currency": "nok",
-                    "customer": record["stripe_customer_id"], "payment_method": record["stripe_payment_method_id"],
-                    "confirm": True, "off_session": True, "capture_method": "manual",
+                    "customer": record["stripe_customer_id"], "capture_method": "manual",
+                    **({} if wallet else {"payment_method": record["stripe_payment_method_id"], "confirm": True, "off_session": True}),
                     "automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
                     "description": f"SNAR tur {trip['trip_id']}", "transfer_group": f"snar_{trip['trip_id']}",
                     "metadata": {"trip_id": trip["trip_id"], "user_id": trip["user_id"], "source": "snar_ride_reservation"},
@@ -119,6 +134,10 @@ class RideReservations:
         if value(pi, "status") == "requires_capture":
             await self.activate(trip, pi, record)
             return {"authorized": True, "payment_intent_id": pi_id}
+        if wallet and value(pi, "status") in ("requires_payment_method", "requires_confirmation", "requires_action"):
+            raise HTTPException(402, {"code": "reservation_requires_action", "payment_provider": "google_pay",
+                "message": "Bekreft turreservasjonen med Google Pay.", "trip_id": trip["trip_id"],
+                "client_secret": value(pi, "client_secret"), "amount_ore": record["authorized_amount_ore"], "currency": "nok"})
         error = value(pi, "last_payment_error", {}) or {}
         if value(pi, "status") == "requires_action" or value(error, "code") == "authentication_required":
             raise HTTPException(402, {"message": "Godkjenn kortreservasjonen i banken før turen bestilles.",
@@ -156,6 +175,8 @@ class RideReservations:
         record = await self.record(trip)
         if not record or not record.get("stripe_payment_intent_id"):
             raise HTTPException(409, "Ingen kortreservasjon å bekrefte")
+        if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
+            raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
         pi = await asyncio.to_thread(self.client().v1.payment_intents.retrieve, record["stripe_payment_intent_id"])
         await self.activate(trip, pi, record)
         trip = await self.db.trips.find_one({"trip_id": trip_id, "user_id": user_id})
@@ -170,6 +191,8 @@ class RideReservations:
         record = await self.record(trip)
         if not record or not record.get("stripe_payment_intent_id"):
             raise HTTPException(402, "Kunden må godkjenne kortreservasjonen før turen starter")
+        if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
+            raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
         pi = await asyncio.to_thread(self.client().v1.payment_intents.retrieve, record["stripe_payment_intent_id"])
         if not self.validate(pi, record) or value(pi, "status") != "requires_capture" or int(value(pi, "amount_capturable", 0)) < int(trip["price"]) * 100:
             raise HTTPException(402, "Kortreservasjonen er ikke gyldig. Turen kan ikke startes.")
@@ -181,6 +204,8 @@ class RideReservations:
         record = await self.record(trip)
         if not record or not record.get("stripe_payment_intent_id"):
             return {"attempted": False, "paid": False, "reason": "no_reservation"}
+        if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
+            raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
         client = self.client()
         try:
             pi = await asyncio.to_thread(client.v1.payment_intents.retrieve, record["stripe_payment_intent_id"])
@@ -254,6 +279,8 @@ class RideReservations:
                 record = await self.record(trip)
                 if not record.get("stripe_payment_intent_id"):
                     return
+            if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
+                raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
             pi = await asyncio.to_thread(self.client().v1.payment_intents.retrieve, record["stripe_payment_intent_id"])
             if not self.validate(pi, record):
                 raise HTTPException(409, "Reservasjonen samsvarer ikke med turen")
@@ -275,6 +302,8 @@ class RideReservations:
         if not record:
             return False
         # Retrieve from Stripe; signatures alone do not resolve reordered events.
+        if bool(record.get("stripe_livemode", False)) != is_live(self.stripe):
+            raise HTTPException(409, "Reservasjonen tilhører et annet betalingsmiljø")
         pi = await asyncio.to_thread(self.client().v1.payment_intents.retrieve, record["stripe_payment_intent_id"])
         if not self.validate(pi, record):
             return True

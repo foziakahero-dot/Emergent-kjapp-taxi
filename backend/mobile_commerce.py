@@ -15,6 +15,7 @@ import jwt
 from stripe_fleet import ensure_fleet_account
 from admin_control_center import _stripe_snapshot, stripe_destination_for_trip
 from qa_safety import is_safe_qa_web_origin
+from payment_modes import payment_config as configured_payments, customer_for_user, method_scope, is_live
 
 
 class NativeIdentity(BaseModel):
@@ -79,22 +80,28 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         set_auth_cookie(response, token)
         return {"token": token, "user": user_public(user)}
 
+    def native_google_id(client="customer"):
+        if client != "customer":
+            return ""
+        # A QA deployment may use only an explicitly configured QA audience.
+        name = "QA_GOOGLE_CLIENT_ID" if os.getenv("APP_ENV", "").strip().lower() == "qa" else "GOOGLE_CLIENT_ID"
+        return os.getenv(name, "").strip()
+
     @api.get("/auth/native/config")
     async def identity_config(client: Literal["customer", "driver"] = "customer"):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            return {"google_enabled": False, "google_web_client_id": "", "google_ios_client_id": ""}
-        google_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        google_id = native_google_id(client)
+        ios_name = "QA_GOOGLE_IOS_CLIENT_ID" if os.getenv("APP_ENV", "").strip().lower() == "qa" else "GOOGLE_IOS_CLIENT_ID"
         return {"google_enabled": bool(google_id), "google_web_client_id": google_id,
-            "google_ios_client_id": os.getenv("GOOGLE_DRIVER_IOS_CLIENT_ID" if client == "driver" else "GOOGLE_IOS_CLIENT_ID", "").strip()}
+            "google_ios_client_id": os.getenv(ios_name, "").strip() if client == "customer" else ""}
 
     @api.post("/auth/google/native")
     async def google_native(body: NativeIdentity, request: Request, response: Response):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
-        await rate_limit(request, "google-native", 30, 900)
-        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        if body.client != "customer":
+            raise HTTPException(403, "Sjåfører må bruke SNAR-passordinnlogging")
+        client_id = native_google_id(body.client)
         if not client_id:
-            raise HTTPException(503, "Google-innlogging er ikke konfigurert")
+            raise HTTPException(503, "Google-innlogging er ikke konfigurert for dette miljøet")
+        await rate_limit(request, "google-native", 30, 900)
         try:
             claims = await verify_google(body.identity_token, client_id)
         except HTTPException:
@@ -105,12 +112,10 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/link")
     async def link_google(body: NativeIdentity, request: Request, current=Depends(require_customer)):
-        if os.getenv("APP_ENV", "").strip().lower() == "qa":
-            raise HTTPException(503, "Google-kobling krever QA-spesifikk OAuth-konfigurasjon.")
         await rate_limit(request, "google-link", 20, 900)
         if body.client != "customer":
             raise HTTPException(403, "Kun kundekonto kan kobles her")
-        client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+        client_id = native_google_id(body.client)
         if not client_id:
             raise HTTPException(503, "Google-innlogging er ikke konfigurert")
         try:
@@ -203,41 +208,14 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         return {"connected": True, **snap, "payout_schedule": fleet.get("stripe_payout_schedule", "stripe_default")}
 
     def payment_config():
-        key = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
-        test_mode = key.startswith("pk_test_") and str(stripe.api_key).startswith(("sk_test_", "rk_test_"))
-        live_mode = (key.startswith("pk_live_") and str(stripe.api_key).startswith(("sk_live_", "rk_live_"))
-            and os.getenv("NATIVE_PAYMENTS_LIVE_ENABLED", "false").lower() == "true"
-            and os.getenv("APP_ENV", "").lower() == "production"
-            and os.getenv("QA_MODE", "false").lower() != "true")
-        mode_matches = test_mode or live_mode
-        enabled = os.getenv("NATIVE_PAYMENTS_ENABLED", "false").lower() == "true" and mode_matches
-        return {"enabled": bool(enabled), "publishable_key": key if enabled else "",
-            "test_mode": key.startswith("pk_test_"),
-            "apple_merchant_id": os.getenv("APPLE_PAY_MERCHANT_ID", "").strip(),
-            "google_pay_enabled": enabled and os.getenv("GOOGLE_PAY_ENABLED", "false").lower() == "true"}
+        return configured_payments(stripe)
 
     @api.get("/payments/native/config")
     async def native_config():
         return payment_config()
 
     async def _stripe_customer_for_user(current):
-        user = await db.users.find_one({"_id": ObjectId(current["id"])})
-        if not user:
-            raise HTTPException(404, "Bruker ikke funnet")
-        customer_id = (user or {}).get("stripe_customer_id")
-        if not customer_id:
-            customer = await asyncio.to_thread(
-                stripe.Customer.create,
-                email=user.get("email"),
-                name=user.get("fullName") or user.get("email"),
-                metadata={"user_id": current["id"]},
-            )
-            customer_id = customer.id
-            await db.users.update_one(
-                {"_id": ObjectId(current["id"])},
-                {"$set": {"stripe_customer_id": customer_id}},
-            )
-        return customer_id
+        return await customer_for_user(db, stripe, current["id"])
 
     @api.post("/payments/native/setup-intent")
     async def native_setup_intent(request: Request, current=Depends(require_customer)):
@@ -268,10 +246,12 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             return {"ready": False, "status": setup.get("status")}
 
         pm = await asyncio.to_thread(stripe.PaymentMethod.retrieve, setup["payment_method"])
+        if bool(pm.get("livemode", False)) != is_live(stripe) or str(pm.get("customer") or "") != customer_id:
+            raise HTTPException(409, "Betalingskortet tilhører et annet betalingsmiljø eller en annen kunde")
         card = pm.get("card") or {}
         pm_id = pm.get("id")
         existing = await db.payment_methods.find_one({
-            "user_id": current["id"],
+            "user_id": current["id"], **method_scope(stripe),
             "stripe_payment_method_id": pm_id,
         })
         if existing:
@@ -288,9 +268,9 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             existing.update({"setup_status": "succeeded", "verified": True, "stripe_setup_intent_id": setup_intent_id})
             return {"ready": True, "verified": True, "card": existing}
 
-        has_any = await db.payment_methods.count_documents({"user_id": current["id"]}) > 0
+        has_any = await db.payment_methods.count_documents({"user_id": current["id"], **method_scope(stripe)}) > 0
         doc = {
-            "user_id": current["id"],
+            "user_id": current["id"], "stripe_livemode": is_live(stripe),
             "type": card.get("brand") or "card",
             "label": {"apple_pay": "Apple Pay", "google_pay": "Google Pay"}.get((card.get("wallet") or {}).get("type"), str(card.get("brand") or "Kort").capitalize()),
             "wallet_type": (card.get("wallet") or {}).get("type"),
@@ -314,7 +294,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
     async def select_default_payment_method(payment_method_id: str, current=Depends(require_customer)):
         if not ObjectId.is_valid(payment_method_id):
             raise HTTPException(404, "Fant ikke betalingskortet")
-        method = await db.payment_methods.find_one({"_id": ObjectId(payment_method_id), "user_id": current["id"],
+        method = await db.payment_methods.find_one({"_id": ObjectId(payment_method_id), "user_id": current["id"], **method_scope(stripe),
             "verified": True, "setup_status": "succeeded"})
         if not method or not method.get("stripe_payment_method_id"):
             raise HTTPException(404, "Fant ikke et verifisert betalingskort")
