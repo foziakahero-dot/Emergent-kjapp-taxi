@@ -26,7 +26,8 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.kjappapp.no",
+        "EXPO_PUBLIC_PAYMENT_ENV": "live"
       },
       "android": {
         "image": "latest"
