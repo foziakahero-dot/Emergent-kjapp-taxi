@@ -59,6 +59,7 @@ def native_identity_config(client="customer"):
     # Customer Google auth remains independently configurable.
     if client == "driver":
         google = ""
+        apple = ""
     google_enabled = bool(google) and (not qa or os.getenv("QA_GOOGLE_AUTH_ENABLED") == "true")
     apple_enabled = bool(apple) and (not qa or os.getenv("QA_APPLE_AUTH_ENABLED") == "true")
     return {"google_enabled": google_enabled,
@@ -252,6 +253,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/apple/native")
     async def apple_native(body: NativeIdentity, request: Request, response: Response):
+        if body.client != "customer":
+            raise HTTPException(403, "Sjåfører må bruke SNAR-passordinnlogging")
         await rate_limit(request, "apple-native", 30, 900)
         claims = await verify_apple(body)
         return await identity_session("apple", claims, body, response)
