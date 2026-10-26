@@ -69,6 +69,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test:design": "node ../scripts/verify-figma-mobile.cjs",
+    "test:dock": "node ../scripts/verify-customer-dock-spec.cjs",
     "icons:figma": "node ../scripts/generate-figma-icons.cjs",
     "audit:customer": "node ../scripts/customer-inventory.cjs && python ../scripts/customer-contract-audit.py && python ../scripts/customer-screen-audit.py",
     "check:customer-build": "node scripts/customer-build-gate.cjs",
