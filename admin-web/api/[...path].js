@@ -1,14 +1,19 @@
-const BACKEND_ORIGIN = 'https://api.kjappapp.no';
+const QA_BRANCH = 'qa/snar-v10-phase5-staging-e2e';
+const BACKEND_ORIGIN = process.env.VERCEL_GIT_COMMIT_REF === QA_BRANCH
+  ? 'https://api-qa.snarapp.no'
+  : process.env.VERCEL_ENV === 'production' ? 'https://api.kjappapp.no' : null;
 
 export default async function handler(req, res) {
   try {
+    if (!BACKEND_ORIGIN) return res.status(503).json({ detail: 'API is disabled for this preview' });
     const incomingUrl = new URL(req.url || '/', 'https://admin.snarapp.no');
     const path = incomingUrl.pathname;
 
     // Keep the admin host as a narrow gateway: only auth + admin endpoints.
     const method = String(req.method || 'GET').toUpperCase();
+    const isHealthRead = path === '/api/health' && ['GET', 'HEAD'].includes(method);
     const isDocumentRead = path.startsWith('/api/files/') && ['GET', 'HEAD'].includes(method);
-    if (!(isDocumentRead || path.startsWith('/api/auth/') || path.startsWith('/api/admin/') || path.startsWith('/api/superadmin/'))) {
+    if (!(isHealthRead || isDocumentRead || path.startsWith('/api/auth/') || path.startsWith('/api/admin/') || path.startsWith('/api/superadmin/'))) {
       return res.status(404).json({ detail: 'Not found' });
     }
 

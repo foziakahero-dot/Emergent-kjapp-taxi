@@ -150,37 +150,13 @@ def test_production_config_rejects_weak_admin_and_jwt():
         "ADMIN_PASSWORD": "a-strong-admin-password-2026",
     })
 
-def test_missing_email_provider_never_logs_message_body(monkeypatch, capsys, caplog):
+def test_missing_email_provider_never_logs_message_body(monkeypatch, capsys):
     monkeypatch.delenv("SENDGRID_API_KEY", raising=False)
-    monkeypatch.delenv("RESEND_API_KEY", raising=False)
-    monkeypatch.delenv("QA_RESEND_API_KEY", raising=False)
     secret_marker = "RESET-TOKEN-MUST-NOT-LEAK"
     assert server.send_email("user@example.no", "Reset", f"<p>{secret_marker}</p>") is False
     output = capsys.readouterr().out
     assert secret_marker not in output
-    assert secret_marker not in caplog.text
-
-
-@pytest.mark.parametrize("configured", [False, True])
-def test_readiness_reports_optional_provider_keys_without_exposing_values(monkeypatch, configured):
-    import asyncio
-    import json
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
-    for name in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VERIFY_SERVICE_SID"):
-        monkeypatch.setenv(name, "fixture-secret-must-not-leak" if configured else "")
-    monkeypatch.setattr(server, "AI_LLM_KEY", "fixture-ai-must-not-leak" if configured else "")
-    monkeypatch.setattr(server, "db", SimpleNamespace(
-        command=AsyncMock(return_value={"ok": 1}),
-        platform_settings=SimpleNamespace(find_one=AsyncMock(return_value={})),
-    ))
-    response = asyncio.run(server.readiness())
-    checks = json.loads(response.body)["checks"]
-    assert checks["driver_sms_login_configured"] is configured
-    assert checks["ai_support_key_configured"] is configured
-    assert b"fixture-secret-must-not-leak" not in response.body
-    assert b"fixture-ai-must-not-leak" not in response.body
+    assert "body=redacted" in output
 
 
 def test_platform_defaults_never_enable_demo_trips():

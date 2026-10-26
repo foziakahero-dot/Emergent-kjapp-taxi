@@ -5,8 +5,8 @@ import os
 from datetime import datetime, timezone, timedelta
 
 from bson import ObjectId
-from promo_credits import platform_fee_ore
 from fastapi import HTTPException
+from payment_method_selection import selected_payment_method
 
 
 def value(obj, key, default=None):
@@ -59,10 +59,7 @@ class RideReservations:
         record = await self.record(trip)
         if not record:
             user = await self.db.users.find_one({"_id": ObjectId(trip["user_id"])}) or {}
-            pm = await self.db.payment_methods.find_one({
-                "user_id": trip["user_id"], "verified": True, "setup_status": "succeeded",
-                "stripe_payment_method_id": {"$type": "string"},
-            }, sort=[("is_default", -1), ("created_at", -1)])
+            pm = await selected_payment_method(self.db, trip["user_id"], user)
             if not pm or not user.get("stripe_customer_id"):
                 raise HTTPException(402, "Legg til og bekreft et betalingskort før du bestiller")
             amount = int(trip.get("reservation_limit_ore", int(trip["price"]) * 100))
@@ -79,7 +76,7 @@ class RideReservations:
                       "kind": "ride_reservation", "session_id": f"reservation:{trip['trip_id']}",
                       "amount": int(trip["price"]), "currency": "nok", "authorized_amount_ore": amount,
                       "stripe_customer_id": user["stripe_customer_id"],
-                      "stripe_payment_method_id": pm["stripe_payment_method_id"],
+                      "stripe_payment_method_id": pm["stripe_payment_method_id"], "wallet": pm.get("wallet"),
                       "status": "authorizing", "payment_status": "unpaid", "created_at": datetime.now(timezone.utc)}
             await self.db.payment_transactions.update_one(
                 {"trip_id": trip["trip_id"], "kind": "ride_reservation"},
@@ -212,7 +209,7 @@ class RideReservations:
                   "stripe_payment_intent_id": stripe_id(pi), "updated_at": datetime.now(timezone.utc)}
         destination = await self.destination(trip)
         if destination:
-            fee = platform_fee_ore(amount, int(trip.get("promo_discount") or 0) * 100, destination["commission_rate"])
+            fee = int(round(amount * destination["commission_rate"]))
             try:
                 transfer = await asyncio.to_thread(self.client().v1.transfers.create, {
                     "amount": amount - fee, "currency": "nok", "destination": destination["stripe_account_id"],

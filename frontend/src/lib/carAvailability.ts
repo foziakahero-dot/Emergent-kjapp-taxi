@@ -1,7 +1,8 @@
 export type LiveCar = { id: string; lat: number; lng: number; [key: string]: any };
 export type Availability = {
   cars: LiveCar[]; phase: 'loading' | 'available' | 'waiting' | 'exhausted';
-  issue: 'empty' | 'offline' | null; attempt: number; nextAt: number | null;
+  issue: 'empty' | 'offline' | 'location' | null; attempt: number; nextAt: number | null;
+  expiresAt?: Record<string, number>;
 };
 export const SEARCH_INTERVAL_MS = 30_000;
 export const SEARCH_ATTEMPTS = 3;
@@ -9,6 +10,19 @@ export function validPosition(p: any): boolean {
   return typeof p?.lat === 'number' && typeof p?.lng === 'number'
     && Number.isFinite(p.lat) && Number.isFinite(p.lng)
     && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
+}
+/** Translate server freshness into a local deadline, tolerating device clock skew. */
+export function carExpiry(car: LiveCar, response: any, receivedAt: number): number {
+  const updated = Date.parse(car.updated_at || '');
+  const server = Date.parse(response.server_time || '');
+  const ttl = Math.min(60, Number(response.gps_fresh_seconds));
+  if (!Number.isFinite(updated) || !Number.isFinite(server) || !Number.isFinite(ttl) || ttl <= 0) return 0;
+  const age = server - updated;
+  if (age < -5000 || age >= ttl * 1000) return 0;
+  return receivedAt + ttl * 1000 - Math.max(0, age);
+}
+export function visibleCars(state: Availability, now: number): LiveCar[] {
+  return state.cars.filter(car => (state.expiresAt?.[car.id] || 0) > now);
 }
 type Clock = { now(): number; set(fn: () => void, ms: number): any; clear(timer: any): void };
 const clock: Clock = { now: Date.now, set: setTimeout, clear: clearTimeout };
@@ -19,6 +33,7 @@ export class CarAvailabilitySearch {
   private active = false;
   private disposed = false;
   private fetching = false;
+  private generation = 0;
   private timer: any;
   constructor(private load: () => Promise<any>, private changed: (state: Availability) => void,
               private continuous = false, private time: Clock = clock) {}
@@ -26,7 +41,9 @@ export class CarAvailabilitySearch {
     this.state = { ...this.state, ...patch }; this.changed(this.state);
   }
   setActive(active: boolean) {
+    if (this.active !== active) this.generation++;
     this.active = active; this.time.clear(this.timer);
+    if (!active) this.publish({ cars: [], expiresAt: {}, nextAt: null });
     if (!active || this.disposed || this.fetching || this.state.phase === 'exhausted') return;
     this.schedule();
   }
@@ -45,18 +62,30 @@ export class CarAvailabilitySearch {
   private async lookup() {
     if (this.fetching || !this.active || this.disposed) return;
     this.fetching = true;
+    const generation = this.generation;
     this.publish({ phase: 'loading', nextAt: null });
     let cars: LiveCar[] = [], issue: Availability['issue'] = null;
+    const expiresAt: Record<string, number> = {};
     try {
       const result = await this.load();
       if (!Array.isArray(result?.cars)) throw new Error('Invalid availability response');
-      cars = result.cars.filter((car: any) => car.id && validPosition(car));
+      cars = result.cars.filter((car: any) => {
+        if (!car?.id || !validPosition(car)) return false;
+        const expiry = carExpiry(car, result, this.time.now());
+        if (expiry <= this.time.now()) return false;
+        expiresAt[car.id] = expiry;
+        return true;
+      });
       issue = cars.length ? null : 'empty';
     } catch { issue = 'offline'; }
     this.fetching = false;
     if (this.disposed) return;
+    // Never publish a late response from before the app was backgrounded.
+    if (!this.active || generation !== this.generation) {
+      this.publish({ nextAt: null }); this.schedule(); return;
+    }
     const attempt = issue ? Math.min(SEARCH_ATTEMPTS, this.state.attempt + 1) : 0;
-    this.publish({ cars, issue, attempt, phase: issue ? 'waiting' : 'available',
+    this.publish({ cars, expiresAt, issue, attempt, phase: issue ? 'waiting' : 'available',
       nextAt: this.time.now() + (this.continuous || !issue ? 8_000 : SEARCH_INTERVAL_MS) });
     this.schedule();
   }

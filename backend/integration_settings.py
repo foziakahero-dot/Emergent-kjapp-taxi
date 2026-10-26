@@ -28,7 +28,7 @@ GROUPS = {
     "fcm": [("FCM_SERVICE_ACCOUNT_JSON", "Firebase tjenestekonto (JSON)", True)],
     "google": [("GOOGLE_CLIENT_ID", "Google klient-ID", False),
                ("GOOGLE_CLIENT_SECRET", "Google klienthemmelighet", True)],
-    "ai": [("SNAR_AI_KEY", "Vercel AI Gateway API-nøkkel", True)],
+    "ai": [("SNAR_AI_KEY", "Emergent AI-nøkkel", True)],
 }
 
 
@@ -40,7 +40,7 @@ class IntegrationSettings:
         self.lock = asyncio.Lock()
         self.revisions = {}
         self.baseline = {key: os.getenv(key, "") for fields in GROUPS.values() for key, _, _ in fields}
-        self.baseline["SNAR_AI_KEY"] = self.baseline["SNAR_AI_KEY"] or os.getenv("AI_GATEWAY_API_KEY", "")
+        self.baseline["SNAR_AI_KEY"] = self.baseline["SNAR_AI_KEY"] or os.getenv("EMERGENT_LLM_KEY", "")
 
     def cipher(self):
         key = os.getenv("SNAR_INTEGRATION_ENCRYPTION_KEY", "")

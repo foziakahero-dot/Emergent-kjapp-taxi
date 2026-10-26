@@ -7,10 +7,10 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://api.kjappapp.no/api/:path*"
+      "destination": "/api/gateway?__snar_path=:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }
   ]

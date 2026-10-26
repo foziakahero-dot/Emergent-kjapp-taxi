@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import secrets
 import unittest
 from datetime import datetime, timezone
@@ -20,6 +21,7 @@ class ManualFleetOnboardingTests(unittest.IsolatedAsyncioTestCase):
             return 'not_configured'
         async def audit(*args): pass
         self.namespace = {
+            'asyncio': asyncio,
             'db': SimpleNamespace(users=Collection(self.raw.users), fleets=Collection(self.raw.fleets)),
             'FleetCreateRequest': object, 'Depends': lambda _: None, 'require_admin': None,
             'HTTPException': HTTPException, 'secrets': secrets, 'datetime': datetime,

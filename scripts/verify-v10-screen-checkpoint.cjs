@@ -27,10 +27,11 @@ const native = {
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
   View: 'View', Text: 'Text', TextInput: 'TextInput', Image: 'Image', KeyboardAvoidingView: 'KeyboardAvoidingView', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator',
   FlatList: ({ data, renderItem, ListEmptyComponent }) => React.createElement('FlatList', null, data.length ? data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item, index }))) : ListEmptyComponent),
+  Keyboard: { dismiss() {} },
   AppState: { addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' }, Linking: { openURL: async () => {} },
   StyleSheet: { create: value => value, hairlineWidth: 1, absoluteFill: { position: 'absolute', inset: 0 } },
 };
-const queryClient = { setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
+const queryClient = { getQueryData: key => queryData[key[0]]?.data, setQueryData: (key, data) => { const value = typeof data === 'function' ? data(queryData[key[0]]?.data) : data; updates.push([key, value]); queryData[key[0]] = { ...queryData[key[0]], data: value }; }, invalidateQueries: async x => invalidated.push(x.queryKey) };
 const stubs = {
   'expo-image': { Image: 'DriverImage' },
   'expo-speech': {speak(){},stop:async()=>{}},
@@ -83,6 +84,9 @@ function load(app, file) {
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
     if (stubs[name]) return stubs[name];
+    if (name === '@/src/lib/useTripUpdates') return { useTripUpdates() {} };
+    if (name === '@/src/lib/useDriverAcceptedAlert') return { useDriverAcceptedAlert() {} };
+    if (/\.(png|webp|jpe?g)$/.test(name)) { const asset = path.resolve(path.dirname(absolute), name); assert.ok(fs.statSync(asset).size > 0); return { uri: asset }; }
     if (name.startsWith('@/')) {
       const relative = name.slice(2);
       return load(app, relative + (fs.existsSync(path.join(root, app, relative + '.tsx')) ? '.tsx' : '.ts'));
@@ -311,12 +315,12 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   navigation = []; socialCalls = 0;
   tree = await mount(Login); const driverSocialRequest = deferred();
   socialLoginResult = () => driverSocialRequest.promise;
-  await act(async () => { button(tree, 'driver-login-google').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
+  await act(async () => { tree.root.findByType('AppleButton').props.onPress(); tree.root.findByType('AppleButton').props.onPress(); button(tree, 'driver-login-submit').props.onPress(); });
   assert.equal(socialCalls, 1, 'Driver social providers share the password lock');
   await act(async () => driverSocialRequest.resolve({ id: 'driver', role: 'driver', approved: true, legal_accepted: true, identity_verification_status: 'pending_review' }));
   assert.equal(navigation.at(-1)[1], '/driver-approval'); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => null; navigation = [];
-  await act(async () => button(tree, 'driver-login-google').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
+  assert.ok(button(tree, 'driver-login-google'), 'Driver Google action remains available alongside Apple'); await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.equal(navigation.length, 0); await unmount(tree);
   tree = await mount(Login); socialLoginResult = async () => { throw new Error('Provider unavailable'); };
   await act(async () => tree.root.findByType('AppleButton').props.onPress()); assert.match(text(tree), /Provider unavailable/); assert.equal(button(tree, 'driver-login-submit').props.disabled, false); await unmount(tree);
   const Register = load('frontend', 'app/register.tsx').default;
@@ -487,11 +491,18 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   tree = await mount(CustomerMessages); assert.match(text(tree), /Kunne ikke hente reisestatus/); assert.doesNotMatch(text(tree), /My confirmed message/); await unmount(tree);
 
   const CustomerHistory = load('frontend', 'app/(app)/history.tsx').default;
-  queryData = { trips: { data: { trips: [{ trip_id: 'finished', status: 'completed', payment_status: 'paid', created_at: new Date().toISOString(), dropoff_address: 'Destination', price: 184 }, { trip_id: 'cancelled', status: 'cancelled', created_at: new Date().toISOString(), price: 999 }] } }, 'customer-active-trip': { data: { trip_id: 'live-trip', status: 'in_trip', dropoff_address: 'Live destination' } } };
+  // Match GET /api/trips: the production route returns a top-level array.
+  queryData = { trips: { data: [{ trip_id: 'finished', status: 'completed', payment_status: 'paid', created_at: new Date().toISOString(), dropoff_address: 'Destination', price: 184 }, { trip_id: 'cancelled', status: 'cancelled', created_at: new Date().toISOString(), price: 999 }, { trip_id: 'hidden-live', status: 'searching', created_at: new Date().toISOString() }] }, 'customer-active-trip': { data: { trip_id: 'live-trip', status: 'in_trip', dropoff_address: 'Live destination' } } };
   tree = await mount(CustomerHistory);
   assert.doesNotMatch(text(tree), /999 kr/);
+  assert.match(text(tree), /Destination|184 kr/);
+  assert.equal(button(tree, 'trip-hidden-live'), undefined);
   await act(async () => button(tree, 'trip-finished').props.onPress()); assert.equal(navigation.at(-1)[1], '/customer-trip/finished');
   await act(async () => button(tree, 'history-active-trip').props.onPress()); assert.equal(navigation.at(-1)[1], '/booking/live-trip'); await unmount(tree);
+  queryData.trips = { isError: true, data: undefined };
+  tree = await mount(CustomerHistory); assert.match(text(tree), /Kunne ikke hente turhistorikken/); await unmount(tree);
+  queryData.trips = { data: [] };
+  tree = await mount(CustomerHistory); assert.match(text(tree), /Ingen turer ennå/); await unmount(tree);
 
   const {osloWeekStart,thisOsloWeek}=load('frontend','src/lib/osloCalendar.ts');
   assert.equal(osloWeekStart(Date.parse('2026-10-11T22:30:00Z')),'2026-10-12','Oslo has already entered Monday while UTC remains Sunday');
@@ -657,21 +668,22 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   console.log('PASS: Actual Driver shift duplicate lock, pending view, confirmed state, network failure, rejected acknowledgement and retry.');
   stubs['@/src/components/VehicleAsset'] = { VehicleAsset: 'VehicleAsset' };
   const supplyConfigs = [];
-  const supplyCars = [{ id:'standard-live',type:'ai-first',lat:59.915,lng:10.748,eta_min:4 },{ id:'xl-live',type:'trygg',lat:59.914,lng:10.747,eta_min:7 },{ id:'premium-live',type:'premium',lat:59.913,lng:10.746,eta_min:6 }];
+  const supplyCars = [{ id:'standard-live',type:'ai-first',lat:59.915,lng:10.748,eta_min:4 },{ id:'suv-live',type:'suv',lat:59.914,lng:10.747,eta_min:7 },{ id:'premium-live',type:'premium',lat:59.913,lng:10.746,eta_min:6 }];
   stubs['@/src/lib/useAvailableCars'] = { useAvailableCars: config => { supplyConfigs.push(config); return { cars:supplyCars,phase:'ready' }; } };
   stubs['@/src/components/AvailabilityStatus'] = { AvailabilityStatus: 'AvailabilityStatus' };
   stubs['@/src/components/ActiveTripCard'] = { ActiveTripCard: 'ActiveTripCard', LIVE_TRIP_STATUSES: ['searching', 'driver_on_way', 'at_pickup', 'in_trip'] };
   stubs['@/src/lib/recentPlaces'] = { recentDestinations: () => [] };
   const card = { id: 'verified-card', label: 'Visa', last4: '4321', verified: true, setup_status: 'succeeded', stripe_payment_method_id: 'pm_verified', created_at: '2026-10-13' };
-  const quote = { distance_km: 3.4, duration_min: 11, pricing_version: 7, geometry: { coordinates: [[10.74, 59.91], [10.75, 59.92]] }, options: [{ vehicle_type: 'ai-first', price: 184, waiting_policy: { token: 'waiting-policy', free_minutes: 5, per_minute: 4, max_fee: 40 } }, { vehicle_type: 'trygg', price: 240 }, { vehicle_type: 'premium', price: 300 }] };
+  const quote = { distance_km: 3.4, duration_min: 11, pricing_version: 7, geometry: { coordinates: [[10.74, 59.91], [10.75, 59.92]] }, options: [{ vehicle_type: 'ai-first', price: 184, waiting_policy: { token: 'waiting-policy', free_minutes: 5, per_minute: 4, max_fee: 40 } }, { vehicle_type: 'suv', price: 240 }, { vehicle_type: 'premium', price: 300 }] };
   let bookingRequests = [], customerActive = null; const requesting = deferred();
   user = { id: 'customer-home', role: 'user', fullName: 'Actual Customer' };
-  Object.assign(stubs['expo-location'], { getForegroundPermissionsAsync: async () => ({ status: 'granted' }) });
+  Object.assign(stubs['expo-location'], { getForegroundPermissionsAsync: async () => ({ status: 'granted' }), hasServicesEnabledAsync: async () => true });
   stubs['@/src/lib/api'].placesApi = { list: async () => ({ places: [] }), reverse: async () => ({ label: 'Actual pickup' }), search: async () => ({ results: [] }) };
   stubs['@/src/lib/api'].mePlacesApi.list = async () => ({ places: [{ label: 'Hjem', name: 'Actual destination', lat: 59.92, lng: 10.75 }] });
   stubs['@/src/lib/api'].paymentApi.list = async () => [card];
   Object.assign(stubs['@/src/lib/api'].tripsApi, { active: async () => customerActive, list: async () => [], estimate: async () => quote, request: async body => { bookingRequests.push(body); return requesting.promise; } });
   const CustomerHome = load('frontend', 'app/(app)/home.tsx').default;
+  queryData['customer-active-trip'] = { data: null };
   tree = await mount(CustomerHome);
   assert.equal(supplyConfigs.at(-1).vehicleType,undefined,'Home must show all real vehicle classes instead of only Standard');
   assert.equal(tree.root.findByType('Map').props.cars.length,3);
@@ -680,17 +692,23 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(tree.root.findAll(node => node.type === 'Map')[0].props.focusMode, 'route');
   await act(async () => button(tree, 'route-choose-vehicle').props.onPress());
   assert.match(text(tree),/4 min unna/);assert.match(text(tree),/7 min unna/);assert.match(text(tree),/6 min unna/);
-  assert.equal(button(tree,'vehicle-comfort').props.disabled,true,'A legacy enkelt quote cannot manufacture a Comfort class');
+  assert.equal(tree.root.findAll(node => node.type === 'Pressable' && node.props.accessibilityRole === 'radio' && String(node.props.testID).startsWith('vehicle-')).length,3);
+  assert.equal(button(tree,'vehicle-comfort'),undefined);
+  await act(async()=>button(tree,'vehicle-premium').props.onPress());assert.match(text(tree),/Bestill Premium · 300 kr/);assert.equal(supplyConfigs.at(-1).vehicleType,'premium');
+  assert.equal(tree.root.findAll(node=>node.props.testID==='available-driver-standard-live').length,0);
+  assert.ok(tree.root.findAll(node=>node.props.testID==='available-driver-premium-live').length);
+  await act(async()=>button(tree,'vehicle-ai-first').props.onPress());
   await act(async () => button(tree, 'booking-payment-row').props.onPress());
   assert.match(text(tree), /4321/);
   assert.doesNotMatch(text(tree), /Equinor|4821/);
   assert.equal(button(tree,'booking-pay-card').props.accessibilityState.checked,true);
-  for (const id of ['apple','google','business','vipps']) { const choice=button(tree,`booking-pay-${id}`);assert.equal(choice.props.disabled,true);await act(async()=>choice.props.onPress()); }
+  assert.equal(button(tree,'booking-pay-google'),undefined,'iOS cannot show Android wallet choices');
+  for (const id of ['apple','business','vipps']) { const choice=button(tree,`booking-pay-${id}`);assert.equal(choice.props.disabled,true);await act(async()=>choice.props.onPress()); }
   assert.ok(button(tree,'booking-payment-done'),'Unavailable provider cannot pretend selection succeeded');
   await act(async () => button(tree, 'booking-payment-done').props.onPress());
   await act(async () => button(tree, 'booking-review').props.onPress());
-  assert.equal(button(tree, 'booking-confirm').props.disabled, true, 'Waiting consent is required before request');
-  await act(async () => button(tree, 'waiting-policy-consent').props.onPress());
+  assert.equal(button(tree, 'waiting-policy-consent'), undefined, 'No separate waiting checkbox');
+  assert.equal(button(tree, 'booking-confirm').props.disabled, false, 'Displayed quote can be booked directly');
   await act(async () => { button(tree, 'booking-confirm').props.onPress(); button(tree, 'booking-confirm').props.onPress(); });
   assert.equal(bookingRequests.length, 1, 'The actual CustomerHome serializes duplicate booking');
   assert.equal(bookingRequests[0].waiting_policy_token, 'waiting-policy');
@@ -713,6 +731,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(helpers.confirmedPaymentMethod([{ ...card, stripe_payment_method_id: null }]), undefined);
   assert.equal(helpers.confirmedPaymentMethod([card, { ...card, id: 'default', is_default: true, created_at: '2026-01-01' }]).id, 'default');
   customerActive = { trip_id: 'existing-trip', status: 'in_trip' };
+  queryData['customer-active-trip'] = { data: customerActive };
   tree = await mount(CustomerHome);
   assert.equal(tree.root.findAllByProps({ testID: 'home-where-to' }).length, 0, 'An active trip cannot display a new booking flow'); await unmount(tree);
   // Customer 05/06: full map viewport, dock events and stale private photo/location responses.
@@ -723,8 +742,10 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const CustomerTabs = load('frontend','app/(app)/_layout.tsx').default;
   tree = await mount(CustomerTabs);
   const sceneLayout = tree.root.findByType('Tabs').props.screenLayout;
-  assert.equal(sceneLayout({route:{key:'home',name:'home'},children:null}).props.children.props.style.marginBottom,0,'Home map must extend below its floating dock');
-  assert.equal(sceneLayout({route:{key:'profile',name:'profile'},children:null}).props.children.props.style.marginBottom,112,'Scrollable profile keeps dock clearance');
+  for (const name of ['home','history','assist','messages','profile']) {
+    const scene = sceneLayout({route:{key:name,name},children:'screen-content'});
+    assert.equal(scene.props.children,'screen-content','Every scene fills its blur target; scroll clearance belongs inside each screen');
+  }
   await unmount(tree);
   const { FloatingTabBar } = stubs['@/src/components/FloatingTabBar'];
   const routes = ['home','history','assist','messages','profile','wallet'].map(name=>({key:name,name}));
@@ -746,6 +767,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async()=>photoRequests[1].resolve({uri:'private-current-photo'}));assert.equal(tree.root.findByType('Image').props.source.uri,'private-current-photo');
   await act(async()=>tree.root.findByType('Image').props.onError());assert.match(text(tree),/B/);assert.equal(tree.root.findAllByType('Image').length,0);await unmount(tree);
   customerActive=null;const initialReverse=deferred();let reverseCount=0;
+  queryData['customer-active-trip'] = { data: null };
   stubs['@/src/lib/api'].placesApi.reverse=async()=>++reverseCount===1?initialReverse.promise:{label:'Newest pickup'};
   tree=await mount(CustomerHome);
   const beforeLocationPrompts=permissionCalls;const locationPrompt=deferred();permissionResult=()=>locationPrompt.promise;
@@ -798,14 +820,24 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   // Customer 09/10: exact class names, invalid prices, canonical reservation and artwork fallback.
   assert.equal(helpers.validVehiclePrice(NaN),false);assert.equal(helpers.validVehiclePrice(-1),false);assert.equal(helpers.validVehiclePrice('184'),false);assert.equal(helpers.validVehiclePrice(184),true);
   assert.equal(helpers.cardExpiryLabel({exp_month:8,exp_year:2028}),'Utløper 08/28');assert.equal(helpers.cardExpiryLabel({exp_month:13,exp_year:2028}),null);
-  customerActive={trip_id:'real-search',status:'searching',vehicle_type:'premium',pickup_lat:59.91,pickup_lng:10.74};tree=await mount(CustomerHome);assert.equal(supplyConfigs.at(-1).vehicleType,'premium','A real booked search retains its canonical class');await unmount(tree);customerActive=null;
+  customerActive={trip_id:'real-search',status:'searching',vehicle_type:'premium',pickup_lat:59.91,pickup_lng:10.74};queryData['customer-active-trip']={data:customerActive};tree=await mount(CustomerHome);assert.equal(supplyConfigs.at(-1).vehicleType,'premium','A real booked search retains its canonical class');await unmount(tree);customerActive=null;queryData['customer-active-trip']={data:null};
   stubs['expo-image']={Image:'CategoryImage'};
   const CategoryImage=load('frontend','src/components/V10CategoryImage.tsx').V10CategoryImage;
-  tree=await mount(()=>React.createElement(CategoryImage,{kind:'ai-first',selected:true}));
-  assert.match(tree.root.findByType('CategoryImage').props.source.uri,/photo-1560958089-b8a1929cea89/);assert.equal(tree.root.findByType('CategoryImage').props.contentFit,'cover');
-  await act(async()=>tree.root.findByType('CategoryImage').props.onError());assert.equal(tree.root.findAllByType('CategoryImage').length,0);assert.equal(tree.root.findByType('VehicleAsset').props.kind,'ai-first');await unmount(tree);
-  console.log('PASS: Customer 09/10 all-class home supply, actual per-class ETA, unavailable Comfort/provider guards, canonical card, real expiry, original illustration URL and CDN fallback.');
-  // Customer 11/12: canonical consent contract and server-owned matching lifecycle.
+  for(const [kind,asset] of [['ai-first','snar/economy.png'],['enkelt','snar/economy.png'],['premium','snar/premium.png'],['suv','snar/suv.png'],['trygg','xl-3d.webp']]) {
+    tree=await mount(()=>React.createElement(CategoryImage,{kind,selected:true}));
+    const image=tree.root.findByType('CategoryImage').props;
+    assert.ok(image.source.uri.endsWith(asset));assert.equal(image.contentFit,'contain');
+    assert.equal(image.style.width,84);assert.equal(image.style.height,56);assert.equal(image.allowDownscaling,true);
+    assert.equal(image.accessibilityState.selected,true);await unmount(tree);
+  }
+  tree=await mount(()=>React.createElement(CategoryImage,{kind:'comfort',selected:false}));assert.equal(tree.toJSON(),null);await unmount(tree);
+  const VehicleMarker=load('frontend','src/components/V10VehicleMarker.tsx').V10VehicleMarker;
+  tree=await mount(()=>React.createElement(VehicleMarker,{selected:true,heading:90}));
+  assert.equal(tree.root.findByType('Svg').props.width,50);assert.equal(tree.root.findAllByType('Circle').filter(c=>c.props.r===21).length,1);await unmount(tree);
+  tree=await mount(()=>React.createElement(VehicleMarker,{active:true,selected:true,heading:90}));
+  assert.equal(tree.root.findAllByType('Circle').filter(c=>c.props.r===21).length,0,'Assigned emphasis takes precedence over selection');assert.equal(tree.root.findAllByType('Circle').filter(c=>c.props.r===20).length,2);await unmount(tree);
+  console.log('PASS: Customer 09/10 all-class home supply, three categories, immediate quoted prices, selected-category drivers, canonical card and distinct bundled illustrations.');
+  // Customer 11/12: canonical displayed quote contract and server-owned matching lifecycle.
   assert.equal(helpers.confirmedWaitingPolicy({token:' ',free_minutes:5,per_minute:4,max_fee:40}),false);
   assert.equal(helpers.confirmedWaitingPolicy({token:'valid',free_minutes:5,per_minute:-1,max_fee:40}),false);
   assert.equal(helpers.confirmedPaymentMethod([null,{verified:true}]),undefined);
@@ -814,10 +846,10 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(button(tree,'waiting-policy-consent'),undefined);assert.equal(button(tree,'booking-confirm').props.disabled,true);
   const requestsBeforeInvalidPolicy=bookingRequests.length;await act(async()=>button(tree,'booking-confirm').props.onPress());assert.equal(bookingRequests.length,requestsBeforeInvalidPolicy,'Missing policy token must never reach reservation');
   stubs['@/src/lib/api'].tripsApi.estimate=async()=>quote;await act(async()=>button(tree,'booking-refresh-quote').props.onPress());
-  assert.match(text(tree),/Bekreft tur/);assert.equal(button(tree,'waiting-policy-consent').props.accessibilityState.checked,false,'Refreshing keeps review but requires new consent');await unmount(tree);
+  assert.match(text(tree),/Bekreft tur/);assert.equal(button(tree,'waiting-policy-consent'),undefined,'Refreshed terms stay informational');assert.equal(button(tree,'booking-confirm').props.disabled,false);await unmount(tree);
   const originalTripRequest=stubs['@/src/lib/api'].tripsApi.request;
   stubs['@/src/lib/api'].tripsApi.request=async body=>{bookingRequests.push(body);return{ok:true}};
-  tree=await mount(CustomerHome);await act(async()=>button(tree,'quick-Hjem').props.onPress());await act(async()=>button(tree,'route-choose-vehicle').props.onPress());await act(async()=>button(tree,'booking-review').props.onPress());await act(async()=>button(tree,'waiting-policy-consent').props.onPress());
+  tree=await mount(CustomerHome);await act(async()=>button(tree,'quick-Hjem').props.onPress());await act(async()=>button(tree,'route-choose-vehicle').props.onPress());await act(async()=>button(tree,'booking-review').props.onPress());
   const beforeUnconfirmedNavigation=navigation.length;await act(async()=>button(tree,'booking-confirm').props.onPress());
   assert.equal(navigation.length,beforeUnconfirmedNavigation,'An unconfirmed response cannot navigate to an invented trip');assert.match(text(tree),/Bestillingen ble ikke bekreftet/);await unmount(tree);stubs['@/src/lib/api'].tripsApi.request=originalTripRequest;
   stubs['@/src/components/AvailabilityStatus'].AvailabilityStatus=Status;
@@ -832,7 +864,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async()=>tree.update(React.createElement(TripPresentation,{...matchingProps,trip:{...matchingProps.trip,status:'cancelled',cancel_reason:'no_driver_available'}})));
   assert.equal(matchingStops,2,'Server terminal state stops both decorative loops');assert.ok(button(tree,'booking-home'));assert.equal(matchingCallbacks.length,0,'No-driver result waits for explicit retry');await unmount(tree);
   reduceMotion=true;tree=await mount(()=>React.createElement(TripPresentation,matchingProps));assert.equal(matchingAnimations.length,2,'Reduced motion does not schedule matching activity');await unmount(tree);reduceMotion=false;native.Animated.timing=oldMatchingTiming;
-  console.log('PASS: Customer 11/12 invalid policy blocks booking, refreshed offer retains review/requires consent, source activity durations/cleanup/reduced motion, real dispatch progress and explicit no-driver recovery.');
+  console.log('PASS: Customer 11/12 invalid policy blocks booking, refreshed offer retains review and refreshed terms, source activity durations/cleanup/reduced motion, real dispatch progress and explicit no-driver recovery.');
   // Customer 13/14: actual fresh road proximity, stable assignment and ETA safety.
   const {driverApproaching}=load('frontend','src/lib/tripPresence.ts');
   const freshDriverTrip={...matchingProps.trip,status:'driver_on_way',driver_id:'real-driver',driver:{name:'Actual Driver',car:'Actual car',plate:'ACTUAL1',rating:4.9,phone:'test'},driver_lat:59.91,driver_lng:10.75,driver_location_at:new Date().toISOString(),driver_distance_to_pickup_km:.2};
@@ -1038,6 +1070,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   user = { id: 'customer-payments' };
   queryData = { 'payment-methods': { data: [card, { ...card, id: 'fake-card', last4: '9999', verified: false }] }, 'native-payment-config': { data: { enabled: false } } };
   let setupCalls = 0, removeCalls = 0, setupResult, removeResult;
+  stubs['@/src/lib/nativePayment'] = { nativeWalletAvailability: async () => null,
+    setupNativePaymentMethod: async () => { setupCalls++; return setupResult(); } };
   Object.assign(stubs['@/src/lib/api'].paymentApi, { nativeConfig: async () => ({}), cardSetup: async () => { setupCalls++; return setupResult(); }, cardSetupStatus: async () => ({ ready: true, verified: false }), remove: async () => { removeCalls++; return removeResult(); } });
   const PaymentMethods = load('frontend', 'app/payment-methods.tsx').default;
   tree = await mount(PaymentMethods);
@@ -1045,8 +1079,8 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   const setupRequest = deferred(); setupResult = () => setupRequest.promise;
   await act(async () => { button(tree, 'pm-stripe').props.onPress(); button(tree, 'pm-stripe').props.onPress(); button(tree, 'pm-remove-verified-card').props.onPress(); });
   assert.equal(setupCalls, 1); assert.equal(removeCalls, 0);
-  await act(async () => setupRequest.resolve({ checkout_url: 'https://fixture.invalid', session_id: 'setup-fixture' }));
-  assert.match(text(tree), /Kortet ble ikke verifisert/);
+  await act(async () => setupRequest.reject(new Error('Stripe har ikke bekreftet kortet ennå.')));
+  assert.match(text(tree), /ikke bekreftet kortet/);
   const removing = deferred(); removeResult = () => removing.promise;
   const invalidationsBeforeRemove = invalidated.length;
   await act(async () => { button(tree, 'pm-remove-verified-card').props.onPress(); button(tree, 'pm-remove-verified-card').props.onPress(); });
@@ -1078,9 +1112,33 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   assert.equal(entrances.length,2);assert.equal(entrances[1].duration,320);assert.deepEqual(Array.from(tree.root.findByType('AnimatedView').props.style[1].transform[0].scale.outputRange),[.94,1]);await unmount(tree);
   reduceMotion=true;tree=await mount(()=>React.createElement(Entrance,{pop:true},React.createElement('Text',null,'Plate')));assert.equal(entrances.length,2);await unmount(tree);
   native.Animated.timing = originalTiming;reduceMotion = false;
+  const { usableDemand } = load('driver-app', 'src/lib/demand.ts');
+  const demandTime = Date.now();
+  const zone = { lat: 59.91, lng: 10.75, weight: .8, recent: 3, typical: 2, drivers: 1, label: 'QA område' };
+  const freshDemand = { generated_at: new Date(demandTime).toISOString(), window_minutes: 90, cells: [zone, { ...zone, lat: 999 }], zones: [zone] };
+  assert.equal(usableDemand(freshDemand, demandTime).cells.length, 1, 'Invalid map coordinates are never rendered');
+  assert.equal(usableDemand({ ...freshDemand, generated_at: new Date(demandTime - 16 * 60000).toISOString() }, demandTime).zones.length, 0, 'Expired recommendations cannot guide a driver');
+  assert.equal(usableDemand({ ...freshDemand, generated_at: new Date(demandTime + 120000).toISOString() }, demandTime).cells.length, 0);
+  assert.equal(usableDemand({ ...freshDemand, zones: [{ ...zone, recent: 0, typical: 0 }] }, demandTime).zones.length, 0);
+  const DemandIntelligence = load('driver-app', 'app/(driver)/intel.tsx').default;
+  queryData['driver-demand'] = { data: freshDemand };
+  const openedDemandUrls = [], previousOpenUrl = native.Linking.openURL;
+  native.Linking.openURL = async url => { openedDemandUrls.push(url); };
+  tree = await mount(DemandIntelligence);
+  assert.equal(tree.root.findAllByType('Map').length, 1);
+  assert.equal(tree.root.findAllByType('Text').some(node => node.children.join('').includes('3 bestillinger siste 90 min')), true);
+  assert.equal(Boolean(button(tree, 'driver-intelligence-navigate').props.disabled), false);
+  await act(async () => button(tree, 'driver-intelligence-navigate').props.onPress());
+  assert.match(openedDemandUrls.at(-1), /destination=59.91,10.75/); await unmount(tree);
+  queryData['driver-demand'] = { isError: true, data: freshDemand };
+  tree = await mount(DemandIntelligence);
+  assert.equal(tree.root.findAllByType('Map').length, 0, 'Failed refresh hides stale heatmap');
+  assert.equal(button(tree, 'driver-intelligence-navigate').props.disabled, true); await unmount(tree);
+  native.Linking.openURL = previousOpenUrl;
+  console.log('PASS: Real demand coordinates/freshness, driver recommendations, actual coordinate navigation and stale-data suppression on refresh failure.');
   console.log('PASS: V10 measured-sheet entry waits for layout, does not replay on errors, cancels on unmount and respects reduced motion.');
   console.log('PASS: Actual receipt reservation/no-double-charge, native/payment status gate, explicit rating submit/feedback/retry/serialization, truthful receipt fields, canonical cards, serialized setup/remove and failed-card refresh.');
-  console.log('PASS: Actual CustomerHome route/vehicle/payment/confirmation flow, route camera, real canonical card, waiting consent, duplicate booking lock, quoted-price token and active-trip exclusion.');
+  console.log('PASS: Actual CustomerHome route/vehicle/payment/confirmation flow, route camera, real canonical card, displayed waiting terms, duplicate booking lock, quoted-price token and active-trip exclusion.');
   console.log('PASS: Actual DriverHome minimize/reopen persistence, semantic versus network rejection, queued recovery and serialized offer acceptance/decline.');
   console.log('PASS: Actual DriverHome pickup-route map, arrival API, held start API, live-route switch, preserved final confirmation, completion API and pending-payment summary wiring.');
   console.log('PASS: Driver real 900ms hold/release/unmount/reduced-motion/duplicate guards, arrival/start/completion review states, missing waiting policy, hidden in-trip finances and pending-payment summary.');

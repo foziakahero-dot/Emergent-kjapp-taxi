@@ -157,10 +157,11 @@ def test_failed_stripe_verification_retains_previous_values(monkeypatch):
 
 def test_server_runtime_keys_update_without_changing_document_storage(monkeypatch):
     import os
+    from ai_configuration import configured_ai_key
     source = Path(__file__).resolve().parents[1].joinpath('server.py').read_text()
     function = next(node for node in ast.parse(source).body if isinstance(node, ast.FunctionDef) and node.name == '_apply_integration_settings')
     stripe = SimpleNamespace(api_key='old')
-    runtime = {'os': os, 'stripe': stripe, 'EMERGENT_LLM_KEY': 'storage-original',
+    runtime = {'os': os, 'stripe': stripe, 'EMERGENT_LLM_KEY': 'storage-original', 'APP_ENV':'development', 'configured_ai_key':configured_ai_key,
                'AI_LLM_KEY': 'old-ai', 'MAPTILER_API_KEY': 'old-map', 'STRIPE_WEBHOOK_SECRET': 'old-webhook',
                'FCM_APP': None, 'FCM_INIT_TRIED': True}
     exec(compile(ast.Module(body=[function], type_ignores=[]), 'runtime-update', 'exec'), runtime)

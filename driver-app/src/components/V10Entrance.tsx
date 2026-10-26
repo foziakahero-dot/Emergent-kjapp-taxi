@@ -1,3 +1,4 @@
+import { animation as motionTokens } from '@/src/theme/snar10';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, type ViewProps } from 'react-native';
 import { useReducedMotion } from './Motion';
@@ -11,8 +12,8 @@ export function V10Entrance({ delay = 0, sheet = false, pop = false, fade = fals
     if (reduced) { progress.setValue(1); return; }
     if (sheet && !height) return;
     progress.setValue(0);
-    const animation = Animated.timing(progress, { toValue: 1, delay, duration: pop ? 320 : sheet ? 280 : fade ? 240 : 210,
-      easing: sheet || pop ? Easing.bezier(.34, 1.32, .52, 1) : Easing.bezier(.2, .8, .2, 1), useNativeDriver: true });
+    const animation = Animated.timing(progress, { toValue: 1, delay, duration: pop ? motionTokens.pop : sheet ? motionTokens.sheet : fade ? motionTokens.fade : motionTokens.component,
+      easing: sheet || pop ? Easing.bezier(...motionTokens.easeSpring) : Easing.bezier(...motionTokens.easeOut), useNativeDriver: true });
     animation.start();
     return () => animation.stop();
   }, [reduced, delay, sheet, pop, fade, height, progress]);

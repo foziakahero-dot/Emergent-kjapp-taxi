@@ -19,9 +19,9 @@ export default function History() {
   const router = useRouter();
   const { user } = useAuth();
   const history = useQuery({ queryKey: ['trips', user?.id], queryFn: tripsApi.list, enabled: !!user?.id });
-  const active = useQuery({ queryKey: ['customer-active-trip', user?.id], queryFn: tripsApi.active, enabled: !!user?.id });
+  const active = useQuery({ queryKey: ['customer-active-trip', user?.id], queryFn: tripsApi.active, enabled: false });
   useFocusEffect(useCallback(() => { void history.refetch(); void active.refetch(); }, [history.refetch, active.refetch]));
-  const trips: any[] = Array.isArray(history.data?.trips) ? history.data.trips : [];
+  const trips: any[] = Array.isArray(history.data) ? history.data : Array.isArray(history.data?.trips) ? history.data.trips : [];
   const past = trips.filter(trip => !liveStatuses.has(trip.status));
   const live = active.data?.trip_id && liveStatuses.has(active.data.status) ? active.data : null;
   const groups = [{ title: 'Denne uken', trips: past.filter(trip => thisOsloWeek(trip.created_at)) }, { title: 'Tidligere', trips: past.filter(trip => !(thisOsloWeek(trip.created_at))) }].filter(group => group.trips.length);

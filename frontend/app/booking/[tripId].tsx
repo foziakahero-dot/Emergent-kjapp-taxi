@@ -1,8 +1,14 @@
+import { DriverAcceptedNotice } from '@/src/components/DriverAcceptedNotice';
+import { useTripUpdates } from '@/src/lib/useTripUpdates';
+import { useDriverAcceptedAlert } from '@/src/lib/useDriverAcceptedAlert';
+import { storage } from '@/src/utils/storage';
+import { DriverSearchOverlay } from '@/src/components/DriverSearchOverlay';
 import { destinationProximity, driverPresence } from '@/src/lib/tripPresence';
 import { BlurTargetView } from 'expo-blur';
 import { V10TripDock } from '@/src/components/V10TripDock';
 import { validPosition } from '@/src/lib/carAvailability';
 import { useAvailableCars } from '@/src/lib/useAvailableCars';
+import { useAssignedVehicle } from '@/src/lib/useAssignedVehicle';
 import { AvailabilityStatus } from '@/src/components/AvailabilityStatus';
 import { apiError, kr } from '@/src/lib/format';
 import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripCard';
@@ -14,6 +20,7 @@ import { CustomerTripView } from '@/src/components/CustomerTripView';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, AppState, Easing, Image, Linking, Modal, Pressable, Share, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon } from '@/src/components/Icon';
@@ -40,13 +47,18 @@ export default function BookingFlow() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [minimized, setMinimized] = useState(false);
+  const [acceptedKey, setAcceptedKey] = useState('');
+  const [acceptedHeight, setAcceptedHeight] = useState(340);
+
   const [pickupGuide, setPickupGuide] = useState(false);
   const mapBlurTarget = useRef<View>(null);
   const sceneBlurTarget = useRef<View>(null);
   const [matchingHeight, setMatchingHeight] = useState(300);
   const [minimizedHeight, setMinimizedHeight] = useState(160);
-  const [trip, setTrip] = useState<any>(null);
+  const [trip, setTrip] = useState<any>(() => queryClient.getQueryData(['customer-trip', tripId]) || null);
+  const assignedVehicle = useAssignedVehicle(trip);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [safetyBusy, setSafetyBusy] = useState(false);
   const safetyLock = useRef(false);
@@ -55,6 +67,25 @@ export default function BookingFlow() {
   const [actionError, setActionError] = useState('');
   const [networkIssue, setNetworkIssue] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const acceptedEligible = trip?.trip_id === tripId && !networkIssue && !!trip?.driver_id && ['driver_on_way', 'at_pickup'].includes(trip?.status);
+  const identityKey = acceptedEligible ? `${tripId}:${trip.driver_id}` : '';
+  const noticeVisible = !!identityKey && acceptedKey === identityKey;
+  useDriverAcceptedAlert(noticeVisible ? identityKey : '');
+  useEffect(() => {
+    let alive = true;
+    setAcceptedKey('');
+    if (identityKey) void storage.getItem(`accepted-driver:${identityKey}`).then(seen => {
+      if (alive && !seen) setAcceptedKey(identityKey);
+    }).catch(() => { if (alive) setAcceptedKey(identityKey); });
+    return () => { alive = false; };
+  }, [identityKey]);
+  const dismissAccepted = () => {
+    setAcceptedKey('');
+    void storage.setItem(`accepted-driver:${identityKey}`, 'seen').catch(() => {});
+  };
+  const refreshTrip = useRef<() => void>(() => {});
+  useTripUpdates(tripId, () => refreshTrip.current());
+
   const [driverPhoto, setDriverPhoto] = useState<{ key: string; source: any } | null>(null);
   const photoKey = trip?.trip_id === tripId && trip?.driver_id ? `${tripId}:${trip.driver_id}:${trip.driver?.photo_version || ''}` : '';
   const driverPhotoSource = driverPhoto?.key === photoKey ? driverPhoto.source : null;
@@ -72,10 +103,16 @@ export default function BookingFlow() {
     cancelPhase.current = 'idle'; setCancelBusy(false);
   }, [tripId]);
   const routeIsCurrent = () => mounted.current && activeRoute.current === tripId;
+  const minimizeTrip = () => {
+    if (!trip || !LIVE_TRIP_STATUSES.includes(trip.status)) return;
+    if (trip.user_id) queryClient.setQueryData(['customer-active-trip', trip.user_id], trip);
+    setMinimized(true);
+    router.replace('/(app)/home');
+  };
   const nav = useRef(false);
   const searching = trip?.trip_id === tripId && ['searching', 'booking'].includes(trip?.status) && !trip?.driver_id;
-  const available = useAvailableCars({ enabled: searching, lat: trip?.pickup_lat, lng: trip?.pickup_lng,
-    vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [], continuous: true });
+  const available = useAvailableCars({ enabled: searching,
+    vehicleType: trip?.vehicle_type || 'ai-first', specialNeeds: trip?.special_needs || [] });
 
   useEffect(() => {
     let mounted = true;
@@ -100,8 +137,9 @@ export default function BookingFlow() {
         if (mounted) setNetworkIssue(true);
       } finally { fetching = false; }
     };
+    refreshTrip.current = () => void fetchTrip();
     fetchTrip();
-    const i = setInterval(fetchTrip, 2500);
+    const i = setInterval(fetchTrip, 1000);
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') void fetchTrip();
     });
@@ -165,6 +203,23 @@ export default function BookingFlow() {
       setActionError(`Kunne ikke hente avbestillingsvilkårene. ${apiError(error)}`);
       releaseCancel();
     }
+  };
+
+  const cancelSearchLock = useRef(false);
+  const cancelSearch = async () => {
+    if (cancelSearchLock.current || !tripId) return;
+    cancelSearchLock.current = true; setCancelBusy(true); setActionError('');
+    try {
+      const result = await tripsApi.cancelSearch(tripId);
+      if (!routeIsCurrent()) return;
+      if (result?.ok !== true) throw new Error('Avbrytelsen ble ikke bekreftet.');
+      await queryClient.invalidateQueries({ queryKey: ['customer-active-trip'] });
+      router.replace('/(app)/home');
+    } catch (error) {
+      if (!routeIsCurrent()) return;
+      try { setTrip(await tripsApi.get(tripId)); } catch {}
+      setActionError(apiError(error));
+    } finally { cancelSearchLock.current = false; if (routeIsCurrent()) setCancelBusy(false); }
   };
 
   const callEmergency = async () => {
@@ -256,7 +311,6 @@ export default function BookingFlow() {
   const route = trip.status === 'driver_on_way' ? (!networkIssue && driverPresence(trip).fresh ? trip.driver_pickup_geometry?.coordinates || null : null) : trip.status === 'in_trip' ? trip.geometry?.coordinates || null : null;
   const presence = driverPresence(trip);
   const driverGpsFresh = presence.fresh;
-  const showCar = ['driver_on_way', 'at_pickup', 'in_trip'].includes(trip.status) && presence.hasPosition;
   const isFinal = ['cancelled', 'cancelled_by_driver'].includes(trip.status);
   const driverCancelled = trip.status === 'cancelled_by_driver';
   const noDriver = trip.status === 'cancelled' && trip.cancel_reason === 'no_driver_available';
@@ -272,6 +326,7 @@ export default function BookingFlow() {
   const nearingDestination = !networkIssue && driverGpsFresh && destinationProximity(trip)?.near === true;
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {searching ? <DriverSearchOverlay trip={trip} busy={cancelBusy} error={actionError} offline={networkIssue} onCancel={() => void cancelSearch()} onDeadline={() => setRetryKey(value => value + 1)} /> : null}
       <BlurTargetView ref={sceneBlurTarget} style={{ flex: 1 }}>
       {actionError ? <View style={{ position: 'absolute', zIndex: 100, top: insets.top + 60, left: 16, right: 16, padding: 12, borderRadius: 16, backgroundColor: colors.surface }}><Text testID="booking-action-error" accessibilityRole="alert" style={{ color: colors.danger }}>{actionError}</Text></View> : null}
       <BlurTargetView ref={mapBlurTarget} style={StyleSheet.absoluteFill}><Map
@@ -284,15 +339,15 @@ export default function BookingFlow() {
         cars={searching ? available.cars : []}
         focusMode={searching ? 'nearby' : nearingDestination ? 'destination' : 'route'}
         focusRevision={nearingDestination ? 1 : 0}
-        contentInsets={{ top: insets.top + 88, right: 72,
-          bottom: minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
-        activeCar={showCar ? { lat: trip.driver_lat, lng: trip.driver_lng, heading: trip.driver_heading, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
+        contentInsets={{ top: noticeVisible ? insets.top + acceptedHeight + 24 : insets.top + 88, right: 72,
+          bottom: noticeVisible ? insets.bottom + 24 : minimized ? insets.bottom + 24 + minimizedHeight + 32 : matchingHeight + 32, left: 72 }}
+        activeCar={assignedVehicle ? { ...assignedVehicle, eta_min: trip.status === 'driver_on_way' ? etaMinutes ?? undefined : undefined } : null}
         testID="booking-map"
       /></BlurTargetView>
 
       {trip.status === 'at_pickup' ? <View testID="pickup-map-dim" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: .25 }]} /> : null}
-      {LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={() => { setMinimized(true); }} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
-      {minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View testID="booking-minimized-card" onLayout={e => setMinimizedHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
+      {!noticeVisible && !searching && LIVE_TRIP_STATUSES.includes(trip.status) && trip.status !== 'in_trip' ? <Pressable testID="active-trip-minimize" accessibilityRole="button" accessibilityLabel="Minimer tur" onPress={minimizeTrip} style={{ position: 'absolute', zIndex: 50, top: insets.top + 8, right: 16, padding: 12, borderRadius: 24, backgroundColor: colors.surface }}><Text>Minimer</Text></Pressable> : null}
+      {noticeVisible ? <DriverAcceptedNotice driver={trip.driver || {}} eta={etaMinutes} etaStatus={trip.eta_status} offline={networkIssue} onClose={dismissAccepted} onCall={callDriver} onChat={() => router.push('/(app)/messages')} onLayout={setAcceptedHeight} /> : minimized && LIVE_TRIP_STATUSES.includes(trip.status) ? <View testID="booking-minimized-card" onLayout={e => setMinimizedHeight(e.nativeEvent.layout.height)} style={{ position: 'absolute', bottom: insets.bottom + 24, left: 16, right: 16, gap: 8 }}>
         <ActiveTripCard trip={trip} offline={networkIssue} onOpen={() => setMinimized(false)} />
         <Pressable testID="active-trip-home" accessibilityRole="button" onPress={() => router.replace('/(app)/home')} style={{ padding: 12, backgroundColor: colors.surface, borderRadius: 24 }}><Text style={{ textAlign: 'center' }}>Til hjem og meny</Text></Pressable>
       </View> : <CustomerTripView
@@ -303,7 +358,7 @@ export default function BookingFlow() {
         onGuideChange={setPickupGuide}
         onInside={value => void setWaitingInside(value)} onCall={callDriver} onChat={() => router.push('/(app)/messages')}
         onShare={() => void shareTrip()} onSafety={() => setSafetyOpen(true)} onCancel={() => void cancel()}
-        onMinimize={() => setMinimized(true)} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
+        onMinimize={minimizeTrip} onHome={() => router.replace(noDriver ? { pathname: '/(app)/home', params: { retryTripId: trip.trip_id } } : '/(app)/home')}
         onWalk={openWalkingDirections} onReady={() => void notifyReady()} onAuthorize={() => void authorize()}
         onPhotoError={() => setDriverPhoto(current => current?.key === photoKey ? null : current)} onSheetLayout={setMatchingHeight}
       />}

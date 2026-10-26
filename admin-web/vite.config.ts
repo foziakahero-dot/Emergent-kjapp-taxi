@@ -8,6 +8,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  define: { 'import.meta.env.VITE_SNAR_QA_PANEL': JSON.stringify(process.env.VERCEL_GIT_COMMIT_REF === 'qa/snar-v10-phase5-staging-e2e' ? 'true' : 'false') },
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
     port: 5173,

@@ -30,6 +30,7 @@ const native = {
   PanResponder: { create: config => ({ panHandlers: config }) },
   Appearance: { getColorScheme: () => systemColorScheme, addChangeListener: listener => { themeListeners.add(listener); return { remove: () => themeListeners.delete(listener) }; } },
   Modal: ({ visible, children }) => visible ? React.createElement('Modal', null, children) : null,
+  useWindowDimensions: () => ({ width: 390, height: 844, scale: 1, fontScale: 1 }),
   Text: 'NativeText', TextInput: 'NativeTextInput', View: 'View', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', ScrollView: 'ScrollView', KeyboardAvoidingView: 'KeyboardAvoidingView', Platform: { OS: 'ios' },
   StyleSheet: { create: value => value, absoluteFill: { position: 'absolute', inset: 0 }, flatten: value => Array.isArray(value) ? Object.assign({}, ...value.filter(Boolean).map(native.StyleSheet.flatten)) : value },
   AccessibilityInfo: {
@@ -47,11 +48,19 @@ function load(app, file) {
   const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = name => {
     if (stubs.has(name)) return stubs.get(name);
+    if (name === '@/src/lib/useAvailableCars') return { useAvailableCars: () => ({ cars: [], phase: 'waiting', issue: 'empty', now: 0, seconds: null, retry() {} }) };
     if (app === 'frontend' && name === './api' && absolute.endsWith(path.join('frontend', 'src', 'lib', 'useAvailableCars.ts'))) {
       return { carsApi: { nearby: async () => ({ cars: [] }) } };
     }
     if (name === '@/src/components/VehicleAsset') return { VehicleAsset: 'VehicleAsset' };
+    if (name === '@/src/lib/useTripUpdates') return { useTripUpdates() {} };
+    if (name === '@/src/lib/useDriverAcceptedAlert') return { useDriverAcceptedAlert() {} };
     if (name === 'react') return React;
+    if (/\.(png|webp|jpe?g)$/.test(name)) {
+      const asset = path.resolve(path.dirname(absolute), name);
+      assert.ok(fs.existsSync(asset), `Missing bundled image: ${name}`);
+      return asset;
+    }
     if (name.startsWith('./')) { const target = path.relative(path.join(root, app), path.resolve(path.dirname(absolute), name)); return load(app, fs.existsSync(path.join(root, app, target + '.tsx')) ? target + '.tsx' : target + '.ts'); }
     if (name === 'react/jsx-runtime') return customerRequire(name);
     if (name === 'react-native') return native;
@@ -227,7 +236,7 @@ const act = renderer.act;
   assert.equal(tabBar.root.findAllByProps({ accessibilityRole: 'tab' }).length, 5, 'Customer dock must expose the five approved routes');
   assert.equal(tabBar.root.findAllByProps({ testID: 'tab-wallet' }).length, 0, 'Wallet remains reachable through its supported route, not a dock item');
   const assistantTab = tabBar.root.findByProps({ testID: 'tab-assist' });
-  assert.equal(assistantTab.findByType('View').props.style.width, 52, 'SNAR AI uses the approved inverse 52px dock tile');
+  assert.equal(native.StyleSheet.flatten(assistantTab.props.style({ pressed: false })).width, 52, 'SNAR AI uses the approved inverse 52px dock tile');
   assert.equal(assistantTab.findAllByType('NativeText').length, 0, 'SNAR AI tile is icon-only like the approved dock');
   await act(async () => tabBar.root.findByProps({ testID: 'tab-messages' }).props.onPress());
   assert.ok(tabCalls.some(call => Array.isArray(call) && call[0] === 'messages'), 'Messages dock item navigates to its supported route');
@@ -296,7 +305,7 @@ const act = renderer.act;
     assert.equal(toggle.root.findByType('Pressable').props.accessibilityState.checked, true);
     assert.equal(timingCalls.length, count, 'Reduced motion must apply toggle state without a duration-zero animation');
     await act(async () => accessibility.forEach(callback => callback(false)));
-    assert.equal(timingCalls.at(-1).duration, app === 'driver-app' ? 210 : 150);
+    assert.equal(timingCalls.at(-1).duration, 210);
     await act(async () => toggle.unmount());
   }
   const { SlideConfirm } = load('driver-app', 'src/components/SlideConfirm.tsx');
@@ -384,7 +393,7 @@ const act = renderer.act;
   stubs.set('expo-notifications', { getPermissionsAsync: async () => ({ granted: permissionGranted }), requestPermissionsAsync: async () => ({ granted: permissionGranted }) });
   stubs.set('expo-router', { useRouter: () => ({ push() {} }) });
   stubs.set('@/src/context/AuthContext', { useAuth: () => ({ user: driverUser, logout() {}, refresh: async () => {} }) });
-  stubs.set('@/src/utils/storage', { storage: { setItem: async (key, value) => cachedPreferences.push({ key, value }) } });
+  stubs.set('@/src/utils/storage', { storage: { getItem: async () => null, setItem: async (key, value) => cachedPreferences.push({ key, value }) } });
   stubs.set('@/src/lib/api', {
     authApi: { me() {} }, authenticatedFileSource() {},
     driverApi: { ratings() {}, vehicles() {}, summary() {}, payouts() {} },
@@ -424,7 +433,7 @@ const act = renderer.act;
   const placeApi = { mePlacesApi: { list() {}, add: async value => writes.push({ type: 'add', value }), update: async (id, value) => writes.push({ type: 'update', id, value }), remove: async () => {} }, placesApi: { search: async () => ({ results: [{ name: 'Ny adresse', lat: 59.9, lng: 10.7 }] }) } };
   stubs.set('@/src/lib/api', placeApi);
   stubs.set('expo-router', { useRouter: () => ({ back() {} }), useLocalSearchParams: () => ({ label: 'Hjem' }) });
-  stubs.set('@tanstack/react-query', { useQuery: () => addressQueryFailed ? ({ data: undefined, isLoading: false, isError: true, refetch: async () => {} }) : ({ data: { places: records }, isLoading: false }), useQueryClient: () => ({ invalidateQueries: async () => {} }) });
+  stubs.set('@tanstack/react-query', { useQuery: () => addressQueryFailed ? ({ data: undefined, isLoading: false, isError: true, refetch: async () => {} }) : ({ data: { places: records }, isLoading: false }), useQueryClient: () => ({ invalidateQueries: async () => {}, setQueryData: () => {}, getQueryData: () => null }) });
   const SavedPlaces = load('frontend', 'app/saved-places.tsx').default;
   let saved;
   await act(async () => { saved = renderer.create(React.createElement(SavedPlaces)); });
@@ -472,6 +481,8 @@ const act = renderer.act;
   let booking;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => booking.root.findByProps({ testID: 'active-trip-minimize' }).props.onPress());
+  assert.equal(navigations.at(-1), '/(app)/home', 'One minimize action returns to the customer menu without cancelling the trip');
+  assert.equal(serverTrip.status, 'driver_on_way');
   assert.equal(booking.root.findAllByProps({ testID: 'active-trip-reopen' }).length, 1);
   assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Venter på oppdatert sjåførposisjon'), 'Stale GPS must remain distinct from a failed trip-status request');
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0);
@@ -519,6 +530,7 @@ const act = renderer.act;
   serverTrip = { ...serverTrip, status: 'driver_on_way' };
   console.log('PASS: Actual Customer pickup geometry, confirmed/failed inside instructions, walking link, serialized readiness message and bank-state authorization.');
   // Failed cancellation cannot exit; duplicate confirmation must not submit twice.
+  navigations.length = 0;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   await act(async () => { const cancel = booking.root.findByProps({ testID: 'assigned-trip-cancel' }).props.onPress; cancel(); cancel(); });
   assert.equal(previews, 1);
@@ -539,7 +551,7 @@ const act = renderer.act;
   await act(async () => { booking = renderer.create(React.createElement(Booking)); });
   assert.ok(booking.root.findAllByType('NativeText').some(node => node.props.children === 'Fixture destination'), 'Active trip banner must use the server destination');
   assert.equal(booking.root.findAllByProps({ testID: 'driver-arrival-eta' }).length, 0, 'Active trip destination banner must replace pickup-arrival status');
-  assert.equal(booking.root.findAllByProps({testID:'trip-dock'}).length,1);
+  assert.equal(booking.root.findAll(node => node.type === 'View' && node.props.testID === 'trip-dock').length,1);
   await act(async()=>booking.root.findByProps({testID:'trip-dock-trip'}).props.onPress());assert.equal(navigations.pop(),'/customer-trip/unit-trip');
   await act(async()=>booking.root.findByProps({testID:'trip-dock-message'}).props.onPress());assert.equal(navigations.pop(),'/(app)/messages','Active trip dock opens the current Customer messaging screen');
   await act(async()=>booking.root.findByProps({testID:'active-trip-minimize'}).props.onPress());assert.equal(booking.root.findAllByProps({testID:'active-trip-reopen'}).length,1);

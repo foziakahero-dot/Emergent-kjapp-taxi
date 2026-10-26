@@ -1,5 +1,6 @@
 """Execute the actual support/AI endpoints without provider calls or real tickets."""
 import ast
+import logging
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,8 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from typing import Optional
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ai_configuration import provider_chat_session
 
 class HTTPException(Exception):
     def __init__(self, status_code, detail):
@@ -20,17 +23,10 @@ def endpoints(key='fixture-key'):
         if isinstance(node, ast.AsyncFunctionDef) and node.name in {'ai_chat', 'create_public_support_ticket', 'admin_tickets'}:
             node.decorator_list = []
             nodes.append(node)
-    class EmptyHistory:
-        def sort(self,*args): return self
-        def limit(self,*args): return self
-        def __aiter__(self): return self
-        async def __anext__(self): raise StopAsyncIteration
-    chats = SimpleNamespace(insert_one=AsyncMock(), find=Mock(return_value=EmptyHistory()))
+    chats = SimpleNamespace(insert_one=AsyncMock())
     tickets = SimpleNamespace(insert_one=AsyncMock(return_value=SimpleNamespace(inserted_id='confirmed-ticket')))
-    gateway = AsyncMock(return_value='Confirmed provider reply')
-    context = {'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'ChatRequest':object, 'PublicSupportRequest':object,
-               '_gateway_chat':gateway, 'AI_CHAT_MODEL':'fixture-model',
-               'httpx':SimpleNamespace(TimeoutException=type('TimeoutException',(Exception,),{})),
+    context = {'AI_LLM_KEY':key, 'AI_SYSTEM':'fixture-system', 'APP_ENV':'qa', 'provider_chat_session':provider_chat_session,
+               'logging':logging, 'ChatRequest':object, 'PublicSupportRequest':object,
                'Request':object, 'Depends':lambda value:None, 'get_current_user':None,
                'HTTPException':HTTPException, '_enforce_rate_limit':AsyncMock(),
                'db':SimpleNamespace(chat_messages=chats, support_tickets=tickets),
@@ -61,36 +57,46 @@ class SupportChatTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(error.exception.status_code,400)
             chats.insert_one.assert_not_awaited()
 
-    async def test_gateway_failure_is_handled_as_502(self):
-        ctx,chats,_=endpoints();ctx['_gateway_chat'].side_effect=RuntimeError('fixture-gateway-error')
-        with self.assertRaises(HTTPException) as error:
-            await self.invoke(ctx)
+    def provider(self, reply='Confirmed provider reply', construction_error=None):
+        chat=SimpleNamespace(send_message=AsyncMock(return_value=reply))
+        factory=Mock(side_effect=construction_error,return_value=SimpleNamespace(with_model=Mock(return_value=chat)))
+        module=ModuleType('emergentintegrations.llm.chat')
+        module.LlmChat=factory
+        module.UserMessage=lambda **values:SimpleNamespace(**values)
+        return module,chat
+
+    async def test_constructor_failure_is_handled_as_502(self):
+        ctx,chats,_=endpoints();module,_=self.provider(construction_error=RuntimeError('fixture-provider-init'))
+        with patch.dict(sys.modules,{'emergentintegrations.llm.chat':module}):
+            with self.assertRaises(HTTPException) as error:
+                await self.invoke(ctx)
         self.assertEqual(error.exception.status_code,502)
         self.assertEqual(chats.insert_one.await_count,1)
 
     async def test_empty_provider_reply_is_not_success_or_stored_as_assistant(self):
-        ctx,chats,_=endpoints();ctx['_gateway_chat'].side_effect=ValueError('Empty AI reply')
-        with self.assertRaises(HTTPException) as error:
-            await self.invoke(ctx)
+        ctx,chats,_=endpoints();module,_=self.provider(reply='  ')
+        with patch.dict(sys.modules,{'emergentintegrations.llm.chat':module}):
+            with self.assertRaises(HTTPException) as error:
+                await self.invoke(ctx)
         self.assertEqual(error.exception.status_code,502)
         self.assertEqual(chats.insert_one.await_count,1)
 
     async def test_confirmed_provider_reply_and_trimmed_user_message_are_stored_under_owner(self):
-        ctx,chats,_=endpoints()
-        response=await self.invoke(ctx)
+        ctx,chats,_=endpoints();module,chat=self.provider()
+        with patch.dict(sys.modules,{'emergentintegrations.llm.chat':module}):
+            response=await self.invoke(ctx)
         self.assertEqual(response,{'reply':'Confirmed provider reply','session_id':'support-session'})
-        messages,model=ctx['_gateway_chat'].call_args.args
-        self.assertEqual(model,'fixture-model')
-        self.assertEqual(messages[0],{'role':'system','content':'fixture-system'})
-        self.assertEqual(messages[-1],{'role':'user','content':'Actual support question'})
+        self.assertEqual(chat.send_message.call_args.args[0].text,'Actual support question')
         rows=[call.args[0] for call in chats.insert_one.call_args_list]
         self.assertEqual([row['role'] for row in rows],['user','assistant'])
         self.assertTrue(all(row['user_id']=='actual-user' for row in rows))
 
     async def test_provider_timeout_is_visible_504(self):
-        ctx,_,_=endpoints();ctx['_gateway_chat'].side_effect=asyncio.TimeoutError()
-        with self.assertRaises(HTTPException) as error:
-            await self.invoke(ctx)
+        ctx,_,_=endpoints();module,chat=self.provider()
+        chat.send_message.side_effect=asyncio.TimeoutError()
+        with patch.dict(sys.modules,{'emergentintegrations.llm.chat':module}):
+            with self.assertRaises(HTTPException) as error:
+                await self.invoke(ctx)
         self.assertEqual(error.exception.status_code,504)
 
     async def test_human_ticket_intake_works_without_ai_key_and_returns_actual_id(self):

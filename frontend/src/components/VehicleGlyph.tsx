@@ -1,5 +1,6 @@
 import React from 'react';
 import { VehicleAsset, VehicleKind } from './VehicleAsset';
+import { customerVehicleArt } from '@/src/lib/vehicleAssets';
 
 /**
  * Vehicle selector artwork.
@@ -13,8 +14,8 @@ export function VehicleGlyph({
   selected: boolean;
   kind?: string;
 }) {
-  const safeKind: VehicleKind =
-    kind === 'trygg' || kind === 'premium' ? kind : 'ai-first';
+  if (!customerVehicleArt(kind)) return null;
+  const safeKind = kind as VehicleKind;
 
   return (
     <VehicleAsset

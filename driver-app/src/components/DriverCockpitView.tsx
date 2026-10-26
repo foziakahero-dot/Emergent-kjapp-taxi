@@ -1,12 +1,17 @@
+import { EarningsCount } from './snar10/driver/EarningsCount';
+import { Sheet as SourceSheet } from './snar10/Sheet';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle } from 'react-native-svg';
+import { Ring } from './snar10/Ring';
+import { TurnBanner } from './snar10/driver/TurnBanner';
+import { OnlineChip } from './snar10/driver/OnlineChip';
+import { OfferSheet } from './snar10/driver/OfferSheet';
 import { Text } from '@/src/components/Typography';
 import { V10Icon } from '@/src/components/V10Icon';
 import { V10Action, V10Badge, V10Group, V10Row, V10Screen, v10 } from '@/src/components/V10UI';
-import { V10HoldAction } from '@/src/components/V10HoldAction';
+import { HoldButton as V10HoldAction } from './snar10/driver/HoldButton';
 import { ExperienceStudio, type StudioOption } from '@/src/components/ExperienceStudio';
 import { usePersonalShiftGoal } from '@/src/lib/usePersonalShiftGoal';
 import { FigmaGradient } from '@/src/components/FigmaGradient';
@@ -19,7 +24,7 @@ import { colors, font, useColorTheme } from '@/src/theme';
 type Props = {
   user: any; online: boolean; busy: boolean; error: string; summary: any; current: any; completed: any; offer: any;
   offerRemaining: number | null; offerExpired: boolean; offerDistance: number | null; offerDuration: number | null;
-  gpsReady: boolean; minimized: boolean; extras: string;
+  mapTarget?: React.RefObject<View | null>; gpsReady: boolean; minimized: boolean; extras: string;
   onOnline: () => void; onAccept: () => void; onDecline: () => void; onAdvance: () => Promise<void>;
   onCancel: () => void; onNoShow: () => void; onCall: () => void; onChat: () => void; onNavigate: () => void;
   onEmergency: () => void; onMinimize: (value: boolean) => void; onContinue: () => void; onPause: () => void;
@@ -28,14 +33,6 @@ type Props = {
 const known = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
 const breakdownAmount = (value: unknown) => known(value) && (value as number) >= 0 ? (value as number).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Avventer';
 const minutes = (value: unknown) => known(value) ? `${Math.floor((value as number) / 60)} t ${(value as number) % 60} min` : '—';
-function Ring({ value, size = 64, color = colors.success, stroke = 3, radius = size / 2 - stroke, children }: { value: number | null; size?: number; color?: string; stroke?: number; radius?: number; children?: React.ReactNode }) {
-  useColorTheme();
-  const length = 2 * Math.PI * radius;
-  return <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}><Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-    <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.lineStrong} strokeWidth={stroke} fill="none" />
-    {value !== null ? <Circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={stroke} fill="none" strokeDasharray={`${length} ${length}`} strokeDashoffset={length * (1 - Math.max(0, Math.min(1, value)))} strokeLinecap="round" rotation={-90} origin={`${size / 2}, ${size / 2}`} /> : null}
-  </Svg>{children}</View>;
-}
 function ShiftStatusRing() {
   const reduced = useReducedMotion();
   const turn = useRef(new Animated.Value(0)).current;
@@ -52,14 +49,9 @@ function ShiftStatusRing() {
   </View>;
 }
 function Sheet({ children, padBottom = 34 }: { children: React.ReactNode; padBottom?: number }) {
-  useColorTheme();
-  const insets = useSafeAreaInsets();
-  return <V10Entrance sheet style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: '82%', borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: colors.surface, paddingTop: 10, boxShadow: colors.elevation3, overflow: 'hidden' }}>
-    <FigmaGradient angle={165} colors={[colors.surfaceRaised, colors.surface]} style={StyleSheet.absoluteFill} pointerEvents="none" />
-    <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.lineStrong, alignSelf: 'center', marginBottom: 14 }} />
-    <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(padBottom, insets.bottom) }}>{children}</ScrollView>
-  </V10Entrance>;
+  return <SourceSheet paddingBottom={padBottom}>{children}</SourceSheet>;
 }
+
 function Kpi({ label, value, unit }: { label: string; value: string; unit?: string }) {
   useColorTheme(); return <View style={{ flex: 1 }}><Text style={v10.caption}>{label}</Text><Text style={{ fontFamily: font.semibold, fontSize: 20, lineHeight: 26, letterSpacing: -.4, color: colors.text, fontVariant: ['tabular-nums'] }}>{value}{unit ? <Text style={v10.caption}> {unit}</Text> : null}</Text></View>; }
 export function DriverCockpitView(p: Props) {
@@ -76,8 +68,6 @@ export function DriverCockpitView(p: Props) {
   const [clock, setClock] = useState(Date.now());
   useEffect(() => { setPhase('base'); }, [p.current?.trip_id, p.current?.status]);
   useEffect(() => { if (p.current?.status !== 'at_pickup') return; const timer = setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, [p.current?.status]);
-  const offerStart = useRef<{ id?: string; remaining: number | null }>({ remaining: null });
-  if (offerStart.current.id !== p.offer?.trip_id) offerStart.current = { id: p.offer?.trip_id, remaining: p.offerRemaining };
   const trip = p.current;
   const name = trip?.customer?.name || 'Kunden din';
   const inside = typeof trip?.pickup_waiting_inside === 'boolean' ? trip.pickup_waiting_inside : /venter inne|venter i resepsjonen|waiting inside/i.test(trip?.passenger_note || '');
@@ -93,7 +83,8 @@ export function DriverCockpitView(p: Props) {
     {pickupNavigation ? <View style={{ flex: 1 }}><V10Action kind="soft" small height={52} iconSize={20} label="Naviger" icon="navigation" onPress={p.onNavigate} testID="driver-pickup-navigation" /></View> : null}
   </View>;
   const header = <V10Entrance key={p.online ? 'online' : 'offline'} style={{ position: 'absolute', top: Math.max(58, insets.top + 10), left: p.online ? 16 : 20, right: p.online ? 16 : 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-    {p.online ? <View style={{ flex: 1, minHeight: 60, borderRadius: 20, boxShadow: colors.elevation2, paddingVertical: 10, paddingLeft: 16, paddingRight: 12, backgroundColor: colors.glass, flexDirection: 'row', alignItems: 'center', gap: 12 }}><V10Badge inline tone="positive">Online</V10Badge><Text style={[v10.secondary, { color: colors.text, fontVariant: ['tabular-nums'] }]}>{minutes(p.summary?.online_minutes)}</Text><Pressable accessibilityRole="button" accessibilityLabel="Dagens inntekt" onPress={() => router.navigate('/(driver)/earnings')} style={{ marginLeft: 'auto' }}><Text style={{ fontFamily: font.semibold, fontSize: 17, lineHeight: 23, fontVariant: ['tabular-nums'] }}>{kr(p.summary?.income)}</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Gå offline" testID="driver-online-toggle" disabled={p.busy || !!trip} onPress={p.onOnline} style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}><V10Icon name="power" size={20} color={colors.text} /></Pressable></View> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><DriverAvatar account={p.user} size={32} /><V10Badge inline>Offline</V10Badge></View>}
+    {p.online ? <OnlineChip target={p.mapTarget} onlineTime={minutes(p.summary?.online_minutes)} income={kr(p.summary?.income)} disabled={p.busy || !!trip}
+      onEarnings={() => router.navigate('/(driver)/earnings')} onOffline={p.onOnline} /> : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, paddingRight: 14, borderRadius: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><DriverAvatar account={p.user} size={32} /><V10Badge inline>Offline</V10Badge></View>}
     {!p.online ? <Pressable accessibilityRole="button" accessibilityLabel="Innstillinger" onPress={() => router.push('/driver-settings')} style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: colors.glass, boxShadow: colors.elevation2, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="settings" /></Pressable> : null}
   </V10Entrance>;
   if (p.busy && !trip && !p.offer && !p.completed) return <V10Entrance fade testID="driver-shift-pending" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -113,7 +104,7 @@ export function DriverCockpitView(p: Props) {
       {p.error ? <Text accessibilityRole="alert" style={{ color: colors.danger }}>{p.error}</Text> : null}
       <V10Entrance pop key={`${done.trip_id}:${paid ? 'paid' : 'pending'}`} style={{ marginTop: 24 }}>
         <V10Badge tone="positive">Tur fullført</V10Badge><Text style={[v10.caption, { marginTop: 16 }]}>Din inntekt</Text>
-        <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: paid ? 52 : 32, lineHeight: 56, letterSpacing: -1.82, fontVariant: ['tabular-nums'] }}>{paid ? kr(done.driver_earnings) : 'Betaling avventer'}</Text>
+        {paid ? <EarningsCount amount={done.driver_earnings} /> : <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 32, lineHeight: 56, letterSpacing: -1.82 }}>Betaling avventer</Text>}
         <Text style={v10.secondary}>{paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text>
       </V10Entrance>
       <V10Group style={{ marginTop: 24, paddingVertical: 6, paddingHorizontal: 16 }}>{rows.map(([label, value], index) => <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, gap: 12 }}>
@@ -127,14 +118,12 @@ export function DriverCockpitView(p: Props) {
     {p.error ? <View style={{ position: 'absolute', top: insets.top + (trip ? 124 : 76), left: 16, right: 16, padding: 10, borderRadius: 12, backgroundColor: colors.dangerSoft, zIndex: 55 }}><Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 12, lineHeight: 16 }}>{p.error}</Text></View> : null}
     {trip && p.minimized ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(108, insets.bottom + 74) }}><Pressable accessibilityRole="button" accessibilityLabel="Åpne aktiv tur" onPress={() => p.onMinimize(false)} testID="driver-trip-reopen" style={{ minHeight: 60, borderRadius: 20, padding: 14, backgroundColor: colors.surfaceInverse }}><Text style={[v10.body, { color: colors.onInverse }]}>{trip.status === 'in_trip' ? 'Tur pågår' : trip.status === 'at_pickup' ? 'Venter på passasjer' : 'På vei til henting'}</Text><Text style={[v10.caption, { color: colors.onInverse }]}>{name} · {trip.status === 'in_trip' ? trip.dropoff_address : trip.pickup_address}</Text></Pressable></View> : trip ? <>
       {!hasTurnBanner ? <Pressable accessibilityRole="button" accessibilityLabel="Minimer tur" testID="driver-trip-minimize" onPress={() => p.onMinimize(true)} style={{ position: 'absolute', right: 16, top: insets.top + 12, width: 48, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: colors.surface, zIndex: 40 }}><V10Icon name="chevD" size={18} /></Pressable> : null}
-      {hasTurnBanner ? <V10Entrance style={{ position: 'absolute', left: 12, right: 12, top: Math.max(56, insets.top + 8), borderRadius: 24, backgroundColor: colors.surfaceInverse, paddingVertical: 16, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <V10Icon name="navigation" size={40} color={colors.onInverse} />
-        <View style={{ flex: 1 }}><Text style={{ color: colors.onInverse, fontSize: pickupNavigation && eta === null ? 24 : 30, lineHeight: 34, letterSpacing: -.9, fontFamily: font.semibold, fontVariant: ['tabular-nums'] }}>{pickupNavigation ? eta !== null ? `${eta} min` : 'Kjør til henting' : 'Til destinasjon'}</Text><Text style={{ color: colors.onInverse, fontFamily: font.semibold, fontSize: 17, lineHeight: 23, opacity: .85 }}>{trip.status === 'in_trip' ? trip.dropoff_address : trip.pickup_address}</Text></View>
+      {hasTurnBanner ? <TurnBanner dist={pickupNavigation ? eta !== null ? `${eta} min` : 'Kjør til henting' : 'Til destinasjon'} street={trip.status === 'in_trip' ? trip.dropoff_address : trip.pickup_address} style={{ top: Math.max(56, insets.top + 8) }}>
         <View style={{ gap: 4 }}>
           <Pressable accessibilityRole="button" accessibilityLabel="Minimer tur" testID="driver-trip-minimize" onPress={() => p.onMinimize(true)} style={{ width: 40, height: 36, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="chevD" size={18} color={colors.onInverse} /></Pressable>
           {!pickupNavigation ? <Pressable accessibilityRole="button" accessibilityLabel="Åpne navigasjon" testID="driver-navigation" onPress={p.onNavigate} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="share" color={colors.onInverse} /></Pressable> : null}
         </View>
-      </V10Entrance> : null}
+      </TurnBanner> : null}
       {inside && trip.status === 'driver_on_way' && phase === 'base' ? <V10Entrance testID="driver-waiting-inside" style={{ position: 'absolute', top: Math.max(172, insets.top + 124), left: 12, right: 12, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.surface, boxShadow: colors.elevation2, flexDirection: 'row', gap: 10, alignItems: 'center' }}><V10Icon name="inside" size={20} color={colors.success} /><Text style={[v10.body, { flex: 1, fontSize: 15 }]}>{name.split(' ')[0]} venter inne</Text><Text style={v10.caption}>Ring ved ankomst</Text></V10Entrance> : null}
       <Sheet key={`${trip.trip_id}:${trip.status}:${phase}`}>
         {trip.status === 'driver_on_way' ? phase === 'arrival' ? <><V10Badge tone="positive">Bekreft hentepunktet</V10Badge><Text style={[v10.title, { marginTop: 10 }]}>{trip.pickup_address}</Text><Text style={[v10.secondary, { marginTop: 4 }]}>{name} blir varslet når ankomsten er bekreftet.</Text><View style={{ marginTop: 20 }}><V10Action height={58} label="Jeg har ankommet" onPress={() => void p.onAdvance().catch(p.onError)} busy={p.busy} testID="driver-advance" /><V10Action kind="ghost" label="Tilbake" onPress={() => setPhase('base')} /></View></> : <>
@@ -150,14 +139,8 @@ export function DriverCockpitView(p: Props) {
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}><View style={{ flex: 1 }}><V10Action small kind="soft" icon="message" label="Melding" onPress={p.onChat} /></View><View style={{ flex: 1 }}><V10Action small kind="soft" icon="safety" label="Sikkerhet" onPress={p.onEmergency} /></View></View><View style={{ marginTop: 12 }}><V10Action height={58} kind="ink" label="Ankommer destinasjon" onPress={() => setPhase('arriving')} testID="driver-arriving-review" /></View>
         </> : null}
       </Sheet>
-    </> : p.offer && p.online ? <Sheet>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}><V10Badge inline icon="vehicle">{({ 'ai-first': 'Standard', trygg: 'XL', premium: 'Premium' } as Record<string, string>)[p.offer.vehicle_type] || 'SNAR'} · ny tur</V10Badge><Ring size={40} color={colors.textSecondary} value={p.offerRemaining !== null && offerStart.current.remaining && offerStart.current.remaining > 0 ? p.offerRemaining / offerStart.current.remaining : null}><Text style={[v10.caption, { color: colors.text, fontVariant: ['tabular-nums'] }]}>{p.offerRemaining ?? '—'}</Text></Ring></View>
-      <Text style={{ marginTop: 12 }}><Text style={{ fontFamily: font.semibold, fontSize: 40, lineHeight: 44, letterSpacing: -1.4 }}>{known(p.offerDuration) ? Math.ceil(p.offerDuration!) : '—'} min</Text><Text style={v10.secondary}> til henting{known(p.offerDistance) ? ` · ${p.offerDistance!.toLocaleString('nb-NO', { maximumFractionDigits: 1 })} km` : ''}</Text></Text>
-      <View style={{ marginVertical: 18, gap: 4 }}><Text style={{ fontFamily: font.semibold, fontSize: 22, lineHeight: 28, letterSpacing: -.44 }}>{p.offer.pickup_address}</Text><View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><V10Icon name="arrowR" size={18} color={colors.textMuted} /><Text style={v10.caption}>{[known(p.offer.distance_km) ? `${p.offer.distance_km.toLocaleString('nb-NO')} km` : null, known(p.offer.duration_min) ? `${p.offer.duration_min} min` : null].filter(Boolean).join(' · ')}</Text></View><Text style={{ fontFamily: font.semibold, fontSize: 22, lineHeight: 28, letterSpacing: -.44 }}>{p.offer.dropoff_address}</Text></View>
-      {p.extras ? <Text style={v10.caption}>{p.extras}</Text> : null}{p.offer.passenger_note ? <Text style={v10.secondary}>{p.offer.passenger_note}</Text> : null}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: 14, borderTopWidth: 1, borderTopColor: colors.line }}><Text style={v10.secondary}>Estimert pris</Text><Text style={{ fontFamily: font.semibold, fontSize: 28, lineHeight: 36, letterSpacing: -.176, fontVariant: ['tabular-nums'] }}>{kr(p.offer.price)}</Text></View>
-      <View style={{ flexDirection: 'row', gap: 8 }}><View style={{ width: 96 }}><V10Action height={64} kind="soft" label="Avslå" onPress={p.onDecline} disabled={p.busy} testID={`driver-decline-${p.offer.trip_id}`} /></View><View style={{ flex: 1 }}><V10Action height={64} labelSize={18} label={p.offerExpired ? 'Utløpt' : 'Aksepter'} onPress={p.onAccept} busy={p.busy} disabled={p.offerExpired} testID={`driver-accept-${p.offer.trip_id}`} /></View></View>
-    </Sheet> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}>
+    </> : p.offer && p.online ? <OfferSheet offer={p.offer} offerRemaining={p.offerRemaining} offerExpired={p.offerExpired}
+      offerDistance={p.offerDistance} offerDuration={p.offerDuration} extras={p.extras} busy={p.busy} onAccept={p.onAccept} onDecline={p.onDecline} /> : p.online ? <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(104, insets.bottom + 70), gap: 8 }}>
       <V10Entrance><Pressable testID="driver-online-intelligence" accessibilityRole="button" onPress={() => router.push('/(driver)/intel')} style={{ borderRadius: 20, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'flex-start', backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.surfaceInverse, alignItems: 'center', justifyContent: 'center' }}><V10Icon name="ai" size={18} color={colors.onInverse} /></View><View style={{ flex: 1 }}><Text style={[v10.body, { fontSize: 15 }]}>Drive Intelligence</Text><Text style={v10.caption}>Ingen etterspørselsprognose tilgjengelig ennå</Text></View></Pressable></V10Entrance>
       <V10Entrance delay={60} style={{ borderRadius: 20, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.glass, boxShadow: colors.elevation2 }}><Text style={[v10.secondary, { color: colors.text }]}>Venter på tur · {p.user?.plate || 'Skilt ikke tilgjengelig'}</Text><Text style={v10.caption}>{p.gpsReady ? 'Posisjonen din deles med dispatch.' : 'Finner GPS…'}</Text></V10Entrance>
     </View> : <Sheet padBottom={108}>

@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
-import { GoogleSignin, isSuccessResponse, isCancelledResponse } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, isSuccessResponse, isCancelledResponse, isErrorWithCode, statusCodes } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
-export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }) {
+export async function googleIdentity(config: { google_web_client_id: string; google_ios_client_id?: string }, _action: 'signin' | 'link' = 'signin') {
   const webClientId = String(config?.google_web_client_id || '').trim();
   const iosClientId = String(config?.google_ios_client_id || '').trim();
   if (!webClientId) throw new Error('Google-innlogging er ikke konfigurert på SNAR-serveren ennå.');
@@ -14,6 +14,8 @@ export async function googleIdentity(config: { google_web_client_id: string; goo
   // valid server configuration just because an EXPO_PUBLIC_* value was omitted
   // from the JavaScript bundle; the iOS URL scheme itself is still baked into the
   // native binary by app.config.js during EAS build.
+  let result;
+  try {
   GoogleSignin.configure({
     webClientId,
     iosClientId: Platform.OS === 'ios' ? iosClientId : undefined,
@@ -23,7 +25,17 @@ export async function googleIdentity(config: { google_web_client_id: string; goo
   if (Platform.OS === 'android') {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   }
-  const result = await GoogleSignin.signIn();
+  result = await GoogleSignin.signIn();
+  } catch (error) {
+    if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) return null;
+    if (isErrorWithCode(error)) {
+      if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) throw new Error('Google Play-tjenester må oppdateres før du kan logge inn.');
+      if (error.code === statusCodes.IN_PROGRESS) throw new Error('Google-innlogging pågår allerede.');
+      if (String(error.code) === '10' || String(error.code) === 'DEVELOPER_ERROR') throw new Error('Google-innlogging mangler riktig appkonfigurasjon. Kontakt SNAR.');
+      if (String(error.code) === '7' || String(error.code) === 'NETWORK_ERROR') throw new Error('Kan ikke kontakte Google. Sjekk nettet og prøv igjen.');
+    }
+    throw new Error('Google-innloggingen kunne ikke fullføres. Prøv igjen.');
+  }
   if (isCancelledResponse(result)) return null;
   if (!isSuccessResponse(result) || !result.data.idToken) {
     throw new Error('Google returnerte ikke et gyldig innloggingstoken.');

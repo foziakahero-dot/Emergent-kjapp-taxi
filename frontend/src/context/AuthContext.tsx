@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { storage } from '@/src/utils/storage';
 import { authApi, TOKEN_KEY } from '@/src/lib/api';
@@ -15,6 +16,7 @@ export type User = {
   legal_accepted?: boolean;
   customer_photo_version?: string;
   google_linked?: boolean;
+  apple_linked?: boolean;
 } | null;
 
 type AuthCtx = {
@@ -39,13 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const epoch = ++sessionEpoch.current;
     setSessionError('');
-    const token = await storage.getItem(TOKEN_KEY);
-    if (epoch !== sessionEpoch.current) return;
-    if (!token) {
-      setUser(null);
-      return;
-    }
     try {
+      const token = await storage.getItem(TOKEN_KEY);
+      if (epoch !== sessionEpoch.current) return;
+      if (!token) { setUser(null); return; }
       const u = await authApi.me();
       if (epoch !== sessionEpoch.current) return;
       if (u?.role !== 'user') {
@@ -103,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
     const epoch = ++sessionEpoch.current;
     const identity = provider === 'google'
-      ? await googleIdentity(await authApi.nativeConfig()) : await appleIdentity();
+      ? await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig()) : await appleIdentity();
     if (!identity || epoch !== sessionEpoch.current) return null;
     const res = typeof identity === 'string' ? await authApi.nativeSignIn(provider, identity) : identity.session;
     if (epoch !== sessionEpoch.current) return null;

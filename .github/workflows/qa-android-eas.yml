@@ -1,0 +1,124 @@
+name: Reusable locked SNAR QA Android EAS build
+
+on:
+  workflow_call:
+    inputs:
+      app_directory:
+        type: string
+        required: true
+      expected_sha:
+        type: string
+        required: true
+      authorization:
+        type: string
+        required: true
+      diagnostic_only:
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      EXPO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snar-qa-apk-${{ inputs.app_directory }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      EAS_BUILD_PROFILE: qa
+      EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
+      EXPO_PUBLIC_SOURCE_SHA: ${{ inputs.expected_sha }}
+      EXPECTED_SOURCE_SHA: ${{ inputs.expected_sha }}
+      QA_APK_AUTHORIZATION: ${{ inputs.authorization }}
+      QA_APP_DIRECTORY: ${{ inputs.app_directory }}
+      QA_ANDROID_CERT_SHA1: ${{ inputs.app_directory == 'frontend' && vars.SNAR_CUSTOMER_QA_ANDROID_SHA1 || vars.SNAR_DRIVER_QA_ANDROID_SHA1 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: qa/snar-v10-phase5-staging-e2e
+          fetch-depth: 1
+
+      - name: Report reusable secret availability safely
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN_PRESENT=true"
+          else
+            echo "EXPO_TOKEN_PRESENT=false"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ inputs.app_directory }}/package-lock.json
+
+      - name: Check release lock tests and deployed QA commit
+        run: |
+          node --test scripts/qa-release-lock.test.cjs
+          node scripts/qa-release-lock.cjs
+
+      - name: Install locked app dependencies
+        working-directory: ${{ inputs.app_directory }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Check actual native app configuration and types
+        working-directory: ${{ inputs.app_directory }}
+        run: |
+          npx tsc --noEmit
+          KJAPP_REQUIRE_FIREBASE='' npx expo config --type public --json > /tmp/snar-expo-config.json
+          node -e 'const c=require("/tmp/snar-expo-config.json"); const e=process.env.QA_APP_DIRECTORY === "frontend" ? "no.kjapp.app" : "no.kjapp.driver"; if(c.android.package !== e || !c.name.includes("QA")) process.exit(1)'
+
+      - name: Recheck deployed release before paid build boundary
+        run: node scripts/qa-release-lock.cjs
+
+      - name: Diagnostic preflight complete - paid EAS build blocked
+        if: inputs.diagnostic_only
+        run: echo "Diagnostic preflight passed. No EAS command executed."
+
+      - name: Require existing Expo authentication
+        if: ${{ !inputs.diagnostic_only }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: test -n "$EXPO_TOKEN"
+
+      - name: Build signed internal APK with existing EAS project credentials
+        if: ${{ !inputs.diagnostic_only }}
+        working-directory: ${{ inputs.app_directory }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli@25.0.0 build --platform android --profile qa --non-interactive --wait --json > "$RUNNER_TEMP/snar-eas-result.json"
+
+      - name: Verify EAS build identity and download APK
+        if: ${{ !inputs.diagnostic_only }}
+        run: node scripts/qa-eas-artifact.cjs "$RUNNER_TEMP/snar-eas-result.json"
+
+      - name: Verify APK signing certificate matches registered Google OAuth
+        if: ${{ !inputs.diagnostic_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs qa-artifacts/*.apk > "$RUNNER_TEMP/snar-certificate.txt"
+          EXPECTED_CERT=$(echo "$QA_ANDROID_CERT_SHA1" | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          ACTUAL_CERT=$(sed -n 's/^Signer #1 certificate SHA-1 digest: //p' "$RUNNER_TEMP/snar-certificate.txt" | tr '[:upper:]' '[:lower:]')
+          test "$ACTUAL_CERT" = "$EXPECTED_CERT"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.diagnostic_only }}
+        with:
+          name: SNAR-QA-${{ inputs.app_directory }}-${{ inputs.expected_sha }}
+          path: qa-artifacts/
+          if-no-files-found: error
+          retention-days: 14

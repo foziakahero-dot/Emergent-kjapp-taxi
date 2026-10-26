@@ -5,13 +5,14 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pymongo import ReturnDocument
-from email_delivery import email_configured
+from resend_email import resend_config, send_resend_email
 
 
 async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
     if not recipient:
         return "not_requested"
     messages = {
+        "customer": ("Velkommen til SNAR", "Kundekontoen din er opprettet. Åpne SNAR-appen for å velge hentested og reisemål. Tidligere turer og kvitteringer finner du under Aktivitet. Denne e-posten bekrefter at kontoen er opprettet; den bekrefter ikke eierskap til e-postadressen."),
         "beta": ("SNAR: Interessen din er registrert", "Du er registrert for SNAR-betaen. Vi sender informasjon om tilgang når neste testgruppe åpner. Dette er en bekreftelse på registreringen, ikke en aktiv brukerkonto."),
         "fleet": ("SNAR: Vi har mottatt partnersøknaden", "Virksomheten og dokumentene dine er sendt til SNAR for kontroll. Du får et eget svar når søknaden er behandlet. Flåtetilgang åpnes etter godkjenning."),
         "driver": ("SNAR: Sjåførregistreringen er mottatt", "Profilbilde, førerkort og kjøreseddel er sendt til kontroll. Registreringen er knyttet til flåten som inviterte deg. Du kan motta turer først når nødvendige godkjenninger er på plass."),
@@ -27,14 +28,31 @@ async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
     await db.onboarding_email_outbox.update_one({"_id": f"{kind}:{entity_id}"}, {"$setOnInsert": {
         "recipient": recipient, "subject": subject, "html": body, "kind": kind,
         "entity_id": str(entity_id), "status": "pending", "attempts": 0,
+        "provider": "resend" if kind == "customer" else "sendgrid",
         "created_at": now, "next_attempt_at": now,
     }}, upsert=True)
-    return "queued" if email_configured() else "not_configured"
+    configured = resend_config()["enabled"] if kind == "customer" else bool(os.environ.get("SENDGRID_API_KEY", "").strip())
+    return "queued" if configured else "not_configured"
 
 
-async def deliver_one(db, send_email, prepare_email=None):
+async def queue_customer_welcome(db, user):
+    if not user or not user.get("welcome_email_pending") or user.get("role") != "user":
+        return "not_requested"
+    try:
+        status = await queue_confirmation(db, "customer", str(user["_id"]), user.get("email"), user.get("fullName"))
+        await db.users.update_one({"_id": user["_id"]}, {"$unset": {"welcome_email_pending": ""}})
+        return status
+    except Exception:
+        # Account creation survives a transient outbox failure. The worker retries
+        # this marker; existing accounts are never sent a retroactive welcome.
+        logging.warning("Customer welcome enqueue needs retry")
+        return "retry_pending"
+
+
+async def deliver_one(db, send_email, prepare_email=None, *, provider="sendgrid"):
     now = datetime.now(timezone.utc)
     job = await db.onboarding_email_outbox.find_one_and_update({
+        "provider": "resend" if provider == "resend" else {"$ne": "resend"},
         "attempts": {"$lt": 8}, "$or": [
             {"status": "pending", "next_attempt_at": {"$lte": now}},
             {"status": "sending", "lease_until": {"$lte": now}},
@@ -44,7 +62,8 @@ async def deliver_one(db, send_email, prepare_email=None):
         return False
     try:
         body = await prepare_email(job) if prepare_email else job["html"]
-        sent = bool(await asyncio.to_thread(send_email, job["recipient"], job["subject"], body))
+        kwargs = {"idempotency_key": f"snar-{os.getenv('APP_ENV', 'development')}-welcome/{job['_id']}"} if provider == "resend" else {}
+        sent = bool(await asyncio.to_thread(send_email, job["recipient"], job["subject"], body, **kwargs))
     except Exception:
         sent = False
     if sent:
@@ -59,7 +78,13 @@ async def deliver_one(db, send_email, prepare_email=None):
 async def confirmation_loop(db, send_email, prepare_email=None, invite_sender=None):
     while True:
         try:
-            if email_configured():
+            async for user in db.users.find({"role": "user", "welcome_email_pending": True}).limit(20):
+                await queue_customer_welcome(db, user)
+            if resend_config()["enabled"]:
+                for _ in range(20):
+                    if not await deliver_one(db, send_resend_email, provider="resend"):
+                        break
+            if os.environ.get("SENDGRID_API_KEY", "").strip():
                 for _ in range(20):
                     if not await deliver_one(db, send_email, prepare_email):
                         break

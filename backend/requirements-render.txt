@@ -1,9 +1,10 @@
 # Render staging dependencies for the existing KJAPP/SNAR FastAPI backend.
-# Keep the core dependency set small. AI runs through Vercel AI Gateway over httpx,
-# so no provider SDK is needed.
+# Keep the core dependency set small, but include emergentintegrations because
+# the live Customer SNAR Assist endpoints still import it for chat/speech.
 -r requirements-ci.txt
 uvicorn==0.32.1
 pywebpush==2.0.1
 cryptography==49.0.0
 firebase_admin==7.5.0
 sendgrid==6.12.5
+emergentintegrations @ https://d33sy5i8bnduwe.cloudfront.net/simple/emergentintegrations/emergentintegrations-0.2.0-py3-none-any.whl#sha256=1822c409e24817689541891784b8ec3ff4dfed845ce8cd09fd4feb91ba3a4bdd

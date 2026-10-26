@@ -1,3 +1,5 @@
+import { EarningsMeter } from '@/src/components/snar10/driver/EarningsMeter';
+import { usePersonalShiftGoal } from '@/src/lib/usePersonalShiftGoal';
 import React, { useCallback, useEffect, useState } from 'react';
 import { AppState, Pressable, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -18,6 +20,7 @@ export default function DriverEarnings() {
   useColorTheme();
   const router = useRouter();
   const { user } = useAuth();
+  const { goal } = usePersonalShiftGoal(user?.id);
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const summary = useQuery({ queryKey: ['driver-summary', user?.id], queryFn: driverApi.summary, enabled: !!user?.id, refetchInterval: focused ? 5000 : false });
@@ -41,6 +44,7 @@ export default function DriverEarnings() {
         <Kpi label="Turer" value={number(data?.trips)?.toLocaleString('nb-NO') || '—'} />
         <Kpi label="Per time" value={hourly !== null ? Math.round(hourly).toLocaleString('nb-NO') : '—'} unit="kr" />
       </View>
+      <EarningsMeter income={income} goal={Number(goal)} />
       <V10Section title="Siste 7 dager"><V10Group style={{ padding: 16 }}>{weekly.isPending ? <Loader /> : weekly.isError ? <V10State icon="wifiOff" title="Grafen kunne ikke hentes" body="Oppdater inntektsdataene for å prøve igjen." action="Prøv igjen" onAction={() => void weekly.refetch()} /> : <DriverWeekChart days={Array.isArray(weekly.data?.days) ? weekly.data.days : []} />}</V10Group></V10Section>
       <Pressable accessibilityRole="button" onPress={() => router.navigate('/(driver)/intel')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, padding: 16, backgroundColor: colors.surface, boxShadow: colors.elevation1, marginTop: 12 }}>
         <View style={[v10.icon, { backgroundColor: colors.surfaceInverse }]}><V10Icon name="ai" size={20} color={colors.onInverse} /></View>

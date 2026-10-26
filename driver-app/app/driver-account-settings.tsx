@@ -7,7 +7,8 @@ import Constants from 'expo-constants';
 import { colors, font, makeStyles, useColorTheme } from '@/src/theme';
 import { Icon, IconName } from '@/src/components/Icon';
 import { Button, Loader } from '@/src/components/ui';
-import { gdprApi, settingsApi } from '@/src/lib/api';
+import { authApi, apiError, gdprApi, settingsApi } from '@/src/lib/api';
+import { googleIdentity } from '@/src/lib/socialSignIn';
 import { useAuth } from '@/src/context/AuthContext';
 import { storage } from '@/src/utils/storage';
 import { isNavigationApp, navigationStorageKey, NavigationApp } from '@/src/lib/navigationPreference';
@@ -25,7 +26,22 @@ export default function DriverAccountSettings() {
   const insets = useSafeAreaInsets();
   const s = useStyles();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const googleLock = useRef(false);
+  const [googleMessage, setGoogleMessage] = useState('');
+  const linkGoogle = async () => {
+    if (googleLock.current) return;
+    googleLock.current = true; setGoogleBusy(true); setGoogleMessage('');
+    try {
+      const identity = await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig(), 'link');
+      if (!identity) return;
+      if (typeof identity === 'string') await authApi.linkGoogle(identity);
+      else if (!identity.session?.linked) throw new Error('Google-koblingen kunne ikke bekreftes.');
+      await refresh(); setGoogleMessage('Google-konto koblet.');
+    } catch (error) { setGoogleMessage(apiError(error)); }
+    finally { googleLock.current = false; setGoogleBusy(false); }
+  };
   const [settings, setSettings] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
@@ -144,6 +160,8 @@ export default function DriverAccountSettings() {
           <Text style={s.sectionTitle}>Min konto</Text>
           <View style={s.card}><LinkRow icon="user" label="Konto og profil" onPress={() => router.push('/driver-account')} s={s} testID="ds-account" /></View>
 
+          <View style={s.card}><Pressable accessibilityRole="button" disabled={googleBusy || user?.google_linked} onPress={() => void linkGoogle()} testID="driver-link-google" style={{ padding: 16 }}><Text>{user?.google_linked ? 'Google-konto koblet' : googleBusy ? 'Kobler Google…' : 'Koble Google-konto'}</Text></Pressable></View>
+          {googleMessage ? <Text accessibilityRole="alert">{googleMessage}</Text> : null}
           <Text style={s.sectionTitle}>Mine biler</Text>
           <View style={s.card}>
             <LinkRow icon="car" label={user?.car && user?.plate ? `${user.car} · ${user.plate}` : 'Velg bil fra flåten'}

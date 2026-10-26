@@ -113,7 +113,7 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   await act(async()=>{tree.root.findByProps({testID:'assist-input'}).props.onChangeText('Taxi til Destination');});await act(async()=>button(tree,'assist-send').props.onPress());
   assert.equal(searches,1);assert.equal(requests.length,0);assert.equal(tree.root.findAllByProps({testID:'assist-place-1'}).length,0,'Null provider coordinates are rejected');
   await act(async()=>button(tree,'assist-place-0').props.onPress());await act(async()=>button(tree,'assist-vehicle-ai-first').props.onPress());
-  assert.equal(button(tree,'assist-confirm').props.disabled,true);await act(async()=>button(tree,'assist-waiting-consent').props.onPress());
+  assert.equal(button(tree,'assist-waiting-consent'),undefined);assert.equal(button(tree,'assist-confirm').props.disabled,false);
   await act(async()=>{button(tree,'assist-confirm').props.onPress();button(tree,'assist-confirm').props.onPress();});assert.equal(requests.length,1);assert.equal(requests[0].waiting_policy_token,'waiting');assert.equal(requests[0].quoted_pricing_version,7);
   await act(async()=>creating.resolve({trip_id:'assist-created'}));assert.equal(navigation.at(-1)[1],'/booking/assist-created');await unmount(tree);
   searches=0;tree=await mount(Assist);await act(async()=>tree.root.findByProps({testID:'assist-input'}).props.onChangeText('Taxi til Gardermoen i morgen'));await act(async()=>button(tree,'assist-send').props.onPress());assert.equal(searches,0);assert.match(text(tree),/Planlagte turer er ikke aktivert/);await unmount(tree);
@@ -122,5 +122,5 @@ async function unmount(tree) { await act(async () => tree.unmount()); }
   recorderState={isRecording:false};await act(async()=>tree.update(React.createElement(Assist)));assert.equal(transcriptions,1,'A duration-limited recording is transcribed once when the recorder stops');
   await act(async()=>button(tree,'assist-voice-close').props.onPress());await unmount(tree);
   tree=await mount(Assist);await act(async()=>button(tree,'assist-mic').props.onPress());await act(async()=>tree.update(React.createElement(Assist)));const before=transcriptions;await act(async()=>button(tree,'assist-voice-close').props.onPress());assert.equal(transcriptions,before,'Closing an active recording cancels it without sending audio');assert.equal(recorderState.isRecording,false);await unmount(tree);
-  console.log('PASS: Actual SNAR AI/voice address selection, null coordinate rejection, explicit quote/waiting/card confirmation, booking serialization, future-time refusal, microphone denial, automatic recording completion and cancellation without transcription.');
+  console.log('PASS: Actual SNAR AI/voice address selection, null coordinate rejection, explicit quote/card confirmation with informational waiting terms, booking serialization, future-time refusal, microphone denial, automatic recording completion and cancellation without transcription.');
 })().catch(error=>{console.error(error);process.exit(1)});

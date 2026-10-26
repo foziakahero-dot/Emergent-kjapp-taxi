@@ -25,14 +25,15 @@ export function apiError(e: any): string {
 }
 
 export const VEHICLES: {
-  type: 'enkelt' | 'ai-first' | 'trygg' | 'premium';
+  type: 'enkelt' | 'ai-first' | 'trygg' | 'premium' | 'suv';
   name: string;
   tagline: string;
   seats: number;
 }[] = [
-  { type: 'ai-first', name: 'SNAR', tagline: 'Rask og enkel', seats: 4 },
-  { type: 'enkelt', name: 'SNAR', tagline: 'Rask og enkel', seats: 4 },
+  { type: 'ai-first', name: 'Standard', tagline: 'Rask og enkel', seats: 4 },
+  { type: 'enkelt', name: 'Standard', tagline: 'Rask og enkel', seats: 4 },
   { type: 'trygg', name: 'SNAR XL', tagline: 'Mer plass · 7 seter', seats: 7 },
+  { type: 'suv', name: 'SUV', tagline: 'Romslig SUV', seats: 5 },
   { type: 'premium', name: 'Premium', tagline: 'Executive comfort', seats: 4 },
 ];
 

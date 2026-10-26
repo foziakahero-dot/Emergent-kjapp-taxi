@@ -16,7 +16,7 @@ type Props = {
   messages: { role: string; content: string }[]; input: string; onInput: (text: string) => void;
   step: string; busy: boolean; transcribing: boolean; recording: boolean; metering?: number; voiceOpen: boolean;
   pickup: any; dropoff: any; estimate: any; options: any[]; selected: any; payment: any;
-  consent: boolean; error: string; onConsent: () => void; onBack: () => void; onCancel: () => void;
+  error: string; onBack: () => void; onCancel: () => void;
   onSend: (text?: string) => void; onVoice: () => void; onCloseVoice: () => void;
   onPlace: (place: any) => void; onVehicle: (type: string) => void; onConfirm: () => void;
   onPayment: () => void; results: any[]; scrollRef: React.RefObject<ScrollView | null>;
@@ -35,8 +35,8 @@ export function CustomerAssistView(p: Props) {
     {['confirm', 'booking'].includes(p.step) && p.selected ? <V10Entrance pop><V10Group style={{ padding: 18, marginTop: 20 }}><Text style={[v10.heading, { marginBottom: 16 }]}>Dette forstod jeg</Text><CustomerJourney pickup={p.pickup?.name || 'Velg hentested'} destination={p.dropoff?.name} />
       <View style={{ flexDirection: 'row', gap: 8, marginVertical: 20 }}><View style={{ flex: 1, padding: 12, borderRadius: 16, backgroundColor: colors.cardSubtle }}><Text style={v10.caption}>Kjøretøy</Text><Text style={v10.body}>{names[p.selected.vehicle_type] || p.selected.vehicle_type}</Text></View><Pressable testID="assist-payment" onPress={p.onPayment} style={{ flex: 1, padding: 12, borderRadius: 16, backgroundColor: colors.cardSubtle }}><Text style={v10.caption}>Betaling</Text><Text style={v10.body}>{paymentLabel(p.payment)}</Text></Pressable></View>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}><Text style={v10.secondary}>Fast pris, inkl. mva</Text><Text style={v10.title}>{kr(p.selected.price)}</Text></View>
-      {policy ? <Pressable testID="assist-waiting-consent" accessibilityRole="checkbox" accessibilityState={{ checked: p.consent }} onPress={p.onConsent} disabled={blocked} style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}><V10Icon name={p.consent ? 'check' : 'clock'} size={20} /><Text style={[v10.secondary, { flex: 1 }]}>Jeg godtar {policy.free_minutes} min gratis ventetid, deretter {kr(policy.per_minute)}/min, maks {kr(policy.max_fee)}. Kortet reserveres for opptil {kr(Number(p.selected.price) + policy.max_fee)}. Ubrukt beløp frigjøres.</Text></Pressable> : null}
-      <V10Action testID="assist-confirm" label="Bekreft og bestill" busy={p.busy} disabled={blocked || !p.payment || (!!policy && !p.consent)} onPress={p.onConfirm} />
+      {policy ? <Text testID="assist-waiting-notice" style={[v10.secondary, { marginBottom: 16 }]}>Ventetid: {policy.free_minutes} min inkludert, deretter {kr(policy.per_minute)}/min, maks {kr(policy.max_fee)}. Ved bestilling reserveres opptil {kr(Number(p.selected.price) + policy.max_fee)} på kortet. Ubrukt beløp frigjøres.</Text> : null}
+      <V10Action testID="assist-confirm" label="Bekreft og bestill" busy={p.busy} disabled={blocked || !p.payment} onPress={p.onConfirm} />
     </V10Group></V10Entrance> : null}
     {p.busy && p.step !== 'booking' ? <View style={{ flexDirection: 'row', gap: 10, marginTop: 16, alignItems: 'center' }}><ActivityIndicator color={colors.accent} /><Text style={v10.secondary}>Henter data…</Text></View> : null}
     {p.error ? <Text testID="assist-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 16 }]}>{p.error}</Text> : null}

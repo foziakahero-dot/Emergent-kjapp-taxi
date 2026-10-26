@@ -16,7 +16,7 @@ export function NativePaymentProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     let mounted = true;
     paymentApi.nativeConfig().then(config => {
-      if (mounted && config.enabled && config.test_mode && config.publishable_key?.startsWith('pk_test_')) {
+      if (mounted && config.enabled && config.publishable_key?.startsWith(config.test_mode ? 'pk_test_' : 'pk_live_')) {
         setPublishableKey(config.publishable_key);
       }
     }).catch(() => {}); // Payment action reports recoverable configuration/network errors.
