@@ -22,6 +22,7 @@ from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
 from ai_configuration import configured_ai_key, provider_chat_session
 from payment_method_selection import selected_payment_method
+from email_delivery import email_configured
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
@@ -1844,6 +1845,13 @@ async def readiness():
         "admin_identity_configured": bool((os.environ.get("ADMIN_EMAIL") or "").strip()),
         "stripe_key_configured": bool((stripe.api_key or "").strip()),
         "stripe_webhook_configured": bool((STRIPE_WEBHOOK_SECRET or "").strip()),
+        "stripe_live_mode_configured": (
+            not IS_PRODUCTION
+            or (
+                is_live(stripe)
+                and os.environ.get("STRIPE_PUBLISHABLE_KEY", "").startswith("pk_live_")
+            )
+        ),
         "stripe_test_mode_configured": (
             APP_ENV != "qa"
             or (
@@ -1851,7 +1859,7 @@ async def readiness():
                 and os.environ.get("STRIPE_PUBLISHABLE_KEY", "").startswith("pk_test_")
             )
         ),
-        "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
+        "email_configured": email_configured(),
         "public_web_origin_configured": (
             is_safe_qa_web_origin(os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", ""))
             if APP_ENV == "qa"
@@ -1894,6 +1902,7 @@ async def readiness():
             "admin_identity_configured",
             "stripe_key_configured",
             "stripe_webhook_configured",
+            "stripe_live_mode_configured",
             "email_configured",
             "public_web_origin_configured",
             "apple_native_auth_configured",
