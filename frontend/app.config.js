@@ -5,6 +5,7 @@ module.exports = ({ config: base }) => {
     process.env.EAS_BUILD_PROFILE,
     process.env.EXPO_PUBLIC_BACKEND_URL
   );
+  const isQaBuild = ['qa', 'testflight-qa'].includes(process.env.EAS_BUILD_PROFILE);
   const plugins = base.plugins.filter(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) !== '@stripe/stripe-react-native');
   if (!plugins.some(plugin => (Array.isArray(plugin) ? plugin[0] : plugin) === 'expo-sharing')) {
     plugins.push('expo-sharing');
@@ -14,8 +15,8 @@ module.exports = ({ config: base }) => {
   // a build-only variable. Support both names so the native URL scheme is baked
   // into the iOS binary whenever the project environment contains the client.
   const iosClient = (
-    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
-    process.env.GOOGLE_IOS_CLIENT_ID ||
+    (isQaBuild ? process.env.EXPO_PUBLIC_QA_GOOGLE_IOS_CLIENT_ID : process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID) ||
+    (isQaBuild ? process.env.QA_GOOGLE_IOS_CLIENT_ID : process.env.GOOGLE_IOS_CLIENT_ID) ||
     ''
   ).trim();
   if (iosClient.endsWith('.apps.googleusercontent.com')) {
@@ -30,9 +31,8 @@ module.exports = ({ config: base }) => {
     ...(merchant ? { merchantIdentifier: merchant } : {}),
   }]);
 
-  const isQaBuild = process.env.EAS_BUILD_PROFILE === 'qa';
   const googleServicesFile = isQaBuild
-    ? ''
+    ? (process.env.QA_GOOGLE_SERVICES_JSON || '').trim()
     : (
       process.env.GOOGLE_SERVICES_JSON ||
       process.env.GOOGLE_SERVICES_FILE ||
@@ -41,11 +41,12 @@ module.exports = ({ config: base }) => {
 
   if (process.env.EAS_BUILD_PLATFORM === 'android' &&
       process.env.KJAPP_REQUIRE_FIREBASE === 'true' && !googleServicesFile) {
-    throw new Error('Configure GOOGLE_SERVICES_JSON as an EAS file secret before an Android build.');
+    throw new Error(isQaBuild ? 'Configure dedicated QA_GOOGLE_SERVICES_JSON as an EAS file secret before a QA Android build.' : 'Configure GOOGLE_SERVICES_JSON as an EAS file secret before an Android build.');
   }
 
   return {
     ...base,
+    extra: { ...base.extra, sourceSha: process.env.EAS_BUILD_GIT_COMMIT_HASH || process.env.EXPO_PUBLIC_SOURCE_SHA || '' },
     ...(isQaBuild ? { name: 'SNAR QA BACKEND' } : {}),
     owner: 'elitetransport',
     plugins,

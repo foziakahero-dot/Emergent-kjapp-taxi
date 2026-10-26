@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: "Customer branch/ref to validate"
+        description: "Customer QA branch/ref to validate"
         required: true
-        default: "fix/customer-search-mapbox-stripe-20261004"
+        default: "qa/snar-v10-phase5-staging-e2e"
         type: string
       expected_sha:
-        description: "Exact Customer commit SHA expected"
+        description: "Exact reviewed Customer QA commit SHA"
         required: true
-        default: "a7bd5261da2cf5d54d7a759e3c1da82028df5927"
         type: string
 
 permissions:
@@ -24,14 +23,15 @@ concurrency:
 
 jobs:
   preflight:
-    name: Validate Customer source without building APK
+    name: Validate Customer QA source without building APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       CI: "1"
-      EXPO_PUBLIC_BACKEND_URL: "https://api.kjappapp.no"
+      EXPO_PUBLIC_BACKEND_URL: "https://api-qa.snarapp.no"
+      EXPO_PUBLIC_SOURCE_SHA: ${{ inputs.expected_sha }}
     steps:
-      - name: Checkout exact Customer ref
+      - name: Checkout exact Customer QA ref
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.source_ref }}
@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           ACTUAL_SHA="$(git rev-parse HEAD)"
           echo "sha=$ACTUAL_SHA" >> "$GITHUB_OUTPUT"
-          echo "Customer source SHA: $ACTUAL_SHA"
+          echo "Customer QA source SHA: $ACTUAL_SHA"
           if [ "$ACTUAL_SHA" != "${{ inputs.expected_sha }}" ]; then
             echo "Ref resolved to $ACTUAL_SHA but expected ${{ inputs.expected_sha }}"
             exit 1
@@ -59,7 +59,7 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
             -f state=pending \
             -f context='snar/customer-preflight' \
-            -f description='Customer preflight running'
+            -f description='Customer QA preflight running'
 
       - name: Verify live-car and vehicle artwork source is present
         shell: bash
@@ -107,10 +107,10 @@ jobs:
         run: |
           if [ "$JOB_STATUS" = "success" ]; then
             STATE=success
-            DESC='Customer preflight passed - APK may be built manually'
+            DESC='Customer QA preflight passed - APK may be built manually'
           else
             STATE=failure
-            DESC='Customer preflight failed - do not build APK'
+            DESC='Customer QA preflight failed - do not build APK'
           fi
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
             -f state="$STATE" \

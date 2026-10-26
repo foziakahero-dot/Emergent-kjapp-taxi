@@ -55,7 +55,7 @@ export default function Assist() {
   const router = useRouter();
   const { user } = useAuth();
   const bookingLock = useRef(false), requestLock = useRef(false), voiceLock = useRef(false), voiceSession = useRef(false), wasRecording = useRef(false), voiceGeneration = useRef(0), alive = useRef(true);
-  const [voiceOpen, setVoiceOpen] = useState(false), [waitingAccepted, setWaitingAccepted] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   useHideTabBar(voiceOpen);
   const { data: methodsData, isError: methodsError, refetch: refreshMethods } = useQuery({ queryKey: ['assist-payment-methods', user?.id], queryFn: paymentApi.list, enabled: !!user?.id });
   useFocusEffect(useCallback(() => { if (user?.id) void refreshMethods(); }, [user?.id, refreshMethods]));
@@ -93,7 +93,7 @@ export default function Assist() {
     setEstimate(null);
     setVehicle(null);
     setResults([]);
-    setError(''); setWaitingAccepted(false);
+    setError('');
   };
 
   const resolvePickup = async (): Promise<Place | null> => {
@@ -220,7 +220,7 @@ export default function Assist() {
     const option = estimate?.options?.find((o: any) => o.vehicle_type === type);
     if (!option) return;
     const copy = vehicleCopy(type);
-    setVehicle(type); setWaitingAccepted(false);
+    setVehicle(type);
     setStep('confirm');
     add({ role: 'user', content: copy.name });
     add({ role: 'assistant', content: `${copy.name} · ${kr(option.price)}. Kontroller turen under og bekreft selv.` });
@@ -230,7 +230,6 @@ export default function Assist() {
     if (!pickup || !dropoff || !vehicle || bookingLock.current || sending) return;
     if (!selectedOption || !Number.isFinite(selectedOption.price) || selectedOption.price <= 0) { setError('Prisen må hentes på nytt før bestilling.'); return; }
     if (!payMethod) { setError('Legg til og verifiser et betalingskort før bestilling.'); router.push('/payment-methods'); return; }
-    if (selectedOption.waiting_policy && !waitingAccepted) { setError('Bekreft ventetid og kortreservasjon først.'); return; }
     bookingLock.current = true; setStep('booking');
     setSending(true);
     setError('');
@@ -250,7 +249,7 @@ export default function Assist() {
       const active = await tripsApi.active().catch(() => null);
       if (active?.trip_id) { router.replace(`/booking/${active.trip_id}`); return; }
       if (e?.response?.data?.detail?.code === 'quote_changed') {
-        setWaitingAccepted(false); setVehicle(null); setStep('category');
+        setVehicle(null); setStep('category');
         const fresh = await tripsApi.estimate({ pickup_lat: pickup.lat, pickup_lng: pickup.lng, dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng }).catch(() => null);
         setEstimate(fresh); setError('Prisen er endret. Velg bil og bekreft det nye tilbudet.');
       } else {
@@ -359,5 +358,5 @@ export default function Assist() {
   const visibleOptions = (estimate?.options || []).filter((o: any) => PRIMARY_TYPES.includes(o.vehicle_type as VehicleKind));
   const methods = Array.isArray(methodsData) ? methodsData : (methodsData?.payment_methods || methodsData?.methods || []);
   const payMethod = methodsError ? null : confirmedPaymentMethod(methods);
-  return <CustomerAssistView messages={messages} input={input} onInput={setInput} step={step} busy={sending} transcribing={transcribing} recording={recorderState.isRecording} metering={recorderState.metering} voiceOpen={voiceOpen} pickup={pickup} dropoff={dropoff} estimate={estimate} options={visibleOptions} selected={selectedOption} payment={payMethod} consent={waitingAccepted} onConsent={() => setWaitingAccepted(value => !value)} error={error} results={results} scrollRef={scroll} onBack={() => router.back()} onCancel={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }} onSend={text => void send(text)} onVoice={() => void toggleVoice()} onCloseVoice={() => void closeVoice()} onPlace={place => void chooseDestination(place)} onVehicle={chooseVehicle} onConfirm={() => void confirm()} onPayment={() => router.push('/payment-methods')} />;
+  return <CustomerAssistView messages={messages} input={input} onInput={setInput} step={step} busy={sending} transcribing={transcribing} recording={recorderState.isRecording} metering={recorderState.metering} voiceOpen={voiceOpen} pickup={pickup} dropoff={dropoff} estimate={estimate} options={visibleOptions} selected={selectedOption} payment={payMethod} error={error} results={results} scrollRef={scroll} onBack={() => router.back()} onCancel={() => { resetBooking(); add({ role: 'assistant', content: 'Bestillingen er avbrutt.' }); }} onSend={text => void send(text)} onVoice={() => void toggleVoice()} onCloseVoice={() => void closeVoice()} onPlace={place => void chooseDestination(place)} onVehicle={chooseVehicle} onConfirm={() => void confirm()} onPayment={() => router.push('/payment-methods')} />;
 }

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const root = path.resolve(__dirname, '..');
 const ts = require(root+'/node_modules/typescript');
 for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (mod,file) => mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,file);
-const { CarAvailabilitySearch, rideSearchProgress } = require(root+'/src/lib/carAvailability.ts');
+const { CarAvailabilitySearch, rideSearchProgress, carExpiry, visibleCars } = require(root+'/src/lib/carAvailability.ts');
 const { fitMapView, mapContentInsets, mapFocusPoints } = require(root+'/src/lib/mapFocus.ts');
 const flush = async()=>{for(let i=0;i<6;i++) await Promise.resolve();};
 function clock(){ let now=0,id=0;const jobs=new Map();return {now:()=>now,set(fn,ms){jobs.set(++id,{fn,at:now+ms});return id},clear(i){jobs.delete(i)},async advance(ms){const end=now+ms;while(true){const entries=[...jobs].filter(([,j])=>j.at<=end).sort((a,b)=>a[1].at-b[1].at);if(!entries.length)break;const [i,j]=entries[0];now=j.at;jobs.delete(i);j.fn();await flush();}now=end;await flush();},jobs};}
@@ -33,7 +33,7 @@ function clock(){ let now=0,id=0;const jobs=new Map();return {now:()=>now,set(fn
  console.log('PASS: no concurrent requests, no stale unmounted response, background pause and resume');
  {
   const time=clock();let calls=0;
-  const car={id:'new-online-driver',lat:59.92,lng:10.79};const s=new CarAvailabilitySearch(async()=>({cars:++calls===2?[car,{id:'bad',lat:NaN,lng:10}]:[]}),()=>{},false,time);
+  const car={id:'new-online-driver',lat:59.92,lng:10.79,updated_at:new Date(30_000).toISOString()};const s=new CarAvailabilitySearch(async()=>({cars:++calls===2?[car,{id:'bad',lat:NaN,lng:10}]:[],server_time:new Date(time.now()).toISOString(),gps_fresh_seconds:60}),()=>{},false,time);
   s.setActive(true);await flush();await time.advance(30_000);assert.deepEqual(s.state.cars,[car]);assert.equal(s.state.phase,'available');
   await time.advance(8_000);assert.equal(s.state.issue,'empty');assert.equal(s.state.attempt,1);s.dispose();
  }
@@ -42,6 +42,26 @@ function clock(){ let now=0,id=0;const jobs=new Map();return {now:()=>now,set(fn
   s.setActive(true);await flush();await time.advance(96_000);assert.equal(calls,13);assert.notEqual(s.state.phase,'exhausted');s.dispose();
  }
  console.log('PASS: newly online car shown, invalid GPS hidden, live supply refresh continues while server searches');
+ {
+  const receivedAt=1_000_000, server=Date.parse('2026-10-16T00:00:00Z');
+  const reply={server_time:new Date(server).toISOString(),gps_fresh_seconds:60};
+  const car={id:'real',lat:59.9,lng:10.7,updated_at:new Date(server-59_000).toISOString()};
+  const deadline=carExpiry(car,reply,receivedAt);
+  assert.equal(deadline,receivedAt+1000,'Server age is independent of the device clock');
+  const state={cars:[car],expiresAt:{real:deadline}};
+  assert.equal(visibleCars(state,receivedAt+999).length,1);
+  assert.equal(visibleCars(state,receivedAt+1000).length,0,'No expired marker between network refreshes');
+  for(const updated_at of [undefined,'invalid',new Date(server-60_000).toISOString(),new Date(server+60_000).toISOString()]) assert.equal(carExpiry({...car,updated_at},reply,receivedAt),0);
+ }
+ {
+  const time=clock();let resolve,calls=0;const snapshots=[];
+  const s=new CarAvailabilitySearch(()=>{calls++;return new Promise(r=>resolve=r)},v=>snapshots.push(v),true,time);
+  s.setActive(true);await flush();s.setActive(false);s.setActive(true);
+  resolve({cars:[{id:'old-flight',lat:59.9,lng:10.7,updated_at:new Date(0).toISOString()}],server_time:new Date(0).toISOString(),gps_fresh_seconds:60});await flush();
+  assert.equal(s.state.cars.length,0,'An old response cannot revive markers after background/resume');
+  assert.equal(calls,2,'Resume requests a fresh snapshot after the old request settles');s.dispose();
+ }
+ console.log('PASS: GPS expiry, invalid/missing timestamps, device clock skew and background/resume race');
  const pickup={lat:59.91,lng:10.75},car={lat:59.94,lng:10.82},far={lat:60.8,lng:11.1};
  assert.deepEqual(mapFocusPoints({pickup,user:pickup,dropoff:far,cars:[car],focusMode:'nearby'}),[pickup,car]);
  assert.deepEqual(mapFocusPoints({pickup,dropoff:far,activeCar:car,cars:[{lat:20,lng:20}],focusMode:'route'}),[pickup,far,car]);

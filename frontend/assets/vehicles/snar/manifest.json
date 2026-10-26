@@ -1,0 +1,9 @@
+{
+  "source": "User PNG uploads in controlled QA task, 2026-10-19",
+  "files": {
+    "economy.png": { "upload": "3417(1).png", "visual": "white hatchback", "width": 1254, "height": 1254, "sha256": "920e52cba67dfe718a90ced86c2d1e18431be625603732895095ab0792457595" },
+    "premium.png": { "upload": "3418(1).png", "visual": "white sedan", "width": 1254, "height": 1254, "sha256": "a6679ccb90e44d9087ba8bafb1bc2862a8702bd9162398ce2cbcc16e5f9eae1b" },
+    "suv.png": { "upload": "3419(1).png", "visual": "white SUV", "width": 1254, "height": 1254, "sha256": "42d4be84b4f98b956184c7a4fbf9119ed830f33eb0339ea41a7802160bfaf317" }
+  },
+  "liveMarker": { "status": "missing-upload", "expected": "Fourth vehicle variant with red live-status indicator" }
+}

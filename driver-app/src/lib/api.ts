@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
-const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
+export const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
 export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
 
@@ -33,6 +33,10 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
+  googleWebConfig: () => api.get('/auth/google/web/config', { params: { client: 'driver' } }).then(r => r.data),
+  googleWebCode: (code: string, code_verifier: string, redirect_uri: string, action: 'signin' | 'link' = 'signin') =>
+    api.post(action === 'link' ? '/auth/google/web/link' : '/auth/google/web/code', { code, code_verifier, redirect_uri, client: 'driver' }).then(r => r.data),
+  linkGoogle: (identity_token: string) => api.post('/auth/google/link', { identity_token, client: 'driver' }).then(r => r.data),
   nativeConfig: () => api.get('/auth/native/config', { params: { client: 'driver' } }).then((r) => r.data),
   nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
     api.post(`/auth/${provider}/native`, { identity_token, client: 'driver', device_id }).then((r) => r.data),
@@ -131,6 +135,16 @@ const normalizePayouts = (data: any = {}) => ({
   history: Array.isArray(data?.history) ? data.history : [],
 });
 
+let locationInFlight = false;
+export async function publishDriverLocation(lat: number, lng: number, heading = 0, speed = 0, recorded_at?: string) {
+  // Foreground and background providers share one bounded request; slow networks
+  // must not create a queue of obsolete positions.
+  if (locationInFlight) return { skipped: true };
+  locationInFlight = true;
+  try { return (await api.post('/driver/location', { lat, lng, heading, speed, recorded_at }, { timeout: 1500 })).data; }
+  finally { locationInFlight = false; }
+}
+
 export const driverApi = {
   pending: () => api.get('/driver/pending').then((r) => r.data),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
@@ -142,8 +156,8 @@ export const driverApi = {
   arrive: (id: string) => api.post(`/driver/trip/${id}/arrive`).then((r) => r.data),
   noShow: (id: string) => api.post(`/driver/trip/${id}/no-show`).then((r) => r.data),
   online: (online: boolean) => api.post('/driver/online', { online }).then((r) => r.data),
-  location: (lat: number, lng: number, heading = 0, speed = 0, recorded_at?: string) =>
-    api.post('/driver/location', { lat, lng, heading, speed, recorded_at }).then((r) => r.data),
+  location: publishDriverLocation,
+  demand: () => api.get('/driver/demand').then(r => r.data),
   summary: () => api.get('/driver/summary/today').then((r) => r.data),
   history: () => api.get('/driver/history').then((r) => r.data),
   weekly: () => api.get('/driver/history/weekly').then((r) => r.data),
@@ -152,6 +166,11 @@ export const driverApi = {
     .then((r) => normalizePayouts(r.data)),
   vehicles: () => api.get('/driver/vehicles').then((r) => r.data),
   selectVehicle: (vehicle_id: string) => api.post(`/driver/vehicles/${vehicle_id}/select`).then((r) => r.data),
+  updateCarIcon: (uri: string) => {
+    const form = new FormData();
+    form.append('file', { uri, name: 'car-icon.jpg', type: 'image/jpeg' } as any);
+    return api.post('/driver/car-icon', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+  },
   updateProfilePhoto: (uri: string) => {
     const form = new FormData();
     form.append('file', {

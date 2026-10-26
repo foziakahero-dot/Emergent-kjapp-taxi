@@ -1,4 +1,7 @@
 import { mapContentInsets, mapFocusPoints, MapContentInsets, MapFocusMode } from '@/src/lib/mapFocus';
+import { CarEtaBadge, carEtaLabel } from './CarEtaBadge';
+import { DriverMarkerPopup } from './DriverMarkerPopup';
+import { MapCarData, distanceKm } from '@/src/lib/liveCars';
 import { MapCar, PositionDot } from '@/src/components/MapMarkers';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleProp, View, ViewStyle } from 'react-native';
@@ -18,7 +21,7 @@ import { useSmoothPosition } from './useSmoothPosition';
 import { InteractiveMap as RasterInteractiveMap } from './RasterMap';
 
 type LL = { lat: number; lng: number };
-type Car = { id?: string; lat: number; lng: number; heading?: number; eta_min?: number };
+type Car = MapCarData;
 
 const OSLO: LL = { lat: 59.9139, lng: 10.7522 };
 const TOKEN = (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -45,11 +48,16 @@ type Props = {
   contentInsets?: Partial<MapContentInsets>;
 };
 
-function MarkerCar({ car, active = false }: { car: Car; active?: boolean }) {
+function MarkerCar({ car, selected = false, onPress }: { car: Car; selected?: boolean; onPress?: () => void }) {
   useColorTheme();
-  const smooth = useSmoothPosition(car);
+  const smooth = useSmoothPosition(car, 250);
   if (!smooth) return null;
-  return <MarkerView coordinate={[smooth.lng, smooth.lat]} allowOverlap><MapCar heading={smooth.heading} active={active} /></MarkerView>;
+  // The geographical point is the car centre, below the 22 dp ETA badge.
+  return <MarkerView coordinate={[smooth.lng, smooth.lat]} anchor={{ x: .5, y: (22 + 50 / 2) / 74 }} allowOverlap>
+    <Pressable collapsable={false} testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress} style={{ width: 130, height: 74, alignItems: 'center' }}>
+      <CarEtaBadge car={car} /><MapCar heading={smooth.heading} selected={selected} vehicleType={car.type} bodyType={car.body_type} />
+    </Pressable>
+  </MarkerView>;
 }
 
 function PointMarker({ kind }: { kind: 'pickup' | 'dropoff' | 'user' }) {
@@ -89,6 +97,11 @@ export function MapboxInteractiveMap({
   contentInsets,
 }: Props) {
   useColorTheme();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = cars.find(car => car.id === selectedId);
+  useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
+  const lastAutoFrame = useRef('');
+  const withDistance = (car: Car): Car => ({ ...car, distance_km: pickup || user ? distanceKm((pickup || user)!, car) : undefined });
   const cameraRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const [manual, setManual] = useState(false);
@@ -140,8 +153,15 @@ export function MapboxInteractiveMap({
 
   useEffect(() => {
     if (!mapReady || manual) return;
+    const nearby = !activeCar && (focusMode === 'nearby' || !dropoff);
+    const origin = pickup || user;
+    const frame = nearby
+      ? `${focusRevision}|${paddingKey}|${size.width},${size.height}|${origin?.lat.toFixed(3)},${origin?.lng.toFixed(3)}|${cars.map(car => car.id).sort().join(',')}`
+      : `${focusRevision}|${paddingKey}|${focusKey}`;
+    if (lastAutoFrame.current === frame) return;
+    lastAutoFrame.current = frame;
     fitFocus(350);
-  }, [mapReady, manual, fitFocus]);
+  }, [mapReady, manual, fitFocus, focusRevision]);
 
   const routeShape = useMemo(() => {
     const coordinates = route?.filter(p => p.length >= 2 && p.every(Number.isFinite)) || [];
@@ -270,7 +290,7 @@ export function MapboxInteractiveMap({
         ) : null}
 
         {cars.map((car, index) => (
-          <MarkerCar key={car.id || `car-${index}`} car={car} />
+          <MarkerCar key={car.id || `car-${index}`} car={withDistance(car)} selected={car.id === selectedId} onPress={() => setSelectedId(car.id || null)} />
         ))}
 
         {pickup ? (
@@ -292,11 +312,12 @@ export function MapboxInteractiveMap({
         ) : null}
         {smoothCar ? (
           <MarkerView coordinate={[smoothCar.lng, smoothCar.lat]} allowOverlap anchor={{ x: .5, y: activeCar?.eta_min != null ? 52 / 77 : .5 }}>
-            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active /></View></View> : <MapCar heading={smoothCar.heading} active />}
+            {activeCar?.eta_min != null ? <View style={{ height: 77, minWidth: 50, alignItems: 'center' }}><Text style={{ height: 24, paddingHorizontal: 10, borderRadius: 9, backgroundColor: colors.surfaceInverse, color: colors.onInverse, fontFamily: font.semibold, fontSize: 12.5, lineHeight: 24 }}>{activeCar.eta_min} min</Text><View style={{ position: 'absolute', top: 27 }}><MapCar heading={smoothCar.heading} active vehicleType={activeCar?.type} bodyType={activeCar?.body_type} /></View></View> : <MapCar heading={smoothCar.heading} active vehicleType={activeCar?.type} bodyType={activeCar?.body_type} />}
           </MarkerView>
         ) : null}
 
       </MapView>
+      {selected ? <DriverMarkerPopup car={withDistance(selected)} onClose={() => setSelectedId(null)} style={{ top: padding.top + 8 }} /> : null}
 
       {!mapReady ? <View testID="map-loading" pointerEvents="none" style={{ position: 'absolute', left: 16, top: 66, backgroundColor: colors.surface, padding: 12, borderRadius: 16 }}><ActivityIndicator color={colors.accent} /></View> : null}
       {interactive && showControls ? (

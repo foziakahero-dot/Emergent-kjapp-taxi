@@ -1,14 +1,8 @@
 import React from 'react';
 import { Image } from 'expo-image';
+import { customerVehicleArt, type CustomerVehicleArtType } from '@/src/lib/vehicleAssets';
 
-type VehicleKind = 'ai-first' | 'trygg' | 'premium';
-
-// Original approved SNAR renders, recovered unchanged from the landing artwork.
-const VEHICLES = {
-  'ai-first': { source: require('../../assets/vehicles/standard-3d.webp'), label: 'SNAR' },
-  trygg: { source: require('../../assets/vehicles/xl-3d.webp'), label: 'SNAR XL' },
-  premium: { source: require('../../assets/vehicles/premium-3d.webp'), label: 'Premium' },
-} as const;
+type VehicleKind = CustomerVehicleArtType;
 
 export function VehicleAsset({
   kind,
@@ -21,12 +15,14 @@ export function VehicleAsset({
   width?: number;
   height?: number;
 }) {
-  const spec = VEHICLES[kind];
+  const spec = customerVehicleArt(kind);
+  if (!spec) return null;
   return (
     <Image
       source={spec.source}
       style={{ width, height }}
       contentFit="contain"
+      allowDownscaling
       accessibilityRole="image"
       accessibilityLabel={spec.label}
       accessibilityState={{ selected }}

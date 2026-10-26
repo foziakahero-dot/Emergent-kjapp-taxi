@@ -5,11 +5,14 @@ import { Image, PanResponder, Platform, Pressable, StyleProp, View, ViewStyle } 
 import Svg, { Circle, Ellipse, G, Polyline, Rect, Text as SvgText } from 'react-native-svg';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { Icon } from './Icon';
-import { V10VehicleBody, V10RasterCar } from './V10VehicleMarker';
+import { V10VehicleBody, V10VehicleMarker } from './V10VehicleMarker';
+import { CarEtaBadge, carEtaLabel } from './CarEtaBadge';
+import { DriverMarkerPopup } from './DriverMarkerPopup';
+import { MapCarData } from '@/src/lib/liveCars';
 import { useSmoothPosition } from './useSmoothPosition';
 
 type LL = { lat: number; lng: number };
-type Car = { lat: number; lng: number; heading?: number; eta_min?: number };
+type Car = MapCarData;
 
 const TILE = 256;
 const MIN_Z = 3;
@@ -90,6 +93,9 @@ export function InteractiveMap({
   contentInsets?: Partial<MapContentInsets>;
 }) {
   useColorTheme();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = cars.find(car => car.id === selectedId);
+  useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [center, setCenter] = useState<LL>(user || OSLO);
   const [zoom, setZoom] = useState(15);
@@ -130,7 +136,7 @@ export function InteractiveMap({
 
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => interactive,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_e, g) => interactive && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
       onPanResponderGrant: (e) => {
         setManual(true);
@@ -245,7 +251,7 @@ export function InteractiveMap({
               </>
             ) : null}
 
-            {cars.map((c, i) => <V10RasterCar key={(c as any).id || `car-${i}`} car={c} projectX={sx} projectY={sy} />)}
+
 
             {pickup ? (
               <G>
@@ -274,7 +280,7 @@ export function InteractiveMap({
               <>
                 <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
                 <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
-                  <V10VehicleBody />
+                  <V10VehicleBody vehicleType={activeCar?.type} bodyType={activeCar?.body_type} />
                 </G>
               </>
             ) : null}
@@ -285,6 +291,8 @@ export function InteractiveMap({
             </G> : null}
 
           </Svg>
+          {cars.map((car, index) => <RasterDriverMarker key={car.id || `car-${index}`} car={car} selected={car.id === selectedId} projectX={sx} projectY={sy} onPress={() => setSelectedId(car.id || null)} />)}
+          {selected ? <DriverMarkerPopup car={selected} onClose={() => setSelectedId(null)} style={{ top: (contentInsets?.top || 88) + 8 }} /> : null}
 
           <Text style={{ position: 'absolute', bottom: 2, left: 6, fontSize: 8, color: colors.textMuted, pointerEvents: 'none' }}>
             {ATTRIB}
@@ -301,6 +309,17 @@ export function InteractiveMap({
       ) : null}
     </View>
   );
+}
+
+function RasterDriverMarker({ car, selected, projectX, projectY, onPress }: {
+  car: Car; selected: boolean; projectX: (lng: number) => number; projectY: (lat: number) => number; onPress: () => void;
+}) {
+  const position = useSmoothPosition(car, 250);
+  if (!position) return null;
+  return <Pressable testID={`driver-marker-${car.id}`} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${car.name || 'Sjåfør'}, ${car.car || 'bil'}, ${carEtaLabel(car)}`} onPress={onPress}
+    style={{ position: 'absolute', left: projectX(position.lng) - 40, top: projectY(position.lat) - 47, width: 80, height: 74, alignItems: 'center' }}>
+    <CarEtaBadge car={car} /><V10VehicleMarker heading={position.heading} selected={selected} vehicleType={car.type} bodyType={car.body_type} />
+  </Pressable>;
 }
 
 function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testID: string }) {
@@ -328,5 +347,4 @@ function Ctrl({ name, onPress, testID }: { name: any; onPress: () => void; testI
 
 export const Map = InteractiveMap;
 export default InteractiveMap;
-
 

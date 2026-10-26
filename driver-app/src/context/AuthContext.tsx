@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { googleIdentity, appleIdentity } from '@/src/lib/socialSignIn';
 import { storage } from '@/src/utils/storage';
@@ -20,6 +21,7 @@ export type User = {
   vehicle_type?: string;
   profile_photo_path?: string;
   approved?: boolean;
+  google_linked?: boolean;
   legal_accepted?: boolean;
   identity_verification_status?: string;
   identity_recheck_required?: boolean;
@@ -35,8 +37,8 @@ type AuthCtx = {
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
-  signInWithGoogle: () => Promise<User>;
   signInWithApple: () => Promise<User>;
+  signInWithGoogle: () => Promise<User>;
 };
 
 const Ctx = createContext<AuthCtx>(null as any);
@@ -152,20 +154,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return persistSession(res, epoch);
   };
 
-  const socialLogin = async (provider: 'google' | 'apple'): Promise<User> => {
+  const signInWithGoogle = async (): Promise<User> => {
     const epoch = ++sessionEpoch.current;
-    const identity = provider === 'google'
-      ? await googleIdentity(await withBackendWakeRetry(() => authApi.nativeConfig()))
-      : await appleIdentity();
+    const identity = await googleIdentity(Platform.OS === 'web' ? { google_web_client_id: '' } : await authApi.nativeConfig());
     if (!identity || epoch !== sessionEpoch.current) return null;
     const device_id = await getDriverInstallationId();
-    if (epoch !== sessionEpoch.current) return null;
-    const res = await withBackendWakeRetry(() => authApi.nativeSignIn(provider, identity, device_id));
+    const res = typeof identity === 'string' ? await authApi.nativeSignIn('google', identity, device_id) : identity.session;
     return persistSession(res, epoch);
   };
 
-  const signInWithGoogle = () => socialLogin('google');
-  const signInWithApple = () => socialLogin('apple');
+  const signInWithApple = async (): Promise<User> => {
+    const epoch = ++sessionEpoch.current;
+    const identity = await appleIdentity();
+    if (!identity || epoch !== sessionEpoch.current) return null;
+    const device_id = await getDriverInstallationId();
+    if (epoch !== sessionEpoch.current) return null;
+    const res = await withBackendWakeRetry(() => authApi.nativeSignIn('apple', identity, device_id));
+    return persistSession(res, epoch);
+  };
+
 
   const acceptLegal = async (): Promise<User> => {
     const updated = await withBackendWakeRetry(() => authApi.acceptLegal('2026-09'));
@@ -188,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, login, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
+    <Ctx.Provider value={{ user, login, acceptLegal, logout, refresh, signInWithApple, signInWithGoogle }}>
       {children}
     </Ctx.Provider>
   );

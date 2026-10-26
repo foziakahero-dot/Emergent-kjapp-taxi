@@ -1,0 +1,33 @@
+name: SNAR QA Customer EAS APK - manual locked
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Exact reviewed QA commit SHA to build"
+        required: true
+        type: string
+  pull_request:
+    branches:
+      - qa/snar-v10-phase5-staging-e2e
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  customer:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'pull_request' &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           startsWith(github.event.pull_request.head.ref, 'release-trigger/customer-') &&
+           (github.event.pull_request.title == 'BUILD_QA_CUSTOMER' ||
+            github.event.pull_request.title == 'TEST_QA_CUSTOMER_PREFLIGHT')) }}
+    uses: ./.github/workflows/qa-android-eas.yml
+    with:
+      app_directory: frontend
+      expected_sha: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_sha || github.event.pull_request.base.sha }}
+      authorization: BUILD_QA_APK
+      diagnostic_only: ${{ github.event_name == 'pull_request' && github.event.pull_request.title == 'TEST_QA_CUSTOMER_PREFLIGHT' }}
+    secrets: inherit

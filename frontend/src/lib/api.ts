@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { storage } from '@/src/utils/storage';
 
-const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
+export const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
 
 export const tripDriverPhotoSource = async (tripId: string) => {
@@ -24,11 +24,12 @@ api.interceptors.request.use(async (config) => {
 });
 
 export const authApi = {
-  googleWebConfig: () => api.get('/auth/google/config').then((r) => r.data),
-  googleWebCode: (code: string, code_verifier: string, redirect_uri: string) =>
-    api.post('/auth/google/code', { code, code_verifier, redirect_uri }).then((r) => r.data),
+  googleWebConfig: () => api.get('/auth/google/web/config', { params: { client: 'customer' } }).then(r => r.data),
+  googleWebCode: (code: string, code_verifier: string, redirect_uri: string, action: 'signin' | 'link' = 'signin') =>
+    api.post(action === 'link' ? '/auth/google/web/link' : '/auth/google/web/code', { code, code_verifier, redirect_uri, client: 'customer' }).then(r => r.data),
   nativeConfig: () => api.get('/auth/native/config', { params: { client: 'customer' } }).then((r) => r.data),
   linkGoogle: (identity_token: string) => api.post('/auth/google/link', { identity_token, client: 'customer' }).then(r => r.data),
+  linkApple: (identity_token: string) => api.post('/auth/apple/link', { identity_token, client: 'customer' }).then(r => r.data),
   nativeSignIn: (provider: 'google' | 'apple', identity_token: string, device_id?: string) =>
     api.post(`/auth/${provider}/native`, { identity_token, client: 'customer', device_id }).then((r) => r.data),
   register: (data: any) => api.post('/auth/register', data).then((r) => r.data),
@@ -37,7 +38,7 @@ export const authApi = {
   checkResetToken: (token: string) => api.get(`/auth/reset-password/${token}`).then((r) => r.data),
   resetPassword: (token: string, new_password: string) => api.post('/auth/reset-password', { token, new_password }).then((r) => r.data),
   acceptLegal: (legal_version = '2026-09') => api.post('/auth/accept-legal', { accepted_terms: true, legal_version }).then((r) => r.data),
-  me: () => api.get('/auth/me').then((r) => r.data),
+  me: () => api.get('/auth/me', { timeout: 10000 }).then((r) => r.data),
   logout: (token?: string) => api.post('/auth/logout', undefined, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined).then((r) => r.data),
   googleSession: (session_id: string) => api.post('/auth/google/session', { session_id }).then((r) => r.data),
   appleSignIn: (data: { identity_token: string; fullName?: string; email?: string | null }) =>
@@ -67,6 +68,7 @@ async function withReservation(request: () => Promise<any>) {
 }
 
 export const tripsApi = {
+  cancelSearch: (id: string) => api.post(`/trips/${encodeURIComponent(id)}/search/cancel`).then(r => r.data),
   estimate: (data: any) => api.post('/trips/estimate', data).then((r) => r.data),
   request: (data: any) => withReservation(() => api.post('/trips/request', data)),
   authorize: (id: string) => withReservation(() => api.post(`/trips/${id}/authorization/retry`)),
@@ -81,6 +83,13 @@ export const tripsApi = {
   rate: (id: string, data: any) => api.post(`/trips/${id}/rate`, data).then((r) => r.data),
   list: () => api.get('/trips').then((r) => r.data),
 };
+
+export async function nearbyDriverMediaSource(driverId: string, kind: 'profile' | 'car-icon', point: { lat: number; lng: number }, version: string) {
+  const token = await storage.getItem(TOKEN_KEY);
+  if (!token) throw new Error('Logg inn for å se sjåførbilder.');
+  return { uri: `${BACKEND}/api/cars/${encodeURIComponent(driverId)}/media/${kind}?lat=${point.lat}&lng=${point.lng}&v=${encodeURIComponent(version)}`,
+    headers: { Authorization: `Bearer ${token}` } };
+}
 
 export const carsApi = {
   nearby: (lat: number, lng: number, vehicle_type?: string, special_needs: string[] = []) =>
@@ -97,6 +106,9 @@ export const placesApi = {
 
 export const paymentApi = {
   nativeConfig: () => api.get('/payments/native/config').then((r) => r.data),
+  nativeSetup: (wallet?: 'google_pay' | 'apple_pay', platform: 'native' | 'web' = 'native') => api.post('/payments/native/setup-intent', wallet ? { wallet, platform, future_use_accepted: true } : { platform }).then(r => r.data),
+  nativeSetupStatus: (id: string) => api.get(`/payments/native/setup-intent/${encodeURIComponent(id)}`).then(r => r.data),
+  setDefault: (id: string) => api.post(`/payment-methods/${encodeURIComponent(id)}/default`).then(r => r.data),
   nativeIntent: (trip_id: string) => api.post('/payments/native/intent', { trip_id }).then((r) => r.data),
   nativeStatus: (id: string) => api.get(`/payments/native/intent/${id}`).then((r) => r.data),
   list: () => api.get('/payment-methods').then((r) => r.data),

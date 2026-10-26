@@ -5,21 +5,22 @@ module.exports = ({ config: base }) => {
     process.env.EAS_BUILD_PROFILE,
     process.env.EXPO_PUBLIC_BACKEND_URL
   );
+  const isQaBuild = ['qa', 'testflight-qa'].includes(process.env.EAS_BUILD_PROFILE);
   const plugins = [...base.plugins, 'expo-apple-authentication'];
-  const iosClient = (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || process.env.GOOGLE_IOS_CLIENT_ID || '').trim();
+  const iosClient = ((isQaBuild ? process.env.EXPO_PUBLIC_QA_GOOGLE_DRIVER_IOS_CLIENT_ID : process.env.EXPO_PUBLIC_GOOGLE_DRIVER_IOS_CLIENT_ID) || '').trim();
   if (iosClient.endsWith('.apps.googleusercontent.com')) {
     plugins.push(['@react-native-google-signin/google-signin', {
       iosUrlScheme: `com.googleusercontent.apps.${iosClient.replace('.apps.googleusercontent.com', '')}`,
     }]);
   }
-  const isQaBuild = process.env.EAS_BUILD_PROFILE === 'qa';
-  const googleServicesFile = isQaBuild ? '' : process.env.GOOGLE_SERVICES_JSON;
+  const googleServicesFile = isQaBuild ? process.env.QA_GOOGLE_SERVICES_JSON : process.env.GOOGLE_SERVICES_JSON;
   if (process.env.EAS_BUILD_PLATFORM === 'android' &&
       process.env.KJAPP_REQUIRE_FIREBASE === 'true' && !googleServicesFile) {
-    throw new Error('Configure GOOGLE_SERVICES_JSON as an EAS file secret before an Android build.');
+    throw new Error(isQaBuild ? 'Configure dedicated QA_GOOGLE_SERVICES_JSON as an EAS file secret before a QA Android build.' : 'Configure GOOGLE_SERVICES_JSON as an EAS file secret before an Android build.');
   }
   return {
     ...base,
+    extra: { ...base.extra, sourceSha: process.env.EAS_BUILD_GIT_COMMIT_HASH || process.env.EXPO_PUBLIC_SOURCE_SHA || '' },
     ...(isQaBuild ? { name: 'SNAR Driver QA BACKEND' } : {}),
     ios: { ...base.ios, usesAppleSignIn: true },
     android: {

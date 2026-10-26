@@ -1,7 +1,6 @@
+from trip_status_stream import TripStatusStream
 from dotenv import load_dotenv
 load_dotenv()
-
-from service_fee_policy import configured_service_fee, commission_source
 
 import os
 import asyncio
@@ -13,7 +12,7 @@ import json
 import base64
 import traceback
 import logging
-import hashlib
+from time import perf_counter
 import re
 import bcrypt
 import jwt
@@ -21,14 +20,16 @@ import httpx
 import stripe
 from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
+from ai_configuration import configured_ai_key, provider_chat_session
+from payment_method_selection import selected_payment_method
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
+from driver_media import install_driver_media, media_versions
+from live_cars import LiveCarsStream, RADIUS_KM, GPS_FRESH_SECONDS, position_bounds, fresh_sample_time
 from waiting_fares import waiting_policy, waiting_charge, waiting_start_fields
-from promo_credits import normalize_code, is_valid_code, discount_for_trip, max_discount_for_trip, platform_fee_ore
 from fleet_vehicle_access import access_query as vehicle_access_query, claim_vehicle, release_vehicle
-from onboarding_emails import queue_confirmation, confirmation_loop
-from email_delivery import email_configured, send_transactional_email
+from onboarding_emails import queue_confirmation, confirmation_loop, queue_customer_welcome
 from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
@@ -41,16 +42,15 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 
-from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastResponse
 from pydantic import BaseModel, Field, EmailStr
-
-logger = logging.getLogger("snar.server")
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
 import pyotp
 import qrcode
 import uuid
@@ -77,7 +77,7 @@ IS_PRODUCTION = APP_ENV == "production"
 DEFAULT_PUBLIC_WEB_ORIGIN = "" if APP_ENV == "qa" else "https://snarapp.no"
 validate_qa_configuration(os.environ)
 EMERGENT_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("EMERGENT_LLM_KEY", "")
-AI_LLM_KEY = "" if APP_ENV == "qa" else os.environ.get("SNAR_AI_KEY", "") or os.environ.get("AI_GATEWAY_API_KEY", "")
+AI_LLM_KEY = configured_ai_key(os.environ, APP_ENV)
 CURRENT_LEGAL_VERSION = (os.environ.get("KJAPP_LEGAL_VERSION") or "2026-09").strip()[:32] or "2026-09"
 APPLE_NATIVE_BUNDLE_ID = "no.nexorahub.kjapp.customer"
 
@@ -372,8 +372,8 @@ async def reconcile_superadmin(db, admin_email: str, admin_password: str, is_pro
     if existing.get("disabled") or existing.get("is_demo"):
         updates["disabled"] = False
         updates["is_demo"] = False
-    if is_production and not verify_password(admin_password, existing.get("password_hash", "")):
-        updates["password_hash"] = hash_password(admin_password)
+    if is_production and not await asyncio.to_thread(verify_password, admin_password, existing.get("password_hash", "")):
+        updates["password_hash"] = await asyncio.to_thread(hash_password, admin_password)
         result["password_rotated"] = True
     if updates:
         await db.users.update_one({"_id": existing["_id"]}, {"$set": updates})
@@ -741,10 +741,7 @@ async def _apply_driver_identity_risk(
 
 
 async def get_current_user(request: Request) -> dict:
-    return await _user_from_token(_auth_token_from_request(request))
-
-
-async def _user_from_token(token: Optional[str]) -> dict:
+    token = _auth_token_from_request(request)
     if not token:
         raise HTTPException(status_code=401, detail="Ikke innlogget")
     try:
@@ -842,7 +839,7 @@ class TwoFAVerifyLoginRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[str] = None
+    session_id: Optional[str] = Field(default=None, max_length=160)
 
 
 class TripStop(BaseModel):
@@ -871,28 +868,13 @@ class TripRequest(BaseModel):
     dropoff_address: str = Field(min_length=1, max_length=200)
     dropoff_lat: float = Field(ge=-90, le=90)
     dropoff_lng: float = Field(ge=-180, le=180)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
     stops: List[TripStop] = Field(default_factory=list, max_length=3)
     special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = Field(default=None, max_length=500)
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
-    use_promo_credit: bool = True
-
-
-class PromoRedeemIn(BaseModel):
-    code: str = Field(min_length=3, max_length=40)
-
-
-class PromoCodeIn(BaseModel):
-    code: str = Field(min_length=3, max_length=24)
-    label: str = Field(default="", max_length=80)
-    credit_kr: int = Field(ge=10, le=1000)
-    max_redemptions: Optional[int] = Field(default=None, ge=1, le=100000)
-    expires_at: Optional[str] = Field(default=None, max_length=40)
-    new_customers_only: bool = True
-    active: bool = True
 
 
 class RateTripRequest(BaseModel):
@@ -918,7 +900,7 @@ class UserPlaceRequest(BaseModel):
 class NearbyCarsRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
-    vehicle_type: Optional[Literal["ai-first", "trygg", "premium"]] = None
+    vehicle_type: Optional[Literal["ai-first", "trygg", "premium", "suv"]] = None
     special_needs: List[SpecialNeed] = Field(default_factory=list, max_length=6)
 
 
@@ -1055,7 +1037,28 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
-    return send_transactional_email(to_email, subject, html)
+    """Send email via SendGrid if configured, else log to console."""
+    if APP_ENV == "qa":
+        print("[EMAIL/disabled-qa] external email delivery is disabled")
+        return False
+    api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
+    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
+    if not api_key:
+        # Never print HTML bodies: password-reset/invite emails can contain bearer-style
+        # one-time tokens. Missing email configuration should be observable without
+        # leaking those links into application logs.
+        print(f"[EMAIL/no-key] to={to_email} subj={subject} body=redacted")
+        return False
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+        msg = Mail(from_email=sender, to_emails=to_email, subject=subject, html_content=html)
+        sg = SendGridAPIClient(api_key)
+        res = sg.send(msg)
+        return 200 <= res.status_code < 300
+    except Exception as e:
+        print(f"[EMAIL/error] {e}")
+        return False
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
@@ -1098,11 +1101,7 @@ DEFAULT_PRICING = {
     "late_driver_cancellation_fee": 0.0,
     "free_cancel_minutes": 2,
     "dispatch_timeout_seconds": 180,
-    "surge": {
-        "enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0,
-        "demand_enabled": True, "demand_radius_km": 3.0, "demand_window_minutes": 10,
-        "demand_min_requests": 3, "demand_sensitivity": 0.25, "demand_max_multiplier": 1.8,
-    },
+    "surge": {"enabled": True, "manual_multiplier": 1.0, "max_multiplier": 2.0},
     "vehicle_rates": {
         "ai-first": {"base_fare": 70.0, "per_km": 16.0, "per_minute": 4.0, "minimum_fare": 0.0},
         "enkelt": {"base_fare": 55.0, "per_km": 14.0, "per_minute": 3.5, "minimum_fare": 0.0},
@@ -1124,7 +1123,7 @@ def _legacy_surge_multiplier(when: datetime = None) -> float:
     return surge
 
 
-def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0, demand_multiplier: float = 1.0) -> dict:
+def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, pricing: dict, when: datetime = None, stops_count: int = 0) -> dict:
     """Pure pricing engine. The supplied pricing document is snapshotted onto the trip."""
     cfg = {**DEFAULT_PRICING, **(pricing or {})}
     vehicle_rates = {**DEFAULT_PRICING["vehicle_rates"], **(cfg.get("vehicle_rates") or {})}
@@ -1136,25 +1135,23 @@ def calculate_price(distance_km: float, vehicle_type: str, duration_min: float, 
             "minimum_fare": cfg.get("minimum_fare", DEFAULT_PRICING["minimum_fare"]),
         }
     else:
-        r = {**DEFAULT_PRICING["vehicle_rates"].get(vehicle_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
-             **(vehicle_rates.get(vehicle_type) or {})}
+        # A new SUV class uses the existing roomy-vehicle tariff unless the
+        # server's pricing document explicitly configures its own SUV tariff.
+        rate_type = "trygg" if vehicle_type == "suv" and not vehicle_rates.get("suv") else vehicle_type
+        r = {**DEFAULT_PRICING["vehicle_rates"].get(rate_type, DEFAULT_PRICING["vehicle_rates"]["ai-first"]),
+             **(vehicle_rates.get(rate_type) or {})}
     base = float(r["base_fare"]) + float(distance_km) * float(r["per_km"]) + float(duration_min) * float(r["per_minute"])
     minimum = float(r.get("minimum_fare", cfg.get("minimum_fare", 0)) or 0)
     surge_cfg = {**DEFAULT_PRICING["surge"], **(cfg.get("surge") or {})}
     surge = 1.0
     if surge_cfg.get("enabled"):
-        surge = max(
-            _legacy_surge_multiplier(when),
-            float(surge_cfg.get("manual_multiplier", 1.0) or 1.0),
-            float(demand_multiplier or 1.0) if surge_cfg.get("demand_enabled") else 1.0,
-        )
+        surge = max(_legacy_surge_multiplier(when), float(surge_cfg.get("manual_multiplier", 1.0) or 1.0))
         surge = min(surge, float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
     stop_fee = max(0, int(stops_count)) * float(cfg.get("extra_stop_fee", 0) or 0)
     total = max(minimum, base * surge + stop_fee)
     return {
         "price": int(round(total)),
         "surge_multiplier": round(surge, 2),
-        "demand_multiplier": round(float(demand_multiplier or 1.0), 2),
         "pricing_version": int(cfg.get("version", 1)),
         "extra_stop_fee_total": int(round(stop_fee)),
     }
@@ -1207,64 +1204,6 @@ def current_surge_info(when: datetime = None) -> dict:
     if local_hour >= 22 or local_hour < 6:
         surge = max(surge, 1.15); reasons.append("Natt-tillegg")
     return {"multiplier": surge, "reasons": reasons, "active": surge > 1.0}
-
-
-DEMAND_OPEN_TRIP_STATUSES = ("payment_authorizing", "searching")
-DEMAND_CACHE_SECONDS = 120
-
-
-def demand_multiplier_from_counts(open_requests: int, free_drivers: int, surge_cfg: dict) -> float:
-    """Pure supply/demand curve: 1.0 until requests outnumber free drivers, then rises in 0.1 steps."""
-    cfg = {**DEFAULT_PRICING["surge"], **(surge_cfg or {})}
-    if not cfg.get("demand_enabled") or open_requests < int(cfg.get("demand_min_requests", 3) or 0):
-        return 1.0
-    ratio = open_requests / max(free_drivers, 1)
-    if ratio <= 1.0:
-        return 1.0
-    raw = 1.0 + (ratio - 1.0) * float(cfg.get("demand_sensitivity", 0.25) or 0)
-    stepped = math.floor(raw * 10 + 1e-9) / 10
-    return round(max(1.0, min(stepped, float(cfg.get("demand_max_multiplier", 1.8) or 1.0))), 2)
-
-
-async def demand_surge_info(lat: float, lng: float, surge_cfg: dict) -> dict:
-    """Live demand around a pickup. Cached per ~1 km cell so a quote and the booking that
-    follows it within DEMAND_CACHE_SECONDS see the same multiplier (no spurious quote_changed)."""
-    cfg = {**DEFAULT_PRICING["surge"], **(surge_cfg or {})}
-    if not cfg.get("enabled") or not cfg.get("demand_enabled"):
-        return {"multiplier": 1.0, "open_requests": 0, "free_drivers": 0, "active": False}
-    radius = float(cfg.get("demand_radius_km", 3.0) or 3.0)
-    cell = f"{round(lat, 2)}:{round(lng, 2)}:{radius}"
-    now = datetime.now(timezone.utc)
-    cached = await db.demand_surge_cache.find_one({"_id": cell, "expires_at": {"$gt": now.isoformat()}})
-    if cached:
-        return {k: cached[k] for k in ("multiplier", "open_requests", "free_drivers", "active")}
-    window = now - timedelta(minutes=int(cfg.get("demand_window_minutes", 10) or 10))
-    open_requests = 0
-    async for t in db.trips.find(
-        _real_trip_filter({"status": {"$in": list(DEMAND_OPEN_TRIP_STATUSES)},
-                           "created_at": {"$gte": window.isoformat()}, "pickup_lat": {"$ne": None}}),
-        {"pickup_lat": 1, "pickup_lng": 1},
-    ).limit(2000):
-        if haversine_km(lat, lng, t["pickup_lat"], t["pickup_lng"]) <= radius:
-            open_requests += 1
-    fresh = (now - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
-    free_drivers = 0
-    async for d in db.users.find(
-        {"role": "driver", "approved": True, "online": True, "last_location_at": {"$gte": fresh},
-         "active_trip_id": {"$in": [None, ""]}, "disabled": {"$ne": True},
-         "demo": {"$ne": True}, "is_demo": {"$ne": True}},
-        {"last_lat": 1, "last_lng": 1},
-    ).limit(2000):
-        if d.get("last_lat") is not None and haversine_km(lat, lng, d["last_lat"], d["last_lng"]) <= radius:
-            free_drivers += 1
-    multiplier = demand_multiplier_from_counts(open_requests, free_drivers, cfg)
-    info = {"multiplier": multiplier, "open_requests": open_requests, "free_drivers": free_drivers, "active": multiplier > 1.0}
-    await db.demand_surge_cache.update_one(
-        {"_id": cell},
-        {"$set": {**info, "expires_at": (now + timedelta(seconds=DEMAND_CACHE_SECONDS)).isoformat()}},
-        upsert=True,
-    )
-    return info
 
 
 FCM_APP = None
@@ -1501,16 +1440,19 @@ async def lifespan(app: FastAPI):
     # Restore encrypted admin configuration before workers or onboarding start.
     await integration_settings.refresh()
     await db.users.create_index("email", unique=True)
+    for provider in ("google", "apple"):
+        await db.users.create_index(provider + "_sub", unique=True,
+            partialFilterExpression={provider + "_sub": {"$type": "string"}})
     await db.trips.create_index("user_id")
     await db.trips.create_index("trip_id", unique=True)
     await db.trips.create_index([("status", 1), ("driver_id", 1), ("dispatch_mode", 1), ("offer_expires_at", 1)])
     await db.trips.create_index([("driver_id", 1), ("status", 1), ("created_at", -1)])
     await db.trips.create_index([("user_id", 1), ("status", 1), ("created_at", -1)])
     await db.places.create_index("slug", unique=True)
-    await db.promo_codes.create_index("code", unique=True)
-    await db.promo_redemptions.create_index([("code_id", 1), ("user_id", 1)], unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.payment_transactions.create_index("session_id", unique=True)
+    await db.payment_methods.create_index([("user_id", 1), ("stripe_payment_method_id", 1)], unique=True,
+        partialFilterExpression={"stripe_payment_method_id": {"$type": "string"}})
     await db.receipt_ledger.create_index("trip_id", unique=True)
     await db.receipt_ledger.create_index("receipt_number", unique=True)
     await db.receipt_ledger.create_index([("paid_at", -1)])
@@ -1590,7 +1532,7 @@ async def lifespan(app: FastAPI):
         else:
             await db.users.insert_one({
                 "email": admin_email,
-                "password_hash": hash_password(admin_password),
+                "password_hash": await asyncio.to_thread(hash_password, admin_password),
                 "fullName": "Superadmin",
                 "phone": "+4700000000",
                 "role": "superadmin",
@@ -1630,7 +1572,7 @@ async def lifespan(app: FastAPI):
             existing_driver = await db.users.find_one({"email": email})
             driver_fields = {
                 "email": email,
-                "password_hash": hash_password(password),
+                "password_hash": await asyncio.to_thread(hash_password, password),
                 "fullName": full_name,
                 "phone": phone,
                 "role": "driver",
@@ -1687,7 +1629,7 @@ async def lifespan(app: FastAPI):
             # Never promote an existing ordinary account through test provisioning.
             if owner is None or (owner.get("internal_test_account") is True and owner.get("role") == "fleet_owner"):
                 owner_fields = {
-                    "email": owner_email, "password_hash": hash_password(owner_password),
+                    "email": owner_email, "password_hash": await asyncio.to_thread(hash_password, owner_password),
                     "fullName": "Beta Løyvehaver", "phone": "",
                     "role": "fleet_owner", "approved": True, "disabled": False,
                     "fleet_id": fleet_id, "fleet_active": True, "internal_test_account": True,
@@ -1715,7 +1657,7 @@ async def lifespan(app: FastAPI):
     if ENABLE_DEMO_DATA and not await db.users.find_one({"email": test_email}):
         uid = await db.users.insert_one({
             "email": test_email,
-            "password_hash": hash_password("test1234"),
+            "password_hash": await asyncio.to_thread(hash_password, "test1234"),
             "fullName": "Ola Nordmann",
             "phone": "+4791234567",
             "role": "user",
@@ -1735,7 +1677,7 @@ async def lifespan(app: FastAPI):
     if ENABLE_DEMO_DATA and not await db.users.find_one({"email": driver_email}):
         await db.users.insert_one({
             "email": driver_email,
-            "password_hash": hash_password("sjafor1234"),
+            "password_hash": await asyncio.to_thread(hash_password, "sjafor1234"),
             "fullName": "Ola Sjåfør",
             "phone": "+4790000001",
             "role": "driver",
@@ -1785,6 +1727,8 @@ async def lifespan(app: FastAPI):
     reservation_task = asyncio.create_task(ride_reservations.reconcile_loop())
     confirmation_task = asyncio.create_task(confirmation_loop(db, send_email, prepare_email=_prepare_onboarding_email, invite_sender=_deliver_driver_invite))
     integration_settings_task = asyncio.create_task(integration_settings.sync_loop())
+    live_cars_task = asyncio.create_task(live_cars_stream.run())
+    trip_status_task = asyncio.create_task(trip_status_stream.run())
 
     yield
 
@@ -1792,7 +1736,12 @@ async def lifespan(app: FastAPI):
     reservation_task.cancel()
     confirmation_task.cancel()
     integration_settings_task.cancel()
-    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, return_exceptions=True)
+    live_cars_task.cancel()
+    trip_status_task.cancel()
+    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, live_cars_task, trip_status_task, return_exceptions=True)
+    await trip_status_stream.close()
+    await live_cars_stream.close()
+    await road_eta.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1808,11 +1757,27 @@ app.add_middleware(
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Correlation ID for every request; safe logging on unhandled errors (never logs headers/credentials)."""
+    started = perf_counter()
     rid = uuid.uuid4().hex[:12]
     request.state.request_id = rid
     try:
         response = await call_next(request)
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+            # GPS, availability, logout, assignment and fleet moderation all wake
+            # per-customer subscriptions immediately after the canonical write.
+            live_cars_stream.changed()
+            trip_status_stream.changed()
         response.headers["X-Request-ID"] = rid
+        elapsed_ms = (perf_counter() - started) * 1000
+        timing = response.headers.get("Server-Timing")
+        response.headers["Server-Timing"] = f"{timing}, app;dur={elapsed_ms:.1f}" if timing else f"app;dur={elapsed_ms:.1f}"
+        if elapsed_ms >= 1000:
+            route = request.scope.get("route")
+            # Route templates avoid recording IDs, addresses, queries or credentials.
+            logging.getLogger("snar.performance").warning(
+                "slow_request request_id=%s method=%s route=%s status=%s duration_ms=%.1f",
+                rid, request.method, getattr(route, "path", "unmatched"), response.status_code, elapsed_ms,
+            )
         return response
     except Exception:
         print(f"[unhandled-error] request_id={rid} {request.method} {request.url.path}")
@@ -1837,8 +1802,16 @@ async def health():
         "app": "KJAPP",
         "status": "ok" if db_ok else "degraded",
         "db": db_ok,
+        "release": release_info(),
         "time": datetime.now(timezone.utc).isoformat(),
     })
+
+
+def release_info():
+    """Public deployment identity; never expose runtime configuration/secrets."""
+    commit = os.environ.get("RENDER_GIT_COMMIT", "")
+    return {"commit": commit if re.fullmatch(r"[0-9a-f]{40}", commit) else "",
+            "environment": APP_ENV}
 
 
 @api.get("/ready")
@@ -1876,9 +1849,7 @@ async def readiness():
                 and os.environ.get("STRIPE_PUBLISHABLE_KEY", "").startswith("pk_test_")
             )
         ),
-        "email_configured": email_configured(),
-        "driver_sms_login_configured": _twilio_verify_config() is not None,
-        "ai_support_key_configured": bool((AI_LLM_KEY or "").strip()),
+        "email_configured": bool((os.environ.get("SENDGRID_API_KEY") or "").strip()),
         "public_web_origin_configured": (
             is_safe_qa_web_origin(os.environ.get("KJAPP_PUBLIC_WEB_ORIGIN", ""))
             if APP_ENV == "qa"
@@ -1936,46 +1907,69 @@ async def readiness():
         "status": "ready" if not blockers else "not_ready",
         "checks": checks,
         "blockers": blockers,
+        "release": release_info(),
         "time": datetime.now(timezone.utc).isoformat(),
     })
 
 
+from google_maps_eta import GoogleMapsEta
+road_eta = GoogleMapsEta()
+
 # ---- Available cars nearby (real driver fleet from DB) ----
 
 
-GPS_FRESH_SECONDS = 60  # a driver marker disappears when the GPS heartbeat is older than this
-
-
 @api.post("/cars/nearby")
-async def cars_nearby(body: NearbyCarsRequest, request: Request):
-    """ONLY real, approved, on-duty drivers with a live GPS heartbeat (<60s) within ~10km.
-    Simulated/demo driver records are never returned — an empty list is an honest 'no cars' answer."""
-    test_customer = False
-    if _auth_token_from_request(request):
-        caller = await get_current_user(request)
-        test_customer = ride_testing.is_test_customer(caller.get("id"))
-    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
+async def cars_nearby(body: NearbyCarsRequest, current=Depends(require_customer)):
+    """Authenticated snapshot, identical policy to the Socket.IO subscription."""
+    return await _nearby_cars_snapshot(body, current)
+
+
+async def _nearby_cars_snapshot(body: NearbyCarsRequest, caller: dict):
+    """Only available drivers with a current login and fresh GPS inside 5 km."""
+    test_customer = ride_testing.is_test_customer(caller.get("id"))
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(seconds=GPS_FRESH_SECONDS)).isoformat()
     cars = []
     async for u in db.users.find({
+        **position_bounds(body.lat, body.lng),
         "role": "driver",
         "approved": True,
         **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
            {"accepted_terms_at": {"$exists": True, "$ne": None}}),
         "online": True,
+        "available": {"$ne": False}, "absent": {"$ne": True},
+        "away": {"$ne": True}, "on_break": {"$ne": True},
+        "availability_status": {"$in": [None, "available", "idle"]},
         **ride_testing.driver_supply_filter(test_customer),
         "active_trip_id": {"$in": [None, ""]},
         "disabled": {"$ne": True},
         "demo": {"$ne": True},
         "is_demo": {"$ne": True},
         "last_location_at": {"$gte": cutoff},
+        "last_location_session.exp": {"$gt": now.timestamp()},
     }):
+        session = u.get("last_location_session") or {}
+        sample_time = fresh_sample_time(u, datetime.now(timezone.utc))
+        if not sample_time:
+            continue
+        if not _session_is_current(session, u) or await _session_is_revoked(session):
+            continue
         if await db.trips.find_one(_real_trip_filter({"driver_id": str(u["_id"]), "status": {"$in": ["booking", "driver_on_way", "at_pickup", "in_trip", "arrived"]}}), {"_id": 1}):
             continue
         lat = u.get("last_lat")
         lng = u.get("last_lng")
-        if lat is None or lng is None or await _fleet_is_suspended(u.get("fleet_id")):
+        if (not isinstance(lat, (int, float)) or isinstance(lat, bool) or not math.isfinite(lat)
+                or not isinstance(lng, (int, float)) or isinstance(lng, bool) or not math.isfinite(lng)
+                or abs(lat) > 90 or abs(lng) > 180):
             continue
-        assigned_vehicle = await _assigned_fleet_vehicle(u, required=False)
+        if await _fleet_is_suspended(u.get("fleet_id")):
+            continue
+        try:
+            assigned_vehicle = await _assigned_fleet_vehicle(u, required=False)
+        except HTTPException as exc:
+            if exc.status_code in (403, 404, 409):
+                continue
+            raise
         if not assigned_vehicle:
             continue
         if body.vehicle_type and (assigned_vehicle.get("vehicle_type") or "ai-first") != body.vehicle_type:
@@ -1986,33 +1980,83 @@ async def cars_nearby(body: NearbyCarsRequest, request: Request):
         if not compliance.get("operational"):
             await _block_driver_new_work(str(u["_id"]), compliance["message"])
             continue
-        d_km = haversine_km(body.lat, body.lng, lat, lng)
-        if d_km > 10:
+        # Fence availability after awaited fleet/compliance checks. Offline,
+        # assignment or a GPS move cannot revive a marker from an earlier read.
+        fresh = await db.users.find_one({"_id": u["_id"], "online": True, "approved": True,
+            "disabled": {"$ne": True}, "available": {"$ne": False}, "absent": {"$ne": True},
+            "away": {"$ne": True}, "on_break": {"$ne": True},
+            "availability_status": {"$in": [None, "available", "idle"]}, "active_trip_id": {"$in": [None, ""]},
+            "last_lat": lat, "last_lng": lng})
+        if not fresh:
             continue
-        # driver "speed": approx 30 km/h in city -> eta = d/30*60 min, min 1 min
-        eta = max(1, int(round(d_km / 30 * 60)))
+        sample_time = fresh_sample_time(fresh, datetime.now(timezone.utc))
+        if not sample_time:
+            continue
+        d_km = haversine_km(body.lat, body.lng, lat, lng)
+        if d_km > RADIUS_KM:
+            continue
+        first_name = str(u.get("fullName") or "").split()
         cars.append({
             "id": str(u["_id"]),
-            "name": u.get("fullName") or "Sjåfør",
+            **media_versions(u, assigned_vehicle),
+            # Nearby supply is visible before a trip is assigned. First name is
+            # sufficient here; full identity belongs to the authenticated trip.
+            "name": first_name[0] if first_name else "Sjåfør",
             "car": assigned_vehicle.get("car") or "",
-            "plate": assigned_vehicle.get("plate") or "",
             "rating": round(float(u["rating"]), 1) if isinstance(u.get("rating"), (int, float)) else None,
             "type": assigned_vehicle.get("vehicle_type") or "ai-first",
+            "body_type": assigned_vehicle.get("body_type") or ("suv" if assigned_vehicle.get("vehicle_type") == "suv" else "van" if assigned_vehicle.get("vehicle_type") == "trygg" else "executive" if assigned_vehicle.get("vehicle_type") == "premium" else "sedan"),
             "lat": lat,
             "lng": lng,
             "heading": u.get("last_heading") or 0,
-            "eta_min": eta,
+            "online": True, "available": True,
             "distance_km": round(d_km, 2),
-            "updated_at": u.get("last_location_at"),
+            # Device sample age matters too: a delayed background batch must not
+            # become a fresh marker merely because the server just received it.
+            "updated_at": sample_time,
         })
-    cars.sort(key=lambda x: x["eta_min"])
+    # Google requests run in the background. Never delay offline/busy removals
+    # or fresh GPS delivery while waiting for the ETA provider.
+    road_eta.enrich(cars, (body.lat, body.lng))
+    cars.sort(key=lambda car: (car["eta_min"] is None, car["eta_min"] or 0, car["distance_km"]))
     return {
         "cars": cars,
         "count": len(cars),
         "live": True,
+        "radius_km": RADIUS_KM,
         "gps_fresh_seconds": GPS_FRESH_SECONDS,
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
+
+
+async def _authenticate_car_stream(token: str):
+    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    return require_customer(await get_current_user(request))
+
+
+live_cars_stream = LiveCarsStream(
+    app, authenticate=_authenticate_car_stream, snapshot=_nearby_cars_snapshot,
+    parse=NearbyCarsRequest.model_validate,
+    origins=compute_cors_origins(APP_ENV, os.environ.get("FRONTEND_URL", "")),
+)
+
+
+async def _authenticate_trip_stream(token: str):
+    request = Request({"type": "http", "headers": [(b"authorization", f"Bearer {token}".encode())]})
+    user = await get_current_user(request)
+    return await require_driver(user) if user.get("role") == "driver" else require_customer(user)
+
+
+async def _trip_stream_snapshot(trip_id, user):
+    owner_field = "driver_id" if user.get("role") == "driver" else "user_id"
+    return await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, owner_field: user["id"]}), {
+        "_id": 0, "trip_id": 1, "status": 1, "driver_id": 1, "driver_lat": 1, "driver_lng": 1,
+        "driver_heading": 1, "driver_location_at": 1, "updated_at": 1, "payment_status": 1,
+        "pickup_waiting_inside": 1, "customer_ready_at": 1,
+    })
+
+
+trip_status_stream = TripStatusStream(live_cars_stream.sio, authenticate=_authenticate_trip_stream, load=_trip_stream_snapshot)
 
 
 @api.get("/places")
@@ -2217,10 +2261,9 @@ async def trip_estimate(body: EstimateRequest):
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
-    demand = await demand_surge_info(body.pickup_lat, body.pickup_lng, effective_pricing.get("surge") or {})
     options = []
-    for vt in ("ai-first", "enkelt", "trygg", "premium"):
-        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops), demand_multiplier=demand["multiplier"])
+    for vt in ("ai-first", "enkelt", "trygg", "premium", "suv"):
+        quote = calculate_price(est, vt, duration, effective_pricing, stops_count=len(body.stops))
         options.append({"vehicle_type": vt, "price": quote["price"], "eta_min": duration,
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"],
@@ -2229,8 +2272,7 @@ async def trip_estimate(body: EstimateRequest):
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
-            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area,
-            "demand": {"active": demand["active"], "multiplier": demand["multiplier"]}}
+            "pricing_version": int(effective_pricing.get("version", 1)), "pricing_area": pricing_area}
 
 
 
@@ -2379,20 +2421,25 @@ async def register(body: RegisterRequest, request: Request, response: Response):
     if body.accepted_terms is not True:
         raise HTTPException(status_code=400, detail="Du må godta vilkår og personvern før kontoen opprettes")
     now_iso = datetime.now(timezone.utc).isoformat()
-    result = await db.users.insert_one({
-        "email": email,
-        "password_hash": hash_password(body.password),
-        "fullName": body.fullName,
-        "phone": body.phone or "",
-        "role": "user",
-        "accepted_terms_at": now_iso,
-        "legal_version": CURRENT_LEGAL_VERSION,
-        "created_at": now_iso,
-    })
+    try:
+        result = await db.users.insert_one({
+            "email": email,
+            "password_hash": await asyncio.to_thread(hash_password, body.password),
+            "fullName": body.fullName,
+            "phone": body.phone or "",
+            "role": "user",
+            "welcome_email_pending": True,
+            "accepted_terms_at": now_iso,
+            "legal_version": CURRENT_LEGAL_VERSION,
+            "created_at": now_iso,
+        })
+    except DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="E-post er allerede registrert") from None
     uid = str(result.inserted_id)
     token = create_access_token(uid, email)
     set_auth_cookie(response, token)
     created_user = await db.users.find_one({"_id": result.inserted_id})
+    await queue_customer_welcome(db, created_user)
     return {"token": token, "user": user_public(created_user or {"_id": result.inserted_id, "email": email, "fullName": body.fullName, "phone": body.phone or "", "role": "user", "accepted_terms_at": now_iso})}
 
 
@@ -2409,9 +2456,23 @@ async def login(body: LoginRequest, request: Request, response: Response):
         # Restrict the lookup to role=driver so a passenger credential can never authenticate
         # into the driver client, even before the client-side role gate runs.
         if "@" in identifier:
-            user = await db.users.find_one({"role": "driver", "email": identifier.lower()})
+            lookup = {"role": "driver", "email": identifier.lower()}
         else:
-            user = await _find_driver_by_phone(identifier)
+            digits = re.sub(r"\D", "", identifier)
+            local = digits[-8:] if len(digits) >= 8 else digits
+            if len(local) != 8:
+                user = None
+            else:
+                sep = r"[\s().-]*"
+                local_pattern = sep.join(re.escape(ch) for ch in local)
+                phone_pattern = rf"^(?:(?:\+|00)?47{sep})?{local_pattern}$"
+                user = await db.users.find_one({
+                    "role": "driver",
+                    "phone": {"$regex": phone_pattern},
+                })
+            lookup = None
+        if lookup is not None:
+            user = await db.users.find_one(lookup)
     elif body.client == "customer":
         # Customer app may authenticate passenger/customer accounts only.
         user = await db.users.find_one({"role": "user", "email": identifier.lower()})
@@ -2419,7 +2480,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         # Generic web login is retained for admin/fleet portals.
         user = await db.users.find_one({"email": identifier.lower()})
 
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or not await asyncio.to_thread(verify_password, body.password, user["password_hash"]):
         await _record_failed_login(login_key, ip)
         raise HTTPException(status_code=401, detail="Feil innlogging")
     if user.get("disabled"):
@@ -2439,159 +2500,14 @@ async def login(body: LoginRequest, request: Request, response: Response):
     return {"token": token, "user": user_public(user)}
 
 
-def _norwegian_local_phone(raw: str) -> Optional[str]:
-    """Return the 8-digit Norwegian subscriber number, or None if the input isn't one."""
-    digits = re.sub(r"\D", "", str(raw or ""))
-    if digits.startswith("0047"):
-        digits = digits[4:]
-    elif digits.startswith("47") and len(digits) == 10:
-        digits = digits[2:]
-    return digits if re.fullmatch(r"[2-9]\d{7}", digits) else None
-
-
-async def _find_driver_by_phone(raw: str):
-    local = _norwegian_local_phone(raw)
-    if not local:
-        return None
-    sep = r"[\s().-]*"
-    local_pattern = sep.join(re.escape(ch) for ch in local)
-    phone_pattern = rf"^(?:(?:\+|00)?47{sep})?{local_pattern}$"
-    return await db.users.find_one({"role": "driver", "phone": {"$regex": phone_pattern}})
-
-
-TWILIO_VERIFY_BASE = "https://verify.twilio.com/v2/Services"
-
-
-def _twilio_verify_config() -> Optional[tuple]:
-    sid = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
-    token = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
-    service = os.environ.get("TWILIO_VERIFY_SERVICE_SID", "").strip()
-    return (sid, token, service) if sid and token and service else None
-
-
-async def _enforce_key_rate_limit(scope: str, key: str, limit: int, window_seconds: int):
-    """Same fixed-window limiter as _enforce_rate_limit, keyed by an identifier instead of IP."""
-    now = datetime.now(timezone.utc)
-    bucket = int(now.timestamp()) // int(window_seconds)
-    bucket_id = f"{scope}:{hashlib.sha256(key.encode()).hexdigest()[:24]}:{bucket}"
-    await db.rate_limit_buckets.update_one(
-        {"_id": bucket_id},
-        {"$inc": {"count": 1}, "$setOnInsert": {
-            "scope": scope, "bucket": bucket, "created_at": now,
-            "expires_at": now + timedelta(seconds=max(window_seconds * 2, 120)),
-        }},
-        upsert=True,
-    )
-    rec = await db.rate_limit_buckets.find_one({"_id": bucket_id}, {"count": 1})
-    if int((rec or {}).get("count") or 0) > int(limit):
-        raise HTTPException(
-            status_code=429,
-            detail="For mange forsøk med dette nummeret. Prøv igjen litt senere.",
-            headers={"Retry-After": str(window_seconds)},
-        )
-
-
-class DriverOtpStartRequest(BaseModel):
-    phone: str = Field(min_length=8, max_length=24)
-
-
-class DriverOtpVerifyRequest(BaseModel):
-    phone: str = Field(min_length=8, max_length=24)
-    code: str = Field(min_length=4, max_length=10)
-    device_id: Optional[str] = Field(default=None, max_length=128)
-
-
-@api.post("/auth/driver/otp/start")
-async def driver_otp_start(body: DriverOtpStartRequest, request: Request):
-    """Send a one-time SMS code to an invited driver's phone via Twilio Verify.
-
-    The response is identical whether or not the number belongs to a driver, so this
-    endpoint cannot be used to discover which phone numbers are registered.
-    """
-    await _enforce_rate_limit(request, "auth-driver-otp-start", 10, 900)
-    config = _twilio_verify_config()
-    if not config:
-        raise HTTPException(status_code=503, detail="SMS-innlogging er ikke aktivert ennå. Bruk passord.")
-    local = _norwegian_local_phone(body.phone)
-    if not local:
-        raise HTTPException(status_code=400, detail="Skriv inn et gyldig norsk mobilnummer.")
-    await _enforce_key_rate_limit("auth-driver-otp-start-phone", local, 5, 3600)
-    generic = {"ok": True, "sent_to": f"+47 ••• •• {local[-3:]}"}
-
-    user = await _find_driver_by_phone(local)
-    if not user or user.get("disabled"):
-        return generic
-
-    sid, token, service = config
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.post(
-                f"{TWILIO_VERIFY_BASE}/{service}/Verifications",
-                data={"To": f"+47{local}", "Channel": "sms", "Locale": "nb"},
-                auth=(sid, token),
-            )
-        if res.status_code >= 400:
-            logger.warning("Twilio Verify start failed: status=%s", res.status_code)
-            raise HTTPException(status_code=502, detail="Kunne ikke sende SMS akkurat nå. Prøv igjen eller bruk passord.")
-    except httpx.HTTPError:
-        logger.warning("Twilio Verify start network error")
-        raise HTTPException(status_code=502, detail="Kunne ikke sende SMS akkurat nå. Prøv igjen eller bruk passord.")
-    return generic
-
-
-@api.post("/auth/driver/otp/verify")
-async def driver_otp_verify(body: DriverOtpVerifyRequest, request: Request, response: Response):
-    await _enforce_rate_limit(request, "auth-driver-otp-verify", 30, 900)
-    config = _twilio_verify_config()
-    if not config:
-        raise HTTPException(status_code=503, detail="SMS-innlogging er ikke aktivert ennå. Bruk passord.")
-    local = _norwegian_local_phone(body.phone)
-    code = re.sub(r"\D", "", body.code)
-    if not local or not (4 <= len(code) <= 10):
-        raise HTTPException(status_code=400, detail="Ugyldig kode.")
-    login_key = f"otp:{local}"
-    ip = _client_ip(request)
-    if await _login_blocked(login_key, ip):
-        raise HTTPException(status_code=429, detail="For mange innloggingsforsøk. Prøv igjen om 15 minutter.")
-
-    sid, token, service = config
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.post(
-                f"{TWILIO_VERIFY_BASE}/{service}/VerificationCheck",
-                data={"To": f"+47{local}", "Code": code},
-                auth=(sid, token),
-            )
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="Kunne ikke kontrollere koden akkurat nå. Prøv igjen.")
-    # Twilio answers 404 once a verification has expired, been used or hit its attempt cap.
-    approved = res.status_code == 200 and (res.json() or {}).get("status") == "approved"
-    user = await _find_driver_by_phone(local) if approved else None
-    if not user or user.get("disabled"):
-        await _record_failed_login(login_key, ip)
-        raise HTTPException(status_code=401, detail="Feil eller utløpt kode.")
-
-    await _clear_failed_logins(login_key, ip)
-    user = await _apply_driver_identity_risk(user, body.device_id, "driver", on_login=True)
-    uid = str(user["_id"])
-    if user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
-    token_value = create_access_token(uid, str(user.get("email") or "").strip().lower())
-    set_auth_cookie(response, token_value)
-    return {"token": token_value, "user": user_public(user)}
-
-
-@api.get("/auth/driver/otp/config")
-async def driver_otp_config():
-    return {"enabled": _twilio_verify_config() is not None}
-
-
 @api.post("/auth/logout")
 async def logout(request: Request, response: Response):
     token = _auth_token_from_request(request)
     if token:
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            if payload.get("type") == "2fa":
+                raise jwt.InvalidTokenError()
             user_id = payload.get("sub")
             jti = payload.get("jti")
             if jti:
@@ -2607,6 +2523,18 @@ async def logout(request: Request, response: Response):
                     {"_id": ObjectId(user_id)},
                     {"$set": {"tokens_valid_after": datetime.now(timezone.utc).timestamp()}},
                 )
+            if user_id:
+                # Logout removes supply even if a device never toggled offline.
+                # An older device logout must not take a newer driver's session
+                # offline; its revoked JTI is still excluded from snapshots.
+                result = await db.users.update_one(
+                    {"_id": ObjectId(user_id), "role": "driver",
+                     "$or": [{"last_location_session.jti": jti}, {"last_location_session": {"$exists": False}}]},
+                    {"$set": {"online": False}, "$unset": {"last_location_session": ""}},
+                )
+                if result.modified_count:
+                    await db.driver_sessions.update_many({"driver_id": user_id, "ended_at": None},
+                        {"$set": {"ended_at": datetime.now(timezone.utc).isoformat()}})
         except (jwt.PyJWTError, InvalidId, TypeError, ValueError):
             pass
     response.delete_cookie("access_token", path="/")
@@ -2645,7 +2573,7 @@ async def twofa_enable(body: TwoFAEnableRequest, current=Depends(get_current_use
     await db.users.update_one(
         {"_id": user["_id"]},
         {
-            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [hash_password(c) for c in backup]},
+            "$set": {"totp_secret": pending, "totp_enabled": True, "totp_backup_codes": [await asyncio.to_thread(hash_password, c) for c in backup]},
             "$unset": {"totp_secret_pending": ""},
         },
     )
@@ -2657,7 +2585,7 @@ async def twofa_disable(body: TwoFADisableRequest, current=Depends(get_current_u
     if _twofa_required_role(current.get("role", "user")):
         raise HTTPException(status_code=403, detail="2FA er obligatorisk for administratorer")
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or not await asyncio.to_thread(verify_password, body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Feil passord.")
     if not user.get("totp_enabled") or not _verify_totp(user.get("totp_secret", ""), body.code):
         raise HTTPException(status_code=400, detail="Feil 2FA-kode.")
@@ -2691,7 +2619,7 @@ async def twofa_verify_login(body: TwoFAVerifyLoginRequest, request: Request, re
     used_idx = None
     if not ok:
         for i, h in enumerate(user.get("totp_backup_codes", [])):
-            if verify_password(code, h):
+            if await asyncio.to_thread(verify_password, code, h):
                 ok = True
                 used_idx = i
                 break
@@ -2814,36 +2742,11 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
         raise HTTPException(status_code=400, detail="Lenken er ugyldig eller utløpt. Be om en ny.")
     await db.users.update_one(
         {"_id": ObjectId(rec["user_id"])},
-        {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
+        {"$set": {"password_hash": await asyncio.to_thread(hash_password, body.new_password), "tokens_valid_after": datetime.now(timezone.utc).timestamp()}, "$unset": {"must_reset_password": ""}},
     )
     # Unlock the account: clear brute-force counters so the user can log in immediately
     await db.login_attempts.delete_many({"identifier": f"email:{rec['email']}"})
     return {"ok": True}
-
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=256)
-    new_password: str = Field(min_length=8, max_length=256)
-
-
-@api.post("/auth/change-password")
-async def change_password(body: ChangePasswordRequest, request: Request, current=Depends(get_current_user)):
-    """Authenticated password change. Used to replace the temporary password
-    issued when a fleet application is approved (must_reset_password)."""
-    await _enforce_rate_limit(request, "auth-change-password", 10, 900)
-    user = await db.users.find_one({"_id": ObjectId(current["id"])})
-    if not user or not verify_password(body.current_password, user.get("password_hash") or ""):
-        raise HTTPException(status_code=400, detail="Nåværende passord er feil")
-    if body.current_password == body.new_password:
-        raise HTTPException(status_code=400, detail="Det nye passordet må være forskjellig fra det gamle")
-    # Revoke every other session, then mint a fresh token for this one.
-    cutoff = datetime.now(timezone.utc).timestamp()
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {"password_hash": hash_password(body.new_password), "tokens_valid_after": cutoff},
-         "$unset": {"must_reset_password": ""}},
-    )
-    return {"ok": True, "token": create_access_token(str(user["_id"]), user.get("email") or "")}
 
 
 @api.get("/auth/legal-config")
@@ -2983,8 +2886,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         geometry = None
     pricing = await active_pricing()
     effective_pricing, pricing_area = pricing_for_pickup(pricing, body.pickup_lat, body.pickup_lng)
-    demand = await demand_surge_info(body.pickup_lat, body.pickup_lng, effective_pricing.get("surge") or {})
-    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops), demand_multiplier=demand["multiplier"])
+    quote = calculate_price(est, body.vehicle_type, eta_min, effective_pricing, stops_count=len(body.stops))
     accepted_waiting = None
     if body.waiting_policy_token is not None:
         policy = waiting_policy(effective_pricing, body.vehicle_type)
@@ -2997,17 +2899,11 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
             raise HTTPException(409, {"code": "quote_changed", "message": "Prisen er endret. Beregn på nytt og bekreft pris og ventetid."})
         accepted_waiting = policy
     commission_rate = await _platform_commission()
-    gross_price = quote["price"]
-    promo_discount = 0
-    if body.use_promo_credit:
-        promo_discount = await _reserve_promo_credit(user_oid, gross_price, commission_rate)
-    price = gross_price - promo_discount
+    price = quote["price"]
     trip = {
         "trip_id": trip_id,
         "user_id": current["id"],
         "internal_beta_test": test_customer,
-        "gross_price": gross_price,
-        "promo_discount": promo_discount,
         "pickup_address": body.pickup_address,
         "pickup_lat": body.pickup_lat,
         "pickup_lng": body.pickup_lng,
@@ -3030,9 +2926,8 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "pricing_area": pricing_area,
         "pricing_snapshot": effective_pricing,
         "commission_rate": commission_rate,
-        "commission_source": commission_source(),
+        "commission_source": "platform_default",
         "surge_multiplier": quote["surge_multiplier"],
-        "demand_multiplier": quote["demand_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "payment_authorizing",
@@ -3045,8 +2940,6 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
     try:
         await db.trips.insert_one(trip)
     except Exception:
-        if promo_discount:
-            await db.users.update_one({"_id": user_oid}, {"$inc": {"promo_credit_kr": promo_discount}})
         await db.users.update_one(
             {"_id": user_oid, "booking_request_lock": trip_id},
             {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
@@ -3066,7 +2959,6 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
                 "cancelled_at": datetime.now(timezone.utc).isoformat(),
             }})
             await ride_reservations.release(trip)
-            await _restore_promo_credit(trip_id)
         raise
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
@@ -3141,6 +3033,13 @@ async def update_trip_pickup_preference(trip_id: str, body: TripPickupPreference
     return {"ok": True, "waiting_inside": body.waiting_inside, "updated_at": stamp}
 
 
+@api.post("/trips/{trip_id}/search/cancel")
+async def cancel_customer_search(trip_id: str, current=Depends(require_customer)):
+    if not await ride_search.cancel(trip_id, current["id"]):
+        raise HTTPException(409, "Søket kan ikke avbrytes: turstatus er endret. Oppdater turen.")
+    return {"ok": True}
+
+
 @api.get("/trips/{trip_id}")
 async def get_trip(trip_id: str, current=Depends(require_customer)):
     trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]}))
@@ -3149,6 +3048,19 @@ async def get_trip(trip_id: str, current=Depends(require_customer)):
     if trip.get("payment_status") == "paid" and not trip.get("receipt_id"):
         await ensure_receipt_snapshot(trip_id)
         trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]})) or trip
+    if not trip.get("driver_id") and trip.get("status") in ("searching", "booking"):
+        await ride_search.tick(trip)
+        trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "user_id": current["id"]})) or trip
+    if trip.get("status") in ("driver_on_way", "at_pickup"):
+        # Canonical destination is the agreed pickup; never present an air-distance
+        # fallback as a Google driving ETA. GPS freshness is checked in the UI.
+        row = {"lat": trip.get("driver_lat"), "lng": trip.get("driver_lng")}
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in (row["lat"], row["lng"], trip.get("pickup_lat"), trip.get("pickup_lng"))) and abs(row["lat"]) <= 90 and abs(row["lng"]) <= 180 and abs(trip["pickup_lat"]) <= 90 and abs(trip["pickup_lng"]) <= 180:
+            road_eta.enrich([row], (trip["pickup_lat"], trip["pickup_lng"]))
+            trip.update({k: v for k, v in row.items() if k.startswith("eta_")})
+        else:
+            trip.update(eta_min=None, eta_source=None, eta_status="unavailable")
+    trip["server_time"] = datetime.now(timezone.utc).isoformat()
     trip["id"] = str(trip["_id"])
     trip.pop("_id", None)
     return trip
@@ -3170,12 +3082,8 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         distance_km, duration_min = fallback_route_points(points)
         geometry = None
     pricing = trip.get("pricing_snapshot") or await active_pricing()
-    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops),
-                            demand_multiplier=float(trip.get("demand_multiplier") or 1.0))
-    updated_gross = quote["price"] + int(trip.get("waiting_fee_total") or 0)
-    previous_discount = int(trip.get("promo_discount") or 0)
-    promo_discount = min(previous_discount, max_discount_for_trip(updated_gross, await _commission_for_trip(trip)))
-    updated_price = updated_gross - promo_discount
+    quote = calculate_price(distance_km, trip.get("vehicle_type", "ai-first"), duration_min, pricing, stops_count=len(body.stops))
+    updated_price = quote["price"] + int(trip.get("waiting_fee_total") or 0)
     if trip.get("waiting_policy") and updated_price * 100 > int(trip.get("authorized_amount_ore", 0)):
         raise HTTPException(409, "Ny destinasjon overstiger kortreservasjonen. Kontakt SNAR for å endre turen.")
     previous = {
@@ -3194,14 +3102,10 @@ async def change_trip_destination(trip_id: str, body: TripDestinationUpdate, cur
         {"$set": {
             "dropoff_address": body.dropoff_address, "dropoff_lat": body.dropoff_lat, "dropoff_lng": body.dropoff_lng,
             "stops": [s.model_dump() for s in body.stops], "distance_km": distance_km, "duration_min": duration_min,
-            "geometry": geometry, "price": updated_price, "quoted_ride_price": quote["price"] - promo_discount,
-            "gross_price": updated_gross, "promo_discount": promo_discount, "surge_multiplier": quote["surge_multiplier"],
+            "geometry": geometry, "price": updated_price, "quoted_ride_price": quote["price"], "surge_multiplier": quote["surge_multiplier"],
             "extra_stop_fee_total": quote["extra_stop_fee_total"], "updated_at": now_iso,
         }, "$push": {"destination_revisions": revision}},
     )
-    if promo_discount < previous_discount:
-        await db.users.update_one({"_id": ObjectId(current["id"])},
-                                  {"$inc": {"promo_credit_kr": previous_discount - promo_discount}})
     if trip.get("driver_id"):
         await send_push_to_user(
             trip["driver_id"],
@@ -3358,7 +3262,7 @@ async def require_driver(current=Depends(get_current_user)):
     if current.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra SNAR admin")
+        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
     if current.get("legal_accepted") is not True:
@@ -3601,7 +3505,6 @@ async def cancel_trip(trip_id: str, current=Depends(require_customer)):
         raise HTTPException(status_code=409, detail="Turen har endret status og kan ikke avbestilles nå")
 
     await ride_reservations.release(trip)
-    await _restore_promo_credit(trip_id)
     # Re-read after the atomic transition. A driver may have been assigned between the
     # initial read and cancellation; cleanup must use canonical post-update ownership.
     cancelled_trip = await db.trips.find_one(
@@ -3657,68 +3560,23 @@ async def _load_trip_or_403(trip_id: str, current: dict):
     return trip, is_passenger, is_driver
 
 
-AI_GATEWAY_CHAT_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
-AI_GATEWAY_TRANSCRIPTION_URL = "https://ai-gateway.vercel.sh/v4/ai/transcription-model"
-AI_CHAT_MODEL = os.environ.get("SNAR_AI_CHAT_MODEL", "openai/gpt-5-mini")
-AI_TRANSLATE_MODEL = os.environ.get("SNAR_AI_TRANSLATE_MODEL", "openai/gpt-5-nano")
-AI_TRANSCRIBE_MODEL = os.environ.get("SNAR_AI_TRANSCRIBE_MODEL", "openai/gpt-4o-mini-transcribe")
-
-
-async def _gateway_chat(messages: list, model: str, timeout: float = 25.0) -> str:
-    """Vercel AI Gateway, OpenAI-compatible chat completions."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        r = await client.post(
-            AI_GATEWAY_CHAT_URL,
-            headers={"Authorization": f"Bearer {AI_LLM_KEY}"},
-            json={"model": model, "messages": messages},
-        )
-    if r.status_code == 429:
-        raise RuntimeError("rate limit")
-    r.raise_for_status()
-    content = ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-    if not content.strip():
-        raise ValueError("Empty AI reply")
-    return content.strip()
-
-
-async def _gateway_transcribe(audio: bytes, media_type: str, timeout: float = 30.0) -> str:
-    """Vercel AI Gateway transcription (same protocol as the AI SDK gateway provider)."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        r = await client.post(
-            AI_GATEWAY_TRANSCRIPTION_URL,
-            headers={
-                "Authorization": f"Bearer {AI_LLM_KEY}",
-                "ai-gateway-protocol-version": "0.0.1",
-                "ai-gateway-auth-method": "api-key",
-                "ai-transcription-model-specification-version": "4",
-                "ai-model-id": AI_TRANSCRIBE_MODEL,
-            },
-            json={"audio": base64.b64encode(audio).decode(), "mediaType": media_type},
-        )
-    if r.status_code == 429:
-        raise RuntimeError("rate limit")
-    if r.status_code == 400:
-        raise RuntimeError(f"unsupported format: {r.text[:200]}")
-    r.raise_for_status()
-    return (r.json().get("text") or "").strip()
-
-
 async def _translate_via_llm(text: str, target_lang: str) -> Optional[str]:
-    """Best-effort translation via Vercel AI Gateway. Returns None on failure."""
+    """Best-effort translation using Emergent LLM key (Claude Sonnet). Returns None on failure."""
     if not AI_LLM_KEY or not text.strip():
         return None
     try:
-        return await _gateway_chat(
-            [
-                {"role": "system", "content": (
-                    "You are a professional translator. Translate the user's message to the requested language. "
-                    "Output ONLY the translated text — no preface, no quotes, no notes. Preserve slang and tone."
-                )},
-                {"role": "user", "content": f"Translate to {target_lang}: {text}"},
-            ],
-            AI_TRANSLATE_MODEL,
-            timeout=15.0,
-        )
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=AI_LLM_KEY,
+            session_id=f"translate_{uuid.uuid4().hex[:8]}",
+            system_message=(
+                "You are a professional translator. Translate the user's message to the requested language. "
+                "Output ONLY the translated text — no preface, no quotes, no notes. Preserve slang and tone."
+            ),
+        ).with_model("openai", "gpt-5.6-luna")
+        prompt = f"Translate to {target_lang}: {text}"
+        out = await chat.send_message(UserMessage(text=prompt))
+        return (out or "").strip()
     except Exception as e:
         print(f"[translate] failed: {e}")
         return None
@@ -3952,10 +3810,29 @@ async def ai_transcribe(body: TranscribeRequest, request: Request, current=Depen
         raise HTTPException(400, "Lydklipp for stort (maks 25 MB)")
 
     try:
+        from emergentintegrations.llm.openai import OpenAISpeechToText
+        import io as _io
+
+        # Best-guess extension from mime type; whisper-1 supports: mp3, mp4, mpeg, mpga, m4a, wav, webm
         mime = (body.mime_type or "audio/webm").lower()
-        if "ogg" in mime:
+        ext = "webm"
+        if "mp3" in mime: ext = "mp3"
+        elif "wav" in mime: ext = "wav"
+        elif "m4a" in mime: ext = "m4a"
+        elif "mp4" in mime: ext = "mp4"
+        elif "mpeg" in mime: ext = "mpeg"
+        elif "ogg" in mime:
             raise HTTPException(400, "Lydformat ogg støttes ikke — bruk webm eller mp3")
-        text = await _gateway_transcribe(raw, mime)
+
+        buf = _io.BytesIO(raw)
+        buf.name = f"audio.{ext}"
+
+        stt = OpenAISpeechToText(api_key=AI_LLM_KEY)
+        kwargs = {"file": buf, "model": "whisper-1", "response_format": "json"}
+        if body.language:
+            kwargs["language"] = body.language
+        response = await stt.transcribe(**kwargs)
+        text = getattr(response, "text", None) or (response.get("text") if isinstance(response, dict) else str(response))
     except HTTPException:
         raise
     except Exception as e:
@@ -3984,12 +3861,17 @@ async def list_trip_messages(trip_id: str, current=Depends(get_current_user)):
 # ---- Payment methods ----
 @api.get("/payment-methods")
 async def list_payment_methods(current=Depends(require_customer)):
+    user = await db.users.find_one({"_id": ObjectId(current["id"])}) or {}
+    default_id = user.get("default_payment_method_id")
+    selected = await selected_payment_method(db, current["id"], user) if default_id else None
     cursor = db.payment_methods.find({"user_id": current["id"]})
     methods = []
     async for m in cursor:
         m["id"] = str(m["_id"])
         m.pop("_id", None)
         m["verified"] = bool(m.get("verified") is True and m.get("setup_status") == "succeeded" and m.get("stripe_payment_method_id"))
+        if default_id:
+            m["is_default"] = bool(selected and m["id"] == str(selected["_id"]))
         methods.append(m)
     return methods
 
@@ -4095,33 +3977,44 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
     """Start a Stripe Checkout Session in 'setup' mode to save a card for future use."""
     if not stripe.api_key:
         raise HTTPException(500, "Stripe er ikke konfigurert")
-    # Reuse or create Stripe customer
+    client = stripe.StripeClient(stripe.api_key, max_network_retries=1)
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
-    customer_id = (user or {}).get("stripe_customer_id")
-    if not customer_id:
-        cust = stripe.Customer.create(email=user["email"], name=user.get("fullName") or user["email"], metadata={"user_id": current["id"]})
-        customer_id = cust.id
-        await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"stripe_customer_id": customer_id}})
+    if not user:
+        raise HTTPException(404, "Bruker ikke funnet")
     origin = _trusted_checkout_origin(body.origin_url)
-    session = stripe.checkout.Session.create(
-        mode="setup",
-        customer=customer_id,
-        payment_method_types=["card"],
-        setup_intent_data={"usage": "off_session"},
-        success_url=f"{origin}/payment/setup-success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{origin}/payment/setup-cancel",
-        metadata={"user_id": current["id"]},
-    )
+    # Fail closed: returning to an unrelated default/landing origin loses the
+    # authenticated app session and used to strand customers after bank approval.
+    if origin != body.origin_url.strip().rstrip("/"):
+        raise HTTPException(400, "Appens returadresse må godkjennes i Render-oppsettet.")
+    try:
+        customer_id = user.get("stripe_customer_id")
+        if not customer_id:
+            customer = await asyncio.to_thread(client.v1.customers.create,
+                {"email": user["email"], "name": user.get("fullName") or user["email"], "metadata": {"user_id": current["id"]}},
+                {"idempotency_key": f"snar-customer-v1-{current['id']}"})
+            customer_id = customer.id
+            await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"stripe_customer_id": customer_id}})
+        session = await asyncio.to_thread(client.v1.checkout.sessions.create, {
+            "mode": "setup", "currency": "nok", "customer": customer_id,
+            "integration_identifier": "snar_card_setup_" + "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(8)),
+            "setup_intent_data": {"usage": "off_session"},
+            "success_url": f"{origin}/payment-methods?setup=success&session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{origin}/payment-methods?setup=cancel",
+            "metadata": {"user_id": current["id"]},
+        })
+    except stripe.StripeError:
+        raise HTTPException(502, "Kunne ikke starte sikker kortregistrering. Prøv igjen.") from None
     return {"checkout_url": session.url, "session_id": session.id}
 
 
 @api.get("/payments/card/setup/{session_id}")
 async def stripe_card_setup_status(session_id: str, current=Depends(require_customer)):
     """After Stripe redirects back, fetch the saved payment method and store it in Mongo."""
+    client = stripe.StripeClient(stripe.api_key, max_network_retries=1)
     try:
-        s = stripe.checkout.Session.retrieve(session_id, expand=["setup_intent"])
-    except stripe.error.StripeError as e:
-        raise HTTPException(400, f"Kunne ikke hente sesjon: {e}")
+        s = await asyncio.to_thread(client.v1.checkout.sessions.retrieve, session_id, {"expand": ["setup_intent"]})
+    except stripe.StripeError:
+        raise HTTPException(400, "Kunne ikke hente kortregistreringen. Prøv igjen.") from None
     user = await db.users.find_one({"_id": ObjectId(current["id"])})
     customer_id = (user or {}).get("stripe_customer_id")
     if not customer_id or (s.get("metadata") or {}).get("user_id") != current["id"] or _stripe_id(s.get("customer")) != customer_id:
@@ -4132,7 +4025,7 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
     if hasattr(si, "id"):
         si_obj = si
     else:
-        si_obj = stripe.SetupIntent.retrieve(si)
+        si_obj = await asyncio.to_thread(client.v1.setup_intents.retrieve, si)
     if _stripe_id(si_obj.get("customer")) != customer_id:
         raise HTTPException(404, "Betalingsoppsett ikke funnet")
     pm_id = si_obj.payment_method
@@ -4141,7 +4034,9 @@ async def stripe_card_setup_status(session_id: str, current=Depends(require_cust
     # A SetupIntent is 'succeeded' only when the card passed 3DS/CVV. Anything else is not verified.
     setup_status = getattr(si_obj, "status", None) or "unknown"
     verified = setup_status == "succeeded"
-    pm = stripe.PaymentMethod.retrieve(pm_id)
+    pm = await asyncio.to_thread(client.v1.payment_methods.retrieve, pm_id)
+    if pm.get("type") != "card" or _stripe_id(pm.get("customer")) != customer_id:
+        raise HTTPException(409, "Betalingsmåten er ikke et verifisert kort for denne kunden")
     card = pm.card
     # Upsert into payment_methods collection
     existing = await db.payment_methods.find_one({"user_id": current["id"], "stripe_payment_method_id": pm_id})
@@ -4244,14 +4139,6 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
 
     session_id = body.session_id or f"user_{current['id']}"
 
-    history = []
-    async for m in db.chat_messages.find(
-        {"user_id": current["id"], "session_id": session_id}
-    ).sort("created_at", -1).limit(12):
-        if m.get("role") in ("user", "assistant") and m.get("content"):
-            history.append({"role": m["role"], "content": m["content"]})
-    history.reverse()
-
     # store user message
     await db.chat_messages.insert_one({
         "user_id": current["id"],
@@ -4262,17 +4149,23 @@ async def ai_chat(body: ChatRequest, request: Request, current=Depends(get_curre
     })
 
     try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=AI_LLM_KEY,
+            session_id=provider_chat_session(APP_ENV, current['id'], session_id),
+            system_message=AI_SYSTEM,
+        ).with_model("openai", "gpt-5.6-sol")
+        # session_id gjør at emergentintegrations selv beholder samtalehistorikk mellom kall
         reply = await asyncio.wait_for(
-            _gateway_chat(
-                [{"role": "system", "content": AI_SYSTEM}, *history, {"role": "user", "content": message}],
-                AI_CHAT_MODEL,
-            ),
+            chat.send_message(UserMessage(text=message)),
             timeout=25.0,
         )
-    except (asyncio.TimeoutError, httpx.TimeoutException):
+        if not isinstance(reply, str) or not reply.strip():
+            raise ValueError("Empty AI reply")
+    except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="SNAR AI bruker lenger tid enn vanlig. Prøv igjen om et øyeblikk.")
     except Exception as e:
-        print(f"[ai/chat] error: {e}")
+        logging.warning("AI chat provider failed (%s)", type(e).__name__)
         raise HTTPException(status_code=502, detail="AI-tjenesten er midlertidig utilgjengelig. Prøv igjen om litt.")
 
     await db.chat_messages.insert_one({
@@ -4330,7 +4223,7 @@ def customer_public(u: dict) -> dict:
 
 # Never serve fabricated/demo/test trips to a driver
 ACTIVE_TRIP_STATUSES = ["driver_on_way", "at_pickup", "in_trip"]
-DISPATCH_OFFER_SECONDS = int(os.environ.get("DISPATCH_OFFER_SECONDS", "20"))
+DISPATCH_OFFER_SECONDS = 30
 
 
 def _recent_driver_reservation(locked_at, now=None) -> bool:
@@ -4365,7 +4258,8 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         {"role": "driver", "approved": True,
          **({"legal_accepted": True, "legal_version": CURRENT_LEGAL_VERSION} if test_customer else
             {"accepted_terms_at": {"$exists": True, "$ne": None}}),
-         "online": True, "disabled": {"$ne": True}, "active_trip_id": {"$in": [None, ""]},
+         "online": True, "disabled": {"$ne": True}, "availability_status": {"$in": [None, "available", "idle"]}, "available": {"$ne": False}, "absent": {"$ne": True},
+         "away": {"$ne": True}, "on_break": {"$ne": True}, "active_trip_id": {"$in": [None, ""]},
          **ride_testing.driver_supply_filter(test_customer),
          "demo": {"$ne": True}, "is_demo": {"$ne": True}, "last_location_at": {"$gte": fresh}},
         {"last_lat": 1, "last_lng": 1, "name": 1, "fleet_id": 1, "capabilities": 1, "vehicle_id": 1, "vehicle_type": 1,
@@ -4387,36 +4281,24 @@ async def _dispatch_candidates(lat: float, lng: float, required_capabilities=Non
         if vehicle_type and driver_vehicle_type != vehicle_type:
             continue
         distance = haversine_km(lat, lng, d["last_lat"], d["last_lng"])
-        if distance <= 10:
+        if distance <= RADIUS_KM:
             out.append({"id": did, "km": distance})
     out.sort(key=lambda x: x["km"])
     return out
 
 
-_driver_sockets: dict = {}
-
-
-async def notify_driver_offer_signal(driver_id: Optional[str]) -> None:
-    """Wake a connected driver app so it re-fetches /driver/pending immediately.
-
-    The socket only carries a content-free signal; the offer itself is always read through the
-    authorised REST endpoint, so dispatch rules stay server-side. Polling remains the fallback.
-    """
-    for ws in list(_driver_sockets.get(str(driver_id or ""), ())):
-        try:
-            await asyncio.wait_for(ws.send_json({"type": "offer"}), timeout=2)
-        except Exception:
-            _driver_sockets.get(str(driver_id), set()).discard(ws)
-
-
 async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     """Nearest-driver-first dispatch: offer the trip to the closest driver who has not seen it yet.
 
-    The offer expires after DISPATCH_OFFER_SECONDS and is then forwarded automatically. When every
-    eligible driver has had a turn the trip opens up to all of them (broadcast) so it is never lost.
+    Offers last at most 30 seconds and never outlive the overall 60-second search.
+    No broadcast fallback: at most one driver owns a live offer at a time.
     """
     trip = await ride_search.ensure_started(trip)
     if not trip or trip.get("driver_id") or trip.get("status") not in ("searching", "booking"):
+        return None
+    deadline = datetime.fromisoformat(trip["search_deadline_at"].replace("Z", "+00:00"))
+    deadline = min(deadline, datetime.fromisoformat(trip["search_started_at"].replace("Z", "+00:00")) + timedelta(seconds=60))
+    if datetime.now(timezone.utc) >= deadline:
         return None
     tried = set(trip.get("offer_history") or [])
     cands = await _dispatch_candidates(
@@ -4428,28 +4310,18 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     )
     nxt = next((c for c in cands if c["id"] not in tried), None)
     commission = await _commission_for_trip(trip)
-    earnings = int(round(_driver_gross(trip) * (1 - commission)))
+    earnings = int(round((trip.get("price") or 0) * (1 - commission)))
     title = f"Ny tur · {earnings} kr til deg"
     body = f"{trip.get('pickup_address')} → {trip.get('dropoff_address')}"
 
     if not nxt:
-        res = await db.trips.update_one(
-            _real_trip_filter({
-                "trip_id": trip["trip_id"],
-                "driver_id": None,
-                "status": {"$in": ["searching", "booking"]},
-                "offer_seq": trip.get("offer_seq"),
-            }),
-            {"$set": {"dispatch_mode": "broadcast", "offer_driver_id": None, "offer_expires_at": None}},
-        )
-        if res.modified_count == 0:
-            return None
-        for c in cands:  # everyone gets a last chance
-            await notify_driver_offer_signal(c["id"])
-            await send_push_to_user(c["id"], title, body, "/driver", tag="kjapp-new-trip", require_interaction=True)
+        await db.trips.update_one(
+            _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None,
+                "status": {"$in": ["searching", "booking"]}, "offer_seq": trip.get("offer_seq")}),
+            {"$set": {"dispatch_mode": "sequential", "offer_driver_id": None, "offer_expires_at": None}})
         return None
 
-    expires = datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS)
+    expires = min(datetime.now(timezone.utc) + timedelta(seconds=DISPATCH_OFFER_SECONDS), deadline)
     res = await db.trips.update_one(
         _real_trip_filter({"trip_id": trip["trip_id"], "driver_id": None, "status": {"$in": ["searching", "booking"]}, "offer_seq": trip.get("offer_seq")}),
         {"$set": {"dispatch_mode": "sequential", "offer_driver_id": nxt["id"],
@@ -4459,7 +4331,6 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
     )
     if res.modified_count == 0:
         return None
-    await notify_driver_offer_signal(nxt["id"])
     await send_push_to_user(
         nxt["id"], title, f"{body} · {round(nxt['km'], 1)} km til henting",
         "/driver", tag="kjapp-new-trip", require_interaction=True,
@@ -4468,7 +4339,7 @@ async def offer_trip_to_next_driver(trip: dict) -> Optional[str]:
 
 
 async def dispatch_loop():
-    """Persisted three-round search, including newly available broadcast drivers."""
+    """Persisted 60-second search with one eligible driver offered at a time."""
     while True:
         try:
             async for trip in db.trips.find(_real_trip_filter({
@@ -4480,7 +4351,7 @@ async def dispatch_loop():
                     print(f"dispatch search error: {type(exc).__name__}")
         except Exception as exc:
             print(f"dispatch_loop error: {type(exc).__name__}")
-        await asyncio.sleep(3)
+        await asyncio.sleep(.5)
 
 
 @api.get("/driver/pending")
@@ -4551,12 +4422,9 @@ async def driver_pending(current=Depends(require_driver)):
         "status": {"$in": ["searching", "booking"]},
         "driver_id": None,
         # Sequential dispatch: only the driver the trip is currently offered to sees it.
-        # Once every eligible driver has had a turn the trip is broadcast to all of them.
-        "$or": [
-            {"offer_driver_id": current["id"]},
-            {"dispatch_mode": "broadcast"},
-            {"dispatch_mode": {"$exists": False}},
-        ],
+        "dispatch_mode": "sequential", "offer_driver_id": current["id"],
+        "offer_expires_at": {"$gt": datetime.now(timezone.utc).isoformat()},
+        "search_deadline_at": {"$gt": datetime.now(timezone.utc).isoformat()},
         **REAL_TRIPS_ONLY,
     }).sort("created_at", 1).limit(10):
         if t["trip_id"] in declined:
@@ -4570,7 +4438,7 @@ async def driver_pending(current=Depends(require_driver)):
         trip_commission = await _commission_for_trip(t)
         if t.get("commission_source") == "platform_default":
             trip_commission = float((own_fleet or {}).get("commission_rate", trip_commission))
-        t["driver_earnings"] = int(round(_driver_gross(t) * (1 - trip_commission)))
+        t["driver_earnings"] = int(round((t.get("price") or 0) * (1 - trip_commission)))
         t["commission_rate"] = trip_commission
         t["pickup_route"] = None
         u = None
@@ -4613,6 +4481,10 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     fleet = await db.fleets.find_one({"_id": ObjectId(current["fleet_id"])}) or {}
     driver = {
         "name": current.get("fullName") or "Sjåfør",
+        "phone": current.get("phone"),
+        "brand": assigned_vehicle.get("brand"),
+        "model": assigned_vehicle.get("model"),
+        "color": assigned_vehicle.get("color"),
         "car": assigned_vehicle.get("car") or "",
         "plate": assigned_vehicle.get("plate") or "",
         "vehicle_id": str(assigned_vehicle["_id"]),
@@ -4631,6 +4503,11 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     }))
     if not trip_pre:
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
+    if trip_pre.get("dispatch_mode") != "sequential" or trip_pre.get("offer_driver_id") != driver_id:
+        raise HTTPException(409, "Turen er ikke aktivt tilbudt deg")
+    deadline = trip_pre.get("search_deadline_at")
+    if not deadline or datetime.now(timezone.utc).isoformat() >= deadline:
+        raise HTTPException(409, "Søket er utløpt")
     internal_driver, _ = await _internal_driver_context(current, assigned_vehicle)
     if not ride_testing.trip_allowed(internal_driver, trip_pre.get("user_id")):
         raise HTTPException(status_code=403, detail="Turen tilhører en annen test-/driftsgruppe")
@@ -4678,8 +4555,9 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         updates["commission_source"] = "fleet_agreement"
     if d_lat is not None and d_lng is not None:
         route = await osrm_route(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"])
-        eta = route["duration_min"] if route else max(1, int(round(
-            haversine_km(d_lat, d_lng, trip_pre["pickup_lat"], trip_pre["pickup_lng"]) / 30 * 60)))
+        eta_row = {"lat": d_lat, "lng": d_lng}
+        road_eta.enrich([eta_row], (trip_pre["pickup_lat"], trip_pre["pickup_lng"]))
+        eta = eta_row["eta_min"]
         updates.update({
             "eta_min": eta,
             "driver_pickup_geometry": route.get("geometry") if route else None,
@@ -4744,7 +4622,8 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         if lock.modified_count == 0:
             raise HTTPException(status_code=409, detail="Du har allerede en aktiv tur")
 
-    claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None}
+    claim = {"trip_id": body.trip_id, "status": {"$in": ["searching", "booking"]}, "driver_id": None,
+             "search_deadline_at": {"$gt": datetime.now(timezone.utc).isoformat()}}
     if trip_pre.get("dispatch_mode") == "sequential":
         claim["offer_driver_id"] = trip_pre.get("offer_driver_id")
         claim["offer_seq"] = trip_pre.get("offer_seq")
@@ -4760,6 +4639,7 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
         )
         raise HTTPException(status_code=409, detail="Turen er ikke lenger tilgjengelig")
     t = await db.trips.find_one(_real_trip_filter({"trip_id": body.trip_id}))
+    trip_status_stream.changed()
     await send_push_to_user(
         t["user_id"],
         "Sjåfør på vei",
@@ -4810,7 +4690,7 @@ async def driver_current(current=Depends(require_driver)):
             return None
     t["id"] = str(t["_id"]); t.pop("_id", None)
     commission = await _commission_for_trip(t)
-    estimated_net = int(round(_driver_gross(t) * (1 - commission)))
+    estimated_net = int(round((t.get("price") or 0) * (1 - commission)))
     t["estimated_driver_earnings"] = estimated_net
     t["driver_earnings"] = estimated_net if t.get("payment_status") == "paid" else None
     t["commission_rate"] = commission
@@ -4968,7 +4848,6 @@ async def driver_no_show(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Kunne ikke registrere no-show")
-    await _restore_promo_credit(trip_id)
     await db.users.update_one(
         {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
         {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
@@ -5190,7 +5069,7 @@ async def driver_summary(current=Depends(require_driver)):
         "payment_status": "paid",
     })):
         trips += 1
-        gross = _driver_gross(t)
+        gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
         gross_total += gross
         total += int(round(gross * (1 - rate)))
@@ -5338,7 +5217,7 @@ async def _refresh_driver_pickup_eta(trip_id: str, driver_id: str, lat: float, l
 
 
 @api.post("/driver/location")
-async def driver_location(body: DriverLocationRequest, current=Depends(require_driver)):
+async def driver_location(body: DriverLocationRequest, request: Request, current=Depends(require_driver)):
     """Accept a fresh, physically plausible GPS sample from the driver device."""
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
@@ -5376,8 +5255,14 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
 
     speed = max(0.0, float(body.speed or 0.0))
     heading = float(body.heading or 0.0) % 360
-    await db.users.update_one(
-        {"_id": ObjectId(current["id"])},
+    # Presence is tied to the authenticated session, never a client-supplied ID.
+    payload = jwt.decode(_auth_token_from_request(request), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    result = await db.users.update_one(
+        {"_id": ObjectId(current["id"]), "$or": [
+            {"last_location_recorded_at": {"$exists": False}},
+            {"last_location_recorded_at": None},
+            {"last_location_recorded_at": {"$lte": recorded.isoformat()}},
+        ]},
         {"$set": {
             "last_lat": body.lat,
             "last_lng": body.lng,
@@ -5385,8 +5270,11 @@ async def driver_location(body: DriverLocationRequest, current=Depends(require_d
             "last_speed": speed,
             "last_location_at": now_iso,
             "last_location_recorded_at": recorded.isoformat(),
+            "last_location_session": {key: payload.get(key) for key in ("jti", "iat", "exp")},
         }},
     )
+    if result.matched_count != 1:
+        raise HTTPException(409, "En nyere GPS-posisjon er allerede mottatt")
     # If driver has an active trip, update canonical trip coordinates for the passenger map.
     active_trip = await db.trips.find_one(
         _real_trip_filter({"driver_id": current["id"], "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
@@ -5614,7 +5502,7 @@ async def google_session(body: GoogleSessionRequest, request: Request, response:
     if not user:
         result = await db.users.insert_one({
             "email": email,
-            "password_hash": hash_password(secrets.token_hex(16)),  # random password, unused
+            "password_hash": await asyncio.to_thread(hash_password, secrets.token_hex(16)),  # random password, unused
             "fullName": name,
             "phone": "",
             "picture": data.get("picture"),
@@ -5665,6 +5553,7 @@ async def _get_google_keys(force: bool = False):
         return GOOGLE_KEYS_CACHE["keys"]
     async with httpx.AsyncClient(timeout=8.0) as client:
         r = await client.get(GOOGLE_JWKS_URL)
+        r.raise_for_status()
         keys = r.json().get("keys", [])
     GOOGLE_KEYS_CACHE.update({"keys": keys, "fetched_at": now})
     return keys
@@ -5694,12 +5583,23 @@ async def google_oauth_config():
 
 
 async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
-    header = jwt.get_unverified_header(id_token)
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Ugyldig Google-token")
+    if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
+        raise HTTPException(401, "Ugyldig Google-token")
     kid = header.get("kid")
-    keys = await _get_google_keys()
+    try:
+        keys = await _get_google_keys()
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Google-nøkler er midlertidig utilgjengelige.")
     key_data = next((k for k in keys if k.get("kid") == kid), None)
     if not key_data:  # Google rotates keys — refresh once before failing
-        keys = await _get_google_keys(force=True)
+        try:
+            keys = await _get_google_keys(force=True)
+        except (httpx.HTTPError, ValueError):
+            raise HTTPException(503, "Google-nøkler er midlertidig utilgjengelige.")
         key_data = next((k for k in keys if k.get("kid") == kid), None)
     if not key_data:
         raise HTTPException(status_code=401, detail="Ukjent Google-nøkkel")
@@ -5707,10 +5607,12 @@ async def _verify_google_id_token(id_token: str, client_id: str) -> dict:
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
     try:
         claims = jwt.decode(id_token, public_key, algorithms=["RS256"], audience=client_id, options={"require": ["exp", "aud", "sub", "iss"]})
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Ugyldig Google-token: {e}")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Google-innloggingen kunne ikke bekreftes. Prøv igjen.")
     if claims.get("iss") not in GOOGLE_ISSUERS:
         raise HTTPException(status_code=401, detail="Ugyldig Google-utsteder")
+    if not isinstance(claims.get("sub"), str) or not claims["sub"].strip():
+        raise HTTPException(401, "Ugyldig Google-identitet")
     return claims
 
 
@@ -5720,75 +5622,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
     Identity is taken ONLY from the cryptographically verified id_token — never from the client."""
     if APP_ENV == "qa":
         raise HTTPException(status_code=503, detail="Google-innlogging krever QA-spesifikk OAuth-konfigurasjon.")
-    await _enforce_rate_limit(request, "auth-google-code", 60, 900)
-    if not google_oauth_configured():
-        raise HTTPException(status_code=503, detail="Google-innlogging er ikke konfigurert ennå")
-    client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
-    client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
-    async with httpx.AsyncClient(timeout=12.0) as client:
-        r = await client.post(GOOGLE_TOKEN_URL, data={
-            "code": body.code,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code_verifier": body.code_verifier,
-            "redirect_uri": body.redirect_uri,
-            "grant_type": "authorization_code",
-        })
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="Google avviste innloggingen")
-    id_token = r.json().get("id_token")
-    if not id_token:
-        raise HTTPException(status_code=401, detail="Ingen id_token fra Google")
-
-    claims = await _verify_google_id_token(id_token, client_id)
-    google_sub = claims.get("sub")
-    email = (claims.get("email") or "").strip().lower()
-    email_verified = str(claims.get("email_verified", "")).lower() in ("true", "1")
-    if not google_sub:
-        raise HTTPException(status_code=401, detail="Ugyldig Google-token")
-    if not (email and email_verified):
-        raise HTTPException(status_code=400, detail="Google-kontoen mangler verifisert e-post")
-
-    name = claims.get("name") or email.split("@")[0]
-    user = await db.users.find_one({"google_sub": google_sub}) or await db.users.find_one({"email": email})
-    if user:
-        if user.get("disabled") or user.get("role", "user") != "user":
-            raise HTTPException(status_code=401, detail="Ugyldig Google-økt")
-        uid = str(user["_id"])
-        role = "user"
-        driver_id = None
-        display_name = user.get("fullName") or name
-        await db.users.update_one({"_id": user["_id"]}, {"$set": {
-            "google_sub": google_sub, "google_linked": True, "picture": claims.get("picture"),
-        }})
-        phone = user.get("phone", "")
-        email = user["email"]
-    else:
-        display_name = name
-        result = await db.users.insert_one({
-            "email": email,
-            "password_hash": hash_password(secrets.token_hex(16)),  # unused, login goes through Google
-            "fullName": display_name,
-            "phone": "",
-            "picture": claims.get("picture"),
-            "role": "user",
-            "google_sub": google_sub,
-            "google_linked": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        uid = str(result.inserted_id)
-        role = "user"
-        driver_id = None
-        phone = ""
-
-    if user and user.get("totp_enabled"):
-        return {"twofa_required": True, "twofa_token": create_twofa_token(uid)}
-    token = create_access_token(uid, email)
-    set_auth_cookie(response, token)
-    session_user = await db.users.find_one({"_id": ObjectId(uid)})
-    if not session_user:
-        raise HTTPException(status_code=500, detail="Kunne ikke hente bruker etter innlogging")
-    return {"token": token, "user": user_public(session_user)}
+    raise HTTPException(410, "Bruk /auth/google/web/code for sikker Google-innlogging.")
 
 
 # ============================================================
@@ -5870,7 +5704,7 @@ async def admin_create_fleet(body: FleetCreateRequest, current=Depends(require_a
         temp_pw = secrets.token_urlsafe(10)
         res = await db.users.insert_one({
             "email": owner_email,
-            "password_hash": hash_password(temp_pw),
+            "password_hash": await asyncio.to_thread(hash_password, temp_pw),
             "fullName": body.name,  # placeholder
             "phone": "",
             "role": "fleet_owner",
@@ -5989,7 +5823,7 @@ async def fleet_overview(current=Depends(require_fleet_owner)):
             "payment_status": "paid",
             "created_at": {"$gte": week_start},
         })):
-            price = _driver_gross(t)
+            price = int(t.get("price", 0) or 0)
             rate = await _commission_for_trip(t)
             trip_net = int(round(price * (1 - rate)))
             week_gross += price; week_net += trip_net; week_trips += 1
@@ -6026,7 +5860,7 @@ async def fleet_drivers(current=Depends(require_fleet_owner)):
             "status": {"$in": ["arrived","completed","rated"]},
             "payment_status": "paid",
         })):
-            gross = _driver_gross(t)
+            gross = int(t.get("price", 0) or 0)
             rate = await _commission_for_trip(t)
             gross_income += gross
             income += int(round(gross * (1 - rate)))
@@ -6179,15 +6013,21 @@ async def fleet_trip_history(
 
 
 class FleetVehicleCreateRequest(BaseModel):
+    brand: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    model: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    color: Optional[str] = Field(default=None, min_length=1, max_length=40)
     car: str = Field(min_length=2, max_length=120)
     plate: str = Field(min_length=2, max_length=24)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
 
 
 class FleetVehicleUpdateRequest(BaseModel):
+    brand: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    model: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    color: Optional[str] = Field(default=None, min_length=1, max_length=40)
     car: Optional[str] = Field(default=None, min_length=2, max_length=120)
     plate: Optional[str] = Field(default=None, min_length=2, max_length=24)
-    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium"]] = None
+    vehicle_type: Optional[Literal["ai-first", "enkelt", "trygg", "premium", "suv"]] = None
     active: Optional[bool] = None
 
 
@@ -6348,6 +6188,7 @@ async def _fleet_vehicle_public(vehicle: dict, fid: str) -> dict:
     return {
         "id": str(vehicle["_id"]),
         "car": vehicle.get("car"),
+        "brand": vehicle.get("brand"), "model": vehicle.get("model"), "color": vehicle.get("color"),
         "plate": vehicle.get("plate"),
         "vehicle_type": vehicle.get("vehicle_type") or "ai-first",
         "active": vehicle.get("active", True),
@@ -6394,6 +6235,9 @@ async def fleet_create_vehicle(body: FleetVehicleCreateRequest, current=Depends(
     doc = {
         "fleet_id": fid,
         "car": body.car.strip(),
+        "brand": body.brand.strip() if body.brand else None,
+        "model": body.model.strip() if body.model else None,
+        "color": body.color.strip() if body.color else None,
         "plate": plate,
         "vehicle_type": body.vehicle_type,
         "active": True,
@@ -6433,11 +6277,15 @@ async def fleet_update_vehicle(vehicle_id: str, body: FleetVehicleUpdateRequest,
         except (InvalidId, TypeError):
             assigned_driver = None
     if assigned_driver and assigned_driver.get("online") and (
-        any(v is not None for v in (body.car, body.plate, body.vehicle_type))
+        any(v is not None for v in (body.car, body.plate, body.vehicle_type, body.brand, body.model, body.color))
         or body.active is False
     ):
         raise HTTPException(409, "Sjåføren må gå offline før bilen endres eller parkeres")
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in ("brand", "model", "color"):
+        value = getattr(body, field)
+        if value is not None:
+            update[field] = value.strip()
     if body.car is not None:
         update["car"] = body.car.strip()
     if body.plate is not None:
@@ -7131,17 +6979,17 @@ async def fleet_export_monthly(
             trips.append(t)
             did = t.get("driver_id")
             if did in drivers_map:
-                gross = _driver_gross(t)
+                gross = int(t.get("price", 0) or 0)
                 rate = float(t.get("commission_rate", commission) or commission)
-                fee = _snar_fee(t, rate)
+                fee = int(round(gross * rate))
                 drivers_map[did]["trips"] += 1
                 drivers_map[did]["gross"] += gross
                 drivers_map[did]["commission"] += fee
                 drivers_map[did]["net"] += gross - fee
 
-    total_gross = sum(_driver_gross(t) for t in trips)
+    total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
     total_trips = len(trips)
-    total_commission = sum(_snar_fee(t, float(t.get("commission_rate", commission) or commission)) for t in trips)
+    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -7229,7 +7077,7 @@ async def fleet_export_monthly(
 
 async def _platform_commission() -> float:
     s = await db.platform_settings.find_one({"_id": "singleton"})
-    return configured_service_fee((s or {}).get("default_commission", 0.12))
+    return float((s or {}).get("default_commission", 0.10))
 
 
 async def _commission_for_trip(trip: dict) -> float:
@@ -7350,172 +7198,6 @@ async def driver_bonus(current=Depends(require_driver)):
             "earned_kr": p["earned_kr"], "cap_reached": p["cap_reached"],
         })
     return {"campaigns": out, "earned_today": await _bonus_earned_today(current["id"])}
-
-
-# ============================================================
-# Customer promo codes. A code grants credit; credit is spent per trip but never
-# beyond SNAR's own fee on that trip, so the fleet net is untouched.
-# ============================================================
-def _active_promo(t: dict) -> int:
-    return 0 if t.get("promo_credit_restored") else int(t.get("promo_discount", 0) or 0)
-
-
-def _driver_gross(t: dict) -> int:
-    """Fare before the customer's promo credit — the basis for driver/fleet earnings."""
-    return int(t.get("price", 0) or 0) + _active_promo(t)
-
-
-def _snar_fee(t: dict, rate: float) -> int:
-    """SNAR's fee after funding the customer's promo credit (never negative)."""
-    return int(round(platform_fee_ore(int(t.get("price", 0) or 0) * 100, _active_promo(t) * 100, rate) / 100))
-
-
-def _promo_expiry(value) -> Optional[datetime]:
-    if not value:
-        return None
-    text = str(value).strip()
-    try:
-        if len(text) == 10:
-            return datetime.fromisoformat(text).replace(tzinfo=OSLO_TZ) + timedelta(days=1)
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    except ValueError:
-        raise HTTPException(400, "Ugyldig utløpsdato. Bruk ÅÅÅÅ-MM-DD.")
-
-
-async def _reserve_promo_credit(user_oid, gross_price: int, commission_rate: float) -> int:
-    user = await db.users.find_one({"_id": user_oid}, {"promo_credit_kr": 1}) or {}
-    amount = discount_for_trip(gross_price, commission_rate, int(user.get("promo_credit_kr") or 0))
-    if amount <= 0:
-        return 0
-    res = await db.users.update_one({"_id": user_oid, "promo_credit_kr": {"$gte": amount}},
-                                    {"$inc": {"promo_credit_kr": -amount}})
-    return amount if res.modified_count == 1 else 0
-
-
-async def _restore_promo_credit(trip_id: str):
-    trip = await db.trips.find_one_and_update(
-        {"trip_id": trip_id, "promo_discount": {"$gt": 0}, "promo_credit_restored": {"$ne": True}},
-        {"$set": {"promo_credit_restored": True}},
-        projection={"user_id": 1, "promo_discount": 1},
-    )
-    if trip and trip.get("user_id"):
-        try:
-            await db.users.update_one({"_id": ObjectId(trip["user_id"])},
-                                      {"$inc": {"promo_credit_kr": int(trip["promo_discount"])}})
-        except (InvalidId, TypeError):
-            pass
-
-
-@api.get("/promo/wallet")
-async def promo_wallet(current=Depends(require_customer)):
-    user = await db.users.find_one({"_id": ObjectId(current["id"])}, {"promo_credit_kr": 1}) or {}
-    redemptions = []
-    async for r in db.promo_redemptions.find({"user_id": current["id"]}).sort("created_at", -1).limit(10):
-        redemptions.append({"code": r.get("code"), "credit_kr": int(r.get("credit_kr") or 0), "created_at": r.get("created_at")})
-    return {"balance_kr": int(user.get("promo_credit_kr") or 0),
-            "commission_rate": await _platform_commission(),
-            "redemptions": redemptions}
-
-
-@api.post("/promo/redeem")
-async def redeem_promo_code(body: PromoRedeemIn, current=Depends(require_customer)):
-    from pymongo.errors import DuplicateKeyError
-    code = normalize_code(body.code)
-    if not is_valid_code(code):
-        raise HTTPException(400, "Ugyldig kode")
-    pc = await db.promo_codes.find_one({"code": code, "active": True})
-    if not pc:
-        raise HTTPException(404, "Koden finnes ikke eller er ikke aktiv")
-    expires = _promo_expiry(pc.get("expires_at"))
-    if expires and expires < datetime.now(timezone.utc):
-        raise HTTPException(410, "Koden har utløpt")
-    code_id = str(pc["_id"])
-    if await db.promo_redemptions.find_one({"code_id": code_id, "user_id": current["id"]}):
-        raise HTTPException(409, "Du har allerede brukt denne koden")
-    phone = (current.get("phone") or "").strip()
-    if phone and await db.promo_redemptions.find_one({"code_id": code_id, "phone": phone}):
-        raise HTTPException(409, "Koden er allerede brukt med dette telefonnummeret")
-    if pc.get("new_customers_only"):
-        finished = await db.trips.count_documents(_real_trip_filter({
-            "user_id": current["id"], "status": {"$in": FINISHED_TRIP_STATUSES}}))
-        if finished:
-            raise HTTPException(403, "Koden gjelder bare nye kunder")
-    slot_filter = {"_id": pc["_id"], "active": True}
-    if pc.get("max_redemptions"):
-        slot_filter["redemptions_count"] = {"$lt": int(pc["max_redemptions"])}
-    slot = await db.promo_codes.update_one(slot_filter, {"$inc": {"redemptions_count": 1}})
-    if slot.modified_count != 1:
-        raise HTTPException(410, "Kampanjen er brukt opp")
-    credit = int(pc["credit_kr"])
-    try:
-        await db.promo_redemptions.insert_one({
-            "code_id": code_id, "code": code, "user_id": current["id"], "phone": phone or None,
-            "credit_kr": credit, "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-    except DuplicateKeyError:
-        await db.promo_codes.update_one({"_id": pc["_id"]}, {"$inc": {"redemptions_count": -1}})
-        raise HTTPException(409, "Du har allerede brukt denne koden")
-    await db.users.update_one({"_id": ObjectId(current["id"])}, {"$inc": {"promo_credit_kr": credit}})
-    user = await db.users.find_one({"_id": ObjectId(current["id"])}, {"promo_credit_kr": 1}) or {}
-    return {"ok": True, "credit_kr": credit, "balance_kr": int(user.get("promo_credit_kr") or 0)}
-
-
-@api.get("/admin/promo-codes")
-async def admin_list_promo_codes(current=Depends(require_admin)):
-    codes = []
-    granted = 0
-    async for c in db.promo_codes.find().sort("created_at", -1):
-        c["id"] = str(c.pop("_id"))
-        c["redemptions_count"] = int(c.get("redemptions_count") or 0)
-        c["granted_kr"] = c["redemptions_count"] * int(c.get("credit_kr") or 0)
-        granted += c["granted_kr"]
-        codes.append(c)
-    spent = 0
-    async for t in db.trips.find(_real_trip_filter({
-        "promo_discount": {"$gt": 0}, "promo_credit_restored": {"$ne": True},
-        "status": {"$in": FINISHED_TRIP_STATUSES}}), {"promo_discount": 1}):
-        spent += int(t.get("promo_discount") or 0)
-    outstanding = 0
-    async for u in db.users.find({"promo_credit_kr": {"$gt": 0}}, {"promo_credit_kr": 1}):
-        outstanding += int(u.get("promo_credit_kr") or 0)
-    return {"codes": codes, "totals": {"granted_kr": granted, "spent_kr": spent, "outstanding_kr": outstanding}}
-
-
-@api.post("/admin/promo-codes")
-async def admin_create_promo_code(body: PromoCodeIn, current=Depends(require_admin)):
-    from pymongo.errors import DuplicateKeyError
-    code = normalize_code(body.code)
-    if not is_valid_code(code):
-        raise HTTPException(400, "Koden kan bare inneholde A–Z, 0–9 og bindestrek (3–24 tegn)")
-    _promo_expiry(body.expires_at)
-    doc = {**body.model_dump(), "code": code, "redemptions_count": 0,
-           "created_at": datetime.now(timezone.utc).isoformat(), "created_by": current["id"]}
-    try:
-        res = await db.promo_codes.insert_one(doc)
-    except DuplicateKeyError:
-        raise HTTPException(409, "Koden finnes allerede")
-    doc["id"] = str(res.inserted_id)
-    doc.pop("_id", None)
-    return doc
-
-
-@api.patch("/admin/promo-codes/{code_id}")
-async def admin_update_promo_code(code_id: str, body: dict, current=Depends(require_admin)):
-    allowed = {k: v for k, v in body.items() if k in {"label", "active", "max_redemptions", "expires_at", "new_customers_only"}}
-    if not allowed:
-        raise HTTPException(400, "Ingen gyldige felter")
-    if "expires_at" in allowed:
-        _promo_expiry(allowed["expires_at"])
-    if allowed.get("max_redemptions") is not None:
-        allowed["max_redemptions"] = max(1, int(allowed["max_redemptions"]))
-    try:
-        res = await db.promo_codes.update_one({"_id": ObjectId(code_id)}, {"$set": allowed})
-    except InvalidId:
-        raise HTTPException(404, "Fant ikke koden")
-    if res.matched_count == 0:
-        raise HTTPException(404, "Fant ikke koden")
-    return {"ok": True}
 
 
 @api.get("/admin/bonus-campaigns")
@@ -7643,12 +7325,12 @@ async def admin_overview(current=Depends(require_admin)):
             "payment_status": "paid",
             "created_at": {"$gte": today},
         }),
-        {"price": 1, "commission_rate": 1, "promo_discount": 1, "promo_credit_restored": 1},
+        {"price": 1, "commission_rate": 1},
     ):
         price = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
         gmv_today += price
-        kjapp_revenue_today += _snar_fee(t, rate)
+        kjapp_revenue_today += int(round(price * rate))
 
     pending_payouts = await count(db.fleet_payouts, {"status": {"$in": ["pending", "processing", "on_hold"]}})
     open_support = await count(db.support_tickets, {"status": {"$in": ["open", "in_progress", "waiting_for_user"]}})
@@ -8058,7 +7740,7 @@ class DriverInviteRequest(BaseModel):
     # Legacy display fields are accepted for old clients but are never canonical for fleet invites.
     car: Optional[str] = ""
     plate: Optional[str] = ""
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
     capabilities: List[SpecialNeed] = Field(default_factory=list, max_length=6)
     note: Optional[str] = ""
     email: Optional[EmailStr] = None  # if set, send invite via SendGrid
@@ -8268,7 +7950,7 @@ async def accept_driver_invite(body: DriverSignupRequest, request: Request, resp
     canonical_vehicle_type = vehicle.get("vehicle_type") or "ai-first"
     doc = {
         "email": email,
-        "password_hash": hash_password(body.password),
+        "password_hash": await asyncio.to_thread(hash_password, body.password),
         "fullName": body.fullName,
         "phone": body.phone,
         "role": "driver",
@@ -8455,7 +8137,7 @@ async def apple_signin(body: AppleSignInRequest, request: Request, response: Res
         display_name = body.fullName or verified_email.split("@")[0]
         result = await db.users.insert_one({
             "email": verified_email,
-            "password_hash": hash_password(secrets.token_hex(16)),
+            "password_hash": await asyncio.to_thread(hash_password, secrets.token_hex(16)),
             "fullName": display_name,
             "phone": "",
             "apple_sub": apple_sub,
@@ -8538,8 +8220,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
 
     price = int(trip.get("price") or 0)
     commission = await _commission_for_trip(trip)
-    promo_discount = 0 if trip.get("promo_credit_restored") else int(trip.get("promo_discount") or 0)
-    platform_fee = int(round(platform_fee_ore(price * 100, promo_discount * 100, commission) / 100))
+    platform_fee = int(round(price * commission))
     paid_at = trip.get("paid_at") or datetime.now(timezone.utc).isoformat()
     paid_day = str(paid_at)[:10].replace("-", "")
     clean_trip = re.sub(r"[^A-Za-z0-9]", "", str(trip_id)).upper()
@@ -8573,7 +8254,6 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "duration_min": trip.get("duration_min"),
         "vehicle_type": trip.get("vehicle_type"),
         "gross_amount": price,
-        "promo_discount": promo_discount,
         "quoted_ride_price": int(trip.get("quoted_ride_price", price)),
         "waiting_fee_total": int(trip.get("waiting_fee_total") or 0),
         "waiting_seconds": int(trip.get("waiting_seconds") or 0),
@@ -8825,15 +8505,7 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     if not customer_id:
         return {"attempted": False, "reason": "no_stripe_customer"}
 
-    pm = await db.payment_methods.find_one(
-        {
-            "user_id": user_id,
-            "verified": True,
-            "setup_status": "succeeded",
-            "stripe_payment_method_id": {"$exists": True, "$ne": None},
-        },
-        sort=[("is_default", -1), ("created_at", -1)],
-    )
+    pm = await selected_payment_method(db, user_id, user)
     if not pm:
         return {"attempted": False, "reason": "no_verified_payment_method"}
 
@@ -9352,17 +9024,9 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
 
 
 @api.get("/pricing/surge")
-async def pricing_surge(lat: Optional[float] = None, lng: Optional[float] = None):
-    """Current surge multiplier + reasons (weekend/night, and live demand when a location is given)."""
-    info = current_surge_info()
-    if lat is None or lng is None:
-        return info
-    effective_pricing, _ = pricing_for_pickup(await active_pricing(), lat, lng)
-    surge_cfg = {**DEFAULT_PRICING["surge"], **(effective_pricing.get("surge") or {})}
-    demand = await demand_surge_info(lat, lng, surge_cfg)
-    reasons = list(info["reasons"]) + (["Høy etterspørsel"] if demand["active"] else [])
-    multiplier = min(max(info["multiplier"], demand["multiplier"]), float(surge_cfg.get("max_multiplier", 2.0) or 2.0))
-    return {"multiplier": multiplier, "reasons": reasons, "active": multiplier > 1.0}
+async def pricing_surge():
+    """Current surge multiplier + reason (weekend/night)."""
+    return current_surge_info()
 
 
 @api.post("/driver/trip/{trip_id}/cancel")
@@ -9429,7 +9093,7 @@ async def driver_history(current=Depends(require_driver), limit: int = 30):
             "payment_status": t.get("payment_status"),
             "receipt_id": t.get("receipt_id"),
             "driver_earnings": (
-                int(round(_driver_gross(t) * (1 - float(t["commission_rate"] if t.get("commission_rate") is not None else 0.10))))
+                int(round(int(t.get("price", 0) or 0) * (1 - float(t["commission_rate"] if t.get("commission_rate") is not None else 0.10))))
                 if t.get("payment_status") == "paid" else None
             ),
             "pickup_address": _driver_history_area(t.get("pickup_address")),
@@ -9455,7 +9119,7 @@ async def driver_history_weekly(current=Depends(require_driver)):
             "payment_status": "paid",
         })):
             trips += 1
-            gross = _driver_gross(t)
+            gross = int(t.get("price", 0) or 0)
             rate = await _commission_for_trip(t)
             gross_total += gross
             total += int(round(gross * (1 - rate)))
@@ -9510,7 +9174,7 @@ async def driver_payouts(current=Depends(require_driver)):
         "payment_status": "paid",
         "created_at": {"$gte": week_start},
     })):
-        gross = _driver_gross(t)
+        gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
         pending += gross
         pending_net += int(round(gross * (1 - rate)))
@@ -10162,30 +9826,6 @@ class FleetApplicationDecisionRequest(BaseModel):
     commission_rate: Optional[float] = Field(default=None, ge=0, le=0.50)
 
 
-def normalize_org_number(value: str) -> str:
-    """Norwegian organisasjonsnummer: 9 digits with a MOD11 check digit."""
-    digits = re.sub(r"[\s.\-]", "", str(value or ""))
-    if not re.fullmatch(r"\d{9}", digits):
-        raise ValueError("Organisasjonsnummer må ha 9 siffer")
-    weights = (3, 2, 7, 6, 5, 4, 3, 2)
-    remainder = sum(int(d) * w for d, w in zip(digits[:8], weights)) % 11
-    check = 0 if remainder == 0 else 11 - remainder
-    if check == 10 or check != int(digits[8]):
-        raise ValueError("Organisasjonsnummeret er ikke gyldig")
-    return digits
-
-
-FLEET_APPLICATION_OPEN_STATUSES = ["pending", "submitted", "under_review", "documents_required"]
-
-
-async def _ensure_no_duplicate_fleet_application(org_number: str, exclude_token: Optional[str] = None):
-    query = {"org_number": org_number, "status": {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved"]}}
-    if exclude_token:
-        query["upload_token"] = {"$ne": exclude_token}
-    if await db.fleet_applications.find_one(query, {"_id": 1}) or await db.fleets.find_one({"org_number": org_number}, {"_id": 1}):
-        raise HTTPException(409, "Det finnes allerede en søknad eller flåte for dette organisasjonsnummeret. Kontakt SNAR hvis dette er feil.")
-
-
 async def _validate_fleet_application_uploads(upload_token: str, documents: dict):
     for doc_type in ("firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"):
         path = str((documents.get(doc_type) or {}).get("path") or "")
@@ -10205,16 +9845,14 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest, req
         raise HTTPException(status_code=400, detail="Du må godta partner-/plattformvilkår og personvern før søknaden opprettes")
     try:
         bank_account = normalize_bank_account(body.bank_account)
-        org_number = normalize_org_number(body.org_number)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
-    await _ensure_no_duplicate_fleet_application(org_number)
     upload_token = secrets.token_urlsafe(24)
     accepted_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "upload_token": upload_token,
         "company_name": body.company_name.strip(),
-        "org_number": org_number,
+        "org_number": body.org_number.strip(),
         "contact_name": body.contact_name.strip(),
         "contact_email": body.contact_email.strip().lower(),
         "contact_phone": body.contact_phone.strip(),
@@ -10253,8 +9891,6 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     if int(app_doc.get("license_count") or 0) < 1 or int(app_doc.get("vehicle_count") or 0) < 1:
         raise HTTPException(status_code=400, detail="Antall løyver og biler må være registrert før innsending")
     await _validate_fleet_application_uploads(body.upload_token, body.documents)
-    # Two drafts for the same company can be started in parallel; only the first may be submitted.
-    await _ensure_no_duplicate_fleet_application(app_doc.get("org_number") or "", exclude_token=body.upload_token)
     await db.fleet_applications.update_one(
         {"upload_token": body.upload_token},
         {"$set": {
@@ -10290,7 +9926,7 @@ async def superadmin_list_applications(status: Optional[str] = None, current=Dep
     if status:
         q["status"] = status
     else:
-        q["status"] = {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved", "rejected"]}
+        q["status"] = {"$in": ["pending", "approved", "rejected"]}
     out = []
     async for a in db.fleet_applications.find(q).sort("submitted_at", -1).limit(200):
         a["id"] = str(a["_id"]); a.pop("_id", None)
@@ -10356,7 +9992,7 @@ async def superadmin_approve_application(app_id: str, body: FleetApplicationDeci
             temp_pw = secrets.token_urlsafe(10)
             res = await db.users.insert_one({
                 "email": owner_email,
-                "password_hash": hash_password(temp_pw),
+                "password_hash": await asyncio.to_thread(hash_password, temp_pw),
                 "fullName": app_doc.get("contact_name") or app_doc.get("company_name"),
                 "phone": app_doc.get("contact_phone", ""),
                 "role": "fleet_owner",
@@ -10489,7 +10125,7 @@ def _driver_invite_result(invite: dict) -> dict:
     result["invite_url"] = _driver_invite_url(invite["token"])
     result["email_status"] = ("sent" if invite.get("email_sent") else
                               "not_requested" if not invite.get("email") else
-                              "not_configured" if not email_configured() else "failed")
+                              "not_configured" if not os.environ.get("SENDGRID_API_KEY", "").strip() else "failed")
     return result
 
 
@@ -10793,7 +10429,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
             "driver_earnings": (
-                int(round(_driver_gross(t) * (1 - float(t.get("commission_rate", commission) or commission))))
+                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
                 if finished and t.get("payment_status") == "paid" else None
             ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
@@ -10928,8 +10564,6 @@ async def admin_trip_intervene(trip_id: str, body: TripInterventionRequest, curr
         )
         if result.modified_count != 1:
             raise HTTPException(409, "Turen endret status før operatøravbruddet kunne utføres")
-        if trip.get("status") != "in_trip":
-            await _restore_promo_credit(trip_id)
         if trip.get("driver_id"):
             try:
                 await db.users.update_one(
@@ -11072,11 +10706,11 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
             "payment_status": "paid",
             "created_at": {"$gte": since},
         }),
-        {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1, "promo_discount": 1, "promo_credit_restored": 1},
+        {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
     ):
         price = int(t.get("price", 0) or 0)
         rate = float(t.get("commission_rate", default_rate) or default_rate)
-        fee = _snar_fee(t, rate)
+        fee = int(round(price * rate))
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
         d["gmv"] += price; d["trips"] += 1
@@ -11129,7 +10763,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            _snar_fee(t, float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -11380,15 +11014,23 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
                 if (payment_tx or {}).get("settlement_model") == "stripe_destination_charge":
                     kwargs["reverse_transfer"] = True
                     kwargs["refund_application_fee"] = True
-                sr = stripe.Refund.create(
-                    **kwargs,
-                    idempotency_key=f"kjapp-refund-{body.trip_id}-{already}-{amount}",
-                )
+                refund_client = stripe.StripeClient(stripe.api_key, max_network_retries=1)
+                sr = await asyncio.to_thread(refund_client.v1.refunds.create, kwargs,
+                    {"idempotency_key": f"kjapp-refund-{body.trip_id}-{already}-{amount}"})
+                if sr.get("status") in ("failed", "canceled"):
+                    raise HTTPException(502, "Stripe kunne ikke refundere beløpet. Ingen refusjon er bekreftet.")
                 provider, provider_ref, prov_status = "stripe", sr.get("id"), sr.get("status") or "pending"
             except stripe.error.StripeError as e:
                 raise HTTPException(502, f"Stripe-refusjon feilet: {getattr(e, 'user_message', str(e))}")
 
+        if trip.get("payment_flow") == "reservation" and provider != "stripe":
+            raise HTTPException(503, "Stripe-refusjon er utilgjengelig. Ingen tilbakebetaling er bekreftet.")
+        # Separate charges/transfers cannot use reverse_transfer on Refund.
+        # Keep customer refund valid and flag fleet recovery for operations.
+        fleet_recovery_pending = bool((payment_tx or {}).get("stripe_transfer_id") and
+                                      (payment_tx or {}).get("settlement_model") == "stripe_separate_charge_transfer")
         doc = {
+            "fleet_recovery_pending": fleet_recovery_pending,
             "id": provider_ref or str(uuid.uuid4()),
             "trip_id": body.trip_id, "user_id": trip.get("user_id"),
             "amount": amount, "currency": "NOK", "reason": body.reason.strip(),
@@ -11481,9 +11123,8 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price,
-                "commission": _snar_fee(t, float(t.get("commission_rate", commission) or commission)),
-                "driver_net": round(_driver_gross(t) * (1 - float(t.get("commission_rate", commission) or commission))),
-                "promo_discount": int(t.get("promo_discount") or 0),
+                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
+                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
                 "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
@@ -11645,7 +11286,7 @@ async def admin_analytics(days: int = 14, current=Depends(require_admin)):
 
 # ---- Platform settings ----
 DEFAULT_PLATFORM_SETTINGS = {
-    "default_commission": 0.12,
+    "default_commission": 0.10,
     "pricing": DEFAULT_PRICING,
     "ride_classes": {
         "ai-first": {"label": "Standard", "multiplier": 1.0, "enabled": True},
@@ -11689,18 +11330,11 @@ def _validate_pricing(p: dict):
         if key in p and not lo <= float(p[key]) <= hi:
             raise HTTPException(400, f"{key} må være mellom {lo} og {hi}")
     surge = p.get("surge") or {}
-    for key in ("manual_multiplier", "max_multiplier", "demand_max_multiplier"):
+    for key in ("manual_multiplier", "max_multiplier"):
         if key in surge and not 1.0 <= float(surge[key]) <= 5.0:
             raise HTTPException(400, f"surge.{key} må være mellom 1.0 og 5.0")
-    demand_limits = {"demand_radius_km": (0.5, 20), "demand_window_minutes": (1, 60),
-                     "demand_min_requests": (1, 100), "demand_sensitivity": (0.05, 2.0)}
-    for key, (lo, hi) in demand_limits.items():
-        if key in surge and not lo <= float(surge[key]) <= hi:
-            raise HTTPException(400, f"surge.{key} må være mellom {lo} og {hi}")
-    if "demand_enabled" in surge and not isinstance(surge["demand_enabled"], bool):
-        raise HTTPException(400, "surge.demand_enabled må være true/false")
     for vt, rates in (p.get("vehicle_rates") or {}).items():
-        if vt not in ("ai-first", "enkelt", "trygg", "premium"):
+        if vt not in ("ai-first", "enkelt", "trygg", "premium", "suv"):
             raise HTTPException(400, f"Ukjent kjøretøyklasse: {vt}")
         _validate_pricing(rates)
     for area_id, area in (p.get("areas") or {}).items():
@@ -11720,11 +11354,9 @@ def _validate_pricing(p: dict):
 async def admin_get_settings(current=Depends(require_admin)):
     s = await db.platform_settings.find_one({"_id": "singleton"})
     if not s:
-        return {**DEFAULT_PLATFORM_SETTINGS, "default_commission": configured_service_fee(), "service_fee_locked": commission_source() == "service_fee_policy", "updated_at": None}
+        return {**DEFAULT_PLATFORM_SETTINGS, "updated_at": None}
     s.pop("_id", None)
     merged = {**DEFAULT_PLATFORM_SETTINGS, **s}
-    merged["default_commission"] = configured_service_fee(merged["default_commission"])
-    merged["service_fee_locked"] = commission_source() == "service_fee_policy"
     features = {**DEFAULT_PLATFORM_SETTINGS["features"], **(s.get("features") or {})}
     # Runtime demo trips are permanently disabled for beta/production control surfaces,
     # even if an old database snapshot still contains demo_trips=true.
@@ -11745,8 +11377,6 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
     prev = await db.platform_settings.find_one({"_id": "singleton"}) or {}
     sets = {}
     if body.default_commission is not None:
-        if commission_source() == "service_fee_policy" and body.default_commission != configured_service_fee():
-            raise HTTPException(409, "Serviceavgiften er låst av driftskonfigurasjonen.")
         if not 0.0 <= body.default_commission <= 0.5:
             raise HTTPException(400, "Kommisjon må være mellom 0% og 50%")
         sets["default_commission"] = body.default_commission
@@ -11806,7 +11436,7 @@ async def admin_update_settings(body: PlatformSettingsUpdate, current=Depends(re
 class PricingTestRequest(BaseModel):
     distance_km: float = Field(ge=0, le=2000)
     duration_min: float = Field(ge=0, le=1440)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
     pickup_lat: Optional[float] = None
     pickup_lng: Optional[float] = None
     waiting_minutes: float = Field(default=0, ge=0, le=1440)
@@ -11815,7 +11445,7 @@ class PricingTestRequest(BaseModel):
 class PricingRouteTestRequest(BaseModel):
     pickup_address: str = Field(min_length=2, max_length=200)
     dropoff_address: str = Field(min_length=2, max_length=200)
-    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium"] = "ai-first"
+    vehicle_type: Literal["ai-first", "enkelt", "trygg", "premium", "suv"] = "ai-first"
 
 
 class PricingRollbackRequest(BaseModel):
@@ -12027,13 +11657,6 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 async def _prepare_onboarding_email(job: dict) -> str:
-    if job.get("kind") == "driver-approved":
-        user = await db.users.find_one({"email": job["recipient"], "role": "driver", "approved": True,
-                                       "disabled": {"$ne": True}})
-        if not user:
-            raise ValueError("Approved driver account is unavailable")
-        username = html_escape.escape(job["recipient"])
-        return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p>Passord: Bruk passordet du valgte under registreringen. Velg «Glemt passord» i sjåførappen hvis du trenger et nytt.</p>'
     if job.get("kind") != "fleet-approved":
         return job["html"]
     user = await db.users.find_one({"email": job["recipient"], "role": "fleet_owner", "approved": True,
@@ -12042,15 +11665,12 @@ async def _prepare_onboarding_email(job: dict) -> str:
         raise ValueError("Approved fleet account is unavailable")
     # Create the expiring setup link only when sending, so queued messages do not
     # expire while the mail provider is missing. Persist only the token hash.
-    fleet_url = os.environ.get("FLEET_PUBLIC_URL", "https://fleet.snarapp.no").rstrip("/")
-    if APP_ENV == "qa" and not is_safe_qa_web_origin(fleet_url):
-        raise ValueError("QA fleet setup requires a configured isolated Fleet origin")
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     await db.password_reset_tokens.insert_one({"token_hash": _password_reset_token_hash(token),
         "user_id": str(user["_id"]), "email": job["recipient"], "created_at": now,
         "expires_at": now + timedelta(hours=1), "used": False})
-    reset_url = f"{fleet_url}/reset-password/{token}"
+    reset_url = f"https://fleet.snarapp.no/reset-password/{token}"
     username = html_escape.escape(job["recipient"])
     return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p><a href="{reset_url}">Velg passord for SNAR Fleet</a> (engangslenken er gyldig i én time). Har du allerede et passord, kan du bruke det.</p>'
 
@@ -12071,8 +11691,8 @@ def _apply_integration_settings(values):
         STRIPE_WEBHOOK_SECRET = values["STRIPE_WEBHOOK_SECRET"]
     if "MAPTILER_API_KEY" in values:
         MAPTILER_API_KEY = values["MAPTILER_API_KEY"]
-    if "SNAR_AI_KEY" in values:
-        AI_LLM_KEY = values["SNAR_AI_KEY"] or os.environ.get("AI_GATEWAY_API_KEY", "")
+    if "SNAR_AI_KEY" in values or "QA_SNAR_AI_KEY" in values or "QA_AI_ENABLED" in values:
+        AI_LLM_KEY = configured_ai_key(os.environ, APP_ENV)
     if "FCM_SERVICE_ACCOUNT_JSON" in values and previous_fcm != values["FCM_SERVICE_ACCOUNT_JSON"]:
         if FCM_APP is not None:
             import firebase_admin
@@ -12118,44 +11738,16 @@ handle_native_payment_webhook = install_mobile_commerce(
     set_auth_cookie=set_auth_cookie, user_public=user_public, apply_driver_risk=_apply_driver_identity_risk,
     require_active_fleet=_require_active_fleet, real_trip_filter=_real_trip_filter,
     mark_paid=_mark_trip_paid_and_complete, send_receipts=send_trip_receipts,
+    on_customer_created=lambda user: queue_customer_welcome(db, user),
 )
+
+install_driver_media(api, db, require_driver=require_driver, require_customer=require_customer,
+    assigned_vehicle=_assigned_fleet_vehicle, snapshot=_nearby_cars_snapshot,
+    parse_circle=NearbyCarsRequest.model_validate, read_document=get_stored_document)
 
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 
 app.include_router(api)
-
-
-@app.websocket("/api/driver/ws")
-async def driver_offer_socket(websocket: WebSocket):
-    # The token arrives as the first message instead of the URL so it never lands in access logs.
-    await websocket.accept()
-    driver_id = None
-    try:
-        first = await asyncio.wait_for(websocket.receive_json(), timeout=10)
-        try:
-            user = await _user_from_token((first or {}).get("token"))
-        except HTTPException:
-            await websocket.close(code=4401)
-            return
-        if user.get("role") != "driver":
-            await websocket.close(code=4403)
-            return
-        driver_id = str(user["id"])
-        _driver_sockets.setdefault(driver_id, set()).add(websocket)
-        await websocket.send_json({"type": "ready"})
-        while True:
-            msg = await websocket.receive_text()
-            if msg == "ping":
-                await websocket.send_text("pong")
-    except (WebSocketDisconnect, asyncio.TimeoutError):
-        pass
-    except Exception:
-        logger.exception("driver offer socket failed")
-    finally:
-        if driver_id:
-            _driver_sockets.get(driver_id, set()).discard(websocket)
-            if not _driver_sockets.get(driver_id):
-                _driver_sockets.pop(driver_id, None)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
 # under /api/ops so it is reachable through the preview ingress (which only routes

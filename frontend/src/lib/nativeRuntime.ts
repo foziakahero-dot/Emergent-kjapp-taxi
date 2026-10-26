@@ -1,11 +1,12 @@
+import { bookingAlertActive } from './acceptanceAlertState';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { api } from '@/src/lib/api';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
+  handleNotification: async notification => ({
+    shouldPlaySound: !(notification.request.content.data?.tag === 'driver_assigned' && bookingAlertActive()),
     shouldSetBadge: false,
     shouldShowBanner: true,
     shouldShowList: true,
