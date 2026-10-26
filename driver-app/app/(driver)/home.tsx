@@ -303,8 +303,60 @@ export default function DriverHome() {
     setError('');
     setBusy(true);
     try {
+      if (next) {
+        // Resolve a real device position before asking the backend to claim the
+        // driver/vehicle. The server rejects an ONLINE request without a fresh
+        // authenticated GPS sample, so the switch can never become green only
+        // from local state.
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) throw new Error('Slå på stedstjenester/GPS før du går online.');
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status !== 'granted') {
+          throw new Error(permission.canAskAgain
+            ? 'SNAR trenger posisjonstilgang for å gå online.'
+            : 'Posisjonstilgang er blokkert. Åpne Innstillinger og tillat posisjon for SNAR Driver.');
+        }
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        const { latitude, longitude, heading, speed } = position.coords;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+            latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+          throw new Error('SNAR fikk ikke en gyldig GPS-posisjon. Prøv igjen.');
+        }
+        const nextLocation: Loc = { lat: latitude, lng: longitude, heading: heading || 0 };
+        const recordedAt = new Date(position.timestamp).toISOString();
+        let locationResult = await driverApi.location(
+          latitude,
+          longitude,
+          heading || 0,
+          Math.max(0, speed || 0),
+          recordedAt,
+        );
+        // A background/foreground sample may already be in flight. Retry once
+        // after that bounded request finishes instead of racing /driver/online.
+        if (locationResult?.skipped) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          locationResult = await driverApi.location(
+            latitude,
+            longitude,
+            heading || 0,
+            Math.max(0, speed || 0),
+            recordedAt,
+          );
+        }
+        if (locationResult?.skipped) throw new Error('GPS-posisjonen behandles fortsatt. Prøv igjen om litt.');
+        setLoc(nextLocation);
+
+        const compliance = await driverApi.compliance();
+        if (compliance?.operational !== true) {
+          throw new Error(compliance?.message || 'Sjåførkontoen eller bilen er ikke klar for å gå online.');
+        }
+      }
       const response = await driverApi.online(next);
       if (response?.online !== next) throw new Error('Vaktstatus ble ikke bekreftet av serveren. Prøv igjen.');
+      const canonical = await driverApi.summary();
+      if (canonical?.online !== next) throw new Error('Serveren bekreftet ikke riktig vaktstatus. Prøv igjen.');
+      setSummary(canonical);
+      gpsBlocked.current = false;
       setOnline(next);
       if (next) poll();
     } catch (e) { setError(apiError(e)); }

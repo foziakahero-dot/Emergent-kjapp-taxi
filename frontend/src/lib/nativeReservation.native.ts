@@ -1,7 +1,7 @@
 import { initStripe, initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 import { paymentApi } from './api';
 
-export async function approveReservation(detail: { client_secret: string; trip_id: string }): Promise<boolean> {
+export async function approveReservation(detail: { client_secret: string; trip_id: string; payment_provider?: string }): Promise<boolean> {
   const config = await paymentApi.nativeConfig();
   if (!config.enabled || !config.publishable_key) throw new Error('Kortgodkjenning er midlertidig utilgjengelig.');
   await initStripe({ publishableKey: config.publishable_key, urlScheme: 'kjapp' });
@@ -10,6 +10,9 @@ export async function approveReservation(detail: { client_secret: string; trip_i
     returnURL: `kjapp://booking/${encodeURIComponent(detail.trip_id)}`,
     allowsDelayedPaymentMethods: false,
     primaryButtonLabel: 'Reserver turbeløpet',
+    ...(detail.payment_provider === 'google_pay' ? {
+      googlePay: { merchantCountryCode: 'NO', testEnv: config.test_mode === true },
+    } : {}),
   });
   if (initialized.error) throw new Error(initialized.error.message);
   const result = await presentPaymentSheet();
