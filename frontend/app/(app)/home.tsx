@@ -259,6 +259,7 @@ export default function Home() {
         vehicle_type: selType,
         stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
         special_needs: specialNeeds,
+        payment_provider: payMethod?.wallet === 'google_pay' ? 'google_pay' : 'card',
         ...(waitingPolicy ? {
           waiting_policy_token: waitingPolicy.token,
           quoted_price: priceFor(selType),

@@ -19,8 +19,7 @@
     "qa": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no",
-        "KJAPP_REQUIRE_FIREBASE": "true"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no"
       },
       "android": {
         "buildType": "apk",
@@ -65,8 +64,7 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no",
-        "KJAPP_REQUIRE_FIREBASE": "true"
+        "EXPO_PUBLIC_BACKEND_URL": "https://api-qa.snarapp.no"
       },
       "ios": {
         "image": "latest",

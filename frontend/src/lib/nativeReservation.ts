@@ -1,7 +1,7 @@
 import { paymentApi } from './api';
 
 let loading: Promise<void> | undefined;
-export async function approveReservation(detail: { client_secret: string; payment_method_id: string }): Promise<boolean> {
+export async function approveReservation(detail: { client_secret: string; payment_method_id?: string | null; payment_provider?: string }): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   if (!(window as any).Stripe) {
     loading ||= new Promise<void>((resolve, reject) => {
@@ -16,6 +16,7 @@ export async function approveReservation(detail: { client_secret: string; paymen
   const config = await paymentApi.nativeConfig();
   if (!config.publishable_key) throw new Error('Kortgodkjenning er midlertidig utilgjengelig.');
   const stripe = (window as any).Stripe(config.publishable_key);
+  if (!detail.payment_method_id) throw new Error('Google Pay-reservasjonen mangler en verifisert betalingsmåte.');
   const result = await stripe.confirmCardPayment(detail.client_secret, { payment_method: detail.payment_method_id });
   if (result.error) throw new Error(result.error.message);
   return result.paymentIntent?.status === 'requires_capture';
