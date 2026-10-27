@@ -19,6 +19,9 @@ SERVER = SERVER_PATH.read_text(encoding="utf-8")
 CONTROL = CONTROL_PATH.read_text(encoding="utf-8")
 CUSTOMER_BOOKING = CUSTOMER_BOOKING_PATH.read_text(encoding="utf-8")
 CUSTOMER_RECEIPT = CUSTOMER_RECEIPT_PATH.read_text(encoding="utf-8")
+RECEIPT_VIEW = (ROOT / "frontend/src/components/CustomerReceiptView.tsx").read_text(encoding="utf-8")
+DRIVER_DETAIL = (ROOT / "driver-app/app/driver-earnings-detail.tsx").read_text(encoding="utf-8")
+DRIVER_HISTORY = (ROOT / "driver-app/src/lib/driverHistory.ts").read_text(encoding="utf-8")
 DRIVER_API = DRIVER_API_PATH.read_text(encoding="utf-8")
 DRIVER_TRIPS = DRIVER_TRIPS_PATH.read_text(encoding="utf-8")
 DRIVER_EARNINGS = DRIVER_EARNINGS_PATH.read_text(encoding="utf-8")
@@ -117,16 +120,20 @@ def test_customer_app_does_not_fake_complete_before_payment():
     assert "try { await tripsApi.complete(tripId!); } catch {}" not in CUSTOMER_BOOKING
     assert "['arrived', 'completed', 'rated'].includes(t.status)" in CUSTOMER_BOOKING
     assert "trip?.payment_status !== 'paid'" in CUSTOMER_RECEIPT
-    assert "Vurdering åpnes når betalingen er bekreftet." in CUSTOMER_RECEIPT
-    assert "{isPaid ? (" in CUSTOMER_RECEIPT
+    assert "const paid = p.trip.payment_status === 'paid'" in RECEIPT_VIEW
+    assert "stage === 'rating' && paid" in RECEIPT_VIEW
+    assert "stage === 'paid' && paid" in RECEIPT_VIEW
 
 
 def test_driver_app_does_not_mask_money_failures_or_recompute_trip_earnings():
     assert ".catch(() => normalizePayouts())" not in DRIVER_API
-    assert "t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'" in DRIVER_TRIPS
-    assert "t.driver_earnings != null ? kr(t.driver_earnings) : 'Venter betaling'" in DRIVER_EARNINGS
-    assert "t.payment_status === 'paid'" in DRIVER_EARNINGS
-    assert "'Venter betaling'" in DRIVER_EARNINGS
+    assert "confirmedTripIncome" in DRIVER_TRIPS
+    assert "confirmedTripIncome" in DRIVER_DETAIL
+    assert "trip.payment_status === 'paid'" in DRIVER_HISTORY
+    assert "Number.isFinite(trip.driver_earnings)" in DRIVER_HISTORY
+    assert "trip.driver_earnings >= 0" in DRIVER_HISTORY
+    assert "queryFn: driverApi.summary" in DRIVER_EARNINGS
+    assert "Kunne ikke hente inntektsdata" in DRIVER_EARNINGS
 
 
 def test_customer_and_driver_roles_are_server_separated():
@@ -145,9 +152,11 @@ def test_driver_login_is_role_scoped_and_supports_email_or_phone():
     login = _block(SERVER, "login")
     assert 'body.client == "driver"' in login
     assert '"role": "driver"' in login
-    assert "await _find_driver_by_phone(identifier)" in login
-    assert '{"role": "driver", "phone": {"$regex": phone_pattern}}' in _block(SERVER, "_find_driver_by_phone")
-    assert 'db.users.find_one({"role": "driver", "email": identifier.lower()})' in login
+    assert 'lookup = {"role": "driver", "email": identifier.lower()}' in login
+    assert '"phone": {"$regex": phone_pattern}' in login
+    assert '"role": "driver"' in login
+    assert 'verify_password, body.password, user["password_hash"]' in login
+
 
 
 def test_driver_profile_truth_comes_from_fleet_vehicle_assignment():
@@ -190,7 +199,8 @@ def test_fleet_operational_history_is_separate_from_paid_accounting():
 
 def test_unresolved_checkout_cannot_escape_payment_state():
     receipt_source = CUSTOMER_RECEIPT
-    assert "Vurdering åpnes når betalingen er bekreftet." in receipt_source
+    assert "trip?.payment_status !== 'paid'" in receipt_source
+    assert "stage === 'rating' && paid" in RECEIPT_VIEW
     payment_success = (ROOT / "frontend" / "app" / "payment" / "success.tsx").read_text(encoding="utf-8")
     assert "turen forblir åpen til serveren bekrefter betalingen" in payment_success
     assert "Tilbake til kvittering" in payment_success
@@ -202,7 +212,7 @@ def test_booking_requires_verified_real_payment_method():
     assert '"verified": True' in booking
     assert '"setup_status": "succeeded"' in booking
     assert '"stripe_payment_method_id": {"$type": "string"}' in booking
-    assert "Kortet ditt må verifiseres før du kan bestille tur" in booking
+    assert "Legg til og verifiser et betalingskort før du bestiller tur" in booking
 
 
 def test_busy_driver_never_receives_new_pending_offers():
@@ -335,10 +345,12 @@ def test_driver_app_exposes_vehicle_selector_and_profile_photo_without_redesign(
     photo = (ROOT / "driver-app" / "app" / "driver-profile-photo.tsx").read_text(encoding="utf-8")
     api = (ROOT / "driver-app" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
 
-    assert 'testID="driver-active-vehicle-card"' in profile
-    assert 'testID={`driver-profile-vehicle-${v.id}`}' in profile
-    assert "authenticatedFileSource" in profile
-    assert "Kun biler tildelt av løyvehaveren" in vehicles
+    assert 'testID="driver-profile-vehicles"' in profile
+    assert "router.push('/driver-vehicles')" in profile
+    assert 'testID="driver-profile-photo-open"' in profile
+    assert "router.push('/driver-profile-photo')" in profile
+    assert "driverApi.vehicles" in vehicles
+    assert "selectVehicle" in vehicles
     assert "selectVehicle" in vehicles
     assert "CameraView" in photo
     assert "updateProfilePhoto" in photo
@@ -394,8 +406,12 @@ def test_customer_booking_shows_real_driver_photo_with_initials_fallback():
     customer_api = (ROOT / "frontend" / "src" / "lib" / "api.ts").read_text(encoding="utf-8")
     assert "tripDriverPhotoSource" in customer_api
     assert "/driver-photo" in customer_api
-    assert 'testID="customer-driver-photo"' in booking
-    assert "(trip.driver?.name || 'S').slice(0, 1).toUpperCase()" in booking
+    view = (ROOT / "frontend/src/components/CustomerTripView.tsx").read_text(encoding="utf-8")
+    assert "tripDriverPhotoSource" in booking
+    assert 'testID="customer-driver-photo"' in view
+    assert "p.driverPhoto ? <Image" in view
+    assert "onError={p.onPhotoError}" in view
+    assert "name.split(' ')" in view
 
 
 def test_fleet_ui_distinguishes_selected_from_extra_assigned_cars():
