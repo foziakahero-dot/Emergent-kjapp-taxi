@@ -12,6 +12,12 @@ def subscription_trip_terms():
     return {"commission_rate": 0.0, "commission_source": "subscription_v1", "business_model": "subscription"}
 
 
+def saved_trip_rate(trip, fallback):
+    """Zero is an authoritative snapshot, never a request to use an old fleet fee."""
+    value = trip.get("commission_rate")
+    return float(fallback if value is None else value)
+
+
 def configured_service_fee(stored_rate=0.12):
     raw = os.getenv('SNAR_SERVICE_FEE_RATE', '').strip()
     rate = float(raw) if raw else float(stored_rate)

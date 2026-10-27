@@ -44,7 +44,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
-from service_fee_policy import subscription_trip_terms
+from service_fee_policy import subscription_trip_terms, saved_trip_rate
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -7006,7 +7006,7 @@ async def fleet_export_monthly(
             did = t.get("driver_id")
             if did in drivers_map:
                 gross = int(t.get("price", 0) or 0)
-                rate = float(t.get("commission_rate", commission) or commission)
+                rate = saved_trip_rate(t, commission)
                 fee = int(round(gross * rate))
                 drivers_map[did]["trips"] += 1
                 drivers_map[did]["gross"] += gross
@@ -7015,7 +7015,7 @@ async def fleet_export_monthly(
 
     total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
     total_trips = len(trips)
-    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
+    total_commission = sum(int(round(int(t.get("price", 0) or 0) * saved_trip_rate(t, commission))) for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -7034,7 +7034,7 @@ async def fleet_export_monthly(
     for k, v in [
         ("Antall turer", total_trips),
         ("Brutto omsetning (NOK)", total_gross),
-        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
+        ("SNAR-avgift etter turavtale (NOK)", total_commission),
         ("Netto til flåte (NOK)", total_net),
         ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
     ]:
@@ -10464,7 +10464,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
             "driver_earnings": (
-                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
+                int(round((t.get("price") or 0) * (1 - saved_trip_rate(t, commission))))
                 if finished and t.get("payment_status") == "paid" else None
             ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
@@ -10744,7 +10744,7 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
         {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
     ):
         price = int(t.get("price", 0) or 0)
-        rate = float(t.get("commission_rate", default_rate) or default_rate)
+        rate = saved_trip_rate(t, default_rate)
         fee = int(round(price * rate))
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
@@ -10798,7 +10798,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * saved_trip_rate(t, _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -11160,8 +11160,8 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price,
-                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
-                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
+                "commission": round(price * saved_trip_rate(t, commission)),
+                "driver_net": round(price * (1 - saved_trip_rate(t, commission))),
                 "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
@@ -11405,7 +11405,7 @@ async def admin_get_settings(current=Depends(require_admin)):
 @api.get("/marketing/platform-config")
 async def marketing_platform_config():
     # Deliberately expose only the public standard service fee, never internal settings.
-    return {"service_fee_percent": round(await _platform_commission() * 100, 2),
+    return {"service_fee_percent": 0, "business_model": "subscription",
             "fleet_application_review": "manual", "brand": "SNAR"}
 
 

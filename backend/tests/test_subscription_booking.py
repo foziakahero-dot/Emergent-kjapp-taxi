@@ -1,12 +1,14 @@
 """New fares use zero commission while historical settlement keeps its snapshot."""
 import asyncio
+import io
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 from bson import ObjectId
 import pytest
 from test_mobile_commerce import Database
-from test_phase2c_dispatch_identity_projection import server
+from test_phase2c_dispatch_identity_projection import server, AsyncCursor
+from openpyxl import load_workbook
 from admin_control_center import stripe_destination_for_trip
 
 
@@ -16,6 +18,7 @@ class BookingCollection:
     async def update_one(self, *args, **kwargs): return self.raw.update_one(*args, **kwargs)
     async def count_documents(self, *args, **kwargs): return self.raw.count_documents(*args, **kwargs)
     async def insert_one(self, *args, **kwargs): return self.raw.insert_one(*args, **kwargs)
+    def find(self, *args, **kwargs): return AsyncCursor(self.raw.find(*args, **kwargs))
 
 
 def test_real_booking_handler_snapshots_subscription_not_stored_percentage(monkeypatch):
@@ -51,3 +54,21 @@ def test_actual_settlement_resolver_uses_trip_snapshot_over_changed_fleet_rate(t
     destination = asyncio.run(stripe_destination_for_trip(db, stripe, {"driver_id": str(did), "commission_rate": trip_rate}))
     assert destination["commission_rate"] == trip_rate
     assert db.raw.fleets.find_one()["commission_rate"] == .2
+
+
+def test_monthly_export_keeps_zero_commission_alongside_historical_fee(monkeypatch):
+    db, fid, did = Database(), ObjectId(), ObjectId()
+    db.raw.fleets.insert_one({"_id": fid, "name": "Fixture", "commission_rate": .2})
+    db.raw.users.insert_one({"_id": did, "role": "driver", "fleet_id": str(fid)})
+    for price, rate in [(100, 0.0), (200, .12)]:
+        db.raw.trips.insert_one({"fleet_id": str(fid), "driver_id": str(did), "status": "completed",
+            "payment_status": "paid", "created_at": "2026-10-01T12:00:00+00:00", "price": price, "commission_rate": rate})
+    monkeypatch.setattr(server, "db", SimpleNamespace(**{name: BookingCollection(db.raw[name]) for name in ('fleets', 'users', 'trips')}))
+    monkeypatch.setattr(server, "get_fleet_id_for", AsyncMock(return_value=str(fid)))
+    response = asyncio.run(server.fleet_export_monthly(2026, 10, {"id": "fixture"}))
+    workbook = load_workbook(io.BytesIO(response.body), data_only=True)
+    assert workbook['Sammendrag']['B5'].value == 300
+    assert workbook['Sammendrag']['B6'].value == 24
+    assert workbook['Sammendrag']['B7'].value == 276
+    assert workbook['Sjåfører']['G2'].value == 24
+    assert workbook['Sjåfører']['H2'].value == 276
