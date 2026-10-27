@@ -22,6 +22,9 @@ class Collection:
     async def update_one(self, *args, **kwargs): return self.raw.update_one(*args, **kwargs)
 
 def fixture(interval=30):
+    # A long full-suite run must not expire this test before it starts.
+    global START
+    START = datetime.now(timezone.utc)
     raw = mongomock.MongoClient().db
     db = SimpleNamespace(trips=Collection(raw.trips), payment_transactions=Collection(raw.payment_transactions))
     trip = {'trip_id':'one-ride','user_id':'one-customer','driver_id':None,'status':'searching',
