@@ -9,8 +9,8 @@ import { tripsApi } from '@/src/lib/api';
 import { driverPresence } from '@/src/lib/tripPresence';
 import { useColorTheme } from '@/src/theme';
 
-const routes = ['home', 'history', 'assist', 'messages', 'profile'].map(name => ({ name, key: `global-${name}` }));
-const titles = ['Hjem', 'Aktivitet', 'SNAR AI', 'Meldinger', 'Profil'];
+const routes = ['home', 'history', 'profile'].map(name => ({ name, key: `global-${name}` }));
+const titles = ['Hjem', 'Turer', 'Konto'];
 const authScreens = new Set(['index', 'login', 'register', 'forgot-password', 'reset-password', 'legal-consent', 'permissions', 'profile-setup']);
 const islandTripStatuses = new Set(['payment_authorizing', 'searching', 'booking', 'driver_on_way', 'at_pickup', 'in_trip']);
 

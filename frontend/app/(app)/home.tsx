@@ -16,7 +16,7 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -366,7 +366,7 @@ export default function Home() {
           if (mapOnly) { setSearchTarget('dropoff'); setSearchOpen(true); }
           else setMapOnly(true);
         }} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', minHeight: 44, paddingHorizontal: 14, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line }}>
-          <V10Icon name={mapOnly ? 'search' : 'chevDown'} size={18} /><Text style={v10.secondary}>{mapOnly ? 'Søk' : 'Vis kart'}</Text>
+          <V10Icon name={mapOnly ? 'search' : 'chevDown'} size={18} /><Text style={v10.secondary}>{mapOnly ? 'Hvor skal du?' : 'Vis kart'}</Text>
         </Pressable>
         {mapOnly ? <Pressable testID="map-profile" accessibilityRole="button" accessibilityLabel="Åpne profilen" onPress={() => router.push('/(app)/profile')} style={{ minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={v10.secondary}>{initials}</Text></Pressable> : null}
       </View> : null}
@@ -411,8 +411,14 @@ export default function Home() {
 
 export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
   useColorTheme();
+  const dimensions = useWindowDimensions();
   const input = useRef<any>(null);
   useEffect(() => { if (visible) input.current?.focus(); }, [visible, target]);
+  useEffect(() => {
+    if (!visible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { Keyboard.dismiss(); onClose(); return true; });
+    return () => sub.remove();
+  }, [visible, onClose]);
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);
@@ -423,6 +429,7 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
   useEffect(() => {
     let current = true;
     setResults([]); setSearchError('');
+    if (!visible) { setLoading(false); return; }
     if (q.trim().length < 2) { setLoading(false); return; }
     setLoading(true);
     const timer = setTimeout(() => {
@@ -432,7 +439,7 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
         .finally(() => { if (current) setLoading(false); });
     }, 350);
     return () => { current = false; clearTimeout(timer); };
-  }, [q, retrySearch]);
+  }, [q, retrySearch, visible]);
 
   const items = q.trim().length < 2
     ? [...quickPlaces, ...(featured || [])].map((p: any) => ({ ...p, saved: true }))
@@ -451,9 +458,9 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
   </View>;
   return <KeyboardAvoidingView pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     style={{ position: 'absolute', inset: 0 }}>
-    <View testID="search-map-dim" pointerEvents="none" style={{ position: 'absolute', inset: 0, backgroundColor: colors.bg, opacity: .55 }} />
-    <SheetFrame testID="search-sheet" style={{ top: Math.max(54, insets.top + 4), maxHeight: undefined, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 10 }}>
-      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" hitSlop={8}><SheetHandle /></Pressable>
+    <View testID="search-map-dim" pointerEvents="none" style={{ position: 'absolute', inset: 0, backgroundColor: colors.bg, opacity: .16 }} />
+    <SheetFrame testID="search-sheet" style={{ top: Math.max(54, insets.top + 4), bottom: undefined, height: dimensions.height * .52, maxHeight: '52%', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, paddingTop: 0 }}>
+      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" style={{ minHeight: 44, justifyContent: 'center' }}><SheetHandle /></Pressable>
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(34, insets.bottom) }}>
         <View style={{ gap: 8 }}>

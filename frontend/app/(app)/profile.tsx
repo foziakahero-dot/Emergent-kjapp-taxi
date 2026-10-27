@@ -33,6 +33,8 @@ export default function Profile() {
       <V10Row border icon="access" title="Tilgjengelighet" onPress={() => router.push('/customer-accessibility')} testID="profile-accessibility" />
       <V10Row border icon="settings" title="Innstillinger" onPress={() => router.push('/settings')} testID="profile-settings" />
       <V10Row border icon="help" title="Support" onPress={() => router.push('/support')} testID="profile-help" />
+      <V10Row border icon="message" title="Meldinger" onPress={() => router.push('/(app)/messages')} testID="profile-messages" />
+      <V10Row border icon="ai" title="AI-hjelp" onPress={() => router.push('/(app)/assist')} testID="profile-ai-help" />
     </V10Group></V10Section>
   </V10Entrance></V10Screen>;
 }
