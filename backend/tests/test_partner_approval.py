@@ -23,7 +23,7 @@ from test_fleet_invitation_delivery import Collection
 @pytest.fixture
 def state(monkeypatch):
     raw = mongomock.MongoClient(tz_aware=True).db
-    db = SimpleNamespace(**{n: Collection(raw[n]) for n in ('users', 'fleets', 'trips', 'fleet_vehicles', 'fleet_applications', 'uploaded_files', 'document_blobs', 'onboarding_email_outbox', 'platform_settings', 'password_reset_tokens')})
+    db = SimpleNamespace(**{n: Collection(raw[n]) for n in ('users', 'fleets', 'trips', 'fleet_vehicles', 'fleet_applications', 'uploaded_files', 'document_blobs', 'onboarding_email_outbox', 'platform_settings', 'password_reset_tokens', 'rate_limit_buckets')})
     monkeypatch.setattr(server, 'db', db)
     monkeypatch.setattr(server.stripe, 'api_key', '')
     monkeypatch.setattr(server, 'EMERGENT_LLM_KEY', '')
@@ -38,7 +38,7 @@ def state(monkeypatch):
 async def submitted(state):
     raw, db, request = state
     draft = await server.create_fleet_application_draft(server.FleetApplicationDraftRequest(
-        company_name='Test Fleet', org_number='123456789', contact_name='Owner',
+        company_name='Test Fleet', org_number='923609016', contact_name='Owner',
         contact_email='owner@example.com', contact_phone='+4799999999', license_count=2, vehicle_count=2,
         bank_account='NO9386011117947', accepted_terms=True), request)
     token = draft['upload_token']

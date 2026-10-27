@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from admin_control_center import install_admin_control_center
 from test_phase2c_dispatch_identity_projection import server
+from admin_control_center import install_admin_control_center
 
 
 def test_complete_api_schema_generates_and_admin_requests_are_json_bodies():
