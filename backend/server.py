@@ -34,6 +34,7 @@ from onboarding_emails import queue_confirmation, confirmation_loop, queue_custo
 from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
+from customer_otp import install_customer_otp
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from integration_settings import IntegrationSettings, install_integration_settings
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
@@ -1462,6 +1463,7 @@ async def lifespan(app: FastAPI):
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.rate_limit_buckets.create_index("expires_at", expireAfterSeconds=0)
+    await db.customer_otp_challenges.create_index("expires_at", expireAfterSeconds=0)
     await db.client_errors.create_index([("created_at", -1)])
     await db.client_errors.create_index("expires_at", expireAfterSeconds=0)
     await db.driver_identity_verifications.create_index([("driver_user_id", 1), ("created_at", -1)])
@@ -11802,6 +11804,9 @@ install_driver_media(api, db, require_driver=require_driver, require_customer=re
     parse_circle=NearbyCarsRequest.model_validate, read_document=get_stored_document)
 
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
+install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
+    create_access_token=create_access_token, create_twofa_token=create_twofa_token,
+    set_auth_cookie=set_auth_cookie, user_public=user_public)
 
 app.include_router(api)
 

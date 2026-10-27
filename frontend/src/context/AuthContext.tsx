@@ -23,6 +23,7 @@ type AuthCtx = {
   sessionError: string;
   user: User | undefined; // undefined = loading, null = signed out
   login: (email: string, password: string) => Promise<any>;
+  loginWithOtp: (phone: string, code: string, challengeId: string) => Promise<any>;
   register: (data: any) => Promise<any>;
   acceptLegal: () => Promise<User>;
   logout: () => Promise<void>;
@@ -74,6 +75,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');
     if (res.twofa_required) return res;
     if (res?.user?.role !== 'user') throw new Error('Denne kontoen kan ikke brukes i SNAR kundeappen.');
+    await storage.setItem(TOKEN_KEY, res.token);
+    if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');
+    setSessionError(''); setUser(res.user);
+    return res.user;
+  };
+
+  const loginWithOtp = async (phone: string, code: string, challengeId: string) => {
+    const epoch = ++sessionEpoch.current;
+    const res = await authApi.otpVerify(phone, code, challengeId);
+    if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');
+    if (res.twofa_required) return res;
+    if (!res?.token || res?.user?.role !== 'user') throw new Error('Innloggingen kunne ikke bekreftes.');
     await storage.setItem(TOKEN_KEY, res.token);
     if (epoch !== sessionEpoch.current) throw new Error('Innloggingen ble avbrutt.');
     setSessionError(''); setUser(res.user);
@@ -134,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ sessionError, user, login, register, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
+    <Ctx.Provider value={{ sessionError, user, login, loginWithOtp, register, acceptLegal, logout, refresh, signInWithGoogle, signInWithApple }}>
       {children}
     </Ctx.Provider>
   );
