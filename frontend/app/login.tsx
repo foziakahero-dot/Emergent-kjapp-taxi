@@ -16,7 +16,7 @@ import { V10Entrance } from '@/src/components/V10Entrance';
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
 export default function Login() {
-  useColorTheme();
+  const theme = useColorTheme();
   const { login, loginWithOtp, logout, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -137,10 +137,10 @@ export default function Login() {
     }
   };
 
-  return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+  return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.effective === 'dark' ? colors.bg : '#FFFFFF' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: Math.max(70, insets.top + 22), paddingBottom: Math.max(40, insets.bottom + 6) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <KjappMark size={44} />
-      <V10Entrance style={{ marginTop: 32 }}><Text style={v10.title}>{challenge && mode === 'phone' ? 'Skriv inn koden' : 'Din neste tur\nStarter her.'}</Text><Text style={[v10.secondary, { marginTop: 10 }]}>{mode === 'password' ? 'Logg inn med e-post og passord.' : challenge ? 'Hvis nummeret er knyttet til en kundekonto, får du en engangskode på SMS.' : 'Fortsett med mobilnummeret på kundekontoen din.'}</Text></V10Entrance>
+      <V10Entrance style={{ marginTop: 32 }}><Text style={v10.title}>{challenge && mode === 'phone' ? 'Skriv inn koden' : 'Din neste tur\nstarter her.'}</Text><Text style={[v10.secondary, { marginTop: 10 }]}>{mode === 'password' ? 'Logg inn med e-post og passord.' : challenge ? 'Hvis nummeret er knyttet til en kundekonto, får du en engangskode på SMS.' : 'Fortsett med mobilnummeret på kundekontoen din.'}</Text></V10Entrance>
       {mode === 'phone' ? <View style={{ marginTop: 28, gap: 12 }}>
         {!challenge ? <View style={{ minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle }}><Text style={v10.body}>+47</Text><TextInput testID="login-phone" accessibilityLabel="Norsk mobilnummer" value={phone} onChangeText={setPhone} editable={!busy} placeholder="Mobilnummer" keyboardType="phone-pad" autoComplete="tel-national" textContentType="telephoneNumber" returnKeyType="go" onSubmitEditing={() => void submitPhone()} placeholderTextColor={colors.textMuted} style={{ flex: 1, minHeight: 60, color: colors.text, fontFamily: font.body, fontSize: 18 }} /></View>
         : <TextInput testID="login-otp" accessibilityLabel="Engangskode fra SMS" value={code} onChangeText={value => setCode(value.replace(/\D/g, '').slice(0, 10))} editable={!busy} placeholder="Engangskode" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" autoFocus maxLength={10} returnKeyType="go" onSubmitEditing={() => void submitPhone()} style={{ minHeight: 60, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, color: colors.text, fontFamily: font.medium, fontSize: 24, letterSpacing: 6 }} />}
