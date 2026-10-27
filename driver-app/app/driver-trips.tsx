@@ -19,7 +19,7 @@ export default function DriverTrips() {
   const { user } = useAuth();
   const history = useQuery({ queryKey: ['driver-history', user?.id], queryFn: driverApi.history, enabled: !!user?.id });
   const trips = historyTrips(history.data);
-  return <V10Screen testID="driver-activity-screen"><V10Entrance fade><V10Header title="Aktivitet" onBack={() => router.back()} />
+  return <V10Screen dock testID="driver-activity-screen"><V10Entrance fade><V10Header title="Turer" onBack={() => router.back()} />
     {history.isPending ? <Loader label="Henter turer…" /> : history.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente turhistorikken" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void history.refetch()} /> : !trips.length ? <View style={{ marginTop: 24 }}><V10State icon="activity" title="Ingen turer ennå" body="Turene du har kjørt, vises her." action="Til cockpit" onAction={() => router.navigate('/(driver)/home')} /></View> : groupHistory(trips).map(group =>
       <V10Section key={group.title} title={group.title}><V10Group>{group.trips.map((trip, index) => {
         const income = confirmedTripIncome(trip);

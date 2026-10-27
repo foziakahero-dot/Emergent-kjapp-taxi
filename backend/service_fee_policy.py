@@ -3,6 +3,15 @@ import math
 import os
 
 
+def subscription_trip_terms():
+    """New bookings carry an immutable zero-commission subscription snapshot.
+
+    Subscription invoices are independent of fare authorization/capture. Legacy
+    fee helpers below remain available only for existing agreements/history.
+    """
+    return {"commission_rate": 0.0, "commission_source": "subscription_v1", "business_model": "subscription"}
+
+
 def configured_service_fee(stored_rate=0.12):
     raw = os.getenv('SNAR_SERVICE_FEE_RATE', '').strip()
     rate = float(raw) if raw else float(stored_rate)

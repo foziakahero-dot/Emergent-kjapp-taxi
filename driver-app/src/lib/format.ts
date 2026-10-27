@@ -33,6 +33,8 @@ export function apiError(e: any): string {
   const detail = detailText(e?.response?.data?.detail);
 
   if (!e?.response) {
+    // Preserve actionable GPS/readiness guards; transport failures are handled below.
+    if (e instanceof Error && !(e as any).isAxiosError && !(e as any).request && !(e as any).code) return e.message;
     const code = String(e?.code || '').toUpperCase();
     if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || /timeout/i.test(String(e?.message || ''))) {
       return 'Tilkoblingen tok for lang tid. Kontroller nettet og prøv igjen.';

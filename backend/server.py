@@ -44,6 +44,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
+from service_fee_policy import subscription_trip_terms
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -2281,7 +2282,7 @@ async def trip_estimate(body: EstimateRequest):
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"],
                         "waiting_policy": waiting_policy(effective_pricing, vt)})
-    commission_rate = await _platform_commission()
+    commission_rate = subscription_trip_terms()["commission_rate"]
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
@@ -2914,7 +2915,6 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
             )
             raise HTTPException(409, {"code": "quote_changed", "message": "Prisen er endret. Beregn på nytt og bekreft pris og ventetid."})
         accepted_waiting = policy
-    commission_rate = await _platform_commission()
     price = quote["price"]
     trip = {
         "trip_id": trip_id,
@@ -2941,8 +2941,7 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "pricing_version": quote["pricing_version"],
         "pricing_area": pricing_area,
         "pricing_snapshot": effective_pricing,
-        "commission_rate": commission_rate,
-        "commission_source": "platform_default",
+        **subscription_trip_terms(),
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
@@ -3279,7 +3278,7 @@ async def require_driver(current=Depends(get_current_user)):
     if current.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+        raise HTTPException(status_code=403, detail="Sjåførkontoen din venter på godkjenning fra SNAR admin")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
     if current.get("legal_accepted") is not True:
@@ -5408,6 +5407,7 @@ async def driver_compliance(current=Depends(require_driver)):
     """
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=False)
     result = await _driver_shift_compliance(current, assigned_vehicle)
+    result["account_approved"] = current.get("approved") is True
     result["online"] = bool(current.get("online"))
     result["location_ready"] = bool(
         current.get("last_lat") is not None

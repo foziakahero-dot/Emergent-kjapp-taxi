@@ -6,6 +6,7 @@ import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -61,6 +62,9 @@ export default function DriverHome() {
   const { user } = useAuth();
   const router = useRouter();
   const [online, setOnline] = useState(false);
+  const [backendConnected, setBackendConnected] = useState(false);
+  const readiness = useQuery({ queryKey: ['driver-readiness', user?.id], queryFn: driverApi.compliance,
+    enabled: !!user?.id, refetchInterval: 10000, refetchIntervalInBackground: false, retry: 1 });
   const [pending, setPending] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>(null);
   const [completedTrip, setCompletedTrip] = useState<any>(null);
@@ -144,6 +148,7 @@ export default function DriverHome() {
     }
     try {
       const p = await driverApi.pending();
+      setBackendConnected(true);
       const nextPending = p?.trips || p?.pending || (Array.isArray(p) ? p : []);
       setPending(nextPending);
 
@@ -165,6 +170,7 @@ export default function DriverHome() {
     } catch {
       // Preserve the last pending state on a transient network error. Seen IDs stay
       // in memory so a reconnect cannot replay the same alert every four seconds.
+      setBackendConnected(false);
     }
     polling.current = false;
     driverApi.summary().then((r) => {
@@ -347,6 +353,7 @@ export default function DriverHome() {
         setLoc(nextLocation);
 
         const compliance = await driverApi.compliance();
+        void readiness.refetch();
         if (compliance?.operational !== true) {
           throw new Error(compliance?.message || 'Sjåførkontoen eller bilen er ikke klar for å gå online.');
         }
@@ -633,6 +640,7 @@ export default function DriverHome() {
       {!online && !current && !firstOffer ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.offlineMapWash]} /> : null}
 
       <DriverCockpitView
+        connected={backendConnected} readiness={readiness.isError ? null : readiness.data} readinessError={readiness.isError ? apiError(readiness.error) : ''} onRefreshReadiness={() => void readiness.refetch()}
         mapTarget={mapTarget} user={user} online={online} busy={busy || summaryActionBusy} error={error}
         summary={summary} current={current} completed={completedTrip} offer={firstOffer}
         offerRemaining={offerRemaining} offerExpired={offerExpired} offerDistance={offerDistance} offerDuration={offerDuration}
