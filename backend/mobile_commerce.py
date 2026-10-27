@@ -224,12 +224,16 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
 
     @api.post("/auth/google/web/code")
     async def google_web_code(body: GoogleWebCode, request: Request, response: Response):
+        if body.client != "customer":
+            raise HTTPException(403, "Sjåfører må bruke SNAR-passordinnlogging")
         await rate_limit(request, "google-web-code", 30, 900)
         identity = await exchange_google_code(body)
         return await google_native(NativeIdentity(identity_token=identity, client=body.client, device_id=body.device_id), request, response)
 
     @api.post("/auth/google/web/link")
     async def google_web_link(body: GoogleWebCode, request: Request, current=Depends(get_current_user)):
+        if body.client != "customer" or current.get("role") not in (None, "user", "customer"):
+            raise HTTPException(403, "Kun kundekonto kan kobles her")
         await rate_limit(request, "google-web-link", 20, 900)
         identity = await exchange_google_code(body)
         return await link_google(NativeIdentity(identity_token=identity, client=body.client), request, current)
@@ -349,6 +353,17 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             "verified": True, "setup_status": "succeeded", "stripe_payment_method_id": {"$type": "string"}})
         if not method:
             raise HTTPException(404, "Fant ikke verifisert betalingsmåte")
+        user = await db.users.find_one({"_id": ObjectId(current["id"])}) or {}
+        customer_id = user.get("stripe_customer_id_live" if is_live(stripe) else "stripe_customer_id_test")
+        if not customer_id and bool(user.get("stripe_customer_livemode", False)) == is_live(stripe):
+            customer_id = user.get("stripe_customer_id")
+        try:
+            pm = await asyncio.to_thread(stripe_client(stripe).v1.payment_methods.retrieve, method["stripe_payment_method_id"])
+        except StripeError:
+            raise HTTPException(409, "Kortet kunne ikke bekreftes. Legg til betalingsmåten på nytt.") from None
+        if (not customer_id or pm.get("type") != "card" or str(pm.get("customer") or "") != customer_id
+                or bool(pm.get("livemode", False)) != is_live(stripe)):
+            raise HTTPException(409, "Kortet tilhører ikke denne kunden eller betalingsmiljøet")
         # A single-document pointer prevents two concurrent selections from
         # creating multiple default cards. Existing trip reservations stay fixed.
         await db.users.update_one({"_id": ObjectId(current["id"])}, {"$set": {"default_payment_method_id": pm_id}})
@@ -400,8 +415,13 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
             customer_id = user.get("stripe_customer_id")
         if not customer_id:
             raise HTTPException(404, "Fant ikke kortverifiseringen")
+        if not stripe.api_key:
+            raise HTTPException(503, "Stripe er ikke konfigurert")
+        # Reading an already-created SetupIntent must survive disabling new setup
+        # in the UI. Ownership and Stripe mode are still verified below.
+        reader = stripe_client(stripe)
         try:
-            setup = await asyncio.to_thread(native_client().v1.setup_intents.retrieve, setup_intent_id)
+            setup = await asyncio.to_thread(reader.v1.setup_intents.retrieve, setup_intent_id)
         except Exception:
             raise HTTPException(404, "Fant ikke kortverifiseringen")
         if (setup.get("metadata") or {}).get("user_id") != current["id"] or str(setup.get("customer") or "") != customer_id:
@@ -409,7 +429,7 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         if setup.get("status") != "succeeded" or not setup.get("payment_method"):
             return {"ready": False, "status": setup.get("status")}
 
-        pm = await asyncio.to_thread(native_client().v1.payment_methods.retrieve, setup["payment_method"])
+        pm = await asyncio.to_thread(reader.v1.payment_methods.retrieve, setup["payment_method"])
         if (pm.get("type") != "card" or str(pm.get("customer") or "") != customer_id
                 or bool(pm.get("livemode", False)) != is_live(stripe)):
             raise HTTPException(409, "Kortet er ikke bekreftet for denne kunden eller betalingsmiljøet")

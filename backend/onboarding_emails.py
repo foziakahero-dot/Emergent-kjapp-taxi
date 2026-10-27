@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from pymongo import ReturnDocument
 from resend_email import resend_config, send_resend_email
+from email_delivery import email_configured
 
 
 async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
@@ -28,10 +29,10 @@ async def queue_confirmation(db, kind, entity_id, recipient, name, notes=""):
     await db.onboarding_email_outbox.update_one({"_id": f"{kind}:{entity_id}"}, {"$setOnInsert": {
         "recipient": recipient, "subject": subject, "html": body, "kind": kind,
         "entity_id": str(entity_id), "status": "pending", "attempts": 0,
-        "provider": "resend" if kind == "customer" else "sendgrid",
+        "provider": "resend" if kind == "customer" else "transactional",
         "created_at": now, "next_attempt_at": now,
     }}, upsert=True)
-    configured = resend_config()["enabled"] if kind == "customer" else bool(os.environ.get("SENDGRID_API_KEY", "").strip())
+    configured = resend_config()["enabled"] if kind == "customer" else email_configured()
     return "queued" if configured else "not_configured"
 
 
@@ -84,7 +85,7 @@ async def confirmation_loop(db, send_email, prepare_email=None, invite_sender=No
                 for _ in range(20):
                     if not await deliver_one(db, send_resend_email, provider="resend"):
                         break
-            if os.environ.get("SENDGRID_API_KEY", "").strip():
+            if email_configured():
                 for _ in range(20):
                     if not await deliver_one(db, send_email, prepare_email):
                         break

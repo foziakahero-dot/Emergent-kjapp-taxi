@@ -22,7 +22,7 @@ from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
 from ai_configuration import configured_ai_key, provider_chat_session
 from payment_method_selection import selected_payment_method
-from email_delivery import email_configured
+from email_delivery import email_configured, send_transactional_email
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
@@ -1042,28 +1042,8 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
-    """Send email via SendGrid if configured, else log to console."""
-    if APP_ENV == "qa":
-        print("[EMAIL/disabled-qa] external email delivery is disabled")
-        return False
-    api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
-    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
-    if not api_key:
-        # Never print HTML bodies: password-reset/invite emails can contain bearer-style
-        # one-time tokens. Missing email configuration should be observable without
-        # leaking those links into application logs.
-        print(f"[EMAIL/no-key] to={to_email} subj={subject} body=redacted")
-        return False
-    try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-        msg = Mail(from_email=sender, to_emails=to_email, subject=subject, html_content=html)
-        sg = SendGridAPIClient(api_key)
-        res = sg.send(msg)
-        return 200 <= res.status_code < 300
-    except Exception as e:
-        print(f"[EMAIL/error] {e}")
-        return False
+    """Use the configured transactional provider with isolated QA credentials."""
+    return send_transactional_email(to_email, subject, html)
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
@@ -4007,7 +3987,6 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
         session = await asyncio.to_thread(client.v1.checkout.sessions.create, {
             "mode": "setup", "currency": "nok", "customer": customer_id,
             "integration_identifier": "snar_card_setup_" + "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(8)),
-            "setup_intent_data": {"usage": "off_session"},
             "success_url": f"{origin}/payment-methods?setup=success&session_id={{CHECKOUT_SESSION_ID}}",
             "cancel_url": f"{origin}/payment-methods?setup=cancel",
             "metadata": {"user_id": current["id"]},
@@ -11715,8 +11694,18 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 async def _prepare_onboarding_email(job: dict) -> str:
+    if job.get("kind") == "driver-approved":
+        user = await db.users.find_one({"email": job["recipient"], "role": "driver", "approved": True,
+                                        "disabled": {"$ne": True}})
+        if not user:
+            raise ValueError("Approved driver account is unavailable")
+        username = html_escape.escape(job["recipient"])
+        return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p>Passord: Bruk passordet du valgte ved registrering. Bruk «Glemt passord» i SNAR Driver dersom du trenger et nytt.</p>'
     if job.get("kind") != "fleet-approved":
         return job["html"]
+    public = os.getenv("FLEET_PUBLIC_URL", "" if APP_ENV == "qa" else "https://fleet.snarapp.no").rstrip("/")
+    if not public or (APP_ENV == "qa" and not is_safe_qa_web_origin(public)):
+        raise ValueError("QA Fleet web origin is not configured")
     user = await db.users.find_one({"email": job["recipient"], "role": "fleet_owner", "approved": True,
                                     "disabled": {"$ne": True}})
     if not user or not user.get("fleet_id"):
@@ -11728,9 +11717,9 @@ async def _prepare_onboarding_email(job: dict) -> str:
     await db.password_reset_tokens.insert_one({"token_hash": _password_reset_token_hash(token),
         "user_id": str(user["_id"]), "email": job["recipient"], "created_at": now,
         "expires_at": now + timedelta(hours=1), "used": False})
-    reset_url = f"https://fleet.snarapp.no/reset-password/{token}"
+    reset_url = f"{public}/reset-password/{token}"
     username = html_escape.escape(job["recipient"])
-    return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p><a href="{reset_url}">Velg passord for SNAR Fleet</a> (engangslenken er gyldig i én time). Har du allerede et passord, kan du bruke det.</p>'
+    return job["html"].replace("https://fleet.snarapp.no", html_escape.escape(public, quote=True)) + f'<p>Brukernavn: <strong>{username}</strong></p><p><a href="{html_escape.escape(reset_url, quote=True)}">Velg passord for SNAR Fleet</a> (engangslenken er gyldig i én time). Har du allerede et passord, kan du bruke det.</p>'
 
 
 async def _queue_beta_confirmation(identity, email, name):
