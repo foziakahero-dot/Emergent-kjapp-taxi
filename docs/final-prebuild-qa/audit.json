@@ -1,0 +1,22 @@
+{
+  "repository": "foziakahero-dot/Emergent-kjapp-taxi",
+  "branch": "qa/snar-v1-prebuild-20261027",
+  "customer_backend": "https://api-qa.snarapp.no",
+  "driver_backend": "https://api-qa.snarapp.no",
+  "production_backend": "https://api.kjappapp.no",
+  "production_head": "02ed5c061d34f80f5b255a2f270a4903aa3c271e",
+  "qa_deploy": "dep-dbgh5jnf3r2c73ek0k2g",
+  "native_build_started": false,
+  "final_implementation_candidate": "c8ee166a8d30027b8fb9355f7e7bc84806d52136",
+  "final_runtime_tree": "0113360a1b2311136922de2b4a00929c806b706e",
+  "qa_runtime_commit": "f52b6bfba556a9baf9bf4a11acad5138fa60071d",
+  "qa_decision": "B \u2014 CODE READY, EXTERNAL CONFIGURATION BLOCKS RELEASE",
+  "release_status": "BLOCKED",
+  "initial_tested_head": "d78d09859d4a4649fc3f49a4d8edcab098d44d13",
+  "initial_tested_tree": "7edcba3ac1ea01cab69357a7d6198721fa82203e",
+  "tested_head": "8aa77fc0bb7675fd8fdfcd9ed4ddea2e6fdc06da",
+  "tested_tree": "0113360a1b2311136922de2b4a00929c806b706e",
+  "stripe_live_charges_enabled": false,
+  "stripe_live_payouts_enabled": false,
+  "stripe_live_disabled_reason": "requirements.past_due"
+}

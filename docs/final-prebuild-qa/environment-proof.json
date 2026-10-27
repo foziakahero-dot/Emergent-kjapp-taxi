@@ -1,0 +1,22 @@
+[
+  {
+    "app": "customer-final-qa",
+    "bundles": [
+      {
+        "file": "/_expo/static/js/web/entry-2494f110b41a14decc7bc46d7e197bd6.js",
+        "sha256": "d7203ce009a0788ece515117753cbbcb165946e658bda35aae55bd24166349de",
+        "api": "https://api-qa.snarapp.no"
+      }
+    ]
+  },
+  {
+    "app": "driver-final-qa",
+    "bundles": [
+      {
+        "file": "/_expo/static/js/web/entry-c9604644c10772107c88955c3d2ebcc6.js",
+        "sha256": "f13a944facd29d94385381a81b862a00f6c51d8b72d6be1ed6cad35e75d32441",
+        "api": "https://api-qa.snarapp.no"
+      }
+    ]
+  }
+]

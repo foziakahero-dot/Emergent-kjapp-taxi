@@ -1,0 +1,24 @@
+[
+  {
+    "app": "frontend",
+    "version": "1.0.0",
+    "android_package": "no.kjapp.app",
+    "android_version_code": null,
+    "ios_bundle": "no.nexorahub.kjapp.customer",
+    "ios_build_number": null,
+    "eas_project": "3631002e-5b25-4847-b5d8-05ec2ef304b5",
+    "scheme": "kjapp",
+    "qa_backend": "https://api-qa.snarapp.no"
+  },
+  {
+    "app": "driver-app",
+    "version": "1.0.0",
+    "android_package": "no.kjapp.driver",
+    "android_version_code": null,
+    "ios_bundle": "no.nexorahub.kjapp.driver",
+    "ios_build_number": null,
+    "eas_project": "1dec8949-0423-4fbf-a080-0703f93519d7",
+    "scheme": "kjapp-driver",
+    "qa_backend": "https://api-qa.snarapp.no"
+  }
+]

@@ -1,0 +1,181 @@
+{
+  "scope": "Local web UI with intercepted fixture APIs; not native or live E2E",
+  "reports": [
+    {
+      "product": "customer",
+      "scenario": "login",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "login",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "home",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "live_cars",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "trips",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "account",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "searching",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "driver_on_way",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "at_pickup",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "in_trip",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "completed",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "offline",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "blocked",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "online",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "offer",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "driver_on_way",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "at_pickup",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "in_trip",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "completed",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "trips",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "earnings",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "account",
+      "api": "https://api-qa.snarapp.no",
+      "wrongApi": [],
+      "errors": [],
+      "horizontalOverflow": false
+    }
+  ]
+}

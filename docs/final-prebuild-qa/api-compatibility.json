@@ -1,0 +1,25 @@
+{
+  "scope": "Live QA OpenAPI route/method contract, not authenticated end-to-end behavior",
+  "components": [
+    {
+      "component": "admin-web",
+      "checked": 55,
+      "missing": []
+    },
+    {
+      "component": "fleet-web",
+      "checked": 30,
+      "missing": []
+    },
+    {
+      "component": "frontend",
+      "checked": 86,
+      "missing": []
+    },
+    {
+      "component": "driver-app",
+      "checked": 62,
+      "missing": []
+    }
+  ]
+}

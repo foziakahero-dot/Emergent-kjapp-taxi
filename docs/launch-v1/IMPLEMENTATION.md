@@ -1,5 +1,7 @@
 # SNAR Launch Candidate V1 — production implementation
 
+Current verification supersedes this checkpoint: see `../final-prebuild-qa/REPORT.md`. QA did not conclude A; release builds remain blocked.
+
 27 October 2026. Production source: `release/onboarding-live-base-20261020`, inspected baseline `02ed5c061d34f80f5b255a2f270a4903aa3c271e`. Candidate: `launch/snar-v1-final-20261026`. API target: **https://api.kjappapp.no**, Render `kjapp-beta-api` / `srv-datbvsid0e5s73bg0s30`, confirmed workspace `tea-dassqnrbc2fs73a770i0`. The old QA branch/service is not the deployment target.
 
 Status distinguishes implementation, configuration and actual runtime evidence. PASS below does not claim native/device E2E. Native builds and design freeze remain gated.

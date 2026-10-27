@@ -1,0 +1,43 @@
+{
+  "checked_date": "2026-10-27",
+  "source": "Connected Stripe API, read-only live account and webhook inspection",
+  "stripe_context": "acct_1TGAN5KFJCRyVUgj",
+  "account_name": "Kjappapp",
+  "business_name": "KJAPP TECH AS",
+  "livemode": true,
+  "charges_enabled": false,
+  "payouts_enabled": false,
+  "details_submitted": false,
+  "card_payments": "inactive",
+  "transfers": "inactive",
+  "disabled_reason": "requirements.past_due",
+  "overdue_requirements": [
+    "company.tax_id",
+    "external_account",
+    "owners.first_name",
+    "owners.last_name",
+    "representative.address.city",
+    "tos_acceptance.date",
+    "tos_acceptance.ip"
+  ],
+  "verification_errors": [
+    "Company address city, line1, postal code and tax ID could not be verified",
+    "Beneficial owners missing"
+  ],
+  "pending_verification": ["company.verification.document"],
+  "production_webhook": {
+    "url": "https://api.kjappapp.no/api/stripe/webhook",
+    "livemode": true,
+    "status": "enabled"
+  },
+  "application_payment_config": {
+    "url": "https://api.kjappapp.no/api/payments/native/config",
+    "enabled": false,
+    "test_mode": false,
+    "google_pay_enabled": false,
+    "apple_pay_enabled": false
+  },
+  "configuration_changed": false,
+  "payments_created": false,
+  "release_status": "BLOCKED"
+}
