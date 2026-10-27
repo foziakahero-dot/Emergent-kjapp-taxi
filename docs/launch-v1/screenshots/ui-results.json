@@ -1,0 +1,131 @@
+{
+  "scope": "Local web UI with intercepted fixture APIs; not native or live E2E",
+  "reports": [
+    {
+      "product": "customer",
+      "scenario": "login",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "login",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "home",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "trips",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "account",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "searching",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "driver_on_way",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "at_pickup",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "in_trip",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "customer",
+      "scenario": "completed",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "offline",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "blocked",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "online",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "offer",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "driver_on_way",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "at_pickup",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "in_trip",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "completed",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "trips",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "earnings",
+      "errors": [],
+      "horizontalOverflow": false
+    },
+    {
+      "product": "driver",
+      "scenario": "account",
+      "errors": [],
+      "horizontalOverflow": false
+    }
+  ]
+}

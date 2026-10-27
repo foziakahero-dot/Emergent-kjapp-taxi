@@ -1,6 +1,6 @@
 # SNAR Launch Candidate V1 audit
 
-Audit performed 26 October 2026, Europe/Oslo. No native builds or deployments started.
+Initial audit: 26 October 2026, Europe/Oslo. Updated 27 October: **production is the active target**. QA is retained only as historical comparison. No APK/AAB/IPA/TestFlight build is authorized by this cycle. See `IMPLEMENTATION.md` for current evidence and remaining provider/device gates.
 
 ## Source selection
 
