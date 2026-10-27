@@ -10,8 +10,9 @@ Focused admin-only capabilities:
 
 All routes reuse the existing FastAPI/MongoDB/auth/audit infrastructure.
 """
-from __future__ import annotations
 
+# These routes declare request models inside the installer. Keep concrete types
+# in endpoint annotations so FastAPI resolves JSON bodies in that local scope.
 import asyncio
 import html
 import os
