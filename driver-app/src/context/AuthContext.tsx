@@ -22,6 +22,7 @@ export type User = {
   legal_accepted?: boolean;
   identity_verification_status?: string;
   identity_recheck_required?: boolean;
+  identity_verification_required?: boolean;
   identity_recheck_reason?: string;
   identity_recheck_trigger?: string;
   next_identity_check_at?: string;

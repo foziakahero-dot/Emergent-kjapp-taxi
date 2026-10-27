@@ -42,8 +42,7 @@ export default function DriverLogin() {
         await logout(); setError('Sjåførkontoen din venter fortsatt på godkjenning. Du får tilgang når dokumentene og kontoen er godkjent.'); return;
       }
       if (res?.legal_accepted !== true) { router.replace('/driver-legal-consent'); return; }
-      const identityStatus = res?.identity_verification_status || 'not_submitted';
-      const identityGate = Boolean(res?.identity_recheck_required) || identityStatus !== 'verified';
+      const identityGate = res?.identity_verification_required === true || res?.identity_recheck_required === true;
       router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
   };
   return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

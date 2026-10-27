@@ -80,7 +80,8 @@ function NativeRuntimeBridge() {
         const identity = await driverApi.identityVerification();
         if (!alive) return;
         const status = identity?.status || '';
-        if (['recheck_required', 'retry_required', 'pending_review'].includes(status)) {
+        if (['recheck_required', 'retry_required'].includes(status) ||
+            (status === 'pending_review' && (user.identity_verification_required || user.identity_verified_at))) {
           await stopDriverBackgroundLocation().catch(() => {});
           await refresh().catch(() => {});
           if (alive && !['/driver-identity', '/driver-approval'].includes(path.current)) router.replace('/driver-approval');
@@ -96,7 +97,7 @@ function NativeRuntimeBridge() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user?.id, user?.role, user?.approved, user?.legal_accepted, refresh]);
+  }, [user?.id, user?.role, user?.approved, user?.legal_accepted, user?.identity_verification_required, user?.identity_verified_at, refresh]);
 
   useEffect(() => {
     if (Platform.OS === 'web' || user?.role !== 'driver') return;

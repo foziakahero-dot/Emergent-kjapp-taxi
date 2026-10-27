@@ -18,8 +18,7 @@ export default function Index() {
 
   useEffect(() => {
     if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted === true) {
-      const identityStatus = user.identity_verification_status || 'not_submitted';
-      const identityGate = Boolean(user.identity_recheck_required) || identityStatus !== 'verified';
+      const identityGate = user.identity_verification_required === true || user.identity_recheck_required === true;
       router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
     } else if (user?.role === 'driver' && user?.approved === true && user?.legal_accepted !== true) {
       router.replace('/driver-legal-consent');

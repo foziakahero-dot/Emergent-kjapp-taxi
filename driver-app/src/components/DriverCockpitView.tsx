@@ -94,10 +94,11 @@ export function DriverCockpitView(p: Props) {
   </V10Entrance>;
   if (p.completed && !trip && !(p.offer && p.online)) {
     const done = p.completed, paid = done.payment_status === 'paid' && known(done.driver_earnings) && done.driver_earnings >= 0;
+    const subscription = done.business_model === 'subscription' || done.commission_source === 'subscription_v1';
     const platformAmount = paid && known(done.price) && done.price >= done.driver_earnings ? done.price - done.driver_earnings : null;
     const rows = [
       ['Kundepris', breakdownAmount(done.price)],
-      [known(done.commission_rate) ? `SNAR plattform (${Math.round(done.commission_rate * 100)} %)` : 'SNAR plattform', platformAmount !== null ? `−${breakdownAmount(platformAmount)}` : 'Avventer'],
+      [subscription ? 'SNAR abonnement' : known(done.commission_rate) ? `SNAR plattform (${Math.round(done.commission_rate * 100)} %)` : 'SNAR plattform', subscription ? '0 % turprovisjon' : platformAmount !== null ? `−${breakdownAmount(platformAmount)}` : 'Avventer'],
       ['Din andel', paid ? breakdownAmount(done.driver_earnings) : 'Avventer'],
       ['Tid', known(done.duration_min) ? `${done.duration_min} min` : '—'],
       ['Distanse', known(done.distance_km) ? `${done.distance_km.toLocaleString('nb-NO')} km` : '—'],

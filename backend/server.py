@@ -531,6 +531,12 @@ def user_public(user: dict) -> dict:
         result.get("role") == "driver"
         and result.get("identity_verification_status") in ("recheck_required", "retry_required")
     )
+    identity_status = result.get("identity_verification_status") or "not_submitted"
+    result["identity_verification_required"] = bool(result.get("role") == "driver" and (
+        result["identity_recheck_required"]
+        or (identity_status == "pending_review" and result.get("identity_verified_at"))
+        or (KJAPP_DRIVER_IDENTITY_REQUIRED and identity_status != "verified")
+    ))
     return result
 
 
@@ -4460,6 +4466,7 @@ async def driver_pending(current=Depends(require_driver)):
         "trips": trips,
         "commission": commission,
         "driver_gps": {"lat": d_lat, "lng": d_lng, "at": current.get("last_location_at")} if d_lat is not None else None,
+        "server_time": datetime.now(timezone.utc).isoformat(),
     }
 
 

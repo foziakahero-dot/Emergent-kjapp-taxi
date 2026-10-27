@@ -21,6 +21,7 @@ import { storage } from '@/src/utils/storage';
 import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
 import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripReceipt } from '@/src/lib/tripSummary';
 import { notifyPendingTripFromForeground } from '@/src/lib/nativeRuntime';
+import { projectedOfferTime } from '@/src/lib/offerClock';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -77,7 +78,8 @@ export default function DriverHome() {
   const summaryActionLock = useRef(false);
   const [error, setError] = useState('');
   const [declineReasonsOpen, setDeclineReasonsOpen] = useState(false);
-  const [offerClock, setOfferClock] = useState(Date.now());
+  const [offerClock, setOfferClock] = useState<number | null>(null);
+  const offerTimeSync = useRef<{ serverTime?: string; receivedAt: number }>({ receivedAt: 0 });
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
@@ -148,6 +150,8 @@ export default function DriverHome() {
     }
     try {
       const p = await driverApi.pending();
+      offerTimeSync.current = { serverTime: p?.server_time, receivedAt: performance.now() };
+      setOfferClock(projectedOfferTime(p?.server_time, offerTimeSync.current.receivedAt, performance.now()));
       setBackendConnected(true);
       const nextPending = p?.trips || p?.pending || (Array.isArray(p) ? p : []);
       setPending(nextPending);
@@ -198,7 +202,7 @@ export default function DriverHome() {
   );
 
   useEffect(() => {
-    const i = setInterval(() => setOfferClock(Date.now()), 500);
+    const i = setInterval(() => setOfferClock(projectedOfferTime(offerTimeSync.current.serverTime, offerTimeSync.current.receivedAt, performance.now())), 500);
     return () => clearInterval(i);
   }, []);
 
@@ -592,7 +596,7 @@ export default function DriverHome() {
   const mapTarget = useRef<View | null>(null);
   const firstOffer = pending[0];
   const offerExpiresMs = firstOffer?.offer_expires_at ? Date.parse(firstOffer.offer_expires_at) : NaN;
-  const offerRemaining = Number.isFinite(offerExpiresMs)
+  const offerRemaining = Number.isFinite(offerExpiresMs) && offerClock !== null
     ? Math.max(0, Math.ceil((offerExpiresMs - offerClock) / 1000))
     : null;
   const offerExpired = offerRemaining !== null && offerRemaining <= 0;
@@ -604,7 +608,9 @@ export default function DriverHome() {
     if (!firstOffer?.offer_expires_at) return;
     const expires = Date.parse(firstOffer.offer_expires_at);
     if (!Number.isFinite(expires)) return;
-    const delay = Math.min(30000, Math.max(500, expires - Date.now() + 500));
+    const serverNow = projectedOfferTime(offerTimeSync.current.serverTime, offerTimeSync.current.receivedAt, performance.now());
+    if (serverNow === null) return;
+    const delay = Math.min(30000, Math.max(500, expires - serverNow + 500));
     const timer = setTimeout(() => { void poll(); }, delay);
     return () => clearTimeout(timer);
   }, [firstOffer?.trip_id, firstOffer?.offer_expires_at, poll]);
