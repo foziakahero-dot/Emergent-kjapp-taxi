@@ -20,5 +20,5 @@ export function customerVehicleArt(apiType: string) {
     ? CUSTOMER_VEHICLE_ART[apiType as CustomerVehicleArtType] : null;
 }
 
-// Live-map artwork is deliberately not assigned until the fourth upload is available.
-// Category PNGs above are full-resolution originals, not optimized map textures.
+// Map rendering uses the separate approved live-marker.png with a red status indicator.
+// Original PNG bytes are preserved; display size and bearing are controlled by the marker.
