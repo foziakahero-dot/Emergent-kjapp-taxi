@@ -56,7 +56,7 @@ class InviteTests(unittest.IsolatedAsyncioTestCase):
                        ObjectId=ObjectId, InvalidId=InvalidId, HTTPException=HTTPException,
                        Request=Request, Response=Response, BaseModel=BaseModel,
                        Field=Field, EmailStr=EmailStr, Optional=Optional, List=List, Literal=Literal,
-                       SpecialNeed=str, CURRENT_LEGAL_VERSION='2026-09',
+                       SpecialNeed=str, CURRENT_LEGAL_VERSION='2026-09', KJAPP_DRIVER_IDENTITY_REQUIRED=False,
                        Depends=lambda _: None, require_fleet_owner=None, require_admin=None,
                        db=self.db, send_email=self.mail, email_configured=email_configured, _enforce_rate_limit=rate, queue_confirmation=confirmation,
                        hash_password=lambda _: 'test-hash', create_access_token=lambda *a:'test-token',
