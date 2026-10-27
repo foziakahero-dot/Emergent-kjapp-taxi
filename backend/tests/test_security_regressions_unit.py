@@ -162,7 +162,7 @@ def test_missing_email_provider_never_logs_message_body(monkeypatch, capsys, cap
 
 
 @pytest.mark.parametrize("configured", [False, True])
-def test_readiness_reports_optional_provider_keys_without_exposing_values(monkeypatch, configured):
+def test_readiness_never_exposes_optional_customer_provider_keys(monkeypatch, configured):
     import asyncio
     import json
     from types import SimpleNamespace
@@ -177,8 +177,13 @@ def test_readiness_reports_optional_provider_keys_without_exposing_values(monkey
     ))
     response = asyncio.run(server.readiness())
     checks = json.loads(response.body)["checks"]
-    assert checks["driver_sms_login_configured"] is configured
-    assert checks["ai_support_key_configured"] is configured
+    # Driver OTP is deliberately absent. Customer SMS has an explicit config
+    # endpoint; readiness must never disclose either provider's secret values.
+    from customer_otp import sms_config
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("CUSTOMER_OTP_ENABLED", "true")
+    assert bool(sms_config()) is configured
+    assert checks["database"] is True
     assert b"fixture-secret-must-not-leak" not in response.body
     assert b"fixture-ai-must-not-leak" not in response.body
 
@@ -336,7 +341,8 @@ def test_parallel_dispatch_notifies_only_one_driver(monkeypatch):
         snapshot = {
             **trip,
             "status": "searching",
-            "search_started_at": "2026-09-29T03:00:00+00:00",
+            "search_started_at": datetime.now(timezone.utc).isoformat(),
+            "search_deadline_at": (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat(),
             "offer_seq": None,
         }
         ensure_started_reads += 1
@@ -395,7 +401,11 @@ async def _race_driver_accepts(monkeypatch, trip_ids, driver_ids):
             "user_id": "507f1f77bcf86cd799439011",
             "status": "searching",
             "driver_id": None,
-            "dispatch_mode": "broadcast",
+            "dispatch_mode": "sequential",
+            "offer_driver_id": driver_ids[trip_ids.index(trip_id)],
+            "offer_seq": 1,
+            "offer_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
+            "search_deadline_at": (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat(),
             "pickup_lat": 59.9,
             "pickup_lng": 10.7,
             "pickup_address": "Oslo S",
@@ -528,7 +538,7 @@ async def _race_driver_accepts(monkeypatch, trip_ids, driver_ids):
     return await asyncio.gather(*calls, return_exceptions=True), trip_docs, user_docs
 
 
-def test_driver_accept_race_two_drivers_claim_one_trip(monkeypatch):
+def test_current_offer_owner_wins_over_another_driver_accepting_same_trip(monkeypatch):
     import asyncio
     from bson import ObjectId
     from fastapi import HTTPException

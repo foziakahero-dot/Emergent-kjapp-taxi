@@ -22,6 +22,9 @@ class Collection:
     async def update_one(self, *args, **kwargs): return self.raw.update_one(*args, **kwargs)
 
 def fixture(interval=30):
+    # A long full-suite run must not expire this test before it starts.
+    global START
+    START = datetime.now(timezone.utc)
     raw = mongomock.MongoClient().db
     db = SimpleNamespace(trips=Collection(raw.trips), payment_transactions=Collection(raw.payment_transactions))
     trip = {'trip_id':'one-ride','user_id':'one-customer','driver_id':None,'status':'searching',
@@ -81,7 +84,10 @@ def test_nearby_matches_pickup_class_equipment_and_live_gps():
     async def assigned(d,required=False):return {'vehicle_type':d['vehicle_type'],'car':'Actual car','plate':'AB12345'}
     async def compliance(*args):return {'operational':True}
     async def suspended(*args):return False
-    env={'NearbyCarsRequest':SimpleNamespace,'Request':SimpleNamespace,'db':db,'datetime':datetime,'timedelta':timedelta,
+    class SampleClock(datetime):
+        @classmethod
+        def now(cls, tz=None): return now
+    env={'NearbyCarsRequest':SimpleNamespace,'Request':SimpleNamespace,'db':db,'datetime':SampleClock,'timedelta':timedelta,
          'timezone':timezone,'GPS_FRESH_SECONDS':2,'RADIUS_KM':5,'math':__import__('math'),
          'media_versions':__import__('driver_media').media_versions,
          'road_eta': SimpleNamespace(enrich=lambda cars, destination: [car.update(eta_min=None) for car in cars]),

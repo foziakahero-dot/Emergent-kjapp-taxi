@@ -1,4 +1,4 @@
-"""Road ETA direction, traffic duration, cache/batching and no fabricated fallback."""
+"""Road ETA direction/cache plus explicitly labelled approximate pickup fallback."""
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -34,7 +34,8 @@ def test_driver_is_origin_customer_is_destination_and_traffic_rounds_up(provider
     async def run():
         eta = GoogleMapsEta(); rows = [car()]
         eta.enrich(rows, (59.92, 10.76))
-        assert rows[0]['eta_min'] is None # immediately returns live GPS while Google works
+        assert rows[0]['eta_min'] == 3 and rows[0]['eta_source'] == 'distance_fallback'
+        assert rows[0]['eta_status'] == 'approximate' and rows[0]['eta_provider_status'] == 'loading'
         await asyncio.gather(*eta.tasks)
         eta.enrich(rows, (59.92, 10.76))
         assert rows[0]['eta_min'] == 3 and rows[0]['eta_source'] == 'google_distance_matrix'
@@ -48,7 +49,8 @@ def test_driver_is_origin_customer_is_destination_and_traffic_rounds_up(provider
 def test_missing_key_qa_does_not_inherit_production_key(provider, monkeypatch):
     monkeypatch.setenv('APP_ENV', 'qa'); monkeypatch.delenv('QA_GOOGLE_MAPS_SERVER_API_KEY', raising=False)
     rows = [car()]; GoogleMapsEta().enrich(rows, (59.92,10.76))
-    assert rows[0]['eta_min'] is None and rows[0]['eta_status'] == 'not_configured'
+    assert rows[0]['eta_min'] == 3 and rows[0]['eta_source'] == 'distance_fallback'
+    assert rows[0]['eta_status'] == 'approximate' and rows[0]['eta_provider_status'] == 'not_configured'
     provider.get.assert_not_awaited()
 
 @pytest.mark.parametrize('data', [
@@ -56,13 +58,14 @@ def test_missing_key_qa_does_not_inherit_production_key(provider, monkeypatch):
     {'status':'OK','rows':[{'elements':[{'status':'ZERO_RESULTS'}]}]},
     {'status':'OK','rows':[{'elements':[{'status':'OK','duration':{'value':-1}}]}]},
 ])
-def test_failure_does_not_fall_back_to_air_distance(provider, data):
+def test_failure_never_labels_approximate_distance_as_google_road_eta(provider, data):
     provider.get.return_value = response(data)
     async def run():
         eta = GoogleMapsEta(); rows = [car()]
         eta.enrich(rows, (59.92,10.76)); await asyncio.gather(*eta.tasks)
         eta.enrich(rows, (59.92,10.76))
-        assert rows[0]['eta_min'] is None and rows[0]['eta_status'] == 'unavailable'
+        assert rows[0]['eta_min'] == 3 and rows[0]['eta_source'] == 'distance_fallback'
+        assert rows[0]['eta_status'] == 'approximate' and rows[0]['eta_provider_status'] == 'unavailable'
         assert provider.get.await_count == 1
     asyncio.run(run())
 
