@@ -57,10 +57,18 @@ def env(monkeypatch):
     class StripeObject(dict):
         __getattr__ = dict.__getitem__
     obj = StripeObject(pi)
-    stripe = SimpleNamespace(api_key='sk_test_example',
+    stripe = SimpleNamespace(api_key='sk_test_example', RequestsClient=Mock(),
         PaymentIntent=SimpleNamespace(create=Mock(return_value=obj), retrieve=Mock(return_value=obj)),
         Account=SimpleNamespace(create=Mock(return_value=SimpleNamespace(id='acct_1')), modify=Mock(), retrieve=Mock()),
         AccountLink=SimpleNamespace(create=Mock(return_value=SimpleNamespace(url='https://connect.stripe.com/setup/test'))))
+    def sdk_client(*_args, **_kwargs):
+        return SimpleNamespace(v1=SimpleNamespace(
+            payment_intents=SimpleNamespace(
+                create=lambda params, options=None: stripe.PaymentIntent.create(**params, **(options or {})),
+                retrieve=lambda intent_id: stripe.PaymentIntent.retrieve(intent_id)),
+            setup_intents=SimpleNamespace(retrieve=lambda setup_id: stripe.SetupIntent.retrieve(setup_id)),
+            payment_methods=SimpleNamespace(retrieve=lambda pm_id: stripe.PaymentMethod.retrieve(pm_id))))
+    stripe.StripeClient = Mock(side_effect=sdk_client)
     verify = AsyncMock(return_value={'sub': 'google-1', 'email': current['email'], 'email_verified': True})
     risk = AsyncMock(side_effect=lambda user, *args, **kwargs: user)
     mark_paid, receipts = AsyncMock(), AsyncMock()
@@ -110,13 +118,13 @@ def test_unapproved_driver_is_blocked(env):
     assert sign_in(env, 'driver').status_code == 403
 
 
-def test_google_accepts_only_linked_approved_driver(env):
+def test_google_rejects_even_linked_approved_driver(env):
     env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'role': 'driver', 'approved': True, 'fleet_id': str(env.fid)}})
-    assert sign_in(env, 'driver').status_code == 200
-    env.verify.assert_awaited_once_with('verified-token', 'owned-web-client')
-    env.risk.assert_awaited_once()
+    assert sign_in(env, 'driver').status_code == 403
+    env.verify.assert_not_awaited()
+    env.risk.assert_not_awaited()
     config = env.client.get('/auth/native/config?client=driver').json()
-    assert config['google_enabled'] is True and config['google_web_client_id'] == 'owned-web-client'
+    assert config['google_enabled'] is False and config['google_web_client_id'] == ''
 
 
 def test_existing_identity_is_not_overwritten(env):
@@ -266,6 +274,9 @@ def test_native_config_live_requires_explicit_production_gate(env, monkeypatch):
     monkeypatch.setenv('QA_MODE', 'true')
     assert env.client.get('/payments/native/config').json()['enabled'] is False
     monkeypatch.setenv('QA_MODE', 'false')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('DB_NAME', 'snar_production_fixture')
+    monkeypatch.setenv('STRIPE_WEBHOOK_SECRET', 'whsec_fixture')
     assert env.client.get('/payments/native/config').json()['enabled'] is True
     env.stripe.api_key = 'sk_test_example'
     assert env.client.get('/payments/native/config').json()['enabled'] is False
@@ -273,19 +284,18 @@ def test_native_config_live_requires_explicit_production_gate(env, monkeypatch):
 
 def test_wallet_setup_verifies_ownership_and_records_wallet(env):
     env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'stripe_customer_id': 'cus_wallet'}})
-    setup = {'status': 'succeeded', 'customer': 'cus_wallet', 'metadata': {'user_id': str(env.uid)}, 'payment_method': 'pm_wallet'}
+    setup = {'id': 'seti_wallet', 'status': 'succeeded', 'customer': 'cus_wallet', 'metadata': {'user_id': str(env.uid)}, 'payment_method': 'pm_wallet'}
     env.stripe.SetupIntent = SimpleNamespace(retrieve=Mock(return_value=setup))
-    env.stripe.PaymentMethod = SimpleNamespace(retrieve=Mock(return_value={'id': 'pm_wallet', 'customer': 'cus_wallet', 'card': {'brand': 'visa', 'last4': '4242', 'wallet': {'type': 'google_pay'}}}))
+    env.stripe.PaymentMethod = SimpleNamespace(retrieve=Mock(return_value={'id': 'pm_wallet', 'type': 'card', 'customer': 'cus_wallet', 'card': {'brand': 'visa', 'last4': '4242', 'wallet': {'type': 'google_pay'}}}))
     result = env.client.get('/payments/native/setup-intent/seti_wallet')
     assert result.status_code == 200
     card = result.json()['card']
     assert result.json()['verified'] is True
-    assert card['label'] == 'Google Pay' and card['wallet_type'] == 'google_pay'
+    assert card['label'] == 'Visa' and card['wallet'] == 'google_pay'
     other = env.db.raw.payment_methods.insert_one({'user_id': str(env.uid), 'is_default': True}).inserted_id
     selected = env.client.post('/payment-methods/' + card['id'] + '/default')
-    assert selected.status_code == 200 and selected.json()['selected'] is True
-    assert env.db.raw.payment_methods.find_one({'_id': other})['is_default'] is False
-    assert env.db.raw.payment_methods.find_one({'_id': ObjectId(card['id'])})['is_default'] is True
+    assert selected.status_code == 200 and selected.json()['default_payment_method_id'] == card['id']
+    assert env.db.raw.users.find_one({'_id': env.uid})['default_payment_method_id'] == card['id']
     setup['metadata']['user_id'] = str(ObjectId())
     assert env.client.get('/payments/native/setup-intent/seti_wallet').status_code == 404
 
@@ -294,10 +304,10 @@ def test_default_card_rejects_foreign_unverified_and_detached_methods(env):
     env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'stripe_customer_id': 'cus_wallet'}})
     method = {'user_id': str(env.uid), 'verified': True, 'setup_status': 'succeeded', 'stripe_payment_method_id': 'pm_bad'}
     mid = str(env.db.raw.payment_methods.insert_one(method).inserted_id)
-    env.stripe.PaymentMethod = SimpleNamespace(retrieve=Mock(return_value={'customer': 'cus_other'}))
+    env.stripe.PaymentMethod = SimpleNamespace(retrieve=Mock(return_value={'customer': 'cus_other', 'type': 'card'}))
     assert env.client.post('/payment-methods/' + mid + '/default').status_code == 409
     env.db.raw.payment_methods.update_one({'_id': ObjectId(mid)}, {'$set': {'verified': False}})
     assert env.client.post('/payment-methods/' + mid + '/default').status_code == 404
     env.db.raw.payment_methods.update_one({'_id': ObjectId(mid)}, {'$set': {'verified': True, 'user_id': str(ObjectId())}})
     assert env.client.post('/payment-methods/' + mid + '/default').status_code == 404
-    assert env.client.post('/payment-methods/not-an-id/default').status_code == 404
+    assert env.client.post('/payment-methods/not-an-id/default').status_code == 400

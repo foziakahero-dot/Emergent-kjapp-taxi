@@ -279,7 +279,7 @@ export function InteractiveMap({
             {smoothCar ? (
               <>
                 <Circle cx={sx(smoothCar.lng)} cy={sy(smoothCar.lat)} r={22} fill={colors.accentGlow} opacity={0.45} />
-                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading}) scale(1.25)`}>
+                <G transform={`translate(${sx(smoothCar.lng)}, ${sy(smoothCar.lat)}) rotate(${smoothCar.heading})`}>
                   <V10VehicleBody vehicleType={activeCar?.type} bodyType={activeCar?.body_type} />
                 </G>
               </>

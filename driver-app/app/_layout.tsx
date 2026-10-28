@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
@@ -80,7 +80,8 @@ function NativeRuntimeBridge() {
         const identity = await driverApi.identityVerification();
         if (!alive) return;
         const status = identity?.status || '';
-        if (['recheck_required', 'retry_required', 'pending_review'].includes(status)) {
+        if (['recheck_required', 'retry_required'].includes(status) ||
+            (status === 'pending_review' && (user.identity_verification_required || user.identity_verified_at))) {
           await stopDriverBackgroundLocation().catch(() => {});
           await refresh().catch(() => {});
           if (alive && !['/driver-identity', '/driver-approval'].includes(path.current)) router.replace('/driver-approval');
@@ -96,22 +97,29 @@ function NativeRuntimeBridge() {
       alive = false;
       clearInterval(timer);
     };
-  }, [user?.id, user?.role, user?.approved, user?.legal_accepted, refresh]);
+  }, [user?.id, user?.role, user?.approved, user?.legal_accepted, user?.identity_verification_required, user?.identity_verified_at, refresh]);
 
   useEffect(() => {
+    if (Platform.OS === 'web' || user?.role !== 'driver') return;
+    let active = true;
+    let sub: { remove: () => void } | undefined;
     const open = (notification?: Notifications.Notification | null) => {
       const target = normalizeDriverNotificationUrl(notification?.request.content.data?.url);
       if (target) router.push(target as any);
     };
 
-    const last = Notifications.getLastNotificationResponse();
-    if (last?.notification) open(last.notification);
-
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      open(response.notification);
-    });
-    return () => sub.remove();
-  }, []);
+    void (async () => {
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (active && last?.notification) open(last.notification);
+        if (!active) return;
+        sub = Notifications.addNotificationResponseReceivedListener(response => open(response.notification));
+      } catch {
+        // Notifications are optional; a module failure cannot terminate Driver startup.
+      }
+    })();
+    return () => { active = false; sub?.remove(); };
+  }, [user?.id, user?.role]);
 
   return null;
 }
@@ -121,14 +129,19 @@ export default function RootLayout() {
   useReducedMotion(); // Resolve the system preference while bundled fonts are loading.
   const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
   const [launchFinished, setLaunchFinished] = useState(false);
+  const [fontDeadline, setFontDeadline] = useState(false);
   useEffect(() => {
-    if (!fontsLoaded && !fontError) return;
+    const minimum = setTimeout(() => setLaunchFinished(true), 1600);
+    const deadline = setTimeout(() => setFontDeadline(true), 5000);
+    return () => { clearTimeout(minimum); clearTimeout(deadline); };
+  }, []);
+  const fontReady = fontsLoaded || !!fontError || fontDeadline;
+  useEffect(() => {
+    if (!fontReady) return;
     void SplashScreen.hideAsync().catch(() => {});
-    const timer = setTimeout(() => setLaunchFinished(true), 1800);
-    return () => clearTimeout(timer);
-  }, [fontsLoaded, fontError]);
+  }, [fontReady]);
   useEffect(() => installClientErrorMonitor(), []);
-  if (!launchFinished) return <><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontsLoaded || fontError) void SplashScreen.hideAsync().catch(() => {}); }} /></>;
+  if (!launchFinished || !fontReady) return <><StatusBar style="light" /><LaunchSplash onLayout={() => { if (fontReady) void SplashScreen.hideAsync().catch(() => {}); }} /></>;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.driverBg }}>

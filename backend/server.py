@@ -1,3 +1,4 @@
+from cash_payments import cash_enabled, is_cash, activate_cash, confirm_cash
 from trip_status_stream import TripStatusStream
 from dotenv import load_dotenv
 load_dotenv()
@@ -22,7 +23,7 @@ from stripe_fleet import ensure_fleet_account
 from mobile_commerce import install_mobile_commerce
 from ai_configuration import configured_ai_key, provider_chat_session
 from payment_method_selection import selected_payment_method
-from email_delivery import email_configured
+from email_delivery import email_configured, send_transactional_email
 import internal_ride_testing as ride_testing
 from ride_reservations import RideReservations
 from ride_search import RideSearch
@@ -34,6 +35,7 @@ from onboarding_emails import queue_confirmation, confirmation_loop, queue_custo
 from norwegian_bank import normalize_bank_account
 import document_storage
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
+from customer_otp import install_customer_otp
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
 from integration_settings import IntegrationSettings, install_integration_settings
 from marketing_waitlist import install_marketing_waitlist, ensure_marketing_waitlist_indexes
@@ -43,6 +45,7 @@ from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from qa_safety import is_safe_qa_web_origin, reject_live_qa_stripe_event, validate_qa_configuration
 from payment_modes import customer_for_user, method_scope, is_live, payment_config as configured_payments, stripe_client
+from service_fee_policy import subscription_trip_terms, saved_trip_rate
 
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, APIRouter, BackgroundTasks, UploadFile, File, Form, Query, Header
 from fastapi.staticfiles import StaticFiles
@@ -529,6 +532,12 @@ def user_public(user: dict) -> dict:
         result.get("role") == "driver"
         and result.get("identity_verification_status") in ("recheck_required", "retry_required")
     )
+    identity_status = result.get("identity_verification_status") or "not_submitted"
+    result["identity_verification_required"] = bool(result.get("role") == "driver" and (
+        result["identity_recheck_required"]
+        or (identity_status == "pending_review" and result.get("identity_verified_at"))
+        or (KJAPP_DRIVER_IDENTITY_REQUIRED and identity_status != "verified")
+    ))
     return result
 
 
@@ -877,7 +886,7 @@ class TripRequest(BaseModel):
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
-    payment_provider: Literal["card", "google_pay"] = "card"
+    payment_provider: Literal["card", "google_pay", "cash"] = "card"
 
 
 class RateTripRequest(BaseModel):
@@ -1040,28 +1049,8 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
 
 
 def send_email(to_email: str, subject: str, html: str) -> bool:
-    """Send email via SendGrid if configured, else log to console."""
-    if APP_ENV == "qa":
-        print("[EMAIL/disabled-qa] external email delivery is disabled")
-        return False
-    api_key = os.environ.get("SENDGRID_API_KEY", "").strip()
-    sender = os.environ.get("SENDER_EMAIL", "noreply@kjappapp.no").strip()
-    if not api_key:
-        # Never print HTML bodies: password-reset/invite emails can contain bearer-style
-        # one-time tokens. Missing email configuration should be observable without
-        # leaking those links into application logs.
-        print(f"[EMAIL/no-key] to={to_email} subj={subject} body=redacted")
-        return False
-    try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-        msg = Mail(from_email=sender, to_emails=to_email, subject=subject, html_content=html)
-        sg = SendGridAPIClient(api_key)
-        res = sg.send(msg)
-        return 200 <= res.status_code < 300
-    except Exception as e:
-        print(f"[EMAIL/error] {e}")
-        return False
+    """Use the configured transactional provider with isolated QA credentials."""
+    return send_transactional_email(to_email, subject, html)
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
@@ -1462,6 +1451,7 @@ async def lifespan(app: FastAPI):
     await db.login_attempts.create_index("identifier")
     await db.login_attempts.create_index("at", expireAfterSeconds=3600)
     await db.rate_limit_buckets.create_index("expires_at", expireAfterSeconds=0)
+    await db.customer_otp_challenges.create_index("expires_at", expireAfterSeconds=0)
     await db.client_errors.create_index([("created_at", -1)])
     await db.client_errors.create_index("expires_at", expireAfterSeconds=0)
     await db.driver_identity_verifications.create_index([("driver_user_id", 1), ("created_at", -1)])
@@ -2279,7 +2269,7 @@ async def trip_estimate(body: EstimateRequest):
                         "surge_multiplier": quote["surge_multiplier"], "pricing_version": quote["pricing_version"],
                         "extra_stop_fee_total": quote["extra_stop_fee_total"],
                         "waiting_policy": waiting_policy(effective_pricing, vt)})
-    commission_rate = await _platform_commission()
+    commission_rate = subscription_trip_terms()["commission_rate"]
     return {"distance_km": est, "duration_min": duration, "options": options, "geometry": geometry,
             "stops": [s.model_dump() for s in body.stops],
             "commission_rate": commission_rate,
@@ -2760,6 +2750,32 @@ async def reset_password(body: ResetPasswordRequest, request: Request):
     return {"ok": True}
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordRequest, request: Request, response: Response,
+                          current=Depends(get_current_user)):
+    await _enforce_rate_limit(request, "auth-change-password", 10, 900)
+    user = await db.users.find_one({"_id": ObjectId(current["id"])})
+    if (not user or user.get("disabled") or not user.get("password_hash")
+            or not await asyncio.to_thread(verify_password, body.current_password, user["password_hash"])):
+        raise HTTPException(400, "Gjeldende passord er ikke riktig. Bruk tilbakestilling hvis du har glemt det.")
+    new_hash = await asyncio.to_thread(hash_password, body.new_password)
+    cutoff = datetime.now(timezone.utc).timestamp()
+    updated = await db.users.update_one({"_id": user["_id"], "password_hash": user["password_hash"]},
+        {"$set": {"password_hash": new_hash,
+                   "tokens_valid_after": cutoff}, "$unset": {"must_reset_password": ""}})
+    if updated.modified_count != 1:
+        raise HTTPException(409, "Passordet ble endret samtidig. Logg inn på nytt.")
+    token = create_access_token(current["id"], user.get("email") or "")
+    set_auth_cookie(response, token)
+    fresh = await db.users.find_one({"_id": user["_id"]})
+    return {"token": token, "user": user_public(fresh)}
+
+
 @api.get("/auth/legal-config")
 async def legal_config():
     return {
@@ -2842,7 +2858,10 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
 
     # A Google Pay booking supplies its wallet payment method at confirmation time;
     # cards still require a verified saved method in the matching Stripe mode.
-    if body.payment_provider == "google_pay":
+    if body.payment_provider == "cash":
+        if not cash_enabled():
+            raise HTTPException(503, "Kontantbetaling er midlertidig deaktivert")
+    elif body.payment_provider == "google_pay":
         if not configured_payments(stripe)["google_pay_enabled"]:
             raise HTTPException(status_code=503, detail="Google Pay er ikke aktivert for dette betalingsmiljøet")
     else:
@@ -2912,7 +2931,6 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
             )
             raise HTTPException(409, {"code": "quote_changed", "message": "Prisen er endret. Beregn på nytt og bekreft pris og ventetid."})
         accepted_waiting = policy
-    commission_rate = await _platform_commission()
     price = quote["price"]
     trip = {
         "trip_id": trip_id,
@@ -2939,14 +2957,14 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "pricing_version": quote["pricing_version"],
         "pricing_area": pricing_area,
         "pricing_snapshot": effective_pricing,
-        "commission_rate": commission_rate,
-        "commission_source": "platform_default",
+        **subscription_trip_terms(),
         "surge_multiplier": quote["surge_multiplier"],
         "extra_stop_fee_total": quote["extra_stop_fee_total"],
         "geometry": geometry,
         "status": "payment_authorizing",
         "payment_status": "authorizing",
-        "payment_flow": "reservation",
+        "payment_flow": "cash" if body.payment_provider == "cash" else "reservation",
+        "payment_method": "cash" if body.payment_provider == "cash" else "card",
         "payment_provider": body.payment_provider,
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2965,7 +2983,10 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
     )
     try:
-        await ride_reservations.authorize(trip)
+        if is_cash(trip):
+            await activate_cash(db, trip, offer_trip_to_next_driver)
+        else:
+            await ride_reservations.authorize(trip)
     except HTTPException as exc:
         needs_action = isinstance(exc.detail, dict) and exc.detail.get("code") == "reservation_requires_action"
         if not needs_action:
@@ -2990,7 +3011,10 @@ async def retry_trip_authorization(trip_id: str, current=Depends(require_custome
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"], "status": "payment_authorizing"})
     if not trip:
         raise HTTPException(409, "Turen venter ikke på kortgodkjenning")
-    await ride_reservations.authorize(trip)
+    if is_cash(trip):
+        await activate_cash(db, trip, offer_trip_to_next_driver)
+    else:
+        await ride_reservations.authorize(trip)
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
     return trip
@@ -3001,6 +3025,8 @@ async def retry_reserved_payment(trip_id: str, current=Depends(require_customer)
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip or trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(409, "Turen er ikke avsluttet")
+    if is_cash(trip):
+        raise HTTPException(409, "Kontantbetaling bekreftes av sjåføren. Kort skal ikke belastes.")
     if trip.get("payment_status") == "paid":
         return {"ok": True, "paid": True}
     if trip.get("payment_flow") != "reservation":
@@ -3173,6 +3199,10 @@ async def customer_driver_photo(trip_id: str, current=Depends(require_customer))
     )
 
 
+class CashReceivedRequest(BaseModel):
+    amount_ore: int = Field(gt=0, strict=True)
+
+
 @api.post("/trips/{trip_id}/complete")
 async def complete_trip(trip_id: str, current=Depends(require_customer)):
     """Passenger closes a ride after the driver has reached the destination.
@@ -3277,7 +3307,7 @@ async def require_driver(current=Depends(get_current_user)):
     if current.get("role") != "driver":
         raise HTTPException(status_code=403, detail="Kun for sjåfører")
     if current.get("approved") is not True:
-        raise HTTPException(status_code=403, detail="Sjåfør-kontoen din venter på godkjenning fra flåte-eier")
+        raise HTTPException(status_code=403, detail="Sjåførkontoen din venter på godkjenning fra SNAR admin")
     if current.get("fleet_active") is False:
         raise HTTPException(status_code=403, detail="Løyvehaveren har deaktivert sjåføren i flåten")
     if current.get("legal_accepted") is not True:
@@ -4006,7 +4036,6 @@ async def stripe_card_setup(body: CardSetupRequest, request: Request, current=De
         session = await asyncio.to_thread(client.v1.checkout.sessions.create, {
             "mode": "setup", "currency": "nok", "customer": customer_id,
             "integration_identifier": "snar_card_setup_" + "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(8)),
-            "setup_intent_data": {"usage": "off_session"},
             "success_url": f"{origin}/payment-methods?setup=success&session_id={{CHECKOUT_SESSION_ID}}",
             "cancel_url": f"{origin}/payment-methods?setup=cancel",
             "metadata": {"user_id": current["id"]},
@@ -4385,6 +4414,10 @@ async def driver_pending(current=Depends(require_driver)):
             "commission": await _platform_commission(),
             "driver_gps": None,
         }
+    cash_due = await db.trips.find_one({"driver_id": current["id"], "status": "arrived",
+        "payment_flow": "cash", "payment_status": "cash_due"}, {"trip_id": 1})
+    if cash_due:
+        return {"trips": [], "busy": True, "cash_due": True, "active_trip_id": cash_due["trip_id"]}
     if current.get("active_trip_id"):
         active = await db.trips.find_one(
             _real_trip_filter({
@@ -4480,6 +4513,7 @@ async def driver_pending(current=Depends(require_driver)):
         "trips": trips,
         "commission": commission,
         "driver_gps": {"lat": d_lat, "lng": d_lng, "at": current.get("last_location_at")} if d_lat is not None else None,
+        "server_time": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -4487,7 +4521,9 @@ async def driver_pending(current=Depends(require_driver)):
 async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)):
     if current.get("online") is not True:
         raise HTTPException(status_code=409, detail="Gå online før du godtar en tur")
-    driver_id = current["id"]  # driver's user id is the driver_id now
+    driver_id = current["id"]
+    if await db.trips.find_one({"driver_id": driver_id, "status": "arrived", "payment_flow": "cash", "payment_status": "cash_due"}):
+        raise HTTPException(409, "Bekreft kontantbetaling på forrige tur før du tar en ny tur")
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
     compliance = await _driver_shift_compliance(current, assigned_vehicle)
     if not compliance.get("operational"):
@@ -4666,13 +4702,22 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     return t
 
 
+@api.post("/driver/trip/{trip_id}/cash/confirm")
+async def driver_confirm_cash(trip_id: str, body: CashReceivedRequest, current=Depends(require_driver)):
+    return await confirm_cash(db, trip_id, current["id"], body.amount_ore,
+                              mark_paid=_mark_trip_paid_and_complete, receipts=send_trip_receipts)
+
+
 @api.get("/driver/current")
 async def driver_current(current=Depends(require_driver)):
     driver_id = current["id"]
     # An ACTIVE trip always wins over a just-finished one. A completed ("arrived") trip is only
     # returned for 15 minutes so the driver can see the summary — after that it is history.
+    # Uncollected cash remains current until the assigned driver confirms receipt.
     t = await db.trips.find_one(
-        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
+        _real_trip_filter({"driver_id": driver_id, "$or": [
+            {"status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
+            {"status": "arrived", "payment_flow": "cash", "payment_status": "cash_due"}]}),
         sort=[("created_at", -1)],
     )
     if t:
@@ -4696,7 +4741,7 @@ async def driver_current(current=Depends(require_driver)):
         )
         if not t:
             return None
-        ts = t.get("arrived_at") or t.get("updated_at")
+        ts = t.get("cash_received_at") or t.get("arrived_at") or t.get("updated_at")
         try:
             done_at = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
             if (datetime.now(timezone.utc) - done_at) > timedelta(minutes=15):
@@ -4934,10 +4979,11 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen endret status før den kunne avsluttes")
-    await db.users.update_one(
-        {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
-        {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
-    )
+    if not is_cash(trip):
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
+            {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+        )
     t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if ended_early:
         # Notify both parties independently; a push failure must not undo the ride ending.
@@ -4953,7 +4999,7 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
             t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
             f"/receipt/{trip_id}", "trip_arrived",
         )
-        payment = {"attempted": False} if trip.get("payment_flow") == "reservation" else await _attempt_trip_auto_charge(t)
+        payment = {"attempted": False} if trip.get("payment_flow") == "reservation" else ({"attempted": False, "reason": "cash_due"} if is_cash(t) else await _attempt_trip_auto_charge(t))
     if trip.get("payment_flow") == "reservation":
         payment = await ride_reservations.capture(t)
     # Bonus evaluation happens only from the canonical payment-success transition.
@@ -5406,6 +5452,7 @@ async def driver_compliance(current=Depends(require_driver)):
     """
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=False)
     result = await _driver_shift_compliance(current, assigned_vehicle)
+    result["account_approved"] = current.get("approved") is True
     result["online"] = bool(current.get("online"))
     result["location_ready"] = bool(
         current.get("last_lat") is not None
@@ -7025,7 +7072,7 @@ async def fleet_export_monthly(
             did = t.get("driver_id")
             if did in drivers_map:
                 gross = int(t.get("price", 0) or 0)
-                rate = float(t.get("commission_rate", commission) or commission)
+                rate = saved_trip_rate(t, commission)
                 fee = int(round(gross * rate))
                 drivers_map[did]["trips"] += 1
                 drivers_map[did]["gross"] += gross
@@ -7034,7 +7081,7 @@ async def fleet_export_monthly(
 
     total_gross = sum(int(t.get("price", 0) or 0) for t in trips)
     total_trips = len(trips)
-    total_commission = sum(int(round(int(t.get("price", 0) or 0) * float(t.get("commission_rate", commission) or commission))) for t in trips)
+    total_commission = sum(int(round(int(t.get("price", 0) or 0) * saved_trip_rate(t, commission))) for t in trips)
     total_net = total_gross - total_commission
 
     # Build workbook
@@ -7053,7 +7100,7 @@ async def fleet_export_monthly(
     for k, v in [
         ("Antall turer", total_trips),
         ("Brutto omsetning (NOK)", total_gross),
-        (f"Provisjon ({int(commission * 100)}%) (NOK)", total_commission),
+        ("SNAR-avgift etter turavtale (NOK)", total_commission),
         ("Netto til flåte (NOK)", total_net),
         ("Antall aktive sjåfører", sum(1 for d in drivers_map.values() if d["trips"] > 0)),
     ]:
@@ -8272,7 +8319,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
     receipt_number = f"KJAPP-{paid_day}-{(clean_trip[:12] or uuid.uuid4().hex[:12].upper())}"
     payment_kind = (payment or {}).get("kind")
     payment_method = (
-        "saved_card" if payment_kind == "auto_charge"
+        "cash" if is_cash(trip) else "saved_card" if payment_kind == "auto_charge"
         else "stripe_checkout" if (payment or {}).get("session_id")
         else (trip.get("payment_method") or "card")
     )
@@ -8310,7 +8357,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "fleet_net": max(0, price - platform_fee),
         "payment_status": "paid",
         "payment_method": payment_method,
-        "stripe_session_id": (payment or {}).get("session_id"),
+        "stripe_session_id": None if is_cash(trip) else (payment or {}).get("session_id"),
         "stripe_payment_intent_id": (payment or {}).get("stripe_payment_intent_id"),
         "settlement_model": (payment or {}).get("settlement_model"),
         "paid_at": paid_at,
@@ -8524,6 +8571,8 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     idempotency key prevents duplicate captures. Any failed/3DS-required off-session attempt
     is cancelled and the customer falls back to the existing manual Checkout flow.
     """
+    if trip and is_cash(trip):
+        return {"attempted": False, "reason": "cash_due"}
     if not AUTO_CHARGE_ENABLED:
         return {"attempted": False, "reason": "disabled"}
     if not stripe.api_key or not configured_payments(stripe)["enabled"]:
@@ -8739,6 +8788,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(status_code=400, detail="Turen er ikke ferdig ennå")
+    if is_cash(trip):
+        raise HTTPException(409, "Kontantturen skal betales direkte til sjåføren.")
     if trip.get("payment_flow") == "reservation":
         raise HTTPException(409, "Turen betales automatisk fra kortreservasjonen. Ingen ny betaling skal startes.")
     if trip.get("price_review_required"):
@@ -9221,6 +9272,9 @@ async def driver_payouts(current=Depends(require_driver)):
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
     pending_net = 0
+    cash_collected = 0
+    cash_net = 0
+    cash_trips = 0
     trips_count = 0
     async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
@@ -9230,6 +9284,11 @@ async def driver_payouts(current=Depends(require_driver)):
     })):
         gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
+        if is_cash(t):
+            cash_collected += gross
+            cash_net += int(round(gross * (1 - rate)))
+            cash_trips += 1
+            continue
         pending += gross
         pending_net += int(round(gross * (1 - rate)))
         trips_count += 1
@@ -9269,9 +9328,11 @@ async def driver_payouts(current=Depends(require_driver)):
     return {
         # Canonical naming: earnings from paid trips. Legacy pending_* aliases remain
         # temporarily for older mobile builds, but do not imply KJAPP pays the driver directly.
-        "earned_gross_7d": pending,
-        "earned_net_7d": net,
-        "paid_trips_7d": trips_count,
+        "cash_collected_7d": cash_collected,
+        "cash_trips_7d": cash_trips,
+        "earned_gross_7d": pending + cash_collected,
+        "earned_net_7d": net + cash_net,
+        "paid_trips_7d": trips_count + cash_trips,
         "pending_gross": pending,
         "pending_trips": trips_count,
         "pending_net": net + bonus_total,
@@ -9856,6 +9917,32 @@ async def download_file(path: str, current=Depends(get_current_user)):
 # ============================================================
 # Løyvehaver (fleet owner) applications — PUBLIC intake + superadmin review
 # ============================================================
+FLEET_APPLICATION_OPEN_STATUSES = ["pending", "submitted", "under_review", "documents_required"]
+
+
+def normalize_org_number(value: str) -> str:
+    # Brreg's nine-digit modulus-11 identifier; this is format validation,
+    # not proof of a company's identity or transport licence.
+    number = re.sub(r"[\s.]", "", str(value or ""))
+    if not re.fullmatch(r"[0-9]{9}", number) or number == "000000000":
+        raise ValueError("Organisasjonsnummer må ha ni gyldige siffer")
+    check = (11 - sum(int(n) * w for n, w in zip(number[:8], [3, 2, 7, 6, 5, 4, 3, 2])) % 11) % 11
+    if check == 10 or check != int(number[-1]):
+        raise ValueError("Organisasjonsnummeret har ugyldig kontrollsiffer")
+    return number
+
+
+async def _ensure_no_duplicate_fleet_application(org_number: str, exclude_token: Optional[str] = None):
+    # Match older formatted identifiers without changing existing records.
+    pattern = r"^\s*" + r"[\s.]*".join(org_number) + r"\s*$"
+    query = {"org_number": {"$regex": pattern}, "status": {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved"]}}
+    if exclude_token:
+        query["upload_token"] = {"$ne": exclude_token}
+    if (await db.fleet_applications.find_one(query)
+            or await db.fleets.find_one({"org_number": {"$regex": pattern}})):
+        raise HTTPException(409, "Virksomheten har allerede en søknad eller er registrert. Kontakt SNAR.")
+
+
 class FleetApplicationDraftRequest(BaseModel):
     company_name: str
     org_number: str
@@ -9899,14 +9986,16 @@ async def create_fleet_application_draft(body: FleetApplicationDraftRequest, req
         raise HTTPException(status_code=400, detail="Du må godta partner-/plattformvilkår og personvern før søknaden opprettes")
     try:
         bank_account = normalize_bank_account(body.bank_account)
+        org_number = normalize_org_number(body.org_number)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
+    await _ensure_no_duplicate_fleet_application(org_number)
     upload_token = secrets.token_urlsafe(24)
     accepted_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "upload_token": upload_token,
         "company_name": body.company_name.strip(),
-        "org_number": body.org_number.strip(),
+        "org_number": org_number,
         "contact_name": body.contact_name.strip(),
         "contact_email": body.contact_email.strip().lower(),
         "contact_phone": body.contact_phone.strip(),
@@ -9932,6 +10021,11 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
         raise HTTPException(status_code=404, detail="Søknad ikke funnet")
     if app_doc.get("status") not in ("draft",):
         raise HTTPException(status_code=410, detail="Søknad allerede sendt inn")
+    try:
+        org_number = normalize_org_number(app_doc.get("org_number"))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    await _ensure_no_duplicate_fleet_application(org_number, exclude_token=body.upload_token)
     required = {"firmaattest", "loyvebevis", "vognkort", "forsikring", "bank"}
     missing = [
         k for k in required
@@ -9945,14 +10039,28 @@ async def submit_fleet_application(body: FleetApplicationSubmitRequest, request:
     if int(app_doc.get("license_count") or 0) < 1 or int(app_doc.get("vehicle_count") or 0) < 1:
         raise HTTPException(status_code=400, detail="Antall løyver og biler må være registrert før innsending")
     await _validate_fleet_application_uploads(body.upload_token, body.documents)
-    await db.fleet_applications.update_one(
-        {"upload_token": body.upload_token},
-        {"$set": {
-            "documents": body.documents,
-            "status": "pending",
-            "submitted_at": datetime.now(timezone.utc).isoformat(),
-        }},
-    )
+    # Reuse the existing TTL collection's unique _id for a short organisation
+    # lease. Parallel drafts cannot both become pending, across API instances.
+    lease_id = "fleet-application-org:" + org_number
+    now = datetime.now(timezone.utc)
+    try:
+        await db.rate_limit_buckets.find_one_and_update({"_id": lease_id,
+            "$or": [{"expires_at": {"$lt": now}}, {"owner_token": body.upload_token}]},
+            {"$set": {"owner_token": body.upload_token, "expires_at": now + timedelta(minutes=2)}},
+            upsert=True, return_document=True)
+    except DuplicateKeyError:
+        raise HTTPException(409, "En søknad for virksomheten behandles allerede. Prøv igjen.") from None
+    try:
+        await _ensure_no_duplicate_fleet_application(org_number, exclude_token=body.upload_token)
+        changed = await db.fleet_applications.update_one(
+            {"upload_token": body.upload_token, "status": "draft"},
+            {"$set": {"documents": body.documents, "org_number": org_number,
+                "status": "pending", "submitted_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        if changed.modified_count != 1:
+            raise HTTPException(409, "Søknaden er allerede sendt inn")
+    finally:
+        await db.rate_limit_buckets.delete_one({"_id": lease_id, "owner_token": body.upload_token})
     # Notify superadmin(s)
     superadmins = db.users.find({"role": "superadmin"})
     async for sa in superadmins:
@@ -9980,7 +10088,7 @@ async def superadmin_list_applications(status: Optional[str] = None, current=Dep
     if status:
         q["status"] = status
     else:
-        q["status"] = {"$in": ["pending", "approved", "rejected"]}
+        q["status"] = {"$in": FLEET_APPLICATION_OPEN_STATUSES + ["approved", "rejected"]}
     out = []
     async for a in db.fleet_applications.find(q).sort("submitted_at", -1).limit(200):
         a["id"] = str(a["_id"]); a.pop("_id", None)
@@ -10483,7 +10591,7 @@ async def admin_trips_full(status: Optional[str] = None, q: Optional[str] = None
             "driver_car": (t.get("driver") or {}).get("car"),
             "driver_plate": (t.get("driver") or {}).get("plate"),
             "driver_earnings": (
-                int(round((t.get("price") or 0) * (1 - float(t.get("commission_rate", commission) or commission))))
+                int(round((t.get("price") or 0) * (1 - saved_trip_rate(t, commission))))
                 if finished and t.get("payment_status") == "paid" else None
             ),
             "payment_status": t.get("payment_status") or ("pending" if finished else None),
@@ -10763,7 +10871,7 @@ async def admin_finance(days: int = 30, current=Depends(require_admin)):
         {"price": 1, "created_at": 1, "driver_id": 1, "fleet_id": 1, "commission_rate": 1},
     ):
         price = int(t.get("price", 0) or 0)
-        rate = float(t.get("commission_rate", default_rate) or default_rate)
+        rate = saved_trip_rate(t, default_rate)
         fee = int(round(price * rate))
         day = (t.get("created_at") or "")[:10]
         d = daily.setdefault(day, {"gmv": 0, "trips": 0})
@@ -10817,7 +10925,7 @@ async def admin_finance_export(days: int = 30, current=Depends(require_admin)):
         w.writerow([
             (t.get("created_at") or "")[:19], t.get("trip_id"), t.get("status"), price,
             t.get("distance_km"), _csv_safe((t.get("driver") or {}).get("name") or ""), t.get("user_id") or "",
-            round(price * float(t.get("commission_rate", _rate) or _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
+            round(price * saved_trip_rate(t, _rate)) if t.get("status") in ("arrived", "completed", "rated") else 0,
         ])
     return RawResponse(
         content="\ufeff" + buf.getvalue(),
@@ -11008,6 +11116,8 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     if trip.get("payment_status") != "paid":
         raise HTTPException(409, "Turen er ikke betalt og kan derfor ikke refunderes")
 
+    if is_cash(trip):
+        raise HTTPException(409, "Kontantrefusjon må avklares og registreres med løyvehaveren; Stripe-refusjon er ikke tilgjengelig.")
     gross = int(trip.get("price") or 0)
     already = int(trip.get("refunded_total") or 0)
     eligible = gross - already
@@ -11179,8 +11289,8 @@ async def admin_transactions(type: Optional[str] = None, date_from: Optional[str
                 "id": f"fare_{t.get('trip_id')}", "type": "FARE", "ride": t.get("trip_id"),
                 "customer_id": t.get("user_id"), "driver_name": (t.get("driver") or {}).get("name"),
                 "amount": price,
-                "commission": round(price * float(t.get("commission_rate", commission) or commission)),
-                "driver_net": round(price * (1 - float(t.get("commission_rate", commission) or commission))),
+                "commission": round(price * saved_trip_rate(t, commission)),
+                "driver_net": round(price * (1 - saved_trip_rate(t, commission))),
                 "provider": t.get("payment_method") or "card", "status": "paid",
                 "fleet_id": fid, "timestamp": t.get("arrived_at") or t.get("completed_at") or t.get("created_at"),
             })
@@ -11424,7 +11534,7 @@ async def admin_get_settings(current=Depends(require_admin)):
 @api.get("/marketing/platform-config")
 async def marketing_platform_config():
     # Deliberately expose only the public standard service fee, never internal settings.
-    return {"service_fee_percent": round(await _platform_commission() * 100, 2),
+    return {"service_fee_percent": 0, "business_model": "subscription",
             "fleet_application_review": "manual", "brand": "SNAR"}
 
 
@@ -11713,8 +11823,18 @@ async def admin_search(q: str, current=Depends(require_admin)):
 
 # Public marketing waitlist intake. Stores beta interest idempotently in MongoDB.
 async def _prepare_onboarding_email(job: dict) -> str:
+    if job.get("kind") == "driver-approved":
+        user = await db.users.find_one({"email": job["recipient"], "role": "driver", "approved": True,
+                                        "disabled": {"$ne": True}})
+        if not user:
+            raise ValueError("Approved driver account is unavailable")
+        username = html_escape.escape(job["recipient"])
+        return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p>Passord: Bruk passordet du valgte ved registrering. Bruk «Glemt passord» i SNAR Driver dersom du trenger et nytt.</p>'
     if job.get("kind") != "fleet-approved":
         return job["html"]
+    public = os.getenv("FLEET_PUBLIC_URL", "" if APP_ENV == "qa" else "https://fleet.snarapp.no").rstrip("/")
+    if not public or (APP_ENV == "qa" and not is_safe_qa_web_origin(public)):
+        raise ValueError("QA Fleet web origin is not configured")
     user = await db.users.find_one({"email": job["recipient"], "role": "fleet_owner", "approved": True,
                                     "disabled": {"$ne": True}})
     if not user or not user.get("fleet_id"):
@@ -11726,9 +11846,9 @@ async def _prepare_onboarding_email(job: dict) -> str:
     await db.password_reset_tokens.insert_one({"token_hash": _password_reset_token_hash(token),
         "user_id": str(user["_id"]), "email": job["recipient"], "created_at": now,
         "expires_at": now + timedelta(hours=1), "used": False})
-    reset_url = f"https://fleet.snarapp.no/reset-password/{token}"
+    reset_url = f"{public}/reset-password/{token}"
     username = html_escape.escape(job["recipient"])
-    return job["html"] + f'<p>Brukernavn: <strong>{username}</strong></p><p><a href="{reset_url}">Velg passord for SNAR Fleet</a> (engangslenken er gyldig i én time). Har du allerede et passord, kan du bruke det.</p>'
+    return job["html"].replace("https://fleet.snarapp.no", html_escape.escape(public, quote=True)) + f'<p>Brukernavn: <strong>{username}</strong></p><p><a href="{html_escape.escape(reset_url, quote=True)}">Velg passord for SNAR Fleet</a> (engangslenken er gyldig i én time). Har du allerede et passord, kan du bruke det.</p>'
 
 
 async def _queue_beta_confirmation(identity, email, name):
@@ -11802,6 +11922,9 @@ install_driver_media(api, db, require_driver=require_driver, require_customer=re
     parse_circle=NearbyCarsRequest.model_validate, read_document=get_stored_document)
 
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
+install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
+    create_access_token=create_access_token, create_twofa_token=create_twofa_token,
+    set_auth_cookie=set_auth_cookie, user_public=user_public)
 
 app.include_router(api)
 

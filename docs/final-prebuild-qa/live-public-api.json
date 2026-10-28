@@ -1,0 +1,133 @@
+[
+  {
+    "path": "/api/health",
+    "status": 200,
+    "result": {
+      "app": "KJAPP",
+      "status": "ok",
+      "db": true,
+      "release": {
+        "commit": "f52b6bfba556a9baf9bf4a11acad5138fa60071d",
+        "environment": "qa"
+      },
+      "time": "2026-10-27T21:10:33.187420+00:00"
+    }
+  },
+  {
+    "path": "/api/ready",
+    "status": 200,
+    "result": {
+      "app": "KJAPP",
+      "ready": true,
+      "status": "ready",
+      "checks": {
+        "database": true,
+        "production_mode": false,
+        "qa_mode": true,
+        "qa_database_isolated": true,
+        "demo_data_disabled": true,
+        "jwt_configured": true,
+        "admin_identity_configured": true,
+        "stripe_key_configured": true,
+        "stripe_webhook_configured": true,
+        "stripe_live_mode_configured": true,
+        "stripe_test_mode_configured": true,
+        "email_configured": false,
+        "public_web_origin_configured": true,
+        "expo_push_sender": true,
+        "identity_recheck_policy_days": [
+          30,
+          90
+        ],
+        "identity_inactivity_days": 30,
+        "apple_native_auth_configured": true,
+        "apple_bundle_env_matches": true,
+        "object_storage_configured": true,
+        "document_storage_backend": "mongodb",
+        "service_area_enforced": true,
+        "auto_charge_enabled": false,
+        "booking_enabled": true
+      },
+      "blockers": [],
+      "release": {
+        "commit": "f52b6bfba556a9baf9bf4a11acad5138fa60071d",
+        "environment": "qa"
+      },
+      "time": "2026-10-27T21:10:38.171224+00:00"
+    }
+  },
+  {
+    "path": "/api/auth/customer/otp/config",
+    "status": 200,
+    "result": {
+      "enabled": false,
+      "country_code": "+47",
+      "existing_accounts_only": true
+    }
+  },
+  {
+    "path": "/api/auth/native/config?client=driver",
+    "status": 200,
+    "result": {
+      "google_enabled": false,
+      "apple_enabled": false,
+      "apple_bundle_id": "",
+      "google_web_client_id_present": false,
+      "google_ios_client_id_present": false
+    }
+  },
+  {
+    "path": "/api/auth/native/config?client=customer",
+    "status": 200,
+    "result": {
+      "google_enabled": true,
+      "apple_enabled": true,
+      "apple_bundle_id": "no.nexorahub.kjapp.customer",
+      "google_web_client_id_present": true,
+      "google_ios_client_id_present": false
+    }
+  },
+  {
+    "path": "/api/payments/native/config",
+    "status": 200,
+    "result": {
+      "enabled": true,
+      "test_mode": true,
+      "apple_merchant_id": "",
+      "google_pay_enabled": false,
+      "apple_pay_enabled": false,
+      "web_wallets_enabled": false,
+      "publishable_key_present": true
+    }
+  },
+  {
+    "path": "/api/driver/pending",
+    "status": 401,
+    "result": {
+      "detail": "Ikke innlogget"
+    }
+  },
+  {
+    "path": "/api/fleet/overview",
+    "status": 401,
+    "result": {
+      "detail": "Ikke innlogget"
+    }
+  },
+  {
+    "path": "/api/admin/overview",
+    "status": 401,
+    "result": {
+      "detail": "Ikke innlogget"
+    }
+  },
+  {
+    "path": "/openapi.json",
+    "status": 200,
+    "result": {
+      "path_count": 225,
+      "fleet_invite_json_body": true,
+      "change_password_endpoint": true
+    }
+  }
+]

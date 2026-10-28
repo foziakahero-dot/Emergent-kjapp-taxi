@@ -122,6 +122,9 @@ def test_live_wallets_require_matching_keys_and_explicit_production_switch(env, 
     monkeypatch.setenv('APP_ENV', 'production')
     assert env.client.get('/payments/native/config').json()['enabled'] is False
     monkeypatch.setenv('NATIVE_PAYMENTS_LIVE_ENABLED', 'true')
+    assert env.client.get('/payments/native/config').json()['enabled'] is False
+    monkeypatch.setenv('DB_NAME', 'snar_production_fixture')
+    monkeypatch.setenv('STRIPE_WEBHOOK_SECRET', 'whsec_fixture')
     assert env.client.get('/payments/native/config').json()['enabled'] is True
     monkeypatch.setenv('APP_ENV', 'qa')
     assert env.client.get('/payments/native/config').json()['enabled'] is False

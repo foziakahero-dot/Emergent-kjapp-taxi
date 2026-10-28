@@ -6,6 +6,7 @@ import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +21,7 @@ import { storage } from '@/src/utils/storage';
 import { isNavigationApp, navigationStorageKey } from '@/src/lib/navigationPreference';
 import { canAutoDismissFinishedTrip, finishedTripDismissalKey, finishedTripReceipt } from '@/src/lib/tripSummary';
 import { notifyPendingTripFromForeground } from '@/src/lib/nativeRuntime';
+import { projectedOfferTime } from '@/src/lib/offerClock';
 
 type Loc = { lat: number; lng: number; heading?: number };
 
@@ -61,6 +63,9 @@ export default function DriverHome() {
   const { user } = useAuth();
   const router = useRouter();
   const [online, setOnline] = useState(false);
+  const [backendConnected, setBackendConnected] = useState(false);
+  const readiness = useQuery({ queryKey: ['driver-readiness', user?.id], queryFn: driverApi.compliance,
+    enabled: !!user?.id, refetchInterval: 10000, refetchIntervalInBackground: false, retry: 1 });
   const [pending, setPending] = useState<any[]>([]);
   const [current, setCurrent] = useState<any>(null);
   const [completedTrip, setCompletedTrip] = useState<any>(null);
@@ -73,7 +78,8 @@ export default function DriverHome() {
   const summaryActionLock = useRef(false);
   const [error, setError] = useState('');
   const [declineReasonsOpen, setDeclineReasonsOpen] = useState(false);
-  const [offerClock, setOfferClock] = useState(Date.now());
+  const [offerClock, setOfferClock] = useState<number | null>(null);
+  const offerTimeSync = useRef<{ serverTime?: string; receivedAt: number }>({ receivedAt: 0 });
   const watch = useRef<Location.LocationSubscription | null>(null);
   const gpsBlocked = useRef(false);
   const actionRetrying = useRef(false);
@@ -91,7 +97,7 @@ export default function DriverHome() {
       let normalized = cur?.trip || cur || null;
       if (normalized && FINISHED_STATUSES.has(normalized.status)) {
         const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
-        setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
+        setCompletedTrip(normalized.payment_flow === 'cash' && normalized.payment_status !== 'paid' ? normalized : dismissed === finishedTripReceipt(normalized) ? null : normalized);
       } else if (normalized && ACTIVE_STATUSES.has(normalized.status)) {
         setCompletedTrip(null);
       }
@@ -117,7 +123,7 @@ export default function DriverHome() {
                   normalized = refreshed?.trip || refreshed || normalized;
                   if (normalized && FINISHED_STATUSES.has(normalized.status)) {
                     const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
-                    setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
+                    setCompletedTrip(normalized.payment_flow === 'cash' && normalized.payment_status !== 'paid' ? normalized : dismissed === finishedTripReceipt(normalized) ? null : normalized);
                   }
                   setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
                   setError('');
@@ -144,6 +150,9 @@ export default function DriverHome() {
     }
     try {
       const p = await driverApi.pending();
+      offerTimeSync.current = { serverTime: p?.server_time, receivedAt: performance.now() };
+      setOfferClock(projectedOfferTime(p?.server_time, offerTimeSync.current.receivedAt, performance.now()));
+      setBackendConnected(true);
       const nextPending = p?.trips || p?.pending || (Array.isArray(p) ? p : []);
       setPending(nextPending);
 
@@ -165,6 +174,7 @@ export default function DriverHome() {
     } catch {
       // Preserve the last pending state on a transient network error. Seen IDs stay
       // in memory so a reconnect cannot replay the same alert every four seconds.
+      setBackendConnected(false);
     }
     polling.current = false;
     driverApi.summary().then((r) => {
@@ -192,7 +202,7 @@ export default function DriverHome() {
   );
 
   useEffect(() => {
-    const i = setInterval(() => setOfferClock(Date.now()), 500);
+    const i = setInterval(() => setOfferClock(projectedOfferTime(offerTimeSync.current.serverTime, offerTimeSync.current.receivedAt, performance.now())), 500);
     return () => clearInterval(i);
   }, []);
 
@@ -347,6 +357,7 @@ export default function DriverHome() {
         setLoc(nextLocation);
 
         const compliance = await driverApi.compliance();
+        void readiness.refetch();
         if (compliance?.operational !== true) {
           throw new Error(compliance?.message || 'Sjåførkontoen eller bilen er ikke klar for å gå online.');
         }
@@ -585,7 +596,7 @@ export default function DriverHome() {
   const mapTarget = useRef<View | null>(null);
   const firstOffer = pending[0];
   const offerExpiresMs = firstOffer?.offer_expires_at ? Date.parse(firstOffer.offer_expires_at) : NaN;
-  const offerRemaining = Number.isFinite(offerExpiresMs)
+  const offerRemaining = Number.isFinite(offerExpiresMs) && offerClock !== null
     ? Math.max(0, Math.ceil((offerExpiresMs - offerClock) / 1000))
     : null;
   const offerExpired = offerRemaining !== null && offerRemaining <= 0;
@@ -597,7 +608,9 @@ export default function DriverHome() {
     if (!firstOffer?.offer_expires_at) return;
     const expires = Date.parse(firstOffer.offer_expires_at);
     if (!Number.isFinite(expires)) return;
-    const delay = Math.min(30000, Math.max(500, expires - Date.now() + 500));
+    const serverNow = projectedOfferTime(offerTimeSync.current.serverTime, offerTimeSync.current.receivedAt, performance.now());
+    if (serverNow === null) return;
+    const delay = Math.min(30000, Math.max(500, expires - serverNow + 500));
     const timer = setTimeout(() => { void poll(); }, delay);
     return () => clearTimeout(timer);
   }, [firstOffer?.trip_id, firstOffer?.offer_expires_at, poll]);
@@ -608,8 +621,20 @@ export default function DriverHome() {
     ? current.pickup_route?.geometry?.coordinates || null
     : current?.status === 'in_trip' ? current.geometry?.coordinates || null : null;
 
+  const cashConfirmationLock = useRef(false);
+  const confirmCashReceived = async () => {
+    if (cashConfirmationLock.current || !completedTrip || completedTrip.payment_flow !== 'cash' || completedTrip.payment_status === 'paid') return;
+    cashConfirmationLock.current = true; setSummaryActionBusy(true); setError('');
+    try {
+      const result = await driverApi.confirmCash(completedTrip.trip_id, Math.round(completedTrip.price * 100));
+      if (result?.paid !== true) throw new Error('Kontantbetalingen ble ikke bekreftet.');
+      await poll();
+    } catch (error) { setError(apiError(error)); await poll(); }
+    finally { cashConfirmationLock.current = false; setSummaryActionBusy(false); }
+  };
+
   const finishSummary = async (continueOnline: boolean) => {
-    if (!completedTrip || summaryActionLock.current) return;
+    if (!completedTrip || summaryActionLock.current || (completedTrip.payment_flow === 'cash' && completedTrip.payment_status !== 'paid')) return;
     summaryActionLock.current = true; setSummaryActionBusy(true);
     try {
       if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
@@ -633,6 +658,7 @@ export default function DriverHome() {
       {!online && !current && !firstOffer ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, s.offlineMapWash]} /> : null}
 
       <DriverCockpitView
+        connected={backendConnected} readiness={readiness.isError ? null : readiness.data} readinessError={readiness.isError ? apiError(readiness.error) : ''} onRefreshReadiness={() => void readiness.refetch()}
         mapTarget={mapTarget} user={user} online={online} busy={busy || summaryActionBusy} error={error}
         summary={summary} current={current} completed={completedTrip} offer={firstOffer}
         offerRemaining={offerRemaining} offerExpired={offerExpired} offerDistance={offerDistance} offerDuration={offerDuration}
@@ -648,6 +674,7 @@ export default function DriverHome() {
           setTripMinimized(value);
           if (current?.trip_id) void (value ? storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id) : storage.removeItem(MINIMIZED_TRIP_KEY)).catch(() => setError('Kunne ikke lagre visningsvalget.'));
         }}
+        onCashReceived={() => void confirmCashReceived()}
         onContinue={() => void finishSummary(true)} onPause={() => void finishSummary(false)}
         onError={error => setError(apiError(error))}
       />

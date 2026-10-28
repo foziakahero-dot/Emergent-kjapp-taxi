@@ -1,3 +1,4 @@
+import { startQuoteRefresh } from '@/src/lib/quoteRefresh';
 import { SheetFrame, SheetHandle } from '@/src/components/snar10/Sheet';
 import { Chip } from '@/src/components/snar10/Chip';
 import { BlurTargetView } from 'expo-blur';
@@ -16,7 +17,7 @@ import { ActiveTripCard, LIVE_TRIP_STATUSES } from '@/src/components/ActiveTripC
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,7 +61,9 @@ export default function Home() {
   const [estimate, setEstimate] = useState<any>(null);
   const [quotedAt, setQuotedAt] = useState<number | null>(null);
   const [quoteRevision, setQuoteRevision] = useState(0);
-  const setQuote = useCallback((result: any) => { setEstimate(result); setQuotedAt(result ? Date.now() : null); }, []);
+  const [quoteFresh, setQuoteFresh] = useState(false);
+  const [quoteError, setQuoteError] = useState('');
+  const setQuote = useCallback((result: any) => { setEstimate(result); setQuotedAt(result ? Date.now() : null); setQuoteFresh(Boolean(result)); }, []);
   const [selType, setSelType] = useState('ai-first');
   const bookingLock = useRef(false);
   const mapBlurTarget = useRef<View>(null);
@@ -88,6 +91,8 @@ export default function Home() {
   const [stops, setStops] = useState<any[]>([]);
   const [specialNeeds, setSpecialNeeds] = useState<string[]>([]);
   const [methods, setMethods] = useState<any[]>([]);
+  const [paymentChoice, setPaymentChoice] = useState<'card' | 'cash'>('card');
+  const { data: paymentConfig } = useQuery({ queryKey: ['payment-config', user?.id], queryFn: paymentApi.nativeConfig, enabled: !!user?.id });
   const [myPlaces, setMyPlaces] = useState<any[]>([]);
   const [recentPlaces, setRecentPlaces] = useState<any[]>([]);
   const [quickPlacesIssue, setQuickPlacesIssue] = useState(false);
@@ -109,6 +114,7 @@ export default function Home() {
       if (!mounted || t.status !== 'cancelled' || t.cancel_reason !== 'no_driver_available') return;
       setSelectedPickup({ name: t.pickup_address, lat: t.pickup_lat, lng: t.pickup_lng });
       setDropoff({ name: t.dropoff_address, lat: t.dropoff_lat, lng: t.dropoff_lng });
+      setPaymentChoice(t.payment_provider === 'cash' ? 'cash' : 'card');
       setSelType(t.vehicle_type || 'ai-first'); setSpecialNeeds(t.special_needs || []); setStops((t.stops || []).map((stop: any) => ({ ...stop, name: stop.address || stop.name })));
       setReviewing(false);
     }).catch(() => { if (mounted) setError('Kunne ikke hente forrige reisemål. Velg hentested og reisemål på nytt.'); });
@@ -130,7 +136,7 @@ export default function Home() {
       if (!card) return;
       const result = await paymentApi.setDefault(card.id);
       if (result.default_payment_method_id !== card.id) throw new Error('Betalingsmåten ble ikke bekreftet.');
-      loadMethods(); setBookingStage('vehicles');
+      setPaymentChoice('card'); loadMethods(); setBookingStage('vehicles');
     } catch (error) { setError(apiError(error)); }
     finally { bookingLock.current = false; setBooking(false); }
   };
@@ -197,17 +203,22 @@ export default function Home() {
   }, [refreshLocation, selectedPickup]);
 
   useEffect(() => {
-    let current = true;
-    setQuote(null);
-    if (!dropoff || (!locationReady && !selectedPickup)) return;
-    tripsApi.estimate({
-      pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
-      dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
-      stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
-    }).then(result => { if (current) { setQuote(result); setError(''); } })
-      .catch(error => { if (current) setError(apiError(error)); });
-    return () => { current = false; };
-  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops, quoteRevision]);
+    setQuote(null); setQuoteError('');
+    if (activeTrip?.trip_id || !dropoff || (!locationReady && !selectedPickup)) return;
+    const refresh = startQuoteRefresh({
+      active: AppState.currentState === 'active', blocked: () => bookingLock.current,
+      fetch: () => tripsApi.estimate({
+        pickup_lat: pickupPoint.lat, pickup_lng: pickupPoint.lng,
+        dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng,
+        stops: stops.map(x => ({ address: x.name, lat: x.lat, lng: x.lng })),
+      }),
+      publish: result => { setQuote(result); setQuoteError(''); },
+      stale: () => { setQuoteFresh(false); setQuoteError('Oppdaterer prisen før du kan bestille.'); },
+      fail: () => setQuoteError('Kunne ikke oppdatere prisen. Vi prøver automatisk igjen. Du må ha en oppdatert pris før bestilling.'),
+    });
+    const subscription = AppState.addEventListener('change', state => refresh.setActive(state === 'active'));
+    return () => { refresh.stop(); subscription.remove(); };
+  }, [dropoff, locationReady, selectedPickup, pickupPoint.lat, pickupPoint.lng, stops, quoteRevision, activeTrip?.trip_id, setQuote]);
 
   const vehicleEtas: Record<string, number> = {};
   for (const car of cars) {
@@ -217,7 +228,8 @@ export default function Home() {
   const nearest = vehicleEtas[selType] ?? null;
   const priceFor = (type: string) => estimate?.options?.find((o: any) => o.vehicle_type === type)?.price;
   const waitingPolicy = estimate?.options?.find((o: any) => o.vehicle_type === selType)?.waiting_policy;
-  const payMethod = confirmedPaymentMethod(methods);
+  const cashSelected = paymentChoice === 'cash' && paymentConfig?.cash_enabled === true;
+  const payMethod = cashSelected ? { type: 'cash', label: 'Kontant til sjåføren' } : paymentChoice === 'cash' || paymentConfig?.enabled === false ? null : confirmedPaymentMethod(methods);
   const quickPlaces = [...myPlaces, ...recentPlaces].filter(place => normalizeSearchPlace(place)).filter((place, index, all) => all.findIndex(other => other.name === place.name && other.lat === place.lat && other.lng === place.lng) === index);
 
   const openVoice = () => {
@@ -232,7 +244,7 @@ export default function Home() {
         setError('Velg hentested manuelt, eller del posisjonen din før du bestiller.');
       return;
     }
-    if (!estimate || priceFor(selType) == null) {
+    if (!quoteFresh || !quotedAt || Date.now() - quotedAt >= 45000 || !estimate || priceFor(selType) == null) {
       setError('Vi beregner fortsatt rute og pris. Prøv igjen om et øyeblikk.');
       return;
     }
@@ -241,8 +253,13 @@ export default function Home() {
       return;
     }
     if (!payMethod) {
-      setError('Legg til et betalingskort før du bestiller.');
-      router.push('/payment-methods');
+      if (paymentConfig?.cash_enabled) {
+        setError('Velg kontantbetaling eller et tilgjengelig kort før du bestiller.');
+        setBookingStage('payment');
+      } else {
+        setError('Legg til et betalingskort før du bestiller.');
+        router.push('/payment-methods');
+      }
       return;
     }
     setError('');
@@ -259,7 +276,7 @@ export default function Home() {
         vehicle_type: selType,
         stops: stops.map((x) => ({ address: x.name, lat: x.lat, lng: x.lng })),
         special_needs: specialNeeds,
-        payment_provider: payMethod?.wallet === 'google_pay' ? 'google_pay' : 'card',
+        payment_provider: cashSelected ? 'cash' : payMethod?.wallet === 'google_pay' ? 'google_pay' : 'card',
         ...(waitingPolicy ? {
           waiting_policy_token: waitingPolicy.token,
           quoted_price: priceFor(selType),
@@ -304,7 +321,7 @@ export default function Home() {
   const routeGeom = estimate?.geometry?.coordinates;
   const previewRoute = useRouteReveal(routeGeom, Boolean(!activeTrip && dropoff));
   // The final booking action confirms the displayed quote and reservation terms.
-  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
+  const canReview = !activeTrip && activeTripChecked && !activeTripOffline && Boolean((locationReady || selectedPickup) && dropoff && quoteFresh && estimate && Number.isFinite(priceFor(selType)) && priceFor(selType) > 0 && !booking);
   const canBook = canReview && Boolean(payMethod && confirmedWaitingPolicy(waitingPolicy));
   const selectedPrice = priceFor(selType);
   const firstName = user?.fullName?.trim().split(/\s+/)[0] || 'SNAR';
@@ -338,14 +355,14 @@ export default function Home() {
       {!activeTrip && !mapOnly && !searchOpen ? <CustomerBookingView
         stage={bookingStage} reviewing={reviewing} pickup={selectedPickup?.name || pickupLabel}
         destination={dropoff} estimate={estimate} quotedAt={quotedAt} vehicle={selType} price={selectedPrice}
-        nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
+        nearest={nearest} availableDrivers={cars} driverPosition={available.center} vehicleEtas={vehicleEtas} payment={payMethod} methods={methods} cardPayment={confirmedPaymentMethod(methods)} cashEnabled={paymentConfig?.cash_enabled === true} cardEnabled={paymentConfig?.enabled !== false} onPaymentChoice={setPaymentChoice} waitingPolicy={waitingPolicy} wallet={wallet} onWallet={() => void setupWallet()}
         onWalletSaved={async card => {
           const selected = await paymentApi.setDefault(card.id);
           if (selected.default_payment_method_id !== card.id) throw new Error('Lommeboken ble ikke valgt.');
-          loadMethods(); setBookingStage('vehicles');
+          setPaymentChoice('card'); loadMethods(); setBookingStage('vehicles');
         }}
         busy={booking} canReview={canReview} canBook={canBook}
-        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
+        mapBlurTarget={mapBlurTarget} avatarVersion={user?.customer_photo_version} error={error || quoteError} firstName={firstName} initials={initials} places={quickPlaces} placesIssue={quickPlacesIssue}
         locationReady={Boolean(locationReady || selectedPickup)} locationHint={selectedPickup ? '' : locationHint} stops={stops}
         onStage={setBookingStage} onReview={setReviewing} onVehicle={setSelType}
         onSearch={target => { setSearchTarget(target); setReviewing(false); setSearchOpen(true); }}
@@ -366,7 +383,7 @@ export default function Home() {
           if (mapOnly) { setSearchTarget('dropoff'); setSearchOpen(true); }
           else setMapOnly(true);
         }} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', minHeight: 44, paddingHorizontal: 14, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line }}>
-          <V10Icon name={mapOnly ? 'search' : 'chevDown'} size={18} /><Text style={v10.secondary}>{mapOnly ? 'Søk' : 'Vis kart'}</Text>
+          <V10Icon name={mapOnly ? 'search' : 'chevDown'} size={18} /><Text style={v10.secondary}>{mapOnly ? 'Hvor skal du?' : 'Vis kart'}</Text>
         </Pressable>
         {mapOnly ? <Pressable testID="map-profile" accessibilityRole="button" accessibilityLabel="Åpne profilen" onPress={() => router.push('/(app)/profile')} style={{ minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}><Text style={v10.secondary}>{initials}</Text></Pressable> : null}
       </View> : null}
@@ -411,8 +428,14 @@ export default function Home() {
 
 export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featured, insets, target = 'dropoff', pickupLabel, onPickup, onDestination, destinationLabel = '', quickPlaces = [] }: any) {
   useColorTheme();
+  const dimensions = useWindowDimensions();
   const input = useRef<any>(null);
   useEffect(() => { if (visible) input.current?.focus(); }, [visible, target]);
+  useEffect(() => {
+    if (!visible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { Keyboard.dismiss(); onClose(); return true; });
+    return () => sub.remove();
+  }, [visible, onClose]);
   const [q, setQ] = useState('');
   useEffect(() => setQ(''), [target]);
   const [results, setResults] = useState<any[]>([]);
@@ -423,6 +446,7 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
   useEffect(() => {
     let current = true;
     setResults([]); setSearchError('');
+    if (!visible) { setLoading(false); return; }
     if (q.trim().length < 2) { setLoading(false); return; }
     setLoading(true);
     const timer = setTimeout(() => {
@@ -432,7 +456,7 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
         .finally(() => { if (current) setLoading(false); });
     }, 350);
     return () => { current = false; clearTimeout(timer); };
-  }, [q, retrySearch]);
+  }, [q, retrySearch, visible]);
 
   const items = q.trim().length < 2
     ? [...quickPlaces, ...(featured || [])].map((p: any) => ({ ...p, saved: true }))
@@ -451,9 +475,9 @@ export function SearchSheet({ visible = true, onClose, onSelect, onVoice, featur
   </View>;
   return <KeyboardAvoidingView pointerEvents="box-none" behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     style={{ position: 'absolute', inset: 0 }}>
-    <View testID="search-map-dim" pointerEvents="none" style={{ position: 'absolute', inset: 0, backgroundColor: colors.bg, opacity: .55 }} />
-    <SheetFrame testID="search-sheet" style={{ top: Math.max(54, insets.top + 4), maxHeight: undefined, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 10 }}>
-      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" hitSlop={8}><SheetHandle /></Pressable>
+    <View testID="search-map-dim" pointerEvents="none" style={{ position: 'absolute', inset: 0, backgroundColor: colors.bg, opacity: .16 }} />
+    <SheetFrame testID="search-sheet" style={{ top: Math.max(54, insets.top + 4), bottom: undefined, height: dimensions.height * .52, maxHeight: '52%', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, paddingTop: 0 }}>
+      <Pressable onPress={onClose} testID="search-close" accessibilityRole="button" accessibilityLabel="Minimer søk" style={{ minHeight: 44, justifyContent: 'center' }}><SheetHandle /></Pressable>
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(34, insets.bottom) }}>
         <View style={{ gap: 8 }}>

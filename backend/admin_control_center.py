@@ -10,8 +10,9 @@ Focused admin-only capabilities:
 
 All routes reuse the existing FastAPI/MongoDB/auth/audit infrastructure.
 """
-from __future__ import annotations
 
+# These routes declare request models inside the installer. Keep concrete types
+# in endpoint annotations so FastAPI resolves JSON bodies in that local scope.
 import asyncio
 import html
 import os
@@ -59,6 +60,8 @@ async def stripe_destination_for_trip(db, stripe, trip: dict) -> Optional[dict]:
     Failure to resolve Connect never blocks the customer's payment. The checkout
     falls back to the platform account and Action Center will flag the fleet.
     """
+    if trip.get("payment_flow") == "cash":
+        return None
     driver_id = trip.get("driver_user_id") or trip.get("driver_id")
     if not driver_id or not stripe.api_key:
         return None

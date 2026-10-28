@@ -46,20 +46,22 @@ def test_web_does_not_link_existing_account_by_email(web):
     assert web.client.post('/auth/google/web/code', json=BODY).status_code == 200
 
 
-def test_web_driver_requires_approval_existing_link_and_active_fleet(web):
+def test_web_driver_social_login_is_disabled_even_for_approved_linked_accounts(web):
     body = {**BODY, 'client': 'driver'}
     assert web.client.post('/auth/google/web/code', json=body).status_code == 403
     web.db.raw.users.update_one({'_id': web.uid}, {'$set': {'role': 'driver', 'approved': True, 'fleet_id': str(web.fid)}})
-    assert web.client.post('/auth/google/web/code', json=body).status_code == 200
+    assert web.client.post('/auth/google/web/code', json=body).status_code == 403
+    web.post.assert_not_awaited()
     assert web.db.raw.users.count_documents({}) == 1
 
 
-def test_link_driver_needs_authenticated_approved_driver(web):
+def test_approved_driver_cannot_link_or_login_with_google(web):
     web.current.update(role='driver', approved=True)
     web.db.raw.users.update_one({'_id': web.uid}, {'$set': {'role': 'driver', 'approved': True}, '$unset': {'google_sub': ''}})
-    assert sign_in(web, 'driver').status_code == 409
-    assert web.client.post('/auth/google/link', json={'identity_token': 'verified-token', 'client': 'driver'}).status_code == 200
-    assert sign_in(web, 'driver').status_code == 200
+    assert sign_in(web, 'driver').status_code == 403
+    assert web.client.post('/auth/google/link', json={'identity_token': 'verified-token', 'client': 'driver'}).status_code == 403
+    assert sign_in(web, 'driver').status_code == 403
+    web.verify.assert_not_awaited()
 
 
 def test_web_qa_never_inherits_shared_credentials(web, monkeypatch):

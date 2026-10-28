@@ -41,6 +41,8 @@ export default function DriverProfile() {
     <V10Group style={{ marginTop: 12 }}>
       <V10Row icon="navigation" title="Navigasjon" onPress={() => router.push('/driver-navigation')} testID="driver-profile-navigation" />
       <V10Row border icon="settings" title="Innstillinger" onPress={() => router.push('/driver-settings')} testID="driver-profile-settings" />
+      <V10Row border icon="message" title="Meldinger" onPress={() => router.push('/(driver)/messages')} testID="driver-profile-messages" />
+      <V10Row border icon="activity" title="Innsikt og dagsmål" onPress={() => router.push('/(driver)/intel')} testID="driver-profile-intel" />
     </V10Group>
   </V10Entrance></V10Screen>;
 }

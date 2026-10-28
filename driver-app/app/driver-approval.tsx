@@ -21,7 +21,8 @@ export default function DriverApproval() {
   const profile = account.data || user;
   const verified = identity.data?.status === 'verified' && !profile?.identity_recheck_required;
   const pending = identity.data?.status === 'pending_review';
-  const ready = !account.isError && !identity.isError && profile?.approved === true && profile?.legal_accepted === true && verified;
+  const identityRequired = profile?.identity_verification_required === true || profile?.identity_recheck_required === true;
+  const ready = !account.isError && !identity.isError && profile?.approved === true && profile?.legal_accepted === true && (!identityRequired || verified);
   const enter = async () => {
     if (lock.current || !ready) return;
     lock.current = true; setBusy(true); setError('');

@@ -16,9 +16,11 @@ import pytest
 def test_verified_card_checkout_returns_to_payment_methods_in_same_web_app(monkeypatch):
     from bson import ObjectId
     uid = str(ObjectId())
+    monkeypatch.setenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_unit')
+    monkeypatch.setenv('NATIVE_PAYMENTS_ENABLED', 'true')
     monkeypatch.setattr(server,'_enforce_rate_limit',AsyncMock())
     monkeypatch.setattr(server,'_trusted_checkout_origin',lambda origin: origin)
-    monkeypatch.setattr(server,'db',SimpleNamespace(users=SimpleNamespace(find_one=AsyncMock(return_value={'email':'unit@example.invalid','stripe_customer_id':'cus_test'}))))
+    monkeypatch.setattr(server,'db',SimpleNamespace(users=SimpleNamespace(find_one=AsyncMock(return_value={'_id':ObjectId(uid),'email':'unit@example.invalid','stripe_customer_id':'cus_test'}),update_one=AsyncMock())))
     create = Mock(return_value=SimpleNamespace(id='cs_test',url='https://checkout.stripe.com/test'))
     monkeypatch.setattr(server.stripe,'StripeClient',Mock(return_value=SimpleNamespace(v1=SimpleNamespace(checkout=SimpleNamespace(sessions=SimpleNamespace(create=create))))))
     monkeypatch.setattr(server.stripe,'api_key','sk_test_unit')
@@ -26,13 +28,15 @@ def test_verified_card_checkout_returns_to_payment_methods_in_same_web_app(monke
     params=create.call_args.args[0]
     assert params['success_url']=='https://customer.example/payment-methods?setup=success&session_id={CHECKOUT_SESSION_ID}'
     assert params['cancel_url']=='https://customer.example/payment-methods?setup=cancel'
-    assert params['setup_intent_data']['usage']=='off_session'
+    assert 'usage' not in params.get('setup_intent_data', {}), 'Checkout setup mode must not send the unsupported usage field'
     assert 'payment_method_types' not in params
     assert result['session_id']=='cs_test'
 
 
 def test_card_registration_never_silently_returns_to_unrelated_landing(monkeypatch):
     from bson import ObjectId
+    monkeypatch.setenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_unit')
+    monkeypatch.setenv('NATIVE_PAYMENTS_ENABLED', 'true')
     monkeypatch.setattr(server,'_enforce_rate_limit',AsyncMock())
     monkeypatch.setattr(server.stripe,'api_key','sk_test_unit')
     monkeypatch.setattr(server,'db',SimpleNamespace(users=SimpleNamespace(find_one=AsyncMock(return_value={'email':'unit@example.invalid'}))))

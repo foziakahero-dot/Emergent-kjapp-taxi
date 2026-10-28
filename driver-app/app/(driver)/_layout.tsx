@@ -10,11 +10,12 @@ export default function DriverTabsLayout() {
       tabBar={props => <FloatingTabBar {...props} driver />}
       screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen name="home" options={{ title: 'Kjør' }} />
+      <Tabs.Screen name="home" options={{ title: 'Hjem' }} />
+      <Tabs.Screen name="trips" options={{ title: 'Turer' }} />
       <Tabs.Screen name="earnings" options={{ title: 'Inntekt' }} />
-      <Tabs.Screen name="intel" options={{ title: 'Innsikt' }} />
-      <Tabs.Screen name="messages" options={{ title: 'Meldinger' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profil' }} />
+      <Tabs.Screen name="intel" options={{ href: null }} />
+      <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ title: 'Konto' }} />
     </Tabs>
     </TabBarVisibilityProvider>
   );

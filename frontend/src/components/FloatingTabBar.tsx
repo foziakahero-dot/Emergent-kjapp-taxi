@@ -37,7 +37,7 @@ export function FloatingTabBar({ state, descriptors, navigation, driver = false 
   if (hidden && (!driver || focused.name === 'home')) return null;
   const visible = state.routes.filter(route => (driver
     ? ['home', 'earnings', 'intel', 'messages', 'profile']
-    : ['home', 'history', 'assist', 'messages', 'profile']).includes(route.name));
+    : ['home', 'history', 'profile']).includes(route.name));
   const customerIcons: Record<string, string> = { home: 'home', history: 'activity', assist: 'ai', messages: 'message', profile: 'profile' };
   const driverIcons: Record<string, string> = { home: 'navigation', earnings: 'earnings', intel: 'ai', messages: 'message', profile: 'profile' };
   return <Dock target={targets[focused.key]} active={focused.name} items={visible.map(route => {

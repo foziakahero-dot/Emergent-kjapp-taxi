@@ -1,3 +1,4 @@
+import { SnarWordmark } from '@/src/components/SnarWordmark';
 import { V10Action, v10 } from '@/src/components/V10UI';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useRef, useState } from 'react';
@@ -42,18 +43,17 @@ export default function DriverLogin() {
         await logout(); setError('Sjåførkontoen din venter fortsatt på godkjenning. Du får tilgang når dokumentene og kontoen er godkjent.'); return;
       }
       if (res?.legal_accepted !== true) { router.replace('/driver-legal-consent'); return; }
-      const identityStatus = res?.identity_verification_status || 'not_submitted';
-      const identityGate = Boolean(res?.identity_recheck_required) || identityStatus !== 'verified';
+      const identityGate = res?.identity_verification_required === true || res?.identity_recheck_required === true;
       router.replace(identityGate ? '/driver-approval' : '/(driver)/home');
   };
   return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, { paddingTop: Math.max(110, insets.top + 62), paddingBottom: Math.max(40, insets.bottom + 6) }]}>
-      <Text style={s.overline}>SNAR Driver</Text>
-      <Text style={s.title}>Logg inn for å kjøre</Text>
-      <Text style={s.subtitle}>Bruk e-post eller telefonnummeret registrert hos løyvehaveren din.</Text>
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[s.content, { paddingTop: Math.max(70, insets.top + 28), paddingBottom: Math.max(40, insets.bottom + 6) }]}>
+      <View style={{ alignItems: 'center', gap: 14 }}><SnarWordmark /><Text style={s.overline}>Driver</Text></View>
+      <Text style={s.title}>{'Velkommen\nsjåfør'}</Text>
+      <Text style={s.subtitle}>Logg inn for å komme i gang og ta imot turer.</Text>
       <View style={s.fields}>
-        <View style={s.field}><TextInput accessibilityLabel="E-post eller telefon" testID="driver-login-identifier" placeholder="E-post eller telefon" autoCapitalize="none" autoCorrect={false} returnKeyType="next" value={identifier} onChangeText={setIdentifier} autoComplete="username" editable={!loading} placeholderTextColor={colors.textMuted} style={s.input} /></View>
-        <View style={s.field}><TextInput accessibilityLabel="Passord" testID="driver-login-password" placeholder="Passord" secureTextEntry={!show} value={password} onChangeText={setPassword} autoComplete="current-password" editable={!loading} placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => void submit()} returnKeyType="go" />
+        <View style={s.field}><Icon name="mail" size={20} color={colors.textSecondary} /><TextInput accessibilityLabel="E-post eller telefon" testID="driver-login-identifier" placeholder="E-post eller telefon" autoCapitalize="none" autoCorrect={false} returnKeyType="next" value={identifier} onChangeText={setIdentifier} autoComplete="username" editable={!loading} placeholderTextColor={colors.textMuted} style={s.input} /></View>
+        <View style={s.field}><Icon name="lock" size={20} color={colors.textSecondary} /><TextInput accessibilityLabel="Passord" testID="driver-login-password" placeholder="Passord" secureTextEntry={!show} value={password} onChangeText={setPassword} autoComplete="current-password" editable={!loading} placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => void submit()} returnKeyType="go" />
           <Pressable accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'} disabled={loading} onPress={() => setShow(v => !v)} style={s.reveal} testID="driver-login-toggle-password"><Icon name={show ? 'eye-off' : 'eye'} size={20} color={colors.textSecondary} /></Pressable>
         </View>
       </View>
@@ -72,10 +72,10 @@ export default function DriverLogin() {
 const s = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg }, content: { flexGrow: 1, paddingHorizontal: 24 },
   overline: { fontFamily: font.semibold, fontSize: 11, lineHeight: 14, letterSpacing: .66, textTransform: 'uppercase', color: colors.textMuted },
-  title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, marginTop: 6, color: colors.text },
-  subtitle: { fontSize: 14, lineHeight: 20, letterSpacing: -.154, color: colors.textSecondary, marginTop: 8 },
+  title: { fontFamily: font.semibold, fontSize: 32, lineHeight: 38, letterSpacing: -.96, marginTop: 28, textAlign: 'center', color: colors.text },
+  subtitle: { fontSize: 14, lineHeight: 20, letterSpacing: -.154, color: colors.textSecondary, marginTop: 10, textAlign: 'center' },
   fields: { marginTop: 28, gap: 8 },
-  field: { flexDirection: 'row', alignItems: 'center', minHeight: 60, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, paddingHorizontal: 16 },
+  field: { flexDirection: 'row', alignItems: 'center', minHeight: 60, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, gap: 12, paddingHorizontal: 16 },
   input: { flex: 1, fontSize: 18, lineHeight: 26, paddingVertical: 16, color: colors.text },
   reveal: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -12 },
   forgot: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8 },

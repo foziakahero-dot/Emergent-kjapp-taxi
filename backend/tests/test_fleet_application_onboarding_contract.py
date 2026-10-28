@@ -47,7 +47,7 @@ def test_admin_list_includes_every_open_status():
 def test_change_password_clears_temporary_flag_and_revokes_sessions():
     body = SOURCE.split('@api.post("/auth/change-password")', 1)[1].split("\n@api.", 1)[0]
     assert "Depends(get_current_user)" in body
-    assert "verify_password(body.current_password" in body
+    assert "asyncio.to_thread(verify_password, body.current_password" in body
     assert '"$unset": {"must_reset_password": ""}' in body
     assert '"tokens_valid_after": cutoff' in body
     assert "create_access_token(" in body

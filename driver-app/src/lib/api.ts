@@ -3,7 +3,7 @@ import { storage } from '@/src/utils/storage';
 
 export const BACKEND = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://api.kjappapp.no').replace(/\/$/, '');
 export const TOKEN_KEY = 'kjapp_token';
-export const KJAPP_DEFAULT_COMMISSION_PCT = 10;
+export const KJAPP_DEFAULT_COMMISSION_PCT = 0;
 
 export const authenticatedFileSource = async (path?: string | null) => {
   if (!path) return null;
@@ -139,6 +139,7 @@ export async function publishDriverLocation(lat: number, lng: number, heading = 
 }
 
 export const driverApi = {
+  confirmCash: (id: string, amount_ore: number) => api.post(`/driver/trip/${encodeURIComponent(id)}/cash/confirm`, { amount_ore }).then(r => r.data),
   pending: () => api.get('/driver/pending').then((r) => r.data),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
   decline: (trip_id: string) => api.post('/driver/decline', { trip_id }).then((r) => r.data),

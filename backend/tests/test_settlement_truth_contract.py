@@ -37,10 +37,13 @@ def test_connect_schedule_is_weekly_friday_not_invented_monday():
 
 
 def test_driver_ui_does_not_claim_direct_driver_payout():
-    assert "Oppgjør via flåte" in DRIVER_EARNINGS
-    assert "Din netto · siste 7 dager" in DRIVER_EARNINGS
-    assert "løyvehaverens Stripe Connect-konto" in DRIVER_EARNINGS
+    detail = (ROOT / "driver-app/app/driver-earnings-detail.tsx").read_text(encoding="utf-8")
+    assert "Oppgjør via fleet" in detail
+    assert "Utbetaling via løyvehaveren" in detail
+    assert "Betalte turer · siste 7 dager" in detail
+    assert "payouts.data?.earned_net_7d" in detail
     assert "Til utbetaling" not in DRIVER_EARNINGS
+    assert "Til utbetaling" not in detail
 
 
 def test_fleet_finance_labels_stripe_payouts():
