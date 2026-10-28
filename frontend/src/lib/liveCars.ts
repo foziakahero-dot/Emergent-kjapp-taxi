@@ -13,6 +13,7 @@ type Socket = {
   connect(): any; disconnect(): any; removeAllListeners(): any;
 };
 export const RADIUS_KM = 5;
+export const FEED_STALE_MS = 10_000;
 export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const rad = Math.PI / 180, dlat = (b.lat - a.lat) * rad, dlng = (b.lng - a.lng) * rad;
   const h = Math.sin(dlat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dlng / 2) ** 2;
@@ -83,7 +84,7 @@ export class LiveCarsFeed {
       const expiresAt: Record<string, number> = {}, cars: LiveCar[] = [];
       for (const car of result.cars) {
         if (car?.online === false || car?.available === false || typeof car?.id !== 'string' || !validPosition(car) || !this.circle || distanceKm(this.circle, car) > RADIUS_KM) continue;
-        const expiry = carExpiry(car, { ...result, gps_fresh_seconds: Math.min(2, Number(result.gps_fresh_seconds)) }, this.now());
+        const expiry = carExpiry(car, result, this.now());
         if (expiry <= this.now() || expiresAt[car.id]) continue;
         expiresAt[car.id] = expiry; cars.push(car);
       }
@@ -93,7 +94,7 @@ export class LiveCarsFeed {
   }
   tick() {
     if (!this.active || !this.socket?.connected) return;
-    if (this.now() - this.lastFrame > 2000) { if (this.state.issue !== 'offline') this.clear('offline'); return; }
+    if (this.now() - this.lastFrame > FEED_STALE_MS) { if (this.state.issue !== 'offline') this.clear('offline'); return; }
     const cars = visibleCars(this.state, this.now());
     if (cars.length !== this.state.cars.length) this.publish({ ...this.state, cars, phase: cars.length ? 'available' : 'waiting', issue: cars.length ? null : 'empty' });
   }

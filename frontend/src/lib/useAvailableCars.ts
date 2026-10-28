@@ -7,11 +7,11 @@ import { useAuth } from '@/src/context/AuthContext';
 import { storage } from '@/src/utils/storage';
 import { BACKEND, TOKEN_KEY, carsApi } from './api';
 import { Availability, carExpiry, validPosition, visibleCars } from './carAvailability';
-import { LiveCarsFeed, distanceKm, RADIUS_KM } from './liveCars';
+import { LiveCarsFeed, distanceKm, RADIUS_KM, FEED_STALE_MS } from './liveCars';
 import { readPickupLocation } from './pickupLocation';
 
 const REST_RECOVERY_MS = 1500;
-const REST_STALE_MS = 2000;
+const REST_STALE_MS = FEED_STALE_MS;
 
 export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], locationRevision = 0 }: {
   enabled: boolean; vehicleType?: string; specialNeeds?: string[]; locationRevision?: number;
@@ -47,7 +47,7 @@ export function useAvailableCars({ enabled, vehicleType, specialNeeds = [], loca
         if (car?.online === false || car?.available === false || typeof car?.id !== 'string' || car.id === user.id || !validPosition(car)) return false;
         if (!point.current || distanceKm(point.current, car) > RADIUS_KM
           || (filters.current.vehicle_type && car.type !== filters.current.vehicle_type)) return false;
-        const expiry = carExpiry(car, { ...result, gps_fresh_seconds: Math.min(2, Number(result.gps_fresh_seconds)) }, receivedAt);
+        const expiry = carExpiry(car, result, receivedAt);
         if (expiry <= receivedAt || expiresAt[car.id]) return false;
         expiresAt[car.id] = expiry;
         return true;

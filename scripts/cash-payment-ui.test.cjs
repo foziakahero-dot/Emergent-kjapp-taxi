@@ -35,6 +35,19 @@ const byId = (node,id) => node.root.findAll(x=>x.props.testID===id && typeof x.t
 const booking = {stage:'payment',reviewing:false,pickup:'Oslo',destination:{name:'Majorstuen'},estimate:{duration_min:5},vehicle:'ai-first',price:173,nearest:2,methods:[],payment:{type:'cash'},cashEnabled:true,
   waitingPolicy:{token:'fixture',free_minutes:2,per_minute:4,max_fee:60},places:[],stops:[],onHeight:noop,onStage:noop,onPayment:()=>{throw Error('Cash must not require a card')},onBook:noop,onBack:noop,onReview:noop,busy:false,canBook:true,canReview:true};
 
+test('customer availability explains automatic updates and actual nearby supply',async()=>{
+  const {AvailabilityStatus}=load('frontend/src/components/AvailabilityStatus.tsx');let tree;
+  const search={cars:[],phase:'loading',issue:null,now:0,retry:noop};
+  await renderer.act(async()=>{tree=renderer.create(React.createElement(AvailabilityStatus,{compact:true,search}));});
+  assert.match(text(tree),/Søker etter ledige biler i nærheten/);
+  assert.match(text(tree),/Ledige biler oppdateres automatisk/);
+  await renderer.act(async()=>tree.update(React.createElement(AvailabilityStatus,{compact:true,search:{...search,phase:'available',cars:[{id:'driver',eta_min:3}]}})));
+  assert.match(text(tree),/1 ledig bil/);assert.match(text(tree),/3 min/);
+  await renderer.act(async()=>tree.update(React.createElement(AvailabilityStatus,{compact:true,search:{...search,issue:'offline'}})));
+  assert.match(text(tree),/Kan ikke oppdatere/);assert.equal(byId(tree,'availability-auto-update'),undefined);
+  await renderer.act(async()=>tree.unmount());
+});
+
 test('cash can be selected without a card and is hidden when disabled',async()=>{
   const {CustomerBookingView}=load('frontend/src/components/CustomerBookingView.tsx');let tree,chosen;
   await renderer.act(async()=>{tree=renderer.create(React.createElement(CustomerBookingView,{...booking,payment:null,onPaymentChoice:x=>chosen=x}));});

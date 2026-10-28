@@ -73,6 +73,18 @@ function Harness({ vehicleType }) { current = useAvailableCars({ enabled: true, 
   assert.ok(requests >= 2); assert.equal(current.cars.length, 0, 'REST markers must expire while the next HTTP call hangs');
   await act(async () => tree.unmount()); assert.equal(timers.size, 0);
 
+  // Real mobile GPS can arrive in bursts. REST must use the same server TTL as
+  // Socket.IO instead of silently shortening it to two seconds.
+  const sampleTime = now;
+  http = () => Promise.resolve({ ...snapshot([car('stationary', { updated_at: new Date(sampleTime).toISOString() })]), gps_fresh_seconds: 15 });
+  await act(async () => { tree = renderer.create(React.createElement(Harness)); });
+  await act(async () => socket.events.connect_error());
+  await advance(6000);
+  assert.equal(current.cars[0]?.id, 'stationary', 'Short gaps between device samples must not make a real online car blink');
+  await advance(9200);
+  assert.equal(current.cars.length, 0, 'Repeated REST replies cannot keep an expired device sample alive');
+  await act(async () => tree.unmount()); assert.equal(timers.size, 0);
+
   http = () => Promise.resolve(snapshot([car('nearby'), car('far', { lat: 60.1 }), car('offline', { online: false }), car('busy', { available: false }), car('customer-self')]));
   await act(async () => { tree = renderer.create(React.createElement(Harness)); });
   await act(async () => socket.events.connect_error());

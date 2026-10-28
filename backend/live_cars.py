@@ -13,7 +13,9 @@ import socketio
 from fastapi import HTTPException
 
 RADIUS_KM = 5.0
-GPS_FRESH_SECONDS = 2
+# A requested 1-second device interval is not a delivery guarantee. Allow short
+# GPS/network gaps while keeping silent drivers bounded by actual sample age.
+GPS_FRESH_SECONDS = 15
 NAMESPACE = "/customer-cars"
 RECONCILE_SECONDS = 0.5
 LOG = logging.getLogger(__name__)
@@ -61,7 +63,7 @@ class LiveCarsStream:
         self.dirty = asyncio.Event()
         self.sio = socketio.AsyncServer(
             async_mode="asgi", cors_allowed_origins=origins,
-            max_http_buffer_size=8192, ping_interval=1, ping_timeout=2,
+            max_http_buffer_size=8192, ping_interval=10, ping_timeout=20,
             logger=False, engineio_logger=False,
         )
         # Mount instead of wrapping FastAPI: existing middleware, routes, lifespan

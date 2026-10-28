@@ -103,9 +103,29 @@ def test_only_logged_in_available_live_drivers(fleet, changes):
     assert response.status_code == 200
     body = response.json()
     assert [car['id'] for car in body['cars']] == [str(good['_id'])]
-    assert body['radius_km'] == 5 and body['gps_fresh_seconds'] == 2
+    assert body['radius_km'] == 5 and body['gps_fresh_seconds'] == 15
     assert body['cars'][0]['name'] == 'QA' and body['cars'][0]['rating'] == 4.8
     assert not {'email', 'phone', 'plate', 'last_location_session'} & body['cars'][0].keys()
+
+
+@pytest.mark.parametrize('sample_age,visible', [(3, True), (8, True), (14, True), (16, False)])
+def test_nearby_tolerates_delivery_gaps_but_expires_silent_drivers(fleet, sample_age, visible):
+    raw, driver, token = fleet
+    stamp = (datetime.now(timezone.utc) - timedelta(seconds=sample_age)).isoformat()
+    car = driver(last_location_at=stamp, last_location_recorded_at=stamp)
+    with TestClient(server.app) as client:
+        cars = snapshot(client, token).json()['cars']
+        assert [c['id'] for c in cars] == ([str(car['_id'])] if visible else [])
+        # An explicit offline transition removes a still-fresh driver immediately.
+        raw.users.update_one({'_id': car['_id']}, {'$set': {'online': False}})
+        assert snapshot(client, token).json()['cars'] == []
+
+
+def test_recent_receipt_cannot_refresh_old_device_sample(fleet):
+    raw, driver, token = fleet
+    driver(last_location_recorded_at=(datetime.now(timezone.utc) - timedelta(seconds=16)).isoformat())
+    with TestClient(server.app) as client:
+        assert snapshot(client, token).json()['cars'] == []
 
 
 def test_exact_circle_rejects_box_corner_and_driver_with_active_trip(fleet):

@@ -30,7 +30,7 @@ socket.receive(frame([car, { ...car, id: 'outside', lat: circle.lat + .1 }, { ..
 assert.deepEqual(feed.state.cars.map(c => c.id), ['real']);
 assert.ok(distanceKm(circle, { ...circle, lat: circle.lat + .1 }) > 5);
 now += 2000; feed.tick(); assert.equal(feed.state.cars.length, 0, 'GPS expiry is independent of device clock skew');
-now += 1; feed.tick(); assert.equal(feed.state.issue, 'offline', 'Silent streams fail closed');
+now += 8001; feed.tick(); assert.equal(feed.state.issue, 'offline', 'Silent streams fail closed after bounded transport grace');
 feed.subscribe({ ...circle, lat: circle.lat + .1 });
 socket.receive(frame([car], 1)); assert.equal(feed.state.cars.length, 0, 'Old subscription cannot restore markers');
 socket.receive(frame([{ ...car, lat: circle.lat + .1 }], 2)); assert.equal(feed.state.cars.length, 1);
@@ -40,6 +40,26 @@ assert.equal(feed.state.cars.length, 0, 'Background response cannot revive cars'
 feed.setActive(true); socket = sockets[1]; socket.receive(frame([{ ...car, lat: circle.lat + .1 }], 2));
 assert.equal(feed.state.cars.length, 1); feed.dispose();
 console.log('PASS: real-time replacement, movement, 5 km filtering, expiry, silence, disconnect, revision and resume');
+
+{
+  let clock = 50_000, stream;
+  const stable = new LiveCarsFeed(() => (stream = new Socket()), () => {}, () => clock);
+  stable.subscribe(circle); stable.setActive(true);
+  const send = age => {
+    const elapsed = clock - 50_000;
+    stream.receive({ ...frame([{ ...car, updated_at: new Date(server + elapsed - age).toISOString() }], 1, elapsed), gps_fresh_seconds: 15 });
+  };
+  send(5000);
+  assert.equal(stable.state.cars.length, 1, 'A 5-second-old real GPS sample remains eligible');
+  clock += 3000; stable.tick();
+  assert.equal(stable.state.cars.length, 1, 'A short frame delay must not remove a fresh driver');
+  send(8000);
+  clock += 7000; stable.tick();
+  assert.equal(stable.state.cars.length, 0, 'Repeated snapshots cannot extend the actual GPS deadline');
+  send(0); stream.receive({ ...frame([], 1, clock - 50_000), gps_fresh_seconds: 15 });
+  assert.equal(stable.state.cars.length, 0, 'Authoritative offline/busy removal never waits for grace');
+  stable.dispose();
+}
 
 const React = require(root + '/node_modules/react');
 const renderer = require(root + '/node_modules/react-test-renderer');
