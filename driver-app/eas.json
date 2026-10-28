@@ -14,7 +14,9 @@
         "buildType": "apk",
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "channel": "production",
+      "environment": "production"
     },
     "qa": {
       "distribution": "internal",
@@ -26,7 +28,8 @@
         "image": "latest",
         "resourceClass": "medium"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "channel": "qa"
     },
     "production": {
       "autoIncrement": true,
@@ -36,7 +39,9 @@
       },
       "ios": {
         "image": "latest"
-      }
+      },
+      "channel": "production",
+      "environment": "production"
     },
     "ios-simulator": {
       "distribution": "internal",
@@ -46,7 +51,9 @@
       },
       "ios": {
         "simulator": true
-      }
+      },
+      "channel": "production",
+      "environment": "production"
     },
     "testflight-beta": {
       "distribution": "store",
@@ -58,7 +65,9 @@
       "ios": {
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "channel": "production",
+      "environment": "production"
     },
     "testflight-qa": {
       "distribution": "store",
@@ -70,7 +79,8 @@
         "image": "latest",
         "resourceClass": "medium"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "channel": "qa"
     },
     "ios-internal": {
       "distribution": "internal",
@@ -81,7 +91,9 @@
       "ios": {
         "image": "latest",
         "resourceClass": "medium"
-      }
+      },
+      "channel": "production",
+      "environment": "production"
     }
   },
   "submit": {

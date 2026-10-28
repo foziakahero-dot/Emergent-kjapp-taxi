@@ -8,7 +8,15 @@ function assertQaBackend(profile, backendUrl) {
   }
 }
 
-module.exports = { APPROVED_QA_BACKEND, QA_BUILD_PROFILES, assertQaBackend };
+function assertUpdateBackend(channel, backendUrl) {
+  if (!channel) return;
+  const expected = { qa: APPROVED_QA_BACKEND, production: 'https://api.kjappapp.no' }[channel];
+  if (!expected || backendUrl !== expected) {
+    throw new Error(`Update channel ${channel} does not match its approved backend.`);
+  }
+}
+
+module.exports = { APPROVED_QA_BACKEND, QA_BUILD_PROFILES, assertQaBackend, assertUpdateBackend };
 
 if (require.main === module) {
   try {

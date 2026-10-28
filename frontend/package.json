@@ -1,6 +1,6 @@
 {
   "name": "kjapp-customer-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/geist": "^0.4.2",
@@ -39,6 +39,7 @@
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "57.0.4",
+    "expo-updates": "~57.0.26",
     "expo-web-browser": "~57.0.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -75,7 +76,9 @@
     "eas-build-pre-install": "node scripts/customer-build-gate.cjs",
     "preandroid": "node scripts/customer-build-gate.cjs",
     "preios": "node scripts/customer-build-gate.cjs",
-    "eas-build-post-install": "npx tsc --noEmit && npx expo install --check"
+    "eas-build-post-install": "npx tsc --noEmit && npx expo install --check",
+    "update:qa": "node ../scripts/publish-mobile-update.cjs --app customer --channel qa",
+    "update:production": "node ../scripts/publish-mobile-update.cjs --app customer --channel production"
   },
   "private": true
 }

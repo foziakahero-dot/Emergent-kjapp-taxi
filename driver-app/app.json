@@ -2,7 +2,7 @@
   "expo": {
     "name": "SNAR Driver",
     "slug": "kjapp-driver",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kjapp-driver",
@@ -104,6 +104,16 @@
     },
     "experiments": {
       "typedRoutes": false
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/1dec8949-0423-4fbf-a080-0703f93519d7",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "useEmbeddedUpdate": true
     }
   }
 }

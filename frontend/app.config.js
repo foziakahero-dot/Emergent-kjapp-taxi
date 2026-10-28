@@ -1,6 +1,7 @@
-const { assertQaBackend } = require('../scripts/phase5-qa-build-guard.cjs');
+const { assertQaBackend, assertUpdateBackend } = require('../scripts/phase5-qa-build-guard.cjs');
 
 module.exports = ({ config: base }) => {
+  assertUpdateBackend(process.env.SNAR_UPDATE_CHANNEL, process.env.EXPO_PUBLIC_BACKEND_URL);
   assertQaBackend(
     process.env.EAS_BUILD_PROFILE,
     process.env.EXPO_PUBLIC_BACKEND_URL

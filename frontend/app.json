@@ -2,7 +2,7 @@
   "expo": {
     "name": "SNAR",
     "slug": "kjapp",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "kjapp",
@@ -104,6 +104,16 @@
     },
     "experiments": {
       "typedRoutes": false
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/3631002e-5b25-4847-b5d8-05ec2ef304b5",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "useEmbeddedUpdate": true
     }
   }
 }

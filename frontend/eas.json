@@ -10,7 +10,8 @@
         "image": "latest",
         "resourceClass": "medium"
       },
-      "environment": "preview"
+      "environment": "production",
+      "channel": "production"
     },
     "qa": {
       "distribution": "internal",
@@ -23,7 +24,8 @@
         "image": "latest",
         "resourceClass": "medium"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "channel": "qa"
     },
     "production": {
       "env": {
@@ -35,7 +37,9 @@
       "ios": {
         "image": "latest"
       },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production",
+      "environment": "production"
     },
     "ios-simulator": {
       "distribution": "internal",
@@ -45,7 +49,9 @@
       "ios": {
         "simulator": true,
         "image": "latest"
-      }
+      },
+      "channel": "production",
+      "environment": "production"
     },
     "testflight-beta": {
       "distribution": "store",
@@ -57,7 +63,8 @@
         "image": "latest",
         "resourceClass": "medium"
       },
-      "environment": "production"
+      "environment": "production",
+      "channel": "production"
     },
     "testflight-qa": {
       "distribution": "store",
@@ -70,7 +77,8 @@
         "image": "latest",
         "resourceClass": "medium"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "channel": "qa"
     }
   },
   "cli": {
