@@ -92,9 +92,23 @@ export function DriverCockpitView(p: Props) {
   if (p.busy && !trip && !p.offer && !p.completed) return <V10Entrance fade testID="driver-shift-pending" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
     <V10Entrance pop style={{ borderRadius: 28, paddingVertical: 28, paddingHorizontal: 32, backgroundColor: colors.glass, boxShadow: colors.elevation2, alignItems: 'center' }}><ShiftStatusRing /><Text style={[v10.heading, { marginTop: 16 }]}>Oppdaterer vaktstatus</Text><Text style={v10.secondary}>Venter på bekreftelse fra SNAR</Text></V10Entrance>
   </V10Entrance>;
+  if (p.completed?.payment_flow === 'cash' && p.completed.payment_status !== 'paid' && !trip) {
+    const done = p.completed;
+    const review = done.price_review_required === true;
+    return <View testID="driver-cash-collection" accessibilityViewIsModal style={[StyleSheet.absoluteFill, { backgroundColor: colors.glass, justifyContent: 'center', padding: 24 }]}>
+      <V10Entrance pop style={{ backgroundColor: colors.bg, borderRadius: 28, padding: 24, gap: 16 }}>
+        <V10Badge>Kontantbetaling</V10Badge>
+        <Text accessibilityRole="alert" style={v10.title}>Ta imot kontantbetaling</Text>
+        <Text testID="driver-cash-amount" style={{ color: colors.text, fontFamily: font.semibold, fontSize: 42, fontVariant: ['tabular-nums'] }}>{kr(done.price)}</Text>
+        <Text style={v10.secondary}>{review ? 'Turprisen er til vurdering. Kontakt flåten for å avklare beløpet.' : 'Kunden betaler direkte til deg. Bekreft først når du har mottatt hele beløpet.'}</Text>
+        {p.error ? <Text accessibilityRole="alert" style={{ color: colors.danger }}>{p.error}</Text> : null}
+        <V10Action testID="driver-confirm-cash" label={`Kontant mottatt · ${kr(done.price)}`} onPress={() => p.onCashReceived?.()} busy={p.busy} disabled={p.busy || review || !known(done.price) || !p.onCashReceived} />
+        {review ? <V10Action kind="ghost" label="Kontakt flåten" onPress={() => router.push('/driver-fleet')} /> : null}
+      </V10Entrance>
+    </View>;
+  }
   if (p.completed && !trip && !(p.offer && p.online)) {
     const done = p.completed, paid = done.payment_status === 'paid' && known(done.driver_earnings) && done.driver_earnings >= 0;
-    const cashDue = done.payment_flow === 'cash' && done.payment_status !== 'paid';
     const subscription = done.business_model === 'subscription' || done.commission_source === 'subscription_v1';
     const platformAmount = paid && known(done.price) && done.price >= done.driver_earnings ? done.price - done.driver_earnings : null;
     const rows = [
@@ -109,13 +123,12 @@ export function DriverCockpitView(p: Props) {
       <V10Entrance pop key={`${done.trip_id}:${paid ? 'paid' : 'pending'}`} style={{ marginTop: 24 }}>
         <V10Badge tone="positive">Tur fullført</V10Badge><Text style={[v10.caption, { marginTop: 16 }]}>Din inntekt</Text>
         {paid ? <EarningsCount amount={done.driver_earnings} /> : <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 32, lineHeight: 56, letterSpacing: -1.82 }}>Betaling avventer</Text>}
-        <Text style={v10.secondary}>{done.payment_flow === 'cash' ? paid ? 'Kontant mottatt · ingen Stripe-utbetaling for denne turen.' : done.price_review_required ? 'SNAR må kontrollere turprisen før du bekrefter kontantbeløpet.' : `Kunden betaler ${kr(done.price)} kontant direkte til deg. Bekreft først når du har mottatt hele beløpet.` : paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text>
+        <Text style={v10.secondary}>{done.payment_flow === 'cash' ? 'Kontantbetaling bekreftet.' : paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text>
       </V10Entrance>
       <V10Group style={{ marginTop: 24, paddingVertical: 6, paddingHorizontal: 16 }}>{rows.map(([label, value], index) => <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, gap: 12 }}>
         <Text style={index === 2 ? v10.body : v10.secondary}>{label}</Text><Text style={index === 2 ? [v10.body, { fontVariant: ['tabular-nums'] }] : { fontFamily: font.medium, fontSize: 16, lineHeight: 23, fontVariant: ['tabular-nums'] }}>{value}</Text>
       </View>)}</V10Group>
-      {cashDue ? <View style={{ marginTop: 20 }}><V10Action testID="driver-confirm-cash" label={`Kontant mottatt · ${kr(done.price)}`} onPress={() => p.onCashReceived?.()} busy={p.busy} disabled={done.price_review_required === true || !p.onCashReceived} /><V10Action kind="ghost" label="Kontakt flåten" onPress={() => router.push('/driver-fleet')} /></View> : null}
-      <View style={{ marginTop: 24, gap: 4 }}><V10Action disabled={cashDue} height={58} label="Fortsett å kjøre" onPress={p.onContinue} busy={p.busy} testID="driver-summary-continue" /><V10Action kind="ghost" label="Ta pause" onPress={p.onPause} disabled={p.busy || cashDue} testID="driver-summary-pause" /></View>
+      <View style={{ marginTop: 24, gap: 4 }}><V10Action height={58} label="Fortsett å kjøre" onPress={p.onContinue} busy={p.busy} testID="driver-summary-continue" /><V10Action kind="ghost" label="Ta pause" onPress={p.onPause} disabled={p.busy} testID="driver-summary-pause" /></View>
     </V10Entrance></V10Screen></View>;
   }
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -140,7 +153,7 @@ export function DriverCockpitView(p: Props) {
           <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}><Ring stroke={4} value={left !== null && free && free > 0 ? left / free : null}><V10Icon name="timer" /></Ring><View style={{ flex: 1 }}><Text style={v10.caption}>{left !== null ? 'Gratis venting igjen' : 'Venter på passasjer'}</Text><Text style={{ fontFamily: font.semibold, fontSize: 32, lineHeight: 38, fontVariant: ['tabular-nums'] }}>{left !== null ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : '—'}</Text></View></View>
           <V10Group style={{ marginTop: 16, backgroundColor: colors.cardSubtle, boxShadow: 'none' }}><V10Row icon="user" title={name} subtitle={trip.passenger_note || 'Ingen henteinstruks oppgitt'} /><V10Row border icon="door" title="Hentested" subtitle={trip.pickup_address} /></V10Group>
           {contact}<V10Action kind="ink" label="Passasjeren er i bilen" onPress={() => setPhase('start')} disabled={p.busy} testID="driver-passenger-confirm" /><V10Action kind="ghost" label="Kunden kom ikke?" onPress={p.onNoShow} disabled={p.busy} testID="driver-no-show" /><V10Action kind="ghost" label="Avbryt tur" onPress={p.onCancel} disabled={p.busy} />
-        </> : trip.status === 'in_trip' ? phase === 'complete' ? <><Text style={v10.caption}>{name} · {trip.dropoff_address}</Text><Text style={v10.title}>Fullfør turen</Text><Text style={[v10.secondary, { marginTop: 6 }]}>Sjekk at passasjeren har gått ut og ikke glemt noe.</Text><View style={{ marginTop: 20 }}><V10HoldAction label="Fullfør tur" onConfirm={p.onAdvance} onError={p.onError} disabled={p.busy} testID="driver-advance" /></View><V10Action kind="ghost" label="Tilbake" onPress={() => setPhase('arriving')} disabled={p.busy} /></> : phase === 'arriving' ? <><Text style={v10.caption}>Ankommer</Text><Text style={v10.title}>{trip.dropoff_address}</Text><Text style={[v10.secondary, { marginTop: 6 }]}>Bekreft når du er fremme og passasjeren kan gå ut.</Text><View style={{ marginTop: 18 }}><V10Action height={58} kind="ink" label="Fremme ved destinasjon" onPress={() => setPhase('complete')} testID="driver-completion-review" /><V10Action kind="ghost" label="Fortsett turen" onPress={() => setPhase('base')} /></View></> : <>
+        </> : trip.status === 'in_trip' ? phase === 'complete' ? <><Text style={v10.caption}>{name} · {trip.dropoff_address}</Text><Text style={v10.title}>Fullfør turen</Text><Text style={[v10.secondary, { marginTop: 6 }]}>{trip.payment_flow === 'cash' ? `Når du fullfører, skal du ta imot ${kr(trip.price)} kontant fra kunden.` : 'Sjekk at passasjeren har gått ut og ikke glemt noe.'}</Text><View style={{ marginTop: 20 }}><V10HoldAction label="Fullfør tur" onConfirm={p.onAdvance} onError={p.onError} disabled={p.busy} testID="driver-advance" /></View><V10Action kind="ghost" label="Tilbake" onPress={() => setPhase('arriving')} disabled={p.busy} /></> : phase === 'arriving' ? <><Text style={v10.caption}>Ankommer</Text><Text style={v10.title}>{trip.dropoff_address}</Text><Text style={[v10.secondary, { marginTop: 6 }]}>Bekreft når du er fremme og passasjeren kan gå ut.</Text><View style={{ marginTop: 18 }}><V10Action height={58} kind="ink" label="Fremme ved destinasjon" onPress={() => setPhase('complete')} testID="driver-completion-review" /><V10Action kind="ghost" label="Fortsett turen" onPress={() => setPhase('base')} /></View></> : <>
           <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}><View style={[v10.icon, { backgroundColor: colors.surfaceInverse }]}><V10Icon name="destination" color={colors.onInverse} size={20} /></View><View style={{ flex: 1 }}><Text style={v10.heading}>{trip.dropoff_address}</Text><Text style={v10.secondary}>{p.gpsReady ? 'Naviger til avtalt destinasjon' : 'Venter på oppdatert posisjon'}</Text></View></View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}><View style={{ flex: 1 }}><V10Action small kind="soft" icon="message" label="Melding" onPress={p.onChat} /></View><View style={{ flex: 1 }}><V10Action small kind="soft" icon="safety" label="Sikkerhet" onPress={p.onEmergency} /></View></View><View style={{ marginTop: 12 }}><V10Action height={58} kind="ink" label="Ankommer destinasjon" onPress={() => setPhase('arriving')} testID="driver-arriving-review" /></View>
         </> : null}

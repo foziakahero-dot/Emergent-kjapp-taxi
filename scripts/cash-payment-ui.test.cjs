@@ -73,13 +73,24 @@ test('cash receipt waits for driver and never offers a second online payment',as
   assert.match(text(tree),/Betalt kontant/);
   await renderer.act(async()=>tree.unmount());
 });
-test('driver must confirm collected cash and cannot dismiss an unpaid cash summary',async()=>{
+test('cash completion prompts receipt before showing the earnings summary',async()=>{
   let tree,calls=0;const {DriverCockpitView}=load('driver-app/src/components/DriverCockpitView.tsx');
   const props={user:{id:'driver'},online:true,busy:false,summary:{},completed:{trip_id:'cash',payment_flow:'cash',payment_status:'cash_due',price:173},onCashReceived:()=>calls++};
   await renderer.act(async()=>{tree=renderer.create(React.createElement(DriverCockpitView,props));});
-  assert.equal(byId(tree,'driver-summary-continue').props.disabled,true);
+  assert.ok(byId(tree,'driver-cash-collection'));
+  assert.match(text(tree),/Ta imot kontantbetaling/);assert.match(text(tree),/173 kr/);
+  assert.doesNotMatch(text(tree),/Betaling avventer|SNAR må kontrollere/);
+  assert.equal(byId(tree,'driver-summary-continue'),undefined);
+  assert.equal(byId(tree,'driver-summary-screen'),undefined);
   await renderer.act(async()=>byId(tree,'driver-confirm-cash').props.onPress());assert.equal(calls,1);
+  await renderer.act(async()=>tree.update(React.createElement(DriverCockpitView,{...props,busy:true})));
+  assert.equal(byId(tree,'driver-confirm-cash').props.disabled,true);
   await renderer.act(async()=>tree.update(React.createElement(DriverCockpitView,{...props,completed:{...props.completed,price_review_required:true}})));
   assert.equal(byId(tree,'driver-confirm-cash').props.disabled,true);
+  await renderer.act(async()=>tree.update(React.createElement(DriverCockpitView,{...props,completed:{...props.completed,payment_status:'paid',driver_earnings:173}})));
+  assert.equal(byId(tree,'driver-cash-collection'),undefined);
+  assert.ok(byId(tree,'driver-summary-screen'));
+  assert.ok(byId(tree,'driver-summary-continue'));
+  assert.match(text(tree),/Kontantbetaling bekreftet/);
   await renderer.act(async()=>tree.unmount());
 });

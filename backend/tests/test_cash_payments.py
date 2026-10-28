@@ -114,6 +114,7 @@ def test_driver_confirmation_idempotent_audited_and_receipt_cash(context, monkey
     saved = raw.trips.find_one()
     assert saved['payment_status'] == 'paid' and saved['status'] == 'completed'
     assert saved['cash_received_by'] == did and saved['cash_received_amount_ore'] == 17300
+    assert saved['cash_collection_required'] is False
     assert raw.payment_transactions.count_documents({}) == 1
     assert raw.payment_transactions.find_one()['settlement_model'] == 'driver_collected_cash'
     receipt = raw.receipt_ledger.find_one()
@@ -160,19 +161,46 @@ def test_cash_waiting_fee_uses_accepted_policy_without_a_card_hold():
     assert fields['waiting_fee_total'] == 4 and fields['price'] == 177
 
 
-def test_actual_arrival_keeps_cash_due_and_blocks_stripe(context, monkeypatch):
+@pytest.mark.parametrize('location', ['destination', 'early', 'missing'])
+def test_actual_arrival_keeps_cash_due_and_blocks_stripe(context, monkeypatch, location):
     raw, db, uid, did = context
     trip = cash_trip(uid, did, status='in_trip', dropoff_lat=59.91, dropoff_lng=10.75)
     raw.trips.insert_one(trip)
     monkeypatch.setattr(server, 'send_push_to_user', AsyncMock())
     monkeypatch.setattr(server, '_attempt_trip_auto_charge', AsyncMock(side_effect=AssertionError('no Stripe')))
     monkeypatch.setattr(server, 'ride_reservations', SimpleNamespace(capture=AsyncMock(side_effect=AssertionError('no Stripe'))))
-    current = {'id': did, 'last_lat': 59.91, 'last_lng': 10.75, 'last_location_at': datetime.now(timezone.utc).isoformat()}
+    current = {'id': did, 'last_lat': None if location == 'missing' else 59.95 if location == 'early' else 59.91,
+               'last_lng': 10.75, 'last_location_at': datetime.now(timezone.utc).isoformat()}
     result = asyncio.run(server.driver_arrive('cash-trip', current))
     assert result['payment']['reason'] == 'cash_due'
     assert raw.trips.find_one()['status'] == 'arrived'
     assert raw.trips.find_one()['payment_status'] == 'cash_due'
+    assert raw.trips.find_one()['price'] == 173
+    assert raw.trips.find_one()['price_review_required'] is False
+    assert raw.trips.find_one()['requires_manual_settlement'] is False
+    assert raw.trips.find_one()['cash_collection_required'] is True
+    assert raw.trips.find_one()['ended_early'] is (location != 'destination')
     assert raw.users.find_one({'_id': ObjectId(did)})['active_trip_id'] == 'cash-trip'
+    notifications = server.send_push_to_user.await_args_list
+    assert notifications[0].args[:2] == (did, 'Ta imot kontantbetaling')
+    assert '173 kr' in notifications[0].args[2]
+    assert notifications[1].args[:2] == (uid, 'Betal kontant til sjåføren')
+    # Retrying arrival cannot mark cash received or send duplicate notices.
+    again = asyncio.run(server.driver_arrive('cash-trip', current))
+    assert again['already_applied'] is True
+    assert server.send_push_to_user.await_count == 2
+    assert raw.trips.find_one()['payment_status'] == 'cash_due'
+
+
+def test_cash_collection_survives_notification_failure(context, monkeypatch):
+    raw, db, uid, did = context
+    raw.trips.insert_one(cash_trip(uid, did, status='in_trip', dropoff_lat=59.91, dropoff_lng=10.75))
+    push = AsyncMock(side_effect=[RuntimeError('push unavailable'), None])
+    monkeypatch.setattr(server, 'send_push_to_user', push)
+    result = asyncio.run(server.driver_arrive('cash-trip', {'id': did}))
+    assert result['ok'] is True and push.await_count == 2
+    assert raw.trips.find_one()['payment_status'] == 'cash_due'
+    assert raw.trips.find_one()['price_review_required'] is False
 
 
 def test_cash_is_earnings_but_never_pending_electronic_payout(context, monkeypatch):

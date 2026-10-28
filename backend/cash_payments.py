@@ -49,6 +49,7 @@ async def confirm_cash(db, trip_id, driver_id, amount_ore, *, mark_paid, receipt
         {"$set": {"status": "completed", "payment_status": "paid", "payment_method": "cash",
                   "cash_received_at": now, "cash_received_by": driver_id,
                   "cash_received_amount_ore": amount_ore, "paid_at": now,
+                  "cash_collection_required": False,
                   "completed_at": now, "updated_at": now, "settlement_model": "driver_collected_cash"}})
     saved = await db.trips.find_one({"trip_id": trip_id, "driver_id": driver_id})
     if not saved or saved.get("payment_status") != "paid" or not saved.get("cash_received_at"):

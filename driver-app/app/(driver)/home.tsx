@@ -464,7 +464,7 @@ export default function DriverHome() {
       }
     };
 
-    if (action === 'arrive') {
+    if (action === 'arrive' && current.payment_flow !== 'cash') {
       Alert.alert(
         'Fullføre turen?',
         'SNAR kontrollerer at du er nær destinasjonen før turen avsluttes og betaling kan starte.',

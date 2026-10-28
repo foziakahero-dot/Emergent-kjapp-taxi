@@ -4973,6 +4973,14 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     if trip.get("payment_flow") == "reservation":
         updates.update({"price_review_required": False, "requires_manual_settlement": False,
                         "payment_status": "capture_pending"})
+    if is_cash(trip):
+        # Cash uses the stored, accepted fare (including accepted waiting fees).
+        # GPS proves where the ride ended; it must not prevent cash collection.
+        updates.update({"price_review_required": False, "requires_manual_settlement": False,
+                        "cash_collection_required": True})
+        if ended_early:
+            warning = f"Turen er avsluttet manuelt. Avtalt turpris på {trip.get('price')} kr betales kontant til sjåføren."
+            updates["early_end_warning"] = warning
     result = await db.trips.update_one(
         _real_trip_filter({"trip_id": trip_id, "driver_id": driver_id, "status": "in_trip"}),
         {"$set": updates},
@@ -4985,7 +4993,18 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
             {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
         )
     t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
-    if ended_early:
+    if is_cash(t):
+        # Independent notifications: failure to deliver must not undo arrival.
+        for recipient, title, message, url in (
+            (driver_id, "Ta imot kontantbetaling", f"Ta imot {t.get('price')} kr fra kunden. Bekreft i Driver når hele beløpet er mottatt.", "/driver"),
+            (t["user_id"], "Betal kontant til sjåføren", f"Turen er avsluttet. Betal {t.get('price')} kr kontant direkte til sjåføren.", f"/receipt/{trip_id}"),
+        ):
+            try:
+                await send_push_to_user(recipient, title, message, url, "trip_arrived", require_interaction=True)
+            except Exception:
+                logging.exception("Cash-collection notification failed for trip %s", trip_id)
+        payment = {"attempted": False, "reason": "cash_due"}
+    elif ended_early:
         # Notify both parties independently; a push failure must not undo the ride ending.
         for recipient, url in ((t["user_id"], f"/receipt/{trip_id}"), (driver_id, "/driver")):
             try:
