@@ -29,7 +29,8 @@ def payment_config(stripe):
                and matching and (not live or live_allowed))
     apple_merchant = os.getenv('APPLE_PAY_MERCHANT_ID', '').strip()
     wallet_prefix = 'QA_' if qa else ''
-    return {'enabled': bool(enabled), 'publishable_key': key if enabled else '',
+    from cash_payments import cash_enabled
+    return {'cash_enabled': cash_enabled(), 'enabled': bool(enabled), 'publishable_key': key if enabled else '',
             'test_mode': not live, 'apple_merchant_id': apple_merchant,
             'google_pay_enabled': bool(enabled and os.getenv(wallet_prefix + 'GOOGLE_PAY_ENABLED', '').lower() == 'true'),
             'apple_pay_enabled': bool(enabled and apple_merchant and os.getenv(wallet_prefix + 'APPLE_PAY_ENABLED', '').lower() == 'true'),

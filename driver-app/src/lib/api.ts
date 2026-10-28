@@ -139,6 +139,7 @@ export async function publishDriverLocation(lat: number, lng: number, heading = 
 }
 
 export const driverApi = {
+  confirmCash: (id: string, amount_ore: number) => api.post(`/driver/trip/${encodeURIComponent(id)}/cash/confirm`, { amount_ore }).then(r => r.data),
   pending: () => api.get('/driver/pending').then((r) => r.data),
   accept: (trip_id: string) => api.post('/driver/accept', { trip_id }).then((r) => r.data),
   decline: (trip_id: string) => api.post('/driver/decline', { trip_id }).then((r) => r.data),

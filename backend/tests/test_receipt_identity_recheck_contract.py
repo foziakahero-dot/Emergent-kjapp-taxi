@@ -92,6 +92,7 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
 
     sys.path.insert(0, str(SERVER.parent))
     from promo_credits import platform_fee_ore
+    from cash_payments import is_cash
 
     source = _source()
     tree = ast.parse(source)
@@ -110,6 +111,7 @@ def test_paid_receipt_preserves_booked_zero_and_promo_commission():
         "re": re,
         "uuid": uuid,
         "platform_fee_ore": platform_fee_ore,
+        "is_cash": is_cash,
     }
 
     async def platform_commission():
