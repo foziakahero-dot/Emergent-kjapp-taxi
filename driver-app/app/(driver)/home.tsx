@@ -97,7 +97,7 @@ export default function DriverHome() {
       let normalized = cur?.trip || cur || null;
       if (normalized && FINISHED_STATUSES.has(normalized.status)) {
         const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
-        setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
+        setCompletedTrip(normalized.payment_flow === 'cash' && normalized.payment_status !== 'paid' ? normalized : dismissed === finishedTripReceipt(normalized) ? null : normalized);
       } else if (normalized && ACTIVE_STATUSES.has(normalized.status)) {
         setCompletedTrip(null);
       }
@@ -123,7 +123,7 @@ export default function DriverHome() {
                   normalized = refreshed?.trip || refreshed || normalized;
                   if (normalized && FINISHED_STATUSES.has(normalized.status)) {
                     const dismissed = await storage.getItem(finishedTripDismissalKey(user.id));
-                    setCompletedTrip(dismissed === finishedTripReceipt(normalized) ? null : normalized);
+                    setCompletedTrip(normalized.payment_flow === 'cash' && normalized.payment_status !== 'paid' ? normalized : dismissed === finishedTripReceipt(normalized) ? null : normalized);
                   }
                   setCurrent(normalized && ACTIVE_STATUSES.has(normalized.status) ? normalized : null);
                   setError('');
@@ -621,8 +621,20 @@ export default function DriverHome() {
     ? current.pickup_route?.geometry?.coordinates || null
     : current?.status === 'in_trip' ? current.geometry?.coordinates || null : null;
 
+  const cashConfirmationLock = useRef(false);
+  const confirmCashReceived = async () => {
+    if (cashConfirmationLock.current || !completedTrip || completedTrip.payment_flow !== 'cash' || completedTrip.payment_status === 'paid') return;
+    cashConfirmationLock.current = true; setSummaryActionBusy(true); setError('');
+    try {
+      const result = await driverApi.confirmCash(completedTrip.trip_id, Math.round(completedTrip.price * 100));
+      if (result?.paid !== true) throw new Error('Kontantbetalingen ble ikke bekreftet.');
+      await poll();
+    } catch (error) { setError(apiError(error)); await poll(); }
+    finally { cashConfirmationLock.current = false; setSummaryActionBusy(false); }
+  };
+
   const finishSummary = async (continueOnline: boolean) => {
-    if (!completedTrip || summaryActionLock.current) return;
+    if (!completedTrip || summaryActionLock.current || (completedTrip.payment_flow === 'cash' && completedTrip.payment_status !== 'paid')) return;
     summaryActionLock.current = true; setSummaryActionBusy(true);
     try {
       if (user?.id) await storage.setItem(finishedTripDismissalKey(user.id), finishedTripReceipt(completedTrip));
@@ -662,6 +674,7 @@ export default function DriverHome() {
           setTripMinimized(value);
           if (current?.trip_id) void (value ? storage.setItem(MINIMIZED_TRIP_KEY, current.trip_id) : storage.removeItem(MINIMIZED_TRIP_KEY)).catch(() => setError('Kunne ikke lagre visningsvalget.'));
         }}
+        onCashReceived={() => void confirmCashReceived()}
         onContinue={() => void finishSummary(true)} onPause={() => void finishSummary(false)}
         onError={error => setError(apiError(error))}
       />

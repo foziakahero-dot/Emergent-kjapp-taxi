@@ -49,6 +49,8 @@ def waiting_start_fields(trip, started_at):
         raise ValueError("Missing or invalid pickup arrival timestamp") from None
     fare = int(trip.get("quoted_ride_price", trip["price"]))
     total = fare + charge["waiting_fee_total"]
-    if total * 100 > int(trip.get("authorized_amount_ore", 0)):
+    cash = trip.get("payment_flow") == "cash" and trip.get("payment_provider") == "cash"
+    limit = (fare + int(policy["max_fee"])) * 100 if cash else int(trip.get("authorized_amount_ore", 0))
+    if total * 100 > limit:
         raise ValueError("Waiting charge exceeds authorized amount")
     return {**charge, "price": total, "waiting_finished_at": started_at.isoformat()}

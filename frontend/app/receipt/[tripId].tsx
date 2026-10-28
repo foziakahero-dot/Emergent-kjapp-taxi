@@ -111,7 +111,7 @@ export default function Receipt() {
 
   const paymentLock = useRef(false);
   const pay = async () => {
-    if (!tripId || paying || paymentLock.current || trip?.payment_status === 'paid' || trip?.payment_flow === 'reservation' || !['arrived', 'completed'].includes(trip?.status)) return;
+    if (!tripId || paying || paymentLock.current || trip?.payment_status === 'paid' || ['reservation', 'cash'].includes(trip?.payment_flow) || !['arrived', 'completed'].includes(trip?.status)) return;
     paymentLock.current = true;
     setPaymentError('');
     setPaying(true);
