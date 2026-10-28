@@ -17,9 +17,10 @@ export function VehicleAsset({
 }) {
   const spec = customerVehicleArt(kind);
   if (!spec) return null;
+  const source = typeof spec.source === 'string' ? { uri: spec.source } : spec.source;
   return (
     <Image
-      source={spec.source}
+      source={source}
       style={{ width, height }}
       contentFit="contain"
       allowDownscaling
