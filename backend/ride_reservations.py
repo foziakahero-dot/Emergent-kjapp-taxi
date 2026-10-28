@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from promo_credits import platform_fee_ore
 from fastapi import HTTPException
+from cash_payments import is_cash
 from payment_modes import customer_for_user, method_scope, is_live, payment_config, stripe_client
 
 
@@ -58,6 +59,8 @@ class RideReservations:
 
     async def authorize(self, trip):
         """No trip is searchable until Stripe confirms requires_capture."""
+        if is_cash(trip):
+            raise HTTPException(409, "Kontantturer skal ikke kortreserveres")
         client = self.client()
         record = await self.record(trip)
         if not record:
@@ -205,6 +208,8 @@ class RideReservations:
         return trip
 
     async def require_reserved(self, trip):
+        if is_cash(trip) and trip.get("payment_status") == "cash_due":
+            return
         if trip.get("payment_flow") != "reservation":
             # Existing rides must also obtain a hold before they can start.
             await self.authorize(trip)
@@ -219,6 +224,8 @@ class RideReservations:
             raise HTTPException(402, "Kortreservasjonen er ikke gyldig. Turen kan ikke startes.")
 
     async def capture(self, trip):
+        if is_cash(trip):
+            raise HTTPException(409, "Kontantturer skal ikke kortbelastes")
         trip = await self.db.trips.find_one({"trip_id": trip["trip_id"]}) or trip
         if trip.get("status") not in ("arrived", "completed", "rated"):
             raise HTTPException(409, "Turen må være avsluttet før beløpet trekkes")
@@ -287,6 +294,10 @@ class RideReservations:
             await self.notify(trip, "Turen er betalt", f"{amount / 100:g} kr ble trukket automatisk. Kvitteringen er klar i SNAR.")
 
     async def release(self, trip):
+        if is_cash(trip):
+            await self.db.trips.update_one({"trip_id": trip["trip_id"], "payment_status": {"$in": ["authorizing", "cash_due"]},
+                "status": {"$in": ["cancelled", "cancelled_by_driver"]}}, {"$set": {"payment_status": "not_due"}})
+            return
         record = await self.record(trip)
         if not record:
             return

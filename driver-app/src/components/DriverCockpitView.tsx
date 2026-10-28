@@ -29,7 +29,7 @@ type Props = {
   onOnline: () => void; onAccept: () => void; onDecline: () => void; onAdvance: () => Promise<void>;
   onCancel: () => void; onNoShow: () => void; onCall: () => void; onChat: () => void; onNavigate: () => void;
   onEmergency: () => void; onMinimize: (value: boolean) => void; onContinue: () => void; onPause: () => void;
-  onError: (error: unknown) => void;
+  onError: (error: unknown) => void; onCashReceived?: () => void;
 };
 const known = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
 const breakdownAmount = (value: unknown) => known(value) && (value as number) >= 0 ? (value as number).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Avventer';
@@ -94,6 +94,7 @@ export function DriverCockpitView(p: Props) {
   </V10Entrance>;
   if (p.completed && !trip && !(p.offer && p.online)) {
     const done = p.completed, paid = done.payment_status === 'paid' && known(done.driver_earnings) && done.driver_earnings >= 0;
+    const cashDue = done.payment_flow === 'cash' && done.payment_status !== 'paid';
     const subscription = done.business_model === 'subscription' || done.commission_source === 'subscription_v1';
     const platformAmount = paid && known(done.price) && done.price >= done.driver_earnings ? done.price - done.driver_earnings : null;
     const rows = [
@@ -108,12 +109,13 @@ export function DriverCockpitView(p: Props) {
       <V10Entrance pop key={`${done.trip_id}:${paid ? 'paid' : 'pending'}`} style={{ marginTop: 24 }}>
         <V10Badge tone="positive">Tur fullført</V10Badge><Text style={[v10.caption, { marginTop: 16 }]}>Din inntekt</Text>
         {paid ? <EarningsCount amount={done.driver_earnings} /> : <Text style={{ color: colors.text, fontFamily: font.semibold, fontSize: 32, lineHeight: 56, letterSpacing: -1.82 }}>Betaling avventer</Text>}
-        <Text style={v10.secondary}>{paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text>
+        <Text style={v10.secondary}>{done.payment_flow === 'cash' ? paid ? 'Kontant mottatt · ingen Stripe-utbetaling for denne turen.' : done.price_review_required ? 'SNAR må kontrollere turprisen før du bekrefter kontantbeløpet.' : `Kunden betaler ${kr(done.price)} kontant direkte til deg. Bekreft først når du har mottatt hele beløpet.` : paid ? `Bekreftet · i dag totalt ${kr(p.summary?.income)}` : 'Inntekt vises når betalingen er bekreftet.'}</Text>
       </V10Entrance>
       <V10Group style={{ marginTop: 24, paddingVertical: 6, paddingHorizontal: 16 }}>{rows.map(([label, value], index) => <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: index ? 1 : 0, borderTopColor: colors.line, gap: 12 }}>
         <Text style={index === 2 ? v10.body : v10.secondary}>{label}</Text><Text style={index === 2 ? [v10.body, { fontVariant: ['tabular-nums'] }] : { fontFamily: font.medium, fontSize: 16, lineHeight: 23, fontVariant: ['tabular-nums'] }}>{value}</Text>
       </View>)}</V10Group>
-      <View style={{ marginTop: 24, gap: 4 }}><V10Action height={58} label="Fortsett å kjøre" onPress={p.onContinue} busy={p.busy} testID="driver-summary-continue" /><V10Action kind="ghost" label="Ta pause" onPress={p.onPause} disabled={p.busy} testID="driver-summary-pause" /></View>
+      {cashDue ? <View style={{ marginTop: 20 }}><V10Action testID="driver-confirm-cash" label={`Kontant mottatt · ${kr(done.price)}`} onPress={() => p.onCashReceived?.()} busy={p.busy} disabled={done.price_review_required === true || !p.onCashReceived} /><V10Action kind="ghost" label="Kontakt flåten" onPress={() => router.push('/driver-fleet')} /></View> : null}
+      <View style={{ marginTop: 24, gap: 4 }}><V10Action disabled={cashDue} height={58} label="Fortsett å kjøre" onPress={p.onContinue} busy={p.busy} testID="driver-summary-continue" /><V10Action kind="ghost" label="Ta pause" onPress={p.onPause} disabled={p.busy || cashDue} testID="driver-summary-pause" /></View>
     </V10Entrance></V10Screen></View>;
   }
   return <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -129,6 +131,7 @@ export function DriverCockpitView(p: Props) {
       </TurnBanner> : null}
       {inside && trip.status === 'driver_on_way' && phase === 'base' ? <V10Entrance testID="driver-waiting-inside" style={{ position: 'absolute', top: Math.max(172, insets.top + 124), left: 12, right: 12, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.surface, boxShadow: colors.elevation2, flexDirection: 'row', gap: 10, alignItems: 'center' }}><V10Icon name="inside" size={20} color={colors.success} /><Text style={[v10.body, { flex: 1, fontSize: 15 }]}>{name.split(' ')[0]} venter inne</Text><Text style={v10.caption}>Ring ved ankomst</Text></V10Entrance> : null}
       <Sheet key={`${trip.trip_id}:${trip.status}:${phase}`}>
+        {trip.payment_flow === 'cash' ? <Text testID="driver-cash-trip" style={[v10.body, { marginBottom: 12 }]}>Kontantbetaling · {kr(trip.price)}</Text> : null}
         {trip.status === 'driver_on_way' ? phase === 'arrival' ? <><V10Badge tone="positive">Bekreft hentepunktet</V10Badge><Text style={[v10.title, { marginTop: 10 }]}>{trip.pickup_address}</Text><Text style={[v10.secondary, { marginTop: 4 }]}>{name} blir varslet når ankomsten er bekreftet.</Text><View style={{ marginTop: 20 }}><V10Action height={58} label="Jeg har ankommet" onPress={() => void p.onAdvance().catch(p.onError)} busy={p.busy} testID="driver-advance" /><V10Action kind="ghost" label="Tilbake" onPress={() => setPhase('base')} /></View></> : <>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}><View style={{ width: 52, height: 52, borderRadius: 17.68, backgroundColor: colors.cardSubtle, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 18.72, fontFamily: font.semibold }}>{name.split(' ').map((part: string) => part[0]).join('').slice(0, 2)}</Text></View><View style={{ flex: 1 }}><Text style={v10.heading}>{name}</Text><Text style={v10.secondary}>{trip.pickup_address}</Text></View><Text style={v10.title}>{eta ?? '—'}<Text style={v10.caption}> min</Text></Text></View>
           {p.extras ? <Text style={[v10.caption, { marginTop: 8 }]}>{p.extras}</Text> : null}{trip.passenger_note ? <Text style={[v10.secondary, { marginTop: 8 }]}>{trip.passenger_note}</Text> : null}

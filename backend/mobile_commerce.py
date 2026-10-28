@@ -511,6 +511,8 @@ def install_mobile_commerce(api, db, *, stripe, get_current_user, require_custom
         trip = await db.trips.find_one(real_trip_filter({"trip_id": body.trip_id, "user_id": current["id"]}))
         if not trip or trip.get("status") not in ("arrived", "completed"):
             raise HTTPException(409, "Turen er ikke klar for betaling")
+        if trip.get("payment_flow") == "cash":
+            raise HTTPException(409, "Kontantturen skal betales direkte til sjåføren.")
         if trip.get("payment_flow") == "reservation":
             raise HTTPException(409, "Turen betales automatisk fra kortreservasjonen. Ingen ny betaling skal startes.")
         if trip.get("price_review_required"):

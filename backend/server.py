@@ -1,3 +1,4 @@
+from cash_payments import cash_enabled, is_cash, activate_cash, confirm_cash
 from trip_status_stream import TripStatusStream
 from dotenv import load_dotenv
 load_dotenv()
@@ -885,7 +886,7 @@ class TripRequest(BaseModel):
     waiting_policy_token: Optional[str] = Field(default=None, max_length=64)
     quoted_price: Optional[int] = Field(default=None, ge=0)
     quoted_pricing_version: Optional[int] = Field(default=None, ge=1)
-    payment_provider: Literal["card", "google_pay"] = "card"
+    payment_provider: Literal["card", "google_pay", "cash"] = "card"
 
 
 class RateTripRequest(BaseModel):
@@ -2857,7 +2858,10 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
 
     # A Google Pay booking supplies its wallet payment method at confirmation time;
     # cards still require a verified saved method in the matching Stripe mode.
-    if body.payment_provider == "google_pay":
+    if body.payment_provider == "cash":
+        if not cash_enabled():
+            raise HTTPException(503, "Kontantbetaling er midlertidig deaktivert")
+    elif body.payment_provider == "google_pay":
         if not configured_payments(stripe)["google_pay_enabled"]:
             raise HTTPException(status_code=503, detail="Google Pay er ikke aktivert for dette betalingsmiljøet")
     else:
@@ -2959,7 +2963,8 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         "geometry": geometry,
         "status": "payment_authorizing",
         "payment_status": "authorizing",
-        "payment_flow": "reservation",
+        "payment_flow": "cash" if body.payment_provider == "cash" else "reservation",
+        "payment_method": "cash" if body.payment_provider == "cash" else "card",
         "payment_provider": body.payment_provider,
         "driver_id": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2978,7 +2983,10 @@ async def request_trip(body: TripRequest, current=Depends(require_customer)):
         {"$unset": {"booking_request_lock": "", "booking_request_locked_at": ""}},
     )
     try:
-        await ride_reservations.authorize(trip)
+        if is_cash(trip):
+            await activate_cash(db, trip, offer_trip_to_next_driver)
+        else:
+            await ride_reservations.authorize(trip)
     except HTTPException as exc:
         needs_action = isinstance(exc.detail, dict) and exc.detail.get("code") == "reservation_requires_action"
         if not needs_action:
@@ -3003,7 +3011,10 @@ async def retry_trip_authorization(trip_id: str, current=Depends(require_custome
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"], "status": "payment_authorizing"})
     if not trip:
         raise HTTPException(409, "Turen venter ikke på kortgodkjenning")
-    await ride_reservations.authorize(trip)
+    if is_cash(trip):
+        await activate_cash(db, trip, offer_trip_to_next_driver)
+    else:
+        await ride_reservations.authorize(trip)
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     trip.pop("_id", None)
     return trip
@@ -3014,6 +3025,8 @@ async def retry_reserved_payment(trip_id: str, current=Depends(require_customer)
     trip = await db.trips.find_one({"trip_id": trip_id, "user_id": current["id"]})
     if not trip or trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(409, "Turen er ikke avsluttet")
+    if is_cash(trip):
+        raise HTTPException(409, "Kontantbetaling bekreftes av sjåføren. Kort skal ikke belastes.")
     if trip.get("payment_status") == "paid":
         return {"ok": True, "paid": True}
     if trip.get("payment_flow") != "reservation":
@@ -3184,6 +3197,10 @@ async def customer_driver_photo(trip_id: str, current=Depends(require_customer))
         media_type=rec.get("content_type") or ct,
         headers={"Cache-Control": "private, max-age=60"},
     )
+
+
+class CashReceivedRequest(BaseModel):
+    amount_ore: int = Field(gt=0, strict=True)
 
 
 @api.post("/trips/{trip_id}/complete")
@@ -4397,6 +4414,10 @@ async def driver_pending(current=Depends(require_driver)):
             "commission": await _platform_commission(),
             "driver_gps": None,
         }
+    cash_due = await db.trips.find_one({"driver_id": current["id"], "status": "arrived",
+        "payment_flow": "cash", "payment_status": "cash_due"}, {"trip_id": 1})
+    if cash_due:
+        return {"trips": [], "busy": True, "cash_due": True, "active_trip_id": cash_due["trip_id"]}
     if current.get("active_trip_id"):
         active = await db.trips.find_one(
             _real_trip_filter({
@@ -4500,7 +4521,9 @@ async def driver_pending(current=Depends(require_driver)):
 async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)):
     if current.get("online") is not True:
         raise HTTPException(status_code=409, detail="Gå online før du godtar en tur")
-    driver_id = current["id"]  # driver's user id is the driver_id now
+    driver_id = current["id"]
+    if await db.trips.find_one({"driver_id": driver_id, "status": "arrived", "payment_flow": "cash", "payment_status": "cash_due"}):
+        raise HTTPException(409, "Bekreft kontantbetaling på forrige tur før du tar en ny tur")
     assigned_vehicle = await _assigned_fleet_vehicle(current, required=True)
     compliance = await _driver_shift_compliance(current, assigned_vehicle)
     if not compliance.get("operational"):
@@ -4679,13 +4702,22 @@ async def driver_accept(body: AcceptTripRequest, current=Depends(require_driver)
     return t
 
 
+@api.post("/driver/trip/{trip_id}/cash/confirm")
+async def driver_confirm_cash(trip_id: str, body: CashReceivedRequest, current=Depends(require_driver)):
+    return await confirm_cash(db, trip_id, current["id"], body.amount_ore,
+                              mark_paid=_mark_trip_paid_and_complete, receipts=send_trip_receipts)
+
+
 @api.get("/driver/current")
 async def driver_current(current=Depends(require_driver)):
     driver_id = current["id"]
     # An ACTIVE trip always wins over a just-finished one. A completed ("arrived") trip is only
     # returned for 15 minutes so the driver can see the summary — after that it is history.
+    # Uncollected cash remains current until the assigned driver confirms receipt.
     t = await db.trips.find_one(
-        _real_trip_filter({"driver_id": driver_id, "status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}}),
+        _real_trip_filter({"driver_id": driver_id, "$or": [
+            {"status": {"$in": ["driver_on_way", "at_pickup", "in_trip"]}},
+            {"status": "arrived", "payment_flow": "cash", "payment_status": "cash_due"}]}),
         sort=[("created_at", -1)],
     )
     if t:
@@ -4709,7 +4741,7 @@ async def driver_current(current=Depends(require_driver)):
         )
         if not t:
             return None
-        ts = t.get("arrived_at") or t.get("updated_at")
+        ts = t.get("cash_received_at") or t.get("arrived_at") or t.get("updated_at")
         try:
             done_at = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
             if (datetime.now(timezone.utc) - done_at) > timedelta(minutes=15):
@@ -4947,10 +4979,11 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Turen endret status før den kunne avsluttes")
-    await db.users.update_one(
-        {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
-        {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
-    )
+    if not is_cash(trip):
+        await db.users.update_one(
+            {"_id": ObjectId(driver_id), "active_trip_id": trip_id},
+            {"$unset": {"active_trip_id": "", "active_trip_locked_at": ""}},
+        )
     t = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id}))
     if ended_early:
         # Notify both parties independently; a push failure must not undo the ride ending.
@@ -4966,7 +4999,7 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
             t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
             f"/receipt/{trip_id}", "trip_arrived",
         )
-        payment = {"attempted": False} if trip.get("payment_flow") == "reservation" else await _attempt_trip_auto_charge(t)
+        payment = {"attempted": False} if trip.get("payment_flow") == "reservation" else ({"attempted": False, "reason": "cash_due"} if is_cash(t) else await _attempt_trip_auto_charge(t))
     if trip.get("payment_flow") == "reservation":
         payment = await ride_reservations.capture(t)
     # Bonus evaluation happens only from the canonical payment-success transition.
@@ -8286,7 +8319,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
     receipt_number = f"KJAPP-{paid_day}-{(clean_trip[:12] or uuid.uuid4().hex[:12].upper())}"
     payment_kind = (payment or {}).get("kind")
     payment_method = (
-        "saved_card" if payment_kind == "auto_charge"
+        "cash" if is_cash(trip) else "saved_card" if payment_kind == "auto_charge"
         else "stripe_checkout" if (payment or {}).get("session_id")
         else (trip.get("payment_method") or "card")
     )
@@ -8324,7 +8357,7 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "fleet_net": max(0, price - platform_fee),
         "payment_status": "paid",
         "payment_method": payment_method,
-        "stripe_session_id": (payment or {}).get("session_id"),
+        "stripe_session_id": None if is_cash(trip) else (payment or {}).get("session_id"),
         "stripe_payment_intent_id": (payment or {}).get("stripe_payment_intent_id"),
         "settlement_model": (payment or {}).get("settlement_model"),
         "paid_at": paid_at,
@@ -8538,6 +8571,8 @@ async def _attempt_trip_auto_charge_locked(trip: dict) -> dict:
     idempotency key prevents duplicate captures. Any failed/3DS-required off-session attempt
     is cancelled and the customer falls back to the existing manual Checkout flow.
     """
+    if trip and is_cash(trip):
+        return {"attempted": False, "reason": "cash_due"}
     if not AUTO_CHARGE_ENABLED:
         return {"attempted": False, "reason": "disabled"}
     if not stripe.api_key or not configured_payments(stripe)["enabled"]:
@@ -8753,6 +8788,8 @@ async def create_trip_checkout(body: TripCheckoutRequest, request: Request, curr
         raise HTTPException(status_code=404, detail="Tur ikke funnet")
     if trip.get("status") not in ("arrived", "completed", "rated"):
         raise HTTPException(status_code=400, detail="Turen er ikke ferdig ennå")
+    if is_cash(trip):
+        raise HTTPException(409, "Kontantturen skal betales direkte til sjåføren.")
     if trip.get("payment_flow") == "reservation":
         raise HTTPException(409, "Turen betales automatisk fra kortreservasjonen. Ingen ny betaling skal startes.")
     if trip.get("price_review_required"):
@@ -9235,6 +9272,9 @@ async def driver_payouts(current=Depends(require_driver)):
     week_start = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
     pending = 0
     pending_net = 0
+    cash_collected = 0
+    cash_net = 0
+    cash_trips = 0
     trips_count = 0
     async for t in db.trips.find(_real_trip_filter({
         "driver_id": driver_id,
@@ -9244,6 +9284,11 @@ async def driver_payouts(current=Depends(require_driver)):
     })):
         gross = int(t.get("price", 0) or 0)
         rate = await _commission_for_trip(t)
+        if is_cash(t):
+            cash_collected += gross
+            cash_net += int(round(gross * (1 - rate)))
+            cash_trips += 1
+            continue
         pending += gross
         pending_net += int(round(gross * (1 - rate)))
         trips_count += 1
@@ -9283,9 +9328,11 @@ async def driver_payouts(current=Depends(require_driver)):
     return {
         # Canonical naming: earnings from paid trips. Legacy pending_* aliases remain
         # temporarily for older mobile builds, but do not imply KJAPP pays the driver directly.
-        "earned_gross_7d": pending,
-        "earned_net_7d": net,
-        "paid_trips_7d": trips_count,
+        "cash_collected_7d": cash_collected,
+        "cash_trips_7d": cash_trips,
+        "earned_gross_7d": pending + cash_collected,
+        "earned_net_7d": net + cash_net,
+        "paid_trips_7d": trips_count + cash_trips,
         "pending_gross": pending,
         "pending_trips": trips_count,
         "pending_net": net + bonus_total,
@@ -11069,6 +11116,8 @@ async def admin_create_refund(body: RefundRequest, current=Depends(require_admin
     if trip.get("payment_status") != "paid":
         raise HTTPException(409, "Turen er ikke betalt og kan derfor ikke refunderes")
 
+    if is_cash(trip):
+        raise HTTPException(409, "Kontantrefusjon må avklares og registreres med løyvehaveren; Stripe-refusjon er ikke tilgjengelig.")
     gross = int(trip.get("price") or 0)
     already = int(trip.get("refunded_total") or 0)
     eligible = gross - already

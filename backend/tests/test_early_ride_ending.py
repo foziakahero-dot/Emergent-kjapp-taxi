@@ -19,6 +19,8 @@ async def push(*args,**kw):
  if push_fails and len(notifications)==1:raise RuntimeError('push channel unavailable')
 async def charge(t):charges.append(t);return {'attempted':True}
 ns=dict(HTTPException=HTTPException,datetime=datetime,timezone=timezone,ObjectId=str,_real_trip_filter=lambda x:x,_fresh_driver_location=lambda x:x=='fresh',haversine_km=lambda *x:distance,DROPOFF_ARRIVAL_RADIUS_M=300,send_push_to_user=push,_attempt_trip_auto_charge=charge,logging=logging)
+from cash_payments import is_cash
+ns['is_cash'] = is_cash
 source_tree=ast.parse((Path(__file__).resolve().parents[1] / 'server.py').read_text())
 tree=ast.Module(body=[n for n in source_tree.body if isinstance(n,ast.AsyncFunctionDef) and n.name == 'driver_arrive'],type_ignores=[])
 for n in tree.body:
