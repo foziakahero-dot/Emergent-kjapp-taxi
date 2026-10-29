@@ -101,6 +101,7 @@ export function InteractiveMap({
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  navigationFollow?: boolean;
 }) {
   useColorTheme();
   const [size, setSize] = useState({ w: 0, h: 0 });

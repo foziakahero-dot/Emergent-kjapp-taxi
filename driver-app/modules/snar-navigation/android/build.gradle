@@ -1,0 +1,19 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.snarnavigation'
+version = '0.1.0'
+
+android {
+  namespace 'expo.modules.snarnavigation'
+  defaultConfig { versionCode 1; versionName '0.1.0' }
+}
+
+repositories { maven { url 'https://api.mapbox.com/downloads/v2/releases/maven' } }
+
+dependencies {
+  // Matches the existing Maps SDK 11.31.1. Use the 16 KB page-size artifacts.
+  implementation 'com.mapbox.navigationcore:android-ndk27:3.31.1'
+}

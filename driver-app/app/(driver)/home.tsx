@@ -1,6 +1,8 @@
 import { BlurTargetView } from 'expo-blur';
 import { useTripUpdates } from '@/src/lib/useTripUpdates';
 import { DriverCockpitView } from '@/src/components/DriverCockpitView';
+import { DriverNavigationPanel } from '@/src/components/DriverNavigationPanel';
+import { useDriverNavigation } from '@/src/lib/useDriverNavigation';
 import { useHideTabBar } from '@/src/components/FloatingTabBar';
 import { Text } from '@/src/components/Typography';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -405,7 +407,13 @@ export default function DriverHome() {
     if (offerActionLock.current || busy) return;
     offerActionLock.current = true; setBusy(true);
     try { await driverApi.decline(tripId); setPending((p) => p.filter((t) => t.trip_id !== tripId)); }
-    catch (e) { setError(apiError(e)); }
+    catch (e) {
+      setError(apiError(e));
+      Alert.alert('Navigasjon', apiError(e), [
+        { text: 'Avbryt', style: 'cancel' },
+        { text: 'Google Maps / Waze', onPress: () => void openExternalNavigation() },
+      ]);
+    }
     finally { offerActionLock.current = false; setBusy(false); }
   };
 
@@ -536,7 +544,14 @@ export default function DriverHome() {
     Linking.openURL('tel:112').catch(() => {});
   };
 
+  const navigation = useDriverNavigation(current);
   const openNavigation = async () => {
+    if (!navigation.supported) { await openExternalNavigation(); return; }
+    try { await navigation.start(); }
+    catch (e) { setError(apiError(e)); }
+  };
+  const openExternalNavigation = async () => {
+    await navigation.stop();
     if (!current) return;
     const toPickup = current.status === 'driver_on_way';
     const lat = Number(toPickup ? current.pickup_lat : current.dropoff_lat);
@@ -651,7 +666,8 @@ export default function DriverHome() {
         user={!current ? loc : null}
         pickup={current ? mapPickup : (firstOffer ? { lat: firstOffer.pickup_lat, lng: firstOffer.pickup_lng } : null)}
         dropoff={current ? mapDropoff : (firstOffer ? { lat: firstOffer.dropoff_lat, lng: firstOffer.dropoff_lng } : null)}
-        route={current ? mapRoute : firstOffer?.geometry?.coordinates}
+        route={navigation.active ? navigation.coordinates : current ? mapRoute : firstOffer?.geometry?.coordinates}
+        navigationFollow={navigation.active}
         activeCar={current && loc ? loc : null}
         testID="driver-map"
       /></BlurTargetView>
@@ -678,6 +694,7 @@ export default function DriverHome() {
         onContinue={() => void finishSummary(true)} onPause={() => void finishSummary(false)}
         onError={error => setError(apiError(error))}
       />
+      {navigation.active ? <DriverNavigationPanel navigation={navigation} onExternal={() => void openExternalNavigation()} /> : null}
 
       {declineReasonsOpen && firstOffer ? (
         <View style={s.declineOverlay}>

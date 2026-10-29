@@ -40,7 +40,7 @@ export default function DriverNavigation() {
   return <V10Screen testID="driver-navigation-screen"><V10Entrance fade>
     <V10Header title="Navigasjon" onBack={() => router.back()} />
     {settings.isPending ? <Loader /> : settings.isError ? <V10State icon="wifiOff" warning title="Kunne ikke hente navigasjonsvalget" body="Sjekk forbindelsen og prøv igjen." action="Prøv igjen" onAction={() => void settings.refetch()} /> :
-      <V10Section title="Standard navigasjon"><V10Group>
+      <V10Section title="Reserve for innebygd navigasjon"><Text style={v10.secondary}>SNAR bruker innebygd navigasjon på støttede Android-bygg. Velg appen som åpnes når du ber om ekstern navigasjon.</Text><V10Group>
         {choices.map(([key, label], index) => <Pressable key={key} accessibilityRole="radio" aria-checked={key === selected} accessibilityState={{ checked: key === selected, selected: key === selected, disabled: saving }} disabled={saving} onPress={() => void select(key)} testID={`driver-navigation-choice-${key}`}
           style={[v10.row, index > 0 && { borderTopWidth: 1, borderTopColor: colors.line }]}>
           <View style={v10.icon}><V10Icon name="navigation" size={20} /></View><Text style={[v10.body, { flex: 1 }]}>{label}</Text>
