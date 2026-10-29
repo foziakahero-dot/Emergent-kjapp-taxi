@@ -18,6 +18,9 @@ def env(monkeypatch):
     for key in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_VERIFY_SERVICE_SID"):
         monkeypatch.setenv(key, "fixture")
     db, uid = Database(), ObjectId()
+    db.raw.users.create_index('email', unique=True)
+    db.raw.users.create_index('phone_e164', unique=True,
+        partialFilterExpression={'role': 'user', 'phone_e164': {'$type': 'string'}})
     db.raw.users.insert_one({"_id": uid, "role": "user", "phone": "+47 912 34 567", "email": "customer@example.test"})
     provider = AsyncMock(return_value={"sid": "VE_fixture", "status": "pending"})
     monkeypatch.setattr(otp, "provider_call", provider)
@@ -26,6 +29,108 @@ def env(monkeypatch):
         create_access_token=mint, create_twofa_token=lambda uid: "second-factor",
         set_auth_cookie=cookie, user_public=lambda u: {"id": str(u["_id"]), "role": u["role"]})
     return SimpleNamespace(client=TestClient(app), db=db, uid=uid, provider=provider, mint=mint, cookie=cookie)
+
+
+@pytest.fixture
+def signup_env(monkeypatch):
+    monkeypatch.setenv('APP_ENV', 'qa')
+    monkeypatch.setenv('QA_CUSTOMER_OTP_ENABLED', 'true')
+    monkeypatch.setenv('QA_CUSTOMER_OTP_SIGNUP_ENABLED', 'true')
+    for key in ('TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_VERIFY_SERVICE_SID'):
+        monkeypatch.setenv('QA_' + key, 'isolated-qa-fixture')
+    db = Database()
+    db.raw.users.create_index('email', unique=True)
+    db.raw.users.create_index('phone_e164', unique=True,
+        partialFilterExpression={'role': 'user', 'phone_e164': {'$type': 'string'}})
+    provider = AsyncMock(return_value={'sid': 'VE_signup_fixture', 'status': 'pending'})
+    monkeypatch.setattr(otp, 'provider_call', provider)
+    app, mint, welcome = FastAPI(), Mock(return_value='new-customer-session'), AsyncMock()
+    otp.install_customer_otp(app, db, rate_limit=AsyncMock(), secret='signup-fixture',
+        create_access_token=mint, create_twofa_token=lambda uid: 'second-factor',
+        set_auth_cookie=Mock(), user_public=lambda u: {'id': str(u['_id']), 'role': u['role']},
+        hash_password=lambda _: 'isolated-unusable-password-hash', current_legal_version='2026-09',
+        on_customer_created=welcome)
+    return SimpleNamespace(client=TestClient(app), db=db, provider=provider, mint=mint, welcome=welcome)
+
+
+def signup_start(e, phone='92234567', **changes):
+    profile = {'fullName': 'Ny Kunde', 'email': 'new@example.test', 'accepted_terms': True, 'legal_version': '2026-09', **changes}
+    return e.client.post('/auth/customer/otp/start', json={'phone': phone, 'signup': profile})
+
+
+def signup_verify(e, challenge, phone='92234567'):
+    e.provider.return_value = {'sid': 'VE_signup_fixture', 'status': 'approved'}
+    return verify(e, challenge, phone)
+
+
+def test_signup_creates_customer_only_after_provider_approval(signup_env):
+    e = signup_env
+    cfg = e.client.get('/auth/customer/otp/config').json()
+    assert cfg['signup_enabled'] and not cfg['existing_accounts_only']
+    r = signup_start(e, email=' New@Example.Test ', fullName='  Ny   Kunde ')
+    assert r.status_code == 200
+    assert e.db.raw.users.count_documents({}) == 0
+    assert e.provider.await_args.args[0][0] == 'isolated-qa-fixture'
+    challenge = r.json()['challenge_id']
+    assert verify(e, challenge, '92234567').status_code == 401
+    assert e.db.raw.users.count_documents({}) == 0
+    response = signup_verify(e, challenge)
+    assert response.status_code == 200 and response.json()['user']['role'] == 'user'
+    saved = e.db.raw.users.find_one()
+    assert saved['email'] == 'new@example.test' and saved['fullName'] == 'Ny Kunde'
+    assert saved['phone_e164'] == '+4792234567' and saved['phone_verified_at']
+    assert saved['email_verified'] is False
+    assert saved['accepted_terms_at'] and saved['legal_version'] == '2026-09'
+    assert verify(e, challenge, '92234567').status_code == 401
+    assert e.db.raw.users.count_documents({}) == 1
+    e.welcome.assert_awaited_once(); e.mint.assert_called_once()
+
+
+@pytest.mark.parametrize('patch', [{'accepted_terms': False}, {'legal_version': 'old'}, {'email': 'invalid'}, {'fullName': '  '}])
+def test_signup_details_and_explicit_consent_validated_before_sms(signup_env, patch):
+    e = signup_env
+    assert signup_start(e, **patch).status_code == 400
+    e.provider.assert_not_awaited(); e.mint.assert_not_called()
+    assert e.db.raw.users.count_documents({}) == 0
+
+
+def test_signup_cannot_request_a_privileged_role(signup_env):
+    assert signup_start(signup_env, role='driver').status_code == 422
+    signup_env.provider.assert_not_awaited()
+
+
+def test_signup_never_merges_an_existing_email_or_a_racing_phone(signup_env):
+    e = signup_env
+    e.db.raw.users.insert_one({'email': 'existing@example.test', 'role': 'user', 'phone': '91234567'})
+    assert signup_start(e, email='existing@example.test').status_code == 409
+    e.provider.assert_not_awaited()
+    first = signup_start(e).json()['challenge_id']
+    second = signup_start(e, email='second@example.test').json()['challenge_id']
+    assert signup_verify(e, first).status_code == 200
+    assert signup_verify(e, second).status_code == 409
+    assert e.db.raw.users.count_documents({'phone_e164': '+4792234567'}) == 1
+    e.mint.assert_called_once()
+
+
+def test_signup_flag_is_separate_and_legacy_unknown_phone_does_not_create(signup_env, monkeypatch):
+    e = signup_env
+    challenge = start(e, '92234567')
+    e.provider.assert_not_awaited()
+    assert signup_verify(e, challenge).status_code == 401
+    assert e.db.raw.users.count_documents({}) == 0
+    monkeypatch.setenv('QA_CUSTOMER_OTP_SIGNUP_ENABLED', 'false')
+    assert signup_start(e).status_code == 503
+    assert e.client.get('/auth/customer/otp/config').json()['existing_accounts_only']
+
+
+def test_editing_display_phone_does_not_replace_a_verified_login_number(env):
+    challenge = start(env)
+    env.provider.return_value = {'sid': 'VE_fixture', 'status': 'approved'}
+    assert verify(env, challenge).status_code == 200
+    env.db.raw.users.update_one({'_id': env.uid}, {'$set': {'phone': '92234567'}})
+    env.provider.reset_mock()
+    start(env, '92234567')
+    env.provider.assert_not_awaited()
 
 
 def start(e, phone="91234567"):

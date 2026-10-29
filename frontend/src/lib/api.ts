@@ -23,9 +23,11 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+export type PhoneSignup = { fullName: string; email: string; accepted_terms: boolean; legal_version: string };
+
 export const authApi = {
   otpConfig: () => api.get('/auth/customer/otp/config').then(r => r.data),
-  otpStart: (phone: string) => api.post('/auth/customer/otp/start', { phone }).then(r => r.data),
+  otpStart: (phone: string, signup?: PhoneSignup) => api.post('/auth/customer/otp/start', { phone, ...(signup ? { signup } : {}) }).then(r => r.data),
   otpVerify: (phone: string, code: string, challenge_id: string) => api.post('/auth/customer/otp/verify', { phone, code, challenge_id }).then(r => r.data),
   googleWebConfig: () => api.get('/auth/google/web/config', { params: { client: 'customer' } }).then(r => r.data),
   googleWebCode: (code: string, code_verifier: string, redirect_uri: string, action: 'signin' | 'link' = 'signin') =>

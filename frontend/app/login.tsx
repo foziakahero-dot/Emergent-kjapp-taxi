@@ -12,6 +12,7 @@ import { apiError } from '@/src/lib/format';
 import { authApi } from '@/src/lib/api';
 import { SnarWordmark } from '@/src/components/SnarWordmark';
 import { V10Entrance } from '@/src/components/V10Entrance';
+import { PhoneSignupFields } from '@/src/components/PhoneSignupFields';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
@@ -34,10 +35,18 @@ export default function Login() {
   const [resendAt, setResendAt] = useState(0);
   const [clock, setClock] = useState(Date.now());
   const [otpEnabled, setOtpEnabled] = useState<boolean | null>(null);
+  const [otpSignupEnabled, setOtpSignupEnabled] = useState(false);
+  const [phoneSignup, setPhoneSignup] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [legalVersion, setLegalVersion] = useState('');
   const [nativeConfig, setNativeConfig] = useState<any>(null);
   useEffect(() => {
     let active = true;
-    authApi.otpConfig().then(config => { if (active) setOtpEnabled(config.enabled === true); })
+    authApi.otpConfig().then(config => { if (active) {
+      setOtpEnabled(config.enabled === true); setOtpSignupEnabled(config.signup_enabled === true);
+      setLegalVersion(config.legal_version || '');
+    } })
       .catch(() => { if (active) setOtpEnabled(false); });
     authApi.nativeConfig().then(config => { if (active) setNativeConfig(config); }).catch(() => {});
     return () => { active = false; };
@@ -93,10 +102,15 @@ export default function Login() {
 
   const submitPhone = async (resend = false) => {
     if (operation.current || (resend && Date.now() < resendAt)) return;
+    if (phoneSignup && (!otpSignupEnabled || !fullName.trim() || !email.trim() || !acceptedTerms || !legalVersion)) {
+      setError('Fyll inn navn og e-post, og godta vilkår og personvern.'); return;
+    }
     operation.current = true; setError(''); setLoading(true);
     try {
       if (!challenge || resend) {
-        const result = await authApi.otpStart(phone.trim());
+        const result = await authApi.otpStart(phone.trim(), phoneSignup ? {
+          fullName: fullName.trim(), email: email.trim(), accepted_terms: acceptedTerms, legal_version: legalVersion,
+        } : undefined);
         if (!result?.challenge_id) throw new Error('SMS-forespørselen ble ikke bekreftet.');
         setChallenge(result.challenge_id); setCode(''); setResendAt(Date.now() + 60000); setClock(Date.now());
       } else {
@@ -140,12 +154,14 @@ export default function Login() {
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.effective === 'dark' ? colors.bg : '#FFFFFF' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: Math.max(70, insets.top + 22), paddingBottom: Math.max(40, insets.bottom + 6) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={{ alignItems: 'center' }}><SnarWordmark /></View>
-      <V10Entrance style={{ marginTop: 28, alignItems: 'center' }}><Text style={[v10.title, { textAlign: 'center', fontFamily: font.bold, fontSize: 34, lineHeight: 39 }]}>{challenge && mode === 'phone' ? 'Skriv inn koden' : 'Hvor skal\ndu i dag?'}</Text><Text style={[v10.secondary, { marginTop: 10, textAlign: 'center', maxWidth: 290 }]}>{mode === 'password' ? 'Logg inn med e-post og passord.' : challenge ? 'Hvis nummeret er knyttet til en kundekonto, får du en engangskode på SMS.' : 'Logg inn og bestill en trygg tur på få sekunder.'}</Text></V10Entrance>
+      <V10Entrance style={{ marginTop: 28, alignItems: 'center' }}><Text style={[v10.title, { textAlign: 'center', fontFamily: font.bold, fontSize: 34, lineHeight: 39 }]}>{challenge && mode === 'phone' ? 'Skriv inn koden' : 'Hvor skal\ndu i dag?'}</Text><Text style={[v10.secondary, { marginTop: 10, textAlign: 'center', maxWidth: 290 }]}>{mode === 'password' ? 'Logg inn med e-post og passord.' : challenge ? phoneSignup ? 'Bekreft mobilnummeret med koden fra SMS. Kontoen opprettes etter bekreftelsen.' : 'Hvis nummeret er knyttet til en kundekonto, får du en engangskode på SMS.' : phoneSignup ? 'Opprett kundekonto med en bekreftet SMS-kode.' : 'Logg inn og bestill en trygg tur på få sekunder.'}</Text></V10Entrance>
       {mode === 'phone' ? <View style={{ marginTop: 28, gap: 12 }}>
         {!challenge ? <View style={{ minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle }}><Text style={v10.body}>+47</Text><TextInput testID="login-phone" accessibilityLabel="Norsk mobilnummer" value={phone} onChangeText={setPhone} editable={!busy} placeholder="Mobilnummer" keyboardType="phone-pad" autoComplete="tel-national" textContentType="telephoneNumber" returnKeyType="go" onSubmitEditing={() => void submitPhone()} placeholderTextColor={colors.textMuted} style={{ flex: 1, minHeight: 60, color: colors.text, fontFamily: font.body, fontSize: 18 }} /></View>
         : <TextInput testID="login-otp" accessibilityLabel="Engangskode fra SMS" value={code} onChangeText={value => setCode(value.replace(/\D/g, '').slice(0, 10))} editable={!busy} placeholder="Engangskode" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" autoFocus maxLength={10} returnKeyType="go" onSubmitEditing={() => void submitPhone()} style={{ minHeight: 60, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, color: colors.text, fontFamily: font.medium, fontSize: 24, letterSpacing: 6 }} />}
+        {phoneSignup && !challenge ? <PhoneSignupFields name={fullName} email={email} accepted={acceptedTerms} disabled={busy} onName={setFullName} onEmail={setEmail} onAccepted={setAcceptedTerms} /> : null}
+        {otpSignupEnabled && !challenge ? <V10Action kind="ghost" small testID="login-phone-signup-toggle" label={phoneSignup ? 'Har du konto? Logg inn med mobilnummer' : 'Opprett konto med mobilnummer'} disabled={busy} onPress={() => { setPhoneSignup(value => !value); setAcceptedTerms(false); setError(''); }} /> : null}
         {otpEnabled === false ? <Text accessibilityRole="alert" style={v10.secondary}>SMS-innlogging er ikke tilgjengelig akkurat nå. Bruk e-post{googleReady ? ' eller Google' : ''} nedenfor.</Text> : null}
-        <V10Action testID="login-phone-submit" label={challenge ? 'Bekreft kode' : 'Fortsett'} height={58} busy={loading} disabled={busy || otpEnabled !== true || (challenge ? code.length < 4 : phone.replace(/\D/g, '').length < 8)} onPress={() => void submitPhone()} />
+        <V10Action testID="login-phone-submit" label={challenge ? 'Bekreft kode' : 'Fortsett'} height={58} busy={loading} disabled={busy || otpEnabled !== true || (phoneSignup && (!acceptedTerms || fullName.trim().length < 2 || !email.includes('@') || !legalVersion)) || (challenge ? code.length < 4 : phone.replace(/\D/g, '').length < 8)} onPress={() => void submitPhone()} />
         {challenge ? <><V10Action kind="ghost" label="Endre mobilnummer" disabled={busy} onPress={() => { setChallenge(''); setCode(''); setError(''); }} /><V10Action kind="ghost" label={clock < resendAt ? `Send ny kode om ${Math.ceil((resendAt - clock) / 1000)} s` : 'Send ny kode'} disabled={busy || clock < resendAt} onPress={() => void submitPhone(true)} /></> : null}
       </View> : <><View style={{ marginTop: 28, gap: 8 }}><View style={{ minHeight: 56, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 12 }}><TextInput testID="login-email" accessibilityLabel="E-post" placeholder="deg@epost.no" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email" value={email} onChangeText={setEmail} editable={!busy} placeholderTextColor={colors.textMuted} style={{ flex: 1, minHeight: 56, paddingVertical: 0, color: colors.text, fontSize: 16, fontFamily: font.body }} /></View>
         <View style={{ minHeight: 56, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle, flexDirection: 'row', alignItems: 'center', paddingLeft: 16, gap: 12 }}><TextInput testID="login-password" accessibilityLabel="Passord" placeholder="Passord" secureTextEntry={!show} value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} returnKeyType="go" autoComplete="current-password" editable={!busy} placeholderTextColor={colors.textMuted} style={{ flex: 1, minHeight: 56, paddingVertical: 0, color: colors.text, fontSize: 16, fontFamily: font.body }} /><Pressable onPress={() => setShow(value => !value)} disabled={busy} testID="login-toggle-password" accessibilityRole="button" accessibilityLabel={show ? 'Skjul passord' : 'Vis passord'} style={{ width: 48, height: 56, alignItems: 'center', justifyContent: 'center' }}><Icon name={show ? 'eye-off' : 'eye'} size={20} color={colors.textMuted} /></Pressable></View>

@@ -1432,6 +1432,8 @@ async def lifespan(app: FastAPI):
     # Restore encrypted admin configuration before workers or onboarding start.
     await integration_settings.refresh()
     await db.users.create_index("email", unique=True)
+    await db.users.create_index("phone_e164", unique=True,
+        partialFilterExpression={"role": "user", "phone_e164": {"$type": "string"}})
     for provider in ("google", "apple"):
         await db.users.create_index(provider + "_sub", unique=True,
             partialFilterExpression={provider + "_sub": {"$type": "string"}})
@@ -11943,7 +11945,9 @@ install_driver_media(api, db, require_driver=require_driver, require_customer=re
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
     create_access_token=create_access_token, create_twofa_token=create_twofa_token,
-    set_auth_cookie=set_auth_cookie, user_public=user_public)
+    set_auth_cookie=set_auth_cookie, user_public=user_public, hash_password=hash_password,
+    current_legal_version=CURRENT_LEGAL_VERSION,
+    on_customer_created=lambda user: queue_customer_welcome(db, user))
 
 app.include_router(api)
 
