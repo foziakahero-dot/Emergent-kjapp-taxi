@@ -1,6 +1,6 @@
 {
   "name": "kjapp-driver-app",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/geist": "^0.4.2",
@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "react-test-renderer": "19.2.3",
     "typescript": "~6.0.3"
   },
   "overrides": {

@@ -39,6 +39,7 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   testID?: string;
   interactive?: boolean;
+  navigationFollow?: boolean;
 };
 
 function MarkerCar({ car }: { car: Car; active?: boolean }) {
@@ -77,6 +78,7 @@ export function MapboxInteractiveMap({
   style,
   testID,
   interactive = true,
+  navigationFollow = false,
 }: Props) {
   const theme = useColorTheme();
   const cameraRef = useRef<any>(null);
@@ -84,6 +86,7 @@ export function MapboxInteractiveMap({
   const [manual, setManual] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const smoothCar = useSmoothPosition(activeCar);
+  useEffect(() => { setManual(false); }, [navigationFollow]);
 
   const focus = useMemo(() => {
     const points: LL[] = [];
@@ -128,9 +131,15 @@ export function MapboxInteractiveMap({
   }, [focusKey]);
 
   useEffect(() => {
+    if (navigationFollow && activeCar && mapReady && !manual) {
+      cameraRef.current?.setCamera({ centerCoordinate: [activeCar.lng, activeCar.lat],
+        zoomLevel: 16.5, pitch: 45, heading: activeCar.heading || 0,
+        animationDuration: 900, animationMode: 'easeTo' });
+      return;
+    }
     if (!mapReady || manual) return;
     fitFocus(350);
-  }, [mapReady, manual, fitFocus]);
+  }, [mapReady, manual, fitFocus, navigationFollow, activeCar?.lat, activeCar?.lng, activeCar?.heading]);
 
   const routeShape = useMemo(() => {
     const coordinates =
