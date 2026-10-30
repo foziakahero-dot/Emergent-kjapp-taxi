@@ -9,6 +9,7 @@ import { AppleSignInButton } from '@/src/components/AppleSignInButton';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, useColorTheme } from '@/src/theme';
 import { apiError } from '@/src/lib/format';
+import { accountLinkInstructions, requiresAccountLink, type SocialProvider } from '@/src/lib/socialAccountRecovery';
 
 /** Registration uses the source's sign-in primitives; it is not a prototype SMS flow. */
 export default function Register() {
@@ -24,6 +25,7 @@ export default function Register() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [pending, setPending] = useState<'password' | 'google' | 'apple' | null>(null);
   const [error, setError] = useState('');
+  const [linkProvider, setLinkProvider] = useState<SocialProvider | null>(null);
   const operation = useRef(false);
   const busy = pending !== null;
   const finish = (user: any) => {
@@ -32,7 +34,7 @@ export default function Register() {
   };
   const submit = async () => {
     if (operation.current) return;
-    setError('');
+    setError(''); setLinkProvider(null);
     if (!fullName.trim() || !email.trim() || password.length < 8) { setError('Fyll inn navn, e-post og passord (minst 8 tegn).'); return; }
     if (!acceptedTerms) { setError('Du må godta vilkår og personvern før kontoen opprettes.'); return; }
     operation.current = true; setPending('password');
@@ -42,9 +44,12 @@ export default function Register() {
   };
   const social = async (provider: 'google' | 'apple') => {
     if (operation.current) return;
-    operation.current = true; setPending(provider); setError('');
+    operation.current = true; setPending(provider); setError(''); setLinkProvider(null);
     try { const user = await (provider === 'google' ? signInWithGoogle() : signInWithApple()); if (user) finish(user); }
-    catch (e) { setError(apiError(e)); }
+    catch (e) {
+      if (requiresAccountLink(e)) { setLinkProvider(provider); setError(accountLinkInstructions(provider)); }
+      else setError(apiError(e));
+    }
     finally { operation.current = false; setPending(null); }
   };
   const openLegal = (url: string) => { void Linking.openURL(url).catch(() => setError('Kunne ikke åpne dokumentet. Prøv igjen.')); };
@@ -64,6 +69,7 @@ export default function Register() {
         <Text style={[v10.caption, { flex: 1, lineHeight: 18 }]}>Jeg godtar SNARs <Text testID="register-terms-link" style={{ color: colors.text, textDecorationLine: 'underline' }} onPress={() => openLegal('https://kjappapp.no/vilkar')}>vilkår</Text> og <Text testID="register-privacy-link" style={{ color: colors.text, textDecorationLine: 'underline' }} onPress={() => openLegal('https://kjappapp.no/personvern')}>personvernerklæring</Text>.</Text>
       </View>
       {error ? <Text testID="register-error" accessibilityRole="alert" style={[v10.secondary, { color: colors.danger, marginTop: 12 }]}>{error}</Text> : null}
+      {linkProvider ? <V10Action kind="soft" testID="register-link-existing-account" label="Logg inn med e-post" disabled={busy} onPress={() => router.replace({ pathname: '/login', params: { linkProvider } })} /> : null}
       <View style={{ marginTop: 12 }}><V10Action testID="register-submit" label="Opprett konto" busy={pending === 'password'} disabled={busy && pending !== 'password'} onPress={() => void submit()} /></View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 }}><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /><Text style={v10.caption}>eller</Text><View style={{ flex: 1, height: 1, backgroundColor: colors.line }} /></View>
       <View style={{ gap: 8 }}><AppleSignInButton loading={pending === 'apple'} disabled={busy && pending !== 'apple'} onPress={() => social('apple')} /><V10Action kind="soft" icon="google" label="Fortsett med Google" testID="register-google" busy={pending === 'google'} disabled={busy && pending !== 'google'} onPress={() => void social('google')} /></View>

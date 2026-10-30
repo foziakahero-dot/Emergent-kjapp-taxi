@@ -3,7 +3,7 @@ import { Icon } from '@/src/components/Icon';
 import { Text, TextInput } from '@/src/components/Typography';
 import React, { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, font, useColorTheme } from '@/src/theme';
@@ -13,6 +13,7 @@ import { authApi } from '@/src/lib/api';
 import { SnarWordmark } from '@/src/components/SnarWordmark';
 import { V10Entrance } from '@/src/components/V10Entrance';
 import { PhoneSignupFields } from '@/src/components/PhoneSignupFields';
+import { accountLinkInstructions, requiresAccountLink, socialProvider, type SocialProvider } from '@/src/lib/socialAccountRecovery';
 
 const isCustomerRole = (role?: string) => !role || role === 'user' || role === 'customer';
 
@@ -20,6 +21,8 @@ export default function Login() {
   const theme = useColorTheme();
   const { login, loginWithOtp, logout, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{ linkProvider?: string }>();
+  const [linkProvider, setLinkProvider] = useState<SocialProvider | null>(() => socialProvider(params.linkProvider));
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +31,7 @@ export default function Login() {
   const [gLoading, setGLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
   const [error, setError] = useState('');
-  const [mode, setMode] = useState<'phone' | 'password'>('phone');
+  const [mode, setMode] = useState<'phone' | 'password'>(() => socialProvider(params.linkProvider) ? 'password' : 'phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [challenge, setChallenge] = useState('');
@@ -74,7 +77,7 @@ export default function Login() {
       router.replace('/legal-consent');
       return;
     }
-    router.replace('/(app)/home');
+    router.replace(linkProvider ? '/customer-account' : '/(app)/home');
   };
 
   const submit = async () => {
@@ -131,7 +134,8 @@ export default function Login() {
       const u = await signInWithGoogle();
       if (u) await finishLogin(u);
     } catch (e) {
-      setError(apiError(e));
+      if (requiresAccountLink(e)) { setLinkProvider('google'); setMode('password'); setError(''); }
+      else setError(apiError(e));
     } finally {
       operation.current = false; setGLoading(false);
     }
@@ -145,7 +149,8 @@ export default function Login() {
       const u = await signInWithApple();
       if (u) await finishLogin(u);
     } catch (e) {
-      setError(apiError(e));
+      if (requiresAccountLink(e)) { setLinkProvider('apple'); setMode('password'); setError(''); }
+      else setError(apiError(e));
     } finally {
       operation.current = false; setAppleLoading(false);
     }
@@ -155,6 +160,7 @@ export default function Login() {
     <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: Math.max(70, insets.top + 22), paddingBottom: Math.max(40, insets.bottom + 6) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={{ alignItems: 'center' }}><SnarWordmark /></View>
       <V10Entrance style={{ marginTop: 28, alignItems: 'center' }}><Text style={[v10.title, { textAlign: 'center', fontFamily: font.bold, fontSize: 34, lineHeight: 39 }]}>{challenge && mode === 'phone' ? 'Skriv inn koden' : 'Hvor skal\ndu i dag?'}</Text><Text style={[v10.secondary, { marginTop: 10, textAlign: 'center', maxWidth: 290 }]}>{mode === 'password' ? 'Logg inn med e-post og passord.' : challenge ? phoneSignup ? 'Bekreft mobilnummeret med koden fra SMS. Kontoen opprettes etter bekreftelsen.' : 'Hvis nummeret er knyttet til en kundekonto, får du en engangskode på SMS.' : phoneSignup ? 'Opprett kundekonto med en bekreftet SMS-kode.' : 'Logg inn og bestill en trygg tur på få sekunder.'}</Text></V10Entrance>
+      {linkProvider ? <Text testID="login-link-instructions" accessibilityRole="alert" style={[v10.secondary, { marginTop: 16 }]}>{accountLinkInstructions(linkProvider)}</Text> : null}
       {mode === 'phone' ? <View style={{ marginTop: 28, gap: 12 }}>
         {!challenge ? <View style={{ minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, backgroundColor: colors.cardSubtle }}><Text style={v10.body}>+47</Text><TextInput testID="login-phone" accessibilityLabel="Norsk mobilnummer" value={phone} onChangeText={setPhone} editable={!busy} placeholder="Mobilnummer" keyboardType="phone-pad" autoComplete="tel-national" textContentType="telephoneNumber" returnKeyType="go" onSubmitEditing={() => void submitPhone()} placeholderTextColor={colors.textMuted} style={{ flex: 1, minHeight: 60, color: colors.text, fontFamily: font.body, fontSize: 18 }} /></View>
         : <TextInput testID="login-otp" accessibilityLabel="Engangskode fra SMS" value={code} onChangeText={value => setCode(value.replace(/\D/g, '').slice(0, 10))} editable={!busy} placeholder="Engangskode" keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" autoFocus maxLength={10} returnKeyType="go" onSubmitEditing={() => void submitPhone()} style={{ minHeight: 60, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.lineStrong, color: colors.text, fontFamily: font.medium, fontSize: 24, letterSpacing: 6 }} />}
