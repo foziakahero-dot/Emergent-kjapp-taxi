@@ -1051,9 +1051,9 @@ def fallback_route_points(points: list[tuple[float, float]]) -> tuple[float, int
     return distance, max(3, int(distance * 2.2))
 
 
-def send_email(to_email: str, subject: str, html: str) -> bool:
+def send_email(to_email: str, subject: str, html: str, *, message_type: str = "notifications") -> bool:
     """Use the configured transactional provider with isolated QA credentials."""
-    return send_transactional_email(to_email, subject, html)
+    return send_transactional_email(to_email, subject, html, message_type=message_type)
 
 
 def email_driver_invite_html(car: str, plate: str, invite_url: str, note: str = "") -> str:
@@ -2719,7 +2719,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
             reset_url = f"kjapp-driver://reset-password/{token}"
         else:
             reset_url = fallback_url
-        send_email(email, "Tilbakestill passordet ditt — SNAR", email_password_reset_html(reset_url, fallback_url if reset_url != fallback_url else None))
+        send_email(email, "Tilbakestill passordet ditt — SNAR", email_password_reset_html(reset_url, fallback_url if reset_url != fallback_url else None), message_type="security")
     return {"ok": True}
 
 
@@ -8523,7 +8523,7 @@ async def send_trip_receipts(trip_id: str):
         if claim.modified_count != 1:
             return None
         try:
-            sent = await asyncio.to_thread(send_email, recipient, subject, html)
+            sent = await asyncio.to_thread(send_email, recipient, subject, html, message_type="receipts")
             if not sent:
                 return None
             await db.receipt_ledger.update_one(
