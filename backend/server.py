@@ -34,6 +34,9 @@ from fleet_vehicle_access import access_query as vehicle_access_query, claim_veh
 from onboarding_emails import queue_confirmation, confirmation_loop, queue_customer_welcome
 from norwegian_bank import normalize_bank_account
 import document_storage
+from receipt_delivery import receipt_delivery_loop
+from qa_panels import install_qa_panels
+from student_verification import install_student_verification, export_student_verification, erase_student_verification
 from customer_profile import install_customer_profile, export_customer_photo, delete_customer_photo
 from customer_otp import install_customer_otp
 from admin_control_center import install_admin_control_center, stripe_destination_for_trip
@@ -1447,6 +1450,8 @@ async def lifespan(app: FastAPI):
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.payment_methods.create_index([("user_id", 1), ("stripe_payment_method_id", 1)], unique=True,
         partialFilterExpression={"stripe_payment_method_id": {"$type": "string"}})
+    await db.student_proofs.create_index("expires_at", expireAfterSeconds=0)
+    await db.student_verifications.create_index([("status", 1), ("submitted_at", -1)])
     await db.receipt_ledger.create_index("trip_id", unique=True)
     await db.receipt_ledger.create_index("receipt_number", unique=True)
     await db.receipt_ledger.create_index([("paid_at", -1)])
@@ -1719,6 +1724,7 @@ async def lifespan(app: FastAPI):
 
     # Nearest-driver-first dispatch: forwards unanswered ride requests to the next closest driver
     dispatch_task = asyncio.create_task(dispatch_loop())
+    receipt_delivery_task = asyncio.create_task(receipt_delivery_loop(db, send_trip_receipts, email_configured))
     reservation_task = asyncio.create_task(ride_reservations.reconcile_loop())
     confirmation_task = asyncio.create_task(confirmation_loop(db, send_email, prepare_email=_prepare_onboarding_email, invite_sender=_deliver_driver_invite))
     integration_settings_task = asyncio.create_task(integration_settings.sync_loop())
@@ -1728,12 +1734,13 @@ async def lifespan(app: FastAPI):
     yield
 
     dispatch_task.cancel()
+    receipt_delivery_task.cancel()
     reservation_task.cancel()
     confirmation_task.cancel()
     integration_settings_task.cancel()
     live_cars_task.cancel()
     trip_status_task.cancel()
-    await asyncio.gather(dispatch_task, reservation_task, confirmation_task, integration_settings_task, live_cars_task, trip_status_task, return_exceptions=True)
+    await asyncio.gather(dispatch_task, receipt_delivery_task, reservation_task, confirmation_task, integration_settings_task, live_cars_task, trip_status_task, return_exceptions=True)
     await trip_status_stream.close()
     await live_cars_stream.close()
     await road_eta.close()
@@ -4946,9 +4953,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     )
     ended_early = not location_verified or dropoff_distance_m > DROPOFF_ARRIVAL_RADIUS_M
     warning = (
-        "Sjåføren har avsluttet turen manuelt uten bekreftet GPS-posisjon. SNAR må kontrollere turen og turprisen før betaling."
+        "Sjåføren har avsluttet turen manuelt uten bekreftet GPS-posisjon. Avtalt turpris beholdes; betalingen vises i SNAR."
         if not location_verified else
-        "Turen er avsluttet før avtalt destinasjon. Turprisen må kontrolleres av SNAR før betaling."
+        "Turen er avsluttet før avtalt destinasjon. Avtalt turpris beholdes; betalingen vises i SNAR."
     )
     if trip.get("payment_flow") == "reservation":
         warning = "Sjåføren har avsluttet turen manuelt. Avtalt turpris trekkes automatisk fra kortreservasjonen, og kvitteringen kommer i SNAR."
@@ -4969,8 +4976,9 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
     if ended_early:
         updates.update({
             "early_end_warning": warning,
-            "price_review_required": True,
-            "requires_manual_settlement": True,
+            "price_review_required": False,
+            "requires_manual_settlement": False,
+            "fare_preserved_on_manual_end": True,
         })
     if trip.get("payment_flow") == "reservation":
         updates.update({"price_review_required": False, "requires_manual_settlement": False,
@@ -5014,7 +5022,8 @@ async def driver_arrive(trip_id: str, current=Depends(require_driver)):
                                         url, "trip_ended_early", require_interaction=True)
             except Exception:
                 logging.exception("Early-end notification failed for trip %s", trip_id)
-        payment = {"attempted": False, "reason": "price_review_required"}
+        payment = ({"attempted": False} if trip.get("payment_flow") == "reservation"
+                   else await _attempt_trip_auto_charge(t))
     else:
         await send_push_to_user(
             t["user_id"], "Du er fremme", f"Takk for turen — {t.get('price')} kr.",
@@ -5742,6 +5751,7 @@ async def google_oauth_code(body: GoogleCodeRequest, request: Request, response:
 # Fleet owner portal
 # ============================================================
 ADMIN_PERMISSION_PREFIXES = (
+    ("/api/admin/receipts", "finance"),
     ("/api/admin/finance", "finance"),
     ("/api/admin/transactions", "finance"),
     ("/api/admin/refunds", "finance"),
@@ -8350,6 +8360,11 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "snapshot_version": 1,
         "trip_id": trip_id,
         "trip_status_at_capture": trip.get("status"),
+        "ended_early": bool(trip.get("ended_early")),
+        "end_reason": trip.get("end_reason"),
+        "actual_dropoff_lat": trip.get("actual_dropoff_lat"),
+        "actual_dropoff_lng": trip.get("actual_dropoff_lng"),
+        "dropoff_location_verified": trip.get("dropoff_location_verified"),
         "user_id": trip.get("user_id"),
         "customer_name": (passenger or {}).get("fullName") or (passenger or {}).get("full_name"),
         "customer_email": (passenger or {}).get("email"),
@@ -8387,6 +8402,8 @@ async def ensure_receipt_snapshot(trip_id: str, backfilled: bool = False) -> Opt
         "refunds": [],
         "customer_email_sent_at": trip.get("receipt_emailed_at"),
         "driver_email_sent_at": trip.get("driver_receipt_emailed_at"),
+        "email_delivery_pending": not backfilled,
+        "email_delivery_attempts": 0,
         "backfilled": bool(backfilled),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -8471,8 +8488,9 @@ async def send_trip_receipts(trip_id: str):
     fee = int(receipt.get("platform_fee") or 0)
     driver_net = int(receipt.get("fleet_net") or max(0, price - fee))
     commission = float(receipt.get("commission_rate") or 0)
-    route = f"{receipt.get('pickup_address','')} → {receipt.get('dropoff_address','')}"
+    route = html_escape.escape(f"{receipt.get('pickup_address','')} → {receipt.get('dropoff_address','')}")
     paid_at = receipt.get("paid_at") or datetime.now(timezone.utc).isoformat()
+    end_note = "<p>Turen ble avsluttet manuelt før bekreftet destinasjon. Avtalt turpris er beholdt.</p>" if receipt.get("ended_early") else ""
 
     async def deliver_once(kind: str, recipient: Optional[str], subject: str, html: str) -> Optional[str]:
         if not recipient:
@@ -8528,7 +8546,7 @@ async def send_trip_receipts(trip_id: str):
         (passenger or {}).get("email"),
         f"SNAR-kvittering · {price} kr",
         f"<h2>Takk for turen</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
-        f"<p>{route}</p><p><strong>Total: {price} kr</strong></p>"
+        f"<p>Avtalt rute: {route}</p>{end_note}<p><strong>Total: {price} kr</strong></p>"
         f"<p>Betalt: {paid_at}</p><p>Tur-ID: {trip_id}</p>",
     )
     if customer_sent_at:
@@ -8542,7 +8560,7 @@ async def send_trip_receipts(trip_id: str):
         (driver or {}).get("email"),
         f"SNAR sjåførkvittering · {driver_net} kr",
         f"<h2>Tur fullført og betalt</h2><p>Kvittering: {receipt.get('receipt_number')}</p>"
-        f"<p>{route}</p><p>Turpris: {price} kr</p>"
+        f"<p>Avtalt rute: {route}</p>{end_note}<p>Turpris: {price} kr</p>"
         f"<p>SNAR serviceavgift: {fee} kr ({round(commission*100, 2)}%)</p>"
         f"<p><strong>Til sjåfør/flåte: {driver_net} kr</strong></p><p>Tur-ID: {trip_id}</p>",
     )
@@ -8554,6 +8572,11 @@ async def send_trip_receipts(trip_id: str):
 
     stored = await db.receipt_ledger.find_one({"trip_id": trip_id})
     if stored:
+        pending = any(recipient and not stored.get(kind + "_email_sent_at")
+                      for kind, recipient in (("customer", (passenger or {}).get("email")),
+                                              ("driver", (driver or {}).get("email"))))
+        await db.receipt_ledger.update_one({"trip_id": trip_id}, {"$set": {"email_delivery_pending": bool(pending)}})
+        stored["email_delivery_pending"] = bool(pending)
         stored["id"] = str(stored["_id"])
         stored.pop("_id", None)
     return stored
@@ -9109,6 +9132,7 @@ async def gdpr_export(current=Depends(get_current_user)):
         "ai_messages": messages,
         "payments": [{k: v for k, v in p.items() if k not in ("client_secret", "stripe_client_secret")} for p in payments],
         "customer_photo": await export_customer_photo(db, uid),
+        "student_verification": await export_student_verification(db, uid),
     }
 
 
@@ -9134,6 +9158,7 @@ async def gdpr_delete(current=Depends(get_current_user), response: Response = No
     )
     # Delete personal data
     await delete_customer_photo(db, uid)
+    await erase_student_verification(db, uid)
     await db.chat_messages.delete_many({"user_id": uid})
     await db.trip_messages.update_many(
         {"from_user_id": uid},
@@ -10656,7 +10681,7 @@ async def admin_receipts(
         r["id"] = str(r["_id"])
         r.pop("_id", None)
         rows.append(r)
-    return _paged(rows, total, page, page_size, "receipts")
+    return {**_paged(rows, total, page, page_size, "receipts"), "email_configured": email_configured()}
 
 
 @api.get("/admin/receipts/{receipt_or_trip}")
@@ -10673,6 +10698,25 @@ async def admin_receipt_detail(receipt_or_trip: str, current=Depends(require_adm
     receipt["id"] = str(receipt["_id"]) if receipt.get("_id") else receipt.get("id")
     receipt.pop("_id", None)
     return receipt
+
+
+@api.post("/admin/receipts/{trip_id}/retry-delivery")
+async def admin_retry_receipt_delivery(trip_id: str, current=Depends(require_admin)):
+    if not email_configured():
+        raise HTTPException(409, "E-post er ikke konfigurert; kvitteringen er fortsatt lagret")
+    trip = await db.trips.find_one(_real_trip_filter({"trip_id": trip_id, "payment_status": "paid"}))
+    if not trip:
+        raise HTTPException(404, "Fant ikke en betalt tur")
+    receipt = await ensure_receipt_snapshot(trip_id)
+    result = await db.receipt_ledger.update_one({"trip_id": trip_id, "$or": [
+        {"email_delivery_lease_until": {"$exists": False}},
+        {"email_delivery_lease_until": {"$lte": datetime.now(timezone.utc)}}]},
+        {"$set": {"email_delivery_pending": True, "email_delivery_attempts": 0},
+         "$unset": {"email_delivery_next_at": ""}})
+    if result.matched_count != 1:
+        raise HTTPException(409, "Levering pågår allerede")
+    await _audit(current, "receipt.retry_delivery", "receipt_ledger", trip_id)
+    return {"queued": True, "receipt_number": receipt["receipt_number"]}
 
 
 @api.post("/admin/receipts/backfill")
@@ -11942,6 +11986,8 @@ install_driver_media(api, db, require_driver=require_driver, require_customer=re
     assigned_vehicle=_assigned_fleet_vehicle, snapshot=_nearby_cars_snapshot,
     parse_circle=NearbyCarsRequest.model_validate, read_document=get_stored_document)
 
+install_student_verification(api, db, require_customer=require_customer, require_admin=require_admin,
+    rate_limit=_enforce_rate_limit, audit=_audit)
 install_customer_profile(api, db, require_customer=require_customer, rate_limit=_enforce_rate_limit)
 install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
     create_access_token=create_access_token, create_twofa_token=create_twofa_token,
@@ -11950,6 +11996,7 @@ install_customer_otp(api, db, rate_limit=_enforce_rate_limit, secret=JWT_SECRET,
     on_customer_created=lambda user: queue_customer_welcome(db, user))
 
 app.include_router(api)
+install_qa_panels(app, os.path.dirname(os.path.dirname(__file__)), environment=APP_ENV)
 
 # Serve the built KJAPP Admin web app (separate Vite/React SPA in /app/admin-web)
 # under /api/ops so it is reachable through the preview ingress (which only routes

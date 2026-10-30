@@ -7,6 +7,8 @@ import Login from './Login';
 import { Icon, SnarMark } from './snar-ui';
 import FleetApplications from './FleetApplications';
 import BetaWaitlist from './BetaWaitlist';
+import Students from './Students';
+import Receipts from './Receipts';
 import {
   Dashboard, Live, Trips, Drivers, Customers, Vehicles, Documents, Finance, Support, Audit, Settings,
 } from './pages';
@@ -23,6 +25,7 @@ const NAV = [
   { group: 'Drift', items: [
     { to: '/trips', label: 'Turer', ic: 'route', perm: 'operations' },
     { to: '/drivers', label: 'Sjåfører', ic: 'users', perm: 'operations' },
+    { to: '/students', label: 'Studenter', ic: 'user', perm: 'operations' },
     { to: '/customers', label: 'Kunder', ic: 'user', perm: 'operations' },
     { to: '/beta-waitlist', label: 'Beta-påmeldinger', ic: 'users', perm: 'operations' },
     { to: '/fleet-applications', label: 'Løyvesøknader', ic: 'file', superadminOnly: true },
@@ -30,6 +33,7 @@ const NAV = [
     { to: '/vehicles', label: 'Kjøretøy', ic: 'car', perm: 'operations' },
   ]},
   { group: 'Økonomi', items: [
+    { to: '/receipts', label: 'Kvitteringer', ic: 'file', perm: 'finance' },
     { to: '/finance', label: 'Økonomi', ic: 'wallet', perm: 'finance' },
     { to: '/payments', label: 'Betaling & oppgjør', ic: 'creditcard', perm: 'finance' },
     { to: '/pricing', label: 'Prissetting', ic: 'tag', perm: 'system' },
@@ -165,12 +169,14 @@ function Shell() {
             <Route path="/live" element={gate('operations', <Live />)} />
             <Route path="/trips" element={gate('operations', <Trips />)} />
             <Route path="/drivers" element={gate('operations', <Drivers />)} />
+            <Route path="/students" element={gate('operations', <Students />)} />
             <Route path="/customers" element={gate('operations', <Customers />)} />
             <Route path="/beta-waitlist" element={gate('operations', <BetaWaitlist />)} />
             <Route path="/fleet-applications" element={gate('operations', <FleetApplications />, true)} />
             <Route path="/fleets" element={gate('operations', <FleetManagement />)} />
             <Route path="/vehicles" element={gate('operations', <Vehicles />)} />
             <Route path="/documents" element={gate('operations', <Documents />)} />
+            <Route path="/receipts" element={gate('finance', <Receipts />)} />
             <Route path="/finance" element={gate('finance', <Finance />)} />
             <Route path="/payments" element={gate('finance', <PaymentsPayouts />)} />
             <Route path="/pricing" element={gate('system', <Settings />)} />

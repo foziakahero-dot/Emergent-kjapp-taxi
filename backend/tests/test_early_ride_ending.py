@@ -1,5 +1,6 @@
-import ast,asyncio,logging
+import ast,asyncio,logging,sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from types import SimpleNamespace
 from datetime import datetime,timezone
 class HTTPException(Exception):
@@ -38,8 +39,9 @@ async def reject(c,code):
 async def main():
  db,c=setup();r=await ns['driver_arrive']('t',c)
  assert r['ok'] and r['ended_early'];assert db.trips.doc['status']=='arrived'
- assert db.trips.doc['actual_dropoff_lat']==c['last_lat'];assert db.trips.doc['price_review_required']
- assert 'active_trip_id' not in db.users.doc;assert not charges
+ assert db.trips.doc['actual_dropoff_lat']==c['last_lat'];assert db.trips.doc['price_review_required'] is False
+ assert db.trips.doc['price']==167 and db.trips.doc['fare_preserved_on_manual_end']
+ assert 'active_trip_id' not in db.users.doc;assert len(charges)==1
  assert [n[0][0] for n in notifications]==['c','d'];assert all(n[0][4]=='trip_ended_early' for n in notifications)
  r=await ns['driver_arrive']('t',c);assert r['already_applied'] and r['ended_early'];assert len(notifications)==2
  db,c=setup(km=.02);r=await ns['driver_arrive']('t',c);assert not r['ended_early'];assert len(charges)==1;assert notifications[0][0][1]=='Du er fremme'
@@ -48,15 +50,15 @@ async def main():
  db,c=setup();c['last_location_at']='stale';r=await ns['driver_arrive']('t',c)
  assert r['ok'] and not r['location_verified'];assert db.trips.doc['actual_dropoff_lat'] is None
  assert db.trips.doc['last_known_driver_lat']==c['last_lat'];assert db.trips.doc['end_reason']=='gps_unavailable'
- assert db.trips.doc['price_review_required'] and not charges and len(notifications)==2
+ assert db.trips.doc['price_review_required'] is False and len(charges)==1 and len(notifications)==2
  assert 'active_trip_id' not in db.users.doc
  db,c=setup();c['last_lat']=None;r=await ns['driver_arrive']('t',c)
- assert r['ok'] and db.trips.doc['actual_dropoff_lat'] is None and not charges
+ assert r['ok'] and db.trips.doc['actual_dropoff_lat'] is None and len(charges)==1
  db,c=setup();db.trips.race=True;await reject(c,409);assert not notifications and not charges;assert db.users.doc['active_trip_id']=='t'
  db,c=setup();global push_fails;push_fails=True
  logging.disable(logging.CRITICAL)
- r=await ns['driver_arrive']('t',c);assert r['ok'] and len(notifications)==2 and not charges
- print('9 ride-end checks passed, including stale/missing GPS manual ending, unknown actual position, both alerts and payment hold.')
+ r=await ns['driver_arrive']('t',c);assert r['ok'] and len(notifications)==2 and len(charges)==1
+ print('9 ride-end checks passed, including stale/missing GPS manual ending, unknown actual position, both alerts and preserved agreed fare.')
 def test_early_ride_ending():
  try:
   asyncio.run(main())

@@ -18,7 +18,7 @@ MAX_PIXELS = 20_000_000
 ALLOWED = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
 
 
-def normalize_photo(data: bytes, content_type: str) -> bytes:
+def normalize_photo(data: bytes, content_type: str, *, max_dimension: int = 768) -> bytes:
     if content_type not in ALLOWED:
         raise HTTPException(415, "Velg JPEG, PNG eller WebP")
     if not data or len(data) > MAX_UPLOAD:
@@ -33,7 +33,7 @@ def normalize_photo(data: bytes, content_type: str) -> bytes:
                     raise HTTPException(415, "Velg et stillbilde")
                 image.load()
                 clean = ImageOps.exif_transpose(image).convert("RGB")
-                clean.thumbnail((768, 768))
+                clean.thumbnail((max_dimension, max_dimension))
                 out = io.BytesIO()
                 clean.save(out, format="JPEG", quality=85, optimize=True)
                 return out.getvalue()

@@ -65,7 +65,8 @@ export default function CustomerAccount() {
   const rows: { section: 'Steder' | 'Konto'; icon: IconName; label: string; sub: string; onPress: () => void; testID: string }[] = [
     { section: 'Steder', icon: 'home', label: 'Favorittadresser', sub: 'Hjem, Jobb og faste steder', onPress: () => router.push('/saved-places'), testID: 'profile-places' },
     { section: 'Konto', icon: 'shield', label: 'Sikkerhetssenter', sub: 'Nødkontakter, deling, verifisering', onPress: () => setView('safety'), testID: 'profile-safety' },
-    { section: 'Konto', icon: 'card', label: 'Betaling og kvitteringer', sub: 'Apple Pay, Google Pay, kort', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
+    { section: 'Konto', icon: 'card', label: 'Betaling og kvitteringer', sub: 'Kort, digitale lommebøker og kontant', onPress: () => router.push('/payment-methods'), testID: 'profile-payments' },
+    { section: 'Konto', icon: 'shield', label: 'SNAR Student', sub: 'Verifiser studentstatus', onPress: () => router.push('/student'), testID: 'profile-student' },
     { section: 'Konto', icon: 'shield', label: 'Personvern', sub: 'Samtykker, data, GDPR', onPress: () => setView('privacy'), testID: 'profile-privacy' },
     { section: 'Konto', icon: 'sparkles', label: 'Kundestøtte', sub: 'AI-assistent, kontakt oss, kode/reward', onPress: () => setView('help'), testID: 'profile-help' },
     { section: 'Konto', icon: 'globe', label: 'Språk og tilgjengelighet', sub: 'Norsk · Stor tekst · Høykontrast', onPress: () => setView('language'), testID: 'profile-language' },
