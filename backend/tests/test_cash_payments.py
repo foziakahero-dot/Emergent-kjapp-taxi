@@ -243,6 +243,7 @@ def test_real_receipt_sender_retries_only_missing_recipients_and_escapes_route(c
     first = asyncio.run(server.send_trip_receipts('cash-trip'))
     assert first['email_delivery_pending'] is True and first['gross_amount'] == 173
     assert send.call_count == 2 and '&lt;script&gt;' in send.call_args_list[0].args[2]
+    assert all(call.kwargs == {'message_type': 'receipts'} for call in send.call_args_list)
     assert first['ended_early'] is True
     send.return_value = True
     second = asyncio.run(server.send_trip_receipts('cash-trip'))
