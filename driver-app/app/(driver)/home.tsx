@@ -472,10 +472,10 @@ export default function DriverHome() {
       }
     };
 
-    if (action === 'arrive' && current.payment_flow !== 'cash') {
+    if (action === 'arrive') {
       Alert.alert(
         'Fullføre turen?',
-        'SNAR kontrollerer at du er nær destinasjonen før turen avsluttes og betaling kan starte.',
+        `Du kan avslutte her selv om destinasjonen ikke er nådd. Avtalt turpris (${current.price} kr) beholdes.${current.payment_flow === 'cash' ? ' Ta imot kontantbeløpet og bekreft mottak etterpå.' : ' Betalingsstatus og kvittering vises i SNAR.'}`,
         [
           { text: 'Fortsett turen', style: 'cancel' },
           { text: 'Fullfør turen', onPress: () => { void execute(); } },

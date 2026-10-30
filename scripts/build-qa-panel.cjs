@@ -8,7 +8,7 @@ if (!['admin-web', 'fleet-web'].includes(panel)) throw new Error('Expected admin
 const root = path.resolve(__dirname, '..');
 const cwd = path.join(root, panel);
 const fleetOrigin = 'https://snar-fleet-git-qa-snar-v10-phase5-staging-e2e-snar1.vercel.app';
-const env = { ...process.env, VITE_APP_ENV: 'qa', VITE_API_BASE: '/api', VITE_PUBLIC_SITE_URL: fleetOrigin };
+const env = { ...process.env, VITE_APP_ENV: 'qa', VITE_API_BASE: '/api', VITE_PUBLIC_SITE_URL: process.env.VITE_PANEL_BASE ? 'https://api-qa.snarapp.no/api/qa-fleet' : fleetOrigin };
 execFileSync('npm', ['run', 'build'], { cwd, env, stdio: 'inherit' });
 const out = path.join(root, 'artifacts', 'phase5-qa', panel);
 fs.rmSync(out, { recursive: true, force: true });

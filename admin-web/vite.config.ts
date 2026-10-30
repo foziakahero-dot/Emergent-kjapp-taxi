@@ -6,9 +6,9 @@ import react from '@vitejs/plugin-react';
 // (admin.kjappapp.no) without rebuilding paths. Routing uses HashRouter so no
 // server-side SPA fallback is required.
 export default defineConfig({
-  base: './',
+  base: process.env.VITE_PANEL_BASE || './',
   plugins: [react()],
-  define: { 'import.meta.env.VITE_SNAR_QA_PANEL': JSON.stringify(process.env.VERCEL_GIT_COMMIT_REF === 'qa/snar-v10-phase5-staging-e2e' ? 'true' : 'false') },
+  define: { 'import.meta.env.VITE_SNAR_QA_PANEL': JSON.stringify(process.env.VITE_APP_ENV === 'qa' || process.env.VERCEL_GIT_COMMIT_REF === 'qa/snar-v10-phase5-staging-e2e' ? 'true' : 'false') },
   build: { outDir: 'dist', emptyOutDir: true },
   server: {
     port: 5173,

@@ -203,6 +203,64 @@ def test_cash_collection_survives_notification_failure(context, monkeypatch):
     assert raw.trips.find_one()['price_review_required'] is False
 
 
+@pytest.mark.parametrize('flow', ['reservation', 'legacy'])
+@pytest.mark.parametrize('location', ['early', 'missing'])
+def test_card_manual_completion_preserves_agreed_fare_and_payment_safeguards(context, monkeypatch, flow, location):
+    raw, db, uid, did = context
+    raw.trips.insert_one(cash_trip(uid, did, status='in_trip', payment_flow=flow,
+        payment_provider='stripe', payment_method='card', payment_status='authorized',
+        dropoff_lat=59.91, dropoff_lng=10.75))
+    monkeypatch.setattr(server, 'send_push_to_user', AsyncMock(side_effect=[RuntimeError('push unavailable'), None]))
+    capture = AsyncMock(return_value={'attempted': True, 'status': 'capture_pending'})
+    charge = AsyncMock(return_value={'attempted': False, 'reason': 'disabled_or_missing'})
+    monkeypatch.setattr(server, 'ride_reservations', SimpleNamespace(capture=capture))
+    monkeypatch.setattr(server, '_attempt_trip_auto_charge', charge)
+    current = {'id': did}
+    if location == 'early': current.update(last_lat=59.95, last_lng=10.75, last_location_at=datetime.now(timezone.utc).isoformat())
+    result = asyncio.run(server.driver_arrive('cash-trip', current))
+    trip = raw.trips.find_one()
+    assert result['ok'] is True and result['ended_early'] is True
+    assert trip['status'] == 'arrived' and trip['price'] == 173
+    assert trip['price_review_required'] is False and trip['requires_manual_settlement'] is False
+    assert trip['fare_preserved_on_manual_end'] is True
+    assert trip['payment_status'] != 'paid'  # Arrival is not proof of settlement.
+    assert raw.users.find_one({'_id': ObjectId(did)}).get('active_trip_id') is None
+    assert capture.await_count == (1 if flow == 'reservation' else 0)
+    assert charge.await_count == (1 if flow == 'legacy' else 0)
+    again = asyncio.run(server.driver_arrive('cash-trip', current))
+    assert again['already_applied'] is True
+    assert charge.await_count == (1 if flow == 'legacy' else 0)
+
+
+def test_real_receipt_sender_retries_only_missing_recipients_and_escapes_route(context, monkeypatch):
+    raw, db, uid, did = context
+    raw.trips.insert_one(cash_trip(uid, did, status='completed', payment_status='paid',
+        ended_early=True, end_reason='before_destination', pickup_address='<script>fixture</script>'))
+    raw.users.update_one({'_id': ObjectId(uid)}, {'$set': {'email': 'customer@example.invalid'}})
+    raw.users.update_one({'_id': ObjectId(did)}, {'$set': {'email': 'driver@example.invalid'}})
+    monkeypatch.setattr(server, '_commission_for_trip', AsyncMock(return_value=0.0))
+    send = Mock(return_value=False); monkeypatch.setattr(server, 'send_email', send)
+    first = asyncio.run(server.send_trip_receipts('cash-trip'))
+    assert first['email_delivery_pending'] is True and first['gross_amount'] == 173
+    assert send.call_count == 2 and '&lt;script&gt;' in send.call_args_list[0].args[2]
+    assert first['ended_early'] is True
+    send.return_value = True
+    second = asyncio.run(server.send_trip_receipts('cash-trip'))
+    assert second['email_delivery_pending'] is False
+    assert second['customer_email_sent_at'] and second['driver_email_sent_at']
+    again = asyncio.run(server.send_trip_receipts('cash-trip'))
+    assert again['receipt_number'] == first['receipt_number'] and send.call_count == 4
+
+
+def test_backfilled_receipts_do_not_create_an_automatic_historical_mailout(context, monkeypatch):
+    raw, db, uid, did = context
+    raw.trips.insert_one(cash_trip(uid, did, status='completed', payment_status='paid'))
+    raw.users.update_one({'_id': ObjectId(uid)}, {'$set': {'email': 'customer@example.invalid'}})
+    monkeypatch.setattr(server, '_commission_for_trip', AsyncMock(return_value=0.0))
+    result = asyncio.run(server.ensure_receipt_snapshot('cash-trip', backfilled=True))
+    assert result['email_delivery_pending'] is False
+
+
 def test_cash_is_earnings_but_never_pending_electronic_payout(context, monkeypatch):
     raw, db, uid, did = context
     raw.trips.insert_one(cash_trip(uid, did, status='completed', payment_status='paid'))
