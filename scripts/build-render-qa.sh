@@ -10,3 +10,5 @@ for panel in admin-web fleet-web; do
   (cd "$panel" && npm ci --no-audit --no-fund)
   VITE_PANEL_BASE="/api/qa-${panel%-web}/" node scripts/build-qa-panel.cjs "$panel"
 done
+(cd marketing-web && npm ci --no-audit --no-fund)
+VITE_PANEL_BASE="/api/qa-site/" node scripts/build-qa-panel.cjs marketing-web

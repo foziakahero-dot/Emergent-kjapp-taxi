@@ -23,7 +23,7 @@ class PanelFiles(StaticFiles):
 def install_qa_panels(app, root, *, environment):
     if environment != 'qa':
         return
-    for slug, directory in [('qa-admin', 'admin-web'), ('qa-fleet', 'fleet-web')]:
+    for slug, directory in [('qa-admin', 'admin-web'), ('qa-fleet', 'fleet-web'), ('qa-site', 'marketing-web')]:
         path = Path(root) / 'artifacts' / 'phase5-qa' / directory
         if (path / 'index.html').is_file():
             app.mount('/api/' + slug, PanelFiles(directory=path, html=True), name=slug)
