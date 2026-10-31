@@ -14,19 +14,20 @@ creating separate mailboxes. Human replies should go to the existing monitored
 Uniweb mailbox. Do not change the root domain's incoming MX records or replace
 Uniweb mail hosting to enable transactional sending.
 
-The following non-secret settings are prepared for the verified QA domain:
+The following non-secret settings are proposed for the QA domain in the supplied
+API key's team. That domain is not verified yet; do not enable sending:
 
 | Setting | QA value |
 | --- | --- |
-| QA_RESEND_FROM_EMAIL | SNAR QA <post@qa-mail.snarapp.no> |
-| QA_RESEND_WELCOME_FROM_EMAIL | SNAR QA <velkommen@qa-mail.snarapp.no> |
-| QA_RESEND_SECURITY_FROM_EMAIL | SNAR QA <sikkerhet@qa-mail.snarapp.no> |
-| QA_RESEND_RECEIPTS_FROM_EMAIL | SNAR QA <kvittering@qa-mail.snarapp.no> |
+| QA_RESEND_FROM_EMAIL | SNAR QA <post@qa-notify.snarapp.no> |
+| QA_RESEND_WELCOME_FROM_EMAIL | SNAR QA <velkommen@qa-notify.snarapp.no> |
+| QA_RESEND_SECURITY_FROM_EMAIL | SNAR QA <sikkerhet@qa-notify.snarapp.no> |
+| QA_RESEND_RECEIPTS_FROM_EMAIL | SNAR QA <kvittering@qa-notify.snarapp.no> |
 | QA_RESEND_REPLY_TO | post@snarapp.no |
 | QA_RESEND_ENABLED | false until credential, billing and controlled delivery checks are complete |
 
 `QA_RESEND_API_KEY` must be stored only in Render secrets. Use an existing key from
-the same Resend team with sending permission for `qa-mail.snarapp.no`. Never copy
+the same Resend team with sending permission for `qa-notify.snarapp.no`. Never copy
 the value into this repository, the QA status log, a screenshot or chat. Do not
 create a broadly privileged replacement merely to fix a sender-domain mismatch.
 
@@ -36,9 +37,12 @@ environment's default sender is used. Malformed address configuration fails the
 send instead of generating a request with injected headers.
 
 Production uses the root domain `snarapp.no`, expressly selected by the owner.
-It was added to the existing Resend team on 30 October 2026 in Ireland
-(`eu-west-1`). Its DNS verification is not yet complete. The existing QA domain
-is separate and verified. No incoming mail handling was enabled in Resend.
+A read-only API check on 31 October 2026 confirmed the previously supplied key
+works, but belongs to a different team from the browser session used on 30 October.
+That key's team had `qa-notify.snarapp.no` with status `failed`, and no root domain.
+`snarapp.no` has now been created in the key's actual team (HTTP 201), in Ireland
+(`eu-west-1`), with status `not_started`. No incoming mail handling was enabled.
+Do not use the other team's domain/DNS instructions with this key.
 
 | Setting | Production value after domain verification |
 | --- | --- |
@@ -56,25 +60,43 @@ the production release is separately authorized.
 
 ### Required root-domain DNS records
 
-The newly created Resend domain's live DNS instructions require:
+The domain created in the supplied API key's team returned these four records
+on 31 October 2026. They supersede the other team's three-record instructions:
 
-| Type | Name relative to snarapp.no | Content |
-| --- | --- | --- |
-| TXT | resend._domainkey | Copy the public DKIM value from this domain's Resend DNS page |
-| CNAME | rsend | rsend-euw1.forge.rmta.net |
-| CNAME | send | send.forge.rmta.net |
+| Type | Name relative to snarapp.no | Content | Priority |
+| --- | --- | --- | --- |
+| TXT | resend._domainkey | Use the public DKIM value below | — |
+| MX | send | feedback-smtp.eu-west-1.amazonses.com | 10 |
+| TXT | send | v=spf1 include:amazonses.com ~all | — |
+| CNAME | rsend | send.forge.rmta.net | — |
 
-The three names returned NXDOMAIN in the public DNS check on 30 October. The
-root MX records still point to Uniweb; the root SPF still authorizes Uniweb.
-Preserve those records and all web/API/QA records. Do not add an extra root SPF
-record or replace root MX records. Uniweb login rejected the attempted secure
-sign-in; no DNS edit was made. After an authenticated DNS update, use Resend's
-verification control and check the actual result instead of assuming propagation.
+Public DKIM value for this domain in the supplied key's team:
 
-The existing Resend account also shows an unpaid invoice (open, USD 20, dated
-22 May 2026) and a disruption warning. No payment, retry or plan change has been
-performed. This may restrict delivery; it does not itself prove current sending
-is suspended. No controlled provider send or real inbox delivery is verified.
+```text
+p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDYIaiie68DMYmv/VrRnui/86XPZfW/QH9hJckudsveXXie58U8efqMVijeWRmKAcpCUPRKVVTVr9+H71XxrnhNgw7RzFKMkpz8iZsxVSVhT4SSD4JkJAFUUwNOSOOADYGeN43xazT9XlL0Dh5P8hrOLthvs25QCyxro25KMcvLrwIDAQAB
+```
+
+Preserve the root MX and SPF records for Uniweb and all web/API/QA records.
+These MX/TXT entries belong to the `send` subdomain, not the root domain. Do not
+install a CNAME at `send` alongside these MX/TXT records. Do not add the old
+`rsend-euw1.forge.rmta.net` target from the other team's setup.
+
+No DNS edit has been made. The 30 October Uniweb login was rejected; the new
+secure sign-in on 31 October was declined before submission. After an authenticated
+DNS update, verify this exact domain in this exact team and check its actual
+result rather than assuming propagation.
+
+Render QA was inspected on 31 October with explicit owner approval. All 37
+service variable names were visible; no `QA_RESEND_*`, `RESEND_*` or
+`EMAIL_PROVIDER` variables were present, and no environment groups were linked.
+No secret values were revealed. Runtime ready still reported
+`email_configured=false`. No Render variables were changed and no new deploy
+was started during this inspection.
+
+The USD 20 unpaid invoice previously observed belonged to the other browser
+team. It is not verified billing evidence for the supplied key's team. No
+payment or subscription change was performed. Real provider send acceptance,
+account sending limits and inbox delivery remain unverified.
 
 ## Activation and acceptance
 
