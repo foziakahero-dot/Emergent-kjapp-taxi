@@ -122,7 +122,8 @@ function RootContent() {
 
 ReactDOMClient.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
+      {import.meta.env.VITE_APP_ENV === 'qa' && <div role="status" style={{background:'#ffe8a3',color:'#161616',padding:12,textAlign:'center'}}>SNAR QA – bare testregistreringer. Ingen reell godkjenning eller utbetaling.</div>}
       <RouteMetadata />
       <RootContent />
       <SupportFooterPortal />
