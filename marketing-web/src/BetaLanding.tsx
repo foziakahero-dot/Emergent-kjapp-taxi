@@ -184,7 +184,7 @@ export default function BetaLanding() {
           </div>
         </div>
       </footer>
-      <BetaWaitlist open={open} onClose={close} returnFocusTo={trigger.current} initialRole="passenger" />
+      <BetaWaitlist open={open} onClose={close} returnFocusTo={trigger.current} initialRole="passenger" endpoint="/beta-intake" />
     </div>
   );
 }
