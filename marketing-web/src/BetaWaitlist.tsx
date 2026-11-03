@@ -8,6 +8,8 @@ type Props = {
   onClose: () => void;
   returnFocusTo?: HTMLElement | null;
   initialRole?: BetaRole;
+  /** Separate, same-origin intake endpoint for gated beta landing previews. */
+  endpoint?: string;
 };
 
 type FormState = {
@@ -43,7 +45,7 @@ function validate(form: FormState) {
   return "";
 }
 
-export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole }: Props) {
+export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole, endpoint = "/api/waitlist" }: Props) {
   const [form, setForm] = useState<FormState>(initialForm);
   const [status, setStatus] = useState<
     "idle" | "submitting" | "success" | "error"
@@ -150,7 +152,7 @@ export default function BetaWaitlist({ open, onClose, returnFocusTo, initialRole
     setMessage("");
 
     try {
-      const response = await fetch("/api/waitlist", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
