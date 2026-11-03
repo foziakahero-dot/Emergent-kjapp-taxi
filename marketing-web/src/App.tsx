@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from "react-router-dom";
 import { ApplyPage } from "./ApplyPage";
 import PremiumHome from "./PremiumHome";
+import BetaLanding from "./BetaLanding";
 import { TripSharePage } from "./TripSharePage";
 import LegalPage from "./LegalPage";
 import { Card, Footer, Header } from "./SnarUI";
@@ -121,6 +122,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<PremiumHome />} />
+      <Route path="/beta" element={<BetaLanding />} />
       <Route path="/loyvehaver" element={<PartnerPage />} />
       <Route path="/loyvehaver/soknad" element={<ApplyPage />} />
       <Route path="/tur/:token" element={<TripSharePage />} />
