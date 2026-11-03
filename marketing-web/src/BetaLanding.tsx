@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import BetaWaitlist from "./BetaWaitlist";
-import { Brand } from "./SnarUI";
+import { Brand, SnarMark } from "./SnarUI";
 import "./beta-launch.css";
 
 const journey = [
@@ -100,7 +100,7 @@ export default function BetaLanding() {
             <div className="beta-path" aria-hidden="true" />
             <div className="beta-pin beta-pin-one" aria-hidden="true" />
             <div className="beta-pin beta-pin-two" aria-hidden="true" />
-            <div className="beta-art-center" aria-hidden="true">S</div>
+            <div className="beta-art-center" aria-hidden="true"><SnarMark size={132} /></div>
             <div className="beta-art-bottom">
               <span>ET NYTT KAPITTEL FOR MOBILITET I OSLO</span>
               <strong>Du kan være med fra starten.</strong>
