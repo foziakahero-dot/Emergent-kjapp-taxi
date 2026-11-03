@@ -6,6 +6,13 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# Dedicated QA beta intake runs as a Netlify Function and fails closed in production.
+[[redirects]]
+  from = "/beta-intake"
+  to = "/.netlify/functions/beta-intake"
+  status = 200
+  force = true
+
 # Marketing waitlist uses a dedicated backend route.
 [[redirects]]
   from = "/api/waitlist"

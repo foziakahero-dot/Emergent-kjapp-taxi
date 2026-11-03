@@ -55,6 +55,16 @@ function RouteMetadata() {
       return;
     }
 
+    if (pathname === "/beta") {
+      setPageSeo({
+        title: "SNAR Oslo Beta | Søk om tidlig tilgang",
+        description:
+          "Meld interesse for SNARs lukkede beta i Oslo. Vi inviterer de første testkundene gradvis.",
+        canonical: canonical("/beta"),
+      });
+      return;
+    }
+
     if (pathname === "/loyvehaver") {
       setPageSeo({
         title: "SNAR for løyvehavere | Bestillinger, drift og oppgjør",

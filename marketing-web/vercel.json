@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://api.kjappapp.no/api/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/beta-intake",
+      "destination": "/api/beta-intake"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.kjappapp.no/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
