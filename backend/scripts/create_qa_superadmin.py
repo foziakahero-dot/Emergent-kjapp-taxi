@@ -55,8 +55,8 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
 def get_operator_password() -> str:
     """
     Get password from operator via secure stdin (TTY getpass) or stdin pipe.
-    Priority: 1) TTY getpass (interactive), 2) stdin pipe (automation), 3) env var (CI only, with warning).
-    NEVER use CLI arguments.
+    Priority: 1) TTY getpass (interactive), 2) stdin pipe (automation).
+    NEVER use CLI arguments or environment variables.
     """
     import sys
 
@@ -69,14 +69,6 @@ def get_operator_password() -> str:
     stdin_input = sys.stdin.read().strip()
     if stdin_input:
         return stdin_input
-
-    # 3. Fallback to env var (CI only — NOT for manual execution)
-    # This path should ONLY be used in controlled CI with secret injection
-    import os
-    pwd = os.environ.get("QA_SUPERADMIN_PASSWORD", "").strip()
-    if pwd:
-        print("WARNING: Using QA_SUPERADMIN_PASSWORD from environment. Prefer stdin/TTY for manual execution.", file=sys.stderr)
-        return pwd
 
     return ""
 
@@ -121,25 +113,31 @@ async def verify_qa_database_identity(db, db_name: str) -> tuple[bool, str]:
         if db.name != db_name:
             return False, f"Connected database name '{db.name}' does not match DB_NAME '{db_name}'"
 
-        # 2. Check for QA isolation marker in platform_settings (set by backend on startup)
+        # 2. Verify platform_settings singleton exists and has QA isolation markers
         settings = await db.platform_settings.find_one({"_id": "singleton"})
-        if settings:
-            # The backend sets qa_mode and validates qa_database_isolated at startup
-            # If we can read platform_settings, we're in the right database
-            pass
+        if not settings:
+            return False, "platform_settings singleton not found - database not initialized by QA backend"
 
-        # 3. Verify no production data markers
-        # Check for production domains that should NEVER appear in QA
+        # Verify QA isolation marker: backend sets qa_database_isolated at startup based on DB_NAME pattern
+        # We also check that qa_mode feature flag is set or that the database was initialized in QA mode
+        qa_isolated = settings.get("qa_database_isolated") is True
+        qa_mode = settings.get("qa_mode") is True
+
+        # The backend health check computes qa_database_isolated from DB_NAME pattern
+        # If the platform_settings doesn't have this marker, the DB hasn't been initialized by QA backend
+        if not (qa_isolated or qa_mode):
+            return False, "Database missing QA isolation markers (qa_database_isolated or qa_mode not set) - not an approved QA database"
+
+        # 3. Verify no production data markers (excluding the known QA bootstrap superadmin)
         prod_domains = ["snarapp.no", "kjappapp.no"]
+        qa_superadmin_email = "qa-superadmin@snarapp.no"
         for domain in prod_domains:
-            count = await db.users.count_documents({"email": {"$regex": f"@{re.escape(domain)}$"}})
+            count = await db.users.count_documents({
+                "email": {"$regex": f"@{re.escape(domain)}$"},
+                "email": {"$ne": qa_superadmin_email}
+            })
             if count > 0:
-                return False, f"Database contains {count} '{domain}' email accounts - not isolated QA"
-
-        # 4. Verify QA-specific configuration markers
-        # Check if there's a QA fleet application or other QA test data
-        qa_fleet_apps = await db.fleet_applications.count_documents({"company_name": {"$regex": "QA|TEST", "$options": "i"}})
-        # Note: This is informational; absence doesn't mean not QA
+                return False, f"Database contains {count} '{domain}' email accounts (excluding qa-superadmin) - not isolated QA"
 
         return True, "OK"
 
