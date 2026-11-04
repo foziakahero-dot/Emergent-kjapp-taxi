@@ -4,7 +4,7 @@
 SECURITY REQUIREMENTS:
 - NEVER output credentials to stdout, stderr, deployment logs, or job logs
 - Require explicit APP_ENV=qa and VERIFIED QA database identity (connect + check isolation markers)
-- Operator provides password via secure stdin (TTY getpass or pipe) — NEVER in env/argv/logs
+- Operator provides password via secure stdin (TTY getpass ONLY) — NEVER in env/argv/logs, NEVER via pipe
 - Preserve mandatory Superadmin 2FA requirements (totp_enabled=false initially)
 - Script is CLI-only, unavailable through public HTTP endpoints
 
@@ -14,13 +14,10 @@ RENDER EXECUTION (SECURE SECRET HANDLING):
 - NEVER in: CLI arguments, environment variables, stdout/stderr, deployment logs, Git, chat
 
 Run on Render QA:
-  # Interactive (RECOMMENDED):
+  # Interactive (REQUIRED):
   render ssh srv-db61otlckfvc73bqp480 --ephemeral
   python backend/scripts/create_qa_superadmin.py
   # Enter password at prompt (getpass, no echo)
-
-  # Non-interactive (automation only):
-  echo "<password>" | render ssh srv-db61otlckfvc73bqp480 --output text -- -o BatchMode=yes 'python backend/scripts/create_qa_superadmin.py'
 
 Or locally with QA database credentials:
   APP_ENV=qa MONGO_URL="mongodb://..." DB_NAME="snar_qa" python backend/scripts/create_qa_superadmin.py
@@ -54,22 +51,18 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
 
 def get_operator_password() -> str:
     """
-    Get password from operator via secure stdin (TTY getpass) or stdin pipe.
-    Priority: 1) TTY getpass (interactive), 2) stdin pipe (automation).
-    NEVER use CLI arguments or environment variables.
+    Get password from operator via secure stdin (TTY getpass ONLY).
+    NEVER use CLI arguments, environment variables, or stdin pipe.
+    Fail closed without a TTY.
     """
     import sys
 
-    # 1. Try TTY interactive (most secure for manual execution)
+    # ONLY TTY interactive (secure for manual execution)
     if sys.stdin.isatty():
         import getpass
         return getpass.getpass("Enter QA superadmin password (16+ chars, upper, lower, digit, special): ").strip()
 
-    # 2. Try stdin pipe (for automation)
-    stdin_input = sys.stdin.read().strip()
-    if stdin_input:
-        return stdin_input
-
+    # No TTY - fail closed. No stdin pipe, no env var fallback.
     return ""
 
 
@@ -107,37 +100,42 @@ async def verify_qa_database_identity(db, db_name: str) -> tuple[bool, str]:
     Connect to database and verify it is the approved isolated QA MongoDB target.
     Checks isolation markers that only exist in the approved QA database.
     Fail closed on any verification failure.
+
+    NOTE: The backend /ready endpoint computes qa_database_isolated and qa_mode
+    dynamically from APP_ENV and DB_NAME - they are NOT stored in platform_settings.
+    This verification uses independently verifiable markers:
+    1. Database name matches expected QA database (from env)
+    2. No production data markers exist (excluding known QA bootstrap account)
+    3. MongoDB cluster identity can be verified if QA cluster identifiers are configured
     """
     try:
         # 1. Verify database name matches expected QA database
         if db.name != db_name:
             return False, f"Connected database name '{db.name}' does not match DB_NAME '{db_name}'"
 
-        # 2. Verify platform_settings singleton exists and has QA isolation markers
+        # 2. Verify platform_settings singleton exists (database initialized by backend)
         settings = await db.platform_settings.find_one({"_id": "singleton"})
         if not settings:
             return False, "platform_settings singleton not found - database not initialized by QA backend"
 
-        # Verify QA isolation marker: backend sets qa_database_isolated at startup based on DB_NAME pattern
-        # We also check that qa_mode feature flag is set or that the database was initialized in QA mode
-        qa_isolated = settings.get("qa_database_isolated") is True
-        qa_mode = settings.get("qa_mode") is True
-
-        # The backend health check computes qa_database_isolated from DB_NAME pattern
-        # If the platform_settings doesn't have this marker, the DB hasn't been initialized by QA backend
-        if not (qa_isolated or qa_mode):
-            return False, "Database missing QA isolation markers (qa_database_isolated or qa_mode not set) - not an approved QA database"
-
         # 3. Verify no production data markers (excluding the known QA bootstrap superadmin)
+        # Use $and to correctly combine regex and $ne - duplicate "email" keys would silently fail
         prod_domains = ["snarapp.no", "kjappapp.no"]
         qa_superadmin_email = "qa-superadmin@snarapp.no"
         for domain in prod_domains:
             count = await db.users.count_documents({
-                "email": {"$regex": f"@{re.escape(domain)}$"},
-                "email": {"$ne": qa_superadmin_email}
+                "$and": [
+                    {"email": {"$regex": f"@{re.escape(domain)}$"}},
+                    {"email": {"$ne": qa_superadmin_email}}
+                ]
             })
             if count > 0:
                 return False, f"Database contains {count} '{domain}' email accounts (excluding qa-superadmin) - not isolated QA"
+
+        # 4. Optional: Verify MongoDB cluster identity if QA cluster identifiers are configured
+        # This requires pre-approved QA cluster identifiers (replica set name, etc.)
+        # For now, the combination of QA DB name pattern + no production data is the verification
+        # TODO: Add QA_CLUSTER_IDENTIFIERS env var with approved replica set names/cluster IDs
 
         return True, "OK"
 
@@ -155,13 +153,14 @@ async def main():
         }), file=sys.stderr)
         sys.exit(1)
 
-    # 2. Require operator-provided password via secure stdin (getpass) or stdin pipe
+    # 2. Require operator-provided password via secure stdin (TTY getpass ONLY)
     # This is NEVER generated by the script, NEVER output to logs, NEVER in CLI args
     temp_password = get_operator_password()
     if not temp_password:
         print(json.dumps({
             "status": "error",
-            "error": "Password required. Provide via interactive prompt (TTY) or stdin pipe. "
+            "error": "Password required. Provide via interactive TTY prompt only (getpass). "
+                     "No stdin pipe, no environment variable. "
                      "Minimum 16 chars, uppercase, lowercase, digit, special char (!@#$%^&*)"
         }), file=sys.stderr)
         sys.exit(1)
