@@ -23,9 +23,14 @@ if (require.main === module) {
       requireGoogle: process.env.QA_REQUIRE_GOOGLE_OAUTH === 'true',
     });
     console.log(JSON.stringify(result));
-  } catch {
+  } catch (error) {
     // Never print file contents, file paths, provider keys or parse-error snippets.
-    console.error('QA Firebase package/signing validation failed. No provider values are logged.');
+    const known = [
+      'Expected Android certificate fingerprint is required.',
+      'Dedicated QA Firebase Android package is not uniquely configured.',
+      'QA Firebase Google OAuth certificate does not match the existing EAS signing certificate.',
+    ];
+    console.error(known.includes(error?.message) ? error.message : 'QA Firebase file is unavailable or invalid JSON. No provider values are logged.');
     process.exitCode = 1;
   }
 }
