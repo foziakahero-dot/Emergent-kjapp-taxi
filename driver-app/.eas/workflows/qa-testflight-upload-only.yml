@@ -1,7 +1,7 @@
 name: SNAR Driver QA TestFlight upload only
 # Manual upload of the verified QA IPA. No recompilation or App Store release.
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 jobs:
   upload_verified_qa_ipa:
     name: Upload Driver 1.0.2 build 16 to TestFlight

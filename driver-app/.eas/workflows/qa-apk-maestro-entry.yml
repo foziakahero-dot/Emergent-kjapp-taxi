@@ -1,7 +1,7 @@
 name: SNAR Driver QA APK Maestro entry
 # Manual validation of the existing signed QA APK. No mobile build or account changes.
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 jobs:
   driver_invitation_entry:
     name: Verify Driver invitation-only entry on Android emulator
