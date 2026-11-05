@@ -27,9 +27,7 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Check types and Expo dependency compatibility
         run: |
-          npx tsc --noEmit
-          # Validate against the installed SDK metadata to preserve the reviewed dependency freeze.
-          EXPO_OFFLINE=1 npx expo install --check
+          npm run eas-build-post-install
       - name: Verify isolated QA runtime without changing data
         run: |
           task_repo_root=$(git rev-parse --show-toplevel)
