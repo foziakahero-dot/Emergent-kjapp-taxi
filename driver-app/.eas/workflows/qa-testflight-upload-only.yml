@@ -1,0 +1,17 @@
+name: SNAR Driver QA TestFlight upload only
+# Manual upload of the verified QA IPA. No recompilation or App Store release.
+on:
+  workflow_dispatch:
+jobs:
+  upload_verified_qa_ipa:
+    name: Upload Driver 1.0.2 build 16 to TestFlight
+    type: testflight
+    environment: preview
+    params:
+      build_id: 065948db-d6be-4cf4-a203-7714f2d70f02
+      profile: testflight-qa
+      submit_beta_review: false
+      changelog: |
+        SNAR Driver QA, isolated QA backend. Source afd2bfaf5a5afe6f706a4ed3488a19fdc759cf6a.
+        Test invitation-only login, driver availability, trip status and recovery.
+        QA test data and test payments only. Physical end-to-end verification is pending.
