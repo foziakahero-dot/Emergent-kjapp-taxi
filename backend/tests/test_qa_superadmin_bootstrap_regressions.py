@@ -24,6 +24,7 @@ from scripts.create_qa_superadmin import (
     get_operator_password,
     verify_qa_environment_config,
     verify_qa_database_identity,
+    _verify_mongodb_cluster_identity,
 )
 
 
@@ -38,6 +39,13 @@ class TestDuplicateEmailKeysFix:
 
             # platform_settings exists
             mock_db.platform_settings.find_one = AsyncMock(return_value={"_id": "singleton"})
+
+            # Mock client for cluster verification
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_db.client = mock_client
 
             # No production domain users except qa-superadmin
             call_count = [0]
@@ -64,10 +72,11 @@ class TestDuplicateEmailKeysFix:
 
             mock_db.users.count_documents = AsyncMock(side_effect=count_documents_side_effect)
 
-            # Should pass verification
-            result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
-            assert result is True, f"Expected True, got False: {msg}"
-            assert msg == "OK"
+            # Should pass verification with approved cluster identifiers
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
+                assert result is True, f"Expected True, got False: {msg}"
+                assert msg == "OK"
 
         asyncio.run(run_test())
 
@@ -78,13 +87,21 @@ class TestDuplicateEmailKeysFix:
             mock_db.name = "snar_qa"
             mock_db.platform_settings.find_one = AsyncMock(return_value={"_id": "singleton"})
 
+            # Mock client for cluster verification
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_db.client = mock_client
+
             # Simulate finding a non-QA production user
             mock_db.users.count_documents = AsyncMock(return_value=1)
 
-            result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
-            assert result is False
-            assert "not isolated QA" in msg
-            assert "1" in msg
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
+                assert result is False
+                assert "not isolated QA" in msg
+                assert "1" in msg
 
         asyncio.run(run_test())
 
@@ -109,9 +126,17 @@ class TestPlatformSettingsVerificationFix:
 
             mock_db.users.count_documents = AsyncMock(return_value=0)
 
+            # Mock client for cluster verification
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_db.client = mock_client
+
             # Should pass verification even without qa_mode/qa_database_isolated in stored doc
-            result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
-            assert result is True, f"Expected True, got False: {msg}"
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
+                assert result is True, f"Expected True, got False: {msg}"
 
         asyncio.run(run_test())
 
@@ -122,9 +147,17 @@ class TestPlatformSettingsVerificationFix:
             mock_db.name = "snar_qa"
             mock_db.platform_settings.find_one = AsyncMock(return_value=None)
 
-            result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
-            assert result is False
-            assert "platform_settings singleton not found" in msg
+            # Mock client for cluster verification
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_db.client = mock_client
+
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
+                assert result is False
+                assert "platform_settings singleton not found" in msg
 
         asyncio.run(run_test())
 
@@ -247,6 +280,122 @@ class TestQAEnvironmentConfig:
             valid, msg = verify_qa_environment_config()
             assert valid is False
             assert "production environment" in msg
+
+
+class TestClusterIdentityVerification:
+    """Test MongoDB cluster identity verification against pre-approved QA identifiers."""
+
+    def test_verify_cluster_identity_fails_when_qa_cluster_identifiers_not_set(self):
+        """Verify verification fails when QA_CLUSTER_IDENTIFIERS env var is not set."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # replSetGetStatus fails (not a replica set or command error)
+            mock_admin_db.command = AsyncMock(side_effect=Exception("not a replica set"))
+
+            # QA_CLUSTER_IDENTIFIERS not set
+            with patch.dict(os.environ, {}, clear=True):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is False
+                assert "QA_CLUSTER_IDENTIFIERS environment variable not set" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_fails_when_qa_cluster_identifiers_empty(self):
+        """Verify verification fails when QA_CLUSTER_IDENTIFIERS is set but empty/whitespace."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(side_effect=Exception("not a replica set"))
+
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "   "}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is False
+                # Empty/whitespace is treated same as not set
+                assert "QA_CLUSTER_IDENTIFIERS environment variable not set" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_fails_when_not_replica_set(self):
+        """Verify verification fails when MongoDB is not a replica set."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # Both replSetGetStatus and buildInfo fail
+            mock_admin_db.command = AsyncMock(side_effect=Exception("not a replica set"))
+
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is False
+                # When both commands fail, we get the generic message
+                assert "Failed to determine MongoDB cluster identity" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_fails_when_replica_set_name_not_approved(self):
+        """Verify verification fails when replica set name is not in approved list."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # replSetGetStatus returns a replica set name not in approved list
+            mock_admin_db.command = AsyncMock(return_value={"set": "unauthorized-rs-01"})
+
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is False
+                assert "unauthorized-rs-01" in msg
+                assert "does not match any approved" in msg
+
+        asyncio.run(run_test())
+
+    def test_verify_cluster_identity_passes_when_replica_set_name_approved(self):
+        """Verify verification passes when replica set name is in approved list."""
+        async def run_test():
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            # replSetGetStatus returns an approved replica set name
+            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await _verify_mongodb_cluster_identity(mock_client)
+                assert result is True
+                assert "qa-rs-01" in msg
+                assert "verified" in msg.lower()
+
+        asyncio.run(run_test())
+
+    def test_verify_qa_database_identity_includes_cluster_verification(self):
+        """Verify that verify_qa_database_identity now requires cluster identity verification."""
+        async def run_test():
+            mock_db = AsyncMock()
+            mock_db.name = "snar_qa"
+            mock_db.platform_settings.find_one = AsyncMock(return_value={"_id": "singleton"})
+            mock_db.users.count_documents = AsyncMock(return_value=0)
+
+            # Mock the client's admin database command for cluster verification
+            mock_client = AsyncMock()
+            mock_admin_db = AsyncMock()
+            mock_client.admin = mock_admin_db
+            mock_admin_db.command = AsyncMock(return_value={"set": "qa-rs-01"})
+            mock_db.client = mock_client
+
+            # Without QA_CLUSTER_IDENTIFIERS - should fail
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": ""}, clear=True):
+                result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
+                assert result is False
+                assert "QA_CLUSTER_IDENTIFIERS environment variable not set" in msg
+
+            # With approved QA_CLUSTER_IDENTIFIERS - should pass
+            with patch.dict(os.environ, {"QA_CLUSTER_IDENTIFIERS": "qa-rs-01,qa-rs-02"}):
+                result, msg = await verify_qa_database_identity(mock_db, "snar_qa")
+                assert result is True, f"Expected True, got False: {msg}"
+
+        asyncio.run(run_test())
 
 
 if __name__ == "__main__":

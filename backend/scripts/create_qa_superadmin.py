@@ -106,7 +106,7 @@ async def verify_qa_database_identity(db, db_name: str) -> tuple[bool, str]:
     This verification uses independently verifiable markers:
     1. Database name matches expected QA database (from env)
     2. No production data markers exist (excluding known QA bootstrap account)
-    3. MongoDB cluster identity can be verified if QA cluster identifiers are configured
+    3. MongoDB cluster identity verified against pre-approved QA cluster identifiers
     """
     try:
         # 1. Verify database name matches expected QA database
@@ -132,15 +132,87 @@ async def verify_qa_database_identity(db, db_name: str) -> tuple[bool, str]:
             if count > 0:
                 return False, f"Database contains {count} '{domain}' email accounts (excluding qa-superadmin) - not isolated QA"
 
-        # 4. Optional: Verify MongoDB cluster identity if QA cluster identifiers are configured
-        # This requires pre-approved QA cluster identifiers (replica set name, etc.)
-        # For now, the combination of QA DB name pattern + no production data is the verification
-        # TODO: Add QA_CLUSTER_IDENTIFIERS env var with approved replica set names/cluster IDs
+        # 4. Verify MongoDB cluster identity against pre-approved QA cluster identifiers
+        # This is MANDATORY - fail closed if QA_CLUSTER_IDENTIFIERS is not configured
+        # or if the connected cluster's identity does not match any approved identifier
+        cluster_verified, cluster_msg = await _verify_mongodb_cluster_identity(db.client)
+        if not cluster_verified:
+            return False, cluster_msg
 
         return True, "OK"
 
     except Exception as e:
         return False, f"Database identity verification failed: {e}"
+
+
+async def _verify_mongodb_cluster_identity(client: AsyncIOMotorClient) -> tuple[bool, str]:
+    """
+    Verify the MongoDB cluster identity against pre-approved QA cluster identifiers.
+
+    Uses the replica set name from replSetGetStatus as the cluster identifier.
+    For sharded clusters, uses the config server replica set name.
+
+    QA_CLUSTER_IDENTIFIERS environment variable must contain a comma-separated list
+    of approved replica set names / cluster identifiers.
+
+    Fail closed if:
+    - QA_CLUSTER_IDENTIFIERS is not set
+    - Cannot determine cluster identity (e.g., not a replica set)
+    - Cluster identity not in approved list
+    """
+    # Get pre-approved QA cluster identifiers from environment
+    approved_identifiers_env = os.environ.get("QA_CLUSTER_IDENTIFIERS", "").strip()
+    if not approved_identifiers_env:
+        return False, (
+            "QA_CLUSTER_IDENTIFIERS environment variable not set. "
+            "Must provide comma-separated list of pre-approved QA MongoDB replica set names "
+            "or cluster identifiers. Cannot verify QA database identity without approved cluster identifiers."
+        )
+
+    approved_identifiers = [id.strip() for id in approved_identifiers_env.split(",") if id.strip()]
+    if not approved_identifiers:
+        return False, "QA_CLUSTER_IDENTIFIERS is set but contains no valid identifiers"
+
+    try:
+        # Get replica set status to determine cluster identity
+        # Use admin database for replica set commands
+        admin_db = client.admin
+
+        # Try replSetGetStatus first (for replica sets)
+        try:
+            repl_status = await admin_db.command("replSetGetStatus")
+            cluster_identity = repl_status.get("set", "").strip()
+            identity_source = "replica set name"
+        except Exception:
+            # If not a replica set, try to get cluster identity from buildInfo or other means
+            # For standalone or sharded clusters, we may need alternative approaches
+            try:
+                build_info = await admin_db.command("buildInfo")
+                # For Atlas, cluster name might be inferable, but not reliably
+                # For now, require replica set deployment
+                return False, (
+                    "Connected MongoDB deployment is not a replica set (replSetGetStatus failed). "
+                    "QA environment requires a replica set deployment with pre-approved replica set name. "
+                    "Cannot verify cluster identity for non-replica-set deployments."
+                )
+            except Exception:
+                return False, "Failed to determine MongoDB cluster identity"
+
+        if not cluster_identity:
+            return False, "MongoDB replica set name is empty - cannot verify cluster identity"
+
+        # Check if cluster identity matches any approved identifier
+        if cluster_identity not in approved_identifiers:
+            return False, (
+                f"MongoDB cluster identity '{cluster_identity}' ({identity_source}) "
+                f"does not match any approved QA cluster identifier. "
+                f"Approved: {approved_identifiers}"
+            )
+
+        return True, f"Cluster identity verified: {cluster_identity} ({identity_source})"
+
+    except Exception as e:
+        return False, f"Cluster identity verification failed: {e}"
 
 
 async def main():
