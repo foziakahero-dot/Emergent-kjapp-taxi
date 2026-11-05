@@ -37,10 +37,18 @@ jobs:
         run: |
           task_repo_root=$(git rev-parse --show-toplevel)
           node "$task_repo_root/scripts/phase5-qa-backend-preflight.cjs"
-      - name: Verify dedicated QA Firebase package and existing EAS signing metadata
+      - name: Verify dedicated QA Firebase file is available and valid JSON
         run: |
           task_repo_root=$(git rev-parse --show-toplevel)
-          node "$task_repo_root/scripts/qa-firebase-signing.cjs"
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs" file
+      - name: Verify dedicated QA Firebase Android package
+        run: |
+          task_repo_root=$(git rev-parse --show-toplevel)
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs" package
+      - name: Verify Customer Google OAuth matches existing EAS signing certificate
+        run: |
+          task_repo_root=$(git rev-parse --show-toplevel)
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs" signing
       - name: Verify native app identity
         run: |
           npx expo config --type public --json > /tmp/snar-qa-config.json
@@ -53,3 +61,4 @@ jobs:
         run: npx expo prebuild --no-install --platform all
       - name: Report validation boundary
         run: echo 'Static native preflight complete. No build, submission, account creation, booking or charge was started. Signing and release lock remain separate gates.'
+

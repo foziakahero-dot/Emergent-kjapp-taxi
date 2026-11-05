@@ -17,10 +17,17 @@ module.exports = { verifyFirebaseSigning };
 if (require.main === module) {
   try {
     const config = JSON.parse(fs.readFileSync(process.env.QA_GOOGLE_SERVICES_JSON, 'utf8'));
+    const stage = process.argv[2] || 'signing';
+    if (!['file', 'package', 'signing'].includes(stage)) throw new Error('Invalid QA Firebase validation stage.');
+    if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Invalid QA Firebase file.');
+    if (stage === 'file') {
+      console.log('Dedicated QA Firebase file parsed. No provider values are logged.');
+      process.exit(0);
+    }
     const result = verifyFirebaseSigning(config, {
       packageName: process.env.QA_ANDROID_PACKAGE,
       expectedSha1: process.env.QA_ANDROID_CERT_SHA1,
-      requireGoogle: process.env.QA_REQUIRE_GOOGLE_OAUTH === 'true',
+      requireGoogle: stage === 'signing' && process.env.QA_REQUIRE_GOOGLE_OAUTH === 'true',
     });
     console.log(JSON.stringify(result));
   } catch (error) {

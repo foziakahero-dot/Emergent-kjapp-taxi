@@ -23,3 +23,31 @@ test('Driver package validation does not introduce a Google-login requirement', 
   assert.deepEqual(verifyFirebaseSigning(config, { ...options, requireGoogle: false }), { packageVerified: true, googleSigningVerified: false });
 });
 test('missing expected fingerprint fails closed', () => assert.throws(() => verifyFirebaseSigning(fixture(), { ...options, expectedSha1: '' })));
+test('CLI diagnostic stages distinguish parse, package and signing without logging file values', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { spawnSync } = require('node:child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'snar-firebase-test-'));
+  const file = path.join(dir, 'fixture.json');
+  const config = fixture();
+  config.client[0].oauth_client = [];
+  config.synthetic_private_marker = 'must-never-be-printed';
+  const run = stage => spawnSync(process.execPath, [path.join(__dirname, 'qa-firebase-signing.cjs'), stage], {
+    encoding: 'utf8', env: { ...process.env, QA_GOOGLE_SERVICES_JSON: file,
+      QA_ANDROID_PACKAGE: options.packageName, QA_ANDROID_CERT_SHA1: fingerprint, QA_REQUIRE_GOOGLE_OAUTH: 'true' },
+  });
+  try {
+    fs.writeFileSync(file, JSON.stringify(config), { mode: 0o600 });
+    for (const [stage, expectedStatus] of [['file', 0], ['package', 0], ['signing', 1], ['unknown', 1]]) {
+      const result = run(stage);
+      assert.equal(result.status, expectedStatus, stage);
+      assert.ok(!(result.stdout + result.stderr).includes(config.synthetic_private_marker));
+      assert.ok(!(result.stdout + result.stderr).includes(file));
+    }
+    fs.writeFileSync(file, '{ "synthetic_private_marker": "must-never-be-printed" INVALID }');
+    const invalid = run('file');
+    assert.equal(invalid.status, 1);
+    assert.ok(!(invalid.stdout + invalid.stderr).includes('must-never-be-printed'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
