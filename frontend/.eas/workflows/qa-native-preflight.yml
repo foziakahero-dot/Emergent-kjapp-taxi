@@ -1,0 +1,48 @@
+name: SNAR Customer QA native preflight
+# Manual validation only. This workflow never starts a mobile build or submission.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_source_sha:
+        type: string
+        required: true
+        description: Full reviewed source SHA
+jobs:
+  validate:
+    name: Validate locked dependencies and QA native configuration
+    environment: preview
+    runs_on: linux-medium
+    env:
+      CI: '1'
+      EAS_BUILD_PROFILE: qa
+      EAS_BUILD_PLATFORM: android
+      KJAPP_REQUIRE_FIREBASE: 'true'
+      EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
+      EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+    steps:
+      - uses: eas/checkout
+      - name: Verify reviewed source before installing dependencies
+        run: |
+          node -e 'const c=require("node:child_process");const s=process.env.EXPECTED_SOURCE_SHA;if(!/^[a-f0-9]{40}$/.test(s||"")||c.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim()!==s)throw new Error("Reviewed source mismatch");console.log("Reviewed source verified");'
+      - name: Install exact locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check types and Expo dependency compatibility
+        run: |
+          npx tsc --noEmit
+          npx expo install --check
+      - name: Verify isolated QA runtime without changing data
+        run: |
+          task_repo_root=$(git rev-parse --show-toplevel)
+          node "$task_repo_root/scripts/phase5-qa-backend-preflight.cjs"
+      - name: Verify native app identity
+        run: |
+          npx expo config --type public --json > /tmp/snar-qa-config.json
+          node -e 'const c=require("/tmp/snar-qa-config.json");if(c.android.package!=="no.kjapp.app"||c.ios.bundleIdentifier!=="no.nexorahub.kjapp.customer"||c.extra.eas.projectId!=="3631002e-5b25-4847-b5d8-05ec2ef304b5"||!c.name.includes("QA"))throw new Error("QA native identity mismatch");console.log("QA native identity verified");'
+      - name: Verify Customer iOS Google and Apple configuration
+        run: |
+          EAS_BUILD_PROFILE=testflight-qa EAS_BUILD_PLATFORM=ios npx expo config --type public --json > /tmp/snar-qa-ios-config.json
+          node -e 'const c=require("/tmp/snar-qa-ios-config.json");const p=c.plugins.find(p=>Array.isArray(p)&&p[0]==="@react-native-google-signin/google-signin");if(!c.ios.usesAppleSignIn||!p||!p[1]?.iosUrlScheme?.startsWith("com.googleusercontent.apps."))throw new Error("Customer iOS social configuration incomplete");console.log("Customer iOS social capabilities verified; physical OAuth remains pending");'
+      - name: Generate Android and iOS native configuration without compiling or publishing
+        run: npx expo prebuild --no-install --platform all
+      - name: Report validation boundary
+        run: echo 'Static native preflight complete. No build, submission, account creation, booking or charge was started. Signing and release lock remain separate gates.'
