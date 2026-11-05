@@ -19,6 +19,9 @@ jobs:
       KJAPP_REQUIRE_FIREBASE: 'true'
       EXPO_PUBLIC_BACKEND_URL: https://api-qa.snarapp.no
       EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+      QA_ANDROID_PACKAGE: no.kjapp.app
+      QA_ANDROID_CERT_SHA1: '44:C8:7B:B8:9C:6E:E9:9B:34:AA:99:7D:B5:A6:70:AD:74:0C:E4:2C'
+      QA_REQUIRE_GOOGLE_OAUTH: 'true'
     steps:
       - uses: eas/checkout
       - name: Verify reviewed source before installing dependencies
@@ -34,6 +37,10 @@ jobs:
         run: |
           task_repo_root=$(git rev-parse --show-toplevel)
           node "$task_repo_root/scripts/phase5-qa-backend-preflight.cjs"
+      - name: Verify dedicated QA Firebase package and existing EAS signing metadata
+        run: |
+          task_repo_root=$(git rev-parse --show-toplevel)
+          node "$task_repo_root/scripts/qa-firebase-signing.cjs"
       - name: Verify native app identity
         run: |
           npx expo config --type public --json > /tmp/snar-qa-config.json
