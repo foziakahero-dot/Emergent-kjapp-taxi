@@ -16,7 +16,7 @@ function verifyFirebaseSigning(config, { packageName, expectedSha1, requireGoogl
 module.exports = { verifyFirebaseSigning };
 if (require.main === module) {
   try {
-    const config = JSON.parse(fs.readFileSync(process.env.QA_GOOGLE_SERVICES_JSON, 'utf8'));
+    const config = JSON.parse(fs.readFileSync(process.env.QA_GOOGLE_SERVICES_JSON_V2 || process.env.QA_GOOGLE_SERVICES_JSON, 'utf8'));
     const stage = process.argv[2] || 'signing';
     if (!['file', 'package', 'signing'].includes(stage)) throw new Error('Invalid QA Firebase validation stage.');
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Invalid QA Firebase file.');
